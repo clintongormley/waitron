@@ -1520,13 +1520,11 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Review every permission: fewer, coarser, and consistently named**
   [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)
 
-- **A1002: several roles per person, fixed built-in names and editable ordinary grants.** Design
-  approved 2026-11-07 22:51, with the 22:53 activity/email addition; corrected 2026-11-08.
-  [Design](superpowers/specs/2026-10-22-a1002-custom-roles-design.md).
-  [Plan amended, 2026-11-08](superpowers/plans/2026-11-08-a1002-custom-roles.md): WATCHER 03:57
-  resolves the remaining findings with two working PRs: same-default permission renames, then
-  complete roles. Both need watcher scope; only the second waits for A1308's writer/sender.
-  Focused Claude amendment read precedes docs-only publication; no feature delivery or build claimed.
+- **A1002: several roles per person, fixed built-in names and editable ordinary grants.**
+  [Approved design](superpowers/specs/2026-10-22-a1002-custom-roles-design.md) and
+  [reviewed plan](superpowers/plans/2026-11-08-a1002-custom-roles.md): approved same-default permission
+  renames first, complete roles second. Both await watcher scope; the second also needs A1308's
+  activity writer/mail sender and the owner's `fiscal.remedy` assignability decision.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order

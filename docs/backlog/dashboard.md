@@ -64,14 +64,14 @@ change what deleting a person does.
 
 ## Roles the admin can edit (A7)
 
-**A1002 design approved 2026-11-07 22:51, with the 22:53 activity/email addition; corrected
-2026-11-08.** The [design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
-holds the accepted rules, recorded authority, shared activity/mail dependencies and review
-corrections. The [plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) received Claude's
-2026-11-08 read; WATCHER 03:57 resolves the remaining findings. Two working PRs cover same-default
-permission renames first, then the complete roles transition. Both need watcher scope; only cut 2
-waits for A1308's shared activity writer and functional mail sender, not a history screen.
-The parent obtains a focused Claude amendment read before docs-only publication. No delivery or build is claimed.
+**A1002 design approved 2026-11-07, with the 2026-11-08 watcher corrections.**
+The [design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md) and
+[reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) keep two working cuts:
+approved same-default permission renames, then the complete roles transition. Both await watcher
+scope; only cut 2 needs A1308's shared activity writer and functional outgoing-mail sender.
+The general history screen is a follow-up. Before cut 2 builds, the owner must decide whether the
+existing Admin-default `fiscal.remedy` may be assigned to another role; its behavior stays unchanged.
+Implementation remains open.
 
 ## A keydown guard that cancels Escape while a save runs did not keep one dialog open
 
@@ -353,12 +353,8 @@ usable active human anchor. The 2026-10-22 ~12:05 protection answer originally a
 the new names answer supersedes that allowance only.
 
 **2026-11-08:** the [approved design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
-records the 2026-11-07 22:51 simplifications and 22:53 activity/email addition. See
-[A7](#roles-the-admin-can-edit-a7) for current status and the
-[reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md), with independent corrections
-and the WATCHER 03:57 answers incorporated. Two working cuts retain every role name; cut 1 needs
-watcher scope, cut 2 also needs shared writer/sender. Focused Claude amendment review precedes
-publication; no feature delivery is claimed.
+and [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) retain every role name.
+See [A7](#roles-the-admin-can-edit-a7) for the two implementation cuts and their remaining gates.
 
 ## Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order says so
 
