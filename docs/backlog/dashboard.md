@@ -64,26 +64,36 @@ change what deleting a person does.
 
 ## Roles the admin can edit (A7)
 
-**A1002, proposed design revised 2026-11-07; full approval, plan and build remain open.**
-The [custom-role design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md) incorporates
-the owner's accepted catalog/defaults, attendance self-approval, restrictive context lists,
-several roles per person and removal-only custom-role deletion. All four built-ins keep fixed
-translated names and cannot be deleted. Staff, Supervisor and Manager keep editable grants;
-Admin retains every current/future privilege, immutable identity and a usable active human anchor.
-ONE `person.admin` and the rule against granting unheld privileges remain settled.
+**A1002 design OWNER APPROVED, 2026-11-07 22:51; activity/email addition at 22:53.
+Corrected 2026-11-08.** The [design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
+records the exact authority in §11. No further design approval is needed; the required Claude read
+still precedes plan/build. Neither starts in this documentation firing.
 
-The driver's union-of-grants and any-held-role list matching are proposed interpretations, not
-owner quotations. Policy matching and action privileges are independent gates; a copied/new role
-joins no device/reason list. Deletion removes memberships and all live device/reason/bill-limit
-references with one confirmation, no replacements, and never turns an empty list into all roles.
-**Owner answers incorporated 2026-11-07:** sole-role deletion leaves no role (§6), preserving pending/suspended status; `node.promote` is Admin-only by default and assignable (§2). The design's §11 records both dated answers and their relay. Seek ONE separate full-design approval; reask neither decision.
+Several roles combine their privileges; any held role can match a policy list, independently of
+the action privilege. Empty device/reason/bill-limit lists mean nobody. Deletion removes the role
+from people and every live list with one impact confirmation, without replacements. Sole-role
+holders keep identity/status/credentials with no role and eligible own-person self-service only;
+pending/suspended status stays. Roles used by shifts retire so those shifts retain their names.
 
-The historical source audit remains pinned and reading-only, with bounded current-source additions
-for the existing `personal_data.export` and whole-person consumers. Storage, live authority,
-membership/proof revisions, import remapping and UI mechanics remain proposed, not runtime-verified.
-A1113 supersedes the old mirror dashboard/viewer proposal; retirement is blocked, not claimed built.
-The dated permission discussion below remains historical; current accepted catalog choices are in
-the revised design. The three sale privileges stay separate, with no fiscal merge queued.
+Staff, Supervisor, Manager and Admin keep fixed translated names and cannot be deleted. Ordinary
+built-in privileges are editable; protected Admin has every declared privilege through code alone
+and a usable active human anchor. Manager holds the single `person.admin` by default; assignment
+and sign-in changes require the actor to hold the target's whole resulting union. Cloud's single
+account owner (D608) is separate from Admin. `node.promote` merges into `node.manage`, Admin-only
+by default and assignable; recovery and other promotion conditions stay.
+
+Only `roles` (permission IDs as JSON) and `person_roles` store role authority. No counters or
+seed bookkeeping; field/set comparisons protect stale edits. Outstanding links read current
+authority when used and are not cancelled on role changes. Approval records keep identities,
+without new role snapshots. Transfer carries definitions, memberships and JSON references through
+normal mapping; imported people stay suspended, with normal later reactivation checks.
+
+§7 specifies activity entries for membership/permission changes and role lifecycle actions, plus
+one EN/ES membership-change email template for the subject person with an address. It records the
+missing shared activity/queued-mail seams at the current source pin; reuse A1308's shared paths,
+without new infrastructure. Audits remain pinned and SOURCE READ ONLY. The dated permission
+discussion below stays historical; A1113 owns mirror dashboard/viewer retirement. The three sale
+privileges stay separate and fiscal behavior stays unchanged. Plan, build and qualification remain.
 
 ## A keydown guard that cancels Escape while a save runs did not keep one dialog open
 
@@ -314,18 +324,19 @@ After A760, decide whether to remove the redundant column and read the provider 
 
 ## Review every permission: fewer, coarser, and consistently named
 
-**A1002 revision, 2026-11-07:** the
-[design's permission inventory](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
-now records the owner's accepted non-fiscal merges and ordinary default sets. Keep `sale.void`,
-`sale.refund` and `sale.rectify` as three identifiers; no fiscal merge/gate is queued.
-`workforce.self_approve` is Admin by default and requires `workforce.correct`, independently of
-`person.admin`. A980 S2c's `personal_data.export` already exists and remains the one privacy-export
-entry. Admin's every-current-and-future-grant rule stays accepted. See §2 for the accepted `node.promote` default/assignability and unchanged promotion conditions.
+**A1002 correction, 2026-11-08:** the
+[approved inventory](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
+keeps the accepted non-fiscal merges and ordinary defaults. `sale.void`, `sale.refund` and
+`sale.rectify` stay separate. `workforce.self_approve` is Admin by default and also requires
+`workforce.correct`; `personal_data.export` remains the one privacy-export entry.
+`node.promote` merges into `node.manage`, Admin-only by default and assignable, with all other
+promotion conditions unchanged. Admin authority is the code's every-declared-permission rule,
+with no stored grants or permission-catalog table. The full approval at 2026-11-07 22:51 and
+22:53 activity/email addition are quoted in §11; no design approval remains outstanding.
+Implementation precedes enabling editable roles, after the required Claude read.
 
-This supersedes the earlier current-status claims that those catalog/default choices still awaited
-answers. Their implementation remains open and precedes enabling editable roles. The complete design
-remains PROPOSED; ONE separate full-design approval is still required under §11. The accepted deletion outcome is in §6, and neither settled answer is reasked.
-Preserve the dated discussion below as the background to this now-answered catalog review.
+The dated discussion below is historical; this correction supersedes its pending-approval wording
+and points to the accepted target without changing those original receipts.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Since
   A494 (2026-10-11), `catalogue.manage` (manager and above, the roles that hold `person.manage`)
@@ -368,17 +379,21 @@ and Manager retain editable privileges. Admin retains every current/future grant
 usable active human anchor. The 2026-10-22 ~12:05 protection answer originally allowed Admin rename;
 the new names answer supersedes that allowance only.
 
-A person may hold several roles. The [revised proposed design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
-proposes the union of their grants and any-held-role matching against explicit policy restrictions.
-These mechanics remain driver inferences pending full approval. Built-in names always translate;
-custom names are literal. Copying any preset produces an ordinary custom role without preset
-identity, future grants or context-list entries. Deleting a custom role removes it from everyone
-and every live policy list, with one impact confirmation and no reassignment workflow.
+**Correction 2026-11-08:** the [design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
+is OWNER APPROVED at 2026-11-07 22:51 with the simplifications, plus the 22:53 activity/email
+addition; exact provenance is in §11. The earlier 7 November separate-promotion interpretation is
+superseded: the target is merged `node.manage`, Admin-only by default and assignable.
 
-**2026-11-07 revision:** the design incorporates both accepted answers: sole-role deletion leaves no role (§6), preserving pending/suspended status, and `node.promote` is Admin-only by default but assignable (§2). §11 records provenance and the ONE remaining full-design approval request. No plan/build is authorized.
-The audit and consumer replacements cover storage, sessions, proofs, domain policies, imports, clients
-and whole-person consumers; A1113 owns mirror dashboard/viewer retirement.
-See [A7](#roles-the-admin-can-edit-a7) and §11 of the design for the approval order.
+A person's roles combine privileges and match context lists independently. Copying a built-in
+creates an ordinary custom with today's permissions, without future authority or list membership.
+Deletion leaves a sole-role person with no role and preserves pending/suspended status; used-shift
+roles retire. One role list serves access and rota. §3–§7 specify two role tables, permission JSON,
+Admin authority in code, field/set stale-edit checks, links retained through role changes,
+identity-only approval records and ordinary transfer mapping with imported people suspended.
+Membership/permission/lifecycle changes enter the shared activity log; membership changes email
+the subject if they have an address, in their language. The current source gap for shared activity/
+queued mail is explicit in §7. See [A7](#roles-the-admin-can-edit-a7). Plan/build remain later work,
+with the required Claude read first; this revision starts neither.
 
 ## Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order says so
 
