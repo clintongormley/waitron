@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { isAppError } from "@waitron/shared";
 import {
   resolveEmailDelivery,
@@ -35,7 +35,7 @@ const ring = loadKeyRing({
 
 describe("resolveEmailDelivery", () => {
   it("reads the settings inside a caller's transaction", async () => {
-    await seedTenant(suite.db);
+    await seedVenue(suite.db, { name: "Bar & Kitchen" });
 
     await expect(
       withTransaction(suite.db, (tx) => resolveEmailDeliveryIn(tx, ring, false)),
@@ -46,7 +46,7 @@ describe("resolveEmailDelivery", () => {
   });
 
   it("uses Mailpit for a practice installation without configured SMTP", async () => {
-    await seedTenant(suite.db);
+    await seedVenue(suite.db, { name: "Bar & Kitchen" });
 
     await expect(resolveEmailDelivery(suite.db, ring, true)).resolves.toEqual({
       mode: "local_capture",
@@ -58,7 +58,7 @@ describe("resolveEmailDelivery", () => {
   });
 
   it("prefers the tenant's SMTP gateway over Mailpit", async () => {
-    await seedTenant(suite.db);
+    await seedVenue(suite.db, { name: "Bar & Kitchen" });
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         purpose: "email.smtp",
@@ -70,23 +70,54 @@ describe("resolveEmailDelivery", () => {
       mode: "smtp",
       smtp: {
         url: "smtps://smtp.example.test:465",
-        from: "Venue <venue@example.test>",
+        from: { name: "Bar & Kitchen", address: "venue@example.test" },
       },
     });
   });
 
+  it.each([false, true])(
+    "does not use an invalid saved sender or capture fallback (practice=%s)",
+    async (practice) => {
+      await seedVenue(suite.db);
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, ring, {
+          purpose: "email.smtp",
+          value: {
+            url: "smtps://smtp.example.test:465",
+            from: "one@example.test, two@example.test",
+          },
+        }),
+      );
+      expect(await resolveEmailDelivery(suite.db, ring, practice)).toEqual({
+        mode: "unconfigured",
+      });
+    },
+  );
+
   it("reports a live installation without SMTP as unconfigured", async () => {
-    await seedTenant(suite.db);
+    await seedVenue(suite.db, { name: "Bar & Kitchen" });
 
     await expect(resolveEmailDelivery(suite.db, ring, false)).resolves.toEqual({
       mode: "unconfigured",
     });
   });
 
+  it("propagates a missing venue instead of treating it as an unusable sender", async () => {
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, ring, {
+        purpose: "email.smtp",
+        value: { url: "smtps://smtp.example.test:465", from: "venue@example.test" },
+      }),
+    );
+    await expect(resolveEmailDelivery(suite.db, ring, false)).rejects.toMatchObject({
+      code: "venue.not_found",
+    });
+  });
+
   it.each(["url", "from"])(
     "refuses an SMTP credential sealed without %s, naming the field",
     async (field) => {
-      await seedTenant(suite.db);
+      await seedVenue(suite.db, { name: "Bar & Kitchen" });
       const payload: Record<string, string> = {
         url: "smtps://smtp.example.test:465",
         from: "Venue <venue@example.test>",
@@ -122,7 +153,7 @@ describe("invoice email routing", () => {
   ] as const)(
     "routes intent=%s development=%s configured=%s to %s",
     async (intent, devMode, configured, mode) => {
-      await seedTenant(suite.db);
+      await seedVenue(suite.db, { name: "Bar & Kitchen" });
       if (configured) {
         await withTransaction(suite.db, (tx) =>
           putCredential(tx, ring, {
@@ -142,7 +173,7 @@ describe("invoice email routing", () => {
                 mode === "smtp"
                   ? {
                       url: "smtps://smtp.example.test:465",
-                      from: "Venue <venue@example.test>",
+                      from: { name: "Bar & Kitchen", address: "venue@example.test" },
                     }
                   : { url: "smtp://127.0.0.1:1025", from: "Waitron <no-reply@waitron.test>" },
             },
@@ -151,7 +182,7 @@ describe("invoice email routing", () => {
   );
 
   it("captures demo invoice mail without changing the account-mail gateway", async () => {
-    await seedTenant(suite.db);
+    await seedVenue(suite.db, { name: "Bar & Kitchen" });
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         purpose: "email.smtp",
@@ -170,7 +201,7 @@ describe("invoice email routing", () => {
   });
 
   it("uses new SMTP settings on the next invoice resolution", async () => {
-    await seedTenant(suite.db);
+    await seedVenue(suite.db, { name: "Bar & Kitchen" });
     const mode = { onboardingIntent: "live" as const, devMode: false };
     expect(await resolveInvoiceEmailDelivery(suite.db, ring, mode)).toEqual({
       mode: "unconfigured",
@@ -183,7 +214,10 @@ describe("invoice email routing", () => {
     );
     expect(await resolveInvoiceEmailDelivery(suite.db, ring, mode)).toEqual({
       mode: "smtp",
-      smtp: { url: "smtps://new.example.test:465", from: "New <new@example.test>" },
+      smtp: {
+        url: "smtps://new.example.test:465",
+        from: { name: "Bar & Kitchen", address: "new@example.test" },
+      },
     });
   });
 });

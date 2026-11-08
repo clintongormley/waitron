@@ -1,11 +1,13 @@
-import { withTransaction, type Database, type Transaction } from "@waitron/db";
+import { readVenue, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { credentialField } from "./credentials.js";
+import { hasCode, isAppError } from "@waitron/shared";
+import { venueSmtpFrom } from "./email-sender-name.js";
+import type { SmtpConnection } from "./smtp-send.js";
 import type { OnboardingIntent } from "./trading-config.js";
 
 export type EmailDelivery =
-  | { mode: "smtp" | "local_capture"; smtp: { url: string; from: string } }
-  | { mode: "unconfigured" };
+  { mode: "smtp" | "local_capture"; smtp: SmtpConnection } | { mode: "unconfigured" };
 
 const LOCAL_CAPTURE_SMTP = {
   url: "smtp://127.0.0.1:1025",
@@ -26,18 +28,41 @@ export async function resolveEmailDeliveryIn(
   ring: KeyRing,
   practiceMode: boolean,
 ): Promise<EmailDelivery> {
-  const configured = await tryGetCredential(tx, ring, { purpose: "email.smtp" });
+  const configured = await readSavedSmtp(tx, ring);
   if (configured !== null) {
-    return {
-      mode: "smtp",
-      smtp: {
-        url: credentialField(configured, "email.smtp", "url"),
-        from: credentialField(configured, "email.smtp", "from"),
-      },
-    };
+    const name = (await readVenue(tx)).name;
+    try {
+      return {
+        mode: "smtp",
+        smtp: { url: configured.url, from: venueSmtpFrom(configured.from, name) },
+      };
+    } catch (error) {
+      if (
+        isAppError(error) &&
+        hasCode(error, "server.credential_unusable") &&
+        error.params.purpose === "email.smtp" &&
+        error.params.field === "from"
+      ) {
+        return { mode: "unconfigured" };
+      }
+      throw error;
+    }
   }
   if (practiceMode) return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
   return { mode: "unconfigured" };
+}
+
+export async function readSavedSmtp(
+  tx: Transaction,
+  ring: KeyRing,
+): Promise<{ url: string; from: string } | null> {
+  const configured = await tryGetCredential(tx, ring, { purpose: "email.smtp" });
+  return configured === null
+    ? null
+    : {
+        url: credentialField(configured, "email.smtp", "url"),
+        from: credentialField(configured, "email.smtp", "from"),
+      };
 }
 
 export async function resolveInvoiceEmailDelivery(

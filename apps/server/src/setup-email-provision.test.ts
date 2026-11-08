@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { tenants, withTransaction } from "@waitron/db";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loadKeyRing, tenantCredentials } from "@waitron/credentials";
@@ -126,6 +127,7 @@ const post = (app: Hono, value: unknown, path = "/setup-api/provision") =>
     body: JSON.stringify(value),
   });
 beforeEach(async () => {
+  await seedVenue(suite.db, { name: "Sala" });
   await withTransaction(suite.db, async (tx) => {
     await tx.delete(tenantCredentials);
   });
@@ -141,7 +143,7 @@ describe("setup provision email credential", () => {
             mode: "smtp",
             smtp: {
               url: "smtp://venue-user:smtp-secret-231q@smtp.example.test:587?requireTLS=true",
-              from: "venue@example.test",
+              from: { name: "Sala", address: "venue@example.test" },
             },
           });
         },
@@ -251,7 +253,7 @@ describe("setup provision email credential", () => {
         mode: "smtp",
         smtp: {
           url: "smtp://venue-user:smtp-secret-231q@smtp.example.test:587?requireTLS=true",
-          from: "venue@example.test",
+          from: { name: "Sala", address: "venue@example.test" },
         },
       });
       expect((await operations.read())?.phase).toBe("secret_sealed");
@@ -296,7 +298,7 @@ describe("setup provision email credential", () => {
         mode: "smtp",
         smtp: {
           url: "smtp://venue-user:smtp-secret-231q@smtp.example.test:587?requireTLS=true",
-          from: "venue@example.test",
+          from: { name: "Sala", address: "venue@example.test" },
         },
       });
     } finally {
