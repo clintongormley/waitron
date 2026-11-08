@@ -34,7 +34,7 @@ import {
 import { discardDraft, type Draft, type BillDraftSnapshot } from "./order-drafts.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { attendanceOperationFacts } from "@waitron/workforce";
-import { AppError } from "@waitron/shared";
+import { AppError, PERSON_HEADER } from "@waitron/shared";
 import {
   watchDerivationsAndLock,
   watchedDerivationCount,
@@ -724,6 +724,39 @@ describe("Discard resolves the whole owned draft atomically", () => {
       expect(await frozen()).toEqual(before);
     },
   );
+
+  it("refuses a discard naming another person signed in on the device, and serves the session's own", async () => {
+    // Both sessions are open on the one till; the staff member edits the draft.
+    const p = await setup();
+    const ana = venue.managerId;
+    const ben = venue.staffId;
+    const discardNaming = async (person: string) => {
+      const res = await venue.app.request(
+        `/api/parties/${p.partyId}/drafts/${p.draft.id}/discard`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: venue.cookie.staff,
+            [PERSON_HEADER]: person,
+          },
+          body: JSON.stringify(await request(p)),
+        },
+      );
+      return { status: res.status, json: (await res.json()) as unknown };
+    };
+    const before = await frozen();
+    expect(await discardNaming(ana)).toEqual({
+      status: 409,
+      json: { error: { code: "session.person_not_signed_in", params: { personId: ana } } },
+    });
+    expect(await frozen()).toEqual(before);
+    const answer = await discardNaming(ben.toUpperCase());
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect((await frozen()).drafts.find((r) => r.id === p.draft.id)).toMatchObject({
+      state: "discarded",
+    });
+  });
 
   it("hides a draft addressed through another party", async () => {
     const p = await setup();

@@ -52,7 +52,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { kitchenNotices } from "@waitron/venue-service";
 import type { DeviceKitchenScreen } from "@waitron/module";
-import { decimal } from "@waitron/shared";
+import { decimal, PERSON_HEADER } from "@waitron/shared";
 import { deviceProfileAdmissionRoles, loginWithPin, persons, sessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import {
@@ -4326,6 +4326,33 @@ describe("a device's approved profiles and switching its active one", () => {
       const [active, ...alternatives] = await offered(`${t.jar}; ${manager.cookie}`);
       expect(active).toBe(t.profileId);
       expect(alternatives.sort()).toEqual([managersOnly, everyone].sort());
+    });
+
+    it("judges by no one when the request names someone other than the session's person", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const managersOnly = await seedProfile("till");
+      await approve(app, venue, t.deviceId, [managersOnly]);
+      await admitOnly(managersOnly, "manager");
+      const ana = await signIn(t, "staff");
+      const ben = await signIn(t, "staff");
+      const offered = async (cookie: string, person?: string) => {
+        const res = await app.request("/api/device/me", {
+          headers: { cookie, ...(person === undefined ? {} : { [PERSON_HEADER]: person }) },
+        });
+        expect(res.status).toBe(200);
+        return ((await res.json()) as { approvedProfiles: { id: string }[] }).approvedProfiles.map(
+          (profile) => profile.id,
+        );
+      };
+
+      expect(await offered(t.jar)).toEqual([t.profileId, managersOnly]);
+      expect(await offered(`${t.jar}; ${ben.cookie}`, ben.personId)).toEqual([t.profileId]);
+      expect(await offered(`${t.jar}; ${ben.cookie}`, ana.personId)).toEqual([
+        t.profileId,
+        managersOnly,
+      ]);
     });
 
     it("judges by no one when the session belongs to another device", async () => {

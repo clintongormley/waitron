@@ -1,7 +1,13 @@
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { and, eq, isNull } from "drizzle-orm";
-import { AppError, deviceId as brandDeviceId, diskFullIn, isUuid } from "@waitron/shared";
+import {
+  AppError,
+  deviceId as brandDeviceId,
+  diskFullIn,
+  isUuid,
+  PERSON_HEADER,
+} from "@waitron/shared";
 import type { DeviceId } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -72,15 +78,35 @@ export async function openSessionPerson(
   return found?.personId ?? null;
 }
 
-/** The person of the request's open session on `deviceId`, or `null` when there is none: a
- * missing, unknown or ended session, or one opened on another device. */
+/**
+ * The refusal for a request whose person header names someone other than `personId`, the person
+ * of its open session; `null` when it names that person or carries no header. A header naming no
+ * one, empty or not a UUID, is refused as another person is, and echoes no id.
+ */
+function personRefusal(c: Context, personId: string): AppError | null {
+  const header = c.req.header(PERSON_HEADER);
+  if (header === undefined) return null;
+  const named = canonicaliseUuid(header);
+  if (named !== null && named === canonicaliseUuid(personId)) return null;
+  return new AppError("session.person_not_signed_in", { personId: named });
+}
+
+/** Who is signed in on a device, as the request sees it. */
+export type SignedInPerson =
+  | { outcome: "nobody" }
+  | { outcome: "person"; personId: string }
+  | { outcome: "refused"; refusal: AppError };
+
+/** The person of the request's open session on `deviceId`. Nobody when there is none: a missing,
+ * unknown or ended session, or one opened on another device. Refused when the request names
+ * someone other than that session's person. */
 export async function signedInPersonOn(
   tx: Transaction,
   c: Context,
   deviceId: string,
-): Promise<string | null> {
+): Promise<SignedInPerson> {
   const token = readSessionToken(c);
-  if (token === null || !isUuid(token)) return null;
+  if (token === null || !isUuid(token)) return { outcome: "nobody" };
   const [found] = await tx
     .select({ personId: sessions.personId })
     .from(sessions)
@@ -91,14 +117,19 @@ export async function signedInPersonOn(
         isNull(sessions.endedAt),
       ),
     );
-  return found?.personId ?? null;
+  if (found === undefined) return { outcome: "nobody" };
+  const refusal = personRefusal(c, found.personId);
+  return refusal === null
+    ? { outcome: "person", personId: found.personId }
+    : { outcome: "refused", refusal };
 }
 
 /**
  * Resolves the request's cookie to an OPEN shift session and the device it was opened on, or throws
  * `session.required`. The lookup is by the token's hash with `ended_at IS NULL`, so an unknown token
  * and a logged-out session fail as a missing cookie does. A session whose device has been revoked
- * throws `device.unauthorized`. Login and logout deliberately do not call this. With `permission`,
+ * throws `device.unauthorized`, and a request naming another person `session.person_not_signed_in`.
+ * Login and logout deliberately do not call this. With `permission`,
  * the session's person must also hold it (`authorize`, no override), checked in the same
  * transaction; with `action`, the device's active profile must permit it (`assertProfileAction`)
  * and the request must prove that same device.
@@ -128,6 +159,8 @@ export async function requireSession(
       .where(and(eq(sessions.tokenHash, hashSessionToken(token)), isNull(sessions.endedAt)));
     if (found === undefined) throw new AppError("session.required", {});
     if (!found.active) throw new AppError("device.unauthorized", {});
+    const refusal = personRefusal(c, found.personId);
+    if (refusal !== null) throw refusal;
     const seenAt = nowIso();
     if (stamp && sightingDue(found.lastSeenAt, seenAt))
       await recordSighting(tx, found.deviceId, seenAt);
