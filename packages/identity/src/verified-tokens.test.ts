@@ -40,7 +40,7 @@ describe("createVerifiedTokenMemory", () => {
     expect(memory.alreadyVerified("c", "token-c", HASH)).toBe(true);
   });
 
-  it("evicts nothing when an id already held is remembered again, and counts it as newest", () => {
+  it("counts the oldest entry as newest when it is remembered again at the limit", () => {
     const memory = createVerifiedTokenMemory(2);
     memory.remember("a", "token-a", HASH);
     memory.remember("b", "token-b", HASH);
@@ -51,6 +51,32 @@ describe("createVerifiedTokenMemory", () => {
     memory.remember("c", "token-c", HASH);
     expect(memory.alreadyVerified("b", "token-b", HASH)).toBe(false);
     expect(memory.alreadyVerified("a", "token-a", HASH)).toBe(true);
+  });
+
+  it("evicts nothing when the newest entry is remembered again at the limit", () => {
+    const memory = createVerifiedTokenMemory(2);
+    memory.remember("a", "token-a", HASH);
+    memory.remember("b", "token-b", HASH);
+    memory.remember("b", "token-b", HASH);
+    expect(memory.alreadyVerified("a", "token-a", HASH)).toBe(true);
+    expect(memory.alreadyVerified("b", "token-b", HASH)).toBe(true);
+  });
+
+  it("keeps every entry when one is remembered again below the limit, and counts it as newest", () => {
+    const memory = createVerifiedTokenMemory(3);
+    memory.remember("a", "token-a", HASH);
+    memory.remember("b", "token-b", HASH);
+    memory.remember("a", "token-a", HASH);
+    memory.remember("c", "token-c", HASH);
+    expect(memory.alreadyVerified("a", "token-a", HASH)).toBe(true);
+    expect(memory.alreadyVerified("b", "token-b", HASH)).toBe(true);
+    expect(memory.alreadyVerified("c", "token-c", HASH)).toBe(true);
+
+    memory.remember("d", "token-d", HASH);
+    expect(memory.alreadyVerified("b", "token-b", HASH)).toBe(false);
+    expect(memory.alreadyVerified("a", "token-a", HASH)).toBe(true);
+    expect(memory.alreadyVerified("c", "token-c", HASH)).toBe(true);
+    expect(memory.alreadyVerified("d", "token-d", HASH)).toBe(true);
   });
 
   it("forgets one id and leaves the others", () => {

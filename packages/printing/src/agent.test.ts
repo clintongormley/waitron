@@ -8,9 +8,11 @@ import {
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
+import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { hashSecret } from "@waitron/identity";
+import { AppError } from "@waitron/shared";
 import { authenticateAgent } from "./agent.js";
 type PrintAgentConfig = { locationId: string };
 import "./errors.js";
@@ -380,6 +382,69 @@ describe("authenticateAgent", () => {
     for (const bad of ["nodothere", "abc.", "not-a-uuid.somesecret"]) {
       expect(await codeOf(() => authenticateAgent(suite.db, bad))).toBe("agent.unauthorized");
     }
+  });
+
+  describe("when the sighting write is refused", () => {
+    /** The venue database, except that every write turn runs `before` and then rejects with `error`. */
+    function sightingRefused(error: Error, before: () => Promise<unknown> = async () => {}) {
+      return Object.create(suite.db, {
+        withWriteLock: {
+          value: async () => {
+            await before();
+            throw error;
+          },
+        },
+      }) as Database;
+    }
+    const diskFull = () => new AppError("storage.disk_full", {});
+    const revoke = (agentId: string) =>
+      suite.db.update(printAgents).set({ active: false }).where(eq(printAgents.id, agentId));
+
+    it("a full disk still authenticates the agent, and saves no sighting", async () => {
+      const { agentId, token } = await enrolled();
+      expect(await authenticateAgent(sightingRefused(diskFull()), token)).toEqual({ agentId });
+      expect(await lastSeenAt(agentId)).toBeNull();
+    });
+
+    it("on a full disk, an agent revoked meanwhile is refused", async () => {
+      const { agentId, token } = await enrolled();
+      const db = sightingRefused(diskFull(), () => revoke(agentId));
+      expect(await codeOf(() => authenticateAgent(db, token))).toBe("agent.unauthorized");
+    });
+
+    it("on a full disk, an agent re-keyed meanwhile is refused", async () => {
+      const { agentId, token } = await enrolled();
+      const db = sightingRefused(diskFull(), () =>
+        suite.db
+          .update(printAgents)
+          .set({ tokenHash: hashSecret(randomBytes(32).toString("base64url")) })
+          .where(eq(printAgents.id, agentId)),
+      );
+      expect(await codeOf(() => authenticateAgent(db, token))).toBe("agent.unauthorized");
+    });
+
+    it("on a full disk, a token whose agent was revoked meanwhile is forgotten", async () => {
+      const { agentId, token } = await enrolled();
+      await authenticateAgent(suite.db, token);
+      await suite.db
+        .update(printAgents)
+        .set({ lastSeenAt: new Date(Date.now() - 90_000).toISOString() })
+        .where(eq(printAgents.id, agentId));
+      const db = sightingRefused(diskFull(), () => revoke(agentId));
+      expect(await codeOf(() => authenticateAgent(db, token))).toBe("agent.unauthorized");
+
+      await suite.db.update(printAgents).set({ active: true }).where(eq(printAgents.id, agentId));
+      const before = verification.calls;
+      await authenticateAgent(suite.db, token);
+      expect(verification.calls - before).toBe(1);
+    });
+
+    it("any other failure still fails the call", async () => {
+      const { agentId, token } = await enrolled();
+      const boom = new Error("boom");
+      await expect(authenticateAgent(sightingRefused(boom), token)).rejects.toBe(boom);
+      expect(await lastSeenAt(agentId)).toBeNull();
+    });
   });
 
   describe("remembering a token that passed the key check", () => {

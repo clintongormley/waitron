@@ -12,7 +12,7 @@ export interface PrintAgentSessionDeps {
 
 /**
  * The Bearer guard for the print-agent API. Every failure — no token, an unknown selector, a revoked
- * agent, a secret that does not verify — is the same `agent.unauthorized`, so none is an oracle.
+ * agent, a secret that does not verify — is the same `agent.unauthorized`.
  */
 export async function requireAgent(
   deps: PrintAgentSessionDeps,

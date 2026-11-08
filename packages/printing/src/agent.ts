@@ -1,7 +1,7 @@
 // Keeps errors.ts's codes reachable from the throwing file (scripts/errors-reachable.test.ts).
 import "./errors.js";
 import { and, eq, isNull, lt, or } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, diskFullIn } from "@waitron/shared";
 import { nowIso, printAgents, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { createVerifiedTokenMemory, verifySecretAsync } from "@waitron/identity";
@@ -16,8 +16,7 @@ const verifiedAgents = createVerifiedTokenMemory(VERIFIED_AGENTS_LIMIT);
 
 /**
  * Resolves a bearer token `${agentId}.${secret}` to its agent id. The id selects the row (the scrypt
- * salt is per row) and the secret validates it. Every failure throws the same `agent.unauthorized`,
- * so the response confirms neither an agent's existence nor its revocation.
+ * salt is per row) and the secret validates it. Every refusal is the same `agent.unauthorized`.
  *
  * The key is derived on the thread pool and the row re-read afterwards, both with no transaction
  * open, so a revoke or a re-key committed while the key was derived refuses this token. A secret
@@ -69,28 +68,39 @@ export async function authenticateAgent(db: Database, token: string): Promise<{ 
   const seenAt = nowIso();
   const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
   if (row.lastSeenAt === null || row.lastSeenAt < staleBefore) {
-    await withTransaction(db, async (tx) => {
-      const [locked] = await tx
-        .select({ tokenHash: printAgents.tokenHash })
-        .from(printAgents)
-        .where(current);
-      if (locked === undefined || locked.tokenHash !== verifiedHash) {
-        verifiedAgents.forget(agentId);
-        throw new AppError("agent.unauthorized", {});
-      }
-      // The staleness check on the row read spares a call the write lock; the same check in this
-      // update keeps calls that all read a stale row to one write.
-      await tx
-        .update(printAgents)
-        .set({ lastSeenAt: seenAt })
-        .where(
-          and(
-            eq(printAgents.id, agentId),
-            // `<` is UNKNOWN for NULL, so a never-seen agent needs its own alternative.
-            or(isNull(printAgents.lastSeenAt), lt(printAgents.lastSeenAt, staleBefore)),
-          ),
-        );
-    });
+    const stillCurrent = (found: { tokenHash: string } | undefined): boolean =>
+      found !== undefined && found.tokenHash === verifiedHash;
+    let stillValid: boolean;
+    try {
+      stillValid = await withTransaction(db, async (tx) => {
+        const [locked] = await tx
+          .select({ tokenHash: printAgents.tokenHash })
+          .from(printAgents)
+          .where(current);
+        if (!stillCurrent(locked)) return false;
+        // The staleness check on the row read spares a call the write lock; the same check in this
+        // update keeps calls that all read a stale row to one write.
+        await tx
+          .update(printAgents)
+          .set({ lastSeenAt: seenAt })
+          .where(
+            and(
+              eq(printAgents.id, agentId),
+              // `<` is UNKNOWN for NULL, so a never-seen agent needs its own alternative.
+              or(isNull(printAgents.lastSeenAt), lt(printAgents.lastSeenAt, staleBefore)),
+            ),
+          );
+        return true;
+      });
+    } catch (error) {
+      // A full disk refuses the sighting, not the agent: the same check runs again, unstamped.
+      if (!diskFullIn(error)) throw error;
+      stillValid = stillCurrent(await readRow());
+    }
+    if (!stillValid) {
+      verifiedAgents.forget(agentId);
+      throw new AppError("agent.unauthorized", {});
+    }
   }
   return { agentId };
 }
