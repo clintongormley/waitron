@@ -12,6 +12,7 @@ import {
   insertAttempting,
 } from "./store.js";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
+import { payments } from "./schema/payments.js";
 import { seedWorkingOrder, seedHeldReader, seedBillPayment } from "../test/seed.js";
 import { deviceOrigin } from "@waitron/shared";
 import {
@@ -49,6 +50,7 @@ it.each(["12.00", "13.00"])("saves a confirmed capture of %s exactly once", asyn
     amount: actual,
     externalRef: "pi_actual",
   });
+  expect(await suite.db.select().from(payments)).toMatchObject([{ requestedAmount: 1210 }]);
   await expect(
     withTransaction(suite.db, (tx) =>
       captureAttempting(tx, {
@@ -63,6 +65,7 @@ it.each(["12.00", "13.00"])("saves a confirmed capture of %s exactly once", asyn
     amount: actual,
     externalRef: "pi_actual",
   });
+  expect(await suite.db.select().from(payments)).toMatchObject([{ requestedAmount: 1210 }]);
 });
 
 const mismatch = (paymentRef: string, provider = "stripe") => ({

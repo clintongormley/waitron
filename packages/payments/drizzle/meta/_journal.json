@@ -8,6 +8,13 @@
       "when": 1793991025633,
       "tag": "0000_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794161460485,
+      "tag": "0001_chief_spirit",
+      "breakpoints": true
     }
   ]
 }

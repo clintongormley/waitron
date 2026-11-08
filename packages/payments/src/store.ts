@@ -208,6 +208,7 @@ async function resolveAttempting(
     .set({
       state,
       amount: extra.amount === undefined ? undefined : decimalToCents(extra.amount),
+      requestedAmount: sql`${payments.amount}`,
       settledAt: extra.settledAt ?? null,
       externalRef: extra.externalRef ?? null,
       cardScheme: extra.card?.scheme ?? null,
