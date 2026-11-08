@@ -28,6 +28,7 @@ import type { PartyAllergyRead } from "@waitron/module";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
+import { noteSessionPerson } from "./testing/tab-person.js";
 import { createZone } from "./testing/service-zone.js";
 import { createTable } from "./testing/live-table.js";
 
@@ -343,6 +344,7 @@ describe("A669 allergy routes", () => {
       .values({ displayName: "Other staff", role: "staff" })
       .returning();
     await suite.db.update(sessions).set({ personId: other!.id }).where(eq(sessions.id, sessionId));
+    noteSessionPerson(token, other!.id);
     await expectError(await request("PUT", path(), original), 409, "submission.id_reused");
     expect(await snapshot()).toEqual(before);
     expect(await suite.db.select().from(serviceCommands)).toHaveLength(2);

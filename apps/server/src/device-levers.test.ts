@@ -18,6 +18,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, persons } from "@waitron/identity";
+import { PERSON_HEADER } from "@waitron/shared";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { LEVER_STATUS, mountDeviceApi } from "./device-api.js";
 import { STATUS as TILL_STATUS, mountTillApi } from "./till-api.js";
@@ -323,7 +324,7 @@ describe("waiter cooking authority", () => {
       });
       const request = new Request(`http://localhost${url}`, {
         method: "POST",
-        headers: { cookie, "content-type": "application/json" },
+        headers: { cookie, "content-type": "application/json", [PERSON_HEADER]: f.ana },
         body: JSON.stringify(body),
       });
       request.text = async () => {
