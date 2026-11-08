@@ -45,7 +45,7 @@ index. Nothing else here was re-run.
 
 ## Commits, pull requests and merging
 
-**Every commit needs `git commit -s`**; CI's `dco` job walks the whole PR range, and every push to `main` from its previous tip. **A PR that goes
+**Every commit needs `git commit -s`**; the sign-off step of CI's `changes` job walks the whole PR range, and every push to `main` from its previous tip. **A PR that goes
 `BEHIND` is not rebased for that alone** (owner decision 2026-09-05): with every check green on
 the current head and every conversation resolved, when GitHub still reports it `MERGEABLE` and
 what `main` gained since the merge-base is documentation, or code only in files this branch did
@@ -74,7 +74,8 @@ passed: Dependabot's commit in each of #764 (compose), #765 and #766 (npm) carri
 `Signed-off-by: dependabot[bot] <support@github.com>`, and each PR's `Every commit is signed off`
 check passed (with the repository's "Require contributors to sign off on web-based commits" setting
 off). The GitHub Actions and Dockerfile update jobs also ran that day and opened no pull request, so
-no commit of theirs has been seen. A commit without the line fails that check; the repair is the one
+no commit of theirs has been seen. A commit without the line now fails the sign-off step of the `ci`
+check (that check became a step of `ci.yml`'s `changes` job on 2026-11-08, A1455); the repair is the one
 the pre-push hook prints, `git rebase --signoff <base>`, run on the Dependabot branch (checked out as
 the next item describes) and pushed with `--force-with-lease` through the hook.
 

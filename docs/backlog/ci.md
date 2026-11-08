@@ -1048,9 +1048,7 @@ output.
 
 ## `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in `.husky/pre-push` beside the same loop; it is not there
 
-- Two reasons #602 deleted and did not restore, for the owner to confirm: the hook bullet at the
-  top of `scripts/check-signoff.test.mjs` no longer gives a reason (the shell-instead-of-`.mjs`
-  decision `licence.yml` points at is still stated), and `scripts/english-only.test.ts`'s
+- A reason #602 deleted and did not restore, for the owner to confirm: `scripts/english-only.test.ts`'s
   provisioning-test exemption lost its end condition ("until that test runs against fiscal-none",
   spec §6 step 5).
 
@@ -1159,7 +1157,7 @@ never ran in that job. The cause remains unverified.
 The A1178 diagnosis compared three morning runs with first-checkout medians of 11 to
 12.5 seconds and no retries against later run `40723334721`, with a 42.5-second median
 and eight retries. Fresh local full-history pack controls grew by 1.49%; they did not reproduce
-the hosted timeout. Both CI and licence checkout attempts now emit Git Trace2 JSON events,
+the hosted timeout. CI's checkout attempts emit Git Trace2 JSON events,
 and successful checkouts print stored-pack byte counts. See the
 [measured diagnosis and its limits](../developers/ci-and-gates.md#checkout-stage-diagnostics-28-october-2026-a1178).
 In full comparison run `40765243305`, both a full-history and a shallow first attempt reached
@@ -1167,7 +1165,7 @@ In full comparison run `40765243305`, both a full-history and a shallow first at
 does not distinguish waiting for incoming data from local indexing. Capture more evidence at
 that boundary before attributing the wait to GitHub, the network or local indexing.
 Suite jobs use depth one, with full history retained for change classification and sign-off.
-Since A1316 those two full-history checkouts skip old file contents
+Since A1316 the full-history checkouts skip old file contents
 ([why, and what was measured](../developers/ci-and-gates.md#the-two-full-history-checkouts-skip-old-file-contents-a1316)).
 Full baseline `40757792434` and shallow comparison `40765243305` each passed 76 jobs, with
 one skipped publish. Package test counts matched; the root gained the new history guard.

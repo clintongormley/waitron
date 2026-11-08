@@ -1,18 +1,13 @@
 name: CI
 
-# `ci` is the only job in this file that branch protection requires. Ruleset 19899160 requires
-# exactly three contexts — read back on 2026-07-31 with:
+# `ci` is the only job in this file, and the only context, that branch protection (ruleset 19899160)
+# requires. Read the list back with:
 #
 #   gh api repos/:owner/:repo/rulesets/19899160 \
 #     --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'
 #
-#   LICENSE is unmodified Elastic License 2.0
-#   Every commit is signed off
-#   ci
-#
-# The other two are produced by licence.yml, whose `licence-integrity` and `dco` jobs set those
-# strings as their `name:` (`grep -n 'name:' .github/workflows/licence.yml`). So `ci` is this
-# file's entire interface to branch protection.
+# The licence and sign-off checks are steps of the `changes` job, so they fail `ci` through it.
+# The watcher removes the old licence workflow's two contexts from the ruleset when this lands.
 #
 # The job ids below are therefore NOT a stable public interface, and removing that property is the
 # whole point of the `ci` job. Until the ruleset was changed, five ids here were required by name:
@@ -312,6 +307,47 @@ jobs:
               | node scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
           fi
 
+      # These two stay last: `lint`, `root-guards` and `server-queue-watchdog` still run when this
+      # job fails and read its outputs, which a step failing earlier would leave empty.
+      - name: Verify LICENSE byte-for-byte
+        run: |
+          echo "48255018b41fc0e965b1115af7e6779bc218bb8a6747d561da800d5022622aa2  LICENSE" \
+            | sha256sum -c -
+      # The predicate and the per-commit walk are scripts/check-signoff.sh, which .husky/pre-push
+      # runs too. Pushes to main are checked as well as pull requests: documentation reaches main by
+      # a direct push, and the hook can be skipped. Schedules, manual runs and tags have no range.
+      - name: Check Signed-off-by trailers
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # Both refusals below fail closed: a range that cannot be listed is not a passed check.
+          case "$BASE_SHA" in
+          *[!0]*) ;;
+          *)
+            echo "::error::This push names no earlier tip (before is all zeros), so its commits cannot be listed"
+            exit 1
+            ;;
+          esac
+          if ! commits=$(git rev-list "$BASE_SHA".."$HEAD_SHA"); then
+            echo "::error::Could not enumerate the commits in $BASE_SHA..$HEAD_SHA"
+            exit 1
+          fi
+          # The range stays here rather than in the script: this one is a pull request's or a push's,
+          # and the hook's is accumulated per pushed ref. Only the predicate and the walk are shared.
+          if missing=$(printf '%s\n' "$commits" | scripts/check-signoff.sh); then
+            echo "All commits signed off."
+            exit 0
+          fi
+          # One annotation per failing commit, which is this job's own reporting — the script writes
+          # the commits and nothing else to stdout precisely so this can wrap them.
+          printf '%s\n' "$missing" | while IFS= read -r line; do
+            if [ -n "$line" ]; then echo "::error::Missing Signed-off-by: $line"; fi
+          done
+          echo "Sign off with: git commit -s   (or: git rebase --signoff <base>)"
+          exit 1
+
   # Worth knowing precisely what `format:check` covers: .prettierignore lists `docs/`, so
   # root-level Markdown (CLAUDE.md, README.md, CONTRIBUTING.md) IS checked and nothing under docs/
   # is. Established by malforming a file in each location — `prettier --check` reports an ignored
@@ -469,8 +505,8 @@ jobs:
       #   `packages/db` until 2026-08-01, where `test-heavy`'s own gate decided whether they ran —
       #   so a pull request touching only `packages/payments` ran neither, and their first run was
       #   the unfiltered `main` merge;
-      #   `scripts/check-signoff.test.mjs`, which covers the script licence.yml's `dco` job runs and
-      #   runs that job's own step, extracted from the workflow file rather than transcribed.
+      #   `scripts/check-signoff.test.mjs`, which covers the script the `changes` job's sign-off step
+      #   runs and runs that step itself, extracted from this file rather than transcribed.
       - run: pnpm vitest run --coverage
 
   # The bundles operators actually run. Nothing else in this workflow builds them: dist/ is

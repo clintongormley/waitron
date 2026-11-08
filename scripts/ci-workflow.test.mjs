@@ -5192,7 +5192,7 @@ function checkoutAttempts(text) {
  */
 describe("the workflows' checkouts", () => {
   it("uses full history, without old file contents, only for change classification and sign-off", () => {
-    const historyReaders = ["ci.yml:changes", "licence.yml:dco"];
+    const historyReaders = ["ci.yml:changes"];
     const checkouts = workflowFiles.flatMap((name) =>
       jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) =>
         workflowSteps(lines.join("\n"))
@@ -5404,6 +5404,43 @@ describe("the workflows' checkouts", () => {
       ),
       'run each checkout as the three steps in docs/developers/ci-and-gates.md, "Every checkout is bounded"',
     ).toEqual([]);
+  });
+});
+
+// Read as TEXT: GitHub's evaluation of the steps' conditions is not run here.
+describe("the licence and sign-off checks", () => {
+  const changesSteps = (() => {
+    const block = jobBlocks(lines.join("\n")).find(({ id }) => id === "changes");
+    expect(block).toBeDefined();
+    return workflowSteps(block.lines.join("\n"));
+  })();
+  const indexOf = (predicate) => changesSteps.findIndex(predicate);
+
+  it("verifies LICENSE byte-for-byte in the changes job", () => {
+    const licence = changesSteps.find(({ step }) => step === "Verify LICENSE byte-for-byte");
+    expect(licence).toBeDefined();
+    expect(
+      licence.command
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
+    ).toEqual([
+      'echo "48255018b41fc0e965b1115af7e6779bc218bb8a6747d561da800d5022622aa2  LICENSE" \\',
+      "| sha256sum -c -",
+    ]);
+  });
+
+  // Jobs that run after a failed `changes` read its outputs, which a step failing before `gates`
+  // would leave unset.
+  it("runs both checks after the gates step", () => {
+    const gates = indexOf(({ id }) => id === "gates");
+    expect(gates).toBeGreaterThan(-1);
+    expect(indexOf(({ step }) => step === "Verify LICENSE byte-for-byte")).toBeGreaterThan(gates);
+    expect(indexOf(({ step }) => step === "Check Signed-off-by trailers")).toBeGreaterThan(gates);
+  });
+
+  it("has no separate licence workflow", () => {
+    expect(existsSync(join(workflowsDir, "licence.yml"))).toBe(false);
   });
 });
 

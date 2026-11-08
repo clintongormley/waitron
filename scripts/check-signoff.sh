@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # The sign-off (DCO) predicate and the walk over a push's commits — the one copy, called by both
-# gates: `.husky/pre-push`'s `check_signoff` and `.github/workflows/licence.yml`'s `dco` job. Each
+# gates: `.husky/pre-push`'s `check_signoff` and the sign-off step of ci.yml's `changes` job. Each
 # kept its own byte-identical `grep -qiE '^Signed-off-by: .+ <.+@.+>'` and its own loop until
 # 2026-08-01. The two agreeing is the whole point of the check, and two copies is not how that is
 # kept true.
@@ -22,11 +22,8 @@
 # and the reporting is different too — this file is the predicate and the walk, which is the part
 # that has to agree.
 #
-# Shell rather than node, decided on how the callers invoke it. The hook runs this step FIRST,
-# before `pnpm install` and the classifier; licence.yml's `dco` job installs no pnpm
-# and no setup-node, and it produces a REQUIRED status check. A node script would put an
-# interpreter under both of those. Tested by scripts/check-signoff.test.mjs, which spawns this file
-# the way both callers do, against throwaway git repositories.
+# Tested by scripts/check-signoff.test.mjs, which spawns this file the way both callers do, against
+# throwaway git repositories.
 missing=0
 
 # `|| [ -n "$sha" ]` so a final line with no trailing newline is still processed: `read` returns
