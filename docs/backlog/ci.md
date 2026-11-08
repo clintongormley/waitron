@@ -650,8 +650,8 @@ A1424's live qualification was added on 7 November 2026.
 - **Find why each restart test in `apps/server/src/first-fiscal-hour.e2e.test.ts` and
   `first-fiscal-hour-boot.e2e.test.ts` boots the real entry point twice.** Left open by A938 (#1930).
   [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
-- **The server's test suite has more measured speed-ups left.** A1297 took the three largest; four
-  more were measured or named but not built. Plus two small guard gaps from the same PR.
+- **The server's test suite has more measured speed-ups left.** A1297 took the three largest;
+  others were measured or named but not built. Plus two small guard gaps from the same PR.
   [Detail](ci.md#server-test-time-levers-left-after-a1297).
 - **Other server test files still hash fixed PINs and passwords on every test.**
   [Detail](ci.md#other-server-test-files-still-hash-fixed-pins-and-passwords-on-every-test).
@@ -1326,12 +1326,15 @@ within a test file, migrated `heldSetup`'s databases once per file, sealed the t
 under one salt per file and split `first-fiscal-hour.e2e.test.ts`. Its investigators measured or named
 these, which it did not build (local figures, 2 November 2026):
 
-- **Start child servers from a prebuilt bundle instead of `tsx`.** Loading `src/boot.ts` through `tsx`
-  took 2.3–2.5 s per process on a busy machine; `kitchen-allergy.restart.test.ts` starts 15,
-  `hour-recovery-placement-*` 2–4 each. A bundle's start time was not measured, and an earlier attempt
-  to bundle `bin.ts` failed resolving `ui-core` and the assets' font path.
+- **Other tests' child processes still load through `tsx`.** A1444 (8 November 2026) moved
+  `kitchen-allergy.restart.test.ts` and `party-allergy.restart.test.ts` to a bundle of `src/bin.ts`
+  built once per file, and changed no other test. Among those left, `test/first-fiscal-hour-entry.ts`
+  starts the real `src/bin.ts` and `src/node-entry.ts` for the `first-fiscal-hour*` end-to-end files
+  that import it, and `hour-recovery-placement-1`, `hour-recovery-placement-2`,
+  `handover-stepdown.crash.test.ts` and `handover-activation-repair.test.ts` replace modules at load
+  time through `registerHooks`.
 - **One migrated template for every `useVenueDb` suite: measured and not worth building** (A1443,
-  8 November 2026). The 0.85 s above predates [PR #2539](https://github.com/clintongormley/waitron/pull/2539),
+  8 November 2026). The 0.85 s per file recorded on 2 November predates [PR #2539](https://github.com/clintongormley/waitron/pull/2539),
   which took the repository from 405 migration files to 7. Timed on one Mac in a new process per run
   (every file is its own process under Vitest's defaults) with the full manifest: migrating takes a
   median of 65 ms and copying an already migrated database 18 ms, a saving of 47 ms per file. The same

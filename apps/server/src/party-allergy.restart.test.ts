@@ -3,10 +3,8 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -19,6 +17,7 @@ import { readPartyAllergy, setRoutingCell } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
 import { readPartyAllergyView } from "./party-allergy.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
+import { useBuiltServer } from "./testing/built-server.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import {
   retainHttpListener,
@@ -45,23 +44,15 @@ const suite = useVenueDb({
   },
 });
 
+const builtServer = useBuiltServer();
+
 async function boot(env: NodeJS.ProcessEnv) {
   const startupDeadline = Date.now() + 60_000;
   const held = await retainHttpListener();
-  const child = spawn(
-    process.execPath,
-    [
-      "--import",
-      retainedHttpPreload,
-      "--import",
-      pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href,
-      fileURLToPath(new URL("./bin.ts", import.meta.url)),
-    ],
-    {
-      env: { ...env, WAITRON_HTTP_PORT: String(held.port) },
-      stdio: ["ignore", "pipe", "pipe", "ipc"],
-    },
-  );
+  const child = spawn(process.execPath, ["--import", retainedHttpPreload, builtServer()], {
+    env: { ...env, WAITRON_HTTP_PORT: String(held.port) },
+    stdio: ["ignore", "pipe", "pipe", "ipc"],
+  });
   let output = "";
   child.stdout!.on("data", (chunk: Buffer) => {
     output += chunk.toString();
