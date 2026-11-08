@@ -108,7 +108,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1398. Pack the other packages' test shards by measured time, and check the packing on every run](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time-and-check-the-packing-on-every-run)
 - [A1399. What happens when a bill payment is sent again under one id](backlog/payments.md#bundle-a1399-what-happens-when-a-bill-payment-is-sent-again-under-one-id)
 - [A1400. An older copy must not undo a save](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
-- [A1401. Find out why the failover bench reports a corrupt database](backlog/replication-cloud.md#bundle-a1401-find-out-why-the-failover-bench-reports-a-corrupt-database)
 
 **3. The foundation, already running.** A1308 stays first in lane A, with
 [Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).
@@ -2129,7 +2128,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   bootstrap; and the cloud-standby end-to-end proof. Do not restart the cloud-standby work until the boundary contract is settled.
   [Detail](backlog/replication-cloud.md#waitron-retains)
 
-- **A1401. Find out why the failover bench reports a corrupt database** (bundle of 2, 1 important, size M, needs a third party). [Detail](backlog/replication-cloud.md#bundle-a1401-find-out-why-the-failover-bench-reports-a-corrupt-database)
+- **Loose ends left by the SQLite failover-loop prototype gate.** Provider qualification,
+  promotion generations and the Cloud recovery contract remain open.
+  [Detail](backlog/replication-cloud.md#loose-ends-left-by-the-sqlite-failover-loop-prototype-gate)
 
 ### CI, tests and developer tooling
 

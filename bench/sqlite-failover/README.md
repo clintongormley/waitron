@@ -115,9 +115,10 @@ delete it.
 
 **Since 2026-11-03 S2 no longer makes a clean run exit 1**: it reads PASS (see "What S2 measures,
 and what it does not" below). Before that every clean run exited 1, because S2's verdict was FAIL.
-A clean run can still exit 1: on 2026-11-03 S3 threw `database disk image is malformed` on some
-whole-table runs on one machine, cause not investigated (the backlog's _Replication, failover and
-the cloud_ area). A 1 means a critical scenario failed or threw; read the table for which.
+On 8 November, a faster-write S3 probe reproduced `database disk image is malformed` while
+reading Part B's deliberately mixed replica; the direct and mirrored restores passed. Part B now
+records SQLite corruption at that read as the control's rejection, with unreadable row and node
+counts. A 1 still means a critical scenario failed or threw; read the table for which.
 
 `TESTCONTAINERS_RYUK_DISABLED=true` is required locally (`CLAUDE.md` §4), and it turns off the reaper
 that would otherwise clean up after an interrupted run. Scenarios run one at a time and each that opens a store stops it
@@ -493,6 +494,19 @@ holds **box-b's nine rows** — `control-rows=9 control-nodes=[box-b]` — and S
 integrity check rather than the row comparison. Both the integrity string and the refusal's own
 words are printed, because a later run refusing at the row comparison instead would be a different
 finding and should read as one.
+
+**Unreadable Part B controls (8 November 2026).** SQLite can throw while opening or reading the
+mixed file, before the comparison above runs. This control records only native SQLite corruption
+(`ERR_SQLITE_ERROR`, primary result code 11) from that read. The read happens inside the
+shared comparison so a missing comparison still fails the control. Its row count and node list then read
+`unreadable`, with SQLite's message in the integrity and refusal fields. The restore command runs
+outside this handling. Other read failures still throw, as do corruption errors in the direct,
+mirrored and same-lineage restores.
+
+Run the deterministic native-SQLite regression checks with
+`node --test bench/sqlite-failover/test/additive-control.test.ts` from the repository root. They
+check an unreadable control, a readable result and unrelated failures. The whole bench command
+above exercises the scenario wiring; these standalone checks are not part of package CI.
 
 **Part C is a MEASUREMENT and decides nothing.** It is the control plan Task 8 asked for, and **it
 does not reproduce the opposite result on this pin**. The plan expected an additive copy to diverge
