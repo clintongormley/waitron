@@ -1538,23 +1538,6 @@ existing one in #2395, and two of its new cases sit apart from the cases they ex
 new setup into the existing helper and move the two cases beside their neighbours; no assertion
 changes.
 
-## A1432. Store commit notifications on the Debian test box
-
-`packages/store/src/index.test.ts`, "tells listeners about a commit that rewrites the side file
-from its beginning at the same size", received zero notifications where it expected one on the
-Debian test box during A1431. It failed in three untouched-production baseline runs at
-`961977794ebf8bac10c50a69295e0188f19e428e` and again after the bound-value fixture changed.
-The focused 54-case file passed on macOS. No notification assertion or store implementation changed.
-
-The Linux runs restricted the process to two CPUs with `taskset -c 0,1` and enabled coverage.
-The last two ran store and shared concurrently with
-`pnpm --filter @waitron/store --filter @waitron/shared -r --parallel test:coverage`.
-`packages/store/src/connections.ts:152–155` documents that a same-size commit in the same
-modification-time tick can go unreported, measured on APFS only. Capture those marks around the
-failed write and check that limit on the box's filesystem; the cause here remains unverified.
-A1432 determines whether the store or the test's timing needs correction, preserving the
-notification and same-size assertions. A1431's PR retains the logs.
-
 ## Shared logo retry checks use the retained timing list
 
 `packages/ui/src/components/wt-venue-logo.retry.test.ts`'s `requests` helper reads

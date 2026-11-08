@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { statSync } from "node:fs";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 import { asDiskFull } from "./disk-full.js";
 
@@ -65,13 +65,27 @@ const totalChanges = (connection: DatabaseSync): number => {
   return (counter.get() as { n: number }).n;
 };
 
-/** The write-ahead side file as last seen: its size and modification time, or why there is none. */
-export type WalMark = { size: bigint; mtimeNs: bigint } | "absent" | "unreadable";
+export type WalMark =
+  { size: bigint; mtimeNs: bigint; commitHeader: string } | "absent" | "unreadable";
 
 export const walMark = (path: string): WalMark => {
   try {
     const stat = statSync(path, { bigint: true, throwIfNoEntry: false });
-    return stat === undefined ? "absent" : { size: stat.size, mtimeNs: stat.mtimeNs };
+    if (stat === undefined) return "absent";
+    const fd = openSync(`${path.slice(0, -4)}-shm`, "r");
+    try {
+      // A reused WAL can keep its size, timestamp and WAL header across successive commits.
+      const header = Buffer.alloc(48);
+      const length = readSync(fd, header, 0, header.length, 0);
+      if (length !== header.length) return "unreadable";
+      return {
+        size: stat.size,
+        mtimeNs: stat.mtimeNs,
+        commitHeader: header.toString("hex"),
+      };
+    } finally {
+      closeSync(fd);
+    }
   } catch {
     return "unreadable";
   }
@@ -82,7 +96,7 @@ export const sameWal = (a: WalMark, b: WalMark): boolean =>
     ? false
     : a === "absent" || b === "absent"
       ? a === b
-      : a.size === b.size && a.mtimeNs === b.mtimeNs;
+      : a.size === b.size && a.mtimeNs === b.mtimeNs && a.commitHeader === b.commitHeader;
 
 /**
  * The connections one database file is opened on, and the rule deciding where a statement goes.
@@ -149,10 +163,9 @@ export interface Connections {
    * listener that throws, or returns a promise that rejects, is skipped rather than allowed to
    * reach the caller, who would otherwise be told a committed write failed.
    *
-   * The side file is compared by size and modification time. After a checkpoint a commit rewrites
-   * it from its beginning, at an unchanged size while it fits, so a commit landing in the same
-   * modification-time tick as the one before is not reported. Measured on macOS APFS only, not on
-   * the box's filesystem. A commit that changes the side file but no row (DDL) is not reported and does not move the comparison either, so a
+   * Size and modification time can stay equal while a reused side file is overwritten; its
+   * shared-memory commit header distinguishes those writes. A commit that changes the side file but no row (DDL)
+   * is not reported and does not move the comparison either, so a
    * same-value update right after one IS reported.
    */
   reportIfChanged: (mark: number | null) => void;
