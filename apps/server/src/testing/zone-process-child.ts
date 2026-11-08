@@ -127,7 +127,6 @@ async function families(directory: string, requested: string) {
     group.keys.push(key);
     groups.set(id, group);
   }
-  // Nested Vitest start-up dominated each run, so one run serves every family sharing a root and kind.
   const reports = new Map<string, Report>();
   let index = 0;
   for (const group of groups.values()) {
