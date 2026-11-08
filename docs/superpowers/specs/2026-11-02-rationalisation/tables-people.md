@@ -243,8 +243,8 @@ A registered passkey. 2–10 rows. Columns and protections as today (UNIQUE `cre
 #### `roles` — merge of A1002's roles and `staff_roles` (state)
 The one list of roles, for access and for the rota (owner, 2026-11-04). A role can grant privileges,
 appear on the rota, or both: Supervisor grants privileges, and a "Cook" role may grant none and
-appear on the rota. Four built-ins plus 5–10 job positions and any custom roles. The names `roles`
-and `person_roles` are proposed: A1002 leaves its storage open (its §4).
+appear on the rota. Four built-ins plus 5–10 job positions and any custom roles. A1002 §4's
+2026-11-08 correction fixes the two state tables as `roles` and `person_roles`.
 
 | column | type | key / null |
 | --- | --- | --- |
@@ -255,10 +255,10 @@ and `person_roles` are proposed: A1002 leaves its storage open (its §4).
 | position | count | not null, default 0 — from `staff_roles` |
 | on_rota | bool | not null — **new**: the role appears on the rota and the staffing painter |
 | retired_at | ts | null — **new**: set when a role a shift has used is retired (owner, 2026-11-04) |
-| revision | count | not null — A1002 §3 |
+| permissions | JSON | not null — list of declared permission IDs; ordinary saved grants only; Admin stores an empty list and receives every current/future declared permission from constants in code (A1002 §3–§4, corrected 2026-11-08) |
 
-What A1002 stores beside this (the privilege catalogue, grants, seed completion, authority
-revisions, and policy references) is that design's to draw. It is not drawn or counted here.
+A1002 §4's corrected approval has no privilege catalogue, grants, seed-completion or authority-revision
+tables. Policy role IDs are JSON on their owning device/reason/bill-limit rows, not additional role tables.
 
 What changes for the rota, read in `packages/staffing/src/`:
 - `listStaffRoles` (`staff-roles.ts:124`), which `readRotaWeek` uses (`rota.ts:53`), lists every
@@ -502,7 +502,7 @@ exists today (a grep for audit or role-change logging in `packages/identity/src/
 | --- | --- | --- |
 | `dashboard.signed_in` (`data`: method), `dashboard.signed_out` | person | `management-session.ts` |
 | `person.created`, `person.updated` | person | `staff.ts`, `profile.ts`, provisioning import |
-| `person.roles_changed` (`data`: added, removed) | person | A1002's membership change, which replaces `staff.ts`'s `setRole` and `setStaffRoleHolders`, a delete-then-insert that keeps no record of who held a role (`staff-roles.ts:180-199`) |
+| `person.roles_changed` (`data`: added, removed) | person | A1002's membership change, which replaces `staff.ts`'s `setRole` and `setStaffRoleHolders`, a delete-then-insert that keeps no record of who held a role (`staff-roles.ts:180-199`). **2026-11-08:** this proposed kind is superseded by `role.member_added` / `role.member_removed` in [approved A1002 §7](../2026-10-22-a1002-custom-roles-design.md#7-replacement-audit-follow-each-consumer-to-its-meaning). |
 | `person.suspended`, `person.reactivated` | person | `staff.ts` |
 | `person.pin_reset`, `person.password_changed` | person | `staff.ts`, `profile.ts`, `account-action.ts` |
 | `person.email_changed` | person | `account-action.ts` (on confirmation) |

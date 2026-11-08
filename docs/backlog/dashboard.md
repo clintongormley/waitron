@@ -67,7 +67,9 @@ change what deleting a person does.
 **A1002 design approved 2026-11-07 22:51, with the 22:53 activity/email addition; corrected
 2026-11-08.** The [design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
 holds the accepted rules, recorded authority, shared activity/mail dependencies and review
-corrections. Plan and build remain open.
+corrections. The [2026-11-08 plan candidate](../superpowers/plans/2026-11-08-a1002-custom-roles.md)
+keeps the consumer transition in one working PR. Claude plan review, the watcher's pre-build scope
+read and functional A1308 shared activity/mail dependencies remain required. Build remains open.
 
 ## A keydown guard that cancels Escape while a save runs did not keep one dialog open
 
@@ -299,7 +301,9 @@ After A760, decide whether to remove the redundant column and read the provider 
 ## Review every permission: fewer, coarser, and consistently named
 
 **2026-11-08:** A1002's [approved inventory](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md#2-one-permission-review-before-role-storage)
-is the target. Implementation remains open. The dated discussion below is historical;
+is the target. The [plan candidate](../superpowers/plans/2026-11-08-a1002-custom-roles.md) keeps its
+consumer/default transition with whole-target checks in the coherent roles cut. Implementation
+remains open. The dated discussion below is historical;
 its pending-approval wording is superseded by the 2026-11-07 full approval recorded in design §11.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Since
@@ -345,7 +349,9 @@ the new names answer supersedes that allowance only.
 
 **2026-11-08:** the [approved design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md)
 records the 2026-11-07 22:51 simplifications and 22:53 activity/email addition. See
-[A7](#roles-the-admin-can-edit-a7) for current status. Plan/build remain open.
+[A7](#roles-the-admin-can-edit-a7) for current status and the
+[plan candidate](../superpowers/plans/2026-11-08-a1002-custom-roles.md). Build remains open pending
+review, watcher scope read and the plan's dependencies.
 
 ## Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order says so
 
