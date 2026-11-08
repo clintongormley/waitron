@@ -3558,24 +3558,95 @@ describe("the image smoke's scoping", () => {
 });
 
 describe("main push package gates", () => {
+  const changes = job("changes").body;
+  const step = changes.slice(changes.indexOf("      - id: gates"));
+  const scriptAt = step.indexOf("        run: |");
+  const script = step
+    .slice(scriptAt + 1)
+    .filter((line) => line.startsWith("          "))
+    .map((line) => line.slice(10))
+    .join("\n");
+  const mainInput = step.find((line) => line.trimStart().startsWith("MAIN_PUSH:"));
+  const packageJobs = jobs.filter(({ id }) => /^(test-|mutation-shared)/.test(id));
+
   it.each([
-    ["docs after verified code", "false", false],
-    ["docs behind a cancelled code run", "true", true],
-    ["a code push", "true", true],
-  ])("evaluates shard gates with the supplied code output for %s", (_name, code, expected) => {
-    expect(testShardJobs.length).toBeGreaterThan(0);
-    for (const { id, body } of testShardJobs) {
-      const line = body.find((entry) => /^ {4}if:/.test(entry));
-      expect(line, id).toBeDefined();
-      const expression = line
-        .replace(/^ {4}if:\s*/, "")
-        .replace(/needs\.changes\.outputs\.code/g, JSON.stringify(code))
-        .replace(/needs\.changes\.outputs\.\w+/g, '"true"')
-        .replace(/==/g, "===")
-        .replace(/!=/g, "!==");
-      expect(Boolean(new Function(`return (${expression});`)()), id).toBe(expected);
-    }
-  });
+    ["push", "refs/heads/main", "packages", "true", "false", "none"],
+    ["push", "refs/heads/main", "global", "true", "false", "none"],
+    ["push", "refs/heads/main", "", "true", "false", "none"],
+    ["push", "refs/heads/main", "documentation", "false", "false", "none"],
+    ["push", "refs/heads/main", "root", "false", "false", "none"],
+    ["pull_request", "refs/pull/1/merge", "packages", "true", "false", "server"],
+    ["pull_request", "refs/pull/1/merge", "global", "true", "false", "all"],
+    ["pull_request", "refs/pull/1/merge", "", "true", "false", "all"],
+    ["schedule", "refs/heads/main", "global", "true", "true", "all"],
+    ["workflow_dispatch", "refs/heads/main", "global", "true", "true", "all"],
+    ["push", "refs/tags/v1.0.0", "global", "true", "true", "all"],
+    ["push", "refs/heads/main", "global", "true", "false", "all", true],
+  ])(
+    "selects package work for %s %s scope=%s code=%s full=%s (%s)",
+    (event, ref, scope, code, full, expected, omitInput = false) => {
+      expect(scriptAt).toBeGreaterThan(-1);
+      expect(packageJobs.length).toBeGreaterThan(0);
+      const dir = mkdtempSync(join(tmpdir(), "ci-main-gates-"));
+      try {
+        const output = join(dir, "output");
+        const env = {
+          PATH: process.env.PATH,
+          SCOPE: scope,
+          PACKAGES: "@waitron/server",
+          GITHUB_OUTPUT: output,
+        };
+        if (!omitInput)
+          env.MAIN_PUSH = mainInput
+            ? String(expressionValue(mainInput, { github: { event_name: event, ref } }))
+            : "";
+        const result = spawnSync("bash", ["-e", "-c", script], {
+          cwd: repoRoot,
+          env,
+          encoding: "utf8",
+          timeout: VERDICT_SPAWN_TIMEOUT_MS,
+        });
+        expect(result.status, result.stderr).toBe(0);
+        const gates = Object.fromEntries(
+          readFileSync(output, "utf8")
+            .trim()
+            .split("\n")
+            .map((line) => line.split("=")),
+        );
+        expect(Object.keys(gates).sort()).toEqual(SCOPE_GATES.map(({ output }) => output).sort());
+        if (expected === "server")
+          expect(Object.keys(gates).filter((name) => gates[name] === "true")).toEqual(["server"]);
+        else
+          expect(
+            Object.values(gates).every(
+              (value) => value === (expected === "none" ? "false" : "true"),
+            ),
+          ).toBe(true);
+        const outputs = { ...gates, code, full };
+        const context = {
+          needs: { changes: { outputs } },
+          always: () => true,
+          cancelled: () => false,
+        };
+        const needs = Object.fromEntries(
+          needsOf(job("ci").body).map((id) => [id, { result: "success", outputs: {} }]),
+        );
+        needs.changes.outputs = outputs;
+        for (const { id, body } of packageJobs) {
+          const enabled = jobCondition(body, context);
+          if (expected === "none") expect(enabled, id).toBe(false);
+          if (!enabled) needs[id].result = "skipped";
+        }
+        expect(jobCondition(job("test-server").body, context)).toBe(expected !== "none");
+        for (const id of ["typecheck", "bundle-smoke"])
+          expect(jobCondition(job(id).body, context), id).toBe(code === "true");
+        expect(runVerdict(needs).status).toBe(0);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    TWO_RUNS_TEST_TIMEOUT_MS,
+  );
 });
 
 describe("the sharded jobs", () => {

@@ -199,7 +199,7 @@ jobs:
           # `set -e` is what makes a classifier that cannot run FAIL this step rather than quietly
           # emit nothing, and it matters for ONE of the outputs rather than being a nicety for all of
           # them: `code`. An empty `scope` would be safe: it is neither `packages` nor `brand`, so
-          # every branch below falls through to running everything. An empty `code` would NOT be —
+          # non-main gates fall through to unscoped selection. An empty `code` would NOT be —
           # every code-gated job tests `needs.changes.outputs.code == 'true'` (bundle-smoke,
           # typecheck, all test shards and both mutation runs), so an empty value skips them, and
           # the `ci` aggregate counts a skip as a pass by design. That is a green pull request with
@@ -251,21 +251,25 @@ jobs:
       # (`<pkg>...` is the other direction, a package and its dependencies, and would gate on the
       # wrong set). Only the attribution moved out of pnpm's hands.
       #
-      # Brand scope uses exact readers; packages scope includes dependents. Other scopes run unscoped:
+      # Ordinary main pushes leave package testing to PRs and full runs. For other events,
+      # brand scope uses exact readers; packages scope includes dependents. Other scopes run unscoped:
       # `global` because an unattributable path could affect anything, `documentation` and `root`
       # because the gates are ANDed with `code`
       # anyway, and an empty or unexpected value because a scope nobody can read is not a reason to
       # skip a suite.
       # The `--unscoped` flag emits every gate as true from the script's own SCOPE_GATES list, so a
-      # gate added there does not also need adding here. Getting that wrong would leave a new job
-      # never running on main, which is the direction nothing else would notice.
+      # gate added there does not also need adding here.
       - id: gates
         env:
+          MAIN_PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           SCOPE: ${{ steps.classify.outputs.scope }}
           PACKAGES: ${{ steps.classify.outputs.packages }}
         run: |
           set -euo pipefail
-          if { [ "$SCOPE" != "packages" ] && [ "$SCOPE" != "brand" ]; } || [ -z "$PACKAGES" ]; then
+          if [ "${MAIN_PUSH:-}" = "true" ]; then
+            echo "Main push: package tests run on pull requests and full runs." >&2
+            printf '[]\n' | node scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
+          elif { [ "$SCOPE" != "packages" ] && [ "$SCOPE" != "brand" ]; } || [ -z "$PACKAGES" ]; then
             node scripts/changed-scope.mjs --unscoped >> "$GITHUB_OUTPUT"
           else
             # The filters are accumulated as POSITIONAL PARAMETERS rather than concatenated into a

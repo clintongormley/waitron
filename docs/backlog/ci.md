@@ -722,6 +722,8 @@ A1424's live qualification was added on 7 November 2026.
 
 ## Decisions and deliberate limits
 
+- **A1452, owner 2026-11-08:** ordinary main pushes keep quick checks and skip package tests/shared mutation in `ci.yml`. PR selection and full nightly/manual/release testing remain. UI registry publication and deploy-selected image smoke keep their checks. BEHIND merges retain their existing rule; package-level failures caused only by combining branches wait for the next full run. Watcher approval and owner risk acceptance: Lane F, 17:48, confirming the owner’s 17:35 decision.
+
 - **A1448 — keep plain typechecks (watcher, 2026-11-08).** Do not adopt TypeScript 7.0.2’s incremental build information: in the retained reproduction, renaming `WtModal.heading` in `packages/ui/src/components/wt-dialog.ts` left two warm dashboard checks passing, while plain `tsc --noEmit` reported 119 errors. The affected callers receive the component type through the global `HTMLElementTagNameMap`; imported-dependency controls did catch errors and did not expose this case. The watcher closed the item and kept the implementation private. Reproduction and results: `~/waitron-campaign-k/receipts/a1448-20261108/reproduce-global-error.py` and `global-error-results.json`.
 
 - **A1449, owner and watcher 2026-11-08:** the pre-push hook keeps sign-off, frozen install, formatting, lint and scoped typechecks. Root tests and coverage run in CI. Known package, machinery and documentation scopes check changed files with content caches; global or unknown scopes retain full format/lint scans.
