@@ -158,7 +158,7 @@ pnpm --filter @waitron/payments-stripe test
 pnpm --filter @waitron/payments-sumup test
 pnpm --filter @waitron/server exec vitest run src/payments-requested-by.test.ts src/reconcile-duty.test.ts src/held-payments.scheduler.test.ts src/pass.db.test.ts src/handover-stepdown.real.test.ts src/bill-payments.card.test.ts src/till-sale-reconciliation.test.ts src/tender-refund-recovery.test.ts src/tender-refund-balance.test.ts src/bill-refunds.card.test.ts
 pnpm --filter @waitron/provisioning exec vitest run src/first-setup-empty-database.test.ts
-pnpm exec vitest run scripts/append-only-triggers.test.ts scripts/append-only-migration-sets.test.ts scripts/schema-constraints.test.ts scripts/behavioural-triggers.test.ts scripts/migrations-match-schema.test.ts scripts/classification-complete.test.ts scripts/migration-upgrade.test.ts
+pnpm exec vitest run scripts/append-only-triggers.test.ts scripts/append-only-migration-sets.test.ts scripts/schema-constraints.test.ts scripts/behavioural-triggers.test.ts scripts/starting-migrations.test.ts scripts/classification-complete.test.ts scripts/migration-upgrade.test.ts
 pnpm --filter @waitron/payments --filter @waitron/payments-stripe --filter @waitron/payments-sumup --filter @waitron/server typecheck
 git grep -n -E 'scheduled_runs|scheduledRuns|scheduled-runs' -- apps packages scripts eslint.config.js docs/developers ':!**/drizzle/**' ':!packages/country-es/test-fixtures/**' ':!scripts/a1308/**' ':!docs/developers/grants-retirement-audit.md'   # prints nothing
 ```

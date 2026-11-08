@@ -246,7 +246,7 @@ pnpm --filter @waitron/payments exec vitest run src/schema src/resolutions.test.
 pnpm --filter @waitron/payments-stripe exec vitest run src/provider.test.ts src/provider-activity.test.ts src/provider-unknown.test.ts src/provider-unknown-http.test.ts
 pnpm --filter @waitron/server exec vitest run src/payments-api.held.test.ts src/payments-api.stuck.test.ts src/pending-card-recovery.test.ts src/held-payments.scheduler.test.ts src/bill-payments-loop.test.ts src/till-sale-integrated.db.test.ts src/till-api.receipt.test.ts src/tender-refund-reservation.test.ts
 pnpm --filter @waitron/dashboard exec vitest run src/screens/payments-screen.held.test.ts src/api/live-queries.test.ts
-pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/migrations-match-schema.test.ts scripts/classification-complete.test.ts scripts/live-subscriptions.test.ts scripts/append-only-migration-sets.test.ts scripts/migration-upgrade.test.ts
+pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/starting-migrations.test.ts scripts/classification-complete.test.ts scripts/live-subscriptions.test.ts scripts/append-only-migration-sets.test.ts scripts/migration-upgrade.test.ts
 pnpm --filter @waitron/payments --filter @waitron/payments-stripe --filter @waitron/server --filter @waitron/dashboard typecheck
 pnpm --filter @waitron/server migration-baseline rebuild --set payments   # prints "unchanged payments"
 ```

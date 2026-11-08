@@ -101,7 +101,7 @@ Uncounted: up to ~50 deleted `beforeEach` lines and the generated files. Under a
 ```bash
 pnpm --filter @waitron/payments test
 pnpm --filter @waitron/payments-stripe test
-pnpm exec vitest run scripts/behavioural-triggers.test.ts scripts/migrations-match-schema.test.ts scripts/migration-upgrade.test.ts
+pnpm exec vitest run scripts/behavioural-triggers.test.ts scripts/starting-migrations.test.ts scripts/migration-upgrade.test.ts
 pnpm --filter @waitron/server migration-baseline rebuild --set payments   # "unchanged payments"
 git grep -n "delete from payments" -- apps packages   # prints nothing
 ```

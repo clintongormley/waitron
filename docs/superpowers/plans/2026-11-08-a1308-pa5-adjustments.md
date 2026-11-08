@@ -125,7 +125,7 @@ Uncounted: generated core files. 1½ hours (4b) or 3 hours (4a).
 pnpm --filter @waitron/adjustments test
 pnpm --filter @waitron/db exec vitest run src/schema/adjustments src/classification.test.ts
 pnpm --filter @waitron/server exec vitest run src/adjustments-apply.test.ts src/order-portions.adjustments.test.ts src/draft-recall-adjustments.test.ts src/adjustments-bill-payments.test.ts src/adjustments-extra-cancel.test.ts src/adjustments-report.test.ts src/bill-editing.adjustments.test.ts src/receipt-adjustments.test.ts src/line-cancel.test.ts src/split-off-extras.split.test.ts src/draft-recall-split.test.ts src/order-portions.filing.test.ts src/order-portions.counter.test.ts src/full-comp.fiscal-identity.test.ts src/personal-data-adjustments.worked-example.test.ts
-pnpm exec vitest run scripts/schema-constraints.test.ts scripts/migrations-match-schema.test.ts scripts/append-only-triggers.test.ts scripts/migration-upgrade.test.ts
+pnpm exec vitest run scripts/schema-constraints.test.ts scripts/starting-migrations.test.ts scripts/append-only-triggers.test.ts scripts/migration-upgrade.test.ts
 pnpm --filter @waitron/db --filter @waitron/adjustments --filter @waitron/server typecheck
 git grep -n -E 'comped_extras|compedExtras' -- apps packages scripts ':!**/drizzle/**' ':!packages/country-es/test-fixtures/**'   # prints nothing
 ```
