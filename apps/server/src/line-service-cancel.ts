@@ -19,8 +19,16 @@ export function serviceCancellationFamilies(
   taken: readonly { dish: Line; off: number }[],
   priors: readonly Cancellation[],
 ) {
+  const rowsByDish = new Map<string, Line[]>();
+  for (const row of rows) {
+    const id = row.parentLineId ?? row.id;
+    const family = rowsByDish.get(id) ?? [];
+    family.push(row);
+    rowsByDish.set(id, family);
+  }
+  const priorByDish = new Map(priors.map((prior) => [prior.lineId, prior]));
   return taken.map(({ dish, off }) => {
-    const prior = priors.find((row) => row.lineId === dish.id);
+    const prior = priorByDish.get(dish.id);
     const quantity = off + (prior?.quantity ?? 0);
     const shareOf = (row: Line, of: number) =>
       row.id === dish.id
@@ -36,13 +44,11 @@ export function serviceCancellationFamilies(
       dish,
       prior,
       quantity,
-      family: rows
-        .filter((row) => row.id === dish.id || row.parentLineId === dish.id)
-        .map((row) => ({
-          row,
-          remaining: row.quantity - shareOf(row, quantity),
-          covered: shareOf(row, off),
-        })),
+      family: (rowsByDish.get(dish.id) ?? []).map((row) => ({
+        row,
+        remaining: row.quantity - shareOf(row, quantity),
+        covered: shareOf(row, off),
+      })),
     };
   });
 }

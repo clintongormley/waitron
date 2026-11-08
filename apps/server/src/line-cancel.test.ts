@@ -27,7 +27,13 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { clearRoutingCell, listStationNotices, setRoutingCell } from "@waitron/venue-service";
 import { createPrinter } from "@waitron/printing";
-import { attachPrinterToStation } from "./station-printers.js";
+import {
+  attachPrinterToStation,
+  listStationPrinters,
+  replaceStationPrinters,
+} from "./station-printers.js";
+import { fireGroup, printHoldTickets } from "./order-groups.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import { createStation } from "./kitchen.js";
@@ -177,6 +183,107 @@ async function startExtra(order: Fixture) {
 }
 
 describe("Cancel item service command", () => {
+  it("queues VOID then HOLD corrections before changing cancellation or ticket rows", async () => {
+    const order = await fixture("hold");
+    const stationIds = order.tickets.map((item) => item.stationId);
+    const extraStation = order.tickets.find(
+      (item) => item.workingOrderLineId === order.extra!.id,
+    )!.stationId;
+    const printers = await inTx(venue, (tx) =>
+      listStationPrinters(tx, { stationId: extraStation }),
+    );
+    const settings = await venue.db
+      .select()
+      .from(kitchenStations)
+      .where(inArray(kitchenStations.id, stationIds));
+    try {
+      await inTx(venue, async (tx) => {
+        await attachPrinterToStation(tx, { stationId: extraStation, printerId: venue.printerId });
+        await setStationPrinting(tx, { printHeldWork: true }, stationIds);
+        await printHoldTickets(tx, venue.cfg, [order.parent.groupId!]);
+        await setStationsWaitForPass(tx, true, [extraStation]);
+      });
+      await payWorkingOrder(
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
+        venue.cfg,
+        { id: order.billId, tender: { method: "cash", amount: "36.00" }, lines: [] },
+      );
+      await inTx(venue, async (tx) => {
+        const [party] = await tx.select().from(parties).where(eq(parties.id, order.partyId));
+        await fireGroup(tx, venue.cfg, order.partyId, order.parent.groupId!, {
+          expectedPartyRevision: party!.revision,
+          submissionId: randomUUID(),
+          operatorId: venue.staffId,
+        });
+        await tx.execute(sql`create temp table cancellation_probe_bill (id text not null)`);
+        await tx.execute(sql`insert into cancellation_probe_bill values (${order.billId})`);
+        await tx.execute(
+          sql`create temp table cancellation_print_probe (job_id text, cancellations integer, tickets integer)`,
+        );
+        await tx.execute(sql`create temp trigger cancellation_paper_observation before insert on print_jobs begin
+          insert into cancellation_print_probe select new.id,
+            (select count(*) from line_service_cancellations where line_id in
+              (select id from working_order_lines where working_order_id in (select id from cancellation_probe_bill))),
+            (select count(*) from ticket_items where working_order_id in (select id from cancellation_probe_bill));
+        end`);
+      });
+      await cancel(order, await askFor(order, "keep_charge", "3"));
+      const observations = await inTx(venue, async (tx) => {
+        const rows = await tx.execute<{
+          jobId: string;
+          cancellations: number;
+          tickets: number;
+        }>(sql`
+          select job_id as jobId, cancellations, tickets from cancellation_print_probe order by rowid`);
+        const jobs = await tx
+          .select()
+          .from(printJobs)
+          .where(
+            inArray(
+              printJobs.id,
+              rows.rows.map((row) => row.jobId),
+            ),
+          );
+        return rows.rows.map((row) => ({
+          title: printedLines(jobs.find((job) => job.id === row.jobId)!.payload)[0],
+          cancellations: row.cancellations,
+          tickets: row.tickets,
+        }));
+      });
+      expect(observations).toEqual([
+        { title: `*** ${kitchenTicketWords("es").void} ***`, cancellations: 0, tickets: 2 },
+        {
+          title: `*** ${kitchenTicketWords("es").holdCancelled} ***`,
+          cancellations: 0,
+          tickets: 2,
+        },
+      ]);
+      const after = await snapshot(order);
+      expect(after.cancellations).toHaveLength(1);
+      expect(after.tickets).toEqual([]);
+    } finally {
+      await inTx(venue, async (tx) => {
+        await tx.execute(sql`drop trigger if exists cancellation_paper_observation`);
+        await tx.execute(sql`drop table if exists cancellation_print_probe`);
+        await tx.execute(sql`drop table if exists cancellation_probe_bill`);
+        await replaceStationPrinters(
+          tx,
+          extraStation,
+          printers.map((printer) => printer.printerId),
+        );
+        for (const station of settings) {
+          await setStationPrinting(tx, { printHeldWork: station.printHeldWork }, [station.id]);
+          await setStationsWaitForPass(tx, station.waitsForPass, [station.id]);
+        }
+      });
+    }
+  });
+
   it.each(["1", "3"])(
     "refuses cancellation of served paid food with %s portions already served",
     async (served) => {

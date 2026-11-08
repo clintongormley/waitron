@@ -7,6 +7,7 @@ import {
   lineServiceCancellations,
   deviceMadeHereStations,
   orderGroups,
+  orderAmendments,
   parties,
   printJobs,
   printAgents,
@@ -480,7 +481,7 @@ describe("unpaid departure stops kitchen work", () => {
         operatorId: venue.staffId,
       }),
     );
-    await joinOwing(order.partyId);
+    const owing = await joinOwing(order.partyId);
     expect(await depart(order.partyId)).toMatchObject({ status: 200 });
     expect(
       (await venue.db.select().from(workingOrders).where(eq(workingOrders.id, order.billId)))[0]!
@@ -497,6 +498,21 @@ describe("unpaid departure stops kitchen work", () => {
     expect(
       facts.filter((fact) => fact.key.startsWith(`service:${order.billId}:unpaid-departure:`)),
     ).toHaveLength(0);
+    const placements = await venue.db
+      .select()
+      .from(orderAmendments)
+      .where(
+        and(
+          eq(orderAmendments.workingOrderId, owing.billId),
+          eq(orderAmendments.kind, "order_placed"),
+        ),
+      );
+    expect(placements).toHaveLength(1);
+    expect(
+      facts.filter(
+        (fact) => fact.key === placements[0]!.id || fact.key.startsWith(`service:${owing.billId}:`),
+      ),
+    ).toEqual([expect.objectContaining({ source: "order", key: placements[0]!.id })]);
   });
 
   it("refuses unfired uninvoiced work before changing any kitchen state or print job", async () => {
@@ -587,6 +603,10 @@ describe("unpaid departure stops kitchen work", () => {
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderId, order.billId));
       expect(after).toEqual(stops ? [] : tickets);
+      expect(
+        (await venue.db.select().from(workingOrders).where(eq(workingOrders.id, order.billId)))[0]!
+          .collectedAt,
+      ).toEqual(remoteExtra ? expect.any(String) : null);
       const slips = (await jobs())
         .filter((job) => !before.has(job.id))
         .map((job) => decodeTicket(job.payload));
@@ -691,59 +711,75 @@ describe("unpaid departure stops kitchen work", () => {
     },
   );
 
-  it("cancels fired food while preserving the invoice and full debt", async () => {
-    const order = await billWith(venue, [{ name: "Burger" }]);
-    const [line] = await venue.db
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, order.billId));
-    const before = new Set((await jobs()).map((job) => job.id));
-
-    expect(await depart(order.partyId)).toMatchObject({ status: 200, body: { state: "closed" } });
-
-    expect(
-      await venue.db
+  it.each([false, true])(
+    "cancels fired food while preserving the invoice and full debt, started %s",
+    async (started) => {
+      const order = await billWith(venue, [{ name: "Burger" }]);
+      const [line] = await venue.db
         .select()
-        .from(lineServiceCancellations)
-        .where(eq(lineServiceCancellations.lineId, line!.id)),
-    ).toEqual([
-      {
-        lineId: line!.id,
-        quantity: 1000,
-        actorId: venue.managerId,
-        wasStarted: false,
-        cancelledAt: expect.any(String),
-      },
-    ]);
-    expect(
-      await venue.db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, order.billId)),
-    ).toEqual([]);
-    expect(
-      await venue.db.select().from(adjustments).where(eq(adjustments.workingOrderId, order.billId)),
-    ).toEqual([]);
-    const [sale] = await venue.db
-      .select({ total: sales.total, settledAt: saleSettlements.settledAt })
-      .from(sales)
-      .leftJoin(saleSettlements, eq(saleSettlements.saleId, sales.id))
-      .where(eq(sales.workingOrderId, order.billId));
-    expect(sale).toMatchObject({ total: 1200, settledAt: null });
-    expect(
-      await venue.db.select().from(workingOrderLines).where(eq(workingOrderLines.id, line!.id)),
-    ).toEqual([line]);
-    const [bill] = await venue.db
-      .select()
-      .from(workingOrders)
-      .where(eq(workingOrders.id, order.billId));
-    expect(bill).toMatchObject({ status: "placed", collectedAt: expect.any(String) });
-    const slips = (await jobs())
-      .filter((job) => !before.has(job.id))
-      .map((job) => decodeTicket(job.payload));
-    expect(slips).toHaveLength(1);
-    expect(slips[0]).toContain("1 x BURG");
-    await expect(serve(order.partyId, line!.id, "1")).rejects.toMatchObject({
-      code: "party.not_open",
-    });
-  });
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, order.billId));
+      if (started) {
+        const [ticket] = await venue.db
+          .select()
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderLineId, line!.id));
+        await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, ticket!.id, "preparing"));
+      }
+      const before = new Set((await jobs()).map((job) => job.id));
+
+      expect(await depart(order.partyId)).toMatchObject({ status: 200, body: { state: "closed" } });
+
+      expect(
+        await venue.db
+          .select()
+          .from(lineServiceCancellations)
+          .where(eq(lineServiceCancellations.lineId, line!.id)),
+      ).toEqual([
+        {
+          lineId: line!.id,
+          quantity: 1000,
+          actorId: venue.managerId,
+          wasStarted: started,
+          cancelledAt: expect.any(String),
+        },
+      ]);
+      expect(
+        await venue.db
+          .select()
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, order.billId)),
+      ).toEqual([]);
+      expect(
+        await venue.db
+          .select()
+          .from(adjustments)
+          .where(eq(adjustments.workingOrderId, order.billId)),
+      ).toEqual([]);
+      const [sale] = await venue.db
+        .select({ total: sales.total, settledAt: saleSettlements.settledAt })
+        .from(sales)
+        .leftJoin(saleSettlements, eq(saleSettlements.saleId, sales.id))
+        .where(eq(sales.workingOrderId, order.billId));
+      expect(sale).toMatchObject({ total: 1200, settledAt: null });
+      expect(
+        await venue.db.select().from(workingOrderLines).where(eq(workingOrderLines.id, line!.id)),
+      ).toEqual([line]);
+      const [bill] = await venue.db
+        .select()
+        .from(workingOrders)
+        .where(eq(workingOrders.id, order.billId));
+      expect(bill).toMatchObject({ status: "placed", collectedAt: expect.any(String) });
+      const slips = (await jobs())
+        .filter((job) => !before.has(job.id))
+        .map((job) => decodeTicket(job.payload));
+      expect(slips).toHaveLength(1);
+      expect(slips[0]).toContain("1 x BURG");
+      await expect(serve(order.partyId, line!.id, "1")).rejects.toMatchObject({
+        code: "party.not_open",
+      });
+    },
+  );
 
   it("cancels a paid sibling's waiting parent when its extra has fired", async () => {
     await inTx(venue, (tx) => setStationsWaitForPass(tx, true, [venue.stationId]));
