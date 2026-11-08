@@ -821,6 +821,61 @@ A1424's live qualification was added on 7 November 2026.
   The [approved measurement plan](../superpowers/plans/2026-11-08-a1453-executed-test-measurement.md)
   records the scope; its prototype and temporary hosted workflow are not part of the product.
 
+  **A1460 follow-up, 2026-11-08: exempt the fixed watchdog, retain child processes.**
+
+  Source check at capture revision `147914ca`: `startWatchdog` passes the fixed `WATCHDOG_SOURCE` string to `new Worker` with `eval: true`, while its shared buffer, timing values and settings are read as data, with no data-derived code-loading path in that string (`packages/store/src/venue-liveness.ts:114`, `:223` and `:231`).
+
+  Changing only that retention rule releases 866 watchdog-only gaps; every mapped watchdog caller is explicitly selected when `venue-liveness.ts` changes, other worker sources and child-process calls retain their fallbacks, all 39,769 stored function hashes match the current parser, and the unchanged-rule control reproduces all 59,206 historical file selections before this adjustment.
+
+  Across the forty PRs below, five ran no measured files and median selected file-time is 11,395.4 seconds with a 0–17,179.7 spread; the thirty-five nonempty rows have median 98.94% selected and a 48.80–100% spread, but unqualified rows are diagnostic only and the ten qualified scoped rows, six nonempty, give 16.73% gross selection savings against the original 4.11%, or 8.91% under the stricter dependent-package fallback.
+
+  In that qualified scoped sample, child-call files still force 12,452.6 of 78,421.8 file-seconds (15.88%), stale maps retain 41,359.4 and remaining attribution gaps retain 23,740.2; all twelve observed failed file/head pairs remain selected, including the one on main, while no sampled PR changes `venue-liveness.ts`, so its explicit invalidation rule is checked by a synthetic control and a deletion that makes that control fail.
+
+  Keep the measured selector stopped under the original 30% bar: this replay reaches neither that bar nor a tens-fold reduction, measures selection rather than remembered passes or job-time savings, and adds no CI run, product selector or recurring workflow; all forty rows, the twelve failure heads, three passing controls and two failed deletion controls are retained in `~/waitron-campaign-d/receipts/a1460-20261108/`.
+
+  | PR | Timing basis | All file-seconds | Original selected | New selected | Stricter selected | Child-call files |
+  | --- | --- | ---: | ---: | ---: | ---: | ---: |
+  | #2611 | qualified scoped | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+  | #2610 | qualified scoped | 11673.5 | 11673.5 | 11673.5 | 11673.5 | 1921.6 |
+  | #2609 | unqualified | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+  | #2607 | unqualified | 10553.3 | 10553.3 | 10553.3 | 10553.3 | 1843.5 |
+  | #2605 | unqualified | 10616.9 | 10478.4 | 10477.3 | 10616.9 | 1640.3 |
+  | #2598 | unqualified | 17179.7 | 17179.7 | 17179.7 | 17179.7 | 2147.4 |
+  | #2596 | unqualified | 13752.5 | 13752.5 | 13752.5 | 13752.5 | 2148.0 |
+  | #2595 | unqualified | 16660.1 | 16507.8 | 16506.9 | 16660.1 | 2140.8 |
+  | #2593 | unqualified | 16805.8 | 16805.8 | 16805.8 | 16805.8 | 2242.3 |
+  | #2591 | unqualified | 12032.9 | 12032.9 | 12032.9 | 12032.9 | 2249.8 |
+  | #2590 | unqualified | 14132.0 | 14132.0 | 14132.0 | 14132.0 | 2219.2 |
+  | #2589 | unqualified | 14134.9 | 13986.0 | 13985.3 | 13985.3 | 2153.5 |
+  | #2588 | unqualified | 14755.9 | 14595.9 | 14594.9 | 14755.9 | 2332.7 |
+  | #2587 | unqualified | 11770.3 | 11770.3 | 11770.3 | 11770.3 | 2141.3 |
+  | #2586 | unqualified | 11893.6 | 11215.0 | 11193.1 | 11193.1 | 2220.5 |
+  | #2585 | qualified scoped | 10348.6 | 9767.9 | 9747.1 | 9747.1 | 1883.7 |
+  | #2583 | unqualified | 11613.8 | 11613.8 | 11613.8 | 11613.8 | 2063.2 |
+  | #2582 | qualified scoped | 11383.5 | 10743.3 | 8273.2 | 8273.2 | 2074.8 |
+  | #2581 | qualified scoped | 14945.9 | 14258.9 | 11669.8 | 11669.8 | 2367.7 |
+  | #2580 | qualified scoped | 16750.9 | 16080.2 | 13579.1 | 16750.9 | 2151.9 |
+  | #2579 | unqualified | 10322.8 | 10322.8 | 10322.8 | 10322.8 | 1962.4 |
+  | #2578 | unqualified | 16356.4 | 16356.4 | 16356.4 | 16356.4 | 2197.7 |
+  | #2577 | qualified scoped | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+  | #2576 | unqualified | 16655.0 | 15963.5 | 12634.2 | 12634.2 | 2142.9 |
+  | #2575 | qualified scoped | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+  | #2574 | unqualified | 10901.0 | 10308.1 | 8049.6 | 10901.0 | 2040.2 |
+  | #2573 | unqualified | 12800.7 | 12800.7 | 12800.7 | 12800.7 | 1957.7 |
+  | #2572 | unqualified | 10586.8 | 9901.2 | 6854.2 | 6854.2 | 1940.1 |
+  | #2571 | qualified scoped | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+  | #2569 | unqualified | 11319.8 | 10622.4 | 7472.8 | 7472.8 | 2062.0 |
+  | #2568 | unqualified | 12278.8 | 11244.4 | 7843.2 | 7843.2 | 2022.6 |
+  | #2567 | unqualified | 15096.6 | 14062.7 | 10669.2 | 15096.6 | 2079.8 |
+  | #2566 | unqualified | 19391.6 | 18325.0 | 9463.4 | 19391.6 | 2354.6 |
+  | #2565 | unqualified | 12597.7 | 11924.3 | 9065.6 | 12597.7 | 1855.2 |
+  | #2561 | qualified coverage | 2517.6 | 2517.6 | 2517.6 | 2517.6 | 0.0 |
+  | #2558 | unqualified | 17171.8 | 17171.8 | 17171.8 | 17171.8 | 2153.0 |
+  | #2557 | unqualified | 11597.6 | 11597.6 | 11597.6 | 11597.6 | 2114.0 |
+  | #2545 | unqualified | 11788.3 | 11788.3 | 11788.3 | 11788.3 | 2228.0 |
+  | #2542 | unqualified | 16259.0 | 15316.9 | 11672.0 | 16259.0 | 2325.1 |
+  | #2531 | qualified scoped | 13319.4 | 12678.5 | 10358.8 | 13319.4 | 2052.9 |
+
 - **A1448 — keep plain typechecks (watcher, 2026-11-08).** Do not adopt TypeScript 7.0.2’s incremental build information: in the retained reproduction, renaming `WtModal.heading` in `packages/ui/src/components/wt-dialog.ts` left two warm dashboard checks passing, while plain `tsc --noEmit` reported 119 errors. The affected callers receive the component type through the global `HTMLElementTagNameMap`; imported-dependency controls did catch errors and did not expose this case. The watcher closed the item and kept the implementation private. Reproduction and results: `~/waitron-campaign-k/receipts/a1448-20261108/reproduce-global-error.py` and `global-error-results.json`.
 
 - **A1449, owner and watcher 2026-11-08:** the pre-push hook keeps sign-off, frozen install, formatting, lint and scoped typechecks. Root tests and coverage run in CI. Known package, machinery and documentation scopes check changed files with content caches; global or unknown scopes retain full format/lint scans.
