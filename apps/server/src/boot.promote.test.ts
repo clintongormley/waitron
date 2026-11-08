@@ -43,7 +43,7 @@ import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { freePort } from "./testing/free-ports.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
-import { useTestProducer } from "./testing/test-producer.js";
+import { TEST_PRODUCER, useTestProducer } from "./testing/test-producer.js";
 
 useTestProducer();
 
@@ -199,6 +199,7 @@ async function seedFiscalWork(): Promise<{ registroIds: string[] }> {
       nodeId: TILL_ENV.WAITRON_NODE_ID,
       nif: "90111111H",
     },
+    producerNif: TEST_PRODUCER.WAITRON_PRODUCER_TAX_ID,
   });
   const material = mintMtlsMaterial();
   await withTransaction(appDb, (tx) =>

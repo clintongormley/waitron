@@ -126,7 +126,7 @@ import {
   startFakeSmtp,
   seedTradingVenue,
 } from "./testing/boot-harness.js";
-import { useTestProducer } from "./testing/test-producer.js";
+import { TEST_PRODUCER, useTestProducer } from "./testing/test-producer.js";
 
 useTestProducer();
 
@@ -2570,6 +2570,7 @@ describe("startServer, against a migrated venue directory", () => {
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         nif: "90000000K",
       },
+      producerNif: TEST_PRODUCER.WAITRON_PRODUCER_TAX_ID,
     });
 
     try {
@@ -2625,6 +2626,7 @@ describe("startServer, against a migrated venue directory", () => {
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         nif: "90000000K",
       },
+      producerNif: TEST_PRODUCER.WAITRON_PRODUCER_TAX_ID,
     });
     const [registroId] = seeded.registroIds;
     const claimedAt = new Date(Date.now() - 1_000).toISOString();
@@ -2859,6 +2861,7 @@ describe("startServer, against a migrated venue directory", () => {
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         nif: "90000000K",
       },
+      producerNif: TEST_PRODUCER.WAITRON_PRODUCER_TAX_ID,
     });
     const material = mintMtlsMaterial();
     await withTransaction(sharedDb, (tx) =>

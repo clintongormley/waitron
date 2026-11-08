@@ -1,6 +1,6 @@
 import { afterAll, beforeAll } from "vitest";
 
-const TEST_PRODUCER = {
+export const TEST_PRODUCER = {
   WAITRON_PRODUCER_NAME: "PRODUCER PERSON",
   WAITRON_PRODUCER_TAX_ID: "00000000T",
   WAITRON_PRODUCER_ADDRESS: "1 Example Street, 00000 Nowhere (Province), Spain",
