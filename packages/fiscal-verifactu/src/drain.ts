@@ -654,21 +654,7 @@ async function claimBatch(
         ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
         -- A cancellation can alter the authority's row under this invoice key before the current alta's
         -- duplicate reply reveals that the row belongs to someone else.
-        and (r.tipo_registro != 'anulacion' or exists (
-          select 1 from registros_facturacion original
-          join envios original_envio on original_envio.registro_id = original.id
-          where original.tipo_registro = 'alta'
-            and original.id_emisor_factura = r.id_emisor_factura
-            and original.num_serie_factura = r.num_serie_factura
-            and original.fecha_expedicion_factura = r.fecha_expedicion_factura
-            and not exists (
-              select 1 from registros_facturacion replacement
-              where replacement.corrects_registro_id = original.id
-            )
-            -- A held original holds a cancellation on its own chain anyway; on another chain nothing would.
-            and (original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado')
-              or (original_envio.estado = 'detenido' and original.sif_id = r.sif_id))
-        ))
+        and (r.tipo_registro != 'anulacion' or ${originalSettled("r", "original")})
         and not exists (
           select 1 from envios earlier
           join registros_facturacion prior on prior.id = earlier.registro_id
@@ -676,20 +662,7 @@ async function claimBatch(
             and (earlier.estado = 'enviando'
               or (earlier.estado = 'pendiente' and (
                 not ${retryDue(sql`earlier.proximo_intento_en`, now)}
-                or (prior.tipo_registro = 'anulacion' and not exists (
-                  select 1 from registros_facturacion prior_original
-                  join envios prior_original_envio on prior_original_envio.registro_id = prior_original.id
-                  where prior_original.tipo_registro = 'alta'
-                    and prior_original.id_emisor_factura = prior.id_emisor_factura
-                    and prior_original.num_serie_factura = prior.num_serie_factura
-                    and prior_original.fecha_expedicion_factura = prior.fecha_expedicion_factura
-                    and not exists (
-                      select 1 from registros_facturacion replacement
-                      where replacement.corrects_registro_id = prior_original.id
-                    )
-                    and (prior_original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado')
-                      or (prior_original_envio.estado = 'detenido' and prior_original.sif_id = prior.sif_id))
-                )))))
+                or (prior.tipo_registro = 'anulacion' and not ${originalSettled("prior", "prior_original")}))))
         )
     ),
     target as (
@@ -902,6 +875,31 @@ async function haltOpenChainClaims(
   for (const id of haltedIds) await writeAck(tx, id, now);
   result.recordsHalted += haltedIds.length;
   return kept;
+}
+
+/**
+ * True when the current alta the cancellation `record` cites is answered, or held on the
+ * cancellation's own chain: a held original holds a cancellation on its own chain anyway; on another
+ * chain nothing would. `original` is the subquery's own alias.
+ */
+function originalSettled(record: "r" | "prior", original: "original" | "prior_original"): SQL {
+  const cancellation = sql.raw(record);
+  const alta = sql.raw(original);
+  const envio = sql.raw(`${original}_envio`);
+  return sql`exists (
+    select 1 from registros_facturacion ${alta}
+    join envios ${envio} on ${envio}.registro_id = ${alta}.id
+    where ${alta}.tipo_registro = 'alta'
+      and ${alta}.id_emisor_factura = ${cancellation}.id_emisor_factura
+      and ${alta}.num_serie_factura = ${cancellation}.num_serie_factura
+      and ${alta}.fecha_expedicion_factura = ${cancellation}.fecha_expedicion_factura
+      and not exists (
+        select 1 from registros_facturacion replacement
+        where replacement.corrects_registro_id = ${alta}.id
+      )
+      and (${envio}.estado in ('aceptado', 'aceptado_con_errores', 'rechazado')
+        or (${envio}.estado = 'detenido' and ${alta}.sif_id = ${cancellation}.sif_id))
+  )`;
 }
 
 // SinRegistroPrevio=S is the separate absent-original operation, not an ordinary cancellation.
