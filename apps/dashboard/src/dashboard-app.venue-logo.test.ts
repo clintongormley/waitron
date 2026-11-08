@@ -233,6 +233,46 @@ it("sets the legal name on the fallback lockup's word, as with no venue logo", a
   }
 });
 
+it("the legal name goes back to centred on the venue's logo when a failed logo's retry loads", async () => {
+  store(withLogo(LIGHT, DARK));
+  startVenueTheme(document.documentElement, { fetchImpl: never });
+  const loads = nextLogoLoad();
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  try {
+    await page.viewport(1280, 800);
+    const { el } = await mount(stubApi(true));
+    const { logo, img } = await loads;
+    const middle = (e: Element) => {
+      const box = e.getBoundingClientRect();
+      return (box.top + box.bottom) / 2;
+    };
+    const name = banner(el).querySelector("[data-test=venue-name]")!;
+    expect(middle(name)).toBeCloseTo(middle(logo), 0);
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    img.dispatchEvent(new Event("error"));
+    await logo.updateComplete;
+    await el.updateComplete;
+    expect(logo.failed).toBe(true);
+    expect(lockupShown(el)).toBe(true);
+    const fallback = lockup(el) as WtWaitronLockup;
+    await fallback.updateComplete;
+    expect(textBaseline(name)).toBeCloseTo(lockupWordBaseline(fallback), 0);
+
+    vi.advanceTimersByTime(VENUE_LOGO_RETRY_MS);
+    vi.useRealTimers();
+    await vi.waitFor(() => expect(currentVenueLogo()).toMatchObject({ failed: false }));
+    await logo.updateComplete;
+    await el.updateComplete;
+    expect(lockupShown(el)).toBe(false);
+    expect(middle(name)).toBeCloseTo(middle(logo), 0);
+  } finally {
+    vi.useRealTimers();
+    await page.viewport(width, height);
+  }
+});
+
 it("follows a live answer without a reload", async () => {
   startVenueTheme(document.documentElement, { fetchImpl: rejecting });
   const api = stubApi(true);
