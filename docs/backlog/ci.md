@@ -734,6 +734,8 @@ A1424's live qualification was added on 7 November 2026.
 
 - **A1427 — keep package scoping; stop related-file selection (2026-11-07).** The corrected 40-PR replay narrowed five server runs to 1,135 of 1,273 files, retained 26 full runs and skipped nine. Its duration-table estimate was about 241 test-job seconds saved at four workers, against 698 local selection seconds plus 24 installs at 5.2 seconds each. These are estimates and local timings, not observed hosted savings. The watcher stopped PR2 at 22:49; keep the prototype and receipts unpublished and add no further selection machinery. Keep PR2557's package-scoped tests and nightly/manual full coverage.
 
+  **A1442 measurement (2026-11-08):** Ten recent successful pull-request runs, each on its first attempt, had 150 test jobs: 144 server shards with 51–54 files each and six stream jobs with 13 each. Four runs started no package-test job; none of the 150 jobs ran zero to ten files. One job lacked API step timings, but its log reported 53 files. Only one test-bearing run met the checkout-time check: [42460639755](https://github.com/clintongormley/waitron/actions/runs/42460639755/attempts/1) spent 15.22 job-minutes before test steps and 45.75 in them. The watcher closed A1442 as measurement-only; keep package selection and the related-file prototype stopped.
+
 - **Investigate CI failures before retrying (owner, 2026-10-31, A1243).** Follow the
   [CI-failure rule](../developers/ci-and-gates.md#what-to-do-when-ci-fails). Record a recurring
   unrelated failure against its root-cause fix before obtaining a clean run for unrelated work;
