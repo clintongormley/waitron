@@ -3298,7 +3298,7 @@ describe("till-app: signing out while a save is out", () => {
     server.saveDraft.mockImplementationOnce(
       () =>
         new Promise<never>((_resolve, reject) => {
-          refuse = () => reject({ code: "draft.person_not_signed_in", status: 409 });
+          refuse = () => reject({ code: "session.person_not_signed_in", status: 409 });
         }),
     );
     await tap(el, "Beer");
@@ -5248,7 +5248,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(api.takeOverDraft).toHaveBeenCalledOnce();
     const reads = api.listDrafts.mock.calls.length;
 
-    refuse({ code: "draft.person_not_signed_in", status: 409 });
+    refuse({ code: "session.person_not_signed_in", status: 409 });
     await flush(el, 6);
 
     expect(lock(el)).not.toBeNull();
@@ -8528,7 +8528,7 @@ describe("recalled draft source splitting", () => {
   });
 
   it("locks the screen and ends no server session when a recalled line's split is refused for its person", async () => {
-    const split = vi.fn().mockRejectedValue({ code: "draft.person_not_signed_in", status: 409 });
+    const split = vi.fn().mockRejectedValue({ code: "session.person_not_signed_in", status: 409 });
     const { el, button } = await opening(split);
     const reads = api.listDrafts.mock.calls.length;
 
@@ -8874,7 +8874,7 @@ describe("recalled draft source splitting", () => {
       const { el, order } = await recallOpening({
         recallToDraft: vi
           .fn()
-          .mockRejectedValue({ code: "draft.person_not_signed_in", status: 409 }),
+          .mockRejectedValue({ code: "session.person_not_signed_in", status: 409 }),
       });
       await tap(el, "Beer");
       await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
@@ -8902,7 +8902,7 @@ describe("recalled draft source splitting", () => {
     it("locks the screen with no message, sending no recall, and keeps the lines for the person, when the save before a recall is refused for them", async () => {
       const { el, order } = await recallOpening();
       await tap(el, "Beer");
-      api.saveDraft.mockRejectedValueOnce({ code: "draft.person_not_signed_in", status: 409 });
+      api.saveDraft.mockRejectedValueOnce({ code: "session.person_not_signed_in", status: 409 });
 
       emit(order, "recall-lines", { lineNos: [7] });
       await flush(el, 6);
@@ -10003,7 +10003,7 @@ describe("A773 retained bill candidates in the app", () => {
 
   it("signs the order's person out on this screen, keeps their lines, and leaves the device's session alone, when a live order's save is refused for them", async () => {
     const { el } = await mountApp({
-      saveDraft: vi.fn().mockRejectedValue({ code: "draft.person_not_signed_in", status: 409 }),
+      saveDraft: vi.fn().mockRejectedValue({ code: "session.person_not_signed_in", status: 409 }),
     });
     await openTable(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -10056,7 +10056,7 @@ describe("A773 retained bill candidates in the app", () => {
       lines: [{ ...sent.lines[0], menuItemId: "offer-steak" }],
     });
 
-    reject({ code: "draft.person_not_signed_in", status: 409 });
+    reject({ code: "session.person_not_signed_in", status: 409 });
     await flush(el, 6);
 
     expect(lock(el)).not.toBeNull();
@@ -10116,7 +10116,7 @@ describe("A773 retained bill candidates in the app", () => {
         expect(api.saveDraft).toHaveBeenCalledOnce();
       }
       if (ending === "save refused for another signed-in person") {
-        api.saveDraft.mockRejectedValueOnce({ code: "draft.person_not_signed_in", status: 409 });
+        api.saveDraft.mockRejectedValueOnce({ code: "session.person_not_signed_in", status: 409 });
         await back(el);
         expect(api.saveDraft).toHaveBeenCalledOnce();
         expect(lock(el)).not.toBeNull();

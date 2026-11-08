@@ -9119,7 +9119,7 @@ describe("till-app: Current orders", () => {
       const split = vi.fn(
         () =>
           new Promise<never>((_resolve, reject) => {
-            refuse = () => reject({ code: "draft.person_not_signed_in", status: 409 });
+            refuse = () => reject({ code: "session.person_not_signed_in", status: 409 });
           }),
       );
       const { el } = await mountApp({

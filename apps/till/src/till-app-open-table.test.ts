@@ -1443,7 +1443,7 @@ describe("A768 the left draft saves in the background", () => {
     await restartWithoutSignOut(el);
     await signIn(el, "p2", "Bea");
 
-    release({ code: "draft.person_not_signed_in", status: 409 });
+    release({ code: "session.person_not_signed_in", status: 409 });
     await flush(el, 6);
 
     expect(lock(el)).toBeNull();
@@ -1461,7 +1461,7 @@ describe("A768 the left draft saves in the background", () => {
     const zones = holdNextZones();
     await signIn(el, "p2", "Bea");
 
-    release({ code: "draft.person_not_signed_in", status: 409 });
+    release({ code: "session.person_not_signed_in", status: 409 });
     await flush(el, 6);
     zones();
     await flush(el, 6);

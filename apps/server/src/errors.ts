@@ -483,6 +483,11 @@ declare module "@waitron/shared" {
      * absent or named no open session. The cookie's value is never echoed.
      */
     "session.required": Record<string, never>;
+    /**
+     * A till request named a person who is not the one signed in on the device, or named nobody.
+     * `personId` is the person named, or `null` when there was no id.
+     */
+    "session.person_not_signed_in": { personId: string | null };
     // `working_order.not_found` is declared in @waitron/db's errors.ts.
     /**
      * A working order this caller tried to MODIFY is not `open` (settled, abandoned, or absent — one
@@ -666,11 +671,6 @@ declare module "@waitron/shared" {
      * the request is on. A discarded draft is not found.
      */
     "draft.not_found": { draftId: string };
-    /**
-     * A till's request named a person who is not the one signed in on the device. `personId` is the
-     * person the request named.
-     */
-    "draft.person_not_signed_in": { personId: string };
     /**
      * A group command needs a HELD group — a join, a move into or out of one, a fire, a reorder —
      * and this one has fired. `groupId` is the group named or the group a moved line sits in.

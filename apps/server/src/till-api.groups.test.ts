@@ -2062,7 +2062,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     return { party, lineId };
   }
 
-  it("refuses 409 draft.person_not_signed_in for a split naming someone else, changing nothing, and goes through once it names the session's person", async () => {
+  it("refuses 409 session.person_not_signed_in for a split naming someone else, changing nothing, and goes through once it names the session's person", async () => {
     const { party, lineId } = await heldTwo();
     const splitNaming = async (personId: string) =>
       call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
@@ -2077,7 +2077,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
       const refused = await splitNaming(named);
       expect(refused.status).toBe(409);
       expect(refused.json).toEqual(
-        refusal("draft.person_not_signed_in", { personId: venue.adminId }),
+        refusal("session.person_not_signed_in", { personId: venue.adminId }),
       );
     }
     expect(await snapshot(party)).toEqual(before);

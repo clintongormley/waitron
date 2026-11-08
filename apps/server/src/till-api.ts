@@ -625,7 +625,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "draft.already_submitted": 409,
   "draft.out_of_date": 409,
   "draft.not_found": 404,
-  "draft.person_not_signed_in": 409,
+  "session.person_not_signed_in": 409,
   "group.not_held": 409,
   "group.not_waiting": 409,
   "group.not_found": 404,
@@ -1140,7 +1140,7 @@ function requireDraftParam(draftId: string): string {
 function requireNamesSessionPerson(body: Record<string, unknown>, sessionPersonId: string): void {
   const named = requireBodyUuid(body.personId, "personId").toLowerCase();
   if (named !== sessionPersonId.toLowerCase())
-    throw new AppError("draft.person_not_signed_in", { personId: named });
+    throw new AppError("session.person_not_signed_in", { personId: named });
 }
 
 /** A step route's step, in lower case as ids are stored: an id that is no UUID names none. */

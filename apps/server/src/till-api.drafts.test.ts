@@ -629,7 +629,7 @@ describe("PUT /api/parties/:id/drafts", () => {
     });
   });
 
-  it("refuses 409 draft.person_not_signed_in for a new order saved for someone else, writing nothing", async () => {
+  it("refuses 409 session.person_not_signed_in for a new order saved for someone else, writing nothing", async () => {
     const party = await seated();
     const billId = (await openBillOf(party.partyId))!;
     const before = await snapshot();
@@ -651,12 +651,12 @@ describe("PUT /api/parties/:id/drafts", () => {
 
     expect(refused.status).toBe(409);
     expect(refused.json).toEqual(
-      refusal("draft.person_not_signed_in", { personId: venue.operatorId }),
+      refusal("session.person_not_signed_in", { personId: venue.operatorId }),
     );
     expect(await snapshot()).toEqual(before);
   });
 
-  it("refuses 409 draft.person_not_signed_in for an empty save for someone else", async () => {
+  it("refuses 409 session.person_not_signed_in for an empty save for someone else", async () => {
     const party = await seated();
     const billId = (await openBillOf(party.partyId))!;
     const before = await snapshot();
@@ -678,7 +678,7 @@ describe("PUT /api/parties/:id/drafts", () => {
 
     expect(refused.status).toBe(409);
     expect(refused.json).toEqual(
-      refusal("draft.person_not_signed_in", { personId: venue.operatorId }),
+      refusal("session.person_not_signed_in", { personId: venue.operatorId }),
     );
     expect(await snapshot()).toEqual(before);
   });
@@ -1016,7 +1016,7 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
     expect(await snapshot()).toEqual(afterSending);
   });
 
-  it("refuses 409 draft.person_not_signed_in for a take-over naming someone else, changing nothing, and goes through once it names the session's person", async () => {
+  it("refuses 409 session.person_not_signed_in for a take-over naming someone else, changing nothing, and goes through once it names the session's person", async () => {
     const party = await seated();
     const anas = await newDraft(ana, party.partyId, [dish("Croquetas")]);
     const path = `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`;
@@ -1048,7 +1048,7 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
       const refused = await takeOverNaming(named);
       expect(refused.status).toBe(409);
       expect(refused.json).toEqual(
-        refusal("draft.person_not_signed_in", { personId: venue.operatorId }),
+        refusal("session.person_not_signed_in", { personId: venue.operatorId }),
       );
     }
     expect(await owner()).toBe(venue.operatorId);

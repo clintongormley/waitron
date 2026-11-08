@@ -130,9 +130,9 @@ import {
 import { deriveExtraSelections } from "./state/held-extras.js";
 import { deriveOptionSelections } from "./state/held-options.js";
 import {
-  DRAFT_PERSON_REFUSAL,
   DRAFT_REFUSALS,
   DraftSync,
+  SESSION_PERSON_REFUSAL,
   TABLE_REQUEST_LIMIT_MS,
   asRefusal,
   limited,
@@ -12066,7 +12066,7 @@ export class TillApp extends LitElement {
   }
 
   #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
-    if (refusal.refused === DRAFT_PERSON_REFUSAL) {
+    if (refusal.refused === SESSION_PERSON_REFUSAL) {
       // The device's session belongs to someone else now, so this person has none to end.
       if (this.operatorName !== "") void this.#onLogout(false);
       return;
@@ -13290,7 +13290,7 @@ export class TillApp extends LitElement {
       } catch (error) {
         const refusal = asRefusal(error);
         // A later sign-in, even the same person's, is not what the server refused.
-        if (refusal?.refused === DRAFT_PERSON_REFUSAL && signIns === this.#signIns)
+        if (refusal?.refused === SESSION_PERSON_REFUSAL && signIns === this.#signIns)
           this.#onDraftRefused(composition.sync!, refusal);
         throw error;
       }

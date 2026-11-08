@@ -4845,7 +4845,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         const el = await panelWith({
           takeOverDraft: vi
             .fn()
-            .mockRejectedValue({ code: "draft.person_not_signed_in", status: 409 }),
+            .mockRejectedValue({ code: "session.person_not_signed_in", status: 409 }),
         });
         const reads = api.listDrafts!.mock.calls.length;
 

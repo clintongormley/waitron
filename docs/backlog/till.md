@@ -3113,7 +3113,7 @@ survivor's current edit state succeeds and retains the separately marked lines. 
 replace Task 7's unrun consumed-draft observation; they do not establish the till's recovery UI.
 
 Each order save names the person whose order it is, and the server refuses
-`draft.person_not_signed_in` (409) unless that is the person signed in on the device (owner, Q35,
+`session.person_not_signed_in` (409) unless that is the person signed in on the device (owner, Q35,
 A791). A take-over (`POST /api/parties/:id/drafts/:did/take-over`), a recall
 (`POST /api/parties/:id/lines/:lineId/recall`) and a line split
 (`POST /api/parties/:id/groups/split-line`) also name their person and are refused the same way.

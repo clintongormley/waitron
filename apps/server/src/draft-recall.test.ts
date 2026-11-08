@@ -150,7 +150,7 @@ async function frozen(partyId: string) {
 }
 
 describe("party Recall to draft", () => {
-  it("refuses 409 draft.person_not_signed_in for a recall naming someone else, changing nothing, and goes through once it names the session's person", async () => {
+  it("refuses 409 session.person_not_signed_in for a recall naming someone else, changing nothing, and goes through once it names the session's person", async () => {
     const p = await setup("fire");
     const recallNaming = async (personId: string) =>
       recall(p.partyId, p.line.id, { ...(await command(p.partyId)), personId });
@@ -160,7 +160,7 @@ describe("party Recall to draft", () => {
       const refused = await recallNaming(named);
       expect(refused.status).toBe(409);
       expect(refused.json).toEqual({
-        code: "draft.person_not_signed_in",
+        code: "session.person_not_signed_in",
         params: { personId: venue.adminId },
       });
     }

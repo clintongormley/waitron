@@ -29,7 +29,7 @@ export const DRAFT_REFUSALS: ReadonlySet<string> = new Set([
   "draft.already_submitted",
 ]);
 
-export const DRAFT_PERSON_REFUSAL = "draft.person_not_signed_in";
+export const SESSION_PERSON_REFUSAL = "session.person_not_signed_in";
 
 /** A table draft: a tap adds into a line that orders the same thing, as the server's save does. */
 export class DraftStore extends WorkingOrderStore {
@@ -714,7 +714,7 @@ export class DraftSync {
     } catch (error) {
       if (this.#ended) return "failed";
       const refusal = asRefusal(error);
-      if (refusal?.refused === DRAFT_PERSON_REFUSAL) {
+      if (refusal?.refused === SESSION_PERSON_REFUSAL) {
         this.#recoveryRequired = true;
         this.#lockAuthority();
         return this.#refusedPerson(refusal);
@@ -755,7 +755,7 @@ export class DraftSync {
     } catch (error) {
       if (this.#ended) return "failed";
       const refusal = asRefusal(error);
-      if (refusal?.refused === DRAFT_PERSON_REFUSAL) return this.#refusedPerson(refusal);
+      if (refusal?.refused === SESSION_PERSON_REFUSAL) return this.#refusedPerson(refusal);
       await this.load();
       return this.#ended ? "failed" : (refusal ?? "failed");
     } finally {
@@ -821,7 +821,7 @@ export class DraftSync {
       } catch (error) {
         if (this.#ended) return "failed";
         const refusal = asRefusal(error);
-        if (refusal?.refused === DRAFT_PERSON_REFUSAL) return this.#refusedPerson(refusal);
+        if (refusal?.refused === SESSION_PERSON_REFUSAL) return this.#refusedPerson(refusal);
         await this.#load();
         return refusal ?? "failed";
       }
@@ -977,7 +977,7 @@ export class DraftSync {
       if (this.#ended) return "failed";
       if (!this.#invalidateSave(expectedEdit)) return await this.#refused(error);
       const refusal = asRefusal(error);
-      if (refusal?.refused !== DRAFT_PERSON_REFUSAL) return "failed";
+      if (refusal?.refused !== SESSION_PERSON_REFUSAL) return "failed";
       this.#options.onRefused(refusal.refused);
       return refusal;
     } finally {
