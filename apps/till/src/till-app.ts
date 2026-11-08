@@ -3102,10 +3102,11 @@ export class TillApp extends LitElement {
   get #orderVisit(): number {
     return this.#orderVisitNumber;
   }
-  /** A refused press's reads end with the visit they were for: {@link #splitRefusalReads}. */
   set #orderVisit(visit: number) {
     this.#orderVisitNumber = visit;
     this.#endSplitRefusalReads();
+    this.lateSendWindow = null;
+    this.lateSendApproval = null;
   }
   #orderVisitNumber = 0;
   /** The {@link #orderVisit} on which the order in {@link activeTabId} was last shown by opening its
@@ -12635,8 +12636,11 @@ export class TillApp extends LitElement {
       // Send meanwhile cannot open the late-send window under the PIN dialog.
       if (typeof followUp === "object" && "approval" in followUp) {
         const { approval, answered: carried } = followUp;
-        await this.#askLateSendApproval(approval.lateSend, approval.pinError, (confirmed) =>
-          this.#sendDraft(detail, confirmed, carried),
+        await this.#askLateSendApproval(
+          approval.lateSend,
+          approval.pinError,
+          (confirmed) => this.#sendDraft(detail, confirmed, carried),
+          () => visit === this.#orderVisit && this.orderParty?.id === partyId,
         );
         return;
       }
@@ -12696,7 +12700,9 @@ export class TillApp extends LitElement {
     lateSend: LateSend,
     pinError: string | undefined,
     retry: (lateSend: LateSend) => Promise<void>,
+    current: () => boolean = () => true,
   ): Promise<void> {
+    if (!current()) return;
     const open = this.lateSendApproval;
     if (pinError !== undefined) {
       if (open !== null && !open.dismissed)
@@ -12714,7 +12720,7 @@ export class TillApp extends LitElement {
     const api = this.api;
     try {
       const authorizers = await api.serviceDayAuthorizers();
-      if (session !== this.#operatorSession || api !== this.api) return;
+      if (session !== this.#operatorSession || api !== this.api || !current()) return;
       this.lateSendApproval = {
         authorizers,
         error: null,
@@ -12724,7 +12730,7 @@ export class TillApp extends LitElement {
         retry,
       };
     } catch (error) {
-      if (session !== this.#operatorSession || api !== this.api) return;
+      if (session !== this.#operatorSession || api !== this.api || !current()) return;
       this.lateSendApproval = null;
       this.errorKey = { code: refusalOf(error, false).code };
     }

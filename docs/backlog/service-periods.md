@@ -410,20 +410,6 @@ now could not be routed apart; the resolver is asked for extras made at their ow
 (`apps/server/src/working-order.ts`); and the line's context stores the ended period's name, not
 its id. Left open by A789 slice 3, #2051 (plan D33).
 
-## Bundle A1388: Till late-send dialogs that stick or say nothing
-
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1090. The zone Keep open's manager's PIN dialog, closed while its PIN is checked, can leave
-  the zone's Keep open dialog stuck.**
-  Read in the code, not run. Left open by A789 slice 4.
-  [Detail](service-periods.md#a1090-the-zone-keep-opens-managers-pin-dialog-closed-while-its-pin-is-checked-can-leave-the-zones-keep-open-dialog-stuck)
-- **A1091. The late-send window and its manager's PIN dialog stay open when the waiter changes table
-  without signing out**
-  [Detail](service-periods.md#a1091-the-late-send-window-and-its-managers-pin-dialog-stay-open-when-the-waiter-changes-table-without-signing-out)
-- **A1095. The till's refusal "A dish's period has ended." names no next step**
-  [Detail](service-periods.md#a1095-the-tills-refusal-a-dishs-period-has-ended-names-no-next-step)
-
 ## Bundle: After A760: A877's one helper first
 
 4 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -945,26 +931,3 @@ makes"):
   Calendar's Show picker; only a list that never loaded leaves Show with departments only. Kept
   so a brief network drop does not lose a manager's chosen station — left open by A722 Part 3's
   Codex review, #1834.
-
-## A1090. The zone Keep open's manager's PIN dialog, closed while its PIN is checked, can leave the zone's Keep open dialog stuck
-
-The PIN dialog hides itself for good, but `till-keep-open`
-ignores its cancel while busy (`apps/till/src/widgets/keep-open.ts`); a wrong or throttled PIN
-then keeps the dialog's people set, so the Keep open dialog stays on screen as busy, with every
-button disabled and Escape and close refused (`beforeClose`, `keep-open-dialog.ts`), under a PIN
-dialog nobody can see. Moving to another zone clears it. A789 slice 4 fixed the same shape for the
-late-send PIN only. Read in the code, not run. Left open by A789 slice 4.
-
-## A1091. The late-send window and its manager's PIN dialog stay open when the waiter changes table without signing out
-
-A send's refusal can open the window after the waiter has left the
-table; Kitchen agreed then answers "table.error" (`#sendDraft`, `apps/till/src/till-app.ts`). Close
-both when the table changes, and open the refusal's window only on the table that sent.
-Reproduced in a browser test by the slice 4 review (#2057). Left open by A789 slice 4.
-
-## A1095. The till's refusal "A dish's period has ended." names no next step
-
-(`menu_period.ended`, `apps/till/src/i18n/codes.ts`). The till shows it when the box refuses a
-late dish the till cannot match to any dish it sent, so no late-send window opens; sending again
-meets the same refusal. Word what the waiter can do (for example, remove the dish or reopen the
-table so the till marks it). Left open by A789 slice 4, #2057; the wording came with slice 3.

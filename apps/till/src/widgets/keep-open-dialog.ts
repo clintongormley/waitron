@@ -115,7 +115,9 @@ export class TillKeepOpenDialog extends LitElement {
     const refusal =
       this.refusal === null || (this.refusalField === "until" && this.fieldEdited)
         ? ""
-        : codeMessage(this.refusal);
+        : this.refusal === "pin.invalid" || this.refusal === "pin.throttled"
+          ? t(this.refusal)
+          : codeMessage(this.refusal);
     const fieldError = this.refusalField === "until" && !this.fieldEdited ? refusal : "";
     return html`<wt-dialog
       ${trackDialog()}

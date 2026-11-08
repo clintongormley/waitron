@@ -522,7 +522,7 @@ freeze. A760 part 3 corrected the guard's two wrong sentences.
 
 ## Bundle: One repeated-run rig, then each named test
 
-8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
+7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06),
 except the last, added on 2026-11-07.
 
 - **A local four-file till browser run ended without a completed-file report.**
@@ -540,10 +540,6 @@ except the last, added on 2026-11-07.
   [Detail](ci.md#the-relocated-independent-department-preview-needs-a-load-investigation).
 - **A printers-screen test failed once during A435 step 2's review fixes and was not reproduced**
   [Detail](ci.md#a-printers-screen-test-failed-once-during-a435-step-2s-review-fixes).
-- **A till late-send PIN test failed once and then passed, twice in two days, in local combined
-  runs (A1126)**: "shows a wrong PIN on the app's line when the dialog was closed while it was
-  sent, and asks afresh next time". **Next action:** reproduce it under load, keep the failure
-  output, and fix at the root. [Detail](ci.md#a-till-late-send-pin-test-failed-once-twice-in-two-days-a1126)
 - **`apps/server/src/fiscal-certificate-diagnosis-process.test.ts`, "resolves only after its exact
   child exits…", failed once in 15 runs on a busy machine** (2026-11-07). The test's
   `cleanupMs = 200` gives a child 150 ms to exit after its result. Fix in the test (a larger budget,
@@ -973,21 +969,6 @@ before retrying unrelated work; a later pass does not fix either test.
 (`apps/dashboard/src/screens/printers-screen.save-state.test.ts`) failed once in eight runs of the
 printers-screen files on 2026-10-10, then passed alone and in the seven later runs; its error was
 not captured. It was not reproduced. **Next action:** reproduce it under load and fix at the root.
-
-## A till late-send PIN test failed once, twice in two days (A1126)
-
-"shows a wrong PIN on the app's line when the dialog was closed while it was sent, and asks afresh
-next time" (`apps/till/src/till-app-late-send.test.ts`, the manager PIN case expecting "Wrong PIN,
-try again") failed once and then passed on reruns, both times in a local combined run. On
-2026-10-25 it failed in A797 slice 1's combined run (`pnpm --filter @waitron/till exec vitest run
-src/till-app ...`). On 2026-10-26 it failed in A797 slice 3 Task 5a's first full run of
-`pnpm --filter @waitron/till exec vitest run src/till-app src/state/bar-tables.test.ts
-src/widgets/till-shell.test.ts`, then passed six times: three alone, two with its file, and two
-later full runs. The suite runs as a till, where slice 3's bar is a fixed empty list. No cause was
-found and the failure output was not kept. **Next action:** reproduce it under load by repeating
-the combined run, keep the failure output, name the cause and fix it. Apply the
-[CI-failure rule](../developers/ci-and-gates.md#what-to-do-when-ci-fails) before retrying
-unrelated work; a later pass does not fix this test.
 
 ## Other `uses:` steps that fetch over the network have no step time limit, and the runner's own action download at job set-up is bounded only by long limits of its own (left open by A935)
 

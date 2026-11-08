@@ -104,7 +104,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 - [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
 - [A1387. Till sentences during the clock stop, with money in hand](backlog/box.md#bundle-a1387-till-sentences-during-the-clock-stop-with-money-in-hand)
-- [A1388. Till late-send dialogs that stick or say nothing](backlog/service-periods.md#bundle-a1388-till-late-send-dialogs-that-stick-or-say-nothing)
 - [A1389. Refuse bad tips and compare the amount captured on the whole-order card path](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
 - [A1392. Discard and Cancel fail on a table bill reached from the counter](backlog/till.md#bundle-a1392-discard-and-cancel-fail-on-a-table-bill-reached-from-the-counter)
 - [A1398. Pack the other packages' test shards by measured time, and check the packing on every run](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time-and-check-the-packing-on-every-run)
@@ -677,7 +676,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   (`priceOrderLines`, `apps/server/src/working-order.ts`), so such an extra made at its own station
   prints and shows unmarked. Left open by A789 slice 3, #2051 (plan D25).
 
-- **A1388. Till late-send dialogs that stick or say nothing** (bundle of 3, 3 important, size S). Holds A1090, A1091, A1095. [Detail](backlog/service-periods.md#bundle-a1388-till-late-send-dialogs-that-stick-or-say-nothing)
 
 - **Opening the Year from a station's Week may keep `/station/<id>` in the address**, though the
   Year shows no station. Found by reading, not run — left open by A722 Part 3, #1834.
@@ -2165,7 +2163,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
-- **One repeated-run rig, then each named test** (bundle of 8, 2 important, size M). [Detail](backlog/ci.md#bundle-one-repeated-run-rig-then-each-named-test)
+- **One repeated-run rig, then each named test** (bundle of 7, size M). [Detail](backlog/ci.md#bundle-one-repeated-run-rig-then-each-named-test)
 
 - **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)
 

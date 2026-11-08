@@ -1050,7 +1050,13 @@ describe("a manager's PIN", () => {
     api.submitDraft!.mockImplementationOnce(() => held);
     await authorize(el, "0123");
 
+    const closed = new Promise<void>((resolve) =>
+      approval(el)!
+        .shadowRoot!.querySelector("wt-dialog")!
+        .addEventListener("wt-close", () => resolve(), { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await flush(el);
     answer(MANAGER_NEEDED);
     await flush(el, 6);
@@ -1068,7 +1074,13 @@ describe("a manager's PIN", () => {
     api.submitDraft!.mockImplementationOnce(() => held).mockRejectedValueOnce(MANAGER_NEEDED);
     await authorize(el, "0123");
 
+    const closed = new Promise<void>((resolve) =>
+      approval(el)!
+        .shadowRoot!.querySelector("wt-dialog")!
+        .addEventListener("wt-close", () => resolve(), { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await flush(el);
     answer(WRONG_PIN);
     await flush(el, 6);
@@ -2420,3 +2432,91 @@ describe("counter place and park", () => {
     expect(parkOrder).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("late-send prompts belong to the table visit", () => {
+  async function leave(el: TillApp) {
+    emit(el.shadowRoot!.querySelector("till-table-order-screen")!, "back-to-floor");
+    await flush(el, 6);
+    expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
+  }
+
+  it("closes the late-send window when leaving the table", async () => {
+    const el = await lateTable();
+    await act(el, "send-all");
+    expect(windowOf(el)).not.toBeNull();
+    await leave(el);
+    expect(windowOf(el)).toBeNull();
+    expect(api.submitDraft).not.toHaveBeenCalled();
+  });
+
+  it("closes the manager PIN when leaving the table", async () => {
+    const el = await managerAsked();
+    await leave(el);
+    expect(approval(el)).toBeNull();
+    expect(submissions()).toHaveLength(1);
+  });
+
+  it("does not open a late refusal after leaving the table", async () => {
+    let refuse!: (error: unknown) => void;
+    const held = new Promise<never>((_resolve, reject) => (refuse = reject));
+    const el = await breakfastTable({ submitDraft: vi.fn(() => held) });
+    await act(el, "send-all");
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+    await leave(el);
+    refuse(
+      refusal(
+        [{ menuId: BREAKFAST_MENU.id, periodName: "Breakfast" }],
+        [offerId(BREAKFAST_MENU, "Omelette")],
+      ),
+    );
+    await flush(el, 6);
+    expect(windowOf(el)).toBeNull();
+    expect(approval(el)).toBeNull();
+  });
+
+  it("does not open a manager PIN whose people read outlives the table", async () => {
+    let answer!: (people: (typeof MARTA)[]) => void;
+    const held = new Promise<(typeof MARTA)[]>((resolve) => (answer = resolve));
+    const el = await lateTable({
+      submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(MANAGER_NEEDED),
+      serviceDayAuthorizers: vi.fn(() => held),
+    });
+    await act(el, "send-all");
+    await choose(el, "data-late-agreed");
+    expect(api.serviceDayAuthorizers).toHaveBeenCalledOnce();
+    await leave(el);
+    answer([MARTA]);
+    await flush(el, 6);
+    expect(approval(el)).toBeNull();
+    expect(windowOf(el)).toBeNull();
+  });
+});
+
+it.each(["late-send window", "manager PIN"])(
+  "closes the %s when a handheld switches away from its table",
+  async (kind) => {
+    const el = await lateTable({
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "phone-portrait" }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "till-dev",
+        name: "Handheld",
+        formFactor: "phone-portrait",
+      }),
+      submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce(MANAGER_NEEDED),
+      serviceDayAuthorizers: vi.fn().mockResolvedValue([MARTA]),
+    });
+    expect(
+      el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!.handheld,
+    ).toBe(true);
+    await act(el, "send-all");
+    if (kind === "manager PIN") {
+      await choose(el, "data-late-agreed");
+      expect(approval(el)).not.toBeNull();
+    } else expect(windowOf(el)).not.toBeNull();
+    emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
+    await flush(el, 6);
+    expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
+    expect(windowOf(el)).toBeNull();
+    expect(approval(el)).toBeNull();
+  },
+);

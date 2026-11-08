@@ -835,8 +835,12 @@ it("names a full disk, a card charged but not recorded, and a wrong clock in bot
 });
 
 it("words a dish whose period has ended, in both languages", () => {
-  expect(codeMessage("menu_period.ended", "en")).toBe("A dish's period has ended.");
-  expect(codeMessage("menu_period.ended", "es")).toBe("Ha terminado el periodo de un plato.");
+  expect(codeMessage("menu_period.ended", "en")).toBe(
+    "A dish's period has ended. Review the order and remove dishes from ended periods before sending again.",
+  );
+  expect(codeMessage("menu_period.ended", "es")).toBe(
+    "Ha terminado el periodo de un plato. Revisa el pedido y quita los platos de periodos terminados antes de volver a enviarlo.",
+  );
 });
 
 it("words the box clock's check refusals plainly, in both languages, never as the generic sentence", () => {
