@@ -2405,7 +2405,6 @@ export class TillApp extends LitElement {
     // Its own event kind, not `nav`: `#setScreen` below records the nav.
     diag.record("info", "server-switch", { from, to });
     this.operatorPersonId = "";
-    this.#sessionPersonId = "";
     this.#tabPerson = null;
     this.operatorName = "";
     this.#loginPending = false;
@@ -3168,7 +3167,9 @@ export class TillApp extends LitElement {
   #operatorSession = 0;
   /** The person the server session now belongs to, and so the person any draft save goes in as. It
    * moves at the start of a sign-in; {@link operatorPersonId} moves only once that sign-in loads. */
-  #sessionPersonId = "";
+  get #sessionPersonId(): string {
+    return this.#tabPerson?.personId ?? "";
+  }
   /** The person every request names, one object per sign-in: a refusal hands back the object its
    * request was sent with, so one for an earlier sign-in, even the same person's, is told apart. A
    * sign-out keeps it, so the sign-out itself names who is leaving. */
@@ -5500,7 +5501,6 @@ export class TillApp extends LitElement {
     this.clockedOut = false;
     this.#loginPending = true;
     this.#dropOthersDrafts(personId);
-    this.#sessionPersonId = personId;
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
     const api = this.api;
