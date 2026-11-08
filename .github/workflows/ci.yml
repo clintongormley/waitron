@@ -365,12 +365,28 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Control only, break a file the cache holds
+        run: |
+          case "$(cat .lint-control 2>/dev/null)" in
+            format) printf 'export   const   brokenControl=1\n' >> scripts/mutation-shard.mjs ;;
+            eslint) printf '\nconst unusedControl = 1;\n' >> scripts/mutation-shard.mjs ;;
+          esac
+
       - run: pnpm lint ${{ needs.changes.outputs.full == 'false' && '--cache --cache-strategy content --cache-location "$RUNNER_TEMP/lint-cache/eslint"' || '' }}
 
       - run: pnpm format:check ${{ needs.changes.outputs.full == 'false' && '--cache --cache-strategy content --cache-location "$RUNNER_TEMP/lint-cache/prettier"' || '' }}
 
       - name: Keep the lint results for later runs
         if: needs.changes.outputs.full == 'false' && github.ref == 'refs/heads/main' && steps.lint-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/lint-cache
+          key: ${{ steps.lint-cache.outputs.cache-primary-key }}
+
+      - name: Control only, keep this pull request's results
+        if: github.event_name == 'pull_request' && steps.lint-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         timeout-minutes: 1
         continue-on-error: true
