@@ -487,7 +487,7 @@ Any other line is a stop (rules §5.2).
 - [ ] **Step 6: Rebuild and run.**
   - Rebuild core: `pnpm --filter @waitron/server migration-baseline rebuild --set core`.
   - From the root:
-    `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/migrations-match-schema.test.ts scripts/classification-complete.test.ts scripts/mutation-shard.test.mjs scripts/live-subscriptions.test.ts`.
+    `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/starting-migrations.test.ts scripts/classification-complete.test.ts scripts/mutation-shard.test.mjs scripts/live-subscriptions.test.ts`.
   - Then `pnpm --filter @waitron/catalogue exec vitest run` and
     `pnpm --filter @waitron/provisioning exec vitest run`.
   - Then `pnpm --filter @waitron/server exec vitest run src/catalogue-api.test.ts src/catalogue-api.full-manifest.test.ts src/till-api.test.ts src/order-portions.counter.test.ts src/order-portions.filing.test.ts src/order-portions.lifecycle.test.ts src/configuration-import.test.ts src/configuration-transfer.test.ts scripts/demo-seed`.

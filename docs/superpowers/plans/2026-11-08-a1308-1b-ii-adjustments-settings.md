@@ -150,7 +150,7 @@ cases, and the regenerated migration files. About 3 hours.
 4. `pnpm --filter @waitron/db exec vitest run src/settings.test.ts`,
    `pnpm --filter @waitron/composition exec vitest run` and
    `pnpm --filter @waitron/dashboard-kit exec vitest run src/codes.test.ts` pass.
-5. `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/classification-complete.test.ts scripts/migrations-match-schema.test.ts scripts/live-subscriptions.test.ts scripts/write-path-tables.test.ts scripts/settings-not-migrated.test.ts scripts/module-seams.test.ts` passes.
+5. `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/classification-complete.test.ts scripts/starting-migrations.test.ts scripts/live-subscriptions.test.ts scripts/write-path-tables.test.ts scripts/settings-not-migrated.test.ts scripts/module-seams.test.ts` passes.
 6. `pnpm protection-list compare` prints exactly the lines below.
 7. The clash and the screen are proven by browser tests (Task 2), not by hand. The look is checked
    by the Claude review seat, not the Codex builder: it opens the reasons screen on a dev stack

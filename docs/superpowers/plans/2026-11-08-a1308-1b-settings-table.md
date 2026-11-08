@@ -169,7 +169,7 @@ run, not its exit status (CLAUDE.md §4).
 
 1. `pnpm --filter @waitron/db exec vitest run src/settings.test.ts src/change-feed.test.ts src/classification.test.ts src/backup-evidence.test.ts` passes.
 2. `pnpm --filter @waitron/server exec vitest run src/live-api.settings.test.ts src/backup-verification.settings.test.ts src/live-api.test.ts src/personal-data-actions.coverage.test.ts scripts/demo-seed/seed.madrid-baseline.test.ts` passes.
-3. `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/classification-complete.test.ts scripts/migrations-match-schema.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/live-subscriptions.test.ts scripts/write-path-tables.test.ts scripts/settings-not-migrated.test.ts scripts/migration-upgrade.test.ts scripts/errors-reachable.test.ts scripts/claude-md-pointers.test.ts` passes.
+3. `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/classification-complete.test.ts scripts/starting-migrations.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/live-subscriptions.test.ts scripts/write-path-tables.test.ts scripts/settings-not-migrated.test.ts scripts/migration-upgrade.test.ts scripts/errors-reachable.test.ts scripts/claude-md-pointers.test.ts` passes.
 4. From `apps/server`, `pnpm protection-list compare` prints exactly the lines in the next section.
 5. `pnpm --filter @waitron/db exec stryker run --mutate src/settings.ts` scores at least 90
    (CLAUDE.md §2: `db` is mutation-tested and the nightly breaks under 90).
@@ -420,7 +420,7 @@ mapping the answer keeps `settings.invalid` and its params. 1b-ii's routes are t
     `ADDED_TABLES` (the seed writes no row to it).
 
 - [ ] **Step 7: Run and see them pass.** Finish-line command 1 (this file only), the
-  `schema-constraints`, `classification-complete`, `migrations-match-schema`, `append-only-triggers`,
+  `schema-constraints`, `classification-complete`, `starting-migrations`, `append-only-triggers`,
   `behavioural-triggers` and `migration-upgrade` files of command 3, and
   `pnpm --filter @waitron/server exec vitest run src/personal-data-actions.coverage.test.ts scripts/demo-seed/seed.madrid-baseline.test.ts`.
 

@@ -508,7 +508,7 @@ longer has `listIngredients`, `createIngredient`, `updateIngredient`, `getProduc
     written like the `parties.main_bill_id` filter at `:167-169`, plus `delete row.recipe_derivation`.
 - [ ] **Step 9: Rebuild and run.**
   - Run `pnpm --filter @waitron/server migration-baseline rebuild --set core`.
-  - From the root, run `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/migrations-match-schema.test.ts scripts/classification-complete.test.ts scripts/english-only.test.ts scripts/changed-scope.test.mjs scripts/ci-workflow.test.mjs scripts/mutation-shard.test.mjs`.
+  - From the root, run `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/starting-migrations.test.ts scripts/classification-complete.test.ts scripts/english-only.test.ts scripts/changed-scope.test.mjs scripts/ci-workflow.test.mjs scripts/mutation-shard.test.mjs`.
   - Then run:
     - `pnpm --filter @waitron/catalogue exec vitest run`;
     - `pnpm --filter @waitron/identity exec vitest run src/permissions.test.ts`;

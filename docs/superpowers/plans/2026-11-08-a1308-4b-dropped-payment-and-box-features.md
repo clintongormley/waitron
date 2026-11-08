@@ -522,7 +522,7 @@ git grep -n -E "provider\.forward\(|card\.forward\(|\.forward\(now|new StripeOnD
     assertions stay.
 
 - [ ] **Step 7: Run.**
-  `pnpm --filter @waitron/payments test && pnpm --filter @waitron/payments-stripe test && pnpm --filter @waitron/payments-sumup test && pnpm --filter @waitron/provisioning exec vitest run src/configuration-transfer.reader-slip-setting.test.ts && pnpm exec vitest run scripts/schema-constraints.test.ts scripts/alert-codes.test.ts scripts/classification-complete.test.ts scripts/migrations-match-schema.test.ts scripts/live-subscriptions.test.ts`
+  `pnpm --filter @waitron/payments test && pnpm --filter @waitron/payments-stripe test && pnpm --filter @waitron/payments-sumup test && pnpm --filter @waitron/provisioning exec vitest run src/configuration-transfer.reader-slip-setting.test.ts && pnpm exec vitest run scripts/schema-constraints.test.ts scripts/alert-codes.test.ts scripts/classification-complete.test.ts scripts/starting-migrations.test.ts scripts/live-subscriptions.test.ts`
   Expected: each prints a `Tests` count, all passing. Server, till and dashboard do not typecheck
   until Task 2; that is expected, because nothing is pushed until Task 6.
 
