@@ -19,7 +19,7 @@ imported lockup, and till's powered-by image check; the three app builds also co
 The reader list is explicit: a new consumer needs that list updated. The selection tests exercise
 the classifier, real workflow gate shell and hook; they do not discover new asset consumers.
 
-The full CI run starts nightly at 02:00 UTC, on manual dispatch and on `v*` releases. It tests all
+The full CI run starts nightly at 02:00 UTC, on manual dispatch other than a `server_probe` one, and on `v*` releases. It tests all
 packages, runs ESLint and Prettier with no saved results, collects coverage and requires the existing merged `98/98/98/95` thresholds. Scoped
 runs skip coverage transfers and merge jobs. Shards retain their existing allocation and check
 that their test script exists before running, including when result uploads are skipped.
@@ -1518,7 +1518,7 @@ on a `pnpm … test:shard` or `test:coverage` line, never one set in a package's
 root `scripts/` is scanned.
 
 `lint` (eslint and `format:check`) and `root-guards` (the repo-level Vitest project) run on every
-CI run, so a regression in a path the gated test jobs skip is caught there only as far as the root
+CI run except a `server_probe` dispatch, so a regression in a path the gated test jobs skip is caught there only as far as the root
 suites exercise it. On a pull request or ordinary `main` push, `lint` restores results an earlier
 `main` run kept for the same inputs, if there are any (see "The lint job reuses earlier results
 except on a full run").
@@ -3317,8 +3317,7 @@ them before adding the export.
 
 On a pull request or an ordinary push to `main`, the `lint` job restores the results an earlier
 `main` run kept, if there are any for the same inputs, and ESLint and Prettier then re-check only
-files whose content changed. A nightly, manual or
-release run (`full` is `true`) restores nothing and checks every file.
+files whose content changed. A nightly, release or manual run (`full` is `true`), other than a `server_probe` dispatch, which skips `lint`, restores nothing and checks every file.
 
 The results are kept once a day for each combination of `eslint.config.js`, `pnpm-lock.yaml` and
 every `package.json`, and only by a push to `main`; a pull request reads them and saves nothing. A
@@ -3684,7 +3683,7 @@ package-wide coverage. Run additional consumer tests locally when useful for inv
 ### Adding a workspace package breaks the root guards until it is wired in
 
 Three guards in the root Vitest project read workspace members BY NAME. The `root-guards` job
-runs that project on every CI run. A new member that is not wired in fails CI, on a branch that may have nothing else wrong with it.
+runs that project on every CI run except a `server_probe` dispatch. A new member that is not wired in fails CI, on a branch that may have nothing else wrong with it.
 
 Measured twice, in both directions, on 2026-09-16 — adding `@waitron/bench-sqlite-failover`, then
 taking the wiring away again. Unwired, exactly three files in the root project go red, and they are
