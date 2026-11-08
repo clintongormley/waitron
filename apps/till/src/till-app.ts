@@ -5476,7 +5476,7 @@ export class TillApp extends LitElement {
 
   /** The device's session belongs to someone else now, so this person has none to end. */
   #onPersonRefused(person: SessionPerson): void {
-    if (person !== this.#tabPerson || this.operatorName === "") return;
+    if (person !== this.#tabPerson || (this.operatorName === "" && !this.#loginPending)) return;
     this.#refusedPerson = person;
     void this.#onLogout(false);
   }

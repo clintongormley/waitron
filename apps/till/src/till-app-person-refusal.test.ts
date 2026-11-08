@@ -565,6 +565,32 @@ describe("the till through its real client", () => {
     },
   );
 
+  it("stays locked, ends no session, and gives Ana her lines back, when a read of her sign-in's setup is refused for her person", async () => {
+    const server = tillServer();
+    const { el, api } = await mountTill(server);
+    let offersSettled = false;
+    const readOffers = api.listDefaultZoneOffers.bind(api);
+    api.listDefaultZoneOffers = (...args) =>
+      readOffers(...args).finally(() => (offersSettled = true));
+    const offersRead = server.hold("GET /api/default-service-zone/offers");
+    await keyIn(el, ANA, PIN);
+    await offersRead.sent;
+    const lockBefore = lockScreen(el);
+
+    offersRead.refuse(409, SESSION_PERSON_REFUSAL);
+    await vi.waitFor(() => expect(offersSettled).toBe(true));
+    await vi.waitFor(() => expect(lockScreen(el)).not.toBe(lockBefore));
+    await el.updateComplete;
+
+    expect(shellOf(el)).toBeNull();
+    expect(lockScreen(el)).not.toBeNull();
+    expect(server.sentTo("DELETE /api/session")).toEqual([]);
+    expect(server.sentTo("GET /api/device/equipment")).toEqual([]);
+    await signInAsAna(el);
+    await openAnasTable(el);
+    expect(server.sentTo("DELETE /api/session")).toEqual([]);
+  });
+
   it("still shows a boot's failure on the lock a person refusal left", async () => {
     const server = tillServer();
     const { el } = await mountTill(server);
