@@ -1,50 +1,60 @@
-# A1453: measure selection by executed functions
+# A1453: measure test selection and remembered results
 
-**Status: pending plan approval.** Lane D queue assignment, watcher 2026-11-08 17:36,
-quotes the owner: “it doesn't need to run all the tests, eg running the verifactu tests when i change the logo”.
-This authorizes measurement only; the driver arranges the Claude read and watcher approval before building.
-You get a short evidence-based recommendation for server, ui, dashboard and till, within two active hours.
-Reject below 30% saved test-execution minutes after fallbacks, or any observed failure missed without a valid fallback.
-Missing evidence means inconclusive, never safe. No product selector, landing workflow change or recurring workflow.
+**Pending watcher approval.** You get numbers for selecting tests by executed functions and
+reusing earlier passing results, not a selector or result store. Lane D's queue assignment
+(2026-11-08 17:36) quotes the owner: “it doesn't need to run all the tests”. The watcher added
+remembered results at 17:39, recording owner “y”, and raised the budget to three active hours.
+The watcher owns the subsequent design. This measurement does not reverse A1427's stop on
+selection machinery. No product change, recurring workflow or design proposal lands here.
 
-**Files and size.** Commit this plan (about 50 doc lines) and `docs/backlog/ci.md` (about 35 doc lines); only if recommending build, add `docs/superpowers/plans/2026-11-08-a1453-test-selection-proposal.md` (at most one page, Claude-read before owner approval).
-Touch `docs/backlog.md` only if its index actually changes (0–3 doc lines). Committed code: 0; tests: 0.
-After watcher approval only, put temporary work beneath `/Users/clintongormley/waitron-campaign-d/receipts/a1453-20261108/`:
-`collector.mjs`, `replay.mjs` (combined ≤250 code lines), `qualify.test.mjs` (≤60 test lines),
-`hosted/` (disposable checkout; config ≤40 lines, workflow ≤40 lines, only if explicitly approved), plus `raw/`, `maps/`, `replay/` for evidence. No temporary scripts in the landing tree.
+**Files and size.** This plan and `docs/backlog/ci.md`: about 90 documentation lines total;
+`docs/backlog.md`: 0–3 lines only if its index changes. Committed code/tests: zero.
+Temporary files under `~/waitron-campaign-d/receipts/a1453-20261108/`: `collector.mjs`, `replay.mjs`
+(up to 350 code lines together), `qualify.test.mjs` (up to 90 test lines), and captured evidence.
+A disposable checkout's `.github/workflows/a1453-measure.yml` and `a1453.config.ts` (up to 80
+configuration lines together) require an explicit exception to “no workflow change” before creation.
+Existing dispatch has no instrumentation input (`.github/workflows/ci.yml:38`); the inspected
+nightly `server-blob-2` from run 42437905513 has merged coverage, not per-test-file attribution.
 
-1. **Authorize the collection route and freeze the sample (20 active minutes).** A1427's decision in `docs/backlog/ci.md` stopped import selection for cost; this experiment does not revive it.
-   Pin the latest 40 merged PRs at measurement start, their base/head SHAs and every recorded CI head/run/attempt.
-   `.github/workflows/ci.yml:38` has `workflow_dispatch` without inputs; dispatch enables full coverage,
-   but existing aggregate reports/blobs do not establish per-file attribution. No proven collection route yet.
-   If capture requires disposable workflow/config instrumentation on a nonlanding branch, obtain an explicit
-   watcher decision permitting that exception to “no workflow change”, including exact paths, before creating it.
+1. **Freeze the sample and ceiling first (30 minutes, proposed simpler route).** Pin the latest
+   40 merged PRs, historical base/head SHAs and all recorded CI attempts. Before results, define
+   the denominator as four-suite file execution seconds from each PR's last completed run on its
+   final head, using `[file-progress] end` logs; absent files/logs make evidence incomplete.
+   Compare within the same job/runner and coverage mode; do not turn concurrent file time into
+   job minutes. Count full-suite fallbacks, then bound combined selection/reuse savings by giving
+   every remaining test a free skip, except known required tests. A ceiling below 30% is a drop;
+   above 30% proves nothing. Watcher approval must resolve whether this early stop replaces collection.
 
-2. **Qualify, then collect once on hosted machines (45 active minutes).** Use the installed V8 provider's
-   `onAfterSuiteRun({coverage,testFiles})` hook before merge; retain SHA, project, environment and single test path.
-   Reference: `node_modules/vitest/dist/chunks/coverage.DM_a_rWm.js:732`; provider `dist/index.js` and `dist/browser.js`.
-   Capture raw function ranges/counts above zero and source maps before provider filtering/aggregation loses detail;
-   include executed workspace dependencies. Reject multi-file attribution rather than assigning the union to each file.
-   First observe a failing qualification, then qualify two files calling distinct functions: each selects its caller,
-   excludes the other, and excludes an imported but uncalled function; injected multi-file/missing-map input forces fallback.
-   Check browser isolation and worker/child-process/bundled-code gaps; any unqualified path forces full affected-package tests.
-   Then run all four suites, including dashboard projects and server's separate stream/full-disk jobs, on hosted runners.
-   Reconcile expected/executed file inventories; capture coverage, timings, source identity and overhead. No local whole-suite run. Unsupported collection or missing suites means inconclusive.
+2. **Qualify then collect (65 minutes).** After hosted-route approval, collect at or before the
+   oldest sampled PR's base, matching that historical base version, never a future head. Retain
+   SHA, project, environment, single test path, raw function ranges/counts and source maps through
+   V8 `onAfterSuiteRun({coverage,testFiles})` before merge, including workspace dependencies.
+   Test first: two files call different functions while importing an uncalled third; prove correct
+   inclusion/exclusion and reject multi-file attribution/missing maps. Repeat in Node and concurrent
+   Chromium pages. Record runtime spawns; tests with unqualified child/worker/bundle/browser paths
+   always run, and uncertain attribution forces full affected packages. Run all four suites only
+   on hosted machines, including server stream/full-disk and every dashboard project. Reconcile
+   expected/executed inventories. No local whole-suite run; unproven coverage is missing evidence.
 
-3. **Replay and audit failures (40 active minutes).** Match functions across each PR's base/head and collection SHA
-   by source/body correspondence and mapped ranges, never names alone. A later map has look-ahead bias:
-   use a function only when its collected body matches the relevant historical version; otherwise fall back. Label results retrospective estimates, not historical qualification.
-   Changed top-level code/config/migrations/lockfiles, new/deleted functions, missing maps, indirect assets/tests,
-   uncertain mapping or correspondence force the full affected-package suite, including dependent packages;
-   unknown affected scope forces all four. Keep all other checks and packages as CI actually ran them.
-   Enumerate every failing test across all recorded heads and attempts of all 40 PRs, including cancelled/failed runs;
-   report selected/direct, covered by a justified fallback, or missed. Out-of-scope tests remain retained and listed.
-   Missing logs, unknown test identities and infrastructure failures are missing evidence, never passing safety checks.
+3. **Replay selection and reuse (60 minutes).** Use each attempt's own base/head diff. Changed
+   production top-level code/config/migrations/lockfiles, new/deleted production functions,
+   indirect assets, shared helpers and uncertain correspondence fall back to affected packages
+   and dependents; unknown scope means all four. Changed tests always run. Match source/ranges,
+   not names; report stale-map fallbacks by PR age. Keep all other packages/checks unchanged.
+   Replay passing results chronologically across PR/main/other recorded runs; only an earlier pass
+   is reusable. Proposed measurement key: test/project, test/setup/helper/config/lockfile/runtime
+   identity, executed function bodies and their files' top-level code. Unknown external inputs or
+   unqualified execution prevent reuse; fallbacks cannot be bypassed by reuse. Report selection
+   alone, extra reuse, remaining files per PR, store entries/bytes, map bytes and rebuild overhead.
+   Audit every observed failed test on every head/attempt against both selection and reuse. List
+   misses and known recurring failures separately; a passing rerun alone proves neither flakiness
+   nor safety. Missing heads/logs remain gaps. Report “no miss among N observed failures”, not safety.
 
-4. **Report the decision (15 active minutes).** Use timings only after incident-history checks for Actions/Git/API/Webhooks,
-   no download HTTP 5xx, and slowest checkout under about 10 seconds; record qualifying run/attempt IDs and rejected runs.
-   Separate estimated summed test execution, measured job time, possible empty-job elimination, worker/concurrency effects,
-   unchanged setup/other checks and collection/replay overhead; compare like coverage modes, never sum parallel time as elapsed time.
-   Report per-package/total savings, fallback frequency, raw/compressed map bytes and nightly rebuild job-minutes/elapsed cost.
-   Recommend build or drop only with complete evidence; otherwise list exact gaps and the next watcher decision needed.
-   At two active hours stop with honest partial evidence. A build recommendation includes the one-page owner proposal above; it never authorizes building a selector here.
+4. **Write the decision (25 minutes).** Reject under 30% combined file-time saving after fallbacks,
+   or any missed observed failure not covered by a justified fallback; missing evidence is inconclusive.
+   Qualify hosted timing via incident history, no download 5xx and checkout under about 10 seconds.
+   Report estimated file seconds separately from actual jobs/minutes, empty-job opportunities,
+   unchanged setup/checks, runner/concurrency effects, map/result-store size and nightly rebuild cost.
+   Explain that asset/top-level fallbacks may retain the logo example and unmapped fiscal tests.
+   Stop at three active hours with exact gaps. Recommend build/drop only from adequate evidence;
+   the watcher's later design decides selection, remembered results and a warm large runner.
