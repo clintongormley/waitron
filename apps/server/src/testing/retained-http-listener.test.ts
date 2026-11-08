@@ -119,6 +119,8 @@ landing.listen(Number(process.env.WAITRON_HTTP_LANDING_PORT), "127.0.0.1", ready
     child.stderr!.on("data", (bytes: Buffer) => (output += bytes.toString()));
     try {
       await transferRetainedListeners(child, [held, landing], 5_000);
+      expect(held.server.listening).toBe(false);
+      expect(landing.server.listening).toBe(false);
       await new Promise<void>((resolve, reject) => {
         child.stdout!.on("data", (bytes: Buffer) => {
           output += bytes.toString();
@@ -253,6 +255,7 @@ it.each(["exit", "disconnect", "silent"] as const)(
         await expect(handoff).rejects.toThrow(
           failure === "exit" ? "child exited" : "handoff timed out",
         );
+      expect(held.server.listening).toBe(false);
     } finally {
       if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
       await exited;

@@ -53,12 +53,17 @@ export function entryWorkspaces() {
   };
 }
 
-export async function childProcess(script: string, env: NodeJS.ProcessEnv, args: string[] = []) {
+export async function childProcess(
+  script: string,
+  env: NodeJS.ProcessEnv,
+  args: string[] = [],
+  options: { landing?: boolean } = {},
+) {
   const startupDeadline = Date.now() + 45_000;
   const held = await retainHttpListener();
   let landing: Awaited<ReturnType<typeof retainHttpListener>> | undefined;
   try {
-    if (env.WAITRON_HTTP_LANDING_PORT !== "0") landing = await retainHttpListener();
+    if (options.landing === true) landing = await retainHttpListener();
   } catch (error) {
     await held.close();
     throw error;

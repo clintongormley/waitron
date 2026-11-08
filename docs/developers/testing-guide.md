@@ -430,7 +430,7 @@ the same day; moved here 2026-10-07.
 
 ## Draw every port a test needs in one `freePorts(n)` call, before binding any of them.
 
-A suite that needs a configured port picks it by binding port 0, reading the number the system
+A suite that needs a released configured port picks it by binding port 0, reading the number the system
 chose, and releasing it, because `WAITRON_HTTP_PORT` refuses `"0"`. Drawing two ports that way one after the
 other can return the same number twice on Linux, and did in CI run 36317643554: the boot's HTTPS
 server took port 40141 and its landing listener was then refused `EADDRINUSE` on 40141 in the same
@@ -458,6 +458,7 @@ bundled-entry checks still run without a TypeScript loader. A crash fixture’s 
 at fd 3; append the IPC slot after it.
 
 Attach the child’s output and exit handlers before awaiting `transferRetainedListeners`.
+The hour-entry helper requests its landing listener with `{ landing: true }`.
 Transfer both the main and enabled landing sockets. The child asks for the handles after attaching
 its receiver and acknowledges receipt; the parent then closes its copies. Before the real server
 adopts a socket, its holder destroys incoming connections. The preload redirects the matching
@@ -468,9 +469,8 @@ Do not apply it to a process whose IPC channel belongs to another caller.
 Give each new child its own reservation and update the client destinations after a restart.
 Use one startup deadline for the transfer and readiness checks. The transfer closes the parent’s
 reservations on failure; the caller still owns stopping and collecting the child. When cleanup
-needs only process death, wait for its recorded `exit`. A Node 26.13.0 probe that sent after IPC
-disconnection observed `exit` without `close`; waiting for `close` stalled that no-output control.
-Keep any required pipe draining separate and bounded.
+needs only process death, wait for its recorded `exit`. Keep any required pipe draining separate
+and bounded.
 
 The standalone `scripts/cloud-integration-fixture.ts` installs `adoptRetainedListeners` directly
 in its own process for the first launch and waits for the actual bind before writing `ready.json`.

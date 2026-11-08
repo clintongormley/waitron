@@ -16,12 +16,12 @@ import { startServer, type StartedServer } from "./boot.js";
 import * as trading from "./trading-config.js";
 import { parseEnvFile } from "./env-file.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
-import { freePorts } from "./testing/free-ports.js";
 import {
   retainHttpListener,
   retainedHttpPreload,
   transferRetainedListeners,
 } from "./testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 import { DatabaseSync } from "node:sqlite";
@@ -72,6 +72,42 @@ vi.mock("@waitron/composition", async (original) => {
     ),
   };
 });
+async function startRetainedServer(
+  env: Parameters<typeof startServer>[0],
+  seams: Parameters<typeof startServer>[2] = {},
+): Promise<{ server: StartedServer; port: number }> {
+  const held = await retainHttpListener();
+  const adoption = adoptRetainedListeners([held]);
+  let started: StartedServer | undefined;
+  try {
+    started = await startServer({ ...env, WAITRON_HTTP_PORT: String(held.port) }, {}, seams);
+    await adoption.bound;
+    const running = started;
+    return {
+      port: held.port,
+      server: {
+        ...running,
+        close: async () => {
+          try {
+            await running.close();
+          } finally {
+            if (held.server.listening) await held.close();
+          }
+        },
+      },
+    };
+  } catch (error) {
+    try {
+      await started?.close();
+    } finally {
+      if (held.server.listening) await held.close();
+    }
+    throw error;
+  } finally {
+    adoption.restore();
+  }
+}
+
 const existing = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const dirs: string[] = [];
 afterEach(async () => {
@@ -88,28 +124,27 @@ it.each(["trading", "completion-state", "completion-marker"])(
       venueDir = join(root, "venue"),
       migrations = join(root, "migrations");
     await copyMigrationsRoot(migrations);
-    const [initialPort] = await freePorts(1);
-    let port = initialPort;
+    let port: number;
     const testClock = createHourTestClock(Date.now());
     time.clock = testClock;
-    const env = {
+    const env: Record<string, string> = {
       WAITRON_ENV: "production",
       WAITRON_STATE_DIR: stateDir,
       WAITRON_VENUE_DIR: venueDir,
       WAITRON_MIGRATIONS_DIR: migrations,
       WAITRON_HTTP_HOST: "127.0.0.1",
-      WAITRON_HTTP_PORT: String(port),
       WAITRON_HTTP_LANDING_PORT: "0",
       WAITRON_MANAGEMENT_RP_ID: "localhost",
       WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
     };
     let server: StartedServer | undefined, agent: Agent | undefined;
+    let competing: Awaited<ReturnType<typeof retainHttpListener>> | undefined;
     const original = (
       await vi.importActual<typeof import("./trading-config.js")>("./trading-config.js")
     ).writeTradingEnv;
     let injected = false;
     try {
-      server = await startServer(env, {}, { testClock });
+      ({ server, port } = await startRetainedServer(env, { testClock }));
       agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
       const nonce = randomBytes(32).toString("base64url");
       let capability = "",
@@ -359,7 +394,10 @@ it.each(["trading", "completion-state", "completion-marker"])(
         await exited;
         if (held.server.listening) await held.close();
       }
-      server = await startServer({ ...env, ...tradingEnv }, {}, { testClock });
+      competing = await retainHttpListener();
+      port = competing.port;
+      env.WAITRON_HTTP_PORT = String(port);
+      ({ server, port } = await startRetainedServer({ ...env, ...tradingEnv }, { testClock }));
       const resumedStatus = await fetch(`https://127.0.0.1:${port}/setup-api/first-setup/status`, {
         dispatcher: agent,
       } as RequestInit);
@@ -375,7 +413,7 @@ it.each(["trading", "completion-state", "completion-marker"])(
       server = undefined;
       await rm(join(stateDir, "first-setup.json"));
       await rm(join(venueDir, "first-setup-claim.json"));
-      server = await startServer(env, {}, { testClock });
+      ({ server, port } = await startRetainedServer(env, { testClock }));
       const lost = await post("/setup-api/first-setup/claim", {
         clientClaimNonce: randomBytes(32).toString("base64url"),
         venue: request,
@@ -399,8 +437,15 @@ it.each(["trading", "completion-state", "completion-marker"])(
         db.close();
       }
     } finally {
-      await server?.close();
-      await agent?.close();
+      try {
+        await server?.close();
+      } finally {
+        try {
+          await agent?.close();
+        } finally {
+          if (competing?.server.listening) await competing.close();
+        }
+      }
     }
   },
 );
@@ -417,20 +462,19 @@ it("refuses a fresh owner claim when only a taxpayer survives in the database", 
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: request.taxId, legalName: request.legalName });
   await existing.db.archiveTo(join(venueDir, "venue.db"));
-  const [port] = await freePorts(1);
+  let port: number;
   let server: StartedServer | undefined, agent: Agent | undefined;
   try {
-    server = await startServer({
+    ({ server, port } = await startRetainedServer({
       WAITRON_ENV: "production",
       WAITRON_STATE_DIR: stateDir,
       WAITRON_VENUE_DIR: venueDir,
       WAITRON_MIGRATIONS_DIR: migrations,
       WAITRON_HTTP_HOST: "127.0.0.1",
-      WAITRON_HTTP_PORT: String(port),
       WAITRON_HTTP_LANDING_PORT: "0",
       WAITRON_MANAGEMENT_RP_ID: "localhost",
       WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
-    });
+    }));
     agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
     const response = await fetch(`https://127.0.0.1:${port}/setup-api/first-setup/claim`, {
       dispatcher: agent,

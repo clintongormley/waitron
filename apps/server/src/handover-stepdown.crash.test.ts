@@ -261,6 +261,7 @@ async function startChild(
   at: CrashPoint,
   env: Record<string, string>,
   binding: HandoverBinding,
+  startupDeadline: number,
 ): Promise<Child & { port: number }> {
   const held = await retainHttpListener();
   env = { ...env, WAITRON_HTTP_PORT: String(held.port) };
@@ -307,7 +308,7 @@ async function startChild(
     child.once("error", () => resolve());
   });
   try {
-    await transferRetainedListeners(child, [held], CHILD_LIMIT_MS);
+    await transferRetainedListeners(child, [held], Math.max(1, startupDeadline - Date.now()));
     return { process: child, marks, output: () => output, exited, port: held.port };
   } catch (error) {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
@@ -318,8 +319,11 @@ async function startChild(
   }
 }
 
-async function waitForMark(child: Child, mark: string): Promise<void> {
-  const deadline = Date.now() + CHILD_LIMIT_MS;
+async function waitForMark(
+  child: Child,
+  mark: string,
+  deadline = Date.now() + CHILD_LIMIT_MS,
+): Promise<void> {
   while (!child.marks.includes(mark)) {
     if (child.process.exitCode !== null || child.process.signalCode !== null)
       throw new Error(`the child ended before "${mark}": ${child.output()}`);
@@ -407,8 +411,14 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
   };
   const env = { ...childEnv, WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled" };
 
-  const child = await startChild(at, { ...childEnv, WAITRON_HTTP_HOST: "127.0.0.1" }, binding);
-  await waitForMark(child, "started");
+  const startupDeadline = Date.now() + CHILD_LIMIT_MS;
+  const child = await startChild(
+    at,
+    { ...childEnv, WAITRON_HTTP_HOST: "127.0.0.1" },
+    binding,
+    startupDeadline,
+  );
+  await waitForMark(child, "started", startupDeadline);
   const base = `http://127.0.0.1:${child.port}`;
   await vi.waitFor(
     async () => {

@@ -20,3 +20,5 @@
 **Stop rule:** If native transfer fails HTTP, HTTPS or paired-listener qualification, park this item with its failing evidence; do not substitute retries. Retrying a child on EADDRINUSE leaves the draw-to-bind window in place, contrary to the queued acceptance check. The amendment review suggested that fallback; it is recorded for the watcher, whose 05:34 instruction chooses native handoff.
 
 **Landing gate:** The `WATCHER-NEEDED: A1433 amendment review suggested retrying children` entry in `~/waitron-campaign-e/questions.md` must have a watcher answer before this branch lands.
+
+**2026-11-08 as built:** The watcher answered the landing gate at 05:39, confirming native handoff and no retry fallback. The 387-second whole-branch review also led to pre-cleanup ownership assertions, an explicit hour-entry landing option, and retained sockets for every in-process first-fiscal-boot start. The handover startup shares its existing deadline across transfer and readiness.
