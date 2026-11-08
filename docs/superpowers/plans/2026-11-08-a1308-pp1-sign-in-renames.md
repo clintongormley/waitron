@@ -40,7 +40,7 @@ fiscal identity, AEAT sending or a value that feeds a fiscal hash (rules §6).
 
 ## Where this plan sits
 
-This is the first of eleven plans for the people and working time area, in build order:
+This is the first of twelve plans for the people and working time area, in build order:
 
 | # | Plan | Tables |
 | --- | --- | --- |
@@ -53,18 +53,19 @@ This is the first of eleven plans for the people and working time area, in build
 | pp7 | [shifts and convenio](2026-11-08-a1308-pp7-shifts-and-convenio.md) | `shift_assignments` → `shifts`; `roster_version_id` required; `convenio_config` one row |
 | pp8 | [attendance days, questions, answers](2026-11-08-a1308-pp8-attendance-days-questions-answers.md) | `attendance_day_work` → `attendance_days`; questions point at their day; `attendance_response_commands` → append-only `attendance_answers` |
 | pp9 | [day marks at every write](2026-11-08-a1308-pp9-attendance-day-marks.md) | no table; every write that changes attendance evidence marks its day |
-| pp10 | [staff activity](2026-11-08-a1308-pp10-staff-activity.md) | `attendance_operation_facts` → `staff_activity`, narrowed; the checker reads the source rows |
-| pp11 | [evidence hash](2026-11-08-a1308-pp11-evidence-hash.md) | `attendance_source_state` deleted; `attendance_days.evidence_hash` |
+| pp10 | [staff activity](2026-11-08-a1308-pp10-staff-activity.md) | `attendance_operation_facts` → `staff_activity`; sign-ins, payments, refunds and amendments read where they live |
+| pp11 | [card payments](2026-11-08-a1308-pp11-card-payments.md) | card payments read from `payments`; the in-flight poller deleted; `staff_activity` narrowed; `payments_created_at_idx` |
+| pp12 | [re-check recent days](2026-11-08-a1308-pp12-recheck-recent-days.md) | `attendance_source_state` and the discovery scan deleted; recent days re-checked after a restore, migration or format change |
 
-The build order estimated 5–7 pull requests. It is eleven because the attendance rewrite cannot be
-one pull request under the size cap and is split by risk (pp8 reshapes, pp9 adds the marks with
-the old safety net still running, pp10 changes what is read, pp11 removes the safety net), and
-because pp6 is kept apart in case the owner lands changes to the legal working-time record (open
-question 1 in pp6).
+The build order estimated 5–7 pull requests. It is twelve because the attendance rewrite cannot be
+one pull request under the size cap and is split by risk (pp8 reshapes; pp9 adds the marks with the
+old safety net still running; pp10 and pp11 change what is read; pp12 removes the safety net), and
+pp6 is kept apart because it changes the working-time record's append path (flagged in its pull
+request, README U11).
 
-pp1–pp8 need only batch 1 and A1002. pp9–pp11 also need the orders-and-sales area's `order_events`,
-the refunds slice's `refunds` table and the payments slice's `payments.requested_by`, so the lane
-builds pp1–pp8, then other lane-2 work, then pp9–pp11.
+pp1–pp8 need only batch 1 and A1002. pp9–pp12 also need os6 (`order_events`), os12 and os13
+(`refunds`), pa3 (`payments.requested_by`; the build order moves pa3 ahead of pp9) and, for pp11 and
+pp12, slice 0's year-of-trading bench. So the lane builds pp1–pp8, then other work, then pp9–pp12.
 
 ## Area files for the package move
 
@@ -90,11 +91,12 @@ time, each with its `*.test.ts` siblings (`<name>.test.ts`, `<name>.*.test.ts`):
   `personal-data-actions.ts` (every area's data), `till-api.ts`, `till-sale.ts`, `working-order.ts`,
   `order-*.ts`, `bill-*.ts` (orders and sales).
 
-**Where the move sits:** after pp11, as its own pull request. pp10 and pp11 delete about 850 lines
+**Where the move sits:** after pp12, as its own pull request. pp11 and pp12 delete about 850 lines
 of the attendance code above (`attendance-discovery.ts` 620, `attendance-integrated.ts` 152,
-`attendance-source-changes.ts` 83, at `a086eedfb7`) and about 1,900 lines of their tests; moving them first would move code that is then deleted, and every
-later plan cites `apps/server/src/...:line` (rules §5.1). If A1453 wants this area's move earlier,
-the sign-in, clock and rota files can move after pp8 and the attendance files after pp11.
+`attendance-source-changes.ts` 83, at `a086eedfb7`) and about 1,900 lines of their tests; moving them
+first would move code that is then deleted, and every later plan cites `apps/server/src/...:line`.
+If A1453 wants this area's move earlier, the sign-in, clock and rota files can move after pp8 and
+the attendance files after pp12.
 
 ---
 

@@ -284,11 +284,12 @@ on; each site's deps gain `markAttendance?: AttendanceMarker` beside its existin
   - Case 12: `"after a changeover change, the next pass queues the day a future published shift
     moved into"` (through `runAttendancePass`).
   - Case 13: one test per product delete Task 1 found.
-  - **Day boundary, one per source whose time pp10 moves** (bill payment, order event, card payment):
+  - **Day boundary, one per source whose time pp10 or pp11 moves** (bill payment, order event,
+    card payment):
     `"a <source> written just before the changeover with its row created just after marks the
     created_at day"` — the write's clock reading on one side of the changeover and the row's
-    `created_at` on the other; the mark lands on the `created_at` day (pp10's read uses the same
-    instant, and its own boundary tests pin that).
+    `created_at` on the other; the mark lands on the `created_at` day (pp10's and pp11's reads use
+    the same instant, and their own boundary tests pin that).
   - `"marks nothing when workforce is off"` (no `markAttendance` dependency).
 - [ ] **Step 2: Run, see the red cases fail.**
 - [ ] **Step 3: Implement** the marks at each site and the boot wiring; `runAttendancePass` calls

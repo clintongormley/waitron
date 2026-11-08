@@ -86,9 +86,9 @@ venue-wide keys; slice 3b moved `attendance_mail` onto `outgoing_mail`.
 
 | Left out | Owner |
 | --- | --- |
-| `attendance_days.evidence_hash` | pp11 (introduced with the code that uses it) |
+| `attendance_days.evidence_hash` | not built (pp12's decision: a day's evaluation reads more than the day) |
 | `attendance_operation_facts` → `staff_activity` | pp10 |
-| `attendance_source_state` | pp11 |
+| `attendance_source_state` | pp12 |
 | `evidence_keys` as a list of labels | stays a list (owner, 2026-11-04; appendix §1) |
 | `entry_ids` on answers | stays a list (README §10) |
 
