@@ -2383,6 +2383,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   receipt-guest, till-API bill-move/groups/fiscal-sale and order-portion filing/adjustment suites
   still use Spanish display samples; fiscal-sale and adjustment order-portion test descriptions,
   shared helpers and their consumers' dish selectors and screen expectations remain.
+  Bill-payment venue and category samples still need triage.
   Triage made-here route and receipt-document fixture
   text there while preserving Spanish receipt output and locale checks. Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
