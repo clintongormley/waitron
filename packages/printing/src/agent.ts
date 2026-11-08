@@ -1,17 +1,15 @@
 // Keeps errors.ts's codes reachable from the throwing file (scripts/errors-reachable.test.ts).
 import "./errors.js";
 import { and, eq, isNull, lt, or } from "drizzle-orm";
-import { AppError, diskFullIn } from "@waitron/shared";
+import { AppError, diskFullIn, isUuid } from "@waitron/shared";
 import { nowIso, printAgents, withTransaction } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { createVerifiedTokenMemory, verifySecretAsync } from "@waitron/identity";
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** How stale a recorded sighting has to be before auth writes a fresh one. */
 const SIGHTING_INTERVAL_MS = 60_000;
 
-const VERIFIED_AGENTS_LIMIT = 256;
+export const VERIFIED_AGENTS_LIMIT = 256;
 const verifiedAgents = createVerifiedTokenMemory(VERIFIED_AGENTS_LIMIT);
 
 /**
@@ -34,12 +32,11 @@ export async function authenticateAgent(db: Database, token: string): Promise<{ 
   if (dot <= 0 || dot === token.length - 1) throw new AppError("agent.unauthorized", {});
   const agentId = token.slice(0, dot);
   const secret = token.slice(dot + 1);
-  if (!UUID_RE.test(agentId)) throw new AppError("agent.unauthorized", {});
+  if (!isUuid(agentId)) throw new AppError("agent.unauthorized", {});
 
-  // `active = true` is the revocation filter, so a revoke takes effect at once.
   const current = and(eq(printAgents.id, agentId), eq(printAgents.active, true));
-  const readRow = async () => {
-    const [found] = await db
+  const readRow = async (on: Database | Transaction = db) => {
+    const [found] = await on
       .select({ tokenHash: printAgents.tokenHash, lastSeenAt: printAgents.lastSeenAt })
       .from(printAgents)
       .where(current);
@@ -61,23 +58,19 @@ export async function authenticateAgent(db: Database, token: string): Promise<{ 
     }
     verifiedAgents.remember(agentId, secret, checkedHash);
   }
-  const verifiedHash = row.tokenHash;
 
   // `last_seen_at` is text, so `<` is a string comparison, a correct time order only for the
   // `toISOString()` spelling `nowIso` writes.
   const seenAt = nowIso();
   const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
   if (row.lastSeenAt === null || row.lastSeenAt < staleBefore) {
-    const stillCurrent = (found: { tokenHash: string } | undefined): boolean =>
-      found !== undefined && found.tokenHash === verifiedHash;
+    const verifiedHash = row.tokenHash;
+    const stillCurrent = async (on: Database | Transaction): Promise<boolean> =>
+      (await readRow(on))?.tokenHash === verifiedHash;
     let stillValid: boolean;
     try {
       stillValid = await withTransaction(db, async (tx) => {
-        const [locked] = await tx
-          .select({ tokenHash: printAgents.tokenHash })
-          .from(printAgents)
-          .where(current);
-        if (!stillCurrent(locked)) return false;
+        if (!(await stillCurrent(tx))) return false;
         // The staleness check on the row read spares a call the write lock; the same check in this
         // update keeps calls that all read a stale row to one write.
         await tx
@@ -95,7 +88,7 @@ export async function authenticateAgent(db: Database, token: string): Promise<{ 
     } catch (error) {
       // A full disk refuses the sighting, not the agent: the same check runs again, unstamped.
       if (!diskFullIn(error)) throw error;
-      stillValid = stillCurrent(await readRow());
+      stillValid = await stillCurrent(db);
     }
     if (!stillValid) {
       verifiedAgents.forget(agentId);

@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   locations,
@@ -13,7 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { hashSecret } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { authenticateAgent } from "./agent.js";
+import { VERIFIED_AGENTS_LIMIT, authenticateAgent } from "./agent.js";
 type PrintAgentConfig = { locationId: string };
 import "./errors.js";
 
@@ -32,6 +32,10 @@ vi.mock("@waitron/identity", async (importOriginal) => {
       return verdict;
     },
   };
+});
+
+afterEach(() => {
+  verification.afterVerify = null;
 });
 
 const LOCALE = "es-ES";
@@ -148,6 +152,16 @@ describe("authenticateAgent", () => {
     return { cfg, agentId: id, token: `${id}.${secret}` };
   }
 
+  const setActive = (agentId: string, active: boolean) =>
+    suite.db.update(printAgents).set({ active }).where(eq(printAgents.id, agentId));
+
+  /** Makes the agent's last sighting 90 seconds old, so a new one is due. */
+  const makeSightingDue = (agentId: string) =>
+    suite.db
+      .update(printAgents)
+      .set({ lastSeenAt: new Date(Date.now() - 90_000).toISOString() })
+      .where(eq(printAgents.id, agentId));
+
   it("a valid token resolves to its agentId and stamps last_seen_at", async () => {
     const { agentId, token } = await enrolled();
     expect(await lastSeenAt(agentId)).toBeNull();
@@ -191,7 +205,7 @@ describe("authenticateAgent", () => {
 
   it("a revoked (active=false) agent → agent.unauthorized", async () => {
     const { agentId, token } = await enrolled();
-    await suite.db.update(printAgents).set({ active: false }).where(eq(printAgents.id, agentId));
+    await setActive(agentId, false);
     expect(await codeOf(() => authenticateAgent(suite.db, token))).toBe("agent.unauthorized");
   });
 
@@ -255,7 +269,7 @@ describe("authenticateAgent", () => {
       lock.release();
       await lock.done;
     }
-    await suite.db.update(printAgents).set({ active: false }).where(eq(printAgents.id, agentId));
+    await setActive(agentId, false);
     const again = holdWriteLock();
     try {
       expect(await within(codeOf(() => authenticateAgent(suite.db, token)))).toBe(
@@ -298,10 +312,7 @@ describe("authenticateAgent", () => {
 
   it("writes one sighting when several calls find it due at once", async () => {
     const { agentId, token } = await enrolled();
-    await suite.db
-      .update(printAgents)
-      .set({ lastSeenAt: new Date(Date.now() - 90_000).toISOString() })
-      .where(eq(printAgents.id, agentId));
+    await makeSightingDue(agentId);
     await suite.db.execute(sql`create table sighting_writes (n integer)`);
     await suite.db.execute(sql`
       create trigger count_sighting_writes after update of last_seen_at on print_agents
@@ -397,8 +408,6 @@ describe("authenticateAgent", () => {
       }) as Database;
     }
     const diskFull = () => new AppError("storage.disk_full", {});
-    const revoke = (agentId: string) =>
-      suite.db.update(printAgents).set({ active: false }).where(eq(printAgents.id, agentId));
 
     it("a full disk still authenticates the agent, and saves no sighting", async () => {
       const { agentId, token } = await enrolled();
@@ -408,7 +417,7 @@ describe("authenticateAgent", () => {
 
     it("on a full disk, an agent revoked meanwhile is refused", async () => {
       const { agentId, token } = await enrolled();
-      const db = sightingRefused(diskFull(), () => revoke(agentId));
+      const db = sightingRefused(diskFull(), () => setActive(agentId, false));
       expect(await codeOf(() => authenticateAgent(db, token))).toBe("agent.unauthorized");
     });
 
@@ -426,14 +435,11 @@ describe("authenticateAgent", () => {
     it("on a full disk, a token whose agent was revoked meanwhile is forgotten", async () => {
       const { agentId, token } = await enrolled();
       await authenticateAgent(suite.db, token);
-      await suite.db
-        .update(printAgents)
-        .set({ lastSeenAt: new Date(Date.now() - 90_000).toISOString() })
-        .where(eq(printAgents.id, agentId));
-      const db = sightingRefused(diskFull(), () => revoke(agentId));
+      await makeSightingDue(agentId);
+      const db = sightingRefused(diskFull(), () => setActive(agentId, false));
       expect(await codeOf(() => authenticateAgent(db, token))).toBe("agent.unauthorized");
 
-      await suite.db.update(printAgents).set({ active: true }).where(eq(printAgents.id, agentId));
+      await setActive(agentId, true);
       const before = verification.calls;
       await authenticateAgent(suite.db, token);
       expect(verification.calls - before).toBe(1);
@@ -448,9 +454,6 @@ describe("authenticateAgent", () => {
   });
 
   describe("remembering a token that passed the key check", () => {
-    const setActive = (agentId: string, active: boolean) =>
-      suite.db.update(printAgents).set({ active }).where(eq(printAgents.id, agentId));
-
     /** How many key checks `body` costs. */
     async function keyChecksDuring(body: () => Promise<unknown>): Promise<number> {
       const before = verification.calls;
@@ -468,7 +471,7 @@ describe("authenticateAgent", () => {
       expect(checks).toBe(1);
     });
 
-    it("refuses a revoked agent's remembered token at once, with no key check", async () => {
+    it("refuses a revoked agent's remembered token with no key check", async () => {
       const { agentId, token } = await enrolled();
       await authenticateAgent(suite.db, token);
       await setActive(agentId, false);
@@ -540,13 +543,37 @@ describe("authenticateAgent", () => {
       expect(await keyChecksDuring(() => authenticateAgent(suite.db, token))).toBe(1);
     });
 
+    it("forgets the oldest remembered token once more agents than the limit have passed the key check", async () => {
+      const { cfg, agentId, token } = await enrolled();
+      const secret = token.slice(token.indexOf(".") + 1);
+      await authenticateAgent(suite.db, token);
+      const [first] = await suite.db
+        .select({ tokenHash: printAgents.tokenHash })
+        .from(printAgents)
+        .where(eq(printAgents.id, agentId));
+      const others = await suite.db
+        .insert(printAgents)
+        .values(
+          Array.from({ length: VERIFIED_AGENTS_LIMIT }, (_, i) => ({
+            locationId: cfg.locationId,
+            name: `Agent ${i}`,
+            tokenHash: first!.tokenHash,
+            active: true,
+          })),
+        )
+        .returning({ id: printAgents.id });
+      const authenticateOthers = () =>
+        Promise.all(others.map(({ id }) => authenticateAgent(suite.db, `${id}.${secret}`)));
+
+      expect(await keyChecksDuring(authenticateOthers)).toBe(VERIFIED_AGENTS_LIMIT);
+      expect(await keyChecksDuring(authenticateOthers)).toBe(0);
+      expect(await keyChecksDuring(() => authenticateAgent(suite.db, token))).toBe(1);
+    });
+
     it("forgets a token when the sighting write finds the agent revoked", async () => {
       const { agentId, token } = await enrolled();
       await authenticateAgent(suite.db, token);
-      await suite.db
-        .update(printAgents)
-        .set({ lastSeenAt: new Date(Date.now() - 90_000).toISOString() })
-        .where(eq(printAgents.id, agentId));
+      await makeSightingDue(agentId);
 
       // Written inside the held transaction, so the lock-free read still finds the agent active.
       const lock = holdWriteLock(() => setActive(agentId, false));
