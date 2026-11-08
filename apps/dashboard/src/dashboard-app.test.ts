@@ -9803,3 +9803,39 @@ describe.each(["light", "dark"] as const)("staff zone repair in %s", (theme) => 
     },
   );
 });
+
+it.each([false, true])(
+  "passes administrator access to profile mail recovery (%s)",
+  async (admin) => {
+    history.replaceState(null, "", "/manage/profile");
+    const api = stubApi({
+      getMe: vi
+        .fn()
+        .mockResolvedValue({ ...meResponse, permissions: admin ? ["person.admin"] : [] }),
+      getProfile: vi.fn().mockResolvedValue(ownProfile),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector<ProfileScreen>("dashboard-profile-screen")!.canAdminister,
+    ).toBe(admin);
+  },
+);
+
+it("profile mail recovery signs out through the leave coordinator", async () => {
+  history.replaceState(null, "", "/manage/profile");
+  const api = stubApi({ getProfile: vi.fn().mockResolvedValue(ownProfile) });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  await flush(el);
+  const profile = el.shadowRoot!.querySelector<ProfileScreen>("dashboard-profile-screen")!;
+  const request = vi.spyOn(leaveCoordinatorFor(profile)!, "request");
+  profile.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }));
+  await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+  expect(request).toHaveBeenCalledWith({
+    scopes: "all",
+    reason: "signout",
+    proceed: expect.any(Function),
+  });
+  await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
+  expect(login(el)).toBeTruthy();
+});

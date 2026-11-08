@@ -1856,3 +1856,161 @@ describe("A403 passkey controls", () => {
     }
   });
 });
+
+describe("profile confirmation delivery messages", () => {
+  for (const locale of ["en-GB", "es-ES"]) {
+    it.each([
+      { result: { emailVerificationSent: true, delivery: "sent" }, key: "profile.email_sent" },
+      {
+        result: { emailVerificationSent: true, delivery: "captured" },
+        key: "profile.email_captured",
+      },
+      {
+        result: { emailVerificationSent: false, problem: "email.unconfigured", uncertain: false },
+        key: "profile.email_unconfigured",
+      },
+      {
+        result: { emailVerificationSent: false, problem: "email.send_refused", uncertain: false },
+        key: "profile.email_not_sent",
+      },
+      {
+        result: { emailVerificationSent: false, problem: "email.send_refused", uncertain: true },
+        key: "profile.email_uncertain",
+      },
+      {
+        result: { emailVerificationSent: false, problem: "email.send_timeout", uncertain: true },
+        key: "profile.email_uncertain",
+      },
+    ] as const)(
+      `keeps the profile saved and reports ${locale} confirmation: $key`,
+      async ({ result, key }) => {
+        const previous = currentLocale();
+        setLocale(locale);
+        try {
+          const { el } = await mount({ saveProfile: vi.fn().mockResolvedValue(result) });
+          await editDetails(el);
+          input(el, "email", "new@example.com");
+          await flush(el);
+          input(el, "currentPassword", "current");
+          await click(el, "save");
+          await vi.waitFor(() =>
+            expect(
+              el.shadowRoot!.querySelector("[data-test=email-status-text]")?.textContent?.trim(),
+            ).toBe(t(key)),
+          );
+          expect(el.shadowRoot!.textContent).toContain(t("profile.saved"));
+          expect(
+            el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!.open,
+          ).toBe(false);
+        } finally {
+          setLocale(previous);
+        }
+      },
+    );
+  }
+
+  it("offers the existing administrator sign-in event when captured mail cannot be read", async () => {
+    const { el } = await mount({
+      saveProfile: vi.fn().mockResolvedValue({ emailVerificationSent: true, delivery: "captured" }),
+    });
+    await editDetails(el);
+    input(el, "email", "new@example.com");
+    await flush(el);
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    const signin = vi.fn();
+    el.addEventListener("admin-sign-in", signin);
+    const button = el.shadowRoot!.querySelector<HTMLElement>("[data-test=email-admin-sign-in]");
+    expect(button).not.toBeNull();
+    button!.click();
+    expect(signin).toHaveBeenCalledOnce();
+    expect(el.shadowRoot!.querySelector("[data-test=email-settings-link]")).toBeNull();
+  });
+
+  it("offers an administrator the existing mail page for a definite send failure", async () => {
+    const { el } = await mount({
+      saveProfile: vi.fn().mockResolvedValue({
+        emailVerificationSent: false,
+        problem: "email.unconfigured",
+        uncertain: false,
+      }),
+    });
+    el.canAdminister = true;
+    await editDetails(el);
+    input(el, "email", "new@example.com");
+    await flush(el);
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    expect(
+      el.shadowRoot!.querySelector("[data-test=email-settings-link]")?.getAttribute("href"),
+    ).toBe("/manage/email");
+    expect(el.shadowRoot!.querySelector("[data-test=email-admin-sign-in]")).toBeNull();
+    const reference = document.createElement("span");
+    reference.style.color = "var(--wt-color-primary-text)";
+    el.shadowRoot!.append(reference);
+    expect(
+      getComputedStyle(el.shadowRoot!.querySelector("[data-test=email-settings-link]")!).color,
+    ).toBe(getComputedStyle(reference).color);
+    reference.remove();
+  });
+
+  it("retains the successful save and mail outcome when its refresh fails", async () => {
+    const profile = await apiStub().getProfile();
+    const { el } = await mount({
+      getProfile: vi
+        .fn()
+        .mockResolvedValueOnce(profile)
+        .mockRejectedValue({ error: { code: "connection.failed" } }),
+      saveProfile: vi.fn().mockResolvedValue({
+        emailVerificationSent: false,
+        problem: "email.send_refused",
+        uncertain: true,
+      }),
+    });
+    await editDetails(el);
+    input(el, "email", "new@example.com");
+    await flush(el);
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    expect(el.shadowRoot!.querySelector("[data-test=email-status-text]")?.textContent?.trim()).toBe(
+      t("profile.email_uncertain"),
+    );
+    expect(el.shadowRoot!.textContent).toContain(t("profile.saved"));
+    expect(el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!.open).toBe(
+      false,
+    );
+  });
+
+  it("does not apply a departed profile's late email result after reconnecting", async () => {
+    let finish!: (value: { emailVerificationSent: boolean; delivery: "captured" }) => void;
+    const pending = new Promise<{ emailVerificationSent: boolean; delivery: "captured" }>(
+      (resolve) => {
+        finish = resolve;
+      },
+    );
+    const { el, host, api } = await mount({ saveProfile: vi.fn().mockReturnValue(pending) });
+    await editDetails(el);
+    input(el, "email", "new@example.com");
+    await flush(el);
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    await vi.waitFor(() => expect(api.saveProfile).toHaveBeenCalledOnce());
+    el.remove();
+    host.append(el);
+    await flush(el);
+    finish({ emailVerificationSent: true, delivery: "captured" });
+    await pending;
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=email-status-text]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(t("profile.saved"));
+  });
+
+  it("shows no delivery diagnosis when saving unchanged email details", async () => {
+    const { el } = await mount();
+    await editDetails(el);
+    input(el, "firstNames", "Alexander");
+    await click(el, "save");
+    expect(el.shadowRoot!.textContent).toContain(t("profile.saved"));
+    expect(el.shadowRoot!.querySelector("[data-test=email-status-text]")).toBeNull();
+  });
+});

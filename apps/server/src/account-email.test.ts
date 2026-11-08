@@ -15,7 +15,7 @@ describe("account email", () => {
       },
       { sendMail, close() {} },
     );
-    await sender({
+    const outcome = await sender({
       purpose: "email_change",
       email: "bea@example.test",
       displayName: "Bea",
@@ -25,6 +25,7 @@ describe("account email", () => {
       codeExpiresAt: expiresAt,
       locale: "en-GB",
     });
+    expect(outcome).toBe("sent");
     const message = sendMail.mock.calls[0]![0] as { text: string; html: string };
     expect(message.text).toContain(`link expires at 29 Mar 2026, ${expected}`);
     expect(message.text).toContain(`code expires at 29 Mar 2026, ${expected}`);

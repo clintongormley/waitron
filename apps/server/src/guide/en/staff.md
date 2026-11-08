@@ -18,7 +18,7 @@ email is set up; for when Waitron refuses it or it changes nothing, see
 [Common losses](data-protection.md#breach-losses). Disabling an account also deletes the person's
 PIN, password, passkeys, two-factor settings, recovery codes and Google link. Re-enabling it sends a new invitation. Managers do not see these actions.
 
-To configure delivery of these links, open [Email settings](email.md#set-up).
+To configure delivery of these links, open [Email settings](email.md#set-up). If an invitation may not have been sent, check the recipient’s inbox before resending: only the newest link works. If a retry says nothing changed, wait a minute before trying again.
 
 If Waitron cannot verify your passkey, you can retry or choose **Use your password** to sign in.
 On the password screen, **I’ve forgotten my password** requests an email with a link to choose
@@ -29,6 +29,8 @@ account exists or can sign in. Resetting a password does not enable a disabled a
 
 Open **Account settings** from the account menu to change your own sign-in details. Your own
 email, password, PIN, passkeys and two-factor settings remain yours to manage.
+
+To confirm a new email address, enter the code sent there. If the confirmation cannot be sent, use the email status’s settings link or **Sign in as an administrator** action; then return to your own account, re-enter the new address in **Your details** and save.
 
 In **Security**, choose **Add passkey** beside **Passkeys**.
 Follow your password manager’s prompt to add it.

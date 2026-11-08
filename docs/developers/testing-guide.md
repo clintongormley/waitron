@@ -3842,3 +3842,16 @@ cases in `party-name-paper.test.ts` and `order-kitchen-note.corrections.test.ts`
 paper and retained the unprinted controls. A temporary base checkout at `1072f1cbd6` reproduced the
 note omission too (one failure, one passing unprinted control). Joining the recorded group/station
 pair admits the waiting work; both name and note cases then pass. No schema change was needed.
+
+
+## Poll real I/O without advancing a frozen Date
+
+Use `expect.poll` for real HTTP or socket reads while only `Date` is faked. In the
+A987 account-mail check on 8 November 2026, `boot.venue-details.test.ts` read an archive
+deadline 50 milliseconds after its pinned instant. A separate 120-millisecond real
+read under `vi.waitFor` advanced the fake Date by 150 milliseconds; the same read
+under `expect.poll` kept the pinned instant. The fixture now polls its health,
+mailbox and clock preview with `expect.poll`, retaining the exact deadline and
+email-time assertions. Run `pnpm --filter @waitron/server exec vitest run
+src/boot.venue-details.test.ts`. This reproduces the clock-advance mechanism; the
+failed run did not retain which earlier read first crossed a polling interval.

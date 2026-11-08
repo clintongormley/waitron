@@ -158,9 +158,9 @@ async function startEmailBox(path: EmailPath, invitees: number) {
     }
     const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
     server = await startServer({ ...box.env, WAITRON_VENUE_DIR: dirname(database) }, box.env);
-    await vi.waitFor(async () => {
-      expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
-    });
+    await expect
+      .poll(async () => (await fetch(`http://127.0.0.1:${httpPort()}/health`)).status)
+      .toBe(200);
   } catch (error) {
     await close();
     throw error;
@@ -178,13 +178,13 @@ async function startEmailBox(path: EmailPath, invitees: number) {
         "POST",
       );
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ invitationSent: true });
+      expect(await response.json()).toEqual({ invitationSent: true, delivery: "sent" });
     } else if (path === "password_reset") {
       const response = await request("/management-api/password-reset", "POST", {
         email: `invitee-${index}@example.test`,
       });
       expect(response.status).toBe(202);
-      await vi.waitFor(() => expect(smtp.messages).toHaveLength(index + 1));
+      await expect.poll(() => smtp.messages.length).toBe(index + 1);
     } else {
       const response = await request("/management-api/session/me/profile", "PUT", {
         displayName: "Email Clock Admin",
@@ -196,7 +196,7 @@ async function startEmailBox(path: EmailPath, invitees: number) {
         currentPassword: PASSWORD,
       });
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ emailVerificationSent: true });
+      expect(await response.json()).toEqual({ emailVerificationSent: true, delivery: "sent" });
     }
     expect(smtp.messages).toHaveLength(index + 1);
     return smtp.messages[index]!.replace(/=\n/g, "");
@@ -219,14 +219,17 @@ describe("a running venue's account email clock", () => {
         const previewPath =
           "/management-api/venue-details/clock-preview?timeZone=UTC&dayCutover=05%3A00";
         let retainedDeadline: string | null = null;
-        await vi.waitFor(async () => {
-          const response = await request(previewPath);
-          expect(response.status).toBe(200);
-          const preview = await response.json();
-          retainedDeadline = preview.backupDeadlines.archive;
-          expect(retainedDeadline).toBe("2026-10-07T12:00:00.000Z");
-          expect(preview.backupDeadlines.cloud).toBeNull();
-        });
+        await expect
+          .poll(async () => {
+            const response = await request(previewPath);
+            expect(response.status).toBe(200);
+            const preview = await response.json();
+            retainedDeadline = preview.backupDeadlines.archive;
+            expect(retainedDeadline).toBe("2026-10-07T12:00:00.000Z");
+            expect(preview.backupDeadlines.cloud).toBeNull();
+            return true;
+          })
+          .toBe(true);
         const oldTime = path === "invitation" ? "14:00 CEST" : "14:30 CEST";
         const newTime = path === "invitation" ? "12:00 UTC" : "12:30 UTC";
         const before = await send(0);
@@ -357,7 +360,11 @@ describe("a box with no email server", () => {
         },
       );
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ emailVerificationSent: false });
+      expect(await response.json()).toEqual({
+        emailVerificationSent: false,
+        problem: "email.unconfigured",
+        uncertain: false,
+      });
       await vi.waitFor(async () => {
         const failures = (await readFile(join(env.WAITRON_LOG_DIR!, "waitron.log"), "utf8"))
           .split("\n")

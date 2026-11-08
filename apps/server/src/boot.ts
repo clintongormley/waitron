@@ -2138,8 +2138,10 @@ async function bootServer(
         resolveAccountEmail(),
         readVenueTimeZone(db),
       ]);
-      if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
+      if (delivery.mode === "unconfigured")
+        throw new AccountEmailFailure("email.unconfigured", undefined, false);
       await createAccountEmailSender({ ...delivery.smtp, timeZone })(message);
+      return delivery.mode === "local_capture" ? "captured" : "sent";
     };
     const management = mountManagementApi(
       app,
@@ -2602,6 +2604,7 @@ async function bootServer(
       timeZone,
       ...(privacyNoticeUrl === null ? {} : { privacyNoticeUrl }),
     })(message);
+    return delivery.mode === "local_capture" ? "captured" : "sent";
   };
   const backupDeadlines: { archive: string | null; cloud: string | null } = {
     archive: null,

@@ -3513,9 +3513,15 @@ describe("startServer — what a trading boot wires behind its management routes
     });
     expect(inbox.status).toBe(200);
     expect(await inbox.json()).toEqual({ mode: "unconfigured", count: 0, messages: [] });
-    expect(await invite("first-invitee@example.test")).toEqual({ invitationSent: false });
+    expect(await invite("first-invitee@example.test")).toEqual({
+      invitationSent: false,
+      problem: "email.unconfigured",
+      uncertain: false,
+    });
     expect(await changeOwnEmail("first-change@example.test")).toEqual({
       emailVerificationSent: false,
+      problem: "email.unconfigured",
+      uncertain: false,
     });
 
     const smtp = await startFakeSmtp();
@@ -3534,9 +3540,13 @@ describe("startServer — what a trading boot wires behind its management routes
       });
       expect(await configured.json()).toEqual({ mode: "smtp", count: 0, messages: [] });
 
-      expect(await invite("second-invitee@example.test")).toEqual({ invitationSent: true });
+      expect(await invite("second-invitee@example.test")).toEqual({
+        invitationSent: true,
+        delivery: "sent",
+      });
       expect(await changeOwnEmail("second-change@example.test")).toEqual({
         emailVerificationSent: true,
+        delivery: "sent",
       });
       expect(smtp.messages).toHaveLength(2);
       expect(smtp.messages[0]).toMatch(/^To: second-invitee@example\.test$/m);

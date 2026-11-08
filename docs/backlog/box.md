@@ -367,8 +367,11 @@ the relevant field or at the bottom of both SMTP forms, with the matching Englis
 guide. Cut C opens Prepare settings, adds admin removal and Settings navigation, and shows stored
 settings separately from invoice capture on development boxes. The Prepare wizard now collects and
 tests SMTP outside development; ordinary Prepare uses the relay or reports unavailable mail. Demo's
-inbox link is offered publicly and to signed-in admins. Left: account delivery details and sender
-naming for account, setup and invoice envelopes.
+inbox link is offered publicly and to signed-in admins. Users and Account settings show actual
+account-mail results, including uncertain sends; throttled invitation actions say nothing changed.
+Left: sender naming for account, setup and invoice envelopes, and making non-development Demo
+capture account mail even when a relay was installed from the terminal (the current resolver still
+prefers that relay; `apps/server/src/email-delivery.ts` and its stored-relay tests).
 Cloud delivery, including Demo with a Cloud account, waits for D102's released interface and
 joint tests. An unavailable Cloud route cannot satisfy setup or silently fall back to capture.
 The setup-test network-target issue below remains separate open work.

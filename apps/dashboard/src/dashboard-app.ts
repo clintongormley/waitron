@@ -2881,6 +2881,8 @@ export class DashboardApp extends LitElement {
           this.profileOpen
             ? html`<dashboard-profile-screen
                 .api=${this.api}
+                .canAdminister=${this.#sessionPermissions.includes("person.admin")}
+                @admin-sign-in=${() => void this.#onLogout()}
                 @profile-updated=${() => void this.#probeSession()}
                 @profile-tab-change=${(
                   e: CustomEvent<{ tab: "details" | "security"; ready: boolean }>,

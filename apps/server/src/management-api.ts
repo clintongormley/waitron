@@ -126,7 +126,7 @@ import { isUuid } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readPrivacyContact } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
-import type { AccountEmailSender } from "./account-email.js";
+import { accountEmailFailure, type AccountEmailSender } from "./account-email.js";
 import { exchangeGoogleCode, type GoogleOidcConfig } from "./google-oidc.js";
 import {
   createAccountActionRateLimiter,
@@ -176,8 +176,14 @@ async function deliverAccountAction(
   log: Logger,
   issued: IssuedAccountAction,
   origin: string,
-): Promise<boolean> {
-  if (deps.sendAccountEmail === undefined) return false;
+): Promise<{
+  invitationSent: boolean;
+  delivery?: "sent" | "captured";
+  problem?: "email.unconfigured" | "email.send_refused" | "email.send_timeout";
+  uncertain?: boolean;
+}> {
+  if (deps.sendAccountEmail === undefined)
+    return { invitationSent: false, problem: "email.unconfigured", uncertain: false };
   const actionUrl = new URL("/manage/account", origin);
   actionUrl.searchParams.set("token", issued.token);
   actionUrl.searchParams.set("purpose", issued.purpose);
@@ -185,7 +191,7 @@ async function deliverAccountAction(
   // username alongside the new-password fields for password managers.
   actionUrl.hash = new URLSearchParams({ email: issued.email }).toString();
   try {
-    await deps.sendAccountEmail({
+    const delivery = await deps.sendAccountEmail({
       purpose: issued.purpose,
       email: issued.email,
       displayName: issued.displayName,
@@ -195,15 +201,16 @@ async function deliverAccountAction(
       expiresAt: issued.expiresAt,
       locale: issued.locale ?? deps.venueLocale ?? "en-GB",
     });
-    return true;
-  } catch {
-    // Do not log the mailer error: SMTP connection URLs can contain credentials, and provider
-    // errors sometimes echo them. The purpose/person id are enough for an operator to retry.
+    return { invitationSent: true, delivery };
+  } catch (error) {
+    const { problem, uncertain, reason } = accountEmailFailure(error);
     log("error", "account_email.send_failed", {
       purpose: issued.purpose,
       personId: issued.personId,
+      errorCode: problem,
+      ...(reason === undefined ? {} : { reason }),
     });
-    return false;
+    return { invitationSent: false, problem, uncertain };
   }
 }
 
@@ -1155,8 +1162,8 @@ export function mountManagementApi(
         });
         return { created, issued };
       });
-      const invitationSent = await deliverAccountAction(deps, log, issued, passkeySite(c).origin);
-      return c.json({ ...created, invitationSent }, 201);
+      const delivery = await deliverAccountAction(deps, log, issued, passkeySite(c).origin);
+      return c.json({ ...created, ...delivery }, 201);
     }),
   );
 
@@ -1177,9 +1184,7 @@ export function mountManagementApi(
           purpose: "invitation",
         });
       });
-      return c.json({
-        invitationSent: await deliverAccountAction(deps, log, issued, passkeySite(c).origin),
-      });
+      return c.json(await deliverAccountAction(deps, log, issued, passkeySite(c).origin));
     }),
   );
 
@@ -1263,9 +1268,7 @@ export function mountManagementApi(
           purpose: "invitation",
         });
       });
-      return c.json({
-        invitationSent: await deliverAccountAction(deps, log, issued, passkeySite(c).origin),
-      });
+      return c.json(await deliverAccountAction(deps, log, issued, passkeySite(c).origin));
     }),
   );
 
@@ -1286,9 +1289,7 @@ export function mountManagementApi(
           purpose: "invitation",
         });
       });
-      return c.json({
-        invitationSent: await deliverAccountAction(deps, log, issued, passkeySite(c).origin),
-      });
+      return c.json(await deliverAccountAction(deps, log, issued, passkeySite(c).origin));
     }),
   );
 
