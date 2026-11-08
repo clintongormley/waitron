@@ -62,10 +62,15 @@ function fixture(
       mkdirSync(dirname(join(dir, file)), { recursive: true });
       cpSync(join(root, file), join(dir, file));
     }
-    for (const name of ["source", "consumer"]) {
-      mkdirSync(join(dir, "packages", name), { recursive: true });
+    for (const name of ["source", "consumer", "ui", "dashboard", "setup", "till"]) {
+      const folder = join(
+        dir,
+        ["dashboard", "setup", "till"].includes(name) ? "apps" : "packages",
+        name,
+      );
+      mkdirSync(folder, { recursive: true });
       writeFileSync(
-        join(dir, "packages", name, "package.json"),
+        join(folder, "package.json"),
         JSON.stringify({
           name: `@waitron/${name}`,
           scripts: { typecheck: "tsc --noEmit", "test:coverage": "vitest" },
@@ -92,7 +97,7 @@ if (process.env.PUSH_REAL_FORMAT === "1" && kind === "format:check") {
 }
 if (kind === "ls") {
   const selected = process.env.PUSH_EMPTY === "1" && args.includes("--filter") ? [] :
-    ["source", "consumer"].map(name => ({ name: "@waitron/" + name, path: path.join(process.cwd(), "packages", name) }));
+    ["source", "consumer", "ui", "dashboard", "setup", "till"].map(name => ({ name: "@waitron/" + name, path: path.join(process.cwd(), ["dashboard", "setup", "till"].includes(name) ? "apps" : "packages", name) }));
   console.log(JSON.stringify(selected));
 }
 `,
@@ -431,5 +436,32 @@ describe("pre-push fast checks", () => {
       },
       { emptySelection: true },
     );
+  });
+});
+
+describe("brand selection", () => {
+  it("typechecks brand readers without their dependents", () => {
+    fixture("packages/ui/brand/logo.svg", ({ invoke }) => {
+      const result = invoke();
+      expect(result.status, result.stderr).toBe(0);
+      const typecheck = result.calls.find((args) => args.at(-1) === "typecheck");
+      expect(typecheck.join(" ")).toBe(
+        "--filter @waitron/dashboard --filter @waitron/setup --filter @waitron/till --filter @waitron/ui typecheck",
+      );
+      expect(result.stdout).toContain("brand readers");
+    });
+  });
+
+  it("retains the source package when a file moves into brand", () => {
+    fixture("packages/source/src/index.ts", ({ invoke, git, head, ref, dir }) => {
+      mkdirSync(join(dir, "packages/ui/brand"), { recursive: true });
+      git("mv", "packages/source/src/index.ts", "packages/ui/brand/logo.svg");
+      git("commit", "-qs", "-m", "Move to brand");
+      const result = invoke(ref(git("rev-parse", "HEAD"), head));
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.calls.find((args) => args.at(-1) === "typecheck")).toContain(
+        "...@waitron/source",
+      );
+    });
   });
 });

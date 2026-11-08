@@ -24,7 +24,7 @@ import {
 // So the attribution is ours and it fails CLOSED: a path is attributed to the innermost workspace
 // member DIRECTORY that contains it, and anything outside every member is GLOBAL. Expanding a changed
 // package to its dependents is still pnpm's, via the `--filter "...<pkg>"` arguments both callers
-// build from this file's output.
+// build from this file's output. Brand scope uses exact readers instead.
 
 /**
  * The workspace's members as `{name, dir}`, `dir` being relative to `repoRoot` — or `null` when the
@@ -102,7 +102,7 @@ function owningPackage(path, packages) {
 
 /**
  * The whole verdict on a push's changed paths, from ONE call:
- * `{ kind, packages, root, deploy, reason }`, where `kind` is one of FOUR outcomes and the hook
+ * `{ kind, packages, root, deploy, reason }`, where `kind` is one of five outcomes and the hook
  * does something different for each.
  *
  *   "documentation"  every changed path is inert (see `isInertPath`).
@@ -113,7 +113,8 @@ function owningPackage(path, packages) {
  *   "global"         run everything: a path outside every package that is not root scope, a file
  *                    `GLOBAL_ROOT_FILES` lists, an unreadable workspace, or a push whose contents
  *                    could not be determined at all.
- *   "packages"       `packages` names the members to narrow to. Non-empty exactly here.
+ *   "brand"          brand assets plus inert paths: exact readers, without dependents.
+ *   "packages"       `packages` names the members to narrow to. Non-empty here and for brand.
  *
  * `root` and `deploy` are orthogonal to `kind`. `root` is true whenever ANY changed path is root
  * scope, so a push of `scripts/x.mjs` beside `packages/db/src/y.ts` is `kind: "packages"` with
@@ -123,7 +124,7 @@ function owningPackage(path, packages) {
  * `loadPackages` is a THUNK, not a value: the hook's thunk shells out to `pnpm ls -r`, and the
  * documentation, undetermined and root outcomes return without calling it.
  *
- * When `kind` is not "packages" the list is EMPTY rather than partial, so a caller that reads it
+ * When `kind` is neither "packages" nor "brand" the list is EMPTY rather than partial. Reading it
  * without checking `kind` narrows to nothing visible instead of to a plausible-looking subset.
  */
 export function scopeForPaths(changedPaths, loadPackages) {
@@ -173,6 +174,33 @@ export function scopeForPaths(changedPaths, loadPackages) {
       root,
       deploy,
       reason: "the workspace layout could not be read — running everything",
+    };
+  }
+
+  if (
+    codePaths.every(
+      (path) =>
+        path === "packages/ui/brand/README.md" ||
+        /^packages\/ui\/brand\/.+\.(png|svg|ico)$/.test(path),
+    )
+  ) {
+    const readers = ["apps/dashboard", "apps/setup", "apps/till", "packages/ui"].map((dir) =>
+      packages.find((pkg) => pkg.dir === dir),
+    );
+    if (readers.some((reader) => reader === undefined))
+      return {
+        kind: "global",
+        packages: [],
+        root,
+        deploy,
+        reason: "a brand reader is missing — running everything",
+      };
+    return {
+      kind: "brand",
+      packages: readers.map((reader) => reader.name).sort(),
+      root,
+      deploy,
+      reason: "brand assets and documentation only — exact brand readers",
     };
   }
 
@@ -246,7 +274,7 @@ export function scopeForPaths(changedPaths, loadPackages) {
  * apart into two filters.
  */
 export function formatScope({ kind, packages, root, deploy }) {
-  const code = kind === "packages" || kind === "global";
+  const code = kind === "packages" || kind === "brand" || kind === "global";
   return `code=${code}\nscope=${kind}\npackages=${packages.join(" ")}\nroot=${root}\ndeploy=${deploy}`;
 }
 

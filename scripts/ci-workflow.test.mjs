@@ -3565,8 +3565,10 @@ describe("the test shards", () => {
       }
     }
 
-    // Every shard job, and the stream step, runs exactly one test command.
-    expect(commands.map(({ id }) => id).sort()).toEqual(steps.map(({ id }) => id).sort());
+    // Every shard job and the stream step has a test command; branches may select different commands.
+    expect([...new Set(commands.map(({ id }) => id))].sort()).toEqual(
+      steps.map(({ id }) => id).sort(),
+    );
     for (const { id, script, command } of commands) {
       expect(command, id).toContain(progress);
       // test:coverage passes no reporter of its own, so a lone --reporter would REPLACE the
@@ -6089,4 +6091,60 @@ describe("scoped shards retain their empty-selection guard", () => {
       expect(guard, id).toBeLessThan(run);
     },
   );
+});
+
+describe("brand selection commands", () => {
+  it.each(["brand", "packages"])("%s gates preserve their package selection", (scope) => {
+    const command = workflowSteps(job("changes").body.join("\n")).find(
+      (step) => step.id === "gates",
+    ).command;
+    const dir = mkdtempSync(join(tmpdir(), "brand-gates-"));
+    try {
+      const output = join(dir, "output");
+      const result = spawnSync("bash", ["-c", command], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        timeout: 15000,
+        env: {
+          ...process.env,
+          SCOPE: scope,
+          PACKAGES: "@waitron/dashboard @waitron/setup @waitron/till @waitron/ui",
+          GITHUB_OUTPUT: output,
+        },
+      });
+      expect(result.status, result.stderr).toBe(0);
+      const enabled = readFileSync(output, "utf8")
+        .trim()
+        .split("\n")
+        .filter((line) => line.endsWith("=true"))
+        .sort();
+      if (scope === "brand")
+        expect(enabled).toEqual(["dashboard=true", "setup=true", "till=true", "ui=true"]);
+      else expect(enabled).toContain("server=true");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["brand", "packages"])("%s executes the intended UI tests", (scope) => {
+    const step = workflowSteps(job("test-ui").body.join("\n")).find(
+      (entry) => entry.step === "Run the ui shard",
+    );
+    const command = step.command
+      .replaceAll("${{ needs.changes.outputs.scope }}", scope)
+      .replaceAll("${{ needs.changes.outputs.full }}", "false");
+    const record =
+      'pnpm() { :; }; node() { case "$*" in *run-with-deadline*) printf "%s\\n" "$*";; esac; };\n';
+    const result = spawnSync("bash", ["-c", record + command], {
+      env: { ...process.env, GITHUB_WORKSPACE: repoRoot },
+      encoding: "utf8",
+      timeout: 15000,
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.match(/--filter @waitron\/[a-z-]+/g)).toEqual(
+      scope === "brand"
+        ? ["--filter @waitron/ui"]
+        : ["--filter @waitron/ui", "--filter @waitron/ui-core"],
+    );
+  });
 });

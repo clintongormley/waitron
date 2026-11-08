@@ -3,7 +3,7 @@ set -euo pipefail
 
 diff_paths() {
   local paths
-  if ! paths=$(git diff --name-only "$@"); then
+  if ! paths=$(git diff --no-renames --name-only "$@"); then
     echo "cannot diff the main CI baseline or PR range: running everything" >&2
     return
   fi
