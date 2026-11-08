@@ -377,6 +377,7 @@ export async function send(
   method: string,
   path: string,
   body?: unknown,
+  headers: Record<string, string> = {},
 ): Promise<Answer> {
   const database = appDatabases.get(app);
   const payload =
@@ -393,7 +394,7 @@ export async function send(
         );
   const res = await app.request(path, {
     method,
-    headers: { "content-type": "application/json", cookie },
+    headers: { "content-type": "application/json", cookie, ...headers },
     ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
   });
   const text = await res.text();

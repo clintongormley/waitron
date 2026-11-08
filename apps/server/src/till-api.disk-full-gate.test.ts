@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import type { Hono } from "hono";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { PERSON_HEADER } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
 import { readBillEditState } from "./bill-editing.js";
@@ -298,12 +299,11 @@ describe("the full-disk gate on the till's routes", () => {
     const signOutNaming = (personId: string) =>
       app.request("/api/session", {
         method: "DELETE",
-        headers: { "content-type": "application/json", cookie: `${session}; ${deviceCookie!}` },
-        body: JSON.stringify({ personId }),
+        headers: { cookie: `${session}; ${deviceCookie!}`, [PERSON_HEADER]: personId },
       });
 
     const other = await signOutNaming(randomUUID());
-    expect(other.status).toBe(200);
+    expect(other.status).toBe(409);
     expect(other.headers.get("set-cookie")).toBeNull();
     expect(await openSessionPerson(venue.db, token)).toBe(venue.operatorId);
 

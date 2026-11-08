@@ -23,6 +23,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { clearRoutingCell, setRoutingCell, setStationToday } from "@waitron/venue-service";
+import { PERSON_HEADER } from "@waitron/shared";
 import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -85,26 +86,14 @@ async function seated(): Promise<Seated> {
 
 /** Ana, the venue's staff session. */
 async function ana(method: string, path: string, body?: unknown) {
-  return send(
-    venue.app,
-    venue.cookie,
-    method,
-    path,
-    await draftBody(method, path, body, venue.operatorId),
-  );
+  return send(venue.app, venue.cookie, method, path, await draftBody(method, path, body));
 }
 
 async function admin(method: string, path: string, body?: unknown) {
-  return send(
-    venue.app,
-    adminCookie,
-    method,
-    path,
-    await draftBody(method, path, body, venue.adminId),
-  );
+  return send(venue.app, adminCookie, method, path, await draftBody(method, path, body));
 }
 
-async function draftBody(method: string, path: string, body: unknown, personId: string) {
+async function draftBody(method: string, path: string, body: unknown) {
   if (
     path.endsWith("/take-over") &&
     body !== null &&
@@ -112,7 +101,7 @@ async function draftBody(method: string, path: string, body: unknown, personId: 
     !Array.isArray(body)
   )
     body = { submissionId: randomUUID(), ...body };
-  return observedDraftCommandBody(venue.db, method, path, body, personId);
+  return observedDraftCommandBody(venue.db, method, path, body);
 }
 async function anotherBill(partyId: string): Promise<string> {
   const billId = randomUUID();
@@ -645,8 +634,8 @@ describe("PUT /api/parties/:id/drafts", () => {
         revision: 0,
         lines: [dish("Pulpo")],
         expectedEdit: { billId, editorVersion: 0, draftId: null, draftRevision: null },
-        personId: venue.operatorId,
       },
+      { [PERSON_HEADER]: venue.operatorId },
     );
 
     expect(refused.status).toBe(409);
@@ -672,8 +661,8 @@ describe("PUT /api/parties/:id/drafts", () => {
         revision: 0,
         lines: [],
         expectedEdit: { billId, editorVersion: 0, draftId: null, draftRevision: null },
-        personId: venue.operatorId,
       },
+      { [PERSON_HEADER]: venue.operatorId },
     );
 
     expect(refused.status).toBe(409);
@@ -698,8 +687,31 @@ describe("PUT /api/parties/:id/drafts", () => {
         revision: 0,
         lines: [dish("Pulpo")],
         expectedEdit: { billId, editorVersion: 0, draftId: null, draftRevision: null },
-        personId: venue.operatorId.toUpperCase(),
       },
+      { [PERSON_HEADER]: venue.operatorId.toUpperCase() },
+    );
+
+    expect(saved.status).toBe(200);
+    expect(saved.json.draft).toMatchObject({ ownerId: venue.operatorId });
+  });
+
+  it("saves a draft whose body names nobody when the header names the session's person", async () => {
+    const party = await seated();
+    const billId = (await openBillOf(party.partyId))!;
+
+    const saved = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/parties/${party.partyId}/drafts`,
+      {
+        billId,
+        draftId: null,
+        revision: 0,
+        lines: [dish("Pulpo")],
+        expectedEdit: { billId, editorVersion: 0, draftId: null, draftRevision: null },
+      },
+      { [PERSON_HEADER]: venue.operatorId },
     );
 
     expect(saved.status).toBe(200);
@@ -1037,7 +1049,8 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
         adminCookie,
         "POST",
         path,
-        await draftBody("POST", path, { revision: anas.revision, personId }, venue.adminId),
+        await draftBody("POST", path, { revision: anas.revision }),
+        { [PERSON_HEADER]: personId },
       );
     const recorded = async () =>
       (await inTx(venue, (tx) => tx.select().from(serviceCommands))).length;
@@ -1072,12 +1085,8 @@ describe("POST /api/parties/:id/drafts/:did/take-over", () => {
       adminCookie,
       "POST",
       path,
-      await draftBody(
-        "POST",
-        path,
-        { revision: anas.revision, personId: venue.adminId.toUpperCase() },
-        venue.adminId,
-      ),
+      await draftBody("POST", path, { revision: anas.revision }),
+      { [PERSON_HEADER]: venue.adminId.toUpperCase() },
     );
 
     expect(taken.status).toBe(200);
@@ -1267,31 +1276,6 @@ describe("a malformed body", () => {
   );
 
   it.each([
-    ["personId", { draftId: null, revision: 0, lines: [], billId: ID }],
-    ["personId", { draftId: null, revision: 0, lines: [], billId: ID, personId: "ana" }],
-    ["personId", { draftId: null, revision: 0, lines: [], billId: ID, personId: 7 }],
-  ] as const)(
-    "refuses a save 400 management.request_invalid naming %s for %j",
-    async (field, body) => {
-      const party = await seated();
-      await newDraft(ana, party.partyId, [dish("Caña")]);
-      const before = await snapshot();
-
-      const refused = await send(
-        venue.app,
-        adminCookie,
-        "PUT",
-        `/api/parties/${party.partyId}/drafts`,
-        body,
-      );
-
-      expect(refused.status).toBe(400);
-      expect(refused.json).toEqual(refusal("management.request_invalid", { field }));
-      expect(await snapshot()).toEqual(before);
-    },
-  );
-
-  it.each([
     ["body", "revision"],
     ["revision", {}],
     ["revision", { revision: -1 }],
@@ -1311,33 +1295,6 @@ describe("a malformed body", () => {
 
       expect(refused.status).toBe(400);
       expect(refused.json).toEqual(refusal("management.request_invalid", { field }));
-      expect(await snapshot()).toEqual(before);
-    },
-  );
-
-  it.each([
-    ["missing", {}],
-    ["not an id", { personId: "ana" }],
-    ["a number", { personId: 7 }],
-    ["null", { personId: null }],
-    ["empty", { personId: "" }],
-  ] as const)(
-    "refuses a take-over 400 management.request_invalid naming personId when it is %s",
-    async (_, person) => {
-      const party = await seated();
-      const anas = await newDraft(ana, party.partyId, [dish("Caña")]);
-      const path = `/api/parties/${party.partyId}/drafts/${anas.id}/take-over`;
-      const body = await observedDraftCommandBody(venue.db, "POST", path, {
-        submissionId: randomUUID(),
-        revision: anas.revision,
-        ...person,
-      });
-      const before = await snapshot();
-
-      const refused = await send(venue.app, adminCookie, "POST", path, body);
-
-      expect(refused.status).toBe(400);
-      expect(refused.json).toEqual(refusal("management.request_invalid", { field: "personId" }));
       expect(await snapshot()).toEqual(before);
     },
   );

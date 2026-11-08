@@ -83,7 +83,7 @@ export async function openSessionPerson(
  * of its open session; `null` when it names that person or carries no header. A header naming no
  * one, empty or not a UUID, is refused as another person is, and echoes no id.
  */
-function personRefusal(c: Context, personId: string): AppError | null {
+export function personRefusal(c: Context, personId: string): AppError | null {
   const header = c.req.header(PERSON_HEADER);
   if (header === undefined) return null;
   const named = canonicaliseUuid(header);

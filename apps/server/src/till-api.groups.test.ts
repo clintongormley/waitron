@@ -29,7 +29,7 @@ import { createTable } from "./testing/live-table.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 
 import "./errors.js";
-import { AppError } from "@waitron/shared";
+import { AppError, PERSON_HEADER } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { readPaidQuantities } from "./bill-payments.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
@@ -2062,15 +2062,32 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     return { party, lineId };
   }
 
+  /** A split whose body names nobody, sent with the person header naming `personId`. */
+  async function splitNamingIn(
+    partyId: string,
+    lineId: string,
+    personId: string,
+    expectedPartyRevision: number,
+  ) {
+    const path = `/api/parties/${partyId}/groups/split-line`;
+    return send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      path,
+      await observedGroupCompositionBody(venue.db, path, {
+        submissionId: randomUUID(),
+        expectedPartyRevision,
+        lineId,
+      }),
+      { [PERSON_HEADER]: personId },
+    );
+  }
+
   it("refuses 409 session.person_not_signed_in for a split naming someone else, changing nothing, and goes through once it names the session's person", async () => {
     const { party, lineId } = await heldTwo();
     const splitNaming = async (personId: string) =>
-      call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
-        submissionId: randomUUID(),
-        expectedPartyRevision: await revisionOf(party.partyId),
-        lineId,
-        personId,
-      });
+      splitNamingIn(party.partyId, lineId, personId, await revisionOf(party.partyId));
     const before = await snapshot(party);
 
     for (const named of [venue.adminId, venue.adminId.toUpperCase()]) {
@@ -2094,41 +2111,16 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     const { party, lineId } = await heldTwo();
     const expectedPartyRevision = await revisionOf(party.partyId);
 
-    const taken = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
-      submissionId: randomUUID(),
-      expectedPartyRevision,
+    const taken = await splitNamingIn(
+      party.partyId,
       lineId,
-      personId: venue.operatorId.toUpperCase(),
-    });
+      venue.operatorId.toUpperCase(),
+      expectedPartyRevision,
+    );
 
     expect(taken.status).toBe(200);
     expect(taken.json).toEqual({ revision: expectedPartyRevision + 1 });
   });
-
-  it.each([
-    ["missing", {}],
-    ["not an id", { personId: "ana" }],
-    ["a number", { personId: 7 }],
-    ["null", { personId: null }],
-    ["empty", { personId: "" }],
-  ] as const)(
-    "refuses a split 400 management.request_invalid naming personId when it is %s",
-    async (_, person) => {
-      const { party, lineId } = await heldTwo();
-      const before = await snapshot(party);
-
-      const refused = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
-        submissionId: randomUUID(),
-        expectedPartyRevision: await revisionOf(party.partyId),
-        lineId,
-        ...person,
-      });
-
-      expect(refused.status).toBe(400);
-      expect(refused.json).toEqual(refusal("management.request_invalid", { field: "personId" }));
-      expect(await snapshot(party)).toEqual(before);
-    },
-  );
 
   it("splits the stored quantity into single units under one revision and replays without writing", async () => {
     const party = await seated();

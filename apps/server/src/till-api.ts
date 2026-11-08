@@ -17,6 +17,7 @@ import {
   isValidGuestCount,
   JOIN_SIDES,
   type JoinSide,
+  PERSON_HEADER,
   SUPPORTED_LOCALES,
   thousandthsToDecimal,
 } from "@waitron/shared";
@@ -219,6 +220,7 @@ import {
   clearSessionCookie,
   isUuid,
   openSessionPerson,
+  personRefusal,
   readSessionToken,
   assertRequestDevice,
   requireSession,
@@ -1137,12 +1139,6 @@ function requireDraftParam(draftId: string): string {
   return draftId.toLowerCase();
 }
 
-function requireNamesSessionPerson(body: Record<string, unknown>, sessionPersonId: string): void {
-  const named = requireBodyUuid(body.personId, "personId").toLowerCase();
-  if (named !== sessionPersonId.toLowerCase())
-    throw new AppError("session.person_not_signed_in", { personId: named });
-}
-
 /** A step route's step, in lower case as ids are stored: an id that is no UUID names none. */
 function requireStepParam(stepId: string): string {
   if (!isUuid(stepId)) throw new AppError("service_step.not_found", { stepId });
@@ -1512,25 +1508,23 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // A request naming a person whose session this is not ends nothing: the cookie is what keeps the
-  // person who is signed in here. A request naming a person never clears the cookie, because its
-  // answer can reach the browser after the next person's sign-in. One naming nobody does clear it.
+  // A sign-out naming its session's person keeps the cookie: its answer can reach the browser
+  // after the next person's sign-in has replaced it.
   app.delete("/api/session", (c) =>
     run(c, log, async () => {
-      const { personId } = await readJsonBody<{ personId?: unknown }>(c);
-      const named =
-        personId === undefined ? undefined : requireBodyUuid(personId, "personId").toLowerCase();
       const token = readSessionToken(c);
-      if (token !== null && isUuid(token)) {
-        if (named !== undefined) {
-          const holder = await openSessionPerson(deps.db, token);
-          if (holder !== null && holder.toLowerCase() !== named) return c.json({ ok: true });
-        }
-        await withTransaction(deps.db, async (tx) => {
-          await endSession(tx, token);
-        });
+      const holder =
+        token !== null && isUuid(token) ? await openSessionPerson(deps.db, token) : null;
+      if (token === null || holder === null) {
+        clearSessionCookie(c);
+        return c.json({ ok: true });
       }
-      if (named === undefined) clearSessionCookie(c);
+      const refusal = personRefusal(c, holder);
+      if (refusal !== null) throw refusal;
+      await withTransaction(deps.db, async (tx) => {
+        await endSession(tx, token);
+      });
+      if (c.req.header(PERSON_HEADER) === undefined) clearSessionCookie(c);
       return c.json({ ok: true });
     }),
   );
@@ -3573,7 +3567,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const command = groupCommand(session.personId, body);
       if (typeof body.lineId !== "string" || !isUuid(body.lineId)) throw invalid("lineId");
       const lineId = body.lineId.toLowerCase();
-      requireNamesSessionPerson(body, session.personId);
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ partyId }]);
         return splitHeldLineIntoUnits(
@@ -3631,7 +3624,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         ...groupCommand(session.personId, body),
         expectedEdit: parseBillEditExpected(body.expectedEdit),
       };
-      requireNamesSessionPerson(body, session.personId);
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ partyId }]);
         return recallToDraft(
@@ -3712,7 +3704,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const draftId = requireDraftId(body.draftId);
       const revision = requireRevision(body.revision);
-      requireNamesSessionPerson(body, personId);
       const draft = await withIssuanceTransaction(
         deps.db,
         async (tx) => {
@@ -3796,7 +3787,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const draftId = requireDraftParam(c.req.param("did"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const revision = requireRevision(body.revision);
-      requireNamesSessionPerson(body, personId);
       const draft = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ partyId }]);
         return takeOverDraft(
