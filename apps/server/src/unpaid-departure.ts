@@ -1,8 +1,15 @@
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
-import { inArray } from "drizzle-orm";
-import { nowIso, unpaidDepartures, workingOrders } from "@waitron/db";
+import { and, inArray, isNull } from "drizzle-orm";
+import {
+  lineServiceCancellations,
+  nowIso,
+  ticketItems,
+  unpaidDepartures,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { TrustedClock, FiscalBackend } from "@waitron/fiscal";
 import { authorize } from "@waitron/identity";
@@ -13,6 +20,7 @@ import {
   billOwes,
   checkAndBumpParty,
   closeParty,
+  handOverFinishedBills,
   readBillsOfParties,
   requirePartyClosingEdits,
 } from "./parties.js";
@@ -32,6 +40,13 @@ import {
   refusePaymentInFlight,
 } from "./working-order.js";
 import "./errors.js";
+import { dishKitchenItems } from "./dish-kitchen.js";
+import { isStarted } from "./kitchen-print.js";
+import {
+  serviceCancellationFamilies,
+  enqueueServiceCancellation,
+  writeServiceCancellations,
+} from "./line-service-cancel.js";
 
 export interface UnpaidDepartureRequest {
   expectedPartyRevision: number;
@@ -166,11 +181,22 @@ export async function recordUnpaidDeparture(
           deviceId: cfg.origin.deviceId,
         });
 
+  const stopped = await stopDepartureKitchen(
+    tx,
+    cfg,
+    bills.map((bill) => bill.workingOrderId),
+    operator.personId,
+  );
   await captureKitchenActivity(
     tx,
     deps.attendance === undefined ? undefined : { recorder: deps.attendance, clock: deps.clock },
     operator.personId,
-    departing.filter((id) => !openIds.has(id)),
+    [
+      ...new Set([
+        ...departing.filter((id) => !openIds.has(id)),
+        ...stopped.cancelledBillIds.filter((id) => !openIds.has(id)),
+      ]),
+    ],
     `unpaid-departure:${partyId}:${req.expectedPartyRevision}`,
   );
 
@@ -185,7 +211,83 @@ export async function recordUnpaidDeparture(
     deps.attendance === undefined ? undefined : { recorder: deps.attendance },
     req.expectedEdits,
   );
+  await handOverFinishedBills(tx, partyId, stopped.kitchenBillIds);
   return { ...closed, departures };
+}
+
+async function stopDepartureKitchen(
+  tx: Transaction,
+  cfg: DeviceRequestConfig,
+  billIds: string[],
+  operatorId: string,
+): Promise<{ kitchenBillIds: string[]; cancelledBillIds: string[] }> {
+  const bills = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(
+      and(
+        inArray(workingOrders.id, billIds),
+        inArray(workingOrders.status, ["placed", "settled"]),
+        isNull(workingOrders.collectedAt),
+      ),
+    );
+  const ids = bills.map((bill) => bill.id);
+  const tickets = await tx
+    .select()
+    .from(ticketItems)
+    .where(inArray(ticketItems.workingOrderId, ids));
+  const remote = new Set(
+    tickets.filter((item) => !item.madeHere).map((item) => item.workingOrderLineId),
+  );
+  const kitchenBillIds = [
+    ...new Set(tickets.filter((item) => !item.madeHere).map((item) => item.workingOrderId)),
+  ];
+  const rows = await tx
+    .select()
+    .from(workingOrderLines)
+    .where(inArray(workingOrderLines.workingOrderId, kitchenBillIds));
+  const dishes = rows.filter((row) => row.parentLineId === null);
+  const priors = await tx
+    .select()
+    .from(lineServiceCancellations)
+    .where(
+      inArray(
+        lineServiceCancellations.lineId,
+        dishes.map((row) => row.id),
+      ),
+    );
+  const work = await dishKitchenItems(
+    tx,
+    dishes.map((row) => row.id),
+  );
+  const taken = dishes.flatMap((dish) => {
+    const off =
+      dish.quantity -
+      dish.servedQuantity -
+      (priors.find((row) => row.lineId === dish.id)?.quantity ?? 0);
+    return off > 0 &&
+      (work.get(dish.id) ?? []).some(
+        (item) => remote.has(item.workingOrderLineId) && item.firedAt !== null,
+      )
+      ? [{ dish, off }]
+      : [];
+  });
+  const families = serviceCancellationFamilies(rows, taken, priors);
+  const cancelledBillIds = [...new Set(taken.map(({ dish }) => dish.workingOrderId))];
+  for (const billId of cancelledBillIds) {
+    const selected = families.filter(({ dish }) => dish.workingOrderId === billId);
+    await enqueueServiceCancellation(tx, cfg, billId, selected, work);
+    for (const family of selected)
+      await writeServiceCancellations(
+        tx,
+        [family],
+        operatorId,
+        (work.get(family.dish.id) ?? []).some(
+          (item) => remote.has(item.workingOrderLineId) && isStarted(item.state),
+        ),
+      );
+  }
+  return { kitchenBillIds, cancelledBillIds };
 }
 
 /**

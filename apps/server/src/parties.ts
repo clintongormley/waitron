@@ -751,34 +751,34 @@ export async function finishTable(
   return closed;
 }
 
-async function handOverFinishedBills(tx: Transaction, partyId: string): Promise<void> {
+export async function handOverFinishedBills(
+  tx: Transaction,
+  partyId: string,
+  kitchenBillIds?: readonly string[],
+): Promise<void> {
   const [party] = await tx
     .select({ closedAt: parties.closedAt })
     .from(parties)
     .where(eq(parties.id, partyId));
-  const bills = await tx
-    .select({ id: workingOrders.id })
-    .from(workingOrders)
-    .where(
-      and(
-        inArray(workingOrders.partyId, await partyFamily(tx, partyId)),
-        eq(workingOrders.status, "settled"),
-        isNull(workingOrders.collectedAt),
-      ),
-    );
-  const fired = tx
-    .select({ id: ticketItems.workingOrderId })
-    .from(ticketItems)
-    .where(
-      inArray(
-        ticketItems.workingOrderId,
-        bills.map((bill) => bill.id),
-      ),
-    );
+  const ids =
+    kitchenBillIds ??
+    (
+      await tx
+        .selectDistinct({ id: workingOrders.id })
+        .from(workingOrders)
+        .innerJoin(ticketItems, eq(ticketItems.workingOrderId, workingOrders.id))
+        .where(
+          and(
+            inArray(workingOrders.partyId, await partyFamily(tx, partyId)),
+            eq(workingOrders.status, "settled"),
+            isNull(workingOrders.collectedAt),
+          ),
+        )
+    ).map((bill) => bill.id);
   await tx
     .update(workingOrders)
     .set({ collectedAt: party!.closedAt })
-    .where(inArray(workingOrders.id, fired));
+    .where(and(inArray(workingOrders.id, [...ids]), isNull(workingOrders.collectedAt)));
 }
 
 export async function requirePartyClosingEdits(

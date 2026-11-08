@@ -1,5 +1,10 @@
 # A758 — Voids and comps: the rules, the owner's answers, and a page of their own
 
+**2026-11-08:** The historical unpaid-departure gap below is superseded by
+[A1403](../plans/2026-11-08-a1403-unpaid-kitchen-stop.md): departure stops unserved
+kitchen families and clears their lists while preserving the bill.
+
+
 > **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
 > Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
 > `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md)

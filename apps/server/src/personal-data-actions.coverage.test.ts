@@ -69,14 +69,10 @@ const NOT_YET: Record<string, string> = Object.fromEntries(
     "ticket_item_moves.moved_by_person_id",
     "unpaid_departures.authorized_by",
     "unpaid_departures.recorded_by",
+    "line_service_cancellations.actor_id",
     "working_order_lines.credited_to",
   ].map((column) => [column, NOT_YET_REASON]),
 );
-
-const COVERED_ELSEWHERE: Record<string, string> = {
-  "line_service_cancellations.actor_id":
-    "the kept-charge cancel's requester; checked against its one writer of a new cancellation, line-cancel.ts's keep-charge branch, which writes the adjustments row the adjustments module's part lists (a split copies the row with its actor); a new writer must write an adjustment too",
-};
 
 const NOT_A_PERSON: Record<string, string> = {
   "print_jobs.claimed_by": "the claiming print agent's id",
@@ -211,12 +207,7 @@ describe("actions personal-data classification", () => {
         .filter((column) => ACTOR_COLUMN.test(column.name))
         .map((column) => `${config.name}.${column.name}`),
     );
-    const lists = [
-      READ,
-      Object.keys(NOT_YET),
-      Object.keys(COVERED_ELSEWHERE),
-      Object.keys(NOT_A_PERSON),
-    ];
+    const lists = [READ, Object.keys(NOT_YET), Object.keys(NOT_A_PERSON)];
     const classified = lists.flat();
     expect(classified.filter((column, index) => classified.indexOf(column) !== index)).toEqual([]);
     expect(actorColumns.sort()).toEqual(classified.sort());

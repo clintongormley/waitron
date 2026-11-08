@@ -2,7 +2,6 @@ import { requireEconomicWrite, type TradingAdmission } from "./trading-admission
 import { eq, inArray } from "drizzle-orm";
 import {
   lineServiceCancellations,
-  nowIso,
   orderGroups,
   sales,
   ticketItems,
@@ -37,7 +36,7 @@ import type { BillEditExpected } from "./order-drafts.js";
 import { refuseRecalledWrite } from "./draft-source.js";
 import { holdPaperFor } from "./order-groups.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
-import { enqueueCorrectionSlips, enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
+import { enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
 import { bumpPartyRevision, partyRevision, runServiceCommand } from "./parties.js";
 import {
   assertTabOpen,
@@ -48,6 +47,11 @@ import {
   bumpRevision,
   type OrderAttendance,
 } from "./working-order.js";
+import {
+  serviceCancellationFamilies,
+  enqueueServiceCancellation,
+  writeServiceCancellations,
+} from "./line-service-cancel.js";
 import "./errors.js";
 
 export interface CancelItemAsk {
@@ -346,32 +350,7 @@ export async function cancelItem(
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, bill!.id));
         const work = await dishKitchenItems(tx, dishIds);
-        const families = taken.map(({ dish, off }) => {
-          const prior = priorOf(dish.id);
-          const quantity = off + (prior?.quantity ?? 0);
-          const shareOf = (row: Line, of: number) =>
-            row.id === dish.id
-              ? of
-              : Number(
-                  divideDecimal(
-                    multiplyDecimal(decimal(String(row.quantity)), decimal(String(of))),
-                    decimal(String(dish.quantity)),
-                    0,
-                  ),
-                );
-          return {
-            dish,
-            prior,
-            quantity,
-            family: rows
-              .filter((row) => row.id === dish.id || row.parentLineId === dish.id)
-              .map((row) => ({
-                row,
-                remaining: row.quantity - shareOf(row, quantity),
-                covered: shareOf(row, off),
-              })),
-          };
-        });
+        const families = serviceCancellationFamilies(rows, taken, priors);
         const coveredValue = (list: boolean) =>
           sumDecimals(
             families.flatMap(({ family }) =>
@@ -463,38 +442,16 @@ export async function cancelItem(
           refundHandoff,
           refundValue,
         });
-        const corrections = families.flatMap(({ dish, family }) =>
-          family.flatMap(({ row, remaining }) => {
-            const item = (work.get(dish.id) ?? []).find(
-              (item) => item.workingOrderLineId === row.id,
-            );
-            const corrected =
-              item === undefined ? 0 : item.firedQuantity - Math.min(item.firedQuantity, remaining);
-            return corrected === 0
-              ? []
-              : [
-                  {
-                    group: groupOf(dish),
-                    requested: item!.requestedAt !== null && item!.firedAt === null,
-                    requestedAt: item!.requestedAt,
-                    item: {
-                      workingOrderLineId: row.id,
-                      stationId: item!.stationId,
-                      quantity: corrected,
-                      wasStarted: ask.preparationStarted === true || isStarted(item!.state),
-                      fired: item!.firedAt !== null,
-                    },
-                  },
-                ];
-          }),
-        );
-        await enqueueCorrectionSlips(
-          tx,
-          cfg,
-          bill!.id,
-          corrections.filter(({ item }) => item.fired).map(({ item }) => item),
-          "VOID",
-        );
+        const corrections = (
+          await enqueueServiceCancellation(
+            tx,
+            cfg,
+            bill!.id,
+            families,
+            work,
+            ask.preparationStarted === true,
+          )
+        ).map(({ dish, ...correction }) => ({ ...correction, group: groupOf(dish) }));
         if (groups.length > 0) {
           const holdPaper = await holdPaperFor(
             tx,
@@ -527,39 +484,7 @@ export async function cancelItem(
             { kind: "HOLD CANCELLED" },
           );
         }
-        for (const { family } of families) {
-          for (const { row, remaining } of family) {
-            const servedQuantity = Math.min(row.servedQuantity, remaining);
-            const servedAt =
-              servedQuantity > 0 && servedQuantity === remaining
-                ? (row.servedAt ?? nowIso())
-                : null;
-            if (servedQuantity !== row.servedQuantity || servedAt !== row.servedAt)
-              await tx
-                .update(workingOrderLines)
-                .set({ servedQuantity, servedAt })
-                .where(eq(workingOrderLines.id, row.id));
-            if (remaining === 0)
-              await tx.delete(ticketItems).where(eq(ticketItems.workingOrderLineId, row.id));
-            else
-              await tx
-                .update(ticketItems)
-                .set({ quantity: remaining })
-                .where(eq(ticketItems.workingOrderLineId, row.id));
-          }
-        }
-        for (const { dish, prior, quantity } of families) {
-          const values = {
-            quantity,
-            cancelledAt: nowIso(),
-            wasStarted: prior?.wasStarted === true || started,
-            actorId: operatorId,
-          };
-          await tx
-            .insert(lineServiceCancellations)
-            .values({ lineId: dish.id, ...values })
-            .onConflictDoUpdate({ target: lineServiceCancellations.lineId, set: values });
-        }
+        await writeServiceCancellations(tx, families, operatorId, started);
         await bumpRevision(tx, [bill!.id]);
         await bumpPartyRevision(tx, partyId);
         await captureKitchenActivity(

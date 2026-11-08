@@ -1,5 +1,9 @@
 # A980: data protection, build overview
 
+**2026-11-08:** [A1403](2026-11-08-a1403-unpaid-kitchen-stop.md) supersedes the S2d
+actor-coverage premise below. Automatic departure cancellations can name an actor without an
+adjustment; the remaining export belongs to the existing privacy bundle.
+
 **Status: plan, 2026-10-24. Nothing was built when this was written.** 2026-10-24: S4 is built
 ([its plan](2026-10-24-a980-s4-deactivation-wipe.md)); `suspendPerson` and `reactivatePerson` were
 deleted, so S11 has only the two routes that already exist to set its date. 2026-10-24: S2a1 is
