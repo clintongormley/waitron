@@ -1,15 +1,17 @@
 #!/usr/bin/env sh
 # Reads a published image's environment off the registry. The one registry read the `publish` job in
-# `.github/workflows/ci.yml` makes of `:main`: `scripts/main-tag-guard.sh` calls it on a push to main,
-# and the tags step calls it directly on a release tag. Its suite is in
+# `.github/workflows/ci.yml` makes of `:main`: `scripts/main-tag-guard.sh` calls it on a nightly or
+# manual run on main, and the tags step calls it directly on a release tag. Its suite is in
 # `scripts/main-tag-guard.test.mjs`, against a stubbed `docker`.
 #
 # CONTRACT
 #
 #   argv     <image-ref>
 #   stdout   the image's environment, one `NAME=value` per line.
-#   exit     0 with the environment; 3, with nothing on stdout, when nothing is published under the
-#            ref yet; any other non-zero, with the registry's own words on stderr, when it cannot read.
+#   exit     0 with the environment; 3 when nothing is published under the ref yet, when this
+#            script prints nothing to stdout itself (`docker`'s own stdout passes through
+#            uncleared); any other non-zero, with the registry's own words on stderr, when it cannot
+#            read.
 set -eu
 
 IMAGE=${1:-}

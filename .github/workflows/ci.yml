@@ -4254,10 +4254,10 @@ jobs:
           fi
 
   # Publishes the image to GHCR — a POST-GATE LEAF, downstream of the WHOLE suite rather than of the
-  # image smoke alone. `needs: [changes, ci]` waits on the `ci` aggregate, so a push to `main` (or a
-  # `v*` tag) whose CI gate goes red never ships `:main` / `:sha-…` / `:<version>` to a
-  # box that follows it via `docker compose pull` (spec §10). `changes` is
-  # needed for its `code` output.
+  # image smoke alone. It runs only on a full run: the nightly schedule or a manual run on `main`, or
+  # a `v*` tag. `needs: [changes, ci]` waits on the `ci` aggregate, so such a run whose CI gate goes
+  # red never ships `:main` / `:sha-…` / `:<version>` to a box that follows it via
+  # `docker compose pull` (spec §10). `changes` is needed for its `full` output.
   #
   # It cannot appear in `ci`'s `needs` — that would be a cycle — so it is the ONE job the
   # "every other job is in ci's needs" rule excepts; scripts/ci-workflow.test.mjs pins it downstream
