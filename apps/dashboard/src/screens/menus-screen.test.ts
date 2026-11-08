@@ -8913,6 +8913,195 @@ describe("publishing", () => {
     });
   });
 
+  for (const action of ["Schedule", "Change time"] as const) {
+    for (const destination of ["/manage/menus/menu/menu-dinner/view/preview", "/manage/menus"]) {
+      it(`${action}: reports a refused save on the screen after leaving for ${destination}`, async () => {
+        const pending = deferred<never>();
+        const client = api({
+          getMenuPublications: vi.fn().mockResolvedValue({
+            timeZone: "Europe/Madrid",
+            live: null,
+            editions:
+              action === "Schedule"
+                ? []
+                : [
+                    {
+                      versionId: "v-lunch-2",
+                      number: 2,
+                      state: "queued",
+                      activatesAt: "2030-01-01T11:00:00.000Z",
+                      queuedAt: "2026-10-07T08:00:00.000Z",
+                      cancelledAt: null,
+                      contentHash: "other-hash",
+                      local: {
+                        date: "2030-01-01",
+                        time: "12:00",
+                        offset: "+01:00",
+                        repeated: false,
+                      },
+                    },
+                  ],
+          }),
+          getMenuPreview: vi.fn().mockResolvedValue({ ...lunchPreview(), warnings: [] }),
+          scheduleMenuPublication: vi.fn(() => pending.promise),
+          rescheduleMenuPublication: vi.fn(() => pending.promise),
+        });
+        const el = await mountPreview(client);
+        const schedule = panel(el).querySelector("dashboard-menu-publications")!;
+        const sq = (selector: string) => schedule.shadowRoot!.querySelector<HTMLElement>(selector);
+        if (action === "Schedule") {
+          await expect.poll(() => sq('[data-test="schedule-open"]')).toBeTruthy();
+          sq('[data-test="schedule-open"]')!.click();
+        } else {
+          const move = () =>
+            sq("wt-data-table")?.shadowRoot?.querySelector<HTMLElement>(
+              '[data-test="move-v-lunch-2"]',
+            );
+          await expect.poll(move).toBeTruthy();
+          move()!.click();
+        }
+        await schedule.updateComplete;
+        type(sq('wt-input[name="date"]')!, "2030-01-02");
+        type(sq('wt-input[name="time"]')!, "13:00");
+        await schedule.updateComplete;
+        sq('[data-test="schedule-submit"]')!.click();
+        const write =
+          action === "Schedule" ? client.scheduleMenuPublication : client.rescheduleMenuPublication;
+        await expect.poll(() => write.mock.calls.length).toBe(1);
+        history.pushState(null, "", destination);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        await expect
+          .poll(() => schedule.isConnected && schedule.menuId === "menu-lunch")
+          .toBe(false);
+        pending.reject({ code: "connection.failed" });
+        await expect
+          .poll(() => text(q(el, '[data-test="member-error"]')))
+          .toBe(
+            "The schedule change for Lunch Menu was not confirmed. Open its Preview tab and check Scheduled versions before trying again.",
+          );
+        expect(write).toHaveBeenCalledTimes(1);
+      });
+    }
+  }
+
+  it("reports a schedule refused after leaving the Menus screen on the current dashboard page", async () => {
+    await import("../dashboard-app.js");
+    const pending = deferred<never>();
+    const client = api({
+      getMenuPreview: vi.fn().mockResolvedValue({ ...lunchPreview(), warnings: [] }),
+      scheduleMenuPublication: vi.fn(() => pending.promise),
+      getMe: async () => ({
+        personId: "p1",
+        email: "ada@example.com",
+        role: "manager",
+        locale: "en-GB",
+        venueLocale: "en-GB",
+        sessionDefault: "en-GB",
+        venueName: "Venue",
+        permissions: ["product.manage"],
+        modules: [],
+      }),
+      getLocales: async () => ({
+        locales: [{ code: "en-GB", label: "English" }],
+        venueDefault: "en-GB",
+        loginDefault: "en-GB",
+        venueName: "Venue",
+        onboardingIntent: "prepare",
+      }),
+      listAlerts: async () => ({ visible: false, alerts: [] }),
+      getDiskStop: async () => ({ stopped: false, deleted: null }),
+      getGoogleConfig: async () => ({ configured: false }),
+      passkeySignals: async () => ({
+        rpId: "localhost",
+        userId: "cDE",
+        credentialIds: [],
+        name: "ada@example.com",
+        displayName: "Ada",
+      }),
+    });
+    history.replaceState(null, "", PREVIEW_PATH);
+    const { el: app } = await mountWidget<DashboardApp>("dashboard-app", { api: client });
+    const publication = () =>
+      app
+        .shadowRoot!.querySelector("dashboard-menus-screen")
+        ?.shadowRoot?.querySelector("dashboard-menu-publications");
+    await expect
+      .poll(() => publication()?.shadowRoot?.querySelector('[data-test="schedule-open"]'))
+      .toBeTruthy();
+    const schedule = publication()!;
+    const menus = app.shadowRoot!.querySelector("dashboard-menus-screen")!;
+    await menus.updateComplete;
+    await schedule.updateComplete;
+    const menuRenders = vi.spyOn(menus, "render");
+    const scheduleRenders = vi.spyOn(schedule, "render");
+    for (let i = 0; i < 3; i++) {
+      app.requestUpdate();
+      await app.updateComplete;
+      await menus.updateComplete;
+      await schedule.updateComplete;
+    }
+    expect(menuRenders).not.toHaveBeenCalled();
+    expect(scheduleRenders).not.toHaveBeenCalled();
+    const sq = (selector: string) => schedule.shadowRoot!.querySelector<HTMLElement>(selector)!;
+    sq('[data-test="schedule-open"]').click();
+    await schedule.updateComplete;
+    type(sq('wt-input[name="date"]'), "2030-01-02");
+    type(sq('wt-input[name="time"]'), "13:00");
+    await schedule.updateComplete;
+    sq('[data-test="schedule-submit"]').click();
+    await expect.poll(() => client.scheduleMenuPublication.mock.calls.length).toBe(1);
+    app.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-overview"]')!.click();
+    const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => question.open).toBe(true);
+    await question.updateComplete;
+    await userEvent.click(
+      question.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!,
+    );
+    await expect.poll(() => schedule.isConnected).toBe(false);
+    pending.reject({ code: "connection.failed" });
+    await expect
+      .poll(
+        () =>
+          app.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-banner"]>(
+            '[data-test="save-refusal"]',
+          )?.message,
+      )
+      .toBe(
+        "The schedule change for Lunch Menu was not confirmed. Open its Preview tab and check Scheduled versions before trying again.",
+      );
+    expect(client.scheduleMenuPublication).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a schedule refusal in its still-open dialog without a page notice", async () => {
+    const pending = deferred<never>();
+    const client = api({
+      getMenuPreview: vi.fn().mockResolvedValue({ ...lunchPreview(), warnings: [] }),
+      scheduleMenuPublication: vi.fn(() => pending.promise),
+    });
+    const el = await mountPreview(client);
+    const schedule = panel(el).querySelector("dashboard-menu-publications")!;
+    const sq = (selector: string) => schedule.shadowRoot!.querySelector<HTMLElement>(selector)!;
+    await expect.poll(() => sq('[data-test="schedule-open"]')).toBeTruthy();
+    sq('[data-test="schedule-open"]').click();
+    await schedule.updateComplete;
+    type(sq('wt-input[name="date"]'), "2030-01-02");
+    type(sq('wt-input[name="time"]'), "13:00");
+    await schedule.updateComplete;
+    sq('[data-test="schedule-submit"]').click();
+    await expect.poll(() => client.scheduleMenuPublication.mock.calls.length).toBe(1);
+    pending.reject({ code: "connection.failed" });
+    await expect
+      .poll(
+        () =>
+          sq('[data-test="schedule-dialog"]').querySelector<
+            HTMLElementTagNameMap["wt-form-actions"]
+          >("wt-form-actions")!.error,
+      )
+      .toBe(codeMessage("connection.failed"));
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+    expect(sq('[data-test="late-refusal"]')).toBeNull();
+  });
+
   it("renders the publications widget for the open menu with the preview it read", async () => {
     const client = api();
     const el = await mountPreview(client);

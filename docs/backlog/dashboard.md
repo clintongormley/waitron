@@ -577,17 +577,6 @@ plans to retire the editor.
 - **Text size after A179 (#988).**
   [Detail](dashboard.md#text-size-after-a179-988)
 
-## Bundle A1396: A save refused after the person left must say so
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A Schedule or Change time write that fails after the person has left that menu still says
-  nothing.** The panel says so only for the menu it is on; on another menu, or with the panel gone,
-  nothing tells the person. The Prices tab's `menus.change_not_saved` shows its message at
-  screen level. Left open by A397.
-- **Change legal name says nothing when its rename is refused after Back and Discard closed the
-  dialog**; the Schedule window now says so on its panel. Left open by A397.
-
 ## Bundle A1400: An older copy must not undo a save
 
 2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

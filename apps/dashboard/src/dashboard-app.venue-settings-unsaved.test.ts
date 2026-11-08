@@ -1,5 +1,5 @@
 import { html } from "lit";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import {
   leaveCoordinatorFor,
@@ -13,7 +13,7 @@ import { createRequest, LiveData, type DashboardContribution } from "@waitron/da
 import type { DashboardApi, VenueDefaults } from "./api/client.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 import { DashboardApp } from "./dashboard-app.js";
-import { setLocale } from "./i18n/t.js";
+import { setLocale, t } from "./i18n/t.js";
 import { receiptLanguageName } from "./widgets/receipt-language.js";
 import {
   mountReceiptEditor,
@@ -725,34 +725,134 @@ it("a rename answered after Back and Discard closed its dialog still updates the
   expect(native.matches(":modal")).toBe(false);
   answer();
   await expect.poll(banner).toBe("Nuevo SL");
+  expect(app.shadowRoot!.querySelector('[data-test="save-refusal"]')).toBeNull();
   await host.updateComplete;
   expect(dialog.open).toBe(false);
   expect(native.matches(":modal")).toBe(false);
   expect(await tabStillClickable(app, "kitchen")).toBe(true);
 });
 
-it("a rename refused after Back and Discard closed its dialog shows nothing", async () => {
+it.each([
+  ["en-GB", "light", 390],
+  ["en-GB", "dark", 390],
+  ["es-ES", "light", 390],
+  ["es-ES", "dark", 390],
+  ["en-GB", "light", 1280],
+  ["en-GB", "dark", 1280],
+  ["es-ES", "light", 1280],
+  ["es-ES", "dark", 1280],
+] as const)(
+  "a rename refused after Back and Discard closed its dialog says so on the current page (%s, %s, %s)",
+  async (locale, theme, width) => {
+    const original = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    onTestFinished(() => page.viewport(original.width, original.height));
+    let refuse!: () => void;
+    const { app } = await mount(undefined, locale, theme, {
+      renameTaxpayer: () =>
+        new Promise((_, reject) => {
+          refuse = () =>
+            reject(Object.assign(new Error("changed"), { code: "venue.detail_changed" }));
+        }),
+    } as Partial<DashboardApi>);
+    const { host, dialog, native } = await openLegalName(app, "Nuevo SL");
+    dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
+    await expect.poll(() => refuse).toBeTypeOf("function");
+    history.back();
+    await choose(app, "discard");
+    await expect.poll(() => selected(app)).toBe("kitchen");
+    refuse();
+    const notice = () =>
+      app.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-banner"]>(
+        '[data-test="save-refusal"]',
+      );
+    const words =
+      locale === "en-GB"
+        ? "The legal-name change was not confirmed. Check the legal name in Venue settings before trying again."
+        : t("venue_details.legal_name_not_saved");
+    await expect
+      .poll(() => notice()?.shadowRoot?.querySelector("p")?.textContent?.trim())
+      .toBe(words);
+    const box = notice()!.getBoundingClientRect();
+    expect(box.width).toBeGreaterThan(0);
+    expect(box.right).toBeLessThanOrEqual(width);
+    expect(box.top).toBeGreaterThanOrEqual(0);
+    await expectNoA11yViolations(notice()!);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await host.updateComplete;
+    expect(dialog.open).toBe(false);
+    expect(native.matches(":modal")).toBe(false);
+    expect(dialog.querySelector<WtFormActions>("wt-form-actions")!.error).toBe("");
+    expect(await tabStillClickable(app, "kitchen")).toBe(true);
+    notice()!.shadowRoot!.querySelector<HTMLElement>("wt-button")!.click();
+    await expect.poll(notice).toBeNull();
+  },
+);
+
+for (const ended of ["removed", "expired", "new session"] as const) {
+  it(`does not announce a legal-name refusal after the saving session is ${ended}`, async () => {
+    let refuse!: () => void;
+    const { app } = await mount(undefined, "en-GB", "light", {
+      renameTaxpayer: () =>
+        new Promise((_, reject) => {
+          refuse = () => reject({ code: "connection.failed" });
+        }),
+    } as Partial<DashboardApi>);
+    const { dialog } = await openLegalName(app, "Proposed Ltd");
+    dialog.querySelector<HTMLElement>("[data-test=save-legal-name]")!.click();
+    await expect.poll(() => refuse).toBeTypeOf("function");
+    if (ended === "removed") app.remove();
+    else if (ended === "new session") {
+      app.sessionEpoch.advance();
+      dialog.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    } else {
+      window.dispatchEvent(
+        new CustomEvent("waitron-session-invalid", {
+          detail: { code: "management_session.expired" },
+        }),
+      );
+      await expect.poll(() => dialog.isConnected).toBe(false);
+    }
+    refuse();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await app.updateComplete;
+    if (ended === "expired") {
+      app
+        .shadowRoot!.querySelector("dashboard-login-screen")!
+        .dispatchEvent(new CustomEvent("logged-in", { bubbles: true, composed: true }));
+      await expect
+        .poll(() => app.shadowRoot!.querySelector('[data-test="nav-overview"]'))
+        .toBeTruthy();
+    }
+    expect(app.shadowRoot!.querySelector('[data-test="save-refusal"]')).toBeNull();
+  });
+}
+
+it("signing out clears a late-save notice before the next sign-in", async () => {
   let refuse!: () => void;
   const { app } = await mount(undefined, "en-GB", "light", {
     renameTaxpayer: () =>
       new Promise((_, reject) => {
-        refuse = () =>
-          reject(Object.assign(new Error("changed"), { code: "venue.detail_changed" }));
+        refuse = () => reject({ code: "connection.failed" });
       }),
   } as Partial<DashboardApi>);
-  const { host, dialog, native } = await openLegalName(app, "Nuevo SL");
-  dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
+  const { dialog } = await openLegalName(app, "Proposed Ltd");
+  dialog.querySelector<HTMLElement>("[data-test=save-legal-name]")!.click();
   await expect.poll(() => refuse).toBeTypeOf("function");
   history.back();
   await choose(app, "discard");
   await expect.poll(() => selected(app)).toBe("kitchen");
   refuse();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await host.updateComplete;
-  expect(dialog.open).toBe(false);
-  expect(native.matches(":modal")).toBe(false);
-  expect(dialog.querySelector<WtFormActions>("wt-form-actions")!.error).toBe("");
-  expect(await tabStillClickable(app, "kitchen")).toBe(true);
+  await expect.poll(() => app.shadowRoot!.querySelector('[data-test="save-refusal"]')).toBeTruthy();
+  window.dispatchEvent(
+    new CustomEvent("waitron-session-invalid", { detail: { code: "management_session.expired" } }),
+  );
+  await expect.poll(() => app.shadowRoot!.querySelector("dashboard-login-screen")).toBeTruthy();
+  app
+    .shadowRoot!.querySelector("dashboard-login-screen")!
+    .dispatchEvent(new CustomEvent("logged-in", { bubbles: true, composed: true }));
+  await expect.poll(() => app.shadowRoot!.querySelector('[data-test="nav-overview"]')).toBeTruthy();
+  expect(app.shadowRoot!.querySelector('[data-test="save-refusal"]')).toBeNull();
 });
 
 it("leaving Venue details by Back and Keep leaves the legal-name dialog open with its draft", async () => {

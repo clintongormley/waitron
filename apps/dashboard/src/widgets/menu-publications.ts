@@ -230,6 +230,7 @@ export class MenuPublicationsPanel extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property() menuId = "";
   @property() menuName = "";
+  @property({ attribute: false }) lateRefusalFor?: (name: string) => () => void;
   @property({ attribute: false }) preview: MenuPreview | null = null;
   /** Set by the screen while an Undo of this menu is out. */
   @property({ type: Boolean }) blocked = false;
@@ -583,6 +584,7 @@ export class MenuPublicationsPanel extends LitElement {
     const submitted = this.#draft();
     const opening = this.#opening;
     const menuId = this.menuId;
+    const reportLateRefusal = this.lateRefusalFor?.(this.menuName);
     this.scheduleBusy = true;
     try {
       if (moving === null)
@@ -592,7 +594,7 @@ export class MenuPublicationsPanel extends LitElement {
         });
       else await this.api.rescheduleMenuPublication(menuId, moving.versionId, { activatesAt });
     } catch (error) {
-      await this.#placeRefusal(error, menuId, opening, moving?.number ?? null);
+      await this.#placeRefusal(error, menuId, opening, moving?.number ?? null, reportLateRefusal);
       return;
     } finally {
       if (opening === this.#opening) this.scheduleBusy = false;
@@ -609,13 +611,14 @@ export class MenuPublicationsPanel extends LitElement {
     menuId: string,
     opening: object,
     placed: number | null,
+    reportLateRefusal: (() => void) | undefined,
   ): Promise<void> {
     const code = codeOf(error);
     const rowOutOfDate =
       code === "menu_publication.not_queued" || code === "menu_publication.not_found";
     if (opening !== this.#opening) {
       if (rowOutOfDate && menuId !== this.menuId) void this.#refresh();
-      this.#sayRefusedLate(menuId);
+      this.#sayRefusedLate(menuId, reportLateRefusal);
       return;
     }
     const params = (error as { params?: Record<string, unknown> }).params ?? {};
@@ -645,7 +648,7 @@ export class MenuPublicationsPanel extends LitElement {
       void this.#refresh();
     }
     if (opening !== this.#opening) {
-      this.#sayRefusedLate(menuId);
+      this.#sayRefusedLate(menuId, reportLateRefusal);
       return;
     }
     this.scheduleRefusal = refusal;
@@ -659,7 +662,8 @@ export class MenuPublicationsPanel extends LitElement {
     }
   }
 
-  #sayRefusedLate(menuId: string): void {
+  #sayRefusedLate(menuId: string, reportLateRefusal: (() => void) | undefined): void {
+    if (!this.isConnected || menuId !== this.menuId) reportLateRefusal?.();
     if (menuId !== this.menuId) return;
     this.lateRefusal = true;
     // Out of the page, the read that follows it being put back does this.

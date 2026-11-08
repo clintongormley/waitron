@@ -47,6 +47,7 @@ export class LegalNameDialog extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) reportLateRefusal?: () => void;
 
   /** The name the dialog opened with; null while it is shut. */
   @state() private opened: string | null = null;
@@ -142,6 +143,7 @@ export class LegalNameDialog extends LitElement {
     }
     const legalName = this.value.trim();
     const opening = this.#opening;
+    const reportLateRefusal = this.reportLateRefusal;
     this.busy = true;
     try {
       const { model } = await this.api.renameTaxpayer({ legalName, expected });
@@ -159,7 +161,10 @@ export class LegalNameDialog extends LitElement {
       this.#dialog()?.closeAfter("saved");
       this.#close();
     } catch (error) {
-      if (opening !== this.#opening) return;
+      if (opening !== this.#opening) {
+        reportLateRefusal?.();
+        return;
+      }
       this.busy = false;
       const code = codeOf(error);
       const params =

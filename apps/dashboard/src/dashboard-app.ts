@@ -320,7 +320,7 @@ const UNLISTED_SCREENS: ScreenRule[] = [
 type CoreSettingsPanel = AccessRule & {
   key: string;
   tab: VenueSettingsTab;
-  render(api: DashboardApi, canConfigure: boolean): TemplateResult;
+  render(api: DashboardApi, canConfigure: boolean, reportLateRefusal: () => void): TemplateResult;
 };
 
 const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
@@ -328,9 +328,10 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
     key: "venue-details",
     tab: "venue-details",
     requiresPermission: "venue.view",
-    render: (api, canConfigure) =>
+    render: (api, canConfigure, reportLateRefusal) =>
       html`<dashboard-venue-details-panel
         .api=${api}
+        .reportLateRefusal=${reportLateRefusal}
         .readOnly=${!canConfigure}
       ></dashboard-venue-details-panel>`,
   },
@@ -978,6 +979,7 @@ export class DashboardApp extends LitElement {
   @state() private alertsVisible = false;
   @state() private alertError: string | null = null;
   @state() private alertBusyKey: string | null = null;
+  @state() private saveRefusal: { key: StringKey; name: string } | null = null;
   @state() private alertToast: { alerts: AlertView[]; tone: "info" | "error" } | null = null;
   readonly #alertArrivals = new AlertArrivals();
   /** Bumped whenever the alerts state is cleared, which also happens without a new session (a
@@ -1571,6 +1573,7 @@ export class DashboardApp extends LitElement {
     this.#diskStopQueries.release("getDiskStop");
     this.diskStop = null;
     this.#clearAlerts();
+    this.saveRefusal = null;
     this.contentLanguagesReady = false;
     this.contentLanguageError = null;
     this.liveUpdates?.stop();
@@ -1978,8 +1981,35 @@ export class DashboardApp extends LitElement {
     return this.screen === "floor-plan" && this.contentLanguagesReady;
   }
 
+  #saveReporters = new Map<StringKey, { generation: number; report: (name?: string) => void }>();
+
+  #lateSaveReporter(key: StringKey): (name?: string) => void {
+    const generation = this.sessionGeneration;
+    const existing = this.#saveReporters.get(key);
+    if (existing?.generation === generation) return existing.report;
+    const report = (name = "") => {
+      if (generation === this.sessionGeneration) this.saveRefusal = { key, name };
+    };
+    this.#saveReporters.set(key, { generation, report });
+    return report;
+  }
+
   #notices(slot?: string): TemplateResult {
     return html`${this.#diskStopBar(slot)} ${this.#updateBar(slot)}
+      ${
+        this.saveRefusal === null
+          ? nothing
+          : html`<wt-banner
+              data-test="save-refusal"
+              slot=${slot ?? nothing}
+              tone="error"
+              message=${fill(this.saveRefusal.key, { name: this.saveRefusal.name })}
+              action-label=${t("action.close")}
+              @wt-banner-action=${() => {
+                this.saveRefusal = null;
+              }}
+            ></wt-banner>`
+      }
       <wt-toast
         class="alert-toast"
         data-test="alert-toast"
@@ -2291,7 +2321,12 @@ export class DashboardApp extends LitElement {
       key: panel.key,
       tab: panel.tab,
       order: 0,
-      render: () => panel.render(this.api, this.#sessionPermissions.includes("venue.configure")),
+      render: () =>
+        panel.render(
+          this.api,
+          this.#sessionPermissions.includes("venue.configure"),
+          this.#lateSaveReporter("venue_details.legal_name_not_saved"),
+        ),
     }));
     const modules = this.#activePanels
       .filter(({ panel }) => this.#mayRead(panel))
@@ -2922,7 +2957,10 @@ export class DashboardApp extends LitElement {
       case "modifiers":
         return html`<dashboard-modifiers-screen .api=${this.api}></dashboard-modifiers-screen>`;
       case "menus":
-        return html`<dashboard-menus-screen .api=${this.api}></dashboard-menus-screen>`;
+        return html`<dashboard-menus-screen
+          .api=${this.api}
+          .reportLateSave=${this.#lateSaveReporter("menus.schedule_not_saved")}
+        ></dashboard-menus-screen>`;
       case "catalogue":
         return html`<dashboard-catalogue-screen
           .api=${this.api}
