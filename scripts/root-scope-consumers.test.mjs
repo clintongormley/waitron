@@ -46,7 +46,6 @@ const GIT_SPAWN_TIMEOUT_MS = 30_000;
 // literal, because scripts/spawn-timeout-budget.test.ts cannot resolve an imported constant.
 const REAL_TREE_TEST_TIMEOUT_MS = 90_000;
 
-/** Git exports `GIT_DIR` to every hook and `.husky/pre-push` runs this suite. */
 const GIT_LOCATION_OVERRIDES = [
   "GIT_DIR",
   "GIT_WORK_TREE",

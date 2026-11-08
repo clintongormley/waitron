@@ -25,7 +25,6 @@ function refusedDocsFiles(files: readonly string[]): string[] {
   );
 }
 
-// Git exports `GIT_DIR` to every hook, and the pre-push hook runs this suite.
 function isolatedGitEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
   for (const name of [

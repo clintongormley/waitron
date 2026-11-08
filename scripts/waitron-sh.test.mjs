@@ -305,8 +305,6 @@ stub("groupadd", "exit 0");
 // as_root calls `sudo -n <cmd>`; drop the -n and exec the rest so it lands on the stubbed systemctl.
 stub("sudo", `[ "$1" = "-n" ] && shift; exec "$@"`);
 
-// Git exports GIT_DIR to every hook, and `.husky/pre-push` runs this suite: a fixture repository made
-// with it inherited would be made somewhere else.
 const GIT_LOCATION_OVERRIDES = [
   "GIT_DIR",
   "GIT_WORK_TREE",

@@ -259,7 +259,7 @@ caps package concurrency at two. Direct package commands retain their Vitest tim
 ## The pre-push hook
 
 The pre-push hook (`.husky/pre-push`) checks sign-offs, runs
-`pnpm install --frozen-lockfile`, `format:check`, lint and the root guards with coverage, then
+`pnpm install --frozen-lockfile`, formatting and lint on changed files, then
 `typecheck` over changed packages and their dependents. `scripts/changed-packages.mjs` resolves
 the scope for both the hook and CI. Before anything else the hook refreshes `origin/main` from
 `origin`, giving up after 20 seconds plus the deadline runner's 5-second grace
@@ -270,9 +270,13 @@ main's commits out of the sign-off range. A new branch's range still starts at i
 scope below reads whatever `origin/main` the checkout has either way. For a ref the remote already has, the typecheck scope is
 what the push changes since the remote's old tip, plus the branch's own changes since its merge base
 with `origin/main` when that merge base exists and differs from the old tip. A new ref is scoped
-from its merge base with `origin/main`. Package tests and coverage run in CI; the root guards stay
-local because they check the machinery that decides what runs. CI also runs mutation testing and
-`bundle-smoke`.
+from its merge base with `origin/main`. Tests and coverage, including root guards, run in CI. CI also runs mutation testing and `bundle-smoke`.
+
+For package, machinery and documentation scopes, formatting and lint receive only changed files
+that still exist as regular files, excluding symlinks. Each tool keeps a content cache under
+`node_modules/.cache/waitron-pre-push/`; its own ignores and file support still apply. Empty
+file lists skip the tool. Global or unknown scopes retain uncached whole-repository
+`pnpm format:check` and `pnpm lint`. The existing scope classifier decides this fallback.
 
 ### Root workers start from available headroom
 
@@ -403,8 +407,7 @@ pnpm --filter @waitron/setup exec node test/bundle-smoke.mjs
 A successful check prints `Built setup bundle rendered and advanced to the setup choices.`
 Chromium must be installed for the setup package's Playwright version.
 
-A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after the root
-guards — unless it changes a file `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) names, which
+A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after lint — unless it changes a file `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) names, which
 also selects the members listed against it (those that read it, or whose CI test job runs it) and
 their dependents, or a file `GLOBAL_ROOT_FILES` there names (the test-progress reporter every CI
 test command loads), which typechecks the whole workspace here and runs every package in CI. A documentation-only push stops after formatting. Deletion-only pushes run no
@@ -3667,9 +3670,7 @@ package-wide coverage. Run additional consumer tests locally when useful for inv
 ### Adding a workspace package breaks the root guards until it is wired in
 
 Three guards in the root Vitest project read workspace members BY NAME. The `root-guards` job
-runs that project unless main reuses verified equal-tree PR CI; `.husky/pre-push` runs it on
-every non-documentation push. So a new member that is not
-wired in fails the hook, on a branch that may have nothing else wrong with it.
+runs that project. A new member that is not wired in fails CI, on a branch that may have nothing else wrong with it.
 
 Measured twice, in both directions, on 2026-09-16 — adding `@waitron/bench-sqlite-failover`, then
 taking the wiring away again. Unwired, exactly three files in the root project go red, and they are

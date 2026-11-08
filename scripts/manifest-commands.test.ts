@@ -35,9 +35,7 @@ const GIT_SPAWN_TIMEOUT_MS = 30_000;
 const SPAWN_TEST_TIMEOUT_MS = 60_000;
 
 /**
- * Git's own location overrides, each of which outranks the `cwd` a child is spawned in. Git exports
- * `GIT_DIR` to every hook and `.husky/pre-push` runs this suite, so an inherited one sends
- * `git ls-files` to another repository's index, where a committed file reads as untracked.
+ * Git's own location overrides, each of which outranks the `cwd` a child is spawned in.
  */
 const GIT_LOCATION_OVERRIDES = [
   "GIT_DIR",
@@ -375,9 +373,6 @@ describe("asking git rather than the filesystem", () => {
       const elsewhere = mkdtempSync(join(tmpdir(), "waitron-manifest-commands-"));
       try {
         withSavedGitEnv(() => {
-          // Poisoned BEFORE the fixture is built, which is the shape `.husky/pre-push` hands this
-          // suite: an unisolated `git init` would exit 0, create the decoy and leave the fixture's
-          // own `.git` absent.
           process.env.GIT_DIR = join(elsewhere, "decoy.git");
           git(["init", "--quiet", elsewhere]);
           expect(existsSync(join(elsewhere, ".git"))).toBe(true);

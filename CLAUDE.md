@@ -79,8 +79,9 @@ normal pre-push hook run the local checks once; scoped package tests run in PR a
 Do not add a whole-workspace local run solely to finish a branch. Broader local runs remain useful
 for investigating failures or behavior across packages. Required CI checks must pass on the current head.
 
-The pre-push hook (`.husky/pre-push`) checks sign-offs, frozen install, formatting, lint, root
-guards with coverage, and scoped package types. It runs no package tests. Which pushes stop early,
+The pre-push hook (`.husky/pre-push`) checks sign-offs, frozen install, changed-file formatting and
+lint, and scoped package types. Global or unknown scopes keep whole-repository formatting and lint.
+Tests and coverage, including root guards, run in CI. Which pushes stop early,
 and which keep the full gate: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 **Coverage thresholds: every package, and the root project, holds `98/98/98/95`** (owner decision
