@@ -27,6 +27,7 @@ import {
   createProduct,
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import type { SoftwareIdentity } from "@waitron/fiscal-verifactu/src/software-identity.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { loginWithPin, persons } from "@waitron/identity";
 import { cardReaderHolders, cardReaders, deviceCardReaders } from "@waitron/payments";
@@ -121,10 +122,11 @@ export async function provisionBillVenue(
   db: Database,
   // Unset, a historical fiscal identity, as existing-sale suites want. A suite whose box must pass a
   // real selection later hands the first setup it means to run.
-  options: { apply?: typeof applyVenue } = {},
+  options: { apply?: typeof applyVenue; identity?: SoftwareIdentity } = {},
 ): Promise<BillVenue> {
   const clock = systemClock();
   const backend = new VerifactuBackend({
+    identity: options.identity,
     clock,
     db,
     environment: deploymentEnvironment(process.env),
