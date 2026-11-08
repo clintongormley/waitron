@@ -659,7 +659,7 @@ export class DashboardApp extends LitElement {
         gap: var(--wt-space-3);
       }
 
-      .brand-line:has(> .brand-logo) {
+      .brand-line.on-lockup {
         align-items: baseline;
       }
 
@@ -2109,6 +2109,12 @@ export class DashboardApp extends LitElement {
     >`;
   }
 
+  /** The lockup is in the light DOM even while a venue's logo is drawn, so ask what is shown. */
+  #lockupShown(): boolean {
+    const state = this.#venueLogo.state;
+    return state.kind === "none" || (state.kind === "logo" && state.failed);
+  }
+
   #lockup(slot?: string): TemplateResult {
     return html`<wt-waitron-lockup class="brand-logo" slot=${slot ?? nothing}></wt-waitron-lockup>`;
   }
@@ -2129,7 +2135,7 @@ export class DashboardApp extends LitElement {
               ></wt-button>`
             : nothing
         }
-        <div class="brand-line">
+        <div class="brand-line ${classMap({ "on-lockup": this.#lockupShown() })}">
           ${this.#brandMark()}
           <span class="venue-row"
             ><span class="venue">

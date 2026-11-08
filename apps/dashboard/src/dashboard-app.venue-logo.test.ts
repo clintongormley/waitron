@@ -13,6 +13,7 @@ import {
   VENUE_LOGO_RETRY_MS,
   type WtVenueLogo,
 } from "@waitron/ui";
+import { lockupWordBaseline, textBaseline } from "@waitron/ui/src/test-helpers.js";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { DashboardApp } from "./dashboard-app.js";
@@ -209,6 +210,27 @@ it("a logo that fails to load shows the lockup through the fallback slot, and ma
   await vi.waitFor(() => expect(lockupShown(el)).toBe(true));
   const state = currentVenueLogo();
   expect(state.kind === "logo" && state.failed).toBe(true);
+});
+
+it("sets the legal name on the fallback lockup's word, as with no venue logo", async () => {
+  store(withLogo("/no-such.png"));
+  startVenueTheme(document.documentElement, { fetchImpl: never });
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  try {
+    await page.viewport(1280, 800);
+    const { el } = await mount(stubApi(true));
+    await vi.waitFor(() => expect(lockupShown(el)).toBe(true));
+    await el.updateComplete;
+    const fallback = lockup(el) as WtWaitronLockup;
+    expect(fallback.getAttribute("slot")).toBe("fallback");
+    await fallback.updateComplete;
+    const name = banner(el).querySelector("[data-test=venue-name]")!;
+    expect(name.textContent!.trim()).not.toBe("");
+    expect(textBaseline(name)).toBeCloseTo(lockupWordBaseline(fallback), 0);
+  } finally {
+    await page.viewport(width, height);
+  }
 });
 
 it("follows a live answer without a reload", async () => {
