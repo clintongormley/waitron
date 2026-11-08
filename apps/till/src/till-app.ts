@@ -3174,6 +3174,9 @@ export class TillApp extends LitElement {
    * request was sent with, so one for an earlier sign-in, even the same person's, is told apart. A
    * sign-out keeps it, so the sign-out itself names who is leaving. */
   #tabPerson: SessionPerson | null = null;
+  /** The sign-in the box refused, kept until a boot; a later sign-in or a server switch moves
+   * {@link #tabPerson} away from it. */
+  #refusedPerson: SessionPerson | undefined;
   @state() private deviceZoneSelection: DeviceZoneSelection | null = null;
   @state() private deviceSettingsOpen = false;
   @state() private deviceZonesOpen = false;
@@ -3448,8 +3451,17 @@ export class TillApp extends LitElement {
   } | null = null;
   @state() private formFactor?: FormFactor;
   @state() private capabilities: CapabilityFlag[] = [];
-  /** The non-fatal error to show over the counter, or `undefined` for none. */
-  @state() private errorKey?: CounterError;
+  /** The non-fatal error to show over the counter, or `undefined` for none. While the till is locked
+   * because the box refused this sign-in's person, every error set is dropped: it comes from a request
+   * of the sign-in that just ended, and the lock already says what to do. */
+  @state() private get errorKey(): CounterError | undefined {
+    return this.#errorKey;
+  }
+  private set errorKey(value: CounterError | undefined) {
+    if (value !== undefined && this.#refusedPerson === this.#tabPerson) return;
+    this.#errorKey = value;
+  }
+  #errorKey?: CounterError;
   /** What a complete submission of a draft did, said once the till is back on the floor. */
   @state() private submittedNotice: string | null = null;
   @state() private servedCommand: ServedCommand | null = null;
@@ -4554,6 +4566,7 @@ export class TillApp extends LitElement {
     this.#stopDepartmentTransfers();
     this.#battery?.stop();
     const bootGeneration = ++this.#bootGeneration;
+    this.#refusedPerson = undefined;
     this.#setupRead = undefined;
     // A boot a newer one has overtaken writes nothing after its reads answer. A torn-down app's boot
     // writes nothing either: `setLocale` is module-global, and `disconnectedCallback` has already run,
@@ -5458,7 +5471,9 @@ export class TillApp extends LitElement {
 
   /** The device's session belongs to someone else now, so this person has none to end. */
   #onPersonRefused(person: SessionPerson): void {
-    if (person === this.#tabPerson && this.operatorName !== "") void this.#onLogout(false);
+    if (person !== this.#tabPerson || this.operatorName === "") return;
+    this.#refusedPerson = person;
+    void this.#onLogout(false);
   }
 
   /** `switched`: a profile switch, which leaves the screen the old profile was on. */

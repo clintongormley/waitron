@@ -15,7 +15,7 @@ import {
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { cleanupWidgets, draftSnapshot, mountWidget } from "./widgets/test-helpers.js";
-import { currentLocale, setLocale } from "./i18n/t.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
 
 /** One request as the stub received it, after the client's own wrapping. */
 interface SeenRequest {
@@ -376,6 +376,23 @@ function afterSignIn(server: TillServer, nth: number): SeenRequest[] {
     .filter((request) => !(request.method === "POST" && request.path === "/api/session"));
 }
 
+/** The codes of the app's `putLocale` calls that have settled, each pushed before the caller's own
+ * catch runs, so a later macrotask sees what that catch did. */
+function settledLocaleSaves(api: TillApi): string[] {
+  const settled: string[] = [];
+  const save = api.putLocale.bind(api);
+  api.putLocale = (code) => save(code).finally(() => settled.push(code));
+  return settled;
+}
+
+/** The refused locale save has been handled by its caller and drawn: no error line over the lock. */
+async function expectNoErrorOnLock(el: TillApp, settled: string[]): Promise<void> {
+  await vi.waitFor(() => expect(settled).toHaveLength(1));
+  await el.updateComplete;
+  expect(lockScreen(el)).not.toBeNull();
+  expect(el.shadowRoot!.querySelector(".error")).toBeNull();
+}
+
 /** A locale change from the shell: a request outside drafts that the app sends at once. */
 function chooseLocale(el: TillApp, code = "es"): void {
   emit(shellOf(el)!, "wt-locale-selected", { code });
@@ -504,7 +521,8 @@ describe("the till through its real client", () => {
     "locks, and ends no session, when a request outside drafts is refused at %i for naming Ana",
     async (status) => {
       const server = tillServer();
-      const { el } = await mountTill(server);
+      const { el, api } = await mountTill(server);
+      const settled = settledLocaleSaves(api);
       await signInAsAna(el);
       server.refuse("PUT /api/session/locale", status, SESSION_PERSON_REFUSAL);
 
@@ -513,8 +531,25 @@ describe("the till through its real client", () => {
 
       expect(named(server.sentTo("PUT /api/session/locale")[0]!)).toBe(ANA.personId);
       expect(server.sentTo("DELETE /api/session")).toEqual([]);
+      await expectNoErrorOnLock(el, settled);
     },
   );
+
+  it("still shows a boot's failure on the lock a person refusal left", async () => {
+    const server = tillServer();
+    const { el } = await mountTill(server);
+    await signInAsAna(el);
+    server.refuse("PUT /api/session/locale", 409, SESSION_PERSON_REFUSAL);
+    chooseLocale(el);
+    await vi.waitFor(() => expect(lockScreen(el)).not.toBeNull());
+    server.refuse("GET /api/till", 500, "server.internal");
+
+    emit(lockScreen(el)!, "device-unauthorized");
+
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector(".error")?.textContent ?? "").toContain(t("boot.error")),
+    );
+  });
 
   it("does nothing when a refusal for a request from Ana's earlier sign-in lands after she signs in again", async () => {
     const server = tillServer();
@@ -550,7 +585,8 @@ describe("the till through its real client", () => {
       ],
     }));
     server.serve("POST /api/device/active-profile", () => ({ activeProfileId: "pr-bar" }));
-    const { el } = await mountTill(server);
+    const { el, api } = await mountTill(server);
+    const settled = settledLocaleSaves(api);
     await signInAsAna(el);
     const before = server.hold("PUT /api/session/locale");
     chooseLocale(el);
@@ -571,13 +607,15 @@ describe("the till through its real client", () => {
     before.refuse(409, SESSION_PERSON_REFUSAL);
     await vi.waitFor(() => expect(lockScreen(el)).not.toBeNull());
     expect(server.sentTo("DELETE /api/session")).toEqual([]);
+    await expectNoErrorOnLock(el, settled);
   });
 
   it("still locks for a request sent before the device zones' Retry", async () => {
     const server = tillServer();
     let zones = deviceZonesFixture([], []);
     server.serve("GET /api/device/zones", () => zones);
-    const { el } = await mountTill(server);
+    const { el, api } = await mountTill(server);
+    const settled = settledLocaleSaves(api);
     await signInAsAna(el);
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-retry-device-zones]")).not.toBeNull(),
@@ -599,5 +637,6 @@ describe("the till through its real client", () => {
     before.refuse(409, SESSION_PERSON_REFUSAL);
     await vi.waitFor(() => expect(lockScreen(el)).not.toBeNull());
     expect(server.sentTo("DELETE /api/session")).toEqual([]);
+    await expectNoErrorOnLock(el, settled);
   });
 });
