@@ -1359,7 +1359,6 @@ describe("listHeldOrders", () => {
     const { cfg, coffeeId, waterId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx.update(products).set({ name: "Coffee" }).where(eq(products.id, coffeeId));
-      await tx.update(products).set({ name: "Water" }).where(eq(products.id, waterId));
     });
     const idA = randomUUID();
     const idB = randomUUID();
@@ -1710,7 +1709,7 @@ describe("getHeldOrder", () => {
 
     const revision = await revisionOf(id);
     await withTransaction(db, (tx) =>
-      updateOrderLine(tx, cfg, id, 1, { note: "Sin sal" }, revision),
+      updateOrderLine(tx, cfg, id, 1, { note: "No salt" }, revision),
     );
     const after = await db.execute<{
       quantity: number;
@@ -3975,7 +3974,7 @@ describe("opening hours", () => {
           .select({ revision: workingOrders.revision })
           .from(workingOrders)
           .where(eq(workingOrders.id, tabId));
-        await updateOrderLine(tx, cfg, tabId, 1, { note: "Sin hielo" }, revision!);
+        await updateOrderLine(tx, cfg, tabId, 1, { note: "No ice" }, revision!);
         const [item] = await ticketItemsFor(tx, tabId);
         expect(item!.stationId).toBe(upstairs.id);
         expect(
@@ -3985,7 +3984,7 @@ describe("opening hours", () => {
               .from(ticketItems)
               .where(eq(ticketItems.workingOrderId, tabId))
           )[0]!.note,
-        ).toBe("Sin hielo");
+        ).toBe("No ice");
         const [parent] = await tx
           .select({ id: workingOrderLines.id })
           .from(workingOrderLines)
@@ -4016,15 +4015,15 @@ describe("opening hours", () => {
           .select({ revision: workingOrders.revision })
           .from(workingOrders)
           .where(eq(workingOrders.id, tabId));
-        await updateOrderLine(tx, cfg, tabId, 1, { note: "Sin limón" }, lastRevision!);
+        await updateOrderLine(tx, cfg, tabId, 1, { note: "No lemon" }, lastRevision!);
         expect(
           await tx
             .select({ stationId: ticketItems.stationId, note: ticketItems.note })
             .from(ticketItems)
             .where(eq(ticketItems.workingOrderId, tabId)),
         ).toEqual([
-          { stationId: upstairs.id, note: "Sin hielo" },
-          { stationId: kitchen.id, note: "Sin limón" },
+          { stationId: upstairs.id, note: "No ice" },
+          { stationId: kitchen.id, note: "No lemon" },
         ]);
       } finally {
         vi.useRealTimers();
@@ -6039,7 +6038,7 @@ describe("correction slips on recall & void (A6)", () => {
         .where(eq(workingOrders.id, tabId));
       const before = await jobRows(tx);
 
-      await updateOrderLine(tx, cfg, tabId, 1, { note: "Sin cebolla" }, revision!);
+      await updateOrderLine(tx, cfg, tabId, 1, { note: "No onion" }, revision!);
 
       const fresh = (await jobRows(tx)).filter((j) => !before.some((b) => b.id === j.id));
       expect(fresh.map((job) => job.printerId)).toEqual([printerId, printerId]);
@@ -6048,7 +6047,7 @@ describe("correction slips on recall & void (A6)", () => {
       expect(slip).toContain("Croquettes");
       expect(ticket).not.toContain("RECALLED");
       expect(ticket).toContain("Croquettes");
-      expect(ticket).toContain("Sin cebolla");
+      expect(ticket).toContain("No onion");
     });
   });
 
@@ -6626,7 +6625,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
         .from(workingOrders)
         .where(eq(workingOrders.id, tabId));
       const beforeNoteJobs = await tx.select({ id: printJobs.id }).from(printJobs);
-      await updateOrderLine(tx, cfg, tabId, 1, { note: "Sin sal" }, nextRevision!);
+      await updateOrderLine(tx, cfg, tabId, 1, { note: "No salt" }, nextRevision!);
       const noteJobs = (
         await tx.select({ id: printJobs.id, payload: printJobs.payload }).from(printJobs)
       )
