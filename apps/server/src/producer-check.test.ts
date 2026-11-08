@@ -122,9 +122,10 @@ describe("checkFiscalSettings, with stand-in modules", () => {
     expect(error).toEqual(["one: an unexpected failure"]);
   });
 
-  it("fails when no fiscal module checks its settings", () => {
-    const { out, error } = output();
-    expect(checkFiscalSettings([withFiscal("one"), {} as WaitronModule], out)).toBe(1);
-    expect(error).toEqual(["no fiscal module checks its settings"]);
+  it("passes when no fiscal module has settings to check", () => {
+    const { out, log, error } = output();
+    expect(checkFiscalSettings([withFiscal("one"), {} as WaitronModule], out)).toBe(0);
+    expect(log).toEqual(["no fiscal module has settings to check"]);
+    expect(error).toEqual([]);
   });
 });

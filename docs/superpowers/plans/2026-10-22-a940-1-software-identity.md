@@ -1162,7 +1162,7 @@ The publish job, in order:
 
 (2026-11-08: a step between 4 and 5 now runs the server's own producer check,
 `/app/producer-check.js`, inside the loaded image; `docs/developers/ci-and-gates.md` lists the job
-as built.)
+as built. 2026-11-08, later: the owner replaced the separate program with `node /app/server.js check-producer`.)
 
 - [ ] **Step 1: failing guard cases** in the two script tests; run
   `pnpm exec vitest run scripts/deploy-image-env.test.ts scripts/ci-workflow.test.mjs` — FAIL.

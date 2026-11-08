@@ -4487,14 +4487,14 @@ jobs:
           done
           exit "$failed"
 
-      # The image's own entry runs each fiscal module's start-up check of the settings, for
+      # The image's server program runs each fiscal module's start-up check of the settings, for
       # production. It prints error codes, setting names and reasons, never a value.
       - name: Run the box's own checks of the producer's settings in the built image
         env:
           CHECK_IMAGE: waitron-publish-check:local
         run: |
           set -euo pipefail
-          timeout 120 docker run --rm --pull never --network none --entrypoint node "$CHECK_IMAGE" /app/producer-check.js
+          timeout 120 docker run --rm --pull never --network none --entrypoint node "$CHECK_IMAGE" /app/server.js check-producer
 
       - name: Publish to GHCR
         uses: docker/build-push-action@v7

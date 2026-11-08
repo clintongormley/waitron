@@ -6716,8 +6716,8 @@ describe("the publish job carries the producer's settings into the image", () =>
 
   describe("the box's own checks, run in the built image", () => {
     const step = () => publishStepNamed(PRODUCER_VALID_STEP);
-    // `docker run … node /app/producer-check.js` answered by the entry's source under tsx, with the
-    // image's environment taken from the stub's INSIDE_-prefixed variables.
+    // `docker run … node /app/server.js check-producer` answered by the server's source under tsx,
+    // with the image's environment taken from the stub's INSIDE_-prefixed variables.
     const bin = mkdtempSync(join(tmpdir(), "producer-valid-bin-"));
     afterAll(() => rmSync(bin, { recursive: true, force: true }));
     writeFileSync(
@@ -6725,13 +6725,13 @@ describe("the publish job carries the producer's settings into the image", () =>
       [
         "#!/usr/bin/env bash",
         'printf \'%s\\n\' "$*" >> "$DOCKER_ARGS"',
-        '[ "${!#}" = /app/producer-check.js ] || exit 97',
+        '[ "${*: -2}" = "/app/server.js check-producer" ] || exit 97',
         "for name in WAITRON_PRODUCER_NAME WAITRON_PRODUCER_TAX_ID WAITRON_PRODUCER_ADDRESS; do",
         '  inside="INSIDE_$name"',
         '  if [ -n "${!inside+set}" ]; then export "$name=${!inside}"; else unset "$name"; fi',
         '  unset "$inside"',
         "done",
-        'exec "$TSX" "$ENTRY"',
+        'exec "$TSX" "$ENTRY" check-producer',
         "",
       ].join("\n"),
     );
@@ -6746,7 +6746,7 @@ describe("the publish job carries the producer's settings into the image", () =>
             CHECK_IMAGE: "waitron:check",
             DOCKER_ARGS: args,
             TSX: join(repoRoot, "apps", "server", "node_modules", ".bin", "tsx"),
-            ENTRY: join(repoRoot, "apps", "server", "src", "producer-check-entry.ts"),
+            ENTRY: join(repoRoot, "apps", "server", "src", "bin.ts"),
             ...Object.fromEntries(Object.entries(inside).map(([k, v]) => [`INSIDE_${k}`, v])),
           },
           bin,
@@ -6765,12 +6765,13 @@ describe("the publish job carries the producer's settings into the image", () =>
       expect(step().text).not.toMatch(/secrets\./);
     });
 
-    // Text only: image-smoke builds the image, but nothing in a pull request runs this entry in it.
-    it("names an entry the server build bundles and the image copies, with its notices", () => {
+    // Text only: image-smoke builds the image, but nothing in a pull request runs this command in it.
+    it("names the server program the build bundles and the image copies, and no separate one", () => {
       const build = JSON.parse(
         readFileSync(join(repoRoot, "apps", "server", "package.json"), "utf8"),
       ).scripts.build;
-      expect(build.split(" ")).toContain("src/producer-check-entry.ts=dist/producer-check.js");
+      expect(build.split(" ")).toContain("src/bin.ts=dist/server.js");
+      expect(build).not.toContain("producer-check");
       const copies = (
         readFileSync(join(repoRoot, "deploy", "Dockerfile"), "utf8").match(
           /^COPY\b(?:[^\n]*\\\n)*[^\n]*/gm,
@@ -6778,13 +6779,14 @@ describe("the publish job carries the producer's settings into the image", () =>
       ).map((copy) => copy.replace(/\\\n\s*/g, " ").split(/\s+/));
       const copied = (source, target) =>
         copies.some((words) => words.includes(source) && words.at(-1) === target);
-      expect(copied("/src/apps/server/dist/producer-check.js", "/app/")).toBe(true);
+      expect(copied("/src/apps/server/dist/server.js", "/app/")).toBe(true);
+      expect(copied("/src/apps/server/dist/producer-check.js", "/app/")).toBe(false);
       expect(
         copied(
           "/src/apps/server/dist/producer-check.js.NOTICES.txt",
           "/app/third-party/npm/server/",
         ),
-      ).toBe(true);
+      ).toBe(false);
     });
 
     it("passes the made-up producer, printing no value", { timeout: 120_000 }, () => {
@@ -6801,7 +6803,8 @@ describe("the publish job carries the producer's settings into the image", () =>
         "--entrypoint",
         "node",
         "waitron:check",
-        "/app/producer-check.js",
+        "/app/server.js",
+        "check-producer",
       ]);
       for (const value of Object.values(PRODUCER_VALUES))
         expect(printed(result)).not.toContain(value);

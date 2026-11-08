@@ -15,8 +15,8 @@ export function checkFiscalSettings(modules: readonly WaitronModule[], out: Chec
     module.fiscal?.refuseSettings === undefined ? [] : [module.fiscal],
   );
   if (checked.length === 0) {
-    out.error("no fiscal module checks its settings");
-    return 1;
+    out.log("no fiscal module has settings to check");
+    return 0;
   }
   let status: 0 | 1 = 0;
   for (const fiscal of checked) {

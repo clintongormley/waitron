@@ -1319,9 +1319,10 @@ its own. A production start with none refuses (`sif.producer_unset`) whether or 
 published; a partly set or malformed value refuses in every environment; and a production start
 whose open chain was made under another tax number refuses (`sif.producer_changed`) until A993 can
 open the new installation, so a change of producer is blocked in production until A993 lands.
-The three secrets were not set on 2026-11-08; set them before landing with
-`gh secret set --env-file ~/waitron-campaign-shared/private/producer-identity.env --app actions --repo clintongormley/waitron`;
-every full run's publish job fails while any is missing. The tax number must not change until A993 lands: the publish job runs on every full run (the nightly, a
+The three secrets hold placeholder values for now (owner, 2026-11-08; `gh secret list` showed all three set that day); replacing them, with
+`gh secret set --env-file ~/waitron-campaign-shared/private/producer-identity.env --app actions --repo clintongormley/waitron`,
+is safe only while no box has started in production, because a production chain refuses a different producer tax number until A993 lands.
+Every full run's publish job fails while any is missing. The tax number must not change until A993 lands: the publish job runs on every full run (the nightly, a
 manual run on `main`, a `v*` tag), so a changed name or address reaches boxes as they update, but a
 changed tax number fails the publish unless the repository variable
 `WAITRON_PRODUCER_CHANGE_ALLOWED` holds it. Watch the first nightly or manual publish:
