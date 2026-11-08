@@ -73,15 +73,23 @@ export function readSessionToken(c: Context): string | null {
   return getCookie(c, SESSION_COOKIE) ?? null;
 }
 
-/** The person whose open session `token` names, or `null` when it names none. */
+/** The person whose open session `token` names, on `deviceId` when one is given; `null` when it
+ * names none. */
 export async function openSessionPerson(
   db: Database | Transaction,
   token: string,
+  deviceId?: string,
 ): Promise<string | null> {
   const [found] = await db
     .select({ personId: sessions.personId })
     .from(sessions)
-    .where(and(eq(sessions.tokenHash, hashSessionToken(token)), isNull(sessions.endedAt)));
+    .where(
+      and(
+        eq(sessions.tokenHash, hashSessionToken(token)),
+        deviceId === undefined ? undefined : eq(sessions.deviceId, deviceId),
+        isNull(sessions.endedAt),
+      ),
+    );
   return found?.personId ?? null;
 }
 
@@ -112,21 +120,10 @@ export async function signedInPersonOn(
 ): Promise<SignedInPerson> {
   const token = readSessionToken(c);
   if (token === null || !isUuid(token)) return { outcome: "nobody" };
-  const [found] = await tx
-    .select({ personId: sessions.personId })
-    .from(sessions)
-    .where(
-      and(
-        eq(sessions.tokenHash, hashSessionToken(token)),
-        eq(sessions.deviceId, deviceId),
-        isNull(sessions.endedAt),
-      ),
-    );
-  if (found === undefined) return { outcome: "nobody" };
-  const refusal = personRefusal(c, found.personId);
-  return refusal === null
-    ? { outcome: "person", personId: found.personId }
-    : { outcome: "refused", refusal };
+  const personId = await openSessionPerson(tx, token, deviceId);
+  if (personId === null) return { outcome: "nobody" };
+  const refusal = personRefusal(c, personId);
+  return refusal === null ? { outcome: "person", personId } : { outcome: "refused", refusal };
 }
 
 /**
