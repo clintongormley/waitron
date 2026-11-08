@@ -1,32 +1,33 @@
 # A987 sender naming implementation plan
 
-**Goal:** SMTP displays the trading/location name, retaining the configured mailbox.
-**Basis:** [approved amendment](../specs/2026-10-22-a987-prepare-venue-email-design.md), [Tasks 8–13 and Cut D](2026-10-22-a987-prepare-venue-email.md).
+**Goal:** Ordinary outgoing SMTP and the existing Settings test show the trading/location name while retaining the configured mailbox. Basis: [approved spec, O5A](../specs/2026-10-22-a987-prepare-venue-email-design.md), [existing plan, Tasks 8–13 and Cut D](2026-10-22-a987-prepare-venue-email.md). This cut narrows their naming work; no new delivery mechanism.
 
-| Authority supplied by driver | Meaning |
+**Approval, read directly:** `/Users/clintongormley/waitron-campaign-e/questions.md`, heading **WATCHER 2026-11-08 10:53 — A987 sender naming: smaller route APPROVED; no reservation holds it**, exact text:
+
+> 1. Take the smaller route: name ordinary outgoing mail and the existing Settings test only; no setup fields, no owner-held test naming, no dashboard preview.
+> 2. The older A739 invoice-envelope reservation does not hold you: overlap is never a reason to wait (owner, 2026-11-01), and whoever lands second rebases. Naming the envelope of mail that carries an invoice is not fiscal as long as invoice contents, PDF bytes, fiscal writers and the outbox stay unchanged; say that in the PR with the test that pins it.
+> 3. Apply the review's concrete corrections as you listed them (raw saved values on Settings GET; invalid sender treated as unavailable at the resolver; refuse CR/LF before parsing; errors to the From field; pin the changed expectations).
+> That is your approved plan; build it. Reports from here go in progress.log.
+
+This clears A739 for invoice-envelope naming; whoever lands second rebases. Corrections below follow `/Users/clintongormley/waitron-campaign-e/receipts/a987-sender-naming-20261108/plan-review.md` (source readings, not reproduced defects).
+
+**Every intended changed path:**
+
+| Kind | Paths |
 | --- | --- |
-| Lane E `questions.md`, WATCHER2026-11-07 19:21: “Account delivery details and sender naming stay for their later cuts.” | Naming is this later cut. |
-| Current RUNNER H13, OWNER2026-11-01: “build on main and whoever lands second resolves overlap” | Source overlap does not require waiting. |
-| Owner launch, 2026-11-08: explicitly authorises finish-branch and land-branch | Driver may finish and land after checks. |
+| Production: create | `apps/server/src/email-sender-name.ts` |
+| Production: modify | `apps/server/src/email-delivery.ts`; `apps/server/src/email-settings-api.ts`; `apps/server/src/invoice-email.ts` |
+| Tests: create | `apps/server/src/email-sender-name.test.ts` |
+| Tests: modify | `apps/server/src/email-delivery.test.ts`; `apps/server/src/email-settings-api.test.ts`; `apps/server/src/invoice-email.test.ts` |
+| Docs: modify | `docs/superpowers/plans/2026-11-08-a987-sender-naming.md`; `apps/server/README.md`; `apps/server/src/guide/en/email.md`; `apps/server/src/guide/es/email.md`; `docs/backlog.md`; `docs/backlog/box.md` |
 
-These external records are driver-supplied authority, not independently inspected here. Baseline: `1f1d02fa67`. Account metadata PR2590 (`4d82f845ee01b5c846836e8240b59e60f3f0dca7`, CI42467357347 running at launch) shares that base: do not import/depend on it; eventual overlap requires the second lander's rebase.
+**Estimate:** production code 60–100 changed lines/four files; tests 150–220 changed lines/four files; brief documentation updates/six files. Estimates, not measurements. Execute inline, failing test → observed expected failure → minimal implementation → passing test count.
 
-**Limits:** Preserve content, subjects, PDF bytes, capture sender, persisted outcomes/retries, authority and privacy. No protected fiscal writers/hash/numbering/immutable-data/registration/restore changes; no schema, dependencies, protocols or evidence formats. Lane F owns body wording. Cloud/D102, stage-policy repair and unauthenticated setup-test target repair are separate; A951-S draft2543 stays parked for physical reboot. Any actual unreleased owner gate stays explicit; report ambiguity to driver.
+- [ ] **Trace and test.** Follow resolver consumers: both boot account wrappers, invoice availability, attendance/certificate workers, box-alert sending, capture inbox and Settings. Add failing cases below before implementation; retain behavioral assertions.
+- [ ] **Name at delivery.** Add `venueSmtpFrom(storedFrom: string, senderName: string): { name: string; address: string }`, using installed nodemailer's `nodemailer/lib/addressparser`, unflattened, and the existing email validator. Check raw `storedFrom` for CR/LF **before parsing**. Accept one valid bare/display mailbox; reject empty, malformed, multiple/group senders with typed `server.credential_unusable`, `{purpose:"email.smtp",field:"from"}`. Test punctuation, Unicode and header-like names through serialized/parsed headers, unchanged mailbox and no injected headers.
+- [ ] **Separate saved settings from delivery.** Extract `readSavedSmtp(tx, ring): Promise<{url:string;from:string}|null>` in `email-delivery.ts`. Keep raw credential reads and `(await readVenue(tx)).name` outside the conversion catch. Catch only the typed sender refusal from `venueSmtpFrom`, returning `{mode:"unconfigured"}` without capture fallback; propagate unrelated failures. Widen delivery `from` to `SmtpConnection["from"]`; change only the invoice sender's input type to match. Preserve capture sender and transaction/write-lock boundaries.
+- [ ] **Keep Settings repairable.** GET reads settings through `readSavedSmtp` and mode through the named resolver: 200 with raw saved From for display-mailbox and invalid stored senders, retaining editable settings even when unconfigured. Preserve redaction/authority. The existing Settings test derives the name via `readVenue`, converts its proposed sender and maps only that typed refusal to `email.settings_invalid {field:"from"}` before network contact. Retain own-recipient/no-save checks. No setup fields, owner-held naming, response `senderName` or dashboard preview.
+- [ ] **Pin preservation.** Update delivery/invoice-route string-From expectations, including Settings tests' resolver expectations, to name/address objects; keep GET raw. Test invalid stored From → unconfigured and unrelated failures → propagated. Add named-invoice coverage asserting exact unchanged subject, body and PDF attachment bytes; retain outcomes, deadlines, retries, outbox, capture, reminder and reset-privacy assertions. No invoice contents, fiscal writers, outbox contents/behavior, schema, dependency, stage-policy or Cloud changes; Lane F retains body wording.
+- [ ] **Verify and document.** Run `pnpm --filter @waitron/server exec vitest run src/{email-sender-name,email-delivery,email-settings-api,invoice-email,account-email,attendance-email,certificate-reminder-email,box-alert-email.context,invoice-delivery,boot.invoice-delivery,guide-content}.test.ts`, `pnpm --filter @waitron/server typecheck`, and `pnpm exec vitest run scripts/guide-links.test.ts`; read passing counts. Update listed guides/README for naming and repair; remove completed naming work from both backlog entries, retaining separate work. No whole-workspace local test run.
 
-Server paths below mean `apps/server/src/`. Driver obtains Claude's pre-build read before coding. Implement inline, failing test → observed failure → minimal implementation → passing count.
-
-- [ ] **Transport naming, Tasks 8/12.** Add `email-sender-name.ts`: `venueSmtpFrom(storedFrom:string,senderName:string):{name:string;address:string}`. Installed nodemailer 10.3.1 exports default `nodemailer/lib/addressparser` (exports/declaration inspected only); use unflattened parsing and identity's `isValidEmail`. Accept one mailbox, bare or display-mailbox; refuse invalid/empty/multiple/group/CRLF senders with `server.credential_unusable`, `{purpose:"email.smtp",field:"from"}`. In `email-delivery.ts`, widen delivery-only `from` to `SmtpConnection["from"]`; name SMTP from `(await readVenue(tx)).name` (`packages/db/src/venue.ts:60`), without location-id injection. Trace both `boot.ts` account wrappers/invoice availability, `attendance-email-worker.ts`, `certificate-reminder-worker.ts`, `box-alert-email.ts` and settings first. Capture stays unchanged. Adapt `invoice-email.ts` envelope type only; retain transport/outbox behavior and box-alert write-lock semantics.
-- [ ] **Tests and settings, Tasks 9/10.** In `setup-email-api.ts`, validate ordinary `venue.name`; thread senderName through setup `api/client.ts`, `setup-app.ts`, `screens/email-screen.ts`. Owner-held `setup-first-fiscal-api.ts` uses `state.frozen.request.name`; keep its email-only body/header and publication recovery. Settings test derives name server-side; `email-settings-api.ts` GET keeps raw saved `from:string`, redaction and authority, adds `senderName`; dashboard `api/client.ts`/`screens/email-settings-panel.ts` previews it without changing form values. No name override or secrets exposed.
-- [ ] **Red/green proof.** Before implementation, add failing `email-sender-name.test.ts` and envelope/route checks: parsed From has distinct trading/legal names, punctuation/Unicode/header-like names without injected headers, unchanged mailbox/content; invalid senders refuse before network. Retain no-route/capture, accepted-test invalidation including name edits, manager/admin, own-recipient, password-reset privacy, worker outcomes/retries and exact invoice attachment-byte controls. No permanent self-mutation tests.
-
-Focused commands:
-
-`pnpm --filter @waitron/server exec vitest run src/{email-sender-name,email-delivery,account-email,attendance-email,certificate-reminder-email,box-alert-email.context,setup-email-api,setup-first-fiscal.route,email-settings-api,invoice-email,invoice-delivery,boot.invoice-delivery,guide-content}.test.ts`
-
-`pnpm --filter @waitron/setup exec vitest run src/{api/client,screens/email-screen,setup-app-first-fiscal,first-setup-session}.test.ts`
-
-`pnpm --filter @waitron/dashboard exec vitest run src/{screens/email-settings-panel,widgets/email-settings-form,widgets/email-settings-form.unsaved}.test.ts`
-
-`pnpm exec vitest run scripts/guide-links.test.ts`
-
-Update EN/ES email guides, README/backlog; inspect preview/guides in both themes/390px. Sign commits; finish-branch's Claude run-it review, normal hook and current-head scoped CI precede authorised land-branch and merged-head CI. No whole-workspace local duplication.
+**Finish line:** focused checks pass; driver inspects and signs off commits, then finish-branch runs Claude run-it review, normal push hook and current-head scoped CI, followed by separately authorised land-branch/merged-head CI. The PR states A739 clearance and cites the invoice preservation test. This amendment changes only the plan; no build, commit or review runs here.
