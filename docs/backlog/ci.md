@@ -465,9 +465,12 @@ infer either from the missing outcome alone.
 
 ## Bundle A1398: Pack the other packages' test shards by measured time
 
-2 entries, size M. Duration warnings are implemented separately. For later packing comparisons,
+3 entries, size M. Duration warnings are implemented separately. For later packing comparisons,
 use qualified runs with one coverage mode; never mix runs from before and after A1427.
 
+- **Refresh the existing server duration table after A1440 lands.** Run full verification on
+  the disposable server runners, qualify its timing data, then use `scripts/test-durations.mjs`.
+  The warning-only change leaves the existing estimates in place; do not invent missing times.
 - **The other sharded packages still use Vitest's file-count split.**
   [Detail](ci.md#the-other-sharded-packages-still-use-vitests-file-count-split)
 - an inventory of run test files, only if a same-count wrong-files case is ever seen
