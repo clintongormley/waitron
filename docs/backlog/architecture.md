@@ -1600,7 +1600,8 @@ with one menu section, a regional wine and its own staff. Build Catalonia first,
 shared with the Balearic Islands, then Valencia, then Galicia. Give each region a
 restaurant name; update an untouched default when the postcode or province changes
 and preserve a name someone has typed. Staff and kitchen names use the region's
-language even when the staff screens are in English or Spanish. This applies to
+language even when the staff screens are in English or Spanish (owner, 2026-11-08: to be
+replaced by A1458, where they follow the language chosen at setup). This applies to
 demo data only; the A918 starter-content policy below stays separate. The
 [design update](../superpowers/specs/2026-10-27-a972-demo-data-per-country-and-region-design.md)
 records the four answers. Spain owns its demo records and pictures behind secondary

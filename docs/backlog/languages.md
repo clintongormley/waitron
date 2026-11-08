@@ -3,10 +3,14 @@
 The open entries are listed in [the backlog](../backlog.md), under "Interface languages". This file holds
 their full text.
 
-## Catalan, Valencian, Galician and Basque — the receipt's words checked, and the whole app in all four (C125, owner 2026-10-02) — PARKED
+## Catalan, Valencian, Galician and Basque — the receipt's words checked, and the whole app in all four (C125, owner 2026-10-02; off hold 2026-11-08)
 
-- **PARKED by the owner (2026-10-02: "save the full translations for
-  much later").** Asked for on C113's question
+- **Off hold (owner, 2026-11-08): the staff screens should be offered in every official language,
+  and setup asks which one a venue works in (A1458, in [setup.md](setup.md)).** Decided the same
+  day: **Valencian is a variant of Catalan**, not a separate translation; only the words that differ
+  get their own. Setup's starting content languages (`STARTER_CONTENT_LANGUAGES`,
+  `packages/country-packs/src/starter-languages.ts`) lack Basque today; add it. Parked from
+  2026-10-02 ("save the full translations for much later"). Asked for on C113's question
   ("Land, review words later, and add full translations for catalán, valenciano, and gallego";
   "Receipt + whole app"; Basque: "Treat it like the others"). When it is picked up, the first step is a spec and plan, ending with the owner's choices:
   - **Receipt:** every fixed word C113 added in Catalan, Galician and Basque checked against an
@@ -18,8 +22,8 @@ their full text.
   - **Whole app:** the dashboard, the till and setup offered in all four beside English and
     Spanish — how strings are held today and every place that pins the list of interface
     languages (language choosers, `Accept-Language` matching, tests); how translations are
-    produced and checked, and what shows when one is missing; whether Valencian is its own
-    interface language or a variant; and an order of work that keeps `main` green.
+    produced and checked, and what shows when one is missing; Valencian as a variant of Catalan
+    (decided 2026-11-08); and an order of work that keeps `main` green.
 
 - **Content-language names outside English and Spanish (A419 review, 2026-10-08):** when you add
   these interface languages, give Valencian its own translated display name and check the picker.
@@ -129,8 +133,8 @@ among them «PIN de gerente») say «gerente». Pick one word and use it everywh
 3 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Catalan, Valencian, Galician and Basque — the receipt's words checked, and the whole app in all
-  four (C125) — PARKED by the owner.**
-  [Detail](languages.md#catalan-valencian-galician-and-basque--the-receipts-words-checked-and-the-whole-app-in-all-four-c125-owner-2026-10-02--parked)
+  four (C125) — off hold (owner, 2026-11-08); Valencian is a variant of Catalan.**
+  [Detail](languages.md#catalan-valencian-galician-and-basque--the-receipts-words-checked-and-the-whole-app-in-all-four-c125-owner-2026-10-02-off-hold-2026-11-08)
 - The till's on-screen ticket writes a Galician or Basque sale's amounts and date the Spanish way,
   while its words are Galician or Basque.
   [Detail](languages.md#the-tills-on-screen-ticket-writes-a-galician-or-basque-sales-amounts-and-date-the-spanish-way)

@@ -1201,6 +1201,46 @@ failing test first.
   (`apps/server/src/receipt-figures.ts:205-212`), so moving its words can change printed text: its
   own pull request waits for the owner.
 
+## Bundle A1457: The Courses page reworked (owner, 2026-11-08)
+
+4 entries, size M, one pull request. The page is `apps/dashboard/src/screens/courses-screen.ts`;
+the list is `apps/dashboard/src/widgets/course-list.ts`.
+
+- **The owner's Courses page changes (2026-11-08, from screenshots of the page empty, while adding
+  the first course, and with three courses).**
+  - Drop both descriptions, `courses.description` ("The order dishes are served in. A product names
+    its course; drag to change the order.") and `courses.description_read_only`, in English and
+    Spanish.
+  - With no courses, the list says only "No courses found" (today `kitchen.no_courses`, "No courses
+    yet. Add one to let products say when they are served.").
+  - Replace the held switch and the note it shows when off ("No · goes to Fire now",
+    `courses.goes_to_fire_now`; «No · va a Marchar ya») with two choices, **Fire now** and **Hold
+    for later**, on `wt-segmented-control`. "Fire now" is the till's panel name and means nothing on
+    the dashboard. The note appearing widens the column and moves every row; the two choices keep
+    one width. Reword or drop the "Held until fired" heading to match.
+  - Give that column's heading a help bubble (`wt-help-tooltip mode="help-mode"`) saying what each
+    choice does on the till. Write it from the code (the rule is stated at
+    `packages/db/src/schema/kitchen-courses.ts`), and update the guide's courses section in English
+    and Spanish.
+  - The layout: the heading is centred over a switch drawn at the column's left edge, and the column
+    floats mid-table with a wide gap before the row menu. Adding the first course draws a bare grey
+    name field with no label or hint, and the held heading over nothing, because the new row has no
+    control until it is saved. Consider moving the page onto `wt-data-table`, as Menus, Modifiers,
+    Printers and Devices use; check first how it keeps the drag-to-reorder this page gets from
+    `ReorderController`. Saving a new course on Enter or on leaving the field stays (owner,
+    2026-11-08).
+- **A row menu whose only action is Delete becomes a trash-can button, on every screen** (owner,
+  2026-11-08). Change `wt-row-actions` so that menu draws an icon button opening the same
+  confirmation, its accessible name naming the row ("Delete: Starters"); a menu with any other single
+  action stays a menu. Add a trash icon to `wt-icon` if it has none. Courses has exactly this menu.
+  The Wt popups bundle (A1256, A1258, in dashboard.md) changes `wt-row-actions` too.
+- **A1075. On the Courses page the row dividers stop short of the card's sides** (mock-up 02 runs
+  them to the edge; needs `course-list.ts` styles), and an error under the list would sit on the
+  card's bottom border (read from the code, not seen). Left open by #1854, A756.
+- **A928. The Courses list may move its rows under a held drag (found by A758-2's review, not
+  tested).**
+  [Detail](catalogue.md#a928-the-courses-list-may-move-its-rows-under-a-held-drag-found-by-a758-2s-review-not-tested)
+
 ## Decisions and deliberate limits
 
 - **Menu copies (A1172, owner 2026-10-28).** Copy… asks for an empty, required new name before

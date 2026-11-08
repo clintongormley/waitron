@@ -457,7 +457,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A237. Nothing guards the hint-or-"?" rule across screens (owner 2026-10-03)** — OPEN.
 
-- **Demo seed language** (bundle of 2, size S). [Detail](backlog/setup.md#bundle-demo-seed-language)
+- **A1458. Setup asks which language the venue works in, and starts each country with its own
+  courses (owner, 2026-11-08)** (bundle of 5, size L). Every one-name starter (courses, table
+  states, the first menu and the rest) and the demo's staff and kitchen names follow the choice.
+  Languages beyond Spanish and English wait for C125. [Detail](backlog/setup.md#bundle-a1458-setup-asks-which-language-the-venue-works-in-and-starts-each-country-with-its-own-courses-owner-2026-11-08)
 
 - **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03)** — OPEN, partly designed,
   not to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.
@@ -474,9 +477,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
-- **A1075. On the Courses page the row dividers stop short of the card's sides** (mock-up 02 runs
-  them to the edge; needs `course-list.ts` styles), and an error under the list would sit on the
-  card's bottom border (read from the code, not seen). Left open by #1854, A756.
+- **A1457. The Courses page reworked (owner, 2026-11-08)** (bundle of 4, size M). Shorter text,
+  "Fire now" or "Hold for later" in place of the held switch, a help bubble, a layout that holds
+  still, and a trash can in place of any row menu whose only action is Delete, on every screen.
+  Holds A1075, A928. [Detail](backlog/catalogue.md#bundle-a1457-the-courses-page-reworked-owner-2026-11-08)
 
 - **Menu prices' narrow-layout CI failure still needs a cause (A613).**
   [Detail](backlog/ci.md#menu-prices-narrow-layout-ci-failure-still-needs-a-cause-a613)
@@ -604,10 +608,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The combined end-to-end journey has not been walked**
   [Detail](backlog/catalogue.md#the-combined-end-to-end-journey-has-not-been-walked)
-
-- **A928. The Courses list may move its rows under a held drag (found by A758-2's review, not
-  tested).**
-  [Detail](backlog/catalogue.md#a928-the-courses-list-may-move-its-rows-under-a-held-drag-found-by-a758-2s-review-not-tested)
 
 - **The picker collapses on `focusout` alone** (`#finishEditing`). If the editor is reported
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
@@ -1577,7 +1577,8 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 - **Native speaker review** (bundle of 3, size S, needs a third party). [Detail](backlog/languages.md#bundle-native-speaker-review)
 
-- **Regional languages** (bundle of 3, size L, needs the owner). [Detail](backlog/languages.md#bundle-regional-languages)
+- **Regional languages** (bundle of 3, size L, needs the owner). C125, the staff screens in every
+  official language, is off hold (owner, 2026-11-08); A1458 depends on it. [Detail](backlog/languages.md#bundle-regional-languages)
 
 ### Alerts, logging and diagnostics
 

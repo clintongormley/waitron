@@ -654,10 +654,36 @@ that operation's reader. Do not remove exact-content checks to make a large file
   live source screens, the dashboard's node recovery panel, and the fiscal first-setup, recovery
   key and offline custodian pages. `wt-file-input` hides that control and draws its own words.
 
-## Bundle: Demo seed language
+## Bundle A1458: Setup asks which language the venue works in, and starts each country with its own courses (owner, 2026-11-08)
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+5 entries, size L. The first three are the owner's of 2026-11-08; the last two were the Demo seed
+language bundle. Spanish and English can be built now; every other language waits for C125
+([languages.md](languages.md#bundle-regional-languages)).
 
+- **Setup asks which language the venue works in.** Today `resolveInstalledStarterLanguages`
+  (`packages/country-packs/src/starter-languages.ts`) derives the staff language from the country,
+  area and receipt language, and it can only be Spanish or English. Setup asks instead, offering the
+  derived language as the default. Every starter holding one name is written in it (A918's rule in
+  [architecture.md](architecture.md), unchanged: a one-name row takes the staff language). Today
+  those are the table states (the service steps "Set up", "Take order", "Anything else?"), seasons,
+  the Counter zone and the "Open" period (`packages/venue-service/src/starter-content.ts`), the
+  first menu, the kitchen station and the device profiles, plus the courses below. Their
+  `StaffNames` files carry Spanish only, so each needs words for every language C125 adds, Valencian
+  as a variant of Catalan. Until C125 lands, setup offers Spanish and English.
+- **The demo follows that choice** (owner, 2026-11-08), replacing A972's rule that a regional
+  demo's staff and kitchen names use the region's language whatever the staff screens: a Catalan
+  demo set up in Spanish shows «Butifarra con judías» on the till, not «Botifarra amb mongetes».
+  Each regional demo then needs staff and kitchen names in every language setup offers. Update
+  A972's decision in [architecture.md](architecture.md) and "Regional practice names" in
+  `docs/developers/products.md` when this is built.
+- **Starter courses, chosen by the country pack.** Setup creates no courses today. Each pack names
+  its list, written in English in code and translated through the starter-content file into the
+  chosen language (Spain's "Sharing plates" is «Pica pica»):
+  - Spain: «Pica pica» and «Entradas» fire now; «Platos principales» and «Postres» are held for
+    later. Catalan, Valencian, Galician and Basque words too; add them to the Native speaker review.
+  - Great Britain: Starters fires now; Mains and Desserts are held for later.
+  - Italy, when its pack is built: Antipasti, Primi piatti, Secondi piatti, Dolci. Which fire now
+    was not decided; ask the owner then.
 - **The demo venue's departments' internal names still follow the seed language.** Left open by
   W108 (#1276, the demo venue's names and tax ID come from the country pack).
 - **Still open from W109-5's Barcelona look (2026-10-07):** product groups and prep stations
