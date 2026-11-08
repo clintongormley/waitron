@@ -706,9 +706,6 @@ export interface ReconcilableRow {
   createdAt: string;
   auditedAt: string;
   workingOrderId: string;
-  // Mirrors @waitron/db's working_order_status enum. Reconcile's orphan rule (`!== "open"`) and
-  // auto-reverse gate (`!== "abandoned"`) treat `placed` as neither; whether that is right for a
-  // placed order is not settled.
   workingOrderStatus: "open" | "placed" | "settled" | "abandoned";
   reconcileRemediatedAt: string | null;
   /** The payment has a hold, with or without an outcome. */

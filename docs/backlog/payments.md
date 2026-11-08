@@ -17,21 +17,14 @@ the request before sending, keeps `tr_<refundId>` on retry and recovers pending 
 
 ## Turn off Stripe's on-reader tip screen, or read the tip back
 
-Backlog only; SumUp is
-the go-live provider (owner, 2026-10-21). Waitron takes the tip at the
-till and adds it to the amount it charges (`tipOf`, `apps/server/src/till-sale.ts`). It creates
-no Stripe Terminal configuration and does not turn the reader's tip screen off:
-`processPaymentIntent` (`packages/payments-stripe/src/stripe-client.ts`) sends only the payment's
-id. Stripe's docs: "When you process the payment, the reader adds the selected tip. If the
-payment is successful, the amount in the `PaymentIntent` and `Charge` updates to include the tip
-amount" (https://docs.stripe.com/terminal/features/collecting-tips/on-reader), set up through "a
-Configuration object or the Dashboard". So if tipping were switched on in Stripe's Dashboard,
-every tipped reader payment would be charged more than Waitron records, the payments check would
-report each as a difference, and an orphaned one would be held. Read from the code and Stripe's
-docs while planning A846 (the fee question's table in
-[the A846 plan](../superpowers/plans/2026-10-19-a846-held-card-payments.md)); not tried against
-Stripe. **Next action:** pass `process_config[skip_tipping]=true` from `processPaymentIntent`,
-tested against Stripe's sandbox.
+SumUp remains the go-live provider (owner, 2026-10-21). A1389's 2026-11-08 cut-back reads the cloud
+reader's actual capture and reported tip; the excess becomes tip, and matching reader-tip evidence
+avoids a difference alert. The fake-client cases exercise this path; no Stripe sandbox or physical
+reader qualification has run. The on-device adapter still records the requested amount
+(`packages/payments-stripe/src/device-provider.ts`). **Next action:** qualify tipping against a real
+Stripe reader before using Stripe, and cover the on-device amount path if that adapter is needed.
+The approved implementation is in
+[the A1389 cut-back plan](../superpowers/plans/2026-11-08-a1389-actual-card-amounts.md).
 
 ## The payments check ignores the currency Stripe reports
 
@@ -353,13 +346,13 @@ and shows a clear message.
 
 ## Bundle: Stripe adapter upkeep
 
-6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+Remaining Stripe qualification and maintenance.
 
 - **Loose ends left by A633.**
   [Detail](payments.md#loose-ends-left-by-a633)
 - **Turn off Stripe's on-reader tip screen, or read the tip back.** Backlog only; SumUp is the
-  go-live provider (owner, 2026-10-21). Next: pass `process_config[skip_tipping]=true` from
-  `processPaymentIntent`, tested against Stripe's sandbox. Left open by A846.
+  go-live provider (owner, 2026-10-21). A1389 reads the cloud reader's actual amount and tip;
+  real-reader qualification and the on-device amount path remain.
   [Detail](payments.md#turn-off-stripes-on-reader-tip-screen-or-read-the-tip-back)
 - **The payments check ignores the currency Stripe reports.** `stripeReportClient` never reads
   `bt.currency`. Left open by A846.

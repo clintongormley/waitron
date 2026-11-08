@@ -1295,11 +1295,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             });
           case "failed":
             return c.json({ outcome: "not_charged" });
-          case "mismatched":
-            throw new AppError("bill.payment_outcome_unconfirmed", {
-              paymentId: id,
-              reason: "mismatched",
-            });
           case "left":
             throw new AppError("bill.payment_outcome_unconfirmed", {
               paymentId: id,

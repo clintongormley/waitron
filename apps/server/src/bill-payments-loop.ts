@@ -55,7 +55,6 @@ export interface BillPaymentsLoopDeps extends BillPaymentDeps {
 export interface BillPaymentsPass {
   received: number;
   failed: number;
-  mismatched: number;
   refundsCompleted: number;
   refundsFailed: number;
   /** Refunds pending over an hour, counted on every pass. */
@@ -78,7 +77,6 @@ export const CHARGED = new Set(["captured", "accepted_offline", "settled"]);
 export type SettledFromRow =
   | { settled: "received"; invoice: TillSaleResult | null }
   | { settled: "failed" }
-  | { settled: "mismatched" }
   | { settled: "left"; providerState: string };
 
 /**
@@ -157,7 +155,6 @@ export async function settlePendingBillPayments(
   const pass: BillPaymentsPass = {
     received: 0,
     failed: 0,
-    mismatched: 0,
     refundsCompleted: 0,
     refundsFailed: 0,
     refundsUnresolved: 0,

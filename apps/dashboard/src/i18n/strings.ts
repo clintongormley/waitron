@@ -2847,8 +2847,6 @@ export const en = {
     "Waitron could not reach the card provider. The bill stays locked; reconnect the provider and try again.",
   "payments.bill.payment_ambiguous":
     "The provider's answer does not settle this payment. Check its transaction or ask provider support before recording an outcome.",
-  "payments.bill.payment_mismatched":
-    "The provider shows a charge for a different amount. The bill stays locked; check the provider transaction before recording an outcome.",
   "payments.bill.refund_pending":
     "The provider has not finished this refund. The bill stays locked; check again after it completes.",
   "payments.bill.refund_not_found":
@@ -6733,8 +6731,6 @@ export const es: Record<StringKey, string> = {
     "Waitron no pudo contactar con el proveedor de tarjetas. La cuenta sigue bloqueada; vuelve a conectar el proveedor e inténtalo de nuevo.",
   "payments.bill.payment_ambiguous":
     "La respuesta del proveedor no resuelve este pago. Revisa la operación o consulta con el soporte del proveedor antes de registrar un resultado.",
-  "payments.bill.payment_mismatched":
-    "El proveedor muestra un cobro de otro importe. La cuenta sigue bloqueada; revisa la operación del proveedor antes de registrar un resultado.",
   "payments.bill.refund_pending":
     "El proveedor aún no ha completado esta devolución. La cuenta sigue bloqueada; vuelve a consultarla cuando termine.",
   "payments.bill.refund_not_found":

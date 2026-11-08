@@ -197,22 +197,6 @@ async function incidentsOf(code: string) {
   );
 }
 
-async function openMismatchIncidents() {
-  return inTx(venue, (tx) =>
-    tx
-      .select({ params: incidents.params })
-      .from(incidents)
-      .where(
-        and(
-          eq(incidents.code, "payment.bill_capture_mismatch"),
-          eq(incidents.source, "payment_check"),
-          isNull(incidents.deviceId),
-          isNull(incidents.acknowledgedAt),
-        ),
-      ),
-  );
-}
-
 /** A pending card payment whose provider row captured 30.00 against the 35.00 it was for. */
 async function mismatchedPending(billId: string, device?: { deviceId: string }): Promise<string> {
   const id = await strandedPending(billId, 3000, 500, device);
@@ -312,7 +296,6 @@ describe("recovery after a crash (design §8 test 13)", () => {
       reserved: "0.00",
     });
     expect(fiscalRecordCount(venue, billId)).toBe(0);
-    expect(await openMismatchIncidents()).toEqual([]);
   });
 
   it("records recovered actual money on two bills independently", async () => {
@@ -811,7 +794,6 @@ describe("withPendingBillPayments", () => {
         return Promise.resolve({
           received: 1,
           failed: 2,
-          mismatched: 0,
           refundsCompleted: 0,
           refundsFailed: 0,
           refundsUnresolved: 0,
@@ -832,7 +814,6 @@ describe("withPendingBillPayments", () => {
         {
           received: 1,
           failed: 2,
-          mismatched: 0,
           refundsCompleted: 0,
           refundsFailed: 0,
           refundsUnresolved: 0,
@@ -844,7 +825,6 @@ describe("withPendingBillPayments", () => {
   const passOf = (counts: Partial<BillPaymentsPass>): BillPaymentsPass => ({
     received: 0,
     failed: 0,
-    mismatched: 0,
     refundsCompleted: 0,
     refundsFailed: 0,
     refundsUnresolved: 0,
@@ -853,12 +833,12 @@ describe("withPendingBillPayments", () => {
     ...counts,
   });
 
-  it("logs nothing for a pass that only finds a capture of another amount still unresolved", async () => {
+  it("logs nothing for a pass that only finds a pending payment", async () => {
     const lines: unknown[][] = [];
     const log: Logger = (...args) => void lines.push(args);
     const pass = withPendingBillPayments(
       () => Promise.resolve(report),
-      () => Promise.resolve(passOf({ mismatched: 1, pending: 1 })),
+      () => Promise.resolve(passOf({ pending: 1 })),
       primary,
       log,
     );
@@ -903,7 +883,6 @@ describe("withPendingBillPayments", () => {
         Promise.resolve({
           received: 0,
           failed: 0,
-          mismatched: 0,
           refundsCompleted: 0,
           refundsFailed: 0,
           refundsUnresolved: 3,

@@ -107,7 +107,6 @@ function billRefusalText(error: unknown): string {
     if (reason === "attempting") return t("payments.bill.payment_attempting");
     if (reason === "unreachable") return t("payments.bill.payment_unreachable");
     if (reason === "ambiguous") return t("payments.bill.payment_ambiguous");
-    if (reason === "mismatched") return t("payments.bill.payment_mismatched");
   }
   if (code === "bill.refund_outcome_unconfirmed") {
     if (reason === "pending") return t("payments.bill.refund_pending");

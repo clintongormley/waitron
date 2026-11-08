@@ -23,3 +23,5 @@ Authority: Lane F `questions.md`, WATCHER **2026-11-08 18:04**, quotes the owner
 | External claim | Source's words | Consequence |
 | --- | --- | --- |
 | Stripe identifies the selected reader tip | [Stripe on-reader tipping, read 8 November 2026](https://docs.stripe.com/terminal/features/collecting-tips/on-reader): “On-reader tipping is enabled, tip amount selected” → “The amount selected” | Approved evidence is `amount_details.tip.amount`, matching the excess; installed stripe 23.0.1 declares it at `cjs/resources/PaymentIntents.d.ts:693`. |
+
+Watcher approval, 2026-11-08 21:28 (Lane F questions.md): keep placed/invoiced short captures; fix cancellation, reconciliation, corrected-invoice totals and retired mismatch wording using existing paths. The provider charge is saved immediately in background recovery, other payments stay blocked, and the contribution attaches at the next Pay; the next person opening the bill sees the warning. These repairs extend the files to `packages/payments/src/reconcile.ts` and its existing tests. One review fix round, then the owner lands the PR.

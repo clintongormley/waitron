@@ -63,12 +63,6 @@ it("shows every amount an alert carries with the euro sign, where each language 
       "Un pago con tarjeta de 1279,50\u00a0€ cobrado",
     ],
     [
-      "payment.bill_capture_mismatch",
-      { captured: "30.00", expected: "25.50" },
-      "charged €30.00 for a payment towards a bill that should have been €25.50.",
-      "cobró 30,00\u00a0€ por un pago a cuenta de una cuenta que debía ser de 25,50\u00a0€.",
-    ],
-    [
       "payment.bill_settle_failed",
       { amount: "12.00" },
       "A card payment of €12.00 towards",

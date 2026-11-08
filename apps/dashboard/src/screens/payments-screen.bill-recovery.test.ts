@@ -578,12 +578,6 @@ describe("bill payment recovery on the Payments screen", () => {
       "payments.bill.payment_unreachable",
     ],
     ["payment", "bill.payment_outcome_unconfirmed", "ambiguous", "payments.bill.payment_ambiguous"],
-    [
-      "payment",
-      "bill.payment_outcome_unconfirmed",
-      "mismatched",
-      "payments.bill.payment_mismatched",
-    ],
     ["refund", "bill.refund_outcome_unconfirmed", "pending", "payments.bill.refund_pending"],
     ["refund", "bill.refund_outcome_unconfirmed", "not_found", "payments.bill.refund_not_found"],
     ["refund", "bill.refund_outcome_unconfirmed", "ambiguous", "payments.bill.refund_ambiguous"],

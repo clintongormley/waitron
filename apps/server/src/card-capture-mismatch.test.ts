@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { withTransaction, workingOrders } from "@waitron/db";
+import { invoiceSeries, sales, ticketItems, withTransaction, workingOrders } from "@waitron/db";
+import { currentIncidentsOf, recordCorrection } from "@waitron/core";
+import { startManagementSession } from "@waitron/identity";
 import { computeDailyClose, currentBusinessDay } from "@waitron/reporting";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { payments } from "@waitron/payments";
+import { payments, reconcilePayments } from "@waitron/payments";
 import type { PaymentProvider } from "@waitron/payments";
 import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { recoverAutomaticCardPayments } from "./pending-card-recovery.js";
@@ -14,7 +16,7 @@ import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
 import { FakeSumUp } from "@waitron/payments-sumup/src/testing/fake-sumup.js";
-import { decimal } from "@waitron/shared";
+import { decimal, saleId, seriesId } from "@waitron/shared";
 import { getBillBalance } from "./bill-payments.js";
 import {
   provisionBillVenue,
@@ -34,15 +36,58 @@ const suite = useVenueDb({
 });
 const poll = { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() };
 
-it.each(["open", "placed", "invoiced"])(
-  "keeps a short whole-order charge on a %s bill and takes the remainder with a new reader key",
-  async (mode) => {
+it.each([
+  { mode: "open", captured: 3400, asked: "35.00", actual: "34.00", records: 0 },
+  { mode: "placed", captured: 3400, asked: "35.00", actual: "34.00", records: 0 },
+  { mode: "invoiced", captured: 3400, asked: "35.00", actual: "34.00", records: 1 },
+  { mode: "corrected", captured: 2900, asked: "30.00", actual: "29.00", records: 1 },
+])(
+  "keeps a short whole-order charge on a $mode bill and takes the remainder with a new reader key",
+  async ({ mode, captured, asked, actual: actualMoney, records }) => {
     const venue = await provisionBillVenue(suite.db);
     const id = await tabWith(venue, "Paella");
     const deps = { ...venue, admission: testTradingAdmission() };
-    if (mode === "invoiced") await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+    if (mode === "invoiced" || mode === "corrected")
+      await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+    if (mode === "corrected")
+      await withTransaction(suite.db, async (tx) => {
+        const [original] = await tx
+          .select({ id: sales.id })
+          .from(sales)
+          .where(eq(sales.workingOrderId, id));
+        const [series] = await tx
+          .select({ id: invoiceSeries.id })
+          .from(invoiceSeries)
+          .where(eq(invoiceSeries.purpose, "rectificative"));
+        const session = await startManagementSession(tx, { personId: venue.adminId });
+        await recordCorrection(tx, venue.backend, {
+          origin: venue.cfg.origin,
+          nodeId: venue.cfg.nodeId,
+          seriesId: seriesId(series!.id),
+          correctsSaleId: saleId(original!.id),
+          total: "-5.00",
+          lines: [
+            {
+              lineNo: 1,
+              name: "Price correction",
+              descriptions: { "es-ES": "Price correction" },
+              quantity: "-1",
+              unitPrice: "4.13",
+              lineTotal: "-4.13",
+              vatRate: "21.00",
+            },
+          ],
+          authz: { managementSessionId: session.token },
+          clock: venue.clock,
+        });
+      });
     if (mode !== "open") await placeOrder(deps, venue.cfg, id, venue.operatorId);
-    let actual = 3400;
+    const sentDishes = await suite.db
+      .select({ id: ticketItems.id })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, id));
+    if (mode !== "open") expect(sentDishes).toHaveLength(1);
+    let actual = captured;
     const client = new FakeStripe();
     const read = client.retrievePaymentIntent.bind(client);
     vi.spyOn(client, "retrievePaymentIntent").mockImplementation(async (ref) => ({
@@ -66,14 +111,57 @@ it.each(["open", "placed", "invoiced"])(
     expect(taken.status).toBe(200);
     expect(taken.json).toMatchObject({
       outcome: "partial",
-      balance: { received: "34.00", outstanding: "1.00" },
-      captureWarning: { requestedAmount: "35.00", reportedAmount: "34.00" },
+      balance: { received: actualMoney, outstanding: "1.00" },
+      captureWarning: { requestedAmount: asked, reportedAmount: actualMoney },
     });
+    const [provided] = await suite.db
+      .select()
+      .from(payments)
+      .where(eq(payments.workingOrderId, id));
+    const reverse = vi.fn(async () => {});
+    const checked = await reconcilePayments(
+      {
+        db: suite.db,
+        provider: "stripe",
+        settlementLagMs: 0,
+        report: {
+          fetch: async () => [
+            {
+              references: [provided!.externalRef!],
+              amount: decimal(actualMoney),
+              settledAt: new Date(provided!.settledAt!),
+            },
+          ],
+        },
+        reverse,
+        incidents: captureAlerts.raise,
+        heldAlerts: { ...captureAlerts, current: currentIncidentsOf },
+      },
+      {
+        from: new Date(Date.parse(provided!.settledAt!) - 1000),
+        to: new Date(Date.parse(provided!.settledAt!) + 1000),
+      },
+      venue.clock.now().instant,
+    );
+    expect(checked.orphan).toEqual([]);
+    expect(reverse).not.toHaveBeenCalled();
+    if (mode !== "open") {
+      const cancelled = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${id}/cancel`,
+        { reason: "Guest changed their mind", override: { personId: venue.adminId, pin: "1234" } },
+      );
+      expect(cancelled.json).toMatchObject({ code: "bill.payments_received" });
+      expect(cancelled.status).toBe(409);
+    }
     expect(await statusOf(venue, id)).toBe(mode === "open" ? "open" : "placed");
-    expect(fiscalRecordCount(venue, id)).toBe(mode === "invoiced" ? 1 : 0);
+    expect(fiscalRecordCount(venue, id)).toBe(records);
     expect(await getBillBalance(venue, id)).toMatchObject({
-      received: "34.00",
+      received: actualMoney,
       outstanding: "1.00",
+      captureWarning: { requestedAmount: asked, reportedAmount: actualMoney },
     });
     const replay = await send(venue.app, venue.cookie, "POST", "/api/pay", {
       id,
@@ -83,14 +171,14 @@ it.each(["open", "placed", "invoiced"])(
     expect(replay.status).toBe(200);
     expect(replay.json).toMatchObject({
       outcome: "partial",
-      balance: { received: "34.00", outstanding: "1.00" },
-      captureWarning: { requestedAmount: "35.00", reportedAmount: "34.00" },
+      balance: { received: actualMoney, outstanding: "1.00" },
+      captureWarning: { requestedAmount: asked, reportedAmount: actualMoney },
     });
     expect(create).toHaveBeenCalledOnce();
     const report = () =>
       withTransaction(suite.db, (tx) =>
         computeDailyClose(tx, {
-          nodeId: venue.cfg.nodeId,
+          nodeIds: [venue.cfg.nodeId],
           cutoverChanges: [],
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
@@ -101,7 +189,7 @@ it.each(["open", "placed", "invoiced"])(
           }),
         }),
       );
-    expect((await report()).cash).toMatchObject({ tenderTotal: "34.00", tipTotal: "0.00" });
+    expect((await report()).cash).toMatchObject({ tenderTotal: actualMoney, tipTotal: "0.00" });
     const [order] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id));
     expect(order!.paymentAttemptAt).toBeNull();
     actual = 100;
@@ -116,15 +204,22 @@ it.each(["open", "placed", "invoiced"])(
     });
     expect(rest.status).toBe(200);
     expect(rest.json).toMatchObject({
-      balance: { status: "settled", received: "35.00", outstanding: "0.00" },
+      balance: { status: "settled", received: asked, outstanding: "0.00" },
     });
+    if (mode !== "open")
+      expect(
+        await suite.db
+          .select({ id: ticketItems.id })
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, id)),
+      ).toEqual(sentDishes);
     expect(create).toHaveBeenCalledTimes(2);
     expect(create.mock.calls[0]![0].idempotencyKey).not.toBe(
       create.mock.calls[1]![0].idempotencyKey,
     );
-    expect(fiscalRecordCount(venue, id)).toBe(1);
-    expect((await tendersOfBill(venue, id)).map((row) => row.amount)).toEqual([3400, 100]);
-    expect((await report()).cash).toMatchObject({ tenderTotal: "35.00", tipTotal: "0.00" });
+    expect(fiscalRecordCount(venue, id)).toBe(Math.max(1, records));
+    expect((await tendersOfBill(venue, id)).map((row) => row.amount)).toEqual([captured, 100]);
+    expect((await report()).cash).toMatchObject({ tenderTotal: asked, tipTotal: "0.00" });
   },
 );
 
@@ -266,6 +361,20 @@ it("retains a short capture after a lost reader answer and warns the next operat
   ).toEqual({ filed: 0, errors: [] });
   expect(await statusOf(venue, id)).toBe("open");
   expect(fiscalRecordCount(venue, id)).toBe(0);
+  const [unattached] = await suite.db
+    .select({ billPaymentId: payments.billPaymentId })
+    .from(payments)
+    .where(eq(payments.workingOrderId, id));
+  expect(unattached).toEqual({ billPaymentId: null });
+  expect(await getBillBalance(venue, id)).toMatchObject({
+    captureWarning: { requestedAmount: "35.00", reportedAmount: "34.00" },
+  });
+  const [waiting] = await suite.db
+    .select({ mark: workingOrders.paymentAttemptAt })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, id));
+  expect(waiting!.mark).not.toBeNull();
+
   expect(
     await suite.db
       .select({ amount: payments.amount, requested: payments.requestedAmount })

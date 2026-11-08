@@ -164,7 +164,11 @@ export function classify(
       continue;
     }
 
-    if (row.saleId === null && row.workingOrderStatus !== "open") {
+    if (
+      row.saleId === null &&
+      row.workingOrderStatus !== "open" &&
+      row.workingOrderStatus !== "placed"
+    ) {
       out.push({ klass: "orphan", row, settled: settled ?? null });
     }
     if (settled === undefined) {

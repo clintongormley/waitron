@@ -7424,9 +7424,8 @@ async function cancelPlaced(
     const invoice = await readOrderInvoice(tx, id);
     if (invoice !== undefined) {
       await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
-      // Before the in-flight check, so the answer names the money already on the bill.
-      await refuseBillWithPayments(tx, id);
     }
+    await refuseBillWithPayments(tx, id);
     // A placed order's card collection writes no mark, and its provider may write no payment row
     // until the card resolves, so only this process's own record of the attempt shows it.
     if (paymentAttemptIsLive(deps.db, id) || (await ordersWithUnfiledPayment(tx, [id])).has(id)) {
