@@ -1,3 +1,9 @@
+> **2026-11-08: A1321 design pending OWNER approval.**
+> [Retire a dead or reset spare](../specs/2026-11-08-a1321-retire-spare-design.md) already tracks
+> D17/Task 6.10's proposed backlog filing; do not create a duplicate. Its build waits for 3b-6
+> and full-design approval. Once built, its dated update must cover D17, G.3's EN/ES recovery
+> wording and Task 6.10's guide limitation. The historical plan below remains unchanged.
+
 # A947 slice 3b — the spare hosts the store, and joining brings the data — Implementation Plan (revision 4)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development

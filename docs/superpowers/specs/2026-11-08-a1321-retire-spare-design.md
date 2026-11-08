@@ -1,63 +1,61 @@
 # A1321: retire a dead or reset spare
 
-**2026-11-08: proposal for OWNER APPROVAL. No build approval.**
+When a joined spare dies or is reset, you should be able to remove it from Servers so the main
+box stops waiting for it at later starts. Extend **Remove / Retirar** with two declarations.
+Keep the old box's data and fiscal originals; notification of an offline machine is unclaimed.
 
-Authority: `/Users/clintongormley/waitron-campaign-k/queue.md`, A1321:
-“Retire a dead or reset spare from the Servers screen, so the main box stops waiting for it
-— DESIGN FIRST, then BUILD”. It records the owner's 2026-11-04 “Yes, before go-live”
-(entry added about 06:15). `/Users/clintongormley/waitron-campaign-k/questions.md`, watcher,
-2026-11-07 21:59: “write the design now (docs only, Claude read, bring it to me past one page).
-The build waits for A947 slice 3b-6, as the item says.” Product approval remains yours.
+**2026-11-08: full design awaits OWNER approval. Build waits for A947 3b-6. No implementation plan.**
 
-**Grounding, read-only observations at `aedb0c8f0d`; no runtime verification.**
-`apps/server/src/membership-removal.ts:71` refuses a joined secondary with
-`membership.standby_joined`; `apps/server/src/boot-peer-check.ts:130` selects active peers and
-counts joined ones. The real join and its dead-spare limit belong to the **unbuilt**
-[A947 3b plan](../plans/2026-11-04-a947-3b-spare-hosts-store.md), D17 and Tasks 6/G.
+Authority, quoted for the review reader:
 
-**Proposed interaction.** Extend the existing Servers Remove action/dialog for a joined spare.
-Name its address and machine id; explain that future starts will stop waiting for it and that its
-copy will stop receiving updates. Require fresh `node.promote` authorization alongside existing
-`mirror.create`, using password and the enrolled second factor, with sign-in offered inline.
-Require both Carry on declarations: this spare is switched off; no other recovery is in progress.
-Offer **Stop**, which changes nothing, and **Retire spare**, disabled until complete.
-If the main box is waiting, use existing Carry on first, then Servers.
+- Lane K `/Users/clintongormley/waitron-campaign-k/queue.md`, A1321, OWNER 2026-11-04:
+  “Yes, before go-live”. This approves the need, not this full design.
+- `/Users/clintongormley/waitron-campaign-k/questions.md`, WATCHER 2026-11-07 21:59:
+  “write the design now (docs only, Claude read, bring it to me past one page). The build waits
+  for A947 slice 3b-6, as the item says.”
+- Same file, WATCHER 2026-11-08 02:33: “extend the existing Remove to a joined serving-secondary,
+  both declarations checked on the server”; “Retiring requires exactly what the existing Remove
+  action requires today”. The reduced scope below follows that answer.
+- Same file, OWNER relayed 2026-11-07 22:51, A1002 item 5: “node.promote stays merged with
+  node.manage, as accepted on 28 October; do not split them again.”
 
-**Proposed saved change.** Recheck the main box, target, expected chart term and handover state
-under the write locks. Refuse a known former selling box or an unfinished handover endpoint.
-Sign the next chart with the spare `evicted`, retaining previous revoked ids. Keep its Removed
-row until existing Clear moves its id to `revoked`; never simply forget it. Retain its `nodes`
-row/key and all fiscal data. Reuse the removal audit and Carry on's `node_handover_events`
-storage for actor, target, term and declarations. Save the venue change first, then clear only
-the matching A947 pair link and reload the stream, with retry repairing interrupted node writes.
+**SOURCE READ ONLY at `e0e4f5b8fd`; no runtime verification.** `apps/server/src/membership-removal.ts:43-52,71-74`
+checks local node rows and explicitly cannot establish completed remote adoption today.
+`membership-removal-api.ts:45-52` authorizes the existing session; `boot-peer-check.ts:130-138`
+skips evicted peers. `apps/dashboard/src/screens/servers-screen.ts:264-266` uses server eligibility.
+[A947 D17/G/Task 6.10](../plans/2026-11-04-a947-3b-spare-hosts-store.md) describe the unbuilt join
+and dead-spare limit. These are not working joined-spare removal receipts.
+
+**Proposed interaction.** Explain the joined spare in the existing dialog, naming address and
+machine id. Require “This spare is switched off” and “No other recovery is in progress”. Keep
+Remove disabled until both are checked; **Stop / Parar** changes nothing. Use the existing
+administrator session with `node.manage`, following A1002, without another password or second-factor
+form. [A1002's document](2026-10-22-a1002-custom-roles-design.md) still says separate promotion;
+the newer recorded answer governs here.
+When the main is waiting, use existing Carry on first, then Servers; add no waiting-page flow.
+
+**Proposed saved change.** Under the write locks, check both declarations, expected chart term,
+main-box authority and target. A current `serving-secondary` is eligible even if it once sold;
+refuse current `serving-primary`/`sell-only` targets and unfinished handovers involving it.
+Existing handover recovery is prerequisite: removal neither cancels nor bypasses it.
+Sign the next chart with the target `evicted`; retain its Removed row until existing Clear moves
+the id to `revoked`. Reuse the existing removal audit (`membership-removal.ts:266`) in the chart
+transaction, with no new record/table. Keep node data and fiscal originals. Save the venue change
+first, then clear only the matching pair link; retries repair interruption without broader deletion.
 A replacement joins normally with a fresh id.
 
-**Proposed return path.** Eviction does not deliver a message. Today signed peer queries use
-`peerKeyOf` (`apps/server/src/peer-status-api.ts:103`), which rejects evicted/revoked keys
-(`packages/membership/src/verify.ts:163`); mirror starts also skip the peer check
-(`apps/server/src/boot.ts:1834`). Add a chart-only exception on existing peer-status: verify a
-retired requester's retained joined-node key, return only the signed chart in the existing status
-envelope with its nonce, and grant no handover access; keep `peerKeyOf` restrictive elsewhere.
-Check on spare start and before promotion; accept only a verified newer chart.
-Learned eviction keeps the box read-only and bars promotion or automatic
-rejoin. Lost local identity keeps A947 G's refusal. This changes a fiscal start step: **the owner
-lands the build**, after 3b-6.
+**Return boundary.** Existing mirror/promotion rules continue. Delivery to an offline old box is
+unclaimed; add no retired-key trust exception, start check, proof system or future takeover work.
+Preserve [A1018 fiscal-return/archive gates](2026-10-23-a1018-simple-handover-design.md#5-point-3-fiscal-only-return-with-a-visible-business-gap)
+and [A1308 U5's kept second-box path](2026-11-02-rationalisation/README.md#5-decisions-made-across-the-areas).
+Removal grants no permission to wipe a past-selling disk.
 
-Keep [A1308 U5](2026-11-02-rationalisation/README.md#5-decisions-made-across-the-areas)'s retained
-second-box path and [A1018 §5](2026-10-23-a1018-simple-handover-design.md#5-point-3-fiscal-only-return-with-a-visible-business-gap)'s
-fiscal return/archive gates. Retirement grants no permission to wipe a past selling box.
-No message stops an isolated old copy: the same switched-off/no-parallel-recovery human
-declaration boundary applies.
+**Build acceptance.** Restart no longer counts that id; missing declarations, stale term and
+unfinished handovers refuse without changes; Stop changes nothing. Cover once-selling spares,
+retries, fresh replacement ids and preserved fiscal originals. Update
+`apps/server/src/guide/{en,es}/servers.md` with shared `{#retire-spare}`; revise EN/ES
+`membership.standby_joined` error and A947 G recovery wording.
+The dated A947 pointer replaces D17/Task 6.10's duplicate backlog filing; once built, update those
+behavior descriptions through a dated pointer, preserving historical text.
 
-Update `apps/server/src/guide/{en,es}/servers.md`: shared `{#retire-spare}`, declarations,
-Carry on first when waiting, replacement joining, and preservation of old selling disks.
-
-**Behavioral acceptance:**
-
-- Retirement survives restart; the main no longer waits for that id.
-- Stop, missing declarations, stale charts and competing handovers change nothing.
-- Returning/cleared ids learn eviction; unknown keys gain no access; offline delivery is unclaimed.
-- Retry preserves the audit, replacement admission and A1018 fiscal return.
-
-**Owner question:** approve these proposed defaults, including the restricted chart read and
-owner-landed start change, for planning with build held until 3b-6?
+**Owner question:** approve this reduced design for planning, with build held until A947 3b-6?

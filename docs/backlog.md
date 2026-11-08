@@ -2045,7 +2045,8 @@ outstanding on code that exists.
 
 - **A1321. Retire a dead or reset spare from Servers.** The
   [one-page proposal](superpowers/specs/2026-11-08-a1321-retire-spare-design.md) awaits owner approval;
-  build waits for A947 3b-6 and its proposed start change is owner-landed.
+  reduced scope extends Remove with server-checked declarations and the existing audit.
+  Build waits for A947 3b-6; no new start check or returning-key trust path.
   [Detail](backlog/replication-cloud.md#a1321-retire-a-dead-or-reset-spare-from-servers)
 
 - **A947. Go-live on two local boxes.** The owner approved the revised design. Slice 3b's build

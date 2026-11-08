@@ -1090,10 +1090,14 @@ mirror's copy was found (not exhaustive). [Design §7.2](../superpowers/specs/20
 
 Wanted before go-live (owner, 2026-11-04). The
 [one-page proposal](../superpowers/specs/2026-11-08-a1321-retire-spare-design.md) awaits owner
-approval, including its permission and returning-box defaults. It proposes the existing signed
-evicted/revoked chart, switched-off/no-parallel-recovery declarations in the Servers dialog,
-retained audit/data, and a restricted chart read for returning retired boxes. Build waits for
-A947 3b-6; the proposed fiscal start change requires the owner to land it. No build approval.
+approval. WATCHER 2026-11-08 02:33 settles the reduced scope: extend Remove / Retirar to a joined
+serving-secondary, including one that once sold, with both declarations checked on the server,
+the existing chart-transaction audit and only the matching pair link cleared. Use the existing
+administrator session and A1002's `node.manage`, governed by the newer OWNER answer relayed
+2026-11-07 22:51. Keep fiscal originals and existing handover recovery/return/archive gates;
+add no returning-key trust path, spare-start check or second audit write. Include EN/ES guide,
+error and recovery wording. The dated A947 pointer replaces its duplicate backlog filing.
+Build waits for A947 3b-6 and full-design approval. No build approval.
 
 ## A947. Go-live on two local boxes
 
