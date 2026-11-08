@@ -527,7 +527,7 @@ export async function resumeCardRefund(
       age >= 0 &&
       age < window
     ) {
-      const resent = await sendCardRefund(deps, provider, refundId, raisedBy, refused);
+      const resent = await sendCardRefund(deps, provider, refundId, raisedBy);
       return { claimed: true, refund: resent, lookup, resent: true };
     }
     const settled = await recordRefundOutcome(deps, refundId, { kind: "lookup", lookup }, raisedBy);

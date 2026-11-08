@@ -405,7 +405,7 @@ async function resolve(
     age < window &&
     !expired()
   )
-    return send(deps, provider, refund, expired, signal, refused);
+    return send(deps, provider, refund, expired, signal);
   return recordOutcome(deps, refund.id, { kind: "lookup", lookup: found }, signal);
 }
 

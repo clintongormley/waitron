@@ -51,7 +51,12 @@ import {
   MANUAL_PROVIDER,
   recordManualCardPayment,
 } from "@waitron/payments";
-import type { PaymentProvider, PaymentResult, PaymentResultState } from "@waitron/payments";
+import type {
+  PaymentProvider,
+  PaymentResult,
+  PaymentResultState,
+  RefundRefusalReason,
+} from "@waitron/payments";
 import {
   cashChange,
   confirmAllocation,
@@ -163,7 +168,7 @@ export interface BillPaymentRequest extends BillPaymentAsk {
 
 /** Money given back from one bill payment before the invoice. */
 export interface BillRefundView {
-  refusalReason?: import("@waitron/payments").RefundRefusalReason;
+  refusalReason?: RefundRefusalReason;
   id: string;
   paymentId: string;
   submissionId: string;

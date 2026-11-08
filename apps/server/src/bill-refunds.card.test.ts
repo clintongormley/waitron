@@ -714,6 +714,7 @@ describe("design §8 test 20: the call's own answer, and which answers settle wh
     ["new", false, false],
     ["resend", true, false],
     ["generic", true, false],
+    ["clock stop", true, false],
   ] as const)(
     "temporary balance explanation: %s, documented %s",
     async (entry, documented, notice) => {
@@ -748,9 +749,33 @@ describe("design §8 test 20: the call's own answer, and which answers settle wh
           ...(entry === "generic" ? {} : { reason: "provider_balance_unavailable" as const }),
         },
       });
-      const asked = await refund(billId, card.id, { applied: "5.00", submissionId });
+      const sent = venue.card.sendRefund.bind(venue.card);
+      const sendSpy =
+        entry !== "clock stop"
+          ? null
+          : vi.spyOn(venue.card, "sendRefund").mockImplementation(async (request) => {
+              const answer = await sent(request);
+              vi.spyOn(venue.backend, "clockBehindLatestRecord").mockResolvedValue({
+                clockAt: "2026-11-08T10:00:00.000Z",
+                offsetMinutes: 0,
+                lastRecordAt: "2026-11-08T10:02:00.000Z",
+                lastRecordOffsetMinutes: 0,
+              });
+              return answer;
+            });
+      let asked: Awaited<ReturnType<typeof refund>>;
+      try {
+        asked = await refund(billId, card.id, { applied: "5.00", submissionId });
+      } finally {
+        if (sendSpy !== null) {
+          sendSpy.mockRestore();
+          vi.mocked(venue.backend.clockBehindLatestRecord).mockRestore();
+        }
+      }
       const view = asked.answer.json.refund as Record<string, unknown>;
-      expect(view.state).toBe(documented && entry !== "resend" ? "failed" : "pending");
+      expect(view.state).toBe(
+        documented && entry !== "resend" && entry !== "clock stop" ? "failed" : "pending",
+      );
       expect(view.refusalReason).toBe(notice ? "provider_balance_unavailable" : undefined);
       expect(await onlyRefundOf(card.id)).toMatchObject({
         appliedAmount: 500,

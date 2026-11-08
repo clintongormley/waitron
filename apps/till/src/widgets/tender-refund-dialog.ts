@@ -424,6 +424,14 @@ export class TillTenderRefundDialog extends LitElement {
       >${error ? html`<p class="error" data-confirm-error role="alert">${error}</p>` : nothing}`;
   }
   #body() {
+    const outcome =
+      this.result === null
+        ? ""
+        : t(`tender_refund.${this.result.state}`) +
+          (this.result.state === "failed" &&
+          this.result.refusalReason === "provider_balance_unavailable"
+            ? ` ${t("refund.provider_balance_unavailable")}`
+            : "");
     const own = this.attempted && !this.#locked() ? this.#errors() : new Map<Field, string>();
     const errors = new Map(own);
     const refused = this.#refusalField();
@@ -493,9 +501,7 @@ export class TillTenderRefundDialog extends LitElement {
       }
       ${
         this.result
-          ? html`<p data-outcome role="status">
-                ${t(`tender_refund.${this.result.state}`)}${this.result.state === "failed" && this.result.refusalReason === "provider_balance_unavailable" ? ` ${t("refund.provider_balance_unavailable")}` : ""}
-              </p>
+          ? html`<p data-outcome role="status">${outcome}</p>
               <p>${this.#money(moneyPlus(this.result.appliedAmount, this.result.tipAmount))}</p>`
           : selected || this.attempt
             ? html`

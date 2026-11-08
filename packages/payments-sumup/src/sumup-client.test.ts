@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
+import { getEventListeners } from "node:events";
 import type { AddressInfo } from "node:net";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { decimal, hasCode, isAppError } from "@waitron/shared";
 import type { AppError } from "@waitron/shared";
 import type { SumUpClient } from "./client.js";
@@ -618,6 +619,8 @@ describe("sumupClient sendRefund", () => {
 
     it.each([
       ["a different problem", 409, JSON.stringify({ detail: "Refund already exists" })],
+      ["a longer explanation", 409, JSON.stringify({ detail: detail + " later" })],
+      ["a bare prefix", 409, JSON.stringify({ detail: "Not enough" })],
       ["another status", 422, JSON.stringify({ detail })],
       ["an array", 409, JSON.stringify([{ detail }])],
       ["a null body", 409, "null"],
@@ -642,7 +645,7 @@ describe("sumupClient sendRefund", () => {
         8_000,
       );
       expect(answer).toEqual({ httpStatus: 409 });
-      expect(performance.now() - started).toBeLessThan(5_000);
+      expect(performance.now() - started).toBeLessThan(3_500);
     }, 15_000);
 
     it("retains a known 409 after the real response body is truncated", async () => {
@@ -664,7 +667,54 @@ describe("sumupClient sendRefund", () => {
       expect(answer).toEqual({ httpStatus: 409 });
     });
 
-    it.each(["absent", "locked", "invalid UTF-8", "cancel rejects", "aborted before body"])(
+    it.each([
+      [4096, true],
+      [4097, false],
+    ] as const)("accepts explanation at %i bytes: %s", async (bytes, recognised) => {
+      const empty = JSON.stringify({ detail, padding: "" });
+      const body = JSON.stringify({
+        detail,
+        padding: "x".repeat(bytes - Buffer.byteLength(empty)),
+      });
+      expect(Buffer.byteLength(body)).toBe(bytes);
+      const answer = await againstServer(
+        (_req, res) => res.writeHead(409).end(body),
+        (client) => client.sendRefund({ transactionId: "t", amount: decimal("1.00") }),
+      );
+      expect(answer).toEqual(
+        recognised
+          ? { httpStatus: 409, reason: "provider_balance_unavailable" }
+          : { httpStatus: 409 },
+      );
+    });
+
+    it.each([409, 422])("cancels an unread or oversized real %i body", async (status) => {
+      let closed = false;
+      await againstServer(
+        (_req, res) => {
+          res.on("close", () => {
+            closed = true;
+          });
+          res.writeHead(status);
+          res.write("x".repeat(4097));
+        },
+        async (client) => {
+          expect(await client.sendRefund({ transactionId: "t", amount: decimal("1.00") })).toEqual({
+            httpStatus: status,
+          });
+          await vi.waitFor(() => expect(closed).toBe(true));
+        },
+      );
+    });
+
+    it.each([
+      "absent",
+      "locked",
+      "invalid UTF-8",
+      "cancel rejects",
+      "aborted before body",
+      "never finishes",
+    ])(
       "keeps a known refusal with optional body %s",
       async (shape) => {
         const body =
@@ -672,13 +722,21 @@ describe("sumupClient sendRefund", () => {
             ? null
             : new ReadableStream<Uint8Array>({
                 start(controller) {
-                  controller.enqueue(
-                    new TextEncoder().encode(
-                      shape === "cancel rejects" ? "x".repeat(4097) : JSON.stringify({ detail }),
-                    ),
-                  );
-                  if (shape === "invalid UTF-8") controller.enqueue(new Uint8Array([255]));
-                  if (shape !== "cancel rejects") controller.close();
+                  if (shape === "invalid UTF-8") {
+                    controller.enqueue(
+                      new TextEncoder().encode(
+                        JSON.stringify({ detail, padding: "bad" }).replace('bad"', ""),
+                      ),
+                    );
+                    controller.enqueue(new Uint8Array([255]));
+                    controller.enqueue(new TextEncoder().encode('"}'));
+                  } else
+                    controller.enqueue(
+                      new TextEncoder().encode(
+                        shape === "cancel rejects" ? "x".repeat(4097) : JSON.stringify({ detail }),
+                      ),
+                    );
+                  if (shape !== "cancel rejects" && shape !== "never finishes") controller.close();
                 },
                 cancel() {
                   if (shape === "cancel rejects") throw new Error("cancel failed");
@@ -704,7 +762,32 @@ describe("sumupClient sendRefund", () => {
           lock?.releaseLock();
         }
       },
+      5_000,
     );
+
+    it("leaves no abort listener or active deadline after reading the explanation", async () => {
+      let signal!: AbortSignal;
+      vi.useFakeTimers();
+      try {
+        const client = sumupClient({
+          apiKey: "k",
+          merchantCode: "MC",
+          fetch: async (_url, init) => {
+            signal = init!.signal!;
+            return new Response(JSON.stringify({ detail }), { status: 409 });
+          },
+        });
+        expect(await client.sendRefund({ transactionId: "t", amount: decimal("1.00") })).toEqual({
+          httpStatus: 409,
+          reason: "provider_balance_unavailable",
+        });
+        expect(getEventListeners(signal, "abort")).toHaveLength(0);
+        await vi.advanceTimersByTimeAsync(20_000);
+        expect(signal.aborted).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it.each([
