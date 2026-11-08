@@ -59,12 +59,7 @@ export async function mountReceiptApp(
     respond?: (path: string, init: RequestInit) => Promise<Response> | undefined;
   } = {},
 ) {
-  const permissions = options.permissions ?? [
-    "venue.configure",
-    "venue.configure",
-    "venue.configure",
-    "venue.view",
-  ];
+  const permissions = options.permissions ?? ["venue.configure", "venue.view"];
   history.replaceState(
     null,
     "",
@@ -107,6 +102,14 @@ export async function mountReceiptApp(
       },
       "/management-api/google/config": { configured: false },
       "/api/content-languages": { defaultLanguage: "es", languages: ["es", "ca"] },
+      "/management-api/reports/overdue-orders": { orders: [] },
+      "/management-api/reports/overview": {
+        businessDay: "2026-08-30",
+        takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
+        counts: { sales: 0, corrections: 0, voids: 0 },
+        openTables: { open: 0, total: 0 },
+        topSellers: [],
+      },
       "/management-api/venue-service": model,
       "/management-api/receipt-preview": preview(),
       "/management-api/receipt": { receipt: {}, venueAddress: [] },

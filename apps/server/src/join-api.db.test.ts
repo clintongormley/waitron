@@ -431,7 +431,7 @@ describe("GET /management-api/join-requests", () => {
     ]);
   });
 
-  it("lists the print_agent kind under hardware.manage, not hardware.manage", async () => {
+  it("lists only the requested print_agent kind for a hardware manager", async () => {
     const venue = await setupVenue(suite.db);
     const { app } = openApp(venue.cfg);
     const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });

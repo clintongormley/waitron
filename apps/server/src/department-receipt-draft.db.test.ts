@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, tenants, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { contentLanguages } from "@waitron/catalogue";
-import { persons, startManagementSession, registerModulePermissions } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { type DepartmentReceiptWrite } from "@waitron/shared";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
@@ -18,15 +18,8 @@ const suite = useVenueDb({
 const fiscal = ALL_MODULES.find((module) => module.fiscal?.venueFields !== undefined)!.fiscal!
   .venueFields!;
 const policy = { receiptPrintMode: "auto", printTradingName: true } as const;
-afterEach(() => {
-  registerModulePermissions([{ permission: "venue.configure", grantedFrom: "manager" }]);
-});
 
-async function fixture(
-  role: "manager" | "staff" = "manager",
-  managementFloor: "manager" | "admin" = "manager",
-) {
-  registerModulePermissions([{ permission: "venue.configure", grantedFrom: managementFloor }]);
+async function fixture(role: "manager" | "staff" = "manager") {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Venue SL" })
@@ -121,8 +114,8 @@ describe("checked department receipt write", () => {
       expect(printed.receipt.footerMessage).toEqual({ "eu-ES": "Eskerrik asko" });
     });
   });
-  it("allows decoration editing without the service-policy permission when both policies are unchanged", async () => {
-    const f = await fixture("manager", "admin");
+  it("allows decoration editing with venue permission when both policies are unchanged", async () => {
+    const f = await fixture();
     await save(f, body());
     expect((await suite.db.select().from(departmentReceipts))[0]!.receipt).toEqual({
       operationDescription: "Deli meals",
@@ -135,7 +128,7 @@ describe("checked department receipt write", () => {
   ] as const)(
     "refuses changed policy %j without its permission and leaves both rows unchanged",
     async (changed) => {
-      const f = await fixture("manager", "admin");
+      const f = await fixture("staff");
       const before = await suite.db.select().from(departmentReceipts);
       await expect(save(f, body({ policy: changed }))).rejects.toMatchObject({
         code: "authorization.not_permitted",
@@ -162,9 +155,10 @@ describe("checked department receipt write", () => {
     expect(await suite.db.select().from(departmentReceipts)).toEqual(before);
     expect((await suite.db.select().from(departmentSalePolicies))[0]).toMatchObject(policy);
   });
-  it("checks the policy currently stored rather than the earlier read's policy", async () => {
-    const f = await fixture("manager", "admin");
+  it("preserves the current policy when venue permission is lost after an earlier read", async () => {
+    const f = await fixture();
     await check(f, body());
+    await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, f.personId));
     await suite.db
       .update(departmentSalePolicies)
       .set({ printTradingName: false })
@@ -229,7 +223,7 @@ describe("checked department receipt write", () => {
       params: { departmentId: f.departmentId },
     });
   });
-  it("requires layout permission before returning a draft", async () => {
+  it("requires venue permission before returning a draft", async () => {
     const f = await fixture("staff");
     await expect(check(f, body())).rejects.toMatchObject({
       code: "authorization.not_permitted",

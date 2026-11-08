@@ -2981,7 +2981,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     },
   );
 
-  it("the reader section is absent without the payments permission", async () => {
+  it("the reader section is absent without the hardware permission", async () => {
     const notPermitted = { code: "authorization.not_permitted" };
     const { api, el } = await editListed({
       getProfileReaders: vi.fn().mockRejectedValue(notPermitted),
@@ -3196,7 +3196,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
 
   it.each([
     [
-      "without the payments permission",
+      "without the hardware permission",
       vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
     ],
     [

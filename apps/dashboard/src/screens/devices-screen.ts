@@ -1270,7 +1270,6 @@ export class DevicesScreen extends LitElement {
     if (this.canManageReaders) void this.#loadReader(device, epoch);
   }
 
-  /** The reader is the payments module's, under its own permission: without it the field is gone. */
   async #loadReader(device: DeviceRow, epoch: number): Promise<void> {
     const profileId = device.deviceProfileId;
     try {

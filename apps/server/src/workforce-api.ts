@@ -32,8 +32,6 @@ export interface WorkforceApiDeps {
   cfg: { nodeId: string };
 }
 
-/** `schedule.manage` gates the roster read/write group and planned-vs-actual; `schedule.manage` /
- * `schedule.manage` gate the two approval queues. */
 const SCHEDULE_PERMISSION: Permission = "schedule.manage";
 const SWAP_APPROVE_PERMISSION: Permission = "schedule.manage";
 const ABSENCE_DECIDE_PERMISSION: Permission = "schedule.manage";

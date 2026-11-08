@@ -876,7 +876,6 @@ it.each([
             "venue.configure",
             "product.manage",
             "venue.configure",
-            "venue.configure",
             "hardware.manage",
           ],
           modules: ["media", "venue-service"],

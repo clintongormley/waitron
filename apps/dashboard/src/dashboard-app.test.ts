@@ -7525,6 +7525,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(items("operations")).toEqual([
       "nav-venue-operations",
       "nav-prep-stations",
+      "nav-floor-plans",
       "nav-opening-hours",
       "nav-venue-settings",
     ]);
@@ -9014,7 +9015,6 @@ describe("mounted public department dialogs", () => {
       "venue.configure",
       "venue.view",
       "venue.configure",
-      "venue.configure",
     ]);
     const box = await draft(app);
     void navigationGuardFor(window)!.write("/manage/venue-operations/department/d1/view/receipt");
@@ -9099,7 +9099,7 @@ describe("mounted public department dialogs", () => {
   it.each(["d1", "d2"])("Receipt opens the authoritative live department %s", async (id) => {
     const app = await mountDepartments(
       `/manage/venue-operations/department/${id}/view/receipt?departmentId=d1`,
-      ["venue.configure", "venue.configure"],
+      ["venue.configure"],
       false,
       true,
     );
@@ -9124,7 +9124,6 @@ describe("mounted public department dialogs", () => {
     "the Receipts tab's %s Keeps then Discards one draft and returns to the list",
     async (destination) => {
       const app = await mountDepartments("/manage/venue-operations/department/d1/view/receipt", [
-        "venue.configure",
         "venue.configure",
       ]);
       await expect.poll(() => find(app, 'wt-input[name="email"]')).not.toBeNull();
@@ -9154,7 +9153,6 @@ describe("mounted public department dialogs", () => {
   it("a missing department Receipt URL does not borrow another department", async () => {
     const app = await mountDepartments("/manage/venue-operations/department/gone/view/receipt", [
       "venue.configure",
-      "venue.configure",
     ]);
     expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
     expect(
@@ -9162,20 +9160,15 @@ describe("mounted public department dialogs", () => {
         .textContent,
     ).toBe("This department no longer exists.");
   });
-  it("the department dialog offers no Receipts tab when the host cannot offer Receipt", async () => {
-    const app = await mountDepartments("/manage/venue-operations/department/d1", [
-      "venue.configure",
-      "venue.view",
-      "venue.configure",
-    ]);
-    const form = find(app, "department-settings")!;
-    expect(form).not.toBeNull();
-    const strip = form.shadowRoot!.querySelector("wt-tabs")!;
-    expect(strip.items.map(({ key }) => key)).not.toContain("receipt");
+  it("the department dialog and Receipts tab need venue permission", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1", ["venue.view"]);
+    expect(find(app, "department-settings")).toBeNull();
+    expect(find(app, "dashboard-overview-screen")).not.toBeNull();
+    expect(find(app, 'button[data-key="receipt"]')).toBeNull();
     expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
   });
-  it.each([["venue.configure"], ["venue.configure"], []])(
-    "a Receipt deep link cannot bypass either permission: %j",
+  it.each([["venue.view"], ["booking.manage"], []])(
+    "a Receipt deep link cannot bypass venue permission: %j",
     async (...permissions) => {
       const app = await mountDepartments(
         "/manage/venue-operations/department/d1/view/receipt",
@@ -9183,10 +9176,8 @@ describe("mounted public department dialogs", () => {
       );
       expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
       expect(find(app, 'button[data-key="receipt"]')).toBeNull();
-      if (permissions.some((permission: string) => permission === "venue.configure")) {
-        expect(find(app, "department-settings")).not.toBeNull();
-        expect((find(app, 'wt-input[name="name"]') as WtInput).value).toBe("Restaurant");
-      }
+      expect(find(app, "department-settings")).toBeNull();
+      expect(find(app, "dashboard-overview-screen")).not.toBeNull();
     },
   );
   it("the real sidebar returns to the bare list after accepting the department draft", async () => {

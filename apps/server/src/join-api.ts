@@ -123,7 +123,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
   };
 
   /**
-   * A caller holding neither permission gets 403 whether or not the row exists: a MISSING row still
+   * A caller without hardware administration gets 403 whether or not the row exists: a MISSING row still
    * authorizes (against `MISSING_ROW_PERMISSION`) before the route answers `join_request.not_found`.
    * Otherwise the 403-vs-404 split tells an unauthorised caller which ids are live. A malformed id
    * takes the same path as an unknown one.

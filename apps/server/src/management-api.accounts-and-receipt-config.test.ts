@@ -2395,7 +2395,7 @@ describe("independent department receipt routes", () => {
   });
 
   it.each(["department", "primary department"])(
-    "requires layout permission for %s GET and PUT",
+    "requires venue permission for %s GET and PUT",
     async (kind) => {
       await setupTenant();
       const app = mountApp();

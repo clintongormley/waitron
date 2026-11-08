@@ -1208,7 +1208,6 @@ export class DeviceProfilesScreen extends LitElement {
     }
   }
 
-  /** The readers belong to the payments module and its own permission: without it they are gone. */
   async #loadReaders(profileId: string | null, opened: number): Promise<void> {
     try {
       const [readers, list] = await Promise.all([

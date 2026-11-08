@@ -278,17 +278,11 @@ it("Venue settings no longer hosts a global receipt tab or global receipt reads"
     ]),
   );
 });
-it("a deep link without layout permission opens Details, replacing the address, with no Receipts tab", async () => {
+it("a Receipt deep link without venue permission opens the overview without department or receipt reads", async () => {
   const push = vi.spyOn(history, "pushState");
-  const { app, fetchImpl } = await mount({ permissions: ["venue.configure"] });
-  await expect.poll(() => departmentForm(app)).toBeTruthy();
-  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/bar");
-  const form = departmentForm(app)!;
-  await form.updateComplete;
-  expect(form.tab).toBe("details");
-  expect(form.shadowRoot!.querySelector("wt-tabs")!.items.map(({ key }) => key)).not.toContain(
-    "receipt",
-  );
+  const { app, fetchImpl } = await mount({ permissions: ["venue.view"] });
+  await expect.poll(() => deep(app.shadowRoot!, "dashboard-overview-screen")).toBeTruthy();
+  expect(departmentForm(app)).toBeNull();
   expect(push.mock.calls.some(([, , url]) => String(url).includes("/department/bar"))).toBe(false);
   expect(receiptTabEditor(app)).toBeNull();
   expect(fetchImpl.mock.calls.some(([path]) => path.endsWith("/bar/receipt"))).toBe(false);

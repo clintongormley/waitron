@@ -1,7 +1,6 @@
-import { registerModulePermissions } from "@waitron/identity";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { locations, printJobs, sales, tenantReceipts } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -17,11 +16,7 @@ const fiscal = ALL_MODULES.find((module) => module.fiscal?.venueFields !== undef
 let venue: Venue;
 let departmentId: string;
 const policy = { receiptPrintMode: "auto", printTradingName: true } as const;
-afterEach(() =>
-  registerModulePermissions([{ permission: "venue.configure", grantedFrom: "manager" }]),
-);
 beforeEach(async () => {
-  registerModulePermissions([{ permission: "venue.configure", grantedFrom: "manager" }]);
   venue = await setupVenue(suite.db);
   const [department] = await suite.db
     .select()

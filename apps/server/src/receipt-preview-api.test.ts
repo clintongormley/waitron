@@ -1,5 +1,4 @@
 import { receiptLabelsFor } from "@waitron/country-packs";
-import { registerModulePermissions } from "@waitron/identity";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { Hono } from "hono";
@@ -45,7 +44,6 @@ let taxId: string;
 let departmentId: string;
 const policy = { receiptPrintMode: "auto", printTradingName: false } as const;
 beforeAll(async () => {
-  registerModulePermissions([{ permission: "venue.configure", grantedFrom: "manager" }]);
   venue = await setupVenue(suite.db);
   const [department] = await suite.db
     .select()

@@ -92,8 +92,8 @@ describe("roleHasPermission", () => {
   it("gives an admin every permission", () => {
     for (const p of PERMISSIONS) expect(roleHasPermission("admin", p)).toBe(true);
   });
-  it("grants venue.configure, venue.configure and system.manage to manager and admin only", () => {
-    for (const p of ["venue.configure", "venue.configure", "system.manage"] as const) {
+  it("grants venue.configure and system.manage to manager and admin only", () => {
+    for (const p of ["venue.configure", "system.manage"] as const) {
       expect(PERMISSIONS).toContain(p);
       expect(roleHasPermission("manager", p)).toBe(true);
       expect(roleHasPermission("admin", p)).toBe(true);
@@ -121,8 +121,8 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "schedule.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "schedule.manage")).toBe(false);
   });
-  it("grants schedule.manage and schedule.manage to manager and admin only (roster slice 2)", () => {
-    for (const p of ["schedule.manage", "schedule.manage"] as const) {
+  it("grants schedule.manage to manager and admin only (roster slice 2)", () => {
+    for (const p of ["schedule.manage"] as const) {
       expect(roleHasPermission("manager", p)).toBe(true);
       expect(roleHasPermission("admin", p)).toBe(true);
       expect(roleHasPermission("staff", p)).toBe(false);
@@ -241,7 +241,7 @@ describe("permissionsForRole", () => {
   });
 });
 
-it("grants hardware.manage separately to manager and admin", () => {
+it("grants hardware.manage for resending to manager and admin", () => {
   expect(roleHasPermission("manager", "hardware.manage")).toBe(true);
   expect(roleHasPermission("admin", "hardware.manage")).toBe(true);
   expect(roleHasPermission("staff", "hardware.manage")).toBe(false);
