@@ -494,8 +494,10 @@ The restart backend can stage a node recovery key separately from the archive en
 The candidate public restore forms collect this credential. A host request supplies
 `nodeRecoverySecret` alongside its public `recoveryOperation`; the secret goes into
 `restore-request.node-key` with mode `0600`, not into the JSON marker. On the first attempt, the selected
-backup's verifier checks it again. An interrupted attempt uses the placed database's verifier.
-Both reread current outside evidence. A missing or
+backup's verifier checks it again. A committed interrupted attempt uses the placed database's
+verifier. Since A1415, a request carrying its recovery selection restarts from the authenticated
+source when no activation was saved for that event; it keeps the same event and name. Both paths
+reread current outside evidence. A missing or
 invalid staged credential refuses recovery rather than falling back to an environment key.
 
 For requests carrying a staged node key, bind `recoveryOperation.binding.sourceId` to the selected

@@ -865,7 +865,7 @@ describe("selected-hour admission before archive placement", () => {
   );
 
   it.each(["archive", "stream"] as const)(
-    "refuses publication after %s process death inside the uncommitted activation",
+    "restarts publication after %s process death inside the uncommitted activation",
     async (kind) => {
       const f = await archiveHost(kind);
       const credentials = {
@@ -949,16 +949,35 @@ describe("selected-hour admission before archive placement", () => {
       } finally {
         await destination.close();
       }
+      const journal = await readModulePreparationHistory(f.roots, binding.module);
       agreeInternet();
-      await expect(runStagedRestore(f.restore)).rejects.toMatchObject({
-        code: "sif.allocation_invalid",
-      });
-      expect(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")).toBe(marker);
-      expect(await readdir(f.roots.stateDir)).not.toContain("trading.env");
+      await expect(runStagedRestore(f.restore)).resolves.toBe(true);
+      expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
+      const files = await readdir(f.roots.stateDir);
+      expect(files).not.toContain("restore-request.json");
+      expect(files).not.toContain("restore-request.node-key");
+      expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toContain(node.nodeId);
       const retained = await openVenueDatabase(f.roots.venueDir);
       try {
-        expect(await retained.venue.select().from(invoiceSeries)).toEqual(rows);
-        expect(await retained.venue.select().from(fiscalAllocations)).toEqual(allocations);
+        const series = await retained.venue.select().from(invoiceSeries);
+        expect(
+          series
+            .filter((row) => row.retiredAt !== null)
+            .map((row) => ({ ...row, retiredAt: null })),
+        ).toEqual(rows);
+        expect(
+          series
+            .filter((row) => row.retiredAt === null)
+            .map((row) => ({ code: row.code, nextNumber: row.nextNumber })),
+        ).toEqual([
+          { code: "A-0CNQT", nextNumber: 1 },
+          { code: "FF-0CNQT", nextNumber: 1 },
+          { code: "R-0CNQT", nextNumber: 1 },
+        ]);
+        const active = await retained.venue.select().from(fiscalAllocations);
+        expect(active.slice(0, 1)).toEqual(allocations);
+        expect(active).toHaveLength(2);
+        expect(active[1]!.eventKey).toBe(f.options.binding.eventId);
       } finally {
         await retained.close();
       }

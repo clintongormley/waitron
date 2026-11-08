@@ -315,6 +315,8 @@ bundle. Named carry-forwards: a stale-`.tmp` sweep; a working-backup boot succes
 test; scope the flat `resolvers` map by module when a second `nonDbState` module lands; a
 `packArchive` pack-time entries bound; a manifest-shape coded refusal (it fails safe under GCM auth
 today); generalise archive entry routing off declared source ids when a second non-DB source lands.
+Database placement durability: sync both incoming database files and the venue folder, then
+qualify power loss during placement; A1415's process-kill tests establish restart decisions only.
 
 ## Box image constraints (B3)
 
@@ -1742,9 +1744,13 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
   comes up in setup mode, and once the cause is gone the same command finishes the restore (pinned in
   `apps/server/src/hour-recovery-placement-1.test.ts`). A restore staged for the box's next start
   puts its original request back when the failure came before the restore hooks' transaction body
-  returned, so the next start restores afresh with the same event and series name; a failure after
-  that keeps "placement started" for a checked replay (`runHeld`, `apps/server/src/restore-request.ts`;
-  pinned for the archive and bucket forms in `apps/server/src/restore-emergency-crash.e2e.test.ts`).
+  returned. Since A1415, a request carrying its recovery selection also checks saved activation
+  when it finds "placement started": no activation restarts authenticated placement with the same
+  event and series name; a committed activation uses checked replay. A missing destination or one
+  without the selected node also restarts placement; an unreadable or uncertain destination keeps
+  staging and refuses (`runHeld`, `apps/server/src/restore-request.ts`; archive and bucket cases in
+  `apps/server/src/restore-emergency-crash.e2e.test.ts`). Physical power-loss durability remains in
+  the [B2 carry-forwards](#backup--restore--carry-forwards-b2).
 
 - **A managed Cloud restore keeps both sealed bucket records (owner answer 2026-10-13, A538-4).**
   A restored or replacement box inherits both `backup.archive` and `backup.stream` (bucket keys

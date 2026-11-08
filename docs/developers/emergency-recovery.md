@@ -157,27 +157,36 @@ archive and prepared-stream paths flush the started-placement marker and its dir
 placement. A stream also flushes its retained source.
 A stream uses a separate placement copy, so leave room for that additional database file.
 
-On restart, a started request uses the placed database. It still needs the selected source's exact
-bytes, the staged node key, current outside confirmation and a matching locally committed event.
-The module checks the event, node and source before its activation hook. Its existing replay
-checks then compare the allocation, approval, active SIF and complete series. A stage marker alone
-permits no new activation. A newer image's database is refused before migration or outside
-consumption.
+On restart, leave the staged request and its key in place. The selected source's exact bytes,
+the staged node key and current outside confirmation still authenticate the attempt. For a request
+carrying its recovery selection, the host checks the destination before choosing what to do:
 
-Set `priorActivation` to `committed` only after checking the outside record and local result.
-An uncertain result refuses recovery. Once placement is marked started, an error thrown after the
-restore hooks' transaction body has returned keeps the staged request and its owner-only key file,
-even on the first attempt. This includes a failed trading-settings write or outside-result
-publication after activation commits. An error thrown before then (before placement, in the
-migration, or in a restore hook) puts the original request back, so the next start restores afresh
-with the same event and name. A refusal while resuming keeps them for another checked attempt. A
-completed restore removes those files. A venue lock refusal before placement leaves a fresh
-request, rather than declaring it interrupted.
+- If activation committed for this event, it uses the placed database. The module checks the event,
+  node and source; replay then checks the allocation, approval, active SIF and complete series.
+- If the module reports no activation for this event, it places the authenticated source again,
+  retaining the same event and series name. A missing destination, or one without the selected
+  node, also takes this path. An existing destination is checked against the image and migrated
+  before its current-schema recovery state is read.
+- An unreadable, corrupt or uncertain destination refuses recovery and retains staging. A newer
+  image's database is refused before migration. Keep the incident evidence; if you cannot resume,
+  prepare a new event against current outside history and submit a fresh restore request.
 
-If an interrupted restore's local activation never committed, the name stays burned. Prepare a new event against current
-outside history and submit a fresh restore request; do not delete the old incident to free it.
-A deliberate fresh request can restore the old backup again. It is different from retrying the
-interrupted request.
+A stage marker alone grants no activation authority. Requests without saved recovery selection
+keep their existing committed-replay path. A deliberate fresh request can restore the old backup
+again, but it does not free the interrupted event's spent name. Never delete the old incident to
+reuse that name.
+
+An error before the restore hooks' transaction body returns normally puts the original request
+back. If that write fails or the process stops first, the next start checks the saved activation
+state as above. Errors after the body returns keep the started request and its owner-only key,
+including a failed trading-settings write or outside-result publication after activation commits.
+A refusal while resuming keeps them for another checked attempt. A completed restore removes them.
+A venue lock refusal before placement leaves a fresh request.
+
+**2026-11-08 (A1415):** the restart-versus-replay decision above supersedes the earlier requirement
+to prepare a new event after every uncommitted interruption. The process-kill tests below do not
+establish power-loss durability during database placement; that remains in the
+[B2 restore carry-forwards](../backlog/box.md#backup--restore--carry-forwards-b2).
 
 Qualification on 2026-10-14: `pnpm --filter @waitron/server exec vitest run
 src/restore-emergency-crash.e2e.test.ts` kills owned child processes after staging, after outside

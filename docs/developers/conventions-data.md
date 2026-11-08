@@ -4741,6 +4741,12 @@ control still sends before the wait. Run them with
 
 ## The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door
 
+**2026-11-08 (A1415):** a started staged restore with saved recovery selection also calls
+`assertNotAhead` in `restore-request.ts` before migrating and reading destination recovery state.
+The existing resumed-placement check in `restore.ts` remains. The caller inventory below records
+the earlier implementation; this repair adds the destination classification described in
+[interrupted staged restores](emergency-recovery.md#resume-an-interrupted-staged-restore).
+
 `assertNotAhead` (`@waitron/provisioning`) compares the database's journal hashes against the
 image's files and throws `provisioning.database_ahead`; there is no backward migration, so
 installing an older ref after a newer one has already migrated the database can fail to boot with
