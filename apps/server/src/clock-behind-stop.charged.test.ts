@@ -421,7 +421,7 @@ it.each(["counter", "bill"] as const)(
       params: { workingOrderId: id, reason: "clock_unusable" },
     });
     expect(capturedUnlinked(id)).toBe(1);
-    expect(registroCount(venue, id)).toBe(0);
+    expect(fiscalRecordCount(venue, id)).toBe(0);
     expect(allRecords()).toBe(records);
     if (surface === "counter") {
       const stillStopped = await payStored(venue.appAt(reader.clock), id);
@@ -459,7 +459,7 @@ it.each(["counter", "bill"] as const)(
       });
       expect((await paymentRows(venue, id)).map((row) => row.state)).toEqual(["received"]);
     }
-    expect(registroCount(venue, id)).toBe(1);
+    expect(fiscalRecordCount(venue, id)).toBe(1);
     expect(allRecords()).toBe(records + 1);
     expect(collects()).toBe(before + 1);
   },
