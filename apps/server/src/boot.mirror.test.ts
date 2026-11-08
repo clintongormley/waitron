@@ -519,12 +519,12 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
           headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
         });
         expect(read.status).toBe(venue === "mirror" ? 403 : 401);
-        expect(await read.json()).toMatchObject({
-          error: {
-            code: venue === "mirror" ? "node.spare" : "management_session.required",
-            params: {},
-          },
-        });
+        const answer = await read.json();
+        if (venue === "primary") {
+          expect(answer).toEqual({ error: { code: "management_session.required", params: {} } });
+        } else {
+          expect(answer).toMatchObject({ error: { code: "node.spare", params: {} } });
+        }
       } finally {
         await server.close();
       }
