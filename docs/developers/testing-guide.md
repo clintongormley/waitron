@@ -472,7 +472,7 @@ reservations on failure; the caller still owns stopping and collecting the child
 needs only process death, wait for its recorded `exit`. Keep any required pipe draining separate
 and bounded.
 
-The standalone `scripts/cloud-integration-fixture.ts` installs `adoptRetainedListeners` directly
+The standalone `apps/server/scripts/cloud-integration-fixture.ts` installs `adoptRetainedListeners` directly
 in its own process for the first launch and waits for the actual bind before writing `ready.json`.
 Its reservation uses the configured host, including the external fixture’s wildcard host. It keeps
 Cloud’s existing IPC channel. Its saved-origin restarts retain the configured binding: holding the
@@ -481,7 +481,7 @@ port while that process is dead is work for Cloud’s external runner, recorded 
 Run `src/testing/retained-http-listener.test.ts` for HTTP, HTTPS, paired ports, address refusals,
 failed-handoff cleanup and real release checks. The party/kitchen restart suites, the three
 `first-fiscal-hour*.test.ts` entry suites, `first-setup-bundle.test.ts`, `first-fiscal-boot.test.ts`,
-`handover-stepdown.crash.test.ts` and `scripts/cloud-integration-fixture.test.ts` exercise the callers.
+`handover-stepdown.crash.test.ts` and `apps/server/scripts/cloud-integration-fixture.test.ts` exercise the callers.
 Production’s `WAITRON_HTTP_PORT` parser is unchanged; `src/config.test.ts` keeps the zero refusal.
 This fixture does not change a later waiting-start rebind inside one process, nor reserve a port
 that represents an unreachable peer.
