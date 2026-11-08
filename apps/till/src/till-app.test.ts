@@ -92,7 +92,7 @@ import type { TillTenderRefundDialog } from "./widgets/tender-refund-dialog.js";
 // counter grid (which shows only the selected menu's products) renders them under the default selection.
 const defaultMenu = { id: "cat-default", name: "Carta", isDefault: true };
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   menuItemId: "menu-item-cafe-0",
   name: "Café",
@@ -106,7 +106,7 @@ const cafe: TillProduct = {
   catalogueName: "Carta",
 };
 
-const jamon: TillProduct = {
+const ham: TillProduct = {
   id: "jamon",
   menuItemId: "menu-item-jamon",
   name: "Jamón",
@@ -472,7 +472,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       .fn()
       .mockResolvedValue(
         fixtureOffers(
-          { menus: [defaultMenu], products: [cafe] },
+          { menus: [defaultMenu], products: [coffee] },
           overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>,
         ),
       ),
@@ -660,7 +660,7 @@ async function toCounter(el: TillApp): Promise<TillCounterScreen> {
  * cajón levers live. */
 async function toTicket(el: TillApp): Promise<void> {
   const c = await toCounter(el);
-  c.store.addProduct(cafe, "2");
+  c.store.addProduct(coffee, "2");
   await el.updateComplete;
   emit(c, "confirm-payment", { method: "cash", amount: "5" });
   await flush(el);
@@ -710,7 +710,7 @@ const answering = (value: object) =>
 
 /** Rings a café into the open table's draft, with the course `courseId` when given, and gives the
  * `submit-draft` a confirmed preview sends for it as one group released `release`. */
-async function ringCafe(
+async function ringCoffee(
   el: TillApp,
   screen: TillTableOrderScreen,
   release: "fire" | "hold" = "fire",
@@ -800,7 +800,7 @@ describe("till-app", () => {
     });
     const { el } = await mountApp({ askSaleDeadEnds, recordSale });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await flush(el);
     tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
     await flush(el);
@@ -854,7 +854,7 @@ describe("till-app", () => {
     const recordSale = vi.fn(async () => saleResult);
     const { el } = await mountApp({ askSaleDeadEnds, recordSale });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await flush(el);
     const first = vi.fn();
     const second = vi.fn();
@@ -896,7 +896,7 @@ describe("till-app", () => {
       pay,
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await flush(el);
     tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
     await flush(el);
@@ -960,7 +960,7 @@ describe("till-app", () => {
       placeOrder,
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await flush(el);
     emit(c, "place-order");
     await flush(el);
@@ -999,7 +999,7 @@ describe("till-app", () => {
       placeOrder,
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     emit(c, "place-order");
     await flush(el);
     expect(askSaleDeadEnds).toHaveBeenCalledTimes(2);
@@ -1013,7 +1013,7 @@ describe("till-app", () => {
     const askSaleDeadEnds = vi.fn().mockRejectedValue(new TypeError("offline"));
     const { el } = await mountApp({ askSaleDeadEnds });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await flush(el);
     tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
     await flush(el);
@@ -1044,7 +1044,7 @@ describe("till-app", () => {
         askSaleDeadEnds,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       await flush(el);
       tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
       await flush(el);
@@ -1077,7 +1077,7 @@ describe("till-app", () => {
         askSaleDeadEnds,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       await flush(el);
       tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
       await flush(el);
@@ -1104,8 +1104,8 @@ describe("till-app", () => {
     });
     const { el } = await mountApp({ askSaleDeadEnds });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
-    c.store.addProduct(jamon, "1");
+    c.store.addProduct(coffee, "1");
+    c.store.addProduct(ham, "1");
     await flush(el);
     tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
     await flush(el);
@@ -1140,7 +1140,7 @@ describe("till-app", () => {
     const recordSale = vi.fn().mockResolvedValue(saleResult);
     const { el } = await mountApp({ askSaleDeadEnds, recordSale });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await flush(el);
     tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
     await flush(el);
@@ -1185,7 +1185,7 @@ describe("till-app", () => {
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
     expect(c.store.lines[0]!.makeAt).toBe("kitchen");
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(updateWorkingOrder).toHaveBeenCalledWith(
@@ -1223,7 +1223,7 @@ describe("till-app", () => {
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(recordSale).not.toHaveBeenCalled();
@@ -1354,7 +1354,7 @@ describe("till-app", () => {
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     emit(c, "collect-card", {});
     await flush(el);
     expect(pay).not.toHaveBeenCalled();
@@ -1393,7 +1393,7 @@ describe("till-app", () => {
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     emit(c, "park-order", { label: "Mesa 4" });
     await flush(el);
     expect(c.store.lines).toHaveLength(2);
@@ -1774,7 +1774,7 @@ describe("till-app", () => {
   });
 
   it("changes the counter zone and accepts a re-selection of the current zone", async () => {
-    const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+    const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
     defaultCatalogue.zones = [
       {
         id: "zone-counter",
@@ -1793,7 +1793,7 @@ describe("till-app", () => {
     ];
     const deliCatalogue = fixtureOffers({
       menus: [{ id: "menu-deli", name: "Deli", isDefault: true }],
-      products: [{ ...jamon, catalogueId: "menu-deli", catalogueName: "Deli" }],
+      products: [{ ...ham, catalogueId: "menu-deli", catalogueName: "Deli" }],
     });
     deliCatalogue.context = {
       departmentName: "Restaurant",
@@ -1823,7 +1823,7 @@ describe("till-app", () => {
   });
 
   it("visibly refuses a service-zone change while the basket has lines", async () => {
-    const catalogue = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+    const catalogue = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
     catalogue.zones = [
       {
         id: "zone-counter",
@@ -1866,7 +1866,7 @@ describe("till-app", () => {
   });
 
   it("ignores a late counter-zone response and keeps the accepted zone for new orders", async () => {
-    const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+    const defaultCatalogue = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
     defaultCatalogue.zones = ["counter", "upstairs", "deli"].map((id) => ({
       id,
       name: id,
@@ -1876,12 +1876,12 @@ describe("till-app", () => {
     }));
     const upstairs = fixtureOffers({
       menus: [{ id: "upstairs-menu", name: "Upstairs", isDefault: true }],
-      products: [{ ...cafe, id: "upstairs-product", catalogueId: "upstairs-menu" }],
+      products: [{ ...coffee, id: "upstairs-product", catalogueId: "upstairs-menu" }],
     });
     upstairs.context.zoneId = "upstairs";
     const deli = fixtureOffers({
       menus: [{ id: "deli-menu", name: "Deli", isDefault: true }],
-      products: [{ ...jamon, id: "deli-product", catalogueId: "deli-menu" }],
+      products: [{ ...ham, id: "deli-product", catalogueId: "deli-menu" }],
     });
     deli.context.zoneId = "deli";
     let resolveUpstairs!: (value: ZoneOfferCatalogue) => void;
@@ -2241,7 +2241,7 @@ describe("till-app", () => {
     /** The default menu with one shortcut, its Handheld display at 4 columns Menu first and its Till
      * display at 8. */
     const displayedMenus = (): Record<string, unknown> => {
-      const served = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+      const served = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
       const offers = {
         ...served,
         menus: served.menus.map((menu) => ({
@@ -2411,7 +2411,7 @@ describe("till-app", () => {
       selectTab(el, "counter");
       await flush(el);
       const c = counter(el)!;
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -2442,7 +2442,7 @@ describe("till-app", () => {
       selectTab(el, "counter");
       await flush(el);
       const c = counter(el)!;
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -2469,7 +2469,7 @@ describe("till-app", () => {
       );
       selectTab(el, "sale");
       await flush(el);
-      payCard(el, "sale").store.addProduct(cafe, "2");
+      payCard(el, "sale").store.addProduct(coffee, "2");
       await flush(el);
 
       payCard(el, "sale").shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
@@ -2821,7 +2821,7 @@ describe("till-app", () => {
     it("leaves a logged-out till's basket in place after new-sale, for the next sign-in", async () => {
       const { el } = await mountApp();
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "logout");
       await flush(el);
@@ -3308,7 +3308,7 @@ describe("till-app", () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
     const store = c.store;
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     await el.updateComplete;
     const workingOrderId = store.id; // the walk-up's STABLE client-minted id — the pay-idempotency key
 
@@ -3342,7 +3342,7 @@ describe("till-app", () => {
   it("opens customer details before a walk-up full invoice choice can pay", async () => {
     const { el } = await mountApp(fullInvoicesOn());
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await flush(el);
 
     tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-full-invoice]")!.click();
@@ -3356,7 +3356,7 @@ describe("till-app", () => {
   it("asks for a full-invoice recipient before charging a loaded bill over €3,000", async () => {
     const { el } = await mountApp(fullInvoicesOn());
     const c = await toCounter(el);
-    c.store.loadFrom("large-bill", [{ product: cafe, quantity: "2001" }]);
+    c.store.loadFrom("large-bill", [{ product: coffee, quantity: "2001" }]);
     await flush(el);
 
     emit(c, "confirm-payment", { method: "cash", amount: "3001.50" });
@@ -3405,7 +3405,7 @@ describe("till-app", () => {
   it("asks for a full-invoice recipient before starting card payment on a loaded bill over €3,000", async () => {
     const { el } = await mountApp(fullInvoicesOn());
     const c = await toCounter(el);
-    c.store.loadFrom("large-bill", [{ product: cafe, quantity: "2001" }]);
+    c.store.loadFrom("large-bill", [{ product: coffee, quantity: "2001" }]);
     await flush(el);
 
     emit(c, "collect-card", {});
@@ -3436,7 +3436,7 @@ describe("till-app", () => {
       placeOrder,
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await flush(el);
     const originalId = c.store.id;
     emit(c, "place-order");
@@ -3444,7 +3444,7 @@ describe("till-app", () => {
     expect(placeOrder).toHaveBeenCalledExactlyOnceWith(originalId, null);
 
     if (replacement === "basket")
-      c.store.loadFrom("replacement", [{ product: cafe, quantity: "1" }], "Next order", 8);
+      c.store.loadFrom("replacement", [{ product: coffee, quantity: "1" }], "Next order", 8);
     else el.api = stubApi();
     await flush(el);
     const lines = structuredClone(c.store.lines);
@@ -3481,7 +3481,7 @@ describe("till-app", () => {
         setOrderInvoiceChoice,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await flush(el);
       emit(c, "choose-invoice");
       await flush(el);
@@ -3505,7 +3505,7 @@ describe("till-app", () => {
       expect(setOrderInvoiceChoice).toHaveBeenCalledOnce();
       expect(originalApi.placeOrder).not.toHaveBeenCalled();
       if (replacement === "basket")
-        c.store.loadFrom("next-basket", [{ product: cafe, quantity: "1" }], "Next order", 8);
+        c.store.loadFrom("next-basket", [{ product: coffee, quantity: "1" }], "Next order", 8);
       else el.api = stubApi();
       await flush(el);
       const id = c.store.id;
@@ -3528,7 +3528,7 @@ describe("till-app", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
     });
     const c = await toCounter(el);
-    c.store.loadFrom("large-bill", [{ product: cafe, quantity: "2001" }]);
+    c.store.loadFrom("large-bill", [{ product: coffee, quantity: "2001" }]);
     await flush(el);
 
     emit(c, "place-order");
@@ -3550,7 +3550,7 @@ describe("till-app", () => {
       placeOrder,
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await flush(el);
     const id = c.store.id;
     const recipient = {
@@ -3597,7 +3597,7 @@ describe("till-app", () => {
       getInvoiceDeliveryOptions,
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await flush(el);
     const id = c.store.id;
     const recipient = {
@@ -3644,7 +3644,7 @@ describe("till-app", () => {
       getInvoiceDeliveryOptions,
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await flush(el);
     const id = c.store.id;
     const recipient = {
@@ -3715,7 +3715,7 @@ describe("till-app", () => {
       getInvoiceDeliveryOptions,
     });
     const c = await toCounter(el);
-    c.store.loadFrom("large-bill", [{ product: cafe, quantity: "2001" }]);
+    c.store.loadFrom("large-bill", [{ product: coffee, quantity: "2001" }]);
     await flush(el);
     const pay = () =>
       tenderPay(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(".pay-card")!;
@@ -3753,7 +3753,7 @@ describe("till-app", () => {
     );
     const { el } = await mountApp({ ...fullInvoicesOn(), getInvoiceDeliveryOptions });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await flush(el);
     const button = () =>
       tenderPay(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
@@ -3780,7 +3780,7 @@ describe("till-app", () => {
     );
     const { el } = await mountApp({ ...fullInvoicesOn(), getInvoiceDeliveryOptions });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await flush(el);
     emit(c, "choose-invoice");
     await flush(el);
@@ -3807,7 +3807,7 @@ describe("till-app", () => {
     );
     const { el } = await mountApp({ ...fullInvoicesOn(), getInvoiceDeliveryOptions });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await flush(el);
     emit(c, "choose-invoice");
     await flush(el);
@@ -3822,7 +3822,7 @@ describe("till-app", () => {
   it("sends the chosen Spanish recipient with the first walk-up cash sale", async () => {
     const { el } = await mountApp(fullInvoicesOn());
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await flush(el);
     const id = c.store.id;
 
@@ -3879,7 +3879,7 @@ describe("till-app", () => {
       .mockResolvedValueOnce({ outcome: "captured", ticket: saleResult });
     const { el } = await mountApp({ ...fullInvoicesOn(), pay });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await flush(el);
     const id = c.store.id;
     const recipient = {
@@ -3928,7 +3928,7 @@ describe("till-app", () => {
   it("does not send one customer's full-invoice choice with a different basket", async () => {
     const { el } = await mountApp(fullInvoicesOn());
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await flush(el);
     emit(c, "choose-invoice");
     await flush(el);
@@ -3948,7 +3948,7 @@ describe("till-app", () => {
     await flush(el);
 
     c.store.clear();
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     const nextId = c.store.id;
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
@@ -3971,7 +3971,7 @@ describe("till-app", () => {
     // (the server re-resolves both). A plain line still omits the key.
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1", {
+    c.store.addProduct(coffee, "1", {
       extras: [
         {
           listId: "list-milk",
@@ -3982,7 +3982,7 @@ describe("till-app", () => {
         },
       ],
     });
-    c.store.addProduct(cafe, "2"); // a plain line — must reach the wire with NO answer keys
+    c.store.addProduct(coffee, "2"); // a plain line — must reach the wire with NO answer keys
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -4014,7 +4014,7 @@ describe("till-app", () => {
     // re-validates it. An options answer rides the same line under its own key.
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1", {
+    c.store.addProduct(coffee, "1", {
       extras: [
         {
           listId: "list-extras",
@@ -4075,7 +4075,7 @@ describe("till-app", () => {
     const norm = (s: string): string => s.replace(/[\u00A0\u202F]/g, " ");
     const { el } = await mountApp({ recordSale: vi.fn().mockResolvedValue(filed) });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2"); // client basket — different from the filed lines
+    c.store.addProduct(coffee, "2"); // client basket — different from the filed lines
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "10" });
@@ -4097,7 +4097,7 @@ describe("till-app", () => {
   it("reprint (from the ticket view) calls TillApi.reprint with the just-filed sale's working-order id", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
     const workingOrderId = c.store.id; // the STABLE id recordSale files against — the reprint target
 
@@ -4146,7 +4146,7 @@ describe("till-app", () => {
         ...api,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       const workingOrderId = c.store.id;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -4309,7 +4309,7 @@ describe("till-app", () => {
         ...overrides,
       });
       const c = await toCounter(el);
-      if (ring) c.store.addProduct(cafe, "2");
+      if (ring) c.store.addProduct(coffee, "2");
       await flush(el);
       return { el, c };
     }
@@ -4530,7 +4530,7 @@ describe("till-app", () => {
       });
       expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
       expect(c.store.revision).toBe(4);
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       await flush(el);
       emit(c, "confirm-payment", { method: "cash", amount: "10" });
       await flush(el);
@@ -4683,7 +4683,7 @@ describe("till-app", () => {
       printReceipt,
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     const id = c.store.id;
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
@@ -4722,7 +4722,7 @@ describe("till-app", () => {
       retryReceipt,
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     const id = c.store.id;
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
@@ -4758,7 +4758,7 @@ describe("till-app", () => {
       retryReceipt,
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=retry-receipt]")).toBeNull();
@@ -4779,7 +4779,7 @@ describe("till-app", () => {
       retryReceipt: vi.fn().mockRejectedValue({ code: "print_queue.failed" }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(
@@ -4815,7 +4815,7 @@ describe("till-app", () => {
         .mockRejectedValue({ code: "connection.failed" }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     emit(ticket(el)!, "print-receipt");
@@ -4848,7 +4848,7 @@ describe("till-app", () => {
       if (order === "same") {
         emit(c, "retrieve-order", { id: "wo-1" });
         await flush(el);
-      } else c.store.addProduct(cafe, "2");
+      } else c.store.addProduct(coffee, "2");
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       emit(ticket(el)!, "new-sale");
@@ -4857,7 +4857,7 @@ describe("till-app", () => {
       if (order === "same") {
         emit(c, "retrieve-order", { id: "wo-1" });
         await flush(el);
-      } else c.store.addProduct(cafe, "2");
+      } else c.store.addProduct(coffee, "2");
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       release({ status: "done", jobId: "old-original", canRetry: false });
@@ -4894,7 +4894,7 @@ describe("till-app", () => {
       confirmReceiptHandover,
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     const id = c.store.id;
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
@@ -4943,7 +4943,7 @@ describe("till-app", () => {
       confirmReceiptHandover,
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     emit(ticket(el)!, "confirm-handover");
@@ -4985,7 +4985,7 @@ describe("till-app", () => {
         confirmReceiptHandover,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       emit(ticket(el)!, "confirm-handover");
@@ -5015,7 +5015,7 @@ describe("till-app", () => {
       if (order === "same") {
         emit(c, "retrieve-order", { id: "wo-1" });
         await flush(el);
-      } else c.store.addProduct(cafe, "2");
+      } else c.store.addProduct(coffee, "2");
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       emit(ticket(el)!, "confirm-handover");
@@ -5027,7 +5027,7 @@ describe("till-app", () => {
       if (order === "same") {
         emit(c, "retrieve-order", { id: "wo-1" });
         await flush(el);
-      } else c.store.addProduct(cafe, "2");
+      } else c.store.addProduct(coffee, "2");
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       release({
@@ -5051,7 +5051,7 @@ describe("till-app", () => {
     const confirmReceiptHandover = vi.fn();
     const { el } = await mountApp({ confirmReceiptHandover });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     Object.assign(el, {
@@ -5079,7 +5079,7 @@ describe("till-app", () => {
       ),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     emit(ticket(el)!, "confirm-handover");
@@ -5097,7 +5097,7 @@ describe("till-app", () => {
     const getReceiptPrintStatus = vi.fn();
     const { el } = await mountApp({ getReceiptPrintStatus });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(getReceiptPrintStatus).not.toHaveBeenCalled();
@@ -5150,7 +5150,7 @@ describe("till-app", () => {
         ...overrides,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       const id = c.store.id;
       if (fakeClock) vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -5543,7 +5543,7 @@ describe("till-app", () => {
       const getInvoiceDeliveries = vi.fn();
       const { el } = await mountApp({ getInvoiceDeliveries });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       expect(ticket(el)).not.toBeNull();
@@ -5771,7 +5771,7 @@ describe("till-app", () => {
         emit(ticket(el)!, "new-sale");
         await flush(el);
         const c = counter(el)!;
-        c.store.addProduct(cafe, "2");
+        c.store.addProduct(coffee, "2");
         emit(c, "confirm-payment", { method: "cash", amount: "5" });
         await flush(el);
         expect(ticket(el)).not.toBeNull();
@@ -5790,7 +5790,7 @@ describe("till-app", () => {
         printReceipt,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       const workingOrderId = c.store.id;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
@@ -5816,7 +5816,7 @@ describe("till-app", () => {
       }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
 
     emit(c, "place-order");
     await flush(el);
@@ -5842,7 +5842,7 @@ describe("till-app", () => {
       printPaymentSlip,
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     const workingOrderId = c.store.id;
     emit(c, "confirm-payment", { method: "card", amount: "3.00" });
     await flush(el);
@@ -5863,7 +5863,7 @@ describe("till-app", () => {
       recordSale: vi.fn().mockResolvedValue(filed),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(c, "confirm-payment", { method: "card", amount: "3.00" });
     await flush(el);
 
@@ -5875,7 +5875,7 @@ describe("till-app", () => {
   it("open-drawer (from the ticket view) calls TillApi.openDrawer with no argument", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
@@ -5949,7 +5949,7 @@ describe("till-app", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["print-receipt"] }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await flush(el);
 
     const pay = tenderPay(el);
@@ -5986,7 +5986,7 @@ describe("till-app", () => {
         openDrawer: vi.fn().mockRejectedValue({ code }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
@@ -6162,7 +6162,7 @@ describe("till-app", () => {
       reprint: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
@@ -6182,7 +6182,7 @@ describe("till-app", () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
     const store = c.store;
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     await el.updateComplete;
     const workingOrderId = store.id; // the walk-up's STABLE client-minted id — the pay-idempotency key
 
@@ -6214,7 +6214,7 @@ describe("till-app", () => {
     });
     const c = await toCounter(el);
     expect(c.heldOrders).toEqual([heldSummary]); // one call on entering the counter
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -6239,7 +6239,7 @@ describe("till-app", () => {
       getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB", invoiceLocale: "ca-ES" }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
@@ -6254,7 +6254,7 @@ describe("till-app", () => {
       }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     emit(c, "confirm-payment", { method: "cash", amount: "2.00" });
     await flush(el);
     expect(ticket(el)?.simulated).toBe(true);
@@ -6308,7 +6308,7 @@ describe("till-app", () => {
     await flush(el);
     expect(store.persisted).toBe(true); // a retrieved order is persisted server-side
 
-    store.addProduct(cafe, "1"); // the edit AFTER retrieve
+    store.addProduct(coffee, "1"); // the edit AFTER retrieve
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -6374,7 +6374,7 @@ describe("till-app", () => {
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
 
     emit(c, "collect-card", {});
@@ -6437,7 +6437,7 @@ describe("till-app", () => {
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     c.store.removeLine(1);
     await el.updateComplete;
 
@@ -6451,7 +6451,7 @@ describe("till-app", () => {
   });
 
   describe("a stored line of two cafés the listing shows is not a portion (A1208)", () => {
-    const listedCafe = (over: Partial<TabLine> = {}): TabLine => ({
+    const listedCoffee = (over: Partial<TabLine> = {}): TabLine => ({
       changesAfterSending: "held-or-waiting",
       stationId: null,
       movable: false,
@@ -6514,7 +6514,7 @@ describe("till-app", () => {
 
     it("raises it in place and reads nothing back; the next save goes from the revision the save answered", async () => {
       const { el, c, updateWorkingOrder, retrieveWorkingOrder } =
-        await raisedAndDeclined(listedCafe());
+        await raisedAndDeclined(listedCoffee());
       expect(retrieveWorkingOrder).toHaveBeenCalledOnce();
       c.store.setLineExtras(0, { note: "Decaf" });
       emit(c, "collect-card", {});
@@ -6524,7 +6524,7 @@ describe("till-app", () => {
 
     it("reads the order back after raising it once a comp has repriced it, as the added cafés go on a line of their own", async () => {
       const { retrieveWorkingOrder } = await raisedAndDeclined(
-        listedCafe({ unitPriceGross: "0.00", listUnitPriceGross: "1.50" }),
+        listedCoffee({ unitPriceGross: "0.00", listUnitPriceGross: "1.50" }),
       );
       expect(retrieveWorkingOrder).toHaveBeenCalledTimes(2);
     });
@@ -6535,7 +6535,7 @@ describe("till-app", () => {
       placeOrder: vi.fn().mockRejectedValue({ code: "station.no_default", status: 409 }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
 
     emit(c, "place-order", {});
@@ -6555,7 +6555,7 @@ describe("till-app", () => {
       }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
 
     emit(c, "place-order", {});
@@ -6574,11 +6574,11 @@ describe("till-app", () => {
       .mockResolvedValue(placedResult);
     const { el } = await mountApp({ updateWorkingOrder, placeOrder });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
     emit(c, "place-order", {});
     await flush(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
 
     emit(c, "place-order", {});
@@ -6628,7 +6628,7 @@ describe("till-app", () => {
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -6668,7 +6668,7 @@ describe("till-app", () => {
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
 
     emit(c, "park-order", {});
@@ -6785,7 +6785,7 @@ describe("till-app", () => {
   };
 
   it("rebuilds a retrieved line's picks under the list its dish still offers", async () => {
-    const offering: TillProduct = { ...cafe, offeredModifiers: [milkList] };
+    const offering: TillProduct = { ...coffee, offeredModifiers: [milkList] };
     const { el } = await mountApp({
       listDefaultZoneOffers: vi
         .fn()
@@ -6806,7 +6806,7 @@ describe("till-app", () => {
             menuItemId: "menu-item-cafe-0",
             productId: "cafe",
             quantity: "2.000",
-            product: cafe,
+            product: coffee,
             extras: [heldMilk],
             note: "Sin espuma",
           },
@@ -6823,7 +6823,7 @@ describe("till-app", () => {
         workingOrderLineId: "line-customised",
         // The stored snapshot keeps the line's own names and price; the OFFERED lists come from
         // today's live offer, which is what the pick has to be answered against.
-        product: { ...cafe, offeredModifiers: [milkList] },
+        product: { ...coffee, offeredModifiers: [milkList] },
         quantity: "2",
         extras: [
           {
@@ -6870,13 +6870,13 @@ describe("till-app", () => {
     precision: 0,
     hardwareUnit: null,
   };
-  const vinoHeld: TillProduct = { ...cafe, unit: mlUnit };
-  const vinoLive: TillProduct = {
-    ...cafe,
+  const heldWineProduct: TillProduct = { ...coffee, unit: mlUnit };
+  const liveWineProduct: TillProduct = {
+    ...coffee,
     unit: { ...mlUnit, measure: true },
     offeredModifiers: [milkList],
   };
-  function heldVino(extras: (typeof heldMilk)[]) {
+  function heldWineOrder(extras: (typeof heldMilk)[]) {
     return {
       kitchenNote: {
         scope: { workingOrderId: "wo-vino" },
@@ -6893,7 +6893,7 @@ describe("till-app", () => {
           menuItemId: "menu-item-cafe-0",
           productId: "cafe",
           quantity: "250.000",
-          product: vinoHeld,
+          product: heldWineProduct,
           ...(extras.length === 0 ? {} : { extras }),
         },
       ],
@@ -6904,8 +6904,8 @@ describe("till-app", () => {
     const { el } = await mountApp({
       listDefaultZoneOffers: vi
         .fn()
-        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [vinoLive] })),
-      retrieveWorkingOrder: vi.fn().mockResolvedValue(heldVino([])),
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [liveWineProduct] })),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(heldWineOrder([])),
     });
     const counter = await toCounter(el);
 
@@ -6922,8 +6922,8 @@ describe("till-app", () => {
     const { el } = await mountApp({
       listDefaultZoneOffers: vi
         .fn()
-        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [vinoLive] })),
-      retrieveWorkingOrder: vi.fn().mockResolvedValue(heldVino([heldMilk])),
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [liveWineProduct] })),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(heldWineOrder([heldMilk])),
     });
     const counter = await toCounter(el);
 
@@ -6939,7 +6939,7 @@ describe("till-app", () => {
   });
 
   /** A retrieved order whose one café line (×2) carries `heldMilk` (×2 per dish). */
-  function milkOrder(product: TillProduct = cafe) {
+  function milkOrder(product: TillProduct = coffee) {
     return {
       kitchenNote: {
         scope: { workingOrderId: "wo-customised" },
@@ -7087,14 +7087,14 @@ describe("till-app", () => {
   });
 
   it("reports a dropped line before a not-offered extra, and a not-offered extra before a stale answer", async () => {
-    const offering: TillProduct = { ...cafe, offeredModifiers: [puntoList] };
+    const offering: TillProduct = { ...coffee, offeredModifiers: [donenessList] };
     const answered = {
       workingOrderLineId: "line-answered",
       menuItemId: "menu-item-cafe-0",
       productId: "cafe",
       quantity: "1.000",
-      product: cafe,
-      optionSnapshots: [{ ...frozenPunto, labelName: { es: "Muy hecho" } }],
+      product: coffee,
+      optionSnapshots: [{ ...frozenDoneness, labelName: { es: "Muy hecho" } }],
       extras: [heldMilk],
     };
     const retrieveWorkingOrder = vi
@@ -7167,7 +7167,7 @@ describe("till-app", () => {
             menuItemId: "menu-item-cafe-0",
             productId: "cafe",
             quantity: "1.000",
-            product: cafe,
+            product: coffee,
             optionSnapshots: [snapshot],
           },
         ],
@@ -7180,7 +7180,7 @@ describe("till-app", () => {
 
     const line = counter.store.lines[0]!;
     expect(line.optionSnapshots).toEqual([snapshot]);
-    // This dish offers no options list today (`cafe` carries no `offeredModifiers`), so there is no
+    // This dish offers no options list today (`coffee` carries no `offeredModifiers`), so there is no
     // list for the frozen wording to be matched back to and the wire carries no answer. A dish that
     // still offers the list is the next case.
     expect(line.options).toBeUndefined();
@@ -7190,7 +7190,7 @@ describe("till-app", () => {
   // `{ listId, labelId }` the wire wants by matching those names against the dish's LIVE offer —
   // the same problem `deriveExtraSelections` solves for a pick. The three names of the list and of
   // the label differ, so a match made on the wrong one of the six fails (CLAUDE.md §3).
-  const puntoList = {
+  const donenessList = {
     kind: "options" as const,
     id: "list-punto",
     name: "Punto",
@@ -7216,7 +7216,7 @@ describe("till-app", () => {
   };
 
   /** The answer as the server froze it: the list's three names and the chosen label's three. */
-  const frozenPunto = {
+  const frozenDoneness = {
     listName: { es: "Punto" },
     listCustomerName: { es: "¿Cómo lo quiere?" },
     listKitchenName: "PTO",
@@ -7225,7 +7225,7 @@ describe("till-app", () => {
     labelKitchenName: "AP",
   };
 
-  /** A retrieved order whose one line froze `answer` against a dish offering `puntoList`. */
+  /** A retrieved order whose one line froze `answer` against a dish offering `donenessList`. */
   function answeredOrder(answer: Record<string, unknown>) {
     return {
       kitchenNote: {
@@ -7243,7 +7243,7 @@ describe("till-app", () => {
           menuItemId: "menu-item-cafe-0",
           productId: "cafe",
           quantity: "2.000",
-          product: cafe,
+          product: coffee,
           optionSnapshots: [answer],
         },
       ],
@@ -7251,12 +7251,12 @@ describe("till-app", () => {
   }
 
   it("re-sends a retrieved line's options answer, matched to the list its dish still offers", async () => {
-    const offering: TillProduct = { ...cafe, offeredModifiers: [puntoList] };
+    const offering: TillProduct = { ...coffee, offeredModifiers: [donenessList] };
     const { el } = await mountApp({
       listDefaultZoneOffers: vi
         .fn()
         .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
-      retrieveWorkingOrder: vi.fn().mockResolvedValue(answeredOrder(frozenPunto)),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(answeredOrder(frozenDoneness)),
     });
     const counter = await toCounter(el);
 
@@ -7294,9 +7294,9 @@ describe("till-app", () => {
   it("sends a walk-up line's options answer and not the names the picker copied onto it for display", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1", {
+    c.store.addProduct(coffee, "1", {
       options: [{ listId: "list-punto", labelId: "label-medium" }],
-      optionSnapshots: [frozenPunto],
+      optionSnapshots: [frozenDoneness],
     });
     await el.updateComplete;
 
@@ -7327,14 +7327,14 @@ describe("till-app", () => {
     // The label was renamed between the park and the retrieve, so the six frozen names name nothing
     // on offer. Substituting the list's default would change what the diner asked for on a line
     // about to be billed, so the answer is left off and the operator is told to choose again.
-    const offering: TillProduct = { ...cafe, offeredModifiers: [puntoList] };
+    const offering: TillProduct = { ...coffee, offeredModifiers: [donenessList] };
     const { el } = await mountApp({
       listDefaultZoneOffers: vi
         .fn()
         .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [offering] })),
       retrieveWorkingOrder: vi
         .fn()
-        .mockResolvedValue(answeredOrder({ ...frozenPunto, labelName: { es: "Muy hecho" } })),
+        .mockResolvedValue(answeredOrder({ ...frozenDoneness, labelName: { es: "Muy hecho" } })),
     });
     const counter = await toCounter(el);
 
@@ -7344,7 +7344,7 @@ describe("till-app", () => {
     const line = counter.store.lines[0]!;
     expect(line.options).toBeUndefined();
     // The wording the order holds stays on screen — it is what the diner asked for.
-    expect(line.optionSnapshots).toEqual([{ ...frozenPunto, labelName: { es: "Muy hecho" } }]);
+    expect(line.optionSnapshots).toEqual([{ ...frozenDoneness, labelName: { es: "Muy hecho" } }]);
     expect(el.shadowRoot!.textContent).toContain(t("held.options_changed"));
   });
 
@@ -7361,7 +7361,7 @@ describe("till-app", () => {
 
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
-    store.addProduct(cafe, "1"); // an edit → the basket is dirty, so the re-sync is attempted
+    store.addProduct(coffee, "1"); // an edit → the basket is dirty, so the re-sync is attempted
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -7400,7 +7400,7 @@ describe("till-app", () => {
 
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
-    store.addProduct(cafe, "1"); // edit → dirty → re-sync attempted
+    store.addProduct(coffee, "1"); // edit → dirty → re-sync attempted
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -7424,7 +7424,7 @@ describe("till-app", () => {
     const { el } = await mountApp({ recordSale });
     const c = await toCounter(el);
     const store = c.store;
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -7450,7 +7450,7 @@ describe("till-app", () => {
 
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
-    store.addProduct(cafe, "1"); // edit → dirty → the pre-pay sync is attempted
+    store.addProduct(coffee, "1"); // edit → dirty → the pre-pay sync is attempted
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -7477,7 +7477,7 @@ describe("till-app", () => {
     const { el } = await mountApp({ recordSale });
     const c = await toCounter(el);
     const store = c.store;
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     await el.updateComplete;
     const stableId = store.id;
 
@@ -7496,7 +7496,7 @@ describe("till-app", () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
     const store = c.store;
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     await el.updateComplete;
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
@@ -7513,7 +7513,7 @@ describe("till-app", () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
     const store = c.store;
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     await el.updateComplete;
     const parkedId = store.id; // captured BEFORE the park — clear() re-mints it on success
 
@@ -7535,7 +7535,7 @@ describe("till-app", () => {
   it("park-order: forwards an unlabelled park (label undefined)", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "park-order", { label: undefined });
@@ -7555,7 +7555,7 @@ describe("till-app", () => {
   ])("park-order refused %o shows that refusal's sentence", async (refused, shown) => {
     const { el } = await mountApp({ parkOrder: vi.fn().mockRejectedValue(refused) });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "park-order", { label: "Table 4" });
@@ -7577,7 +7577,7 @@ describe("till-app", () => {
         }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "park-order", { label: "Table 4" });
       await flush(el);
@@ -7599,7 +7599,7 @@ describe("till-app", () => {
       });
       const c = await toCounter(el);
       expect(currentLocale()).toBe(locale);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "park-order", { label: "Table 4" });
@@ -7617,7 +7617,7 @@ describe("till-app", () => {
     });
     const c = await toCounter(el);
     const store = c.store;
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "park-order", { label: "Mesa 4" });
@@ -7637,7 +7637,7 @@ describe("till-app", () => {
     const parkOrder = vi.fn(() => new Promise(() => {}));
     const { el } = await mountApp({ parkOrder });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "park-order", { label: "Mesa 4" }); // first — raises the guard, awaits
@@ -7660,7 +7660,7 @@ describe("till-app", () => {
   it("park success: refreshes the held-orders list", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "park-order", { label: "Mesa 4" });
@@ -7685,7 +7685,7 @@ describe("till-app", () => {
     await flush(el);
     expect(store.persisted).toBe(true); // a retrieved order is persisted server-side
 
-    store.addProduct(cafe, "1"); // the edit AFTER retrieve → the basket is dirty
+    store.addProduct(coffee, "1"); // the edit AFTER retrieve → the basket is dirty
     await el.updateComplete;
 
     emit(c, "park-order", { label: "Mesa 4" });
@@ -7715,7 +7715,7 @@ describe("till-app", () => {
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
     emit(c, "park-order", { label: "Ana" });
     await flush(el);
@@ -7877,7 +7877,7 @@ describe("till-app", () => {
     await flush(el);
     expect(store.label).toBe("Mesa 4"); // loadFrom adopted the retrieved order's name
 
-    store.addProduct(cafe, "1"); // edit AFTER retrieve → dirty
+    store.addProduct(coffee, "1"); // edit AFTER retrieve → dirty
     await el.updateComplete;
 
     emit(c, "park-order", { label: undefined }); // the blank Hold field
@@ -7908,7 +7908,7 @@ describe("till-app", () => {
 
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
-    store.addProduct(cafe, "1"); // edit → dirty, so #syncIfDirty attempts the update
+    store.addProduct(coffee, "1"); // edit → dirty, so #syncIfDirty attempts the update
     await el.updateComplete;
 
     emit(c, "park-order", { label: "Mesa 4" });
@@ -7993,7 +7993,7 @@ describe("till-app", () => {
         {
           ...fixtureOffers({
             menus: [{ id: "menu-standard", name: "Standard", isDefault: true }],
-            products: [{ ...cafe, id: "negroni", unitPrice: "9.00" }],
+            products: [{ ...coffee, id: "negroni", unitPrice: "9.00" }],
           }).offers[0]!,
           id: "offer-standard",
           productId: "negroni",
@@ -8004,7 +8004,7 @@ describe("till-app", () => {
         {
           ...fixtureOffers({
             menus: [{ id: "menu-happy", name: "Happy hour", isDefault: true }],
-            products: [{ ...cafe, id: "negroni", unitPrice: "7.00" }],
+            products: [{ ...coffee, id: "negroni", unitPrice: "7.00" }],
           }).offers[0]!,
           id: "offer-happy",
           productId: "negroni",
@@ -8116,7 +8116,7 @@ describe("till-app", () => {
     const { el } = await mountApp({
       listDefaultZoneOffers: vi
         .fn()
-        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [cafe, jamon] })),
+        .mockResolvedValue(fixtureOffers({ menus: [defaultMenu], products: [coffee, ham] })),
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         kitchenNote: {
           scope: { workingOrderId: "wo-1" },
@@ -8164,7 +8164,7 @@ describe("till-app", () => {
         ],
       }),
     });
-    const c = await toCounter(el); // products default to [cafe] — "ghost" won't resolve
+    const c = await toCounter(el); // products default to [coffee] — "ghost" won't resolve
     const store = c.store;
 
     emit(c, "retrieve-order", { id: "wo-1" });
@@ -8300,7 +8300,7 @@ describe("till-app", () => {
     const c = await toCounter(el);
     expect(c.heldOrders).toEqual([heldSummary]);
     const store = c.store;
-    store.addProduct(cafe, "2"); // a basket already in progress
+    store.addProduct(coffee, "2"); // a basket already in progress
     await el.updateComplete;
 
     emit(c, "retrieve-order", { id: "wo-1" });
@@ -8315,7 +8315,7 @@ describe("till-app", () => {
     expect(c.heldOrders).toEqual([]);
     // the in-progress basket is UNTOUCHED — loadFrom never ran on the rejected retrieve
     expect(store.lines).toHaveLength(1);
-    expect(store.lines[0]!.product).toBe(cafe);
+    expect(store.lines[0]!.product).toBe(coffee);
     expect(counter(el)).not.toBeNull();
     expect(ticket(el)).toBeNull();
   });
@@ -8484,8 +8484,8 @@ describe("till-app", () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
     const store: WorkingOrderStore = c.store;
-    store.addProduct(cafe, "2");
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "2");
+    store.addProduct(coffee, "1");
     await el.updateComplete;
 
     emit(c, "logout");
@@ -8496,7 +8496,7 @@ describe("till-app", () => {
     expect(counter(el)).toBeNull();
     // A shift change never loses the half-built order.
     expect(store.lines).toHaveLength(2);
-    expect(store.lines[0]!.product).toBe(cafe);
+    expect(store.lines[0]!.product).toBe(coffee);
   });
 
   it("session activity: a handheld + 300s boot configures the controller; logout stops it", async () => {
@@ -8737,7 +8737,7 @@ describe("till-app", () => {
     });
     const c = await toCounter(el);
     const store = c.store;
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "show-schedule");
@@ -8760,8 +8760,8 @@ describe("till-app", () => {
     });
     const c = await toCounter(el);
     const store = c.store;
-    store.addProduct(cafe, "2");
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "2");
+    store.addProduct(coffee, "1");
     await el.updateComplete;
 
     emit(c, "show-schedule");
@@ -8775,7 +8775,7 @@ describe("till-app", () => {
     expect(schedule(el)).toBeNull();
     // The basket survives the whole counter → schedule → counter round trip.
     expect(store.lines).toHaveLength(2);
-    expect(store.lines[0]!.product).toBe(cafe);
+    expect(store.lines[0]!.product).toBe(coffee);
   });
 
   describe("live floor (FP-1)", () => {
@@ -8786,7 +8786,7 @@ describe("till-app", () => {
       });
       const c = await toCounter(el);
       const store = c.store;
-      store.addProduct(cafe, "2");
+      store.addProduct(coffee, "2");
       await el.updateComplete;
 
       selectTab(el, "floor");
@@ -9289,7 +9289,7 @@ describe("till-app", () => {
       const { el } = await mountApp();
       const c = await toCounter(el);
       const store = c.store;
-      store.addProduct(cafe, "2");
+      store.addProduct(coffee, "2");
       await el.updateComplete;
 
       selectTab(el, "floor");
@@ -9367,7 +9367,7 @@ describe("till-app", () => {
           menus: [{ id: "menu-dining", name: "Dining", isDefault: true }],
           products: [
             {
-              ...cafe,
+              ...coffee,
               id: "negroni",
               menuItemId: "menu-item-negroni-0",
               name: "Negroni",
@@ -9414,12 +9414,16 @@ describe("till-app", () => {
         };
         const offersA = fixtureOffers({
           menus: [{ id: "menu-a", name: "Menu A", isDefault: true }],
-          products: [{ ...cafe, id: "product-a", catalogueId: "menu-a", catalogueName: "Menu A" }],
+          products: [
+            { ...coffee, id: "product-a", catalogueId: "menu-a", catalogueName: "Menu A" },
+          ],
         });
         offersA.context.zoneId = "zone-a";
         const offersB = fixtureOffers({
           menus: [{ id: "menu-b", name: "Menu B", isDefault: true }],
-          products: [{ ...cafe, id: "product-b", catalogueId: "menu-b", catalogueName: "Menu B" }],
+          products: [
+            { ...coffee, id: "product-b", catalogueId: "menu-b", catalogueName: "Menu B" },
+          ],
         });
         offersB.context.zoneId = "zone-b";
         let resolveA!: (value: ZoneOfferCatalogue) => void;
@@ -9505,7 +9509,7 @@ describe("till-app", () => {
         const screen = await toTableOrder(el, openTable);
         expect(getTabLines).toHaveBeenCalledTimes(1);
 
-        emit(screen, "submit-draft", await ringCafe(el, screen));
+        emit(screen, "submit-draft", await ringCoffee(el, screen));
         await flush(el);
 
         // Put on the party's tab, then re-read so the drawer reflects the new round.
@@ -9543,7 +9547,7 @@ describe("till-app", () => {
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
         });
         const screen = await toTableOrder(el, openTable);
-        emit(screen, "submit-draft", await ringCafe(el, screen, "fire", "postres"));
+        emit(screen, "submit-draft", await ringCoffee(el, screen, "fire", "postres"));
         await flush(el);
         expect(drafts.sentGroups(submitDraft.mock.calls[0]![2])).toEqual([
           {
@@ -9564,7 +9568,7 @@ describe("till-app", () => {
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
         });
         const screen = await toTableOrder(el, openTable);
-        emit(screen, "submit-draft", await ringCafe(el, screen, "hold"));
+        emit(screen, "submit-draft", await ringCoffee(el, screen, "hold"));
         await flush(el);
         expect(drafts.sentGroups(submitDraft.mock.calls[0]![2])).toEqual([
           { release: "hold", lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] },
@@ -9796,7 +9800,7 @@ describe("till-app", () => {
         const screen = await toTableOrder(el, openTable);
 
         for (const [type, detail] of [
-          ["submit-draft", await ringCafe(el, screen)],
+          ["submit-draft", await ringCoffee(el, screen)],
           ["serve-lines", { items: [{ lineId: "line-1", quantity: "2" }] }],
           ["set-line-course", { lineNo: 1, courseId: "c2" }],
         ] as const) {
@@ -10443,7 +10447,7 @@ describe("till-app", () => {
     });
     const c = await toCounter(el);
     const store = c.store;
-    store.addProduct(cafe, "2");
+    store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -10471,7 +10475,7 @@ describe("till-app", () => {
   ])("a permanent fiscal refusal (%s) says to stop, not to retry", async (code) => {
     const { el } = await mountApp({ recordSale: vi.fn().mockRejectedValue({ code }) });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -10499,7 +10503,7 @@ describe("till-app", () => {
       recordSale: vi.fn().mockRejectedValue({ code: "fiscal.record_invalid" }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "card", amount: "5", externalRef: "OP-4417" });
@@ -10515,7 +10519,7 @@ describe("till-app", () => {
     async function payCash(refusal: object) {
       const { el } = await mountApp({ recordSale: vi.fn().mockRejectedValue(refusal) });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
@@ -10525,7 +10529,7 @@ describe("till-app", () => {
     async function payReader(refusal: object) {
       const { el } = await mountApp({ pay: vi.fn().mockRejectedValue(refusal) });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       await el.updateComplete;
       emit(c, "collect-card", {});
       await flush(el);
@@ -10544,7 +10548,7 @@ describe("till-app", () => {
           }),
         });
         const c = await toCounter(el);
-        c.store.addProduct(cafe, "1");
+        c.store.addProduct(coffee, "1");
         await el.updateComplete;
         emit(c, "collect-card", {});
         await flush(el);
@@ -10567,7 +10571,7 @@ describe("till-app", () => {
         }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "card", amount: "5", externalRef: "OP-4417" });
       await flush(el);
@@ -10595,7 +10599,7 @@ describe("till-app", () => {
     it("a sale on a terminal the box does not talk to, refused for a full disk, adds the card advice", async () => {
       const { el } = await mountApp({ recordSale: vi.fn().mockRejectedValue(diskFull) });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "card", amount: "5", externalRef: "OP-4417" });
       await flush(el);
@@ -10648,7 +10652,7 @@ describe("till-app", () => {
       });
       const c = await toCounter(el);
       await vi.waitFor(() => expect(getDeviceEquipment).toHaveBeenCalled());
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       await el.updateComplete;
       emit(c, "collect-card", {});
       await flush(el);
@@ -10779,7 +10783,7 @@ describe("till-app", () => {
       recordSale: vi.fn().mockRejectedValue({ code: "sale.tender_shortfall" }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -10799,7 +10803,7 @@ describe("till-app", () => {
       }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -10821,7 +10825,7 @@ describe("till-app", () => {
       }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -10838,7 +10842,7 @@ describe("till-app", () => {
       .mockResolvedValueOnce(saleResult);
     const { el } = await mountApp({ recordSale });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" }); // rejected → error banner
@@ -10858,7 +10862,7 @@ describe("till-app", () => {
     const recordSale = vi.fn(() => new Promise<TillSaleResult>(() => {}));
     const { el } = await mountApp({ recordSale });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" }); // first — raises submitting, awaits
@@ -10876,7 +10880,7 @@ describe("till-app", () => {
       recordSale: vi.fn().mockRejectedValue({ code: "sale.rejected" }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -10891,7 +10895,7 @@ describe("till-app", () => {
   it("resets the busy state after a SUCCESSFUL sale so a later sale is not blocked", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
@@ -10901,7 +10905,7 @@ describe("till-app", () => {
     // success rather than left stuck (a stuck flag would make this confirm-payment a silent no-op).
     emit(ticket(el)!, "new-sale");
     await flush(el);
-    counter(el)!.store.addProduct(cafe, "1");
+    counter(el)!.store.addProduct(coffee, "1");
     await el.updateComplete;
     emit(counter(el)!, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
@@ -10971,7 +10975,7 @@ describe("till-app", () => {
         cancelDemoReaderPayment,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await flush(el);
       const orderId = c.store.id;
 
@@ -10994,7 +10998,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({ getTill: withReaderTill(), askSaleDeadEnds, pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       await flush(el);
       const stepper = tenderPay(el).shadowRoot!.querySelector<
         HTMLElement & { updateComplete: Promise<unknown>; error: string }
@@ -11022,7 +11026,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({ getTill: withReaderTill(), pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       await flush(el);
       const stepper = tenderPay(el).shadowRoot!.querySelector<
         HTMLElement & { updateComplete: Promise<unknown> }
@@ -11050,7 +11054,7 @@ describe("till-app", () => {
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
       const store = c.store;
-      store.addProduct(cafe, "2");
+      store.addProduct(coffee, "2");
       await el.updateComplete;
       const workingOrderId = store.id; // the walk-up's stable id — the same pay-idempotency key
 
@@ -11073,7 +11077,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11094,7 +11098,7 @@ describe("till-app", () => {
       });
       const c = await toCounter(el);
       expect(c.heldOrders).toEqual([heldSummary]); // one call on entering the counter
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11109,7 +11113,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11134,7 +11138,7 @@ describe("till-app", () => {
         const pay = vi.fn().mockResolvedValue({ outcome });
         const { el } = await mountApp({ pay });
         const c = await toCounter(el);
-        c.store.addProduct(cafe, "2");
+        c.store.addProduct(coffee, "2");
         await el.updateComplete;
 
         emit(c, "collect-card", {});
@@ -11155,7 +11159,7 @@ describe("till-app", () => {
         .mockResolvedValueOnce({ outcome: "captured", ticket: saleResult });
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {}); // first — declines
@@ -11177,7 +11181,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11199,7 +11203,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11227,7 +11231,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       const declinedBasketId = c.store.id;
 
@@ -11252,7 +11256,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockRejectedValue({ code: "server.internal" });
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11274,7 +11278,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockRejectedValue({ code: "fiscal.record_invalid" });
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11299,7 +11303,7 @@ describe("till-app", () => {
         pay,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11322,7 +11326,7 @@ describe("till-app", () => {
         pay,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11359,7 +11363,7 @@ describe("till-app", () => {
           pay,
         });
         const c = await toCounter(el);
-        c.store.addProduct(cafe, "2");
+        c.store.addProduct(coffee, "2");
         await flush(el);
 
         tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
@@ -11387,7 +11391,7 @@ describe("till-app", () => {
         pay,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await flush(el);
 
       tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
@@ -11417,7 +11421,7 @@ describe("till-app", () => {
         pay,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11440,7 +11444,7 @@ describe("till-app", () => {
 
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
-      store.addProduct(cafe, "1"); // edit → dirty → the pre-pay sync is attempted
+      store.addProduct(coffee, "1"); // edit → dirty → the pre-pay sync is attempted
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11458,7 +11462,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11476,7 +11480,7 @@ describe("till-app", () => {
       const pay = vi.fn(() => new Promise<PayOutcome>(() => {}));
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {}); // first — raises submitting, awaits
@@ -11494,7 +11498,7 @@ describe("till-app", () => {
       const pay = vi.fn(() => new Promise<PayOutcome>((_resolve, reject) => (refuse = reject)));
       const { el } = await mountApp({ getTill: withReaderTill(), pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await flush(el);
 
       tapPayCard(el);
@@ -11526,7 +11530,7 @@ describe("till-app", () => {
         .mockImplementationOnce(() => new Promise<PayOutcome>(() => {}));
       const { el } = await mountApp({ getTill: withReaderTill(), pay, listWorkingOrders });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await flush(el);
 
       holdHeldRead = true;
@@ -11597,7 +11601,7 @@ describe("till-app", () => {
       const c = await toCounter(el);
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       await flush(el);
 
       tapPayCard(el);
@@ -11645,7 +11649,7 @@ describe("till-app", () => {
       const c = await toCounter(el);
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       await flush(el);
 
       tapPayCard(el);
@@ -11680,7 +11684,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({ getTill: withReaderTill(), pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await flush(el);
 
       tapPayCard(el);
@@ -11703,7 +11707,7 @@ describe("till-app", () => {
       const c = await toCounter(el);
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       await flush(el);
 
       tapPayCard(el);
@@ -11720,7 +11724,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11742,7 +11746,7 @@ describe("till-app", () => {
 
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
-      store.addProduct(cafe, "1"); // the edit AFTER retrieve
+      store.addProduct(coffee, "1"); // the edit AFTER retrieve
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11837,7 +11841,7 @@ describe("till-app", () => {
         pay,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "collect-card", {});
       await flush(el);
@@ -11869,7 +11873,7 @@ describe("till-app", () => {
         pay,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -11956,7 +11960,7 @@ describe("till-app", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       const id = c.store.id;
       expect(c.store.persisted).toBe(false); // a fresh walk-up basket, never parked
@@ -12022,7 +12026,7 @@ describe("till-app", () => {
 
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
-      c.store.addProduct(cafe, "1"); // the edit AFTER retrieve → the basket is dirty
+      c.store.addProduct(coffee, "1"); // the edit AFTER retrieve → the basket is dirty
       await el.updateComplete;
 
       emit(c, "place-order");
@@ -12058,7 +12062,7 @@ describe("till-app", () => {
 
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
-      c.store.addProduct(cafe, "1"); // edit → dirty → re-sync attempted
+      c.store.addProduct(coffee, "1"); // edit → dirty → re-sync attempted
       await el.updateComplete;
 
       emit(c, "place-order");
@@ -12078,7 +12082,7 @@ describe("till-app", () => {
         parkOrder: vi.fn().mockRejectedValue({ code: "working_order.rejected" }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "place-order");
@@ -12103,7 +12107,7 @@ describe("till-app", () => {
         placeOrder: vi.fn().mockRejectedValue(refused),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "place-order");
@@ -12123,7 +12127,7 @@ describe("till-app", () => {
         });
         const c = await toCounter(el);
         expect(currentLocale()).toBe(locale);
-        c.store.addProduct(cafe, "2");
+        c.store.addProduct(coffee, "2");
         await el.updateComplete;
 
         emit(c, "place-order");
@@ -12142,7 +12146,7 @@ describe("till-app", () => {
         placeOrder: vi.fn().mockRejectedValue({ code: "fiscal.record_invalid" }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "place-order");
@@ -12165,7 +12169,7 @@ describe("till-app", () => {
         parkOrder,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "place-order");
@@ -12188,7 +12192,7 @@ describe("till-app", () => {
         placeOrder,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "place-order");
@@ -12209,7 +12213,7 @@ describe("till-app", () => {
         parkOrder,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "place-order"); // first — raises the guard, awaits
@@ -12234,7 +12238,7 @@ describe("till-app", () => {
           getStationQueue,
         });
         const c = await toCounter(el);
-        c.store.addProduct(cafe, "2");
+        c.store.addProduct(coffee, "2");
         await el.updateComplete;
         const reads = getStationQueue.mock.calls.length;
 
@@ -12259,7 +12263,7 @@ describe("till-app", () => {
         }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -12274,7 +12278,7 @@ describe("till-app", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       const id = c.store.id;
       emit(c, "place-order");
@@ -13226,7 +13230,7 @@ describe("till-app", () => {
         collectOrder: vi.fn().mockRejectedValue({ code: "working_order.not_placed" }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "place-order");
       await flush(el);
@@ -13252,7 +13256,7 @@ describe("till-app", () => {
         collectOrder: vi.fn().mockRejectedValue({ code: "fiscal.foreign_recipient_unsupported" }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "place-order");
       await flush(el);
@@ -13274,7 +13278,7 @@ describe("till-app", () => {
           collectOrder: vi.fn().mockRejectedValue(refusal),
         });
         const c = await toCounter(el);
-        c.store.addProduct(cafe, "2");
+        c.store.addProduct(coffee, "2");
         await el.updateComplete;
         emit(c, "place-order");
         await flush(el);
@@ -13326,7 +13330,7 @@ describe("till-app", () => {
         }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "place-order");
       await flush(el);
@@ -13351,7 +13355,7 @@ describe("till-app", () => {
         }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "place-order");
       await flush(el);
@@ -13377,7 +13381,7 @@ describe("till-app", () => {
         }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "place-order");
       await flush(el);
@@ -13407,7 +13411,7 @@ describe("till-app", () => {
         }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "place-order");
       await flush(el);
@@ -13430,7 +13434,7 @@ describe("till-app", () => {
         collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "place-order");
       await flush(el);
@@ -13453,7 +13457,7 @@ describe("till-app", () => {
         collectOrder,
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "place-order");
       await flush(el);
@@ -13473,7 +13477,7 @@ describe("till-app", () => {
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "place-order");
       await flush(el);
@@ -13684,7 +13688,7 @@ describe("till-app", () => {
     it("show-station: the counter nav switches to the station-display screen (basket-preserving)", async () => {
       const { el } = await mountApp();
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "1"); // a basket in progress
+      c.store.addProduct(coffee, "1"); // a basket in progress
       await el.updateComplete;
 
       emit(c, "show-station");
@@ -13718,7 +13722,7 @@ describe("till-app", () => {
     it("show-expo: the counter nav switches to the expo/pass screen (basket-preserving)", async () => {
       const { el } = await mountApp();
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "1"); // a basket in progress
+      c.store.addProduct(coffee, "1"); // a basket in progress
       await el.updateComplete;
 
       emit(c, "show-expo");
@@ -13784,7 +13788,7 @@ describe("till-app", () => {
       await toCounter(el);
       for (const [index, presentation] of presentations.entries()) {
         const c = counter(el)!;
-        c.store.addProduct(cafe, "2");
+        c.store.addProduct(coffee, "2");
         await flush(el);
         emit(c, "confirm-payment", { method: "cash", amount: "5" });
         await flush(el);
@@ -13821,7 +13825,7 @@ describe("till-app", () => {
         recordSale: vi.fn().mockResolvedValue({ ...saleResult, receiptTrim: receipt }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
@@ -13834,7 +13838,7 @@ describe("till-app", () => {
         recordSale: vi.fn().mockResolvedValue({ ...saleResult, venueAddress }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
@@ -13844,7 +13848,7 @@ describe("till-app", () => {
     it("keeps the empty address supplied by the invoice answer", async () => {
       const { el } = await mountApp();
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
@@ -13854,7 +13858,7 @@ describe("till-app", () => {
     it("keeps the empty trim supplied by the invoice answer", async () => {
       const { el } = await mountApp();
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
@@ -14508,7 +14512,7 @@ describe("till-app", () => {
       const c = counter(el)!;
       expect(c.shadowRoot!.querySelector("till-card-grid")).toBeNull();
       expect(c.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
@@ -14522,7 +14526,7 @@ describe("till-app", () => {
     it("returns to the counter tab and clears the basket on New sale from the ticket drill-in", async () => {
       const el = await toShellCounter();
       const c = counter(el)!;
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
@@ -14565,7 +14569,7 @@ describe("till-app", () => {
       // unmounted at `lock`, which would mask it).
       const el = await toShellCounter();
       const c = counter(el)!;
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
@@ -14766,7 +14770,7 @@ describe("till-app", () => {
       answerLocales({ locales: [], venueDefault: "es-ES", loginDefault: "es-ES" });
       await flush(el);
       expect(currentLocale()).toBe("en-GB");
-      answerOffers(fixtureOffers({ menus: [defaultMenu], products: [cafe] }));
+      answerOffers(fixtureOffers({ menus: [defaultMenu], products: [coffee] }));
       await flush(el);
     });
 
@@ -15050,7 +15054,7 @@ describe("till-app", () => {
   describe("multi-menu switcher", () => {
     const foodMenu = { id: "cat-food", name: "Comida", isDefault: true };
     const drinksMenu = { id: "cat-drinks", name: "Bebidas", isDefault: false };
-    const bocadillo: TillProduct = {
+    const sandwich: TillProduct = {
       id: "bocadillo",
       menuItemId: "menu-item-bocadillo",
       name: "Bocadillo",
@@ -15063,7 +15067,7 @@ describe("till-app", () => {
       catalogueId: "cat-food",
       catalogueName: "Comida",
     };
-    const cerveza: TillProduct = {
+    const beer: TillProduct = {
       id: "cerveza",
       menuItemId: "menu-item-cerveza",
       name: "Cerveza",
@@ -15079,7 +15083,7 @@ describe("till-app", () => {
     const twoMenuProducts = vi
       .fn()
       .mockResolvedValue(
-        fixtureOffers({ menus: [foodMenu, drinksMenu], products: [bocadillo, cerveza] }),
+        fixtureOffers({ menus: [foodMenu, drinksMenu], products: [sandwich, beer] }),
       );
 
     const switcher = (el: TillApp) =>
@@ -15102,7 +15106,7 @@ describe("till-app", () => {
       const c = await toCounter(el);
       expect(gridNames(el)).toEqual(["Bocadillo"]);
       expect(counter(el)!.selectedMenuId).toBe("cat-food");
-      c.store.addProduct(bocadillo, "1");
+      c.store.addProduct(sandwich, "1");
       const pushHistory = vi.spyOn(history, "pushState");
       const path = location.pathname;
       switcherButtons(el)[1]!.click();
@@ -15184,7 +15188,7 @@ describe("till-app", () => {
           ],
           products: [
             {
-              ...bocadillo,
+              ...sandwich,
               id: "mojito",
               menuItemId: "menu-item-mojito",
               name: "Mojito",
@@ -15192,7 +15196,7 @@ describe("till-app", () => {
               catalogueName: "Cócteles",
             },
             {
-              ...cerveza,
+              ...beer,
               id: "rioja",
               menuItemId: "menu-item-rioja",
               name: "Rioja",
@@ -15336,7 +15340,7 @@ describe("till-app", () => {
       switcherButtons(live)[1]!.click();
       await flush(live);
       expect(counter(live)!.selectedMenuId).toBe("cat-drinks");
-      resolve(fixtureOffers({ menus: [foodMenu], products: [bocadillo] }));
+      resolve(fixtureOffers({ menus: [foodMenu], products: [sandwich] }));
       await flush(el);
       expect(counter(live)!.selectedMenuId).toBe("cat-drinks");
       expect(gridNames(live)).toEqual(["Cerveza"]);
@@ -15377,7 +15381,7 @@ describe("till-app", () => {
       const c = await toCounter(el);
 
       // Ring the default menu's product into the working order (an in-flight cart line).
-      c.store.addProduct(bocadillo, "1");
+      c.store.addProduct(sandwich, "1");
       await el.updateComplete;
       expect(c.store.lineCount).toBe(1);
 
@@ -15408,7 +15412,7 @@ describe("till-app", () => {
       // NOT be reset while the order is in progress, or it would fight the waiter).
       switcherButtons(el)[1]!.click();
       await flush(el);
-      c.store.addProduct(cerveza, "1");
+      c.store.addProduct(beer, "1");
       await el.updateComplete;
       expect(selected(el)).toBe("cat-drinks");
 
@@ -15437,7 +15441,7 @@ describe("till-app", () => {
       // Switch to the non-default menu and ring a line — the switch sticks mid-order (the control).
       switcherButtons(el)[1]!.click();
       await flush(el);
-      c.store.addProduct(cerveza, "1");
+      c.store.addProduct(beer, "1");
       await el.updateComplete;
       expect(selected(el)).toBe("cat-drinks");
 
@@ -15449,7 +15453,7 @@ describe("till-app", () => {
     });
 
     it("with a SINGLE menu the switcher renders nothing and the grid shows every product (unchanged)", async () => {
-      // The default stubApi ships one menu (`defaultMenu`) with `cafe` on it.
+      // The default stubApi ships one menu (`defaultMenu`) with `coffee` on it.
       const { el } = await mountApp();
       await toCounter(el);
 
@@ -15542,7 +15546,7 @@ it("leaves login and pairing actions clear of the language chooser on a narrow s
 describe("remembered dietary filters", () => {
   // Each dish is its own offer, with its own menu-item id, as every served offer is.
   const salad: TillProduct = {
-    ...cafe,
+    ...coffee,
     id: "salad",
     menuItemId: "menu-item-salad",
     name: "Ensalada",
@@ -15550,7 +15554,7 @@ describe("remembered dietary filters", () => {
     diet: { vegan: "yes", vegetarian: "yes", contains: [] },
   };
   const mixed: TillProduct = {
-    ...cafe,
+    ...coffee,
     id: "mixed",
     menuItemId: "menu-item-mixed",
     name: "Mixto",
@@ -16346,7 +16350,7 @@ describe("till-app follows a server move", () => {
     const { el } = await mountWidget<TillApp>("till-app", { api, router });
     const c = await toCounter(el); // the suite's existing login helper (logs in "Ana" = p1)
     // The half-built order the till holds when the box dies — it must survive the move (kept in memory).
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
     expect((el as unknown as { operatorPersonId: string }).operatorPersonId).not.toBe("");
 
@@ -16465,7 +16469,7 @@ describe("a failed list refresh after a successful write", () => {
     const listWorkingOrders = failingAfterLogin<HeldOrderSummary[]>([]);
     const { el } = await mountApp({ listWorkingOrders });
     const c = await toCounterFake(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
     emit(c, "park-order", { label: "Mesa 4" });
     await settle(el);
@@ -16543,7 +16547,7 @@ describe("a failed list refresh after a successful write", () => {
   it("a second failure while a retry counts down joins that retry, keeping its countdown", async () => {
     const { el, c, listWorkingOrders } = await parkWithFailingRefresh();
     await tick(el, 2000);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
     emit(c, "park-order", { label: "Mesa 5" });
     await settle(el);
@@ -16624,7 +16628,7 @@ describe("a failed list refresh after a successful write", () => {
       listWorkingOrders,
     });
     const c = await toCounterFake(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
     emit(c, "park-order", { label: "Mesa 4" });
     await settle(el);
@@ -16659,7 +16663,7 @@ describe("a failed list refresh after a successful write", () => {
         router,
       });
       const c = await toCounterFake(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "park-order", { label: "Mesa 4" });
       await settle(el);
@@ -16698,7 +16702,7 @@ describe("a failed list refresh after a successful write", () => {
     await settle(el);
     listWorkingOrders.mockResolvedValueOnce([]);
     const c = await toCounterFake(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await settle(el);
@@ -16739,7 +16743,7 @@ describe("a failed list refresh after a successful write", () => {
     listWorkingOrders.mockImplementationOnce(
       () => new Promise((_resolve, reject) => (fail = reject)),
     );
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
     emit(c, "park-order", { label: "Mesa 5" });
     await settle(el);
@@ -16765,7 +16769,7 @@ describe("a failed list refresh after a successful write", () => {
     await settle(el);
     expect(countdown(el, "held")).toBe(t("refresh.retrying"));
 
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
     emit(c, "park-order", { label: "Mesa 5" });
     await settle(el);
@@ -16833,7 +16837,7 @@ describe("a failed list refresh after a successful write", () => {
       expect(alertText(el)).toContain(t("refresh.held"));
       expect(el.shadowRoot!.querySelector("[data-refresh-notice][data-active]")).toBeNull();
 
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "park-order", { label: "Mesa 4" });
       await settle(el);
@@ -16868,7 +16872,7 @@ describe("a failed list refresh after a successful write", () => {
     const listWorkingOrders = failingAfterLogin<HeldOrderSummary[]>([]);
     const { el } = await mountApp({ listWorkingOrders });
     const c = await toCounterFake(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -16884,7 +16888,7 @@ describe("a failed list refresh after a successful write", () => {
     const listWorkingOrders = failingAfterLogin<HeldOrderSummary[]>([]);
     const { el } = await mountApp({ listWorkingOrders });
     const c = await toCounterFake(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "collect-card", {});
@@ -16907,7 +16911,7 @@ describe("a failed list refresh after a successful write", () => {
       getStationQueue,
     });
     const c = await toCounterFake(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
 
     emit(c, "place-order");
@@ -16945,7 +16949,7 @@ describe("a failed list refresh after a successful write", () => {
         getStationQueue,
       });
       const c = await toCounterFake(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, event, detail);
@@ -16959,7 +16963,7 @@ describe("a failed list refresh after a successful write", () => {
 
   /** A ticket-then-pay counter whose zone list offers a prepay zone, `zone-deli`, to switch to. */
   function mountWithPrepayZone(getStationQueue: ReturnType<typeof vi.fn>) {
-    const counterZone = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+    const counterZone = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
     counterZone.context = {
       departmentName: "Restaurant",
       zoneId: "zone-counter",
@@ -16982,7 +16986,7 @@ describe("a failed list refresh after a successful write", () => {
         serviceMode: "prepay",
       },
     ];
-    const deli = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+    const deli = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
     deli.context = {
       departmentName: "Restaurant",
       zoneId: "zone-deli",
@@ -17030,7 +17034,7 @@ describe("a failed list refresh after a successful write", () => {
     });
     const { el } = await mountWithPrepayZone(getStationQueue);
     const c = await toCounterFake(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
     emit(c, "place-order");
     await settle(el);
@@ -17078,7 +17082,7 @@ describe("a failed list refresh after a successful write", () => {
       emit(ticket(el)!, "new-sale");
       await settle(el);
       expect(counter(el)!.busy).toBe(false);
-      counter(el)!.store.addProduct(cafe, "1");
+      counter(el)!.store.addProduct(coffee, "1");
       await el.updateComplete;
       emit(counter(el)!, "confirm-payment", { method: "cash", amount: "5" });
       await settle(el);
@@ -17106,7 +17110,7 @@ describe("a failed list refresh after a successful write", () => {
                       menus: [defaultMenu],
                       products: [
                         {
-                          ...cafe,
+                          ...coffee,
                           unit: {
                             staffName: "Staff unit",
                             staffAbbreviation: "su",
@@ -17125,7 +17129,7 @@ describe("a failed list refresh after a successful write", () => {
                 theme,
               );
               const c = await toCounterFake(el);
-              c.store.addProduct(cafe, "1");
+              c.store.addProduct(coffee, "1");
               emit(c, "park-order", { label: "Mesa 4" });
               await settle(el);
               expect(counter(el)!.store.lines).toEqual([]);
@@ -17155,7 +17159,7 @@ describe("a failed list refresh after a successful write", () => {
       const listWorkingOrders = unansweredAfterLogin<HeldOrderSummary[]>([]);
       const { el } = await mountApp({ listWorkingOrders });
       const c = await toCounterFake(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       const id = c.store.id;
       emit(c, "park-order", { label: "Mesa 4" });
       await settle(el);
@@ -17163,7 +17167,7 @@ describe("a failed list refresh after a successful write", () => {
       expect(c.store.id).not.toBe(id);
       expect(c.store.lines).toEqual([]);
       expect(counter(el)!.busy).toBe(false);
-      counter(el)!.store.addProduct(cafe, "1");
+      counter(el)!.store.addProduct(coffee, "1");
       emit(counter(el)!, "park-order", { label: "Mesa 5" });
       await settle(el);
       expect(currentApi.parkOrder).toHaveBeenCalledTimes(2);
@@ -17203,7 +17207,7 @@ describe("a failed list refresh after a successful write", () => {
       const listWorkingOrders = unansweredAfterLogin<HeldOrderSummary[]>([]);
       const { el } = await mountApp({ listWorkingOrders });
       const c = await toCounterFake(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -17219,7 +17223,7 @@ describe("a failed list refresh after a successful write", () => {
       const listWorkingOrders = unansweredAfterLogin<HeldOrderSummary[]>([]);
       const { el } = await mountApp({ listWorkingOrders });
       const c = await toCounterFake(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "collect-card", {});
@@ -17239,7 +17243,7 @@ describe("a failed list refresh after a successful write", () => {
       });
       const { el } = await mountApp({ ...ticketThenPay, getStationQueue });
       const c = await toCounterFake(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
 
       emit(c, "place-order");
@@ -17258,7 +17262,7 @@ describe("a failed list refresh after a successful write", () => {
       const listCounterWaiting = vi.fn().mockResolvedValue([]);
       const { el } = await mountApp({ ...ticketThenPay, listCounterWaiting });
       const c = await toCounterFake(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "place-order");
       await settle(el);
@@ -17299,7 +17303,7 @@ describe("a failed list refresh after a successful write", () => {
       const listWorkingOrders = unansweredAfterLogin<HeldOrderSummary[]>([]);
       const { el } = await mountApp({ listWorkingOrders });
       const c = await toCounterFake(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await settle(el);
@@ -17331,7 +17335,7 @@ describe("a failed list refresh after a successful write", () => {
       async (_read, list, method, key) => {
         const { el } = await mountApp(ticketThenPay);
         const c = await toCounterFake(el);
-        c.store.addProduct(cafe, "2");
+        c.store.addProduct(coffee, "2");
         await el.updateComplete;
         const read = vi.mocked(currentApi[method] as (...args: unknown[]) => Promise<unknown>);
         read.mockImplementation(unanswered);
@@ -17389,7 +17393,7 @@ describe("a counter pay, place or hold refused for a reason the operator can act
           [method]: vi.fn().mockRejectedValue({ code }),
         });
         const c = await toCounter(el);
-        c.store.addProduct(cafe, "1");
+        c.store.addProduct(coffee, "1");
         await el.updateComplete;
 
         emit(c, type, detail);
@@ -17409,7 +17413,7 @@ describe("a counter pay, place or hold refused for a reason the operator can act
       const c = await toCounter(el);
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       await el.updateComplete;
 
       emit(c, "park-order", { label: "Mesa 4" });
@@ -17428,7 +17432,7 @@ describe("a counter pay, place or hold refused for a reason the operator can act
       pay: vi.fn().mockRejectedValue({ code: "order.payment_in_flight", status: 409 }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
 
     emit(c, "collect-card", {});
@@ -17448,7 +17452,7 @@ describe("a counter pay, place or hold refused for a reason the operator can act
       .mockRejectedValueOnce({ code: "server.internal" });
     const { el } = await mountApp({ recordSale });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -17543,8 +17547,8 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     unsentDrafts: [],
     reminder: null,
   };
-  const mesa9: TableState = { ...freeTable, id: "t9", label: "Mesa 9", shortName: "Mesa 9" };
-  const mesa7: TableState = {
+  const table9: TableState = { ...freeTable, id: "t9", label: "Mesa 9", shortName: "Mesa 9" };
+  const table7: TableState = {
     ...openTable,
     id: "t7",
     label: "Mesa 7",
@@ -17565,7 +17569,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
   async function counterWith(overrides: Record<string, unknown> = {}) {
     const mounted = await mountApp({
       listWorkingOrders: vi.fn().mockResolvedValue([counterOrder]),
-      getTablesState: vi.fn().mockResolvedValue([mesa7, mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table7, table9]),
       previewBillMoveAllergy: counterMovePreview(),
       moveBill: vi.fn().mockResolvedValue({ partyId: "v-new", billId: "wo-12" }),
       getFindBill: vi.fn().mockResolvedValue({
@@ -17713,7 +17717,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>('[data-target="t9"]')!);
     await flush(el);
     expect(getFindBill).toHaveBeenCalledOnce();
-    c.store.loadFrom("wo-12", [{ product: cafe, quantity: "2" }], "Retrieved", 0);
+    c.store.loadFrom("wo-12", [{ product: coffee, quantity: "2" }], "Retrieved", 0);
     c.store.setLineQuantity(0, "3");
     release({
       ...billRow({ workingOrderId: "wo-12", partyId: null }),
@@ -17846,7 +17850,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
   });
 
   it("does not reload held orders after a move refusal's floor read outlives sign-out", async () => {
-    let answerFloor!: (tables: (typeof mesa7)[]) => void;
+    let answerFloor!: (tables: (typeof table7)[]) => void;
     const { el, c } = await counterWith({
       moveBill: vi.fn().mockRejectedValue({ code: "party.out_of_date" }),
     });
@@ -17863,7 +17867,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await flush(el);
     await discardMoveDraftIfAsked(el);
     const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
-    answerFloor([mesa7, mesa9]);
+    answerFloor([table7, table9]);
     await flush(el);
 
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads);
@@ -17970,7 +17974,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       listZones,
       getTablesState: vi
         .fn()
-        .mockResolvedValue([mesa9, { ...mesa9, id: "dining-table", zoneId: "dining" }]),
+        .mockResolvedValue([table9, { ...table9, id: "dining-table", zoneId: "dining" }]),
     });
     const held = heldList(el);
     const move = held.shadowRoot!.querySelector<HTMLElement>(".move")!;
@@ -17996,7 +18000,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     const listZones = vi.fn().mockResolvedValue([floorZone]);
     const { el } = await counterWith({
       listZones,
-      getTablesState: vi.fn().mockResolvedValue([mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table9]),
     });
     const held = heldList(el);
     const move = held.shadowRoot!.querySelector<HTMLElement>(".move")!;
@@ -18021,7 +18025,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       .mockImplementationOnce(() => new Promise((resolve) => (current = resolve)));
     const { el, c } = await counterWith({
       listZones,
-      getTablesState: vi.fn().mockResolvedValue([mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([table9]),
     });
     await userEvent.click(heldList(el).shadowRoot!.querySelector<HTMLElement>(".move")!);
     await flush(el);
@@ -18049,7 +18053,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await flush(el);
 
     expect(currentApi.getTablesState).toHaveBeenCalledTimes(reads + 1);
-    expect(heldList(el).tables).toEqual([mesa7, mesa9]);
+    expect(heldList(el).tables).toEqual([table7, table9]);
   });
 
   it("moves a counter order to a table read free as a bill read with no party, stays on the counter and says where it went", async () => {
@@ -18101,7 +18105,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     const { el, c } = await counterWith({
       getTablesState: vi
         .fn()
-        .mockResolvedValue([mesa7, { ...mesa9, today: todayAs({ name: "Window" }) }]),
+        .mockResolvedValue([table7, { ...table9, today: todayAs({ name: "Window" }) }]),
     });
     emit(c, "move-held-order-open", { orderId: "wo-12" });
     await flush(el);
@@ -18117,8 +18121,8 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     const group = { joinId: "j1", joinSeats: 8, joinName: "García birthday" };
     const { el, c } = await counterWith({
       getTablesState: vi.fn().mockResolvedValue([
-        { ...mesa7, party: null, condition: "free", today: todayAs(group) },
-        { ...mesa9, today: todayAs({ name: "Window", ...group }) },
+        { ...table7, party: null, condition: "free", today: todayAs(group) },
+        { ...table9, today: todayAs({ name: "Window", ...group }) },
       ]),
     });
     emit(c, "move-held-order-open", { orderId: "wo-12" });
@@ -18168,7 +18172,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
   it("sends the party the waiter picked, though the floor read since seats another there", async () => {
     const pedro = { ...luisParty, id: "v8", revision: 2, name: "Pedro", displayName: "Pedro" };
     const { el, c } = await counterWith({
-      getTablesState: vi.fn().mockResolvedValue([{ ...mesa7, party: pedro }, mesa9]),
+      getTablesState: vi.fn().mockResolvedValue([{ ...table7, party: pedro }, table9]),
     });
     emit(c, "move-held-order-open", undefined);
     await flush(el);
@@ -18204,16 +18208,16 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     const { el, c } = await counterWith({
       getTablesState: vi
         .fn()
-        .mockResolvedValueOnce([mesa7, mesa9])
+        .mockResolvedValueOnce([table7, table9])
         .mockRejectedValue(new TypeError("Failed to fetch")),
     });
     emit(c, "move-held-order-open", undefined);
     await flush(el);
-    expect(heldList(el).tables).toEqual([mesa7, mesa9]);
+    expect(heldList(el).tables).toEqual([table7, table9]);
     emit(c, "move-held-order-open", undefined);
     await flush(el);
 
-    expect(heldList(el).tables).toEqual([mesa7, mesa9]);
+    expect(heldList(el).tables).toEqual([table7, table9]);
   });
 
   it("says the move stands when the held orders cannot be read again after it", async () => {
@@ -18269,7 +18273,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
 
   it("keeps the basket when another order is moved", async () => {
     const { el, c } = await counterWith();
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
     const id = c.store.id;
 
@@ -18315,10 +18319,10 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
   it("says the table changed when a party sat there since it was read free", async () => {
     const reads = vi
       .fn()
-      .mockResolvedValueOnce([mesa7, mesa9])
+      .mockResolvedValueOnce([table7, table9])
       .mockResolvedValue([
-        mesa7,
-        { ...mesa9, condition: "held", party: { ...luisParty, id: "v9", tableIds: ["t9"] } },
+        table7,
+        { ...table9, condition: "held", party: { ...luisParty, id: "v9", tableIds: ["t9"] } },
       ]);
     const { el, c } = await counterWith({
       getTablesState: reads,
@@ -18426,7 +18430,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     const { el, c } = await counterWith({
       recordSale: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
     });
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await el.updateComplete;
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
@@ -18860,7 +18864,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     });
 
     pressPay(el, "wo-sent");
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     expect(c.store.lineCount).toBe(0);
     read.answer(placedRead("wo-sent"));
     await flush(el);
@@ -18929,7 +18933,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
           .mockResolvedValueOnce([])
           .mockRejectedValue(new TypeError("Failed to fetch")),
       });
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await el.updateComplete;
       if (write === "a sale") emit(c, "confirm-payment", { method: "cash", amount: "5" });
       if (write === "a card sale") emit(c, "collect-card", {});
@@ -18958,7 +18962,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
         retrievePlacedOrder: vi.fn().mockReturnValue(read.promise),
         recordSale: vi.fn(recordSale),
       });
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       const own = c.store.id;
       await el.updateComplete;
 
@@ -19155,7 +19159,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
       listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
       retrievePlacedOrder: vi.fn().mockRejectedValue({ code: "working_order.not_found" }),
     });
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     const id = c.store.id;
     await el.updateComplete;
 
@@ -19175,7 +19179,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
       retrievePlacedOrder,
       placeOrder: vi.fn(() => new Promise(() => {})),
     });
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     const id = c.store.id;
     await el.updateComplete;
     emit(c, "place-order");
@@ -19210,7 +19214,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
   it("reads the list again when an order is placed and when a paid order's sale is recorded", async () => {
     const listCounterWaiting = vi.fn().mockResolvedValue([]);
     const placed = await counterWaiting({ ...invoiceFirst, listCounterWaiting });
-    placed.c.store.addProduct(cafe, "2");
+    placed.c.store.addProduct(coffee, "2");
     await placed.el.updateComplete;
     emit(placed.c, "place-order");
     await flush(placed.el);
@@ -19219,7 +19223,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     cleanupWidgets();
     const afterSale = vi.fn().mockResolvedValue([]);
     const paid = await counterWaiting({ listCounterWaiting: afterSale });
-    paid.c.store.addProduct(cafe, "2");
+    paid.c.store.addProduct(coffee, "2");
     await paid.el.updateComplete;
     emit(paid.c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(paid.el);
@@ -20509,7 +20513,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     expect(tenderPay(el).activeReaders.map((reader) => reader.id)).toEqual([R2.id]);
     expect(tenderPay(el).defaultReaderId).toBe(R2.id);
     expect(readerName(el)).toBe(R2.name);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await el.updateComplete;
     emit(c, "collect-card", {});
     await flush(el);
@@ -20790,9 +20794,9 @@ describe("switching the device's profile from the header", () => {
     fixtureOffers({
       menus: [foodMenu, drinksMenu],
       products: [
-        { ...cafe, catalogueId: "cat-food", catalogueName: "Comida" },
+        { ...coffee, catalogueId: "cat-food", catalogueName: "Comida" },
         {
-          ...cafe,
+          ...coffee,
           id: "cerveza",
           menuItemId: "menu-item-cerveza",
           name: "Cerveza",
@@ -20919,7 +20923,7 @@ describe("switching the device's profile from the header", () => {
 
   it("profile refusal for an active basket keeps the Schedule draft without another question", async () => {
     const { el, c, owner, input } = await scheduleWithProfile("Family visit");
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
     await flush(el);
     expect(profileDialog(el)!.notice).toBe("order_open");
@@ -20953,7 +20957,7 @@ describe("switching the device's profile from the header", () => {
     emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
     const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await expect.poll(() => question.open).toBe(true);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     await question.updateComplete;
     question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await flush(el);
@@ -21252,7 +21256,7 @@ describe("switching the device's profile from the header", () => {
       activeProfileId: BAR.id,
     });
     const { el, c } = await openProfile({ switchDeviceProfile });
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await flush(el);
     emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
     await flush(el);
@@ -21393,7 +21397,7 @@ describe("switching the device's profile from the header", () => {
     const offersIn = async (zoneId: string, menu: string): Promise<ZoneOfferCatalogue> => {
       const catalogue = fixtureOffers({
         menus: [{ id: menu, name: menu, isDefault: true }],
-        products: [{ ...cafe, catalogueId: menu, catalogueName: menu }],
+        products: [{ ...coffee, catalogueId: menu, catalogueName: menu }],
       });
       catalogue.context = { ...catalogue.context, zoneId };
       catalogue.zones = zones;
@@ -21588,7 +21592,7 @@ describe("dead-end unsaved choices in the till shell", () => {
       const recordSale = vi.fn().mockResolvedValue(saleResult);
       const { el } = await mountApp({ askSaleDeadEnds, recordSale });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "1");
+      c.store.addProduct(coffee, "1");
       await flush(el);
       tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
       await flush(el);
@@ -21647,7 +21651,7 @@ it.each(["cash", "reference"] as const)(
     const recordSale = vi.fn().mockResolvedValue(saleResult);
     const { el } = await mountApp({ recordSale });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     await flush(el);
     const form = tenderPay(el);
     form.shadowRoot!.querySelector<HTMLElement>(kind === "cash" ? ".pay" : ".pay-card")!.click();
@@ -21909,7 +21913,7 @@ describe("W69 till shell leave routes", () => {
   it("counter tab changes and logout retain the same basket without a form warning", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     c.store.label = "Lunch";
     const lines = c.store.lines;
     selectTab(el, "floor");
@@ -22208,7 +22212,7 @@ describe("W69 held move basket protection", () => {
     await answerCounterMoveIfAsked(el);
     await expect.poll(() => warning(el).open).toBe(true);
     const stale = warning(el).shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
-    c.store.loadFrom("other", [{ product: jamon, quantity: "1" }], "Other", 1);
+    c.store.loadFrom("other", [{ product: ham, quantity: "1" }], "Other", 1);
     await expect.poll(() => warning(el).open).toBe(false);
     stale.click();
     await flush(el);
@@ -22356,7 +22360,7 @@ describe("basket unsaved replacement", () => {
     expect(unloadCancelled()).toBe(true);
     c.store.label = undefined;
     expect(unloadCancelled()).toBe(false);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     expect(unloadCancelled()).toBe(true);
     c.store.removeLine(0);
     expect(unloadCancelled()).toBe(false);
@@ -22364,7 +22368,7 @@ describe("basket unsaved replacement", () => {
   it("Keep retains the basket; Discard retrieves once without abandoning or paying it", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(jamon, "1");
+    c.store.addProduct(ham, "1");
     c.store.label = "Lunch";
     const id = c.store.id;
     emit(c, "retrieve-order", { id: "wo-1" });
@@ -22407,7 +22411,7 @@ describe("basket unsaved replacement", () => {
       retrieveWorkingOrder: vi.fn().mockRejectedValue({ code: "working_order.not_found" }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(jamon, "1");
+    c.store.addProduct(ham, "1");
     const id = c.store.id;
     emit(c, "retrieve-order", { id: "gone" });
     await expect.poll(() => question(el).open).toBe(true);
@@ -22421,7 +22425,7 @@ describe("basket unsaved replacement", () => {
   it("retained basket remains unload-protected through tabs and logout without asking", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     selectTab(el, "floor");
     await flush(el);
     expect(question(el).open).toBe(false);
@@ -22436,7 +22440,7 @@ describe("basket unsaved replacement", () => {
   it("a successful sale clears basket unload protection without asking before payment", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     expect(unloadCancelled()).toBe(true);
     emit(c, "confirm-payment", { method: "cash", amount: "3" });
     await expect.poll(() => ticket(el)).not.toBeNull();
@@ -22459,7 +22463,7 @@ describe("basket unsaved replacement", () => {
     const id = c.store.id;
     emit(c, "retrieve-order", { id: "wo-1" });
     await expect.poll(() => currentApi.retrieveWorkingOrder).toHaveBeenCalledOnce();
-    c.store.addProduct(jamon, "1");
+    c.store.addProduct(ham, "1");
     c.store.label = "Newer basket";
     resolve(saved);
     await flush(el);
@@ -22472,7 +22476,7 @@ describe("basket unsaved replacement", () => {
     const saved = await stubApi().retrieveWorkingOrder("wo-1");
     const { el } = await mountApp({ retrievePlacedOrder: vi.fn().mockResolvedValue(saved) });
     const c = await toCounter(el);
-    c.store.addProduct(jamon, "1");
+    c.store.addProduct(ham, "1");
     const id = c.store.id;
     emit(c, "pay-waiting-order", { id: "wo-1" });
     await flush(el);
@@ -22500,7 +22504,7 @@ describe("basket protection lifetimes", () => {
   it("display-only basket notifications leave a pending replacement decision open", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(c, "retrieve-order", { id: "wo-1" });
     const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await expect.poll(() => question.open).toBe(true);
@@ -22516,7 +22520,7 @@ describe("basket protection lifetimes", () => {
       pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(c, "collect-card", {});
     await expect.poll(() => ticket(el)).not.toBeNull();
     expect(currentApi.pay).toHaveBeenCalledOnce();
@@ -22576,7 +22580,7 @@ describe("basket protection lifetimes", () => {
     ];
     c.store.loadFrom(
       "stored",
-      [{ product: cafe, quantity: "2.000", extras, options }],
+      [{ product: coffee, quantity: "2.000", extras, options }],
       "Stored",
       2,
     );
@@ -22598,7 +22602,7 @@ describe("basket protection lifetimes", () => {
     expect(unloadCancelled()).toBe(true);
     c.store.setLineMakeAt(0, undefined);
     expect(unloadCancelled()).toBe(false);
-    c.store.addProduct(jamon, "1");
+    c.store.addProduct(ham, "1");
     expect(unloadCancelled()).toBe(true);
     c.store.removeLine(1);
     expect(unloadCancelled()).toBe(false);
@@ -22633,7 +22637,7 @@ describe("basket native replacement warning", () => {
             );
             const c = await toCounter(el);
             await showCounterList(el, "parked");
-            c.store.addProduct(jamon, "1");
+            c.store.addProduct(ham, "1");
             c.store.label = "Lunch";
             const id = c.store.id;
             const held = counterBody(el)!.shadowRoot!.querySelector("till-held-orders")!;
@@ -22699,7 +22703,7 @@ it("retained basket traverses indexed and unindexed history without a discard wa
   }
   const { el } = await mountApp();
   const c = await toCounter(el);
-  c.store.addProduct(cafe, "2");
+  c.store.addProduct(coffee, "2");
   c.store.label = "History basket";
   const id = c.store.id;
   selectTab(el, "floor");
@@ -22733,7 +22737,7 @@ it("New sale keeps edits made during payment until you explicitly discard them",
   const paid = new Promise<TillSaleResult>((resolve) => (answer = resolve));
   const { el } = await mountApp({ recordSale: vi.fn().mockReturnValue(paid) });
   const c = await toCounter(el);
-  c.store.addProduct(cafe, "2");
+  c.store.addProduct(coffee, "2");
   const id = c.store.id;
   emit(c, "confirm-payment", { method: "cash", amount: "3" });
   await expect.poll(() => currentApi.recordSale).toHaveBeenCalledOnce();
@@ -22769,7 +22773,7 @@ it("a completed sale can start the next basket while its held-list refresh is st
     listWorkingOrders: vi.fn().mockResolvedValueOnce([]).mockReturnValue(pending),
   });
   const c = await toCounter(el);
-  c.store.addProduct(cafe, "2");
+  c.store.addProduct(coffee, "2");
   const id = c.store.id;
   emit(c, "confirm-payment", { method: "cash", amount: "3" });
   await expect.poll(() => ticket(el)).not.toBeNull();
@@ -22969,11 +22973,13 @@ describe("closed floor zone counter refusals", () => {
       parkOrder: vi.fn().mockRejectedValue({ code: "service_zone.closed" }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(c, "park-order", { label: "Later" });
     await flush(el);
     await expect.poll(() => listZones.mock.calls.length).toBe(1);
-    expect(c.store.lines.map((line) => [line.product.id, line.quantity])).toEqual([[cafe.id, "2"]]);
+    expect(c.store.lines.map((line) => [line.product.id, line.quantity])).toEqual([
+      [coffee.id, "2"],
+    ]);
     expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
       codeMessage("service_zone.closed", "es"),
     );
@@ -22998,7 +23004,7 @@ describe("closed floor zone counter refusals", () => {
       parkOrder: vi.fn().mockRejectedValue({ code: "service_zone.closed" }),
     });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "1");
+    c.store.addProduct(coffee, "1");
     emit(c, "park-order", {});
     await flush(el);
     await expect.poll(() => listZones.mock.calls.length).toBe(1);
@@ -23186,7 +23192,7 @@ describe("A737 Find a bill page", () => {
       getTablesState: vi.fn().mockResolvedValue([]),
       getPartyBills: vi.fn(),
     });
-    counter.store.addProduct(cafe, "2");
+    counter.store.addProduct(coffee, "2");
     emit(view, "find-bill-open", { row: billRow() });
     await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.stale")));
     expect(pageOf(el)).toBe(view);
@@ -23208,7 +23214,7 @@ describe("A737 Find a bill page", () => {
         }),
     );
     el.api.getTablesState = getTablesState;
-    counter.store.addProduct(cafe, "2");
+    counter.store.addProduct(coffee, "2");
     emit(view, "find-bill-open", { row: billRow() });
     await vi.waitFor(() => expect(getTablesState).toHaveBeenCalledOnce());
     emit(view, "find-bill-back");
@@ -23237,7 +23243,7 @@ describe("A737 Find a bill page", () => {
       ),
       getFiledTicket,
     });
-    counter.store.addProduct(cafe, "2");
+    counter.store.addProduct(coffee, "2");
     emit(view, "find-bill-open", { row: billRow() });
     await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.stale")));
     expect(view.busy).toBe(false);
@@ -23309,7 +23315,7 @@ describe("A737 Find a bill page", () => {
     await vi.waitFor(() => expect(retrieveWorkingOrder).toHaveBeenCalledOnce());
     emit(view, "find-bill-back");
     await flush(el);
-    counter.store.addProduct(cafe, "2");
+    counter.store.addProduct(coffee, "2");
     const id = counter.store.id;
     finish({
       expectedEdit: null,
@@ -23334,7 +23340,7 @@ describe("A737 Find a bill page", () => {
   });
   it("opens only from More as a page and Back preserves the counter basket", async () => {
     const { el, counter, view } = await open();
-    counter.store.addProduct(cafe, "2");
+    counter.store.addProduct(coffee, "2");
     await flush(el);
     const sh = shell(el)!;
     expect(sh.shadowRoot!.querySelector(".session > .find-bill")).toBeNull();
@@ -23373,7 +23379,7 @@ describe("A737 Find a bill page", () => {
       getReceiptPrintStatus: originalRead,
       getInvoiceDeliveries: originalRead,
     });
-    counter.store.addProduct(cafe, "2");
+    counter.store.addProduct(coffee, "2");
     await view.updateComplete;
     const tabs = view.shadowRoot!.querySelector("wt-tabs")!;
     await userEvent.click(
@@ -23577,7 +23583,7 @@ describe("A737 Find a bill page", () => {
       getTransactionReceipt,
       getRefundableTenders,
     });
-    counter.store.addProduct(cafe, "2");
+    counter.store.addProduct(coffee, "2");
     emit(view, "find-transaction-open", { row: refundRow() });
     await vi.waitFor(() => expect(refundView(el)).not.toBeNull());
     expect(getTenderRefundAcknowledgment.mock.calls[0]![0]).toBe("refund-1");
@@ -23768,7 +23774,7 @@ describe("A737 Find a bill page", () => {
         }),
     );
     const { el, counter, view } = await open({ getFindBill });
-    counter.store.addProduct(cafe, "1");
+    counter.store.addProduct(coffee, "1");
     emit(view, "find-bill-open", { row: billRow() });
     await vi.waitFor(() => expect(getFindBill).toHaveBeenCalledTimes(1));
     expect(getFindBill.mock.calls[0]![0]).toBe("bill-1");
@@ -23798,7 +23804,7 @@ describe("A737 Find a bill page", () => {
     const collectOrder = vi.fn();
     const getFindBill = vi.fn().mockRejectedValue({ code: "working_order.not_found" });
     const { el, counter, view } = await open({ getFindBill, collectOrder });
-    counter.store.addProduct(cafe, "1");
+    counter.store.addProduct(coffee, "1");
     emit(view, "find-bill-open", { row: billRow() });
     await vi.waitFor(() => expect(getFindBill).toHaveBeenCalledTimes(1));
     await flush(el);
@@ -23826,7 +23832,7 @@ describe("A737 Find a bill page", () => {
       getFindBill: vi.fn().mockResolvedValue(billRow({ state: "held", paid: "0.00" })),
       retrieveWorkingOrder,
     });
-    counter.store.addProduct(cafe, "1");
+    counter.store.addProduct(coffee, "1");
     await flush(el);
     emit(view, "find-bill-open", { row: billRow() });
     await vi.waitFor(() =>
@@ -23949,7 +23955,7 @@ describe("A737 Find a bill page", () => {
         ]),
       getTabLines,
     });
-    counter.store.addProduct(cafe, "1");
+    counter.store.addProduct(coffee, "1");
     await flush(el);
     emit(view, "find-bill-open", { row: billRow({ workingOrderId: "wo-other" }) });
     await vi.waitFor(() => expect(tableOrder(el)?.orderId).toBe("wo-other"));
@@ -24005,7 +24011,7 @@ describe("A737 Find a bill page", () => {
       ),
       getFiledTicket,
     });
-    counter.store.addProduct(cafe, "1");
+    counter.store.addProduct(coffee, "1");
     await flush(el);
     emit(view, "find-bill-open", { row: billRow({ workingOrderId: "bill-paid" }) });
     await vi.waitFor(() => expect(ticket(el)?.result).toEqual(saleResult));
@@ -24033,7 +24039,7 @@ describe("A737 Find a bill page", () => {
     await vi.waitFor(() => expect(listZoneOffers).toHaveBeenCalledTimes(1));
     emit(view, "find-bill-back");
     await flush(el);
-    finish(fixtureOffers({ menus: [defaultMenu], products: [cafe] }));
+    finish(fixtureOffers({ menus: [defaultMenu], products: [coffee] }));
     await flush(el);
     expect(tableOrder(el)).toBeNull();
     expect(pageOf(el)).toBeNull();
@@ -24065,7 +24071,7 @@ describe("A737 Find a bill page", () => {
     emit(view, "find-bill-back");
     await flush(el);
     expect(retrievePlacedOrder.mock.calls[0]![1].signal.aborted).toBe(true);
-    counter.store.addProduct(cafe, "1");
+    counter.store.addProduct(coffee, "1");
     const id = counter.store.id;
     finish({
       kitchenNote: {
@@ -24107,7 +24113,7 @@ describe("A737 Find a bill page", () => {
 
   it("browser Back leaves the page with the basket intact", async () => {
     const { el, counter } = await open();
-    counter.store.addProduct(cafe, "1");
+    counter.store.addProduct(coffee, "1");
     await flush(el);
     history.back();
     await vi.waitFor(() => expect(pageOf(el)).toBeNull());
@@ -24335,7 +24341,7 @@ describe("A767 card outcome belongs to its order", () => {
     emit(c, "collect-card", {});
     await flush(el);
     const lines = [...c.store.lines];
-    c.store.loadFrom("other-order", [{ product: cafe, quantity: "1" }]);
+    c.store.loadFrom("other-order", [{ product: coffee, quantity: "1" }]);
     await flush(el);
     expect(tenderPay(el).shadowRoot!.querySelector(".retry")).toBeNull();
     c.store.loadFrom("wo-1", lines, "Mesa 4", 3);
@@ -24347,12 +24353,12 @@ describe("A767 card outcome belongs to its order", () => {
     const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
     const { el } = await mountApp({ ...readerTill(), pay });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(c, "collect-card", {});
     await flush(el);
     const retry = tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".retry")!;
     pay.mockClear();
-    c.store.loadFrom("other-order", [{ product: cafe, quantity: "1" }]);
+    c.store.loadFrom("other-order", [{ product: coffee, quantity: "1" }]);
     retry.click();
     await flush(el);
     expect(c.store.id).toBe("other-order");
@@ -24439,7 +24445,7 @@ describe("A767 sign-in and held-order recovery", () => {
   it("retrieves without discarding edits after sign-in when a declined card already stored the unchanged order", async () => {
     const { el } = await mountApp({ pay: vi.fn().mockResolvedValue({ outcome: "declined" }) });
     const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
+    c.store.addProduct(coffee, "2");
     emit(c, "collect-card", {});
     await flush(el);
     expect(c.store.persisted).toBe(true);
@@ -24467,7 +24473,7 @@ it("A767 keeps edits made while the card request was pending protected after a d
   );
   const { el } = await mountApp({ pay });
   const c = await toCounter(el);
-  c.store.addProduct(cafe, "2");
+  c.store.addProduct(coffee, "2");
   emit(c, "collect-card", {});
   await vi.waitFor(() => expect(pay).toHaveBeenCalledOnce());
   c.store.setLineQuantity(0, "3");
@@ -24624,7 +24630,7 @@ describe("A737 post-invoice refund integration", () => {
         {},
         invoiceType,
       );
-      basket.store.addProduct(cafe, "2");
+      basket.store.addProduct(coffee, "2");
       await flush(el);
       await openRefund(el);
       expect(getRefundableTenders).toHaveBeenCalledWith("sale-1", expect.anything());
@@ -24745,7 +24751,7 @@ describe("A737 post-invoice refund integration", () => {
     );
     const activity = fakeSessionActivity();
     const { el, basket } = await open({ refundTransaction }, "F2", activity);
-    basket.store.addProduct(cafe, "2");
+    basket.store.addProduct(coffee, "2");
     await flush(el);
     await openRefund(el);
     await submit(el);
@@ -25165,7 +25171,7 @@ describe("A737 post-invoice refund integration", () => {
     );
     await vi.waitFor(() => expect(grid.serverPaging?.page).toBe(1));
     await vi.waitFor(() => expect(grid.loading).toBe(false));
-    basket.store.addProduct(cafe, "2");
+    basket.store.addProduct(coffee, "2");
     await flush(el);
     const before = listTransactions.mock.calls.at(-1)![0];
     expect(before).toMatchObject({
@@ -25471,7 +25477,7 @@ describe("retrieved table bills paid at Counter", () => {
     const recordSale = vi.fn().mockResolvedValue(saleResult);
     const { el, counter } = await retrievedTable({ recordSale });
     counter.store.clear();
-    counter.store.addProduct(cafe, "1");
+    counter.store.addProduct(coffee, "1");
     const next = counter.store.id;
     expect(next).not.toBe("wo-1");
     emit(counter, "confirm-payment", { method: "cash", amount: "1.50" });
@@ -25519,7 +25525,7 @@ describe("request-device refusals keep their recovery instruction", () => {
       });
       const c = await toCounter(el);
       setLocale(locale);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       emit(ticket(el)!, "confirm-handover");
@@ -25574,7 +25580,7 @@ describe("request-device refusals keep their recovery instruction", () => {
         cancelDemoReaderPayment: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
       });
       const c = await toCounter(el);
-      c.store.addProduct(cafe, "2");
+      c.store.addProduct(coffee, "2");
       await flush(el);
       emit(c, "collect-card", { readerId });
       await vi.waitFor(() => expect(pay).toHaveBeenCalledOnce());

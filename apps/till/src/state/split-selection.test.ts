@@ -73,7 +73,7 @@ function dish(id: string, lineNo: number, price: string): TabLine {
   });
 }
 
-const cañas = (from = 1) => [0, 1, 2, 3].map((at) => line(`c${at + 1}`, from + at));
+const fourBeerLines = (from = 1) => [0, 1, 2, 3].map((at) => line(`c${at + 1}`, from + at));
 
 function balanceOf(
   lines: readonly TabLine[],
@@ -267,19 +267,23 @@ describe("A803 selection:", () => {
     });
 
     it("2 of 4 from a whole bill: unticking the Caña row drops all four, and a pick count keeps 4a's first-members rule", () => {
-      const lines = [dish("p", 1, "12.00"), ...cañas(2)];
+      const lines = [dish("p", 1, "12.00"), ...fourBeerLines(2)];
       const one = source("b1", 1, lines);
 
-      const noCañas = pickOnBill(one, wholeOf("b1"), new Set(["p"]));
-      expect(sorted(noCañas.picks.get("b1"))).toEqual(["p"]);
+      const withoutBeerLines = pickOnBill(one, wholeOf("b1"), new Set(["p"]));
+      expect(sorted(withoutBeerLines.picks.get("b1"))).toEqual(["p"]);
 
-      const row = rowsOf(one, noCañas)[1]!;
+      const row = rowsOf(one, withoutBeerLines)[1]!;
       expect(row.counted).toBe(true);
-      const two = pickOnBill(one, noCañas, setCount(row, 2, noCañas.picks.get("b1")!));
+      const two = pickOnBill(
+        one,
+        withoutBeerLines,
+        setCount(row, 2, withoutBeerLines.picks.get("b1")!),
+      );
       expect(sorted(two.picks.get("b1"))).toEqual(["c1", "c2", "p"]);
       expect(pickedCount(rowsOf(one, two)[1]!, two.picks.get("b1")!)).toBe(2);
 
-      const later = pickOnBill(one, noCañas, new Set(["p", "c3", "c4"]));
+      const later = pickOnBill(one, withoutBeerLines, new Set(["p", "c3", "c4"]));
       expect(sorted(later.picks.get("b1"))).toEqual(["c1", "c2", "p"]);
     });
   });
@@ -957,7 +961,7 @@ describe("A803 selection:", () => {
     });
 
     it("a re-read that pays one of 2 of 4 names the bill, and the count stays", () => {
-      const lines = cañas();
+      const lines = fourBeerLines();
       const one = source("b1", 1, lines);
       const split = looseOf({ b1: ["c1", "c2"] });
       const paid = source("b1", 1, lines, { paid: ["c1"], received: "5.00" });
@@ -1231,7 +1235,7 @@ describe("A803 selection:", () => {
       const floor = source(
         "b1",
         1,
-        [dish("twelve", 1, "12.00"), ...cañas(2), dish("big", 6, "20.00")],
+        [dish("twelve", 1, "12.00"), ...fourBeerLines(2), dish("big", 6, "20.00")],
         {
           received: "40.00",
         },

@@ -5483,8 +5483,8 @@ describe("A773 fire paper: the cue on the station card", () => {
     cardOf(el, 7).querySelector<HTMLElement>("[data-goes-with]");
 
   it("A773 fire paper: a released card whose group has dishes held for the pass names their stations", async () => {
-    const moscatel = ageDish("moscatel", 18, { name: "Moscatel", group: dessertsGroup });
-    const { el } = await mountCard([moscatel]);
+    const muscatWine = ageDish("moscatel", 18, { name: "Moscatel", group: dessertsGroup });
+    const { el } = await mountCard([muscatWine]);
     expect(cue(el)).not.toBeNull();
     expect(cue(el)!.textContent!.trim()).toBe("Goes with Grill");
     const lines = [...cardOf(el, 7).querySelectorAll(".line-name")];
@@ -5496,7 +5496,7 @@ describe("A773 fire paper: the cue on the station card", () => {
     const previousLocale = currentLocale();
     setLocale("es-ES");
     try {
-      const spanish = await mountCard([moscatel]);
+      const spanish = await mountCard([muscatWine]);
       expect(cue(spanish.el)!.textContent!.trim()).toBe("Sale con Grill");
     } finally {
       setLocale(previousLocale);
@@ -5536,11 +5536,11 @@ describe("A773 fire paper: the cue on the station card", () => {
     expect(cue(heldBeside.el)!.textContent!.trim()).toBe("Goes with Grill");
     cleanupWidgets();
 
-    const tartaBeside = await mountCard([
+    const cakeBeside = await mountCard([
       ageDish("tarta", 18, { name: "Tarta", passControlled: true, group: dessertsGroup }),
       ageDish("moscatel", 18, { name: "Moscatel", group: dessertsGroup }),
     ]);
-    expect(cue(tartaBeside.el)!.textContent!.trim()).toBe("Goes with Grill");
+    expect(cue(cakeBeside.el)!.textContent!.trim()).toBe("Goes with Grill");
     cleanupWidgets();
 
     const plain = await mountCard([ageDish("moscatel", 18, { group: plainGroup })]);

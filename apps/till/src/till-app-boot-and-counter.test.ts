@@ -51,7 +51,7 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 
-const cafe: TillProduct = {
+const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   pricingUnit: "each",
@@ -207,7 +207,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listStaff: vi.fn().mockResolvedValue([]),
     listDefaultZoneOffers: vi
       .fn()
-      .mockResolvedValue(zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter")),
+      .mockResolvedValue(zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter")),
     listZoneOffers: vi.fn(),
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
@@ -1682,7 +1682,7 @@ describe("till-app receipt issuance", () => {
   }
 
   it("uses automatic printing when zone offers omit the receipt choice, with or without a zone chooser", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     catalogue.zones = [zone("zone-counter", "prepay")];
     expect((await ticketAfterSale(catalogue)).originalReceiptAvailable).toBe(false);
     cleanupWidgets();
@@ -1692,7 +1692,7 @@ describe("till-app receipt issuance", () => {
 
   it("takes pay timing from the zone context when no zone chooser is supplied", async () => {
     const catalogue = zoneOffers(
-      { menus: [defaultMenu], products: [cafe] },
+      { menus: [defaultMenu], products: [coffee] },
       "zone-counter",
       "ticket_then_pay",
     );
@@ -1707,7 +1707,7 @@ describe("till-app receipt issuance", () => {
   });
 
   it("offers the original receipt according to the selected zone", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     catalogue.context.receiptPrintMode = "on_request";
     const { el } = await mountApp({
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
@@ -1722,10 +1722,10 @@ describe("till-app receipt issuance", () => {
   });
 
   it("updates original receipt availability when the counter switches zones", async () => {
-    const initial = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    const initial = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     initial.context.receiptPrintMode = "on_request";
     initial.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
-    const deli = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-deli");
+    const deli = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-deli");
     deli.context.receiptPrintMode = "auto";
     const { el } = await mountApp({
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(initial)),
@@ -1745,7 +1745,7 @@ describe("till-app receipt issuance", () => {
 
   it("keeps the original receipt on offer and says why when printing it fails", async () => {
     const printReceipt = vi.fn().mockRejectedValue({ code: "printing.no_printer" });
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     catalogue.context.receiptPrintMode = "on_request";
     const { el } = await mountApp({
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
@@ -1834,7 +1834,7 @@ describe("till-app counter menus and service zones", () => {
   });
 
   it("ignores a zone change naming a zone the counter was not offered", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     catalogue.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
     const { el } = await mountApp({ listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue) });
     const c = await toCounter(el);
@@ -1848,7 +1848,7 @@ describe("till-app counter menus and service zones", () => {
 
   it("keeps the current counter and pay timing when a forged counter pick names a table zone", async () => {
     const catalogue = zoneOffers(
-      { menus: [defaultMenu], products: [cafe] },
+      { menus: [defaultMenu], products: [coffee] },
       "zone-counter",
       "ticket_then_pay",
     );
@@ -1857,8 +1857,8 @@ describe("till-app counter menus and service zones", () => {
       {
         menus: twoMenus,
         products: [
-          { ...cafe, id: "tostada", catalogueId: "menu-food" },
-          { ...cafe, id: "cana", catalogueId: "menu-drinks" },
+          { ...coffee, id: "tostada", catalogueId: "menu-food" },
+          { ...coffee, id: "cana", catalogueId: "menu-drinks" },
         ],
       },
       "zone-terrace",
@@ -1883,7 +1883,7 @@ describe("till-app counter menus and service zones", () => {
   });
 
   it("shows service_zone.load_error when the new zone's menus cannot load, but not for a superseded request", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     catalogue.zones = [
       zone("zone-counter", "prepay"),
       zone("zone-a", "prepay"),
@@ -1918,7 +1918,7 @@ describe("till-app counter menus and service zones", () => {
   });
 
   it("says in its own words that the profile no longer works in the zone chosen", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     catalogue.zones = [zone("zone-counter", "prepay"), zone("zone-a", "prepay")];
     const { el } = await mountApp({
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
@@ -1939,14 +1939,14 @@ describe("till-app counter menus and service zones", () => {
 
   it("searches the menus of the zone the counter switches to", async () => {
     const lunch = { id: "menu-lunch", name: "Lunch", isDefault: true };
-    const tostada = { ...cafe, id: "tostada", name: "Tostada", catalogueId: "menu-lunch" };
-    const lunchOffers = { menus: [lunch], products: [tostada] };
+    const toast = { ...coffee, id: "tostada", name: "Tostada", catalogueId: "menu-lunch" };
+    const lunchOffers = { menus: [lunch], products: [toast] };
     const zoneA = zoneOffers(
       {
         menus: [...lunchOffers.menus, { id: "menu-drinks", name: "Drinks", isDefault: false }],
         products: [
           ...lunchOffers.products,
-          { ...cafe, id: "tinto", name: "Tinto", catalogueId: "menu-drinks" },
+          { ...coffee, id: "tinto", name: "Tinto", catalogueId: "menu-drinks" },
         ],
       },
       "zone-a",
@@ -1957,7 +1957,7 @@ describe("till-app counter menus and service zones", () => {
         menus: [...lunchOffers.menus, { id: "menu-brunch", name: "Brunch", isDefault: false }],
         products: [
           ...lunchOffers.products,
-          { ...cafe, id: "tortilla", name: "Tortilla", catalogueId: "menu-brunch" },
+          { ...coffee, id: "tortilla", name: "Tortilla", catalogueId: "menu-brunch" },
         ],
       },
       "zone-b",
@@ -2330,7 +2330,7 @@ describe("till-app counter: the guests the receipt prints", () => {
     await flush(el);
   }
 
-  async function counterWithCafe() {
+  async function counterWithCoffee() {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue(cashTill),
       collectOrder: vi.fn().mockResolvedValue(saleResult),
@@ -2342,7 +2342,7 @@ describe("till-app counter: the guests the receipt prints", () => {
   }
 
   it("a cash sale with the field untouched sends no guests line beside a bare tender", async () => {
-    const { el, c } = await counterWithCafe();
+    const { el, c } = await counterWithCoffee();
     expect(guests(el)!.value).toBe("");
 
     await payCash(el);
@@ -2355,14 +2355,14 @@ describe("till-app counter: the guests the receipt prints", () => {
   });
 
   it("identifies a counter sale as having no table editor", async () => {
-    const { el } = await counterWithCafe();
+    const { el } = await counterWithCoffee();
     await payCash(el);
     expect(vi.mocked(api.recordSale).mock.calls[0]).toHaveLength(9);
     expect(vi.mocked(api.recordSale).mock.calls[0]![8]).toBeNull();
   });
 
   it("identifies a counter collection as having no table editor", async () => {
-    const { el, c } = await counterWithCafe();
+    const { el, c } = await counterWithCoffee();
     emit(c, "collect-order", { method: "cash", amount: "5", guestCount: 2 });
     await flush(el);
     expect(vi.mocked(api.collectOrder).mock.calls[0]).toHaveLength(5);
@@ -2370,7 +2370,7 @@ describe("till-app counter: the guests the receipt prints", () => {
   });
 
   it("a cash sale after typing 2 sends 2", async () => {
-    const { el } = await counterWithCafe();
+    const { el } = await counterWithCoffee();
     await typeGuests(el, "2");
 
     await payCash(el);
@@ -2381,7 +2381,7 @@ describe("till-app counter: the guests the receipt prints", () => {
   });
 
   it("collecting a placed counter order sends the count beside a bare tender", async () => {
-    const { el, c } = await counterWithCafe();
+    const { el, c } = await counterWithCoffee();
 
     emit(c, "collect-order", { method: "cash", amount: "5", guestCount: 2 });
     await flush(el);
@@ -2392,7 +2392,7 @@ describe("till-app counter: the guests the receipt prints", () => {
   });
 
   it("a sale with a full invoice chosen shows no field and sends no guests", async () => {
-    const { el, c } = await counterWithCafe();
+    const { el, c } = await counterWithCoffee();
     emit(c, "choose-invoice");
     await flush(el);
     const invoice = {
@@ -2474,8 +2474,8 @@ describe("till-app retrieving a held order", () => {
       {
         menus: [defaultMenu],
         products: [
-          { ...cafe, id: "first", name: "Primero", unitPrice: "1.00", menuItemId: "mi-dup" },
-          { ...cafe, id: "second", name: "Segundo", unitPrice: "2.00", menuItemId: "mi-dup" },
+          { ...coffee, id: "first", name: "Primero", unitPrice: "1.00", menuItemId: "mi-dup" },
+          { ...coffee, id: "second", name: "Segundo", unitPrice: "2.00", menuItemId: "mi-dup" },
         ],
       },
       "zone-counter",
@@ -2505,7 +2505,7 @@ describe("till-app retrieving a held order", () => {
   });
 
   it("keeps a line that names no product or selling id from its stored snapshot", async () => {
-    const snapshot: TillProduct = { ...cafe, id: "retired", name: "Antiguo", unitPrice: "4.00" };
+    const snapshot: TillProduct = { ...coffee, id: "retired", name: "Antiguo", unitPrice: "4.00" };
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
         kitchenNote: {
@@ -2627,7 +2627,7 @@ describe("till-app fits the page it is given", () => {
     {
       menus: [defaultMenu],
       products: Array.from({ length: 40 }, (_, i) => ({
-        ...cafe,
+        ...coffee,
         id: `cafe-${i}`,
         name: `Café ${i}`,
       })),
@@ -3047,7 +3047,7 @@ describe("till-app logout while a request is waiting for the server", () => {
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn().mockResolvedValue({
         ...zoneOffers(
-          { menus: [defaultMenu], products: [cafe] },
+          { menus: [defaultMenu], products: [coffee] },
           "zone-counter",
           "ticket_then_pay",
         ),
@@ -3077,7 +3077,7 @@ describe("till-app logout while a request is waiting for the server", () => {
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn().mockResolvedValue({
         ...zoneOffers(
-          { menus: [defaultMenu], products: [cafe] },
+          { menus: [defaultMenu], products: [coffee] },
           "zone-counter",
           "ticket_then_pay",
         ),
@@ -3172,7 +3172,7 @@ describe("till-app logout while a request is waiting for the server", () => {
   });
 
   it("does not reload stations for a zone choice answered after sign-out", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     catalogue.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
     let answer!: (catalogue: ZoneOfferCatalogue) => void;
     const { el } = await mountApp({
@@ -3188,17 +3188,17 @@ describe("till-app logout while a request is waiting for the server", () => {
     emit(shell(el)!, "logout");
     await flush(el);
     const stationReads = vi.mocked(api.listStations).mock.calls.length;
-    answer(zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-deli"));
+    answer(zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-deli"));
     await flush(el);
 
     expect(api.listStations).toHaveBeenCalledTimes(stationReads);
   });
 
   it("does not choose a menu after a zone's station read outlives sign-out", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     catalogue.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
     const deli = zoneOffers(
-      { menus: [{ id: "cat-deli", name: "Deli", isDefault: true }], products: [cafe] },
+      { menus: [{ id: "cat-deli", name: "Deli", isDefault: true }], products: [coffee] },
       "zone-deli",
     );
     let answerStations!: (rows: []) => void;
@@ -3338,7 +3338,9 @@ describe("till-app logout while a request is waiting for the server", () => {
     const { el } = await mountApp({
       listZoneOffers: vi
         .fn()
-        .mockResolvedValue(zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter")),
+        .mockResolvedValue(
+          zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter"),
+        ),
       pay: vi.fn(() => new Promise((_, reject) => (refuse = reject))),
     });
     const c = await toCounter(el);
@@ -3358,7 +3360,7 @@ describe("till-app logout while a request is waiting for the server", () => {
   });
 
   it("does not retry a cash sale after its version refresh outlives sign-out", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     let answerOffers!: (offers: ZoneOfferCatalogue) => void;
     const recordSale = vi
       .fn()
@@ -3383,7 +3385,7 @@ describe("till-app logout while a request is waiting for the server", () => {
   });
 
   it("does not retry a card sale after its version refresh outlives sign-out", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     let answerOffers!: (offers: ZoneOfferCatalogue) => void;
     const pay = vi
       .fn()
@@ -3408,7 +3410,7 @@ describe("till-app logout while a request is waiting for the server", () => {
   });
 
   it("does not retry a place after its version refresh outlives sign-out", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     let answerOffers!: (offers: ZoneOfferCatalogue) => void;
     const placeOrder = vi
       .fn()
@@ -3434,7 +3436,7 @@ describe("till-app logout while a request is waiting for the server", () => {
   });
 
   it("does not retry a park after its version refresh outlives sign-out", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
     let answerOffers!: (offers: ZoneOfferCatalogue) => void;
     const parkOrder = vi
       .fn()
@@ -3601,7 +3603,9 @@ describe("till-app logout while a request is waiting for the server", () => {
     const { el } = await mountApp({
       listZoneOffers: vi
         .fn()
-        .mockResolvedValue(zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter")),
+        .mockResolvedValue(
+          zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter"),
+        ),
       parkOrder: vi.fn().mockResolvedValue(undefined),
       placeOrder: vi.fn(() => new Promise((_, reject) => (refuse = reject))),
     });
@@ -4001,7 +4005,7 @@ describe("department transfers across operator lifetimes", () => {
     const desk = transfers();
     let accepted = false;
     const catalogue = zoneOffers(
-      { menus: [defaultMenu], products: [cafe] },
+      { menus: [defaultMenu], products: [coffee] },
       "terrace",
       "table_tab",
     );
@@ -4371,7 +4375,7 @@ describe("department transfers across operator lifetimes", () => {
                     menus: [defaultMenu],
                     products: [
                       {
-                        ...cafe,
+                        ...coffee,
                         unit: {
                           staffName: "Staff unit",
                           staffAbbreviation: "su",
@@ -4436,7 +4440,7 @@ describe("department transfers across operator lifetimes", () => {
               listDefaultZoneOffers: vi
                 .fn()
                 .mockResolvedValue(
-                  zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter"),
+                  zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter"),
                 ),
             });
             host.setAttribute("data-theme", theme);
@@ -5049,7 +5053,7 @@ describe("department transfers across operator lifetimes", () => {
       orderNumber: 12,
       label: "Moved lunch",
       revision: 7,
-      lines: [{ productId: "cafe", quantity: "1.000", product: cafe }],
+      lines: [{ productId: "cafe", quantity: "1.000", product: coffee }],
     });
     await flush(el);
     expect(c.store.persisted).toBe(false);
@@ -5097,7 +5101,7 @@ describe("department transfers across operator lifetimes", () => {
       orderNumber: 13,
       label: "Different lunch",
       revision: 7,
-      lines: [{ productId: "cafe", quantity: "2.000", product: cafe }],
+      lines: [{ productId: "cafe", quantity: "2.000", product: coffee }],
     });
     await flush(el);
     expect(c.store.persisted).toBe(true);
@@ -5109,9 +5113,9 @@ describe("department transfers across operator lifetimes", () => {
 
 describe("hierarchy deletion service choices", () => {
   it("starts at the surviving permitted zone after the remembered zone is deleted", async () => {
-    const initial = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "removed");
+    const initial = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "removed");
     initial.zones = [zone("removed", "prepay"), zone("survivor", "prepay")];
-    const survivor = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "survivor");
+    const survivor = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "survivor");
     survivor.zones = [zone("survivor", "prepay")];
     const { el } = await mountApp({
       listDefaultZoneOffers: vi.fn().mockResolvedValueOnce(initial).mockResolvedValue(survivor),
@@ -5218,7 +5222,7 @@ describe("till-app when the server reports another build", () => {
           id: "wo-1",
           orderNumber: 5,
           label: null,
-          lines: [{ quantity: "1.000", product: cafe }],
+          lines: [{ quantity: "1.000", product: coffee }],
         }),
       },
       { reload },
@@ -6245,7 +6249,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
             await page.viewport(width, 844);
             const kind = "kind" in view ? view.kind : undefined;
             const dish: TillProduct = {
-              ...cafe,
+              ...coffee,
               customerName: { en: "Coffee for the guest", es: "Café de la casa" },
               kitchenName: "CAFÉ COCINA",
             };
@@ -6568,7 +6572,7 @@ describe("A738 counter order views", () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
     const store = c.store;
-    store.addProduct(cafe, "1");
+    store.addProduct(coffee, "1");
     const lines = store.lines;
     const original = structuredClone(lines);
     const held = (id: string) => ({
@@ -6673,9 +6677,9 @@ describe("A738 counter order views", () => {
 });
 
 describe("A1208 a retrieved counter order's portions", () => {
-  const tostada: TillProduct = { ...cafe, id: "tostada", name: "Tostada", unitPrice: "2.50" };
-  const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe, tostada] }, "zone-counter");
-  const cafeOffer = "menu-item-cafe-0";
+  const toast: TillProduct = { ...coffee, id: "tostada", name: "Tostada", unitPrice: "2.50" };
+  const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee, toast] }, "zone-counter");
+  const coffeeOffer = "menu-item-cafe-0";
   const ids = ["l1", "l2", "l3"];
   const held = (revision = 4) => ({
     kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 0 },
@@ -6684,7 +6688,11 @@ describe("A1208 a retrieved counter order's portions", () => {
     orderNumber: 5,
     label: null,
     revision,
-    lines: ids.map((id) => ({ workingOrderLineId: id, menuItemId: cafeOffer, quantity: "1.000" })),
+    lines: ids.map((id) => ({
+      workingOrderLineId: id,
+      menuItemId: coffeeOffer,
+      quantity: "1.000",
+    })),
   });
   const listedLine = (id: string, lineNo: number) => ({
     id,
@@ -6708,7 +6716,7 @@ describe("A1208 a retrieved counter order's portions", () => {
     groupId: null,
     note: null,
     listId: null,
-    menuItemId: cafeOffer,
+    menuItemId: coffeeOffer,
     portion: true,
   });
   const summary = (hasPayments: boolean) => ({
@@ -6811,7 +6819,7 @@ describe("A1208 a retrieved counter order's portions", () => {
 
   it("places what is left after a dead-end answer removes the row, saving no member of it", async () => {
     const placing = zoneOffers(
-      { menus: [defaultMenu], products: [cafe, tostada] },
+      { menus: [defaultMenu], products: [coffee, toast] },
       "zone-counter",
       "ticket_then_pay",
     );
@@ -6950,7 +6958,7 @@ describe("A1208 a retrieved counter order's portions", () => {
             ...held(5),
             lines: four.map((id) => ({
               workingOrderLineId: id,
-              menuItemId: cafeOffer,
+              menuItemId: coffeeOffer,
               quantity: "1.000",
             })),
           };
@@ -6995,7 +7003,7 @@ describe("A1208 a retrieved counter order's portions", () => {
                     workingOrderLineId: "t1",
                     menuItemId: "menu-item-tostada-0",
                     quantity: "1.000",
-                    product: tostada,
+                    product: toast,
                   },
                 ],
               })
@@ -7055,7 +7063,7 @@ describe("A1208 a retrieved counter order's portions", () => {
                     workingOrderLineId: "t1",
                     menuItemId: "menu-item-tostada-0",
                     quantity: "1.000",
-                    product: tostada,
+                    product: toast,
                   },
                 ],
               })

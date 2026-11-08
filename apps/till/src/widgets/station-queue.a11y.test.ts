@@ -835,7 +835,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
   it("A773 fire paper: a Bar card naming the stations it goes with has no violations", async () => {
-    const moscatel = {
+    const muscatWine = {
       allergy: null,
       id: "ti-moscatel",
       workingOrderLineId: "wol-moscatel",
@@ -857,7 +857,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     const { host, el } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       {
-        groups: [{ ...groups[0]!, items: [{ ...moscatel, ...kitchenStamps(moscatel) }] }],
+        groups: [{ ...groups[0]!, items: [{ ...muscatWine, ...kitchenStamps(muscatWine) }] }],
         stationId: "st-bar",
       },
       theme,

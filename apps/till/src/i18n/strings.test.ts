@@ -70,10 +70,10 @@ describe("the till's Spanish Clear snooze label, and no aplazar in the catalogue
   });
 
   it("has no Spanish catalogue string that says aplazar", () => {
-    const aplaza = Object.entries(catalogues["es-ES"] ?? {}).filter(([, text]) =>
+    const snoozeTermEntries = Object.entries(catalogues["es-ES"] ?? {}).filter(([, text]) =>
       /aplaz/i.test(text),
     );
-    expect(aplaza).toEqual([]);
+    expect(snoozeTermEntries).toEqual([]);
   });
 });
 
@@ -112,10 +112,10 @@ describe("the floor's held chip, the Waiting chip's own word, and no retenido in
   // Owner decision (2026-10-20): held dishes are «en espera» everywhere. Weaker than its name:
   // only the catalogue in strings.ts is read, not codes.ts or the dashboard.
   it("has no Spanish catalogue string that says retenido", () => {
-    const retenido = Object.entries(catalogues["es-ES"] ?? {}).filter(([, text]) =>
+    const heldTermEntries = Object.entries(catalogues["es-ES"] ?? {}).filter(([, text]) =>
       /retenid/i.test(text),
     );
-    expect(retenido).toEqual([]);
+    expect(heldTermEntries).toEqual([]);
   });
 
   it("the floor's held chip says held with the order screen's word", () => {

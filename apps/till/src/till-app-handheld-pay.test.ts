@@ -6623,7 +6623,7 @@ describe("a presented counter bill from Find a bill, on a device with no counter
 });
 
 describe("a parked counter bill from Find a bill, on a device with no counter screen", () => {
-  const cana = {
+  const draughtBeer = {
     id: "cana",
     menuItemId: "offer-cana",
     catalogueId: "cat-default",
@@ -6682,7 +6682,12 @@ describe("a parked counter bill from Find a bill, on a device with no counter sc
         label: "Lucía",
         revision: 1,
         lines: [
-          { workingOrderLineId: "l1", menuItemId: "offer-cana", quantity: "1.000", product: cana },
+          {
+            workingOrderLineId: "l1",
+            menuItemId: "offer-cana",
+            quantity: "1.000",
+            product: draughtBeer,
+          },
         ],
       }),
       getTabLines: vi.fn().mockResolvedValue({

@@ -3949,7 +3949,7 @@ describe("till-table-order-screen", () => {
   });
 
   describe("direct Send stays with the bill and store on screen", () => {
-    async function ringCafe(el: TillTableOrderScreen): Promise<void> {
+    async function ringCoffee(el: TillTableOrderScreen): Promise<void> {
       grid(el).store.addProduct(coffee, "1");
       await el.updateComplete;
     }
@@ -3965,13 +3965,13 @@ describe("till-table-order-screen", () => {
 
     it("uses the current bill's store among open, presented, paid and merged siblings", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4", courses });
-      await ringCafe(el);
+      await ringCoffee(el);
       await assertOwnSend(el, grid(el).store);
     });
 
     it("uses the split bill's own store rather than selecting another bill at Send", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-check", courses });
-      await ringCafe(el);
+      await ringCoffee(el);
       const own = grid(el).store;
       await assertOwnSend(el, own);
       expect(el.orderId).toBe("wo-check");
@@ -3979,7 +3979,7 @@ describe("till-table-order-screen", () => {
 
     it("does not move an addition on a split bill to the bill the floor names", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-check", courses });
-      await ringCafe(el);
+      await ringCoffee(el);
       el.party = { ...anaParty, openingBillId: "wo-part" };
       await el.updateComplete;
       await assertOwnSend(el, grid(el).store);
@@ -3988,7 +3988,7 @@ describe("till-table-order-screen", () => {
 
     it("keeps the same arrangement and store through repeated direct sends", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-check", courses });
-      await ringCafe(el);
+      await ringCoffee(el);
       const own = grid(el).store;
       await assertOwnSend(el, own);
       await assertOwnSend(el, own);
@@ -4007,7 +4007,7 @@ describe("till-table-order-screen", () => {
         orderId: "wo-4",
         courses,
       });
-      await ringCafe(el);
+      await ringCoffee(el);
       await assertOwnSend(el, grid(el).store);
     });
 
@@ -4018,20 +4018,20 @@ describe("till-table-order-screen", () => {
         orderId: "wo-check",
         courses,
       });
-      await ringCafe(el);
+      await ringCoffee(el);
       await assertOwnSend(el, grid(el).store);
       expect(el.orderId).toBe("wo-check");
     });
 
     it("uses the current store without a party or bill picker", async () => {
       const { el } = await mount({ orderId: "wo-4", courses });
-      await ringCafe(el);
+      await ringCoffee(el);
       await assertOwnSend(el, grid(el).store);
     });
 
     it("refuses even an old Send control after the current bill is presented", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-check", courses });
-      await ringCafe(el);
+      await ringCoffee(el);
       const old = draftAction(el, "send-all")!;
       (grid(el).store as DraftStore).billStatus = "placed";
       el.bills = [tabBill, { ...checkBill, status: "placed" }];
@@ -4046,7 +4046,7 @@ describe("till-table-order-screen", () => {
 
     it("does not redirect an abandoned current bill into an open sibling", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-check", courses });
-      await ringCafe(el);
+      await ringCoffee(el);
       (grid(el).store as DraftStore).billStatus = "abandoned";
       el.bills = [tabBill, { ...checkBill, billNumber: null, status: "abandoned" }];
       await el.updateComplete;
@@ -4063,7 +4063,7 @@ describe("till-table-order-screen", () => {
         orderId: "wo-check",
         courses,
       });
-      await ringCafe(el);
+      await ringCoffee(el);
       const own = grid(el).store;
       (own as DraftStore).billStatus = "abandoned";
       el.bills = [tabBill, { ...checkBill, billNumber: null, status: "abandoned" }, thirdBill];
@@ -4075,7 +4075,7 @@ describe("till-table-order-screen", () => {
 
     it("does not follow a change of the bill the floor names away from its current store", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4", courses });
-      await ringCafe(el);
+      await ringCoffee(el);
       const own = grid(el).store;
       el.party = { ...anaParty, openingBillId: "wo-check" };
       el.bills = [tabBill, checkBill, partlyPaidBill];
@@ -4086,14 +4086,14 @@ describe("till-table-order-screen", () => {
 
     it("sends to the bill the floor names through its own store without a bill override", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4", courses });
-      await ringCafe(el);
+      await ringCoffee(el);
       await assertOwnSend(el, grid(el).store);
       expect(el.orderId).toBe("wo-4");
     });
 
     it("keeps the bill on screen's store after the floor names another bill", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4", courses });
-      await ringCafe(el);
+      await ringCoffee(el);
       const own = grid(el).store;
       el.party = { ...anaParty, openingBillId: "wo-check" };
       await el.updateComplete;
@@ -4108,7 +4108,7 @@ describe("till-table-order-screen", () => {
         orderId: "wo-check",
         courses,
       });
-      await ringCafe(el);
+      await ringCoffee(el);
       const own = grid(el).store;
       el.party = { ...anaParty, openingBillId: "wo-4" };
       el.bills = [{ ...paidBill, billNumber: 1 }, checkBill, { ...tabBill, billNumber: 3 }];
@@ -5614,7 +5614,7 @@ describe("till-table-order-screen", () => {
   // Multi-menu: the round grid shows only the SELECTED menu's products, while a tab line's NAME still
   // resolves against the full product set (a tab may span menus). The app owns the selection.
   describe("multi-menu round grid", () => {
-    const bocadillo: TillProduct = {
+    const sandwich: TillProduct = {
       ...coffee,
       id: "bocadillo",
       menuItemId: "menu-item-bocadillo",
@@ -5634,9 +5634,9 @@ describe("till-table-order-screen", () => {
       catalogueId: "cat-drinks",
       catalogueName: "Bebidas",
     };
-    const foodMenu = servedMenu("cat-food", "Comida", true, [bocadillo]);
+    const foodMenu = servedMenu("cat-food", "Comida", true, [sandwich]);
     const drinksMenu = servedMenu("cat-drinks", "Bebidas", false, [beerProduct]);
-    const bothMenus = { menus: [foodMenu, drinksMenu], products: [bocadillo, beerProduct] };
+    const bothMenus = { menus: [foodMenu, drinksMenu], products: [sandwich, beerProduct] };
 
     const gridNames = (el: TillTableOrderScreen) =>
       [...grid(el).shadowRoot!.querySelectorAll(".name")].map((n) => n.textContent);
@@ -5677,7 +5677,7 @@ describe("till-table-order-screen", () => {
 
     it("A461 table-order forwards unfiltered served offers through both menu diet results", async () => {
       const veganFood: TillProduct = {
-        ...bocadillo,
+        ...sandwich,
         diet: { vegan: "yes", vegetarian: "yes", contains: [] },
       };
       const meatDrink: TillProduct = {
@@ -5722,7 +5722,7 @@ describe("till-table-order-screen", () => {
     });
 
     it("hands the browser the selected menu's products before the diet lens as well as after", async () => {
-      const veganCerveza: TillProduct = {
+      const veganBeer: TillProduct = {
         ...beerProduct,
         diet: { vegan: "yes", vegetarian: "yes", contains: [] },
       };
@@ -5736,15 +5736,15 @@ describe("till-table-order-screen", () => {
       const { el } = await mount({
         menus: [
           foodMenu,
-          servedMenu("cat-drinks", "Bebidas", false, [veganCerveza, croquetteProduct]),
+          servedMenu("cat-drinks", "Bebidas", false, [veganBeer, croquetteProduct]),
         ],
-        products: [bocadillo, veganCerveza, croquetteProduct],
+        products: [sandwich, veganBeer, croquetteProduct],
         selectedMenuId: "cat-drinks",
         selectedFilters: { diets: ["vegan"], exclude: {} },
       });
       await grid(el).updateComplete;
-      expect(grid(el).products).toEqual([veganCerveza]);
-      expect(grid(el).unfilteredProducts).toEqual([veganCerveza, croquetteProduct]);
+      expect(grid(el).products).toEqual([veganBeer]);
+      expect(grid(el).unfilteredProducts).toEqual([veganBeer, croquetteProduct]);
     });
 
     it("resolves a tab line's NAME from the full product set even when its menu is not the one shown", async () => {
@@ -5798,7 +5798,7 @@ describe("till-table-order-screen", () => {
       });
 
       it("leaves a product the diet lens rejects out of another menu's group", async () => {
-        const veganCerveza: TillProduct = {
+        const veganBeer: TillProduct = {
           ...beerProduct,
           diet: { vegan: "yes", vegetarian: "yes", contains: [] },
         };
@@ -5812,9 +5812,9 @@ describe("till-table-order-screen", () => {
         const { el } = await mount({
           menus: [
             foodMenu,
-            servedMenu("cat-drinks", "Bebidas", false, [veganCerveza, croquetteProduct]),
+            servedMenu("cat-drinks", "Bebidas", false, [veganBeer, croquetteProduct]),
           ],
-          products: [bocadillo, veganCerveza, croquetteProduct],
+          products: [sandwich, veganBeer, croquetteProduct],
           selectedMenuId: "cat-food",
         });
         await search(el, "c");

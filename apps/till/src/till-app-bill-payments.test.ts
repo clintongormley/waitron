@@ -4161,7 +4161,7 @@ describe("till-app: a partly paid order at the counter", () => {
   }
 
   it("lists the dish a saved raise added among the items Pay offers (A1208)", async () => {
-    const cana = {
+    const draughtBeer = {
       id: "cana",
       menuItemId: "offer-cana",
       catalogueId: "cat-default",
@@ -4182,7 +4182,7 @@ describe("till-app: a partly paid order at the counter", () => {
         workingOrderLineId: id,
         menuItemId: "offer-cana",
         quantity: "1.000",
-        product: cana,
+        product: draughtBeer,
       })),
     });
     const listed = (ids: string[]) => ({

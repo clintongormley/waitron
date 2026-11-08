@@ -896,8 +896,8 @@ describe("WorkingOrderStore", () => {
 
     it("addProduct stores the picks on the line and totals them into the running line price", () => {
       const s = new WorkingOrderStore();
-      const cortado: TillProduct = { ...coffee, id: "cortado", unitPrice: "2.50" };
-      s.addProduct(cortado, "1", { extras: [oatMilk] });
+      const smallCoffee: TillProduct = { ...coffee, id: "cortado", unitPrice: "2.50" };
+      s.addProduct(smallCoffee, "1", { extras: [oatMilk] });
       expect(s.lines).toHaveLength(1);
       expect(s.lines[0]?.extras).toEqual([oatMilk]);
       // dish 2.50 + pick 0.50 → 3.00.
@@ -1541,7 +1541,7 @@ describe("WorkingOrderStore.lockEdits", () => {
 
 describe("WorkingOrderStore — the simplified-invoice limit", () => {
   // 1,000.00 a unit, so three make 3,000.00 and the limit below sits 10.00 above that.
-  const banquete: TillProduct = {
+  const banquet: TillProduct = {
     ...coffee,
     id: "banquete",
     name: "Banquete",
@@ -1567,7 +1567,7 @@ describe("WorkingOrderStore — the simplified-invoice limit", () => {
 
   it("adds a line up to the limit, and refuses one past it, leaving the basket as it was", () => {
     const { store, refusals } = limited();
-    store.addProduct(banquete, "3");
+    store.addProduct(banquet, "3");
     store.addProduct({ ...coffee, unitPrice: "10.00" }, "1");
     expect(store.total).toBe("3010.00");
     expect(refusals).toEqual([]);
@@ -1584,8 +1584,8 @@ describe("WorkingOrderStore — the simplified-invoice limit", () => {
 
   it("refuses a merged add or a raised quantity that would pass the limit", () => {
     const { store, refusals } = limited();
-    store.addMerging(banquete, "3");
-    store.addMerging(banquete, "1");
+    store.addMerging(banquet, "3");
+    store.addMerging(banquet, "1");
     expect(store.lines[0]!.quantity).toBe("3");
     store.setLineQuantity(0, "4");
     expect(store.lines[0]!.quantity).toBe("3");
@@ -1594,7 +1594,7 @@ describe("WorkingOrderStore — the simplified-invoice limit", () => {
 
   it("refuses extras that would take a line past the limit", () => {
     const { store, refusals } = limited();
-    store.addProduct(banquete, "3");
+    store.addProduct(banquet, "3");
     // Two picks of 5.01 on each of three dishes: 30.06 more.
     store.setLineModifiers(0, { extras: [extra] });
     expect(store.lines[0]!.extras).toBeUndefined();
@@ -1603,7 +1603,7 @@ describe("WorkingOrderStore — the simplified-invoice limit", () => {
 
   it("lets a basket already past the limit be made smaller, but not bigger", () => {
     const { store, refusals } = limited();
-    store.loadFrom("held", [{ product: banquete, quantity: "4" }]);
+    store.loadFrom("held", [{ product: banquet, quantity: "4" }]);
     store.setLineQuantity(0, "5");
     expect(store.lines[0]!.quantity).toBe("4");
     store.setLineQuantity(0, "3");
@@ -1615,7 +1615,7 @@ describe("WorkingOrderStore — the simplified-invoice limit", () => {
     const store = new WorkingOrderStore();
     const refusals: unknown[] = [];
     store.on("refused", (payload) => refusals.push(payload));
-    store.addProduct(banquete, "9");
+    store.addProduct(banquet, "9");
     expect(store.total).toBe("9000.00");
     expect(refusals).toEqual([]);
   });

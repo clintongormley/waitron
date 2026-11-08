@@ -1043,7 +1043,7 @@ describe("till-menu-browser", () => {
 
     // The same product as Lunch's Cola, offered by Drinks at its own price.
     const colaOnDrinks = offerOn("drinks", "cola", "Cola", { unitPrice: "2.20" });
-    const cortado = offerOn("drinks", "cortado", "Cortado", {
+    const smallCoffee = offerOn("drinks", "cortado", "Cortado", {
       variants: [
         {
           ...sellingValuesOf(coffee),
@@ -1057,7 +1057,7 @@ describe("till-menu-browser", () => {
     });
     const coconut = offerOn("drinks", "coconut", "Coconut water", { available: false });
     const cordial = offerOn("drinks", "cordial", "Cordial", { ordering: "not_sold_separately" });
-    const DRINKS_PRODUCTS = [colaOnDrinks, cortado, coconut, cordial];
+    const DRINKS_PRODUCTS = [colaOnDrinks, smallCoffee, coconut, cordial];
 
     const pancakes = offerOn("brunch", "pancakes", "Pancakes");
     const porridge = offerOn("brunch", "porridge", "Porridge");
@@ -1247,11 +1247,11 @@ describe("till-menu-browser", () => {
       await search(el, "cortado");
       await tap(el, groupEntry(el, "menu-drinks", "Cortado"));
       const picker = root(el).querySelector("till-modifier-picker")!;
-      expect(picker.product).toBe(cortado);
-      const detail: ModifierConfirmDetail = { product: cortado, note: "corto" };
+      expect(picker.product).toBe(smallCoffee);
+      const detail: ModifierConfirmDetail = { product: smallCoffee, note: "corto" };
       picker.dispatchEvent(new CustomEvent("wt-modifier-confirm", { detail }));
       await el.updateComplete;
-      expect(store.lines).toEqual([{ product: cortado, quantity: "1", note: "corto" }]);
+      expect(store.lines).toEqual([{ product: smallCoffee, quantity: "1", note: "corto" }]);
     });
 
     it("keeps a sold-out product greyed in its group and leaves out one not sold separately", async () => {
