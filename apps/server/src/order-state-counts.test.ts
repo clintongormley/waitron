@@ -465,7 +465,7 @@ describe("readOrderStateCounts", () => {
       });
       await advance(dish.id, "preparing", "ready");
       await advance(extra!.id, "preparing", "ready");
-      const ready = (await inTx(venue, (tx) => readBillSignals(tx, [billId])))
+      const ready = (await inTx(venue, (tx) => readBillSignals(tx, [billId], Date.now())))
         .get(billId)!
         .find((s) => s.kind === "ready");
       expect(ready?.kind === "ready" ? ready.byStation.map((s) => s.count) : null).toEqual([
@@ -833,7 +833,9 @@ describe("readOrderStateCounts on a party's bill", () => {
       expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 1, waiting: 1 });
       await advance(extra!.id, "preparing", "ready");
       expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 1, ready: 1 });
-      const signals = (await inTx(venue, (tx) => readBillSignals(tx, [billId]))).get(billId)!;
+      const signals = (await inTx(venue, (tx) => readBillSignals(tx, [billId], Date.now()))).get(
+        billId,
+      )!;
       const ready = signals.find((signal) => signal.kind === "ready");
       expect(
         ready?.kind === "ready" ? ready.byStation.map((station) => station.count) : null,
