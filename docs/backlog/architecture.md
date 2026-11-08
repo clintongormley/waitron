@@ -854,8 +854,8 @@ product failures.
   `party-move-bill.test.ts`, `party-arriving-dishes.test.ts`,
   `receipt-guests.test.ts`, `order-portions.filing.test.ts`, `order-portions.adjustments.test.ts`,
   `till-api.move-bill.test.ts`, `till-api.groups.test.ts` and `till-api.fiscal-sale-paths.test.ts`;
-  Bill-payment venue and category samples, shared helper samples and their consumers' dish
-  selectors also remain. These belong to
+  `bill-payments-api.test.ts`, `bill-payments.issue-clock.test.ts`, shared helper samples and
+  their consumers' dish selectors also remain. These belong to
   A976 rather than the private-name work in A974. The `made-here.routes.test.ts` venue
   samples and `receipt-document.test.ts` fixture descriptions and test titles also need
   triage there; preserve Spanish receipt output and deliberate locale checks. Fiscal-sale and
