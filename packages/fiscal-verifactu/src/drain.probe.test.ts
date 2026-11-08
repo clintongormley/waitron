@@ -8,7 +8,6 @@ import type { RespuestaLinea, VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
   appendCancellation,
-  appendCancellationOnChain,
   appendPendingAlta,
   collideAtAeat,
   seedPendingEnvios,
@@ -631,7 +630,9 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       .select()
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.id, other.registroId));
-    const cancellation = await appendCancellationOnChain(suite.db, original!, other.registroId, 11);
+    const cancellation = await appendCancellation(suite.db, seeded, original!, 11, {
+      otherChainHeadId: other.registroId,
+    });
     const later = await appendPendingAlta(
       suite.db,
       { ...seeded, nodeId: brandNodeId(otherHead!.nodeId), sifId: otherHead!.sifId },

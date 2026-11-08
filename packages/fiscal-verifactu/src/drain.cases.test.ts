@@ -10,7 +10,6 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
   consultaNames,
   appendCancellation,
-  appendCancellationOnChain,
   appendCorrection,
   appendPendingAlta,
   collideAtAeat,
@@ -951,12 +950,9 @@ describe("drain — a cancellation on another chain", () => {
     const other = await seedSecondChain(suite.db, seeded, 5);
     await drain(deps(aeat.client()), FIRST);
     const original = await appendPendingAlta(suite.db, seeded, 2);
-    const cancellation = await appendCancellationOnChain(
-      suite.db,
-      original.registroId,
-      other.registroId,
-      6,
-    );
+    const cancellation = await appendCancellation(suite.db, seeded, original.registroId, 6, {
+      otherChainHeadId: other.registroId,
+    });
     const wire = recording(aeat.client());
 
     await drain(deps(wire.client), SECOND);
@@ -984,7 +980,9 @@ describe("drain — a cancellation on another chain", () => {
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.id, other.registroId));
     const otherChain = { ...seeded, nodeId: brandNodeId(head!.nodeId), sifId: head!.sifId };
-    const cancellation = await appendCancellationOnChain(suite.db, original!, other.registroId, 6);
+    const cancellation = await appendCancellation(suite.db, seeded, original!, 6, {
+      otherChainHeadId: other.registroId,
+    });
     const later = await appendPendingAlta(suite.db, otherChain, 7);
     const wire = recording(aeat.client());
 
@@ -1004,12 +1002,9 @@ describe("drain — a cancellation on another chain", () => {
     aeat.reject(original.facturaKey, 1100, "Campo obligatorio ausente");
     await drain(deps(aeat.client()), SECOND);
     expect(await envioOf(original.registroId)).toMatchObject({ estado: "rechazado" });
-    const cancellation = await appendCancellationOnChain(
-      suite.db,
-      original.registroId,
-      other.registroId,
-      6,
-    );
+    const cancellation = await appendCancellation(suite.db, seeded, original.registroId, 6, {
+      otherChainHeadId: other.registroId,
+    });
     const wire = recording(aeat.client());
 
     const result = await drain(deps(wire.client), THIRD);
@@ -1052,13 +1047,10 @@ describe("heldRecords — a cancellation held by a run of refusals", () => {
     aeat.reject(original.facturaKey, 1100, "Campo obligatorio ausente");
     await drain(deps(aeat.client()), FIRST);
     expect(await envioOf(original.registroId)).toMatchObject({ estado: "rechazado" });
-    const cancellation = await appendCancellationOnChain(
-      suite.db,
-      original.registroId,
-      other.registroIds[2]!,
-      13,
-      { sinRegistroPrevio: "S" },
-    );
+    const cancellation = await appendCancellation(suite.db, seeded, original.registroId, 13, {
+      sinRegistroPrevio: "S",
+      otherChainHeadId: other.registroIds[2]!,
+    });
 
     await drain(deps(aeat.client()), SECOND);
 

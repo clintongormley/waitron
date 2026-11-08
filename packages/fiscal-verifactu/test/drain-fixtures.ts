@@ -305,101 +305,63 @@ export async function appendPendingAlta(
   return { registroId, facturaKey: `${seeded.nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
 }
 
-/** A pending cancellation of `originalId`, appended to the original's own chain at `secuencia`.
- * `sinRegistroPrevio: "S"` makes it the absent-original cancellation. */
+type StoredRegistro = typeof registrosFacturacion.$inferSelect;
+
+/** The latest record on the chain `record` sits on. */
+function chainHeadOf(records: readonly StoredRegistro[], record: StoredRegistro): StoredRegistro {
+  return records
+    .filter((row) => row.sifId === record.sifId)
+    .sort((a, b) => b.secuencia - a.secuencia)[0]!;
+}
+
+/** The fields by which a new record names the record before it on its chain. */
+function followingRecord(head: StoredRegistro) {
+  return {
+    anteriorIdEmisorFactura: head.idEmisorFactura,
+    anteriorNumSerieFactura: head.numSerieFactura,
+    anteriorFechaExpedicionFactura: head.fechaExpedicionFactura,
+    anteriorHuella: head.huella,
+  };
+}
+
+async function advanceChainPointer(
+  db: Database,
+  seeded: SeededDrain,
+  secuencia: number,
+  id: string,
+  huella: string,
+): Promise<void> {
+  await db.execute(sql`
+    update cadenas set secuencia = ${secuencia}, ultimo_registro_id = ${id}, ultima_huella = ${huella}
+    where node_id = ${seeded.nodeId}
+  `);
+}
+
+/**
+ * A pending cancellation of `originalId` at `secuencia`, on the original's own chain, whose pointer
+ * in `seeded` moves on to it. `sinRegistroPrevio: "S"` makes it the absent-original cancellation.
+ *
+ * With `otherChainHeadId` it goes on ANOTHER chain instead, after that chain's record: a box
+ * cancelling an invoice that another box's chain issued. The row is then built from that head, and
+ * no chain pointer moves.
+ */
 export async function appendCancellation(
   db: Database,
   seeded: SeededDrain,
   originalId: string,
   secuencia: number,
-  options: { sinRegistroPrevio?: "S" } = {},
+  options: { sinRegistroPrevio?: "S"; otherChainHeadId?: string } = {},
 ): Promise<string> {
   const records = await db.select().from(registrosFacturacion);
   const original = records.find((row) => row.id === originalId)!;
-  const head = records
-    .filter((row) => row.sifId === original.sifId)
-    .sort((a, b) => b.secuencia - a.secuencia)[0]!;
+  const onOtherChain = options.otherChainHeadId !== undefined;
+  const head = onOtherChain
+    ? records.find((row) => row.id === options.otherChainHeadId)!
+    : chainHeadOf(records, original);
   const id = newId();
-  const huella = "C".repeat(63) + String(secuencia % 10);
+  const huella = (onOtherChain ? "F" : "C").repeat(63) + String(secuencia % 10);
   await db.insert(registrosFacturacion).values({
-    ...original,
-    id,
-    secuencia,
-    tipoRegistro: "anulacion",
-    tipoFactura: null,
-    descripcionOperacion: null,
-    desglose: null,
-    cuotaTotal: null,
-    importeTotal: null,
-    primerRegistro: false,
-    sinRegistroPrevio: options.sinRegistroPrevio ?? null,
-    anteriorIdEmisorFactura: head.idEmisorFactura,
-    anteriorNumSerieFactura: head.numSerieFactura,
-    anteriorFechaExpedicionFactura: head.fechaExpedicionFactura,
-    anteriorHuella: head.huella,
-    huella,
-  });
-  await db.execute(sql`
-    update cadenas set secuencia = ${secuencia}, ultimo_registro_id = ${id}, ultima_huella = ${huella}
-    where node_id = ${seeded.nodeId}
-  `);
-  await db.insert(envios).values({ registroId: id, proximoIntentoEn: DUE_AT });
-  return id;
-}
-
-/** A pending correction (Subsanacion=S) of the alta `originalId`, appended to its own chain at
- * `secuencia`: the same invoice, replacing that version. */
-export async function appendCorrection(
-  db: Database,
-  seeded: SeededDrain,
-  originalId: string,
-  secuencia: number,
-): Promise<string> {
-  const records = await db.select().from(registrosFacturacion);
-  const original = records.find((row) => row.id === originalId)!;
-  const head = records
-    .filter((row) => row.sifId === original.sifId)
-    .sort((a, b) => b.secuencia - a.secuencia)[0]!;
-  const id = newId();
-  const huella = "D".repeat(63) + String(secuencia % 10);
-  await db.insert(registrosFacturacion).values({
-    ...original,
-    id,
-    secuencia,
-    correctsRegistroId: originalId,
-    subsanacion: "S",
-    rechazoPrevio: "X",
-    primerRegistro: false,
-    anteriorIdEmisorFactura: head.idEmisorFactura,
-    anteriorNumSerieFactura: head.numSerieFactura,
-    anteriorFechaExpedicionFactura: head.fechaExpedicionFactura,
-    anteriorHuella: head.huella,
-    huella,
-  });
-  await db.execute(sql`
-    update cadenas set secuencia = ${secuencia}, ultimo_registro_id = ${id}, ultima_huella = ${huella}
-    where node_id = ${seeded.nodeId}
-  `);
-  await db.insert(envios).values({ registroId: id, proximoIntentoEn: DUE_AT });
-  return id;
-}
-
-/** A pending cancellation of `originalId` appended to ANOTHER chain, after that chain's record
- * `headId`: a box cancelling an invoice that another box's chain issued. `sinRegistroPrevio: "S"`
- * makes it the absent-original cancellation a person files for a refused invoice. */
-export async function appendCancellationOnChain(
-  db: Database,
-  originalId: string,
-  headId: string,
-  secuencia: number,
-  options: { sinRegistroPrevio?: "S" } = {},
-): Promise<string> {
-  const records = await db.select().from(registrosFacturacion);
-  const original = records.find((row) => row.id === originalId)!;
-  const head = records.find((row) => row.id === headId)!;
-  const id = newId();
-  await db.insert(registrosFacturacion).values({
-    ...head,
+    ...(onOtherChain ? head : original),
     id,
     secuencia,
     saleId: original.saleId,
@@ -414,12 +376,38 @@ export async function appendCancellationOnChain(
     importeTotal: null,
     primerRegistro: false,
     sinRegistroPrevio: options.sinRegistroPrevio ?? null,
-    anteriorIdEmisorFactura: head.idEmisorFactura,
-    anteriorNumSerieFactura: head.numSerieFactura,
-    anteriorFechaExpedicionFactura: head.fechaExpedicionFactura,
-    anteriorHuella: head.huella,
-    huella: "F".repeat(63) + String(secuencia % 10),
+    ...followingRecord(head),
+    huella,
   });
+  if (!onOtherChain) await advanceChainPointer(db, seeded, secuencia, id, huella);
+  await db.insert(envios).values({ registroId: id, proximoIntentoEn: DUE_AT });
+  return id;
+}
+
+/** A pending correction (Subsanacion=S) of the alta `originalId`, appended to its own chain at
+ * `secuencia`: the same invoice, replacing that version. */
+export async function appendCorrection(
+  db: Database,
+  seeded: SeededDrain,
+  originalId: string,
+  secuencia: number,
+): Promise<string> {
+  const records = await db.select().from(registrosFacturacion);
+  const original = records.find((row) => row.id === originalId)!;
+  const id = newId();
+  const huella = "D".repeat(63) + String(secuencia % 10);
+  await db.insert(registrosFacturacion).values({
+    ...original,
+    id,
+    secuencia,
+    correctsRegistroId: originalId,
+    subsanacion: "S",
+    rechazoPrevio: "X",
+    primerRegistro: false,
+    ...followingRecord(chainHeadOf(records, original)),
+    huella,
+  });
+  await advanceChainPointer(db, seeded, secuencia, id, huella);
   await db.insert(envios).values({ registroId: id, proximoIntentoEn: DUE_AT });
   return id;
 }

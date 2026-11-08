@@ -15,7 +15,7 @@ import { listFilingCases } from "./filing-cases.js";
 import { reconcile, type ReconcileDeps } from "./reconcile.js";
 import { toAeatDate } from "./registro-row.js";
 import {
-  appendCancellationOnChain,
+  appendCancellation,
   consultaNames,
   seedPendingEnvios,
   seedSecondChain,
@@ -839,7 +839,9 @@ describe("reconcile — an invoice the old box issued and the box that took over
     const head = await seedSecondChain(suite.db, old, 5);
     await drain(drainDeps(staticResolver(aeat.client())), DRAIN_AT);
     const [original] = old.registroIds;
-    const cancellation = await appendCancellationOnChain(suite.db, original!, head.registroId, 6);
+    const cancellation = await appendCancellation(suite.db, old, original!, 6, {
+      otherChainHeadId: head.registroId,
+    });
     await drain(drainDeps(staticResolver(aeat.client())), new Date("2026-07-21T00:02:00Z"));
     expect([...(await estadosFor()).values()]).toEqual(["aceptado", "aceptado", "aceptado"]);
     const records = await suite.db.select().from(registrosFacturacion);
