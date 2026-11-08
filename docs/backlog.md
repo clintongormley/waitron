@@ -2094,34 +2094,12 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **One signed request helper; strict reply readers** (bundle of 2, size M). [Detail](backlog/replication-cloud.md#bundle-one-signed-request-helper-strict-reply-readers)
 
-- **A951-S. Reach the box's dashboard through Cloud.** The owner replaced the earlier A951 build
-  on 6 November with a small remote entrance and the existing gateway. The old branch stays parked.
-  A manual browser signed in through the public gateway with normal certificate trust on
-  6 November ([proof PR](https://github.com/clintongormley/waitron/pull/2525)); live certificate
-  replacement also worked without a server restart. A separate managed demo recovered its app
-  and tunnel after controlled exits. After the shared physical reboot on 7 November, that demo
-  returned automatically and trusted browser sign-in passed; its changed connection-file hash is
-  still being investigated. The final combined installation remains unqualified. The certificate worker
-  now resumes pending requests, renews before expiry and opens the listener after first issuance;
-  a fresh isolated test venue completed automatic key submission, tunnel configuration, certificate
-  installation and trusted public browser sign-in on 7 November. Its peer restart also recovered.
-  A bounded run of the normal bundled server under systemd also retained Settings off across
-  an app restart and Cloud refresh; on restored trusted public access. Managed process and peer
-  recovery passed with the same keys and certificate. Left: publication and installation of the
-  combined build and physical reboot. A second allocated venue completed simulated due-input public
-  renewal/reload, signed revocation and live venue-separation checks.
-  [Receipt and limits](operations/a951-host-evidence.md#second-venue-renewal-and-revocation-7-november-2026).
-  A fresh unpaired preproduction venue completed a real €2.50 cash sale and replay through the
-  managed bundle with no external network route; the paired remote-access registration was retained.
-  [Offline sale and limits](operations/a951-host-evidence.md#managed-bundle-cash-sale-without-internet-7-november-2026). The later bounded check rejected foreign Host headers,
-  eight authenticated non-staff paths and repeated password guesses. A controlled Compose LAN
-  forwarding probe and one cash/F1 route case without an external network route also passed.
-  [Receipt and limits](operations/a951-host-evidence.md#staff-hostname-and-network-isolation-7-november-2026).
-  The private combined build removes the old `@waitron/tunnel` TCP relay and its settings.
-  Its repaired remote-only dialog passed a fresh public browser run: Stop retained access,
-  confirmed off disconnected it and local on restored it.
-  Translate all returned one editable menu suggestion on the test box; address completion
-  remains a trial to build.
+- **A951-S. Reach the box's dashboard through Cloud.** The test-box trials support trusted
+  public dashboard sign-in, automatic tunnel and certificate setup, Settings on/off, and app
+  and peer recovery. The combined build remains a draft: installation and physical reboot
+  await the owner's shared quiet window. Trial details and limits stay in
+  [PR #2543](https://github.com/clintongormley/waitron/pull/2543).
+  Translate all returned one editable menu suggestion; address completion still needs its trial.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** publication of box-side networking; first-contact trust

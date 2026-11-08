@@ -1021,56 +1021,17 @@ stays parked. Use the existing Cloud gateway and one outbound WireGuard containe
 password sign-in on the box; staff-host passkeys enrol separately. Venue devices keep using
 `.local`, and local sales never depend on Cloud or the internet. Customer pages stay later.
 
-The first cut adds an optional dashboard-only HTTPS listener, using the existing staff key and
-certificate files. It excludes the setup and recovery pages, till, device, print and machine-operation routes and marks requests
-remote before the box's own-device check. Password guessing keeps the existing backoff. The local
-listener and its passkey hostname keep their configuration.
+The test-box trials support trusted public dashboard sign-in, automatic tunnel and certificate
+setup, Settings on/off, and recovery after app and peer restarts. The combined build remains a
+draft and removes the old TCP relay; it does not enable standby adoption. Trial details, source
+revisions and limits stay in [PR #2543](https://github.com/clintongormley/waitron/pull/2543).
 
-On 6 November a manual Chromium session used the public gateway to sign in to the test box
-with its ordinary password and normal certificate trust, then opened its overview. Installing
-an issued replacement changed new TLS connections without restarting the server. This was a Mac
-client on the home network using the public Internet path. A fresh Chromium session then
-repeated the password sign-in through the rented server's outside-home exit with normal trust.
-The bounded test app and peer were stopped afterwards. At the owner's request a separate
-managed demo then replaced them: the unprivileged app and its separate tunnel recovered from
-controlled process exits, and the public page returned 200. After the shared physical reboot on
-7 November, its enabled service and same tunnel container returned automatically; normal-trust
-Chromium signed in as administrator. The connection JSON's hash changed and its cause remains
-under investigation; the other retained file hashes matched. The final combined installation
-remains unqualified. The owner's three containers returned healthy.
-[Receipt: PR #2525](https://github.com/clintongormley/waitron/pull/2525).
+Left: publish and install the combined build, then qualify its physical reboot in the owner's
+shared quiet window. The earlier manual demo's reboot does not qualify this build; its changed
+connection-file hash still needs an explanation.
 
-On 7 November the five reviewed cuts on private `feat/a951s-integration` completed the fresh
-test-box path. After pairing, the boot worker submitted the container's saved public key, wrote
-its assigned placement, requested and installed the staff certificate, and opened the staff
-listener without restarting. Chromium signed in through the public gateway with normal certificate
-trust. A peer-container restart recovered the trusted public page. The bounded test stopped its
-own fixture and peer afterwards; the earlier managed demo remains separate and running.
-[Receipt and limits](../operations/a951-host-evidence.md#a951-s-automatic-staff-connection-7-november-2026).
-
-The second-venue trial exercised a simulated due-input public renewal and listener reload,
-signed revocation, and separation from a live allocated venue. The earlier managed offline sale
-and Compose forwarding checks retain their recorded scope.
-[Second-venue receipt and limits](../operations/a951-host-evidence.md#second-venue-renewal-and-revocation-7-november-2026).
-
-Remaining work, following the owner's certificate-first order:
-
-- Finish publication of the combined build and its installation path. Its normal
-  server bundle passed a bounded systemd run: Settings off survived an app restart and Cloud
-  refresh, local sign-in worked, and on restored trusted public access with the same registration,
-  key and certificate. Systemd app recovery and a peer-container restart also passed. The temporary
-  unit, peer and network were removed; the earlier persistent demo is unchanged.
-  [Receipt and limits](../operations/a951-host-evidence.md#bounded-managed-server-restart-7-november-2026).
-  The Settings review repairs passed a fresh managed/public run: the remote-only dialog's
-  Stop retained access, confirmed off disconnected it and local on restored it.
-  [Receipt and limits](../operations/a951-host-evidence.md#managed-review-repairs-and-relay-retirement-7-november-2026).
-  The private combined build removes
-  `@waitron/tunnel`, its boot worker and its four relay settings. The staff listener is the
-  remote entrance; it supplies no relay for standby adoption.
-- Qualify the final combined installation across a physical reboot and explain the manual demo's changed connection-file hash.
-- Translate all returned one real editable English menu suggestion on the test box on
-  7 November through the signed connection; it remains unaccepted. The address fields still need
-  their trial Cloud provider. Provider keys stay on the gateway host and come from the owner.
+Translate all returned one editable menu suggestion on the test box. Address completion still
+needs its trial Cloud provider. Provider keys stay on the gateway host and come from the owner.
 
 The owner accepts that a compromised Cloud could obtain a staff certificate and intercept logins,
 that the sign-in page and a bug in the remote entrance face the internet, and that this version
