@@ -207,6 +207,7 @@ function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Har
       }),
     },
     probe: vi.fn(async () => ({ ok: true as const })),
+    prepareEncryption: vi.fn(async () => ({ ok: true as const })),
     turns: createTurns(),
     ...overrides,
   };
@@ -420,6 +421,40 @@ describe("stream settings routes", () => {
     },
   );
 
+  it.each(["encryption_unavailable", "encryption_ignored"] as const)(
+    "Save refuses %s before minting, sealing or saving anything",
+    async (reason) => {
+      await clearBucket();
+      const { app, deps, order } = harness({
+        prepareEncryption: vi.fn(async () => ({
+          ok: false as const,
+          reason,
+          detail: "private provider reply",
+        })),
+      });
+      const cookie = await login(app);
+      const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+      expect(res.status).toBe(422);
+      expect(await res.json()).toEqual({
+        error: { code: "backup.stream_test_failed", params: { reason } },
+      });
+      expect(deps.prepareEncryption).toHaveBeenCalledWith(BUCKET);
+      expect(order).toEqual([]);
+      expect(await storedBucket()).toBeNull();
+    },
+  );
+
+  it("Test leaves bucket encryption settings alone", async () => {
+    const { app, deps } = harness();
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/stream/test", {
+      method: "POST",
+      ...json(cookie, BODY),
+    });
+    expect(res.status).toBe(200);
+    expect(deps.prepareEncryption).not.toHaveBeenCalled();
+  });
+
   it("Save refuses a bucket that fails the probe and stores nothing", async () => {
     await clearBucket();
     const { app, deps, reload } = harness({
@@ -432,6 +467,7 @@ describe("stream settings routes", () => {
     const cookie = await login(app);
     const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
     expect(res.status).toBe(422);
+    expect(deps.prepareEncryption).not.toHaveBeenCalled();
     expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
     expect(await storedBucket()).toBeNull();
@@ -832,6 +868,7 @@ describe("stream settings routes", () => {
           error: { code: "backup.archive_namespace_overlap" },
         });
         expect(deps.probe).not.toHaveBeenCalled();
+        expect(deps.prepareEncryption).not.toHaveBeenCalled();
         expect(reload).not.toHaveBeenCalled();
         expect(await storedBucket()).toBeNull();
 

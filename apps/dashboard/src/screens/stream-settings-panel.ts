@@ -68,6 +68,8 @@ const FIELDS: { field: Field; name: string; labelKey: StringKey; requiredKey?: S
 
 /** `ProbeFailure` in `packages/stream/src/probe.ts`. */
 const PROBE_REASON_KEYS: Readonly<Record<string, StringKey>> = {
+  encryption_unavailable: "stream.probe.encryption_unavailable",
+  encryption_ignored: "stream.probe.encryption_ignored",
   access_denied: "stream.probe.access_denied",
   conditional_write_unsupported: "stream.probe.conditional_write_unsupported",
   write_failed: "stream.probe.write_failed",
@@ -594,6 +596,7 @@ export class StreamSettingsPanel extends LitElement {
               </p>`
             : nothing
         }
+        <p class="hint" data-test="encryption-setting">${t("stream.form.encryption_setting")}</p>
         <wt-form-actions .error=${marked ? t("form.fix_fields") : ""}>
           ${
             canCancel

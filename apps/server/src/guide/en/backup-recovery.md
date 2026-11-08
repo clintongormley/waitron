@@ -122,7 +122,7 @@ your recovery keys and existing backup files.
 
 If the bucket copy says its settings could not be used safely, choose **Change bucket** in
 **Backups**. Correct the fields it marks. **Test** checks the bucket without saving settings;
-**Save and turn on** applies them. **Cancel** leaves the saved settings as they were. This form
+**Save and turn on** also checks that a test file can be read with its matching key and that reads with a wrong key or no key are refused before applying the settings. If Save refuses the bucket, follow the message to enable those keys or choose another provider. Save can allow customer-supplied encryption keys in your bucket’s settings. That change remains if a later check fails. **Cancel** leaves the saved settings as they were. This form
 cannot diagnose a failure in the box's own configuration. Keep your recovery keys and existing
 copies if the refusal persists.
 

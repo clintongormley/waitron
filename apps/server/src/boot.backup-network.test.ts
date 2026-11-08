@@ -34,6 +34,24 @@ vi.mock("@hono/node-server", async () => {
 
 const { startServer, httpPort } = ephemeralServerFixture();
 
+const streamCheck = vi.hoisted(() => ({ refuse: false }));
+vi.mock("@waitron/stream", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/stream")>();
+  return {
+    ...actual,
+    probeBucket: (...args: Parameters<typeof actual.probeBucket>) =>
+      streamCheck.refuse ? Promise.resolve({ ok: true as const }) : actual.probeBucket(...args),
+    prepareBucketEncryption: (...args: Parameters<typeof actual.prepareBucketEncryption>) =>
+      streamCheck.refuse
+        ? Promise.resolve({
+            ok: false as const,
+            reason: "encryption_ignored" as const,
+            detail: "keys ignored",
+          })
+        : actual.prepareBucketEncryption(...args),
+  };
+});
+
 /** When set, every call to an archive destination waits until it is stopped, or until `release`. */
 const stall = vi.hoisted(() => ({
   on: false,
@@ -108,6 +126,7 @@ const scratches: string[] = [];
 let serverRunning = false;
 afterEach(async () => {
   serverRunning = false;
+  streamCheck.refuse = false;
   stall.on = false;
   stall.started = [];
   await withTransaction(venue.db, (tx) => deleteCredential(tx, { purpose: ARCHIVE_PURPOSE }));
@@ -413,6 +432,40 @@ describe("trading with environment backup settings beside a sealed record", () =
         expect(await res.json()).toMatchObject({
           error: { code: "backup.archive_namespace_overlap" },
         });
+      },
+    );
+  }, 60_000);
+});
+
+describe("stream encryption checks at the real trading boot", () => {
+  it("refuses Save when the provider ignores keys and keeps trading without saved stream settings", async () => {
+    streamCheck.refuse = true;
+    let cookie = "";
+    await bootAndTrade(
+      async () => {
+        cookie = await managerCookie();
+        return {};
+      },
+      async (_lines, { base, via }) => {
+        const response = await fetch(`${base}/api/backup/stream`, {
+          ...via,
+          method: "PUT",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({
+            endpoint: "https://s3.example.test",
+            region: "eu-north-1",
+            bucket: "owner-copy",
+            prefix: "",
+            accessKeyId: "test-access-key",
+            secretAccessKey: "not-a-real-secret",
+          }),
+        });
+        expect(response.status).toBe(422);
+        expect(await response.json()).toMatchObject({
+          error: { code: "backup.stream_test_failed", params: { reason: "encryption_ignored" } },
+        });
+        const status = await fetch(`${base}/api/backup/stream`, { ...via, headers: { cookie } });
+        expect(await status.json()).toMatchObject({ configured: false, recoveryKeySet: false });
       },
     );
   }, 60_000);

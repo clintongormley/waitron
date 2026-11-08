@@ -426,6 +426,7 @@ import { writeRecoveryKey } from "./backup-env-writer.js";
 import {
   createS3ObjectStore,
   parseRecoveryKit,
+  prepareBucketEncryption,
   probeBucket,
   type BucketConfig,
 } from "@waitron/stream";
@@ -3358,6 +3359,7 @@ async function bootServer(
         writeRecoveryKey(config.stateDir, { recoveryKey, keyRotatedAt: undefined }),
       sealedState,
       probe: (bucket) => probeBucket(createS3ObjectStore(bucket)),
+      prepareEncryption: prepareBucketEncryption,
       turns: backupTurns,
     },
     log,
