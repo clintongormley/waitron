@@ -14,7 +14,7 @@ import type {
   WtDialog,
 } from "@waitron/ui";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
-import { decimal, formatMoney, toScale } from "@waitron/shared";
+import { compareDecimal, decimal, formatMoney, toScale } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import {
   lineGross,
@@ -116,6 +116,9 @@ export class TillModifierPicker extends LitElement {
       wt-input[name="quantity"] {
         display: block;
         margin-block-end: var(--wt-space-3);
+      }
+      .min-quantity-action {
+        margin-block: calc(-1 * var(--wt-space-2)) var(--wt-space-3);
       }
       .group {
         margin: 0 0 var(--wt-space-4);
@@ -231,6 +234,12 @@ export class TillModifierPicker extends LitElement {
   @property({ attribute: false }) courseChoices: readonly ComboboxOption[] = [];
   @property({ type: Boolean }) disabled = false;
   @property({ type: Boolean }) lineDetails = false;
+  /** With {@link lineDetails}, the line's quantity is neither drawn nor sent. */
+  @property({ type: Boolean }) quantityReadOnly = false;
+  /** With {@link lineDetails}, the lowest quantity Save accepts; below it the field shows
+   * {@link minQuantityMessage} and the `min-quantity-action` slot. */
+  @property() minQuantity?: string;
+  @property() minQuantityMessage = "";
   @property({ type: Boolean }) readOnly = false;
   @property({ attribute: false }) nutrition: LineNutrition | null = null;
   @property({ attribute: false }) stagedRemoval?: StagedRemoval;
@@ -562,9 +571,7 @@ export class TillModifierPicker extends LitElement {
     const options = this.#selectedOptions();
     const detail: ModifierConfirmDetail = {
       product: this.#selectedProduct,
-      ...(this.lineDetails && this.initialSelections !== undefined
-        ? { quantity: this.editedQuantity }
-        : {}),
+      ...(this.#editsQuantity ? { quantity: this.editedQuantity } : {}),
       ...(this.#hasCourse ? { courseId: this.courseId } : {}),
       ...(extras.length === 0 ? {} : { extras }),
       ...(options.length === 0 ? {} : { options, optionSnapshots: this.#selectedSnapshots() }),
@@ -671,22 +678,29 @@ export class TillModifierPicker extends LitElement {
             `
           : html`
               ${
-                this.lineDetails && this.initialSelections !== undefined
+                this.#editsQuantity
                   ? html`<wt-input
-                      name="quantity"
-                      label=${t("table.split_quantity")}
-                      required
-                      decimal-locale=${currentLocale()}
-                      .value=${this.editedQuantity}
-                      .error=${this.attempted && this.#quantityInvalid() ? t("line.quantity_invalid") : ""}
-                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                        event.stopPropagation();
-                        if (!this.isConnected || !this.active || this.disabled || this.readOnly)
-                          return;
-                        this.editedQuantity = event.detail.value;
-                        this.#scope?.changed();
-                      }}
-                    ></wt-input>`
+                        name="quantity"
+                        label=${t("table.split_quantity")}
+                        required
+                        decimal-locale=${currentLocale()}
+                        .value=${this.editedQuantity}
+                        .error=${!this.attempted || !this.#quantityInvalid() ? "" : this.#quantityBelowMinimum() ? this.minQuantityMessage : t("line.quantity_invalid")}
+                        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                          event.stopPropagation();
+                          if (!this.isConnected || !this.active || this.disabled || this.readOnly)
+                            return;
+                          this.editedQuantity = event.detail.value;
+                          this.#scope?.changed();
+                        }}
+                      ></wt-input
+                      >${
+                        this.attempted && this.#quantityBelowMinimum()
+                          ? html`<div class="min-quantity-action">
+                              <slot name="min-quantity-action"></slot>
+                            </div>`
+                          : nothing
+                      }`
                   : nothing
               }
               ${
@@ -845,14 +859,28 @@ export class TillModifierPicker extends LitElement {
     return keyed(this.#connection, modal);
   }
 
+  get #editsQuantity(): boolean {
+    return this.lineDetails && this.initialSelections !== undefined && !this.quantityReadOnly;
+  }
+
   #quantityInvalid(): boolean {
+    if (this.quantityReadOnly) return false;
     try {
       assertQuantityPrecision(this.editedQuantity, productUnit(this.product).precision, {
         positive: true,
       });
-      return false;
     } catch {
       return true;
+    }
+    return this.#quantityBelowMinimum();
+  }
+
+  #quantityBelowMinimum(): boolean {
+    if (this.minQuantity === undefined || !this.#editsQuantity) return false;
+    try {
+      return compareDecimal(decimal(this.editedQuantity), decimal(this.minQuantity)) < 0;
+    } catch {
+      return false;
     }
   }
 

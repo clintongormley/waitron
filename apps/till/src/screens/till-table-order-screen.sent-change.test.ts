@@ -536,6 +536,7 @@ async function pressChange(el: TillTableOrderScreen) {
 }
 
 const doneness = burger.offeredModifiers!.find((list) => list.kind === "options")!;
+const extrasList = burger.offeredModifiers!.find((list) => list.kind === "extras")!;
 const steakish = { ...burger, offeredModifiers: [doneness] };
 const rare = {
   listName: { en: "Doneness" },
@@ -685,6 +686,7 @@ it("shows a weighed dish's quantity read-only and sends its note change without 
   const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
   await picker.updateComplete;
   expect(picker.shadowRoot!.querySelector('[name="quantity"]')).toBeNull();
+  expect(picker.lineDetails).toBe(true);
   expect(q(el, "[data-sent-line-dialog] .move-dish")!.textContent).toContain("×0.35");
   await editNote(el, "thin slices");
   await pressChange(el);
@@ -706,24 +708,44 @@ it("shows a weighed dish's quantity read-only and sends its note change without 
   ]);
 });
 
-it("sends nothing for a lower total and points to Void…, which asks before opening Void for the row", async () => {
+/** The quantity field's own message, and whether the field shows the host's Void… beside it. */
+function quantityField(el: TillTableOrderScreen) {
+  const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
+  const field = picker.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+    '[name="quantity"]',
+  )!;
+  const slot = picker.shadowRoot!.querySelector<HTMLSlotElement>(
+    'slot[name="min-quantity-action"]',
+  );
+  return {
+    error: field.error,
+    voidShown: slot?.assignedElements().includes(q(el, "[data-sent-change-void]")!) ?? false,
+  };
+}
+
+it("refuses a lower total at its field, with Void… beside it, which asks before opening Void for the row", async () => {
   setLocale("es");
   const { el, answer, dialog } = await openInApp();
   const seen = changes(el);
   const voids: unknown[] = [];
   el.addEventListener("cancel-item", (event) => voids.push((event as CustomEvent).detail));
-  expect(q(el, "[data-sent-change-lower]")).toBeNull();
   await editNote(el, "warm, no cream");
   await setQuantity(el, "1");
+  expect(quantityField(el)).toEqual({ error: "", voidShown: false });
   await pressChange(el);
   expect(seen).toEqual([]);
   expect(dialog.open).toBe(true);
-  const lower = q(el, "[data-sent-change-lower]")!;
-  expect(lower.textContent).toContain("Para quitar uno, usa Cancelar…");
-  const voidButton = q(el, "[data-sent-change-void]")!;
-  expect(voidButton.textContent!.trim()).toBe("Cancelar…");
+  expect(quantityField(el)).toEqual({ error: "Para quitar uno, usa Cancelar…", voidShown: true });
+  expect(q(el, "[data-sent-change-void]")!.textContent!.trim()).toBe("Cancelar…");
+  await expect.poll(() => footerSentence(el)?.textContent?.trim()).toBe(t("form.fix_fields"));
+  expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(true);
+  await setQuantity(el, "2");
+  expect(quantityField(el)).toEqual({ error: "", voidShown: false });
+  expect(footerSentence(el)?.textContent?.trim() ?? "").toBe("");
   expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(false);
-  voidButton.click();
+  await setQuantity(el, "1");
+  expect(quantityField(el).voidShown).toBe(true);
+  q(el, "[data-sent-change-void]")!.click();
   await answer("keep");
   expect(voids).toEqual([]);
   expect(dialog.open).toBe(true);
@@ -732,4 +754,37 @@ it("sends nothing for a lower total and points to Void…, which asks before ope
   await expect.poll(() => voids).toEqual([{ lineId: "l-flan" }]);
   await expect.poll(() => dialog.open).toBe(false);
   expect(seen).toEqual([]);
+});
+
+it("sends a whole total typed with a decimal place as digits only", async () => {
+  const el = await openRow({ lines: [line()], revision: 9, billEdit });
+  const seen = changes(el);
+  await setQuantity(el, "3.0");
+  await pressChange(el);
+  expect(seen[0]!.patch).toEqual({ note: "warm", portionLineNos: [], quantity: "3" });
+  expect(seen[0]!.saleLine!.quantity).toBe("3");
+});
+
+it("sends a dish's extras when they change, and its whole set with any other change", async () => {
+  const extrasOnly = { ...burger, offeredModifiers: [extrasList] };
+  const lines = [line({ productId: "burger", menuItemId: "offer-burger" })];
+  const el = await openRow({ lines, products: [flan, extrasOnly], revision: 9, billEdit });
+  const seen = changes(el);
+  const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
+  await picker.updateComplete;
+  picker
+    .shadowRoot!.querySelector<HTMLElement>('[data-test="pick-list-extras-p-bacon-inc"]')!
+    .click();
+  await picker.updateComplete;
+  await el.updateComplete;
+  await pressChange(el);
+  const bacon = [{ listId: "list-extras", picks: [{ productId: "p-bacon", quantity: 1 }] }];
+  expect(seen[0]!.patch).toEqual({ note: "warm", portionLineNos: [], extras: bacon });
+  expect(seen[0]!.saleLine!.extras).toEqual(bacon);
+  cleanupWidgets();
+  const noteOnly = await openRow({ lines, products: [flan, extrasOnly], revision: 9, billEdit });
+  const sent = changes(noteOnly);
+  await editNote(noteOnly, "warm, no salt");
+  await pressChange(noteOnly);
+  expect(sent[0]!.patch).toEqual({ note: "warm, no salt", portionLineNos: [], extras: [] });
 });

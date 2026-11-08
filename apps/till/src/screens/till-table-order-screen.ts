@@ -1349,9 +1349,6 @@ export class TillTableOrderScreen extends LitElement {
     pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
     detail: ModifierChangeDetail;
   } | null = null;
-  /** The open Sent window whose Change dish was pressed with a lower total. */
-  @state() private sentChangeLowered: NonNullable<TillTableOrderScreen["sentLinePending"]> | null =
-    null;
   /** The product and selection the open Sent window's fields started from. */
   #sentChangeSeed?: {
     pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
@@ -3132,16 +3129,6 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** A whole dish's field names a total below what the row holds now. */
-  #sentChangeLowers(selection: ModifierConfirmDetail | undefined, total: Decimal): boolean {
-    if (selection?.quantity === undefined) return false;
-    try {
-      return compareDecimal(decimal(selection.quantity), total) < 0;
-    } catch {
-      return false;
-    }
-  }
-
   /** Sends Change dish for the open row; false when nothing was sent. */
   #changeSentLine(
     pending: NonNullable<typeof this.sentLinePending>,
@@ -3161,17 +3148,15 @@ export class TillTableOrderScreen extends LitElement {
       TabLine,
       ...TabLine[],
     ];
-    if (this.#sentChangeLowers(detail, total)) {
-      this.sentChangeLowered = pending;
-      return false;
-    }
     const offered = offeredListsOf(seed.product);
     const patch: OrderLinePatch = {
       note: detail.note ?? null,
       portionLineNos: others.map((other) => other.lineNo),
     };
-    if (detail.quantity !== undefined && compareDecimal(decimal(detail.quantity), total) !== 0)
-      patch.quantity = detail.quantity;
+    // The server takes a row's total only as digits, so "3.0" goes as "3".
+    const quantity = detail.quantity === undefined ? undefined : trimQuantity(detail.quantity);
+    if (quantity !== undefined && compareDecimal(decimal(quantity), total) !== 0)
+      patch.quantity = quantity;
     const options = detail.options ?? [];
     if (
       offered.some((entry) => entry.kind === "options") &&
@@ -3191,7 +3176,7 @@ export class TillTableOrderScreen extends LitElement {
         ...(line.parentProductId === null || line.productId === null
           ? {}
           : { variantId: line.productId }),
-        quantity: detail.quantity ?? line.quantity,
+        quantity: quantity ?? line.quantity,
         options,
         extras,
         ...(detail.note ? { note: detail.note } : {}),
@@ -3465,10 +3450,6 @@ export class TillTableOrderScreen extends LitElement {
     const changeReady = change?.changed === true && change.savable && !disabled;
     // More of a weighed dish is weighed on its own, so it goes in the New order.
     const weighed = changeLines !== undefined && (changeLines[0]!.unitPrecision ?? 0) > 0;
-    const lowered =
-      seed !== undefined &&
-      this.sentChangeLowered === pending &&
-      this.#sentChangeLowers(change?.selection, decimal(shownQuantity));
     const status =
       slice?.kind === "cancelled_charged"
         ? t("table.cancelled_charged")
@@ -3509,7 +3490,10 @@ export class TillTableOrderScreen extends LitElement {
                         data-sent-change-fields
                         inline
                         withNote
-                        ?lineDetails=${!weighed}
+                        lineDetails
+                        ?quantityReadOnly=${weighed}
+                        .minQuantity=${weighed ? undefined : this.#displayQty(shownQuantity)}
+                        .minQuantityMessage=${t("table.change_dish_lower")}
                         .draftParent=${this}
                         .product=${seed.product}
                         .quantity=${this.#displayQty(shownQuantity)}
@@ -3524,22 +3508,16 @@ export class TillTableOrderScreen extends LitElement {
                           event.stopPropagation();
                           if (!this.#changeSentLine(pending!, event.detail)) event.preventDefault();
                         }}
-                      ></till-modifier-picker>`,
+                        ><wt-button
+                          slot="min-quantity-action"
+                          variant="secondary"
+                          data-sent-change-void
+                          ?disabled=${disabled}
+                          @click=${() => this.#actOnSentLine(pending, "void")}
+                          >${t("table.void_line")}</wt-button
+                        ></till-modifier-picker
+                      >`,
                     )
-              }
-              ${
-                lowered
-                  ? html`<div class="total-row" data-sent-change-lower role="alert">
-                      <span>${t("table.change_dish_lower")}</span>
-                      <wt-button
-                        variant="secondary"
-                        data-sent-change-void
-                        ?disabled=${disabled}
-                        @click=${() => this.#actOnSentLine(pending, "void")}
-                        >${t("table.void_line")}</wt-button
-                      >
-                    </div>`
-                  : nothing
               }
               <div class="total-row">
                 <span>${row.name}</span

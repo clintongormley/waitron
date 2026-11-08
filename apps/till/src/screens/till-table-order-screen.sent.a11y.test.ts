@@ -116,6 +116,22 @@ describe.each(["en", "es"] as const)("Sent on the table in %s", (locale) => {
         element: native,
         path: `__screenshots__/a1426-sent-change-fix-${locale}-${theme}-${width}.png`,
       });
+      picker
+        .shadowRoot!.querySelector('[name="quantity"]')!
+        .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "1" } }));
+      await (picker as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+      await el.updateComplete;
+      const voidButton = el.shadowRoot!.querySelector<HTMLElement>("[data-sent-change-void]")!;
+      await expect.poll(() => voidButton.checkVisibility()).toBe(true);
+      expect(voidButton.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+      expect(voidButton.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      expect(sentence()!.checkVisibility()).toBe(true);
+      expect(change.hasAttribute("disabled")).toBe(true);
+      await expectNoA11yViolations(host);
+      await page.screenshot({
+        element: native,
+        path: `__screenshots__/a1426-sent-change-lower-${locale}-${theme}-${width}.png`,
+      });
     });
     it.each([360, 390, 1280])(
       "keeps folds, information and native service usable at %i",
