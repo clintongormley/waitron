@@ -185,10 +185,15 @@ describe("generic print runtime's invoice boundary", () => {
     "an ineligible failed invoice does not delay ordinary work (%s)",
     async (invoiceReceiptsAt) => {
       const ctx = await setup();
+      const queuedAt = Date.now();
       await withTransaction(suite.db, async (tx) => {
         await tx
           .update(printJobs)
-          .set({ status: "failed", attempts: 1, createdAt: "2026-01-01T00:00:00.000Z" })
+          .set({
+            status: "failed",
+            attempts: 1,
+            createdAt: new Date(queuedAt - 2000).toISOString(),
+          })
           .where(eq(printJobs.id, ctx.managed));
         await tx
           .update(invoiceDeliveries)
@@ -196,7 +201,7 @@ describe("generic print runtime's invoice boundary", () => {
           .where(eq(invoiceDeliveries.id, ctx.deliveryId));
         await tx
           .update(printJobs)
-          .set({ createdAt: "2026-01-01T00:00:01.000Z" })
+          .set({ createdAt: new Date(queuedAt - 1000).toISOString() })
           .where(eq(printJobs.id, ctx.ordinary));
         const other = await createPrinter(tx, {
           name: "Other",
@@ -206,7 +211,7 @@ describe("generic print runtime's invoice boundary", () => {
         const queued = await enqueuePrintJob(tx, other.id, new Uint8Array([3]));
         await tx
           .update(printJobs)
-          .set({ createdAt: "2026-01-01T00:00:02.000Z" })
+          .set({ createdAt: new Date(queuedAt).toISOString() })
           .where(eq(printJobs.id, queued.jobId));
         expect(
           (
