@@ -182,7 +182,7 @@ interface SeededVenue {
 
 /**
  * Stand up a fresh chained venue + registered SIF, then seed a catalogue and read back two
- * `each`/general(21%) products. Each test gets its OWN tenant so its sale / registro counts are
+ * `each`/general(21%) products. Each test gets its OWN tenant so its sale / fiscal record counts are
  * order-independent (CLAUDE.md §4).
  */
 async function setupVenue(): Promise<SeededVenue> {
@@ -626,7 +626,7 @@ describe("payWorkingOrder", () => {
     ]);
 
     // The working order was created AND settled in the one transaction; exactly one sale + one
-    // registro reference it.
+    // fiscal record reference it.
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
     expect(await fiscalRecordCount(id)).toBe(1);
@@ -846,7 +846,7 @@ describe("payWorkingOrder", () => {
     expect(second.qr.length).toBeGreaterThan(0);
     expect(second.qrText).toEqual(first.qrText);
 
-    // No double filing: STILL exactly one sale + one registro after the retry.
+    // No double filing: STILL exactly one sale + one fiscal record after the retry.
     expect(await saleCount(id)).toBe(1);
     expect(await fiscalRecordCount(id)).toBe(1);
   });
@@ -882,7 +882,7 @@ describe("payWorkingOrder", () => {
       ),
     ]);
 
-    // Same ticket from both; exactly ONE sale and ONE registro — the loser replayed, did not file.
+    // Same ticket from both; exactly ONE sale and ONE fiscal record — the loser replayed, did not file.
     expect(resA.invoiceNumber).toBe(resB.invoiceNumber);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
@@ -1066,7 +1066,7 @@ describe("card tender (manual / datáfono)", () => {
     expect(res.tender).toMatchObject({ method: "card", reference: "OP-12345" });
     expect(res.invoiceNumber).toBe("A/1");
 
-    // One sale + one chained registro, exactly as the cash path.
+    // One sale + one chained fiscal record, exactly as the cash path.
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1);
     expect(await fiscalRecordCount(id)).toBe(1);
@@ -1123,7 +1123,7 @@ describe("card tender (manual / datáfono)", () => {
 
     const first = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, req);
     // The retry — same id, same body (a lost first response). The `sales_working_order_id_key`
-    // idempotency replays the ORIGINAL ticket and files NOTHING: no second sale, no second registro,
+    // idempotency replays the ORIGINAL ticket and files NOTHING: no second sale, no second fiscal record,
     // and — the card-specific part — no second captured payment.
     const second = await payWorkingOrder({ ...deps, admission: testTradingAdmission() }, cfg, req);
 
@@ -1945,7 +1945,7 @@ describe("prepare & collect — zone payment timing", () => {
     expect(await paymentsFor(cardId)).toEqual([
       { provider: "manual", state: "captured", amount: "1.50", linkedToSale: true },
     ]);
-    // Still exactly ONE sale + ONE registro — the ledger row rides ALONGSIDE the settlement, never a
+    // Still exactly ONE sale + ONE fiscal record — the ledger row rides ALONGSIDE the settlement, never a
     // second fiscal file (§5).
     expect(await saleCount(cardId)).toBe(1);
     expect(await fiscalRecordCount(cardId)).toBe(1);
@@ -2889,7 +2889,7 @@ describe("markCollected (the counter handover)", () => {
     expect(readyQueue.map((g) => g.orderId)).toEqual([id]);
     expect(readyQueue[0]!.status).toBe("settled");
 
-    // Hand it over. NON-FISCAL — markCollected writes only collected_at (no sale/registro/tender/huella).
+    // Hand it over. NON-FISCAL — markCollected writes only collected_at (no sale/fiscal record/tender/huella).
     await markCollected({ db: suite.db }, cfg, id);
     expect(await collectedAtSet(id)).toBe(true);
     expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);

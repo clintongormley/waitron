@@ -237,7 +237,7 @@ async function fiscalRecordCount(workingOrderId: string): Promise<number> {
 }
 
 describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)", () => {
-  it("openTab + addTabRound → payWorkingOrder settles it, files one sale + registro, table reads free", async () => {
+  it("openTab + addTabRound → payWorkingOrder settles it, files one sale + fiscal record, table reads free", async () => {
     const { cfg, coffee, water, tables } = await setupVenue();
     const tableId = await seedTable(cfg, "Pay-1", suite.db, tables.zoneId);
     const deps = { db: suite.db, backend, clock };

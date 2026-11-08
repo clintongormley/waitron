@@ -1035,7 +1035,7 @@ describe("an original receipt whose printer was deleted", () => {
       reprints: await suite.db.select().from(receiptReprints),
       drawers: await suite.db.select().from(drawerOpens),
       sales: await suite.db.select().from(sales),
-      registros: await suite.db.select().from(registrosFacturacion),
+      fiscalRecords: await suite.db.select().from(registrosFacturacion),
     };
   }
 

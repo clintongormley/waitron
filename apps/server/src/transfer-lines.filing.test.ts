@@ -235,8 +235,8 @@ beforeAll(() => {
   });
 });
 
-describe("H2 — after a partial transfer, each tab files its OWN single registro (no double-file, no re-price)", () => {
-  it("transfer 1 café A→B, then pay BOTH tabs → exactly one sale + one registro each, at the locked price", async () => {
+describe("H2 — after a partial transfer, each tab files its OWN single fiscal record (no double-file, no re-price)", () => {
+  it("transfer 1 café A→B, then pay BOTH tabs → exactly one sale + one fiscal record each, at the locked price", async () => {
     const { cfg, tabA, tabB } = await setupTwoTabs(); // A: café×4, B: café×4
     await withTransaction(suite.db, async (tx) => {
       const party = (await partyRevisionOfOrder(tx, tabA))!;
@@ -260,7 +260,7 @@ describe("H2 — after a partial transfer, each tab files its OWN single registr
       tender: { method: "cash", amount: "20.00" },
     });
 
-    // Each tab files EXACTLY one sale + one chained registro — no café double-files (every café lives on
+    // Each tab files EXACTLY one sale + one chained fiscal record — no café double-files (every café lives on
     // exactly one tab after the split), the H2 invariant the transfer must preserve.
     expect(await saleCount(tabA)).toBe(1);
     expect(await saleCount(tabB)).toBe(1);

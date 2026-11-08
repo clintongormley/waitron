@@ -2029,7 +2029,6 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toBeDefined();
 
     expect(client.lastCreateIntent).toBeUndefined(); // never re-charged
-    // No sale, no registro; the order stays open; the captured payment is untouched (still an orphan).
     expect(await saleCount(id)).toBe(0);
     expect(await fiscalRecordCount(id)).toBe(0);
     expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });

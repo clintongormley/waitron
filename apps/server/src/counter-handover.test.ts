@@ -632,7 +632,7 @@ describe("payment and handover in either order end with the same facts", () => {
       status: row.status,
       handedOver: row.collectedAt !== null,
       sales: saleCount(id),
-      registros: fiscalRecordCount(venue, id),
+      fiscalRecords: fiscalRecordCount(venue, id),
       tickets: ticketItemCount(id),
     };
   }
@@ -657,7 +657,13 @@ describe("payment and handover in either order end with the same facts", () => {
     await markCollected({ db: venue.db }, venue.cfg, handedOverFirst);
     await collectCash(handedOverFirst);
 
-    const expected = { status: "settled", handedOver: true, sales: 1, registros: 1, tickets: 1 };
+    const expected = {
+      status: "settled",
+      handedOver: true,
+      sales: 1,
+      fiscalRecords: 1,
+      tickets: 1,
+    };
     expect(await facts(paidFirst)).toEqual(expected);
     expect(await facts(handedOverFirst)).toEqual(expected);
   });

@@ -296,7 +296,7 @@ describe("joinTables → one bill", () => {
   });
 });
 
-describe("parties combined, bills merged → one registro (H2)", () => {
+describe("parties combined, bills merged → one fiscal record (H2)", () => {
   it("a merged-then-paid tab yields exactly ONE registros_facturacion row; the source tab files nothing", async () => {
     const { cfg, coffee, water } = await setupVenue();
     const tInto = await seedTable(cfg, "MR-into");
@@ -320,7 +320,7 @@ describe("parties combined, bills merged → one registro (H2)", () => {
     expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" });
     expect(await saleCount(fromTab)).toBe(0);
 
-    // Pay the merged intoTab → exactly one sale + one chained registro for the combined bill.
+    // Pay the merged intoTab → exactly one sale + one chained fiscal record for the combined bill.
     await payWorkingOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,

@@ -726,7 +726,7 @@ describe("a presented bill whose card is in flight", () => {
     return venue.db.all(sql`
       select
         (select count(*) from sales) as sales,
-        (select count(*) from registros_facturacion) as registros,
+        (select count(*) from registros_facturacion) as fiscalRecords,
         (select count(*) from sale_settlements) as settlements,
         (select count(*) from unpaid_departures) as departures,
         (select count(*) from print_jobs) as printJobs
