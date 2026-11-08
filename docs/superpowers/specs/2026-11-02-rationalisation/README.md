@@ -400,6 +400,9 @@ payloads stay with A980, and the bench measures them unpruned.
   (including the venue's time zone, which since A696 sets every invoice's time offset,
   `packages/fiscal/src/issue-clock.ts:7-23`) — following the
   owner's rule of 2026-10-21 that truly fiscal pull requests wait for the owner. The working-time
+  record's hash change (U6) is a labour record, not fiscal; it is flagged in its pull request.
+  (2026-11-08: this sentence was cut off by the backlog commit of 6 November, 2d20a8aeff, and is
+  restored from 62c9d6d5df.)
 - *Other work on the same tables.* A1301's schema slices S20–S28 have a design but no plan yet and
   are absorbed into this design's venue-and-box slice. A773-2 (tickets), A803 (lane C is mid-build),
   A1089 (filing cases), A980 (people) and A1018 land before the slice that touches their tables, or
