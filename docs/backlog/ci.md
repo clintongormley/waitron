@@ -1338,8 +1338,6 @@ these, which it did not build (local figures, 2 November 2026):
   recorded, or 0.3%; three times that, for a slower CI machine, is still under 1%. The 5% bar would need
   about 770 ms per file. Measured locally only: no CI run was made. Measure again only if the
   migration history grows back to hundreds of files.
-- **The `zone-process-matrix.*` files** run other test files in nested Vitest runs; child processes
-  were 47–54 s of their 49–57 s locally. Not investigated further.
 - **The remaining random salts in test setup:** `src/testing/staged-hour-restore.ts` and
   `src/testing/staged-hour-crash.ts` still draw one per call. Sharing `apps/server/test/fixture-salt.ts` with `src/testing/` would mean moving it
   there, under coverage and mutation.
