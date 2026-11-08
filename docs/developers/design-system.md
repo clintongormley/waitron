@@ -248,8 +248,8 @@ the icons and spinners its `GRAPHIC_USES` list names by file and selector
   `apps/` and `packages/`, files ending `.test.ts`, and `.js` and `.mjs` files.
 
 Two uses of the button colour it cannot see were checked by hand on 2026-10-21 and stay, being
-graphics: the logo's waiter drawing, `fill: var(--wt-color-primary)` in
-`apps/setup/src/setup-app.ts:500`, and the floor map's drag line, `stroke: var(--wt-color-primary)`
+graphics: the logo's drawing, `fill: var(--wt-color-primary)` (then in `apps/setup/src/setup-app.ts`,
+now in `packages/ui/src/components/wt-waitron-lockup.ts`), and the floor map's drag line, `stroke: var(--wt-color-primary)`
 in `packages/ui/src/components/wt-floor-map.ts:348`. The one text site of that kind found then, the
 printer name's redeclared `--wt-color-text` (`apps/dashboard/src/screens/printers-screen.ts:218`),
 moved to `--wt-color-primary-text`, and a case in `printers-screen.test.ts` sets the two tokens to
@@ -3813,7 +3813,8 @@ authenticated screen. In Demo and Preparation, put `wt-demo-bar` above it; in Li
 at the top. The menu and page content belong underneath the banner. The
 banner shows the venue's logo when one is set (`wt-venue-logo`, `size="banner"`, alt empty,
 Waitron's lockup in its fallback slot), else the canonical Waitron lockup, and then the deployment
-tenant's legal name. While a browser with no saved copy of the venue's theme
+tenant's legal name. The name sits on the lockup word's baseline whenever the lockup is what shows
+(no venue logo, or a venue logo that failed to load), and is centred on a venue's own logo. While a browser with no saved copy of the venue's theme
 waits for its first theme read, the logo's place is an empty `wt-venue-logo` `size="banner"` box; a
 read that fails or passes its 5-second limit (`VENUE_THEME_TIME_LIMIT_MS`) ends the wait with the
 lockup.
@@ -5719,7 +5720,7 @@ bar, at 360 px the tab strip got 148 px of the 178 px its tabs needed, and "Sala
 accepts the scroll on a short phone, and moves the chooser off a handheld's bar: build plan slice 3,
 D5–D6.) A theme pick applies at once and never asks about unsaved work, unlike a language pick on
 the till. The dashboard banner's lockup (`wt-waitron-lockup`) follows the choice through the theme's
-tokens, and the
+tokens, the SVG tab icon follows it through `startThemedFavicon`, and the
 printable node recovery page takes the screen's resolved `color-scheme` rather than `light dark`.
 
 A till keeps Counter, Floor, Parked, Waiting, Transfers and Pass on a permanent, horizontally

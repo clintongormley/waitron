@@ -426,17 +426,6 @@ readers yet." under an empty table, and Cloud services says "Checking Cloud conn
 failure message; the same on `main` before W18. It is the kind of empty-state text W18 removed from
 Roster and Planned vs actual.
 
-## The dashboard's dark wordmark looked nearly black (A253 observation, 2026-10-09)
-
-The final live A435-1 catalogue captures at
-`a68dc2188`, with the dashboard forced to the dark theme, showed a nearly black wordmark.
-The browser's `prefers-color-scheme` was not measured, so the cause is **UNVERIFIED**.
-**Next action:** measure the browser's media preference and the selected `<picture>` source
-against `data-wt-theme` in the live dashboard before deciding a fix.
-A366-4B's 2026-10-09 sidebar captures also show a dark wordmark with the root and fixture host
-set to the dark theme. The media preference and selected source were not measured there either.
-Seen again 2026-10-20 in A757 slice 2's look pictures.
-
 ## A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07)
 
 Left open by the completed A331 batches:
@@ -733,15 +722,13 @@ plans to retire the editor.
 
 ## Bundle: Theme logo
 
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size M.
 
-- **The box's trust page and the favicon still follow the device's setting, not the Theme choice
-  (left open by A681).**
-  [Detail](dashboard.md#the-boxs-trust-page-and-the-favicon-still-follow-the-devices-setting-not-the-theme-choice-left-open-by-a681)
-- **Five tidy-ups A681's review left for later (#1842, 2026-10-17).**
-  [Detail](dashboard.md#five-tidy-ups-a681s-review-left-for-later-1842-2026-10-17)
-- **The dashboard's dark wordmark looked nearly black (A253 observation, 2026-10-09) — UNVERIFIED.**
-  [Detail](dashboard.md#the-dashboards-dark-wordmark-looked-nearly-black-a253-observation-2026-10-09)
+- **The box's trust page still follows the device's setting, not the Theme choice (left open by
+  A681).**
+  [Detail](dashboard.md#the-boxs-trust-page-still-follows-the-devices-setting-not-the-theme-choice-left-open-by-a681)
+- **Four tidy-ups A681's review left for later (#1842, 2026-10-17).**
+  [Detail](dashboard.md#four-tidy-ups-a681s-review-left-for-later-1842-2026-10-17)
 
 ## Bundle: Dashboard i18n odds
 
@@ -1212,23 +1199,21 @@ The off track is `--wt-color-border` (`packages/ui/src/components/wt-switch.ts:7
   `visualViewport`), and remove the listener when it closes.
 
 
-## The box's trust page and the favicon still follow the device's setting, not the Theme choice (left open by A681).
+## The box's trust page still follows the device's setting, not the Theme choice (left open by A681).
 
 The trust page (`apps/server/src/trust-page.ts`, its logo in
   `trust-page-logo.ts`) is rendered by the server with no script, so it never reads the choice
   saved in the browser; it is the only server-rendered page under `apps/server/src` that reads the
-  device's setting at all. The favicon (`packages/ui/brand/public/favicon.svg`) is drawn by the
-  browser from the operating system's setting. Open.
+  device's setting at all. Open.
 
 
-## Five tidy-ups A681's review left for later (#1842, 2026-10-17).
+## Four tidy-ups A681's review left for later (#1842, 2026-10-17).
 
 None is a defect; each
-  reshapes working code. (1) Draw the dashboard logo as a token-coloured inline image, as setup's
-  is, instead of swapping two images by `media`. (2) One shared "redraw when this changes" helper
-  for the theme and the language. (3) Move more of the two choosers' repeated open and close steps
-  into `packages/ui/src/menu-popover.ts`. (4) Rename the till's `language-chooser-styles.ts`, which
-  now places the Theme menu too. (5) Handle a theme pick with a plain handler in each app instead
+  reshapes working code. (1) One shared "redraw when this changes" helper
+  for the theme and the language. (2) Move more of the two choosers' repeated open and close steps
+  into `packages/ui/src/menu-popover.ts`. (3) Rename the till's `language-chooser-styles.ts`, which
+  now places the Theme menu too. (4) Handle a theme pick with a plain handler in each app instead
   of `ThemeChoiceController`'s `applies` option. Take them when next working in those files.
 
 

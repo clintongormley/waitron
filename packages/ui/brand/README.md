@@ -7,9 +7,10 @@ drawn as outlines, so nothing loads a font. The lockup is the two together, side
 ## Sources and derived files
 
 You edit the two source drawings by hand. `build-icons.mjs` writes the derived files from those
-drawings and the dark colour tokens, so the geometry exists in exactly one place per drawing and
-redrawing the mark is one edit plus one command. The derived files are committed, so run the command
-whenever you change a source drawing or a dark token.
+drawings and the dark colour tokens. The derived files are committed, so run the command whenever
+you change a source drawing or a dark token. One number is kept by hand outside the drawings:
+`WORD_BASELINE` in `packages/ui/src/components/wt-waitron-lockup.ts`, where the word's letters sit;
+update it when the wordmark is redrawn (`wt-waitron-lockup.test.ts` fails if it is off).
 
 | File                          | Kind    | Read by                                                                                                                                                                                                                                                                                                       |
 | ----------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -53,12 +54,10 @@ and each dark value from the `@media (prefers-color-scheme: dark)` block, so a `
 that disagrees with either is not seen, and it checks neither the favicon nor the certificate page's
 copy.
 
-The setup wizard (`apps/setup/src/setup-app.ts`) also draws the lockup inline, in the same way, but copies nothing:
-it imports `waitron-lockup.svg` as-is through a `?raw` import and repaints its two top-level groups
-by position — the first `<g>` (the waiter) with `--wt-color-primary`, the last (the word) with
-`--wt-color-text`. That is the order `build-icons.mjs` writes them in, so the wizard depends on it
-staying that way; the paint cases in `apps/setup/src/setup-app.test.ts` find each group by the ink
-this file gives it, so a reordered file fails them.
+The setup wizard (`apps/setup/src/setup-app.ts`) draws its header logo with `wt-waitron-lockup` too.
+The primitive repaints the file's two top-level groups by position, the first `<g>` (the cloche)
+with `--wt-color-primary` and the last (the word) with `--wt-color-text`. That is the order
+`build-icons.mjs` writes them in, so the primitive depends on it staying that way.
 
 ## Why an .ico and a PNG as well as the SVG
 
@@ -93,21 +92,3 @@ node packages/ui/brand/build-icons.mjs
 Run this by hand: Inkscape is not a workspace dependency. The root tests use a stub raster renderer,
 so they do not replace regeneration with real Inkscape. Set `INKSCAPE` if the binary is not on PATH.
 The command prints what it wrote and which Inkscape it used.
-
-On 2026-10-03, one re-run over the committed files on one machine, with Inkscape 1.4.4 (dcaf3e7),
-left all seven files it wrote — `public/favicon.svg`, `waitron-lockup.svg`,
-`waitron-lockup-dark.svg`, `public/apple-touch-icon.png`, `public/icon-192.png`,
-`public/icon-512.png` and `public/favicon.ico` — byte for byte unchanged (`git status` reported none
-of them modified). That is the whole experiment: it is not a claim about other Inkscape builds,
-which may well render differently.
-
-Since the cloche logo it also writes the three images under `png/`; that re-run was not repeated.
-
-## If the mark is redrawn
-
-The hand-drawn Inkscape export draws the cloche as a **full circle with its lower half hidden under a
-white rectangle**. That works on a white page and nowhere else: reversed out, the rectangle shows as
-a white box across the tray and the dome reads as a whole circle floating above it. In
-`waitron-mark.svg` it is a real clipped arc instead — same centre, same radius, cut at the same line
-— and because the cut sits below the circle's centre the arc subtends more than 180 degrees, so it
-needs `large-arc-flag` set. Reapply that whenever a new export comes in, then re-run the generator.
