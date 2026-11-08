@@ -7,6 +7,7 @@ import {
   blankCommentsAndLiterals,
   BAND_RANK,
   BUILD_HEADER,
+  PERSON_HEADER,
   DEFAULT_READY_WARNING_AFTER_MINUTES,
   classifyBand,
   compareDecimal,
@@ -91,6 +92,10 @@ import * as timing from "./timing.js";
 describe("package public surface (./index.js)", () => {
   it("re-exports the build header name", () => {
     expect(BUILD_HEADER).toBe("x-waitron-build");
+  });
+
+  it("re-exports the person header name", () => {
+    expect(PERSON_HEADER).toBe("x-waitron-person");
   });
 
   it("re-exports AppError, isAppError and hasCode", () => {

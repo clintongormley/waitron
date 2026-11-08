@@ -1,5 +1,8 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { PERSON_HEADER } from "@waitron/shared";
+import clientSource from "./client.ts?raw";
 import {
+  SESSION_PERSON_REFUSAL,
   TillApi,
   isNetworkFailure,
   menuOfferToTillProduct,
@@ -4700,7 +4703,6 @@ describe("TillApi: a party's drafts", () => {
         revision: 0,
         expectedEdit: emptyEdit,
         lines: [beer],
-        personId: "p1",
       },
       { signal },
     );
@@ -4734,7 +4736,6 @@ describe("TillApi: a party's drafts", () => {
         revision: 0,
         expectedEdit: emptyEdit,
         lines: [beer],
-        personId: "p1",
       }),
     ).resolves.toEqual({ draft, edit });
 
@@ -4746,7 +4747,6 @@ describe("TillApi: a party's drafts", () => {
         revision: 0,
         expectedEdit: emptyEdit,
         lines: [beer],
-        personId: "p1",
       }),
     );
   });
@@ -4764,7 +4764,6 @@ describe("TillApi: a party's drafts", () => {
       revision: 1,
       expectedEdit: observed,
       lines: [],
-      personId: "p1",
     });
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -4775,7 +4774,6 @@ describe("TillApi: a party's drafts", () => {
         revision: 1,
         expectedEdit: observed,
         lines: [],
-        personId: "p1",
       }),
     );
   });
@@ -4800,7 +4798,6 @@ describe("TillApi: a party's drafts", () => {
         revision: 1,
         expectedEdit: observed,
         lines: [beer],
-        personId: "p1",
       }),
     ).rejects.toEqual({
       code: "draft.taken_over",
@@ -4828,7 +4825,6 @@ describe("TillApi: a party's drafts", () => {
         revision: 0,
         expectedEdit: emptyEdit,
         lines: [beer],
-        personId: "p1",
       }),
     ).rejects.toEqual({ code: "draft.out_of_date", status: 409, draftId: "d1", revision: 3 });
   });
@@ -5969,5 +5965,250 @@ describe("A803 action results", () => {
       code: "party.out_of_date",
       status: 409,
     });
+  });
+});
+
+describe("TillApi: the tab's person on every request", () => {
+  const personOf = (init: RequestInit | undefined) => new Headers(init?.headers).get(PERSON_HEADER);
+  const ok = () => jsonResponse({});
+  const emptyStream = () =>
+    new Response("", { status: 200, headers: { "content-type": "text/event-stream" } });
+
+  async function sendEach(api: TillApi) {
+    await api.getTill();
+    await api.openDrawer();
+    await api.getTill({ signal: new AbortController().signal });
+    await api.getDeviceEquipment();
+    await api.readDepartmentTransferEvents(() => {});
+  }
+
+  it("names the source's person on a GET, a POST, a read with a signal, a method's own headers and the transfer stream", async () => {
+    const fetchStub = vi
+      .fn<typeof fetch>()
+      .mockImplementation((input) =>
+        Promise.resolve(String(input).endsWith("/events") ? emptyStream() : ok()),
+      );
+    const api = new TillApi("", fetchStub);
+    api.namePersonFrom(
+      () => ({ personId: "p1" }),
+      () => {},
+    );
+
+    await sendEach(api);
+
+    expect(fetchStub.mock.calls.map(([, init]) => personOf(init))).toEqual([
+      "p1",
+      "p1",
+      "p1",
+      "p1",
+      "p1",
+    ]);
+    const [, post] = fetchStub.mock.calls[1]!;
+    expect(new Headers(post?.headers).get("content-type")).toBe("application/json");
+    expect(fetchStub.mock.calls[2]![1]?.signal).toBeInstanceOf(AbortSignal);
+    const [, own] = fetchStub.mock.calls[3]!;
+    expect(new Headers(own?.headers).get("x-waitron-device-clock")).toMatch(/^\d+$/);
+    const [, events] = fetchStub.mock.calls[4]!;
+    expect(new Headers(events?.headers).get("accept")).toBe("text/event-stream");
+  });
+
+  it("sends no person on the sign-in", async () => {
+    const fetchStub = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ personId: "p1" }));
+    const api = new TillApi("", fetchStub);
+    api.namePersonFrom(
+      () => ({ personId: "p1" }),
+      () => {},
+    );
+
+    await api.login("p1", "1234");
+
+    expect(personOf(fetchStub.mock.calls[0]![1])).toBeNull();
+  });
+
+  it.each([
+    [
+      "the source gives nobody",
+      (api: TillApi) =>
+        api.namePersonFrom(
+          () => null,
+          () => {},
+        ),
+    ],
+    ["no source is set", () => {}],
+  ])("sends no person when %s", async (_, setUp) => {
+    const fetchStub = vi
+      .fn<typeof fetch>()
+      .mockImplementation((input) =>
+        Promise.resolve(String(input).endsWith("/events") ? emptyStream() : ok()),
+      );
+    const api = new TillApi("", fetchStub);
+    setUp(api);
+
+    await sendEach(api);
+
+    expect(fetchStub.mock.calls.map(([, init]) => personOf(init))).toEqual([
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  it.each([409, 400])(
+    "hands the refusal listener the person a refused request named, before the caller sees it (%s)",
+    async (status) => {
+      const fetchStub = vi
+        .fn<typeof fetch>()
+        .mockImplementation(() =>
+          Promise.resolve(
+            jsonResponse(
+              { error: { code: SESSION_PERSON_REFUSAL, params: { personId: "p1" } } },
+              status,
+            ),
+          ),
+        );
+      const api = new TillApi("", fetchStub);
+      const sent = { personId: "p1" };
+      const seen: unknown[] = [];
+      api.namePersonFrom(
+        () => sent,
+        (person) => seen.push(person),
+      );
+
+      const outcome = api.getTill().then(
+        () => "resolved",
+        (error: unknown) => {
+          seen.push("rejected");
+          return error;
+        },
+      );
+
+      expect(await outcome).toEqual({ code: SESSION_PERSON_REFUSAL, personId: "p1", status });
+      expect(seen).toEqual([sent, "rejected"]);
+      expect(seen[0]).toBe(sent);
+    },
+  );
+
+  it("hands the listener a refused transfer stream's person", async () => {
+    const fetchStub = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: SESSION_PERSON_REFUSAL, params: { personId: "p1" } } }, 409),
+      );
+    const api = new TillApi("", fetchStub);
+    const sent = { personId: "p1" };
+    const onRefused = vi.fn();
+    api.namePersonFrom(() => sent, onRefused);
+
+    await expect(api.readDepartmentTransferEvents(() => {})).rejects.toEqual({
+      code: SESSION_PERSON_REFUSAL,
+      status: 409,
+    });
+
+    expect(onRefused).toHaveBeenCalledTimes(1);
+    expect(onRefused.mock.calls[0]![0]).toBe(sent);
+  });
+
+  it.each([
+    ["a request", (api: TillApi) => api.getTill()],
+    ["the transfer stream", (api: TillApi) => api.readDepartmentTransferEvents(() => {})],
+  ])("reads a refused answer's body once while someone is named (%s)", async (_, send) => {
+    const fetchStub = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: SESSION_PERSON_REFUSAL, params: { personId: "p1" } } }, 409),
+      );
+    const api = new TillApi("", fetchStub);
+    const onRefused = vi.fn();
+    api.namePersonFrom(() => ({ personId: "p1" }), onRefused);
+    const reads = vi.spyOn(Response.prototype, "json");
+    const clones = vi.spyOn(Response.prototype, "clone");
+
+    try {
+      await expect(send(api)).rejects.toMatchObject({ code: SESSION_PERSON_REFUSAL, status: 409 });
+      expect(onRefused).toHaveBeenCalledOnce();
+      expect(reads).toHaveBeenCalledOnce();
+      expect(clones).not.toHaveBeenCalled();
+    } finally {
+      reads.mockRestore();
+      clones.mockRestore();
+    }
+  });
+
+  it("does not call the listener for another refusal", async () => {
+    const fetchStub = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ error: { code: "session.required" } }, 409));
+    const api = new TillApi("", fetchStub);
+    const onRefused = vi.fn();
+    api.namePersonFrom(() => ({ personId: "p1" }), onRefused);
+
+    await expect(api.getTill()).rejects.toMatchObject({ code: "session.required" });
+
+    expect(onRefused).not.toHaveBeenCalled();
+  });
+
+  it("names the person on the sign-out, and on the sign-in names nobody", async () => {
+    const fetchStub = vi
+      .fn<typeof fetch>()
+      .mockImplementation(() => Promise.resolve(jsonResponse({ ok: true })));
+    const api = new TillApi("https://box.test", fetchStub);
+    api.namePersonFrom(
+      () => ({ personId: "p1" }),
+      () => {},
+    );
+
+    await api.logout();
+    await api.login("p1", "1234");
+
+    expect(fetchStub.mock.calls.map(([url, init]) => [url, init?.method, personOf(init)])).toEqual([
+      ["https://box.test/api/session", "DELETE", "p1"],
+      ["https://box.test/api/session", "POST", null],
+    ]);
+  });
+
+  it("still rejects with the server's refusal when the refusal listener throws", async () => {
+    const fetchStub = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ error: { code: SESSION_PERSON_REFUSAL, params: { personId: "p1" } } }, 409),
+      );
+    const api = new TillApi("", fetchStub);
+    const onRefused = vi.fn(() => {
+      throw new Error("listener broke");
+    });
+    api.namePersonFrom(() => ({ personId: "p1" }), onRefused);
+
+    await expect(api.getTill()).rejects.toEqual({
+      code: SESSION_PERSON_REFUSAL,
+      personId: "p1",
+      status: 409,
+    });
+    expect(onRefused).toHaveBeenCalledOnce();
+  });
+
+  // Reads client.ts as TEXT: it finds the name `#fetchImpl`, not a fetch reached some other way.
+  it("reads #fetchImpl only in its declaration, the constructor and #fetchFor, so no request skips the person (a text check)", () => {
+    const start = clientSource.indexOf("\n  #fetchFor(");
+    const end = clientSource.indexOf("\n  }\n", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(clientSource.slice(start, end)).toContain("this.#fetchImpl");
+    const elsewhere = (clientSource.slice(0, start) + clientSource.slice(end))
+      .split("\n")
+      .filter((line) => line.includes("#fetchImpl"))
+      .map((line) => line.trim());
+    expect(elsewhere).toEqual(["readonly #fetchImpl: FetchLike;", "this.#fetchImpl = fetchImpl;"]);
+  });
+
+  it("logout takes no argument and sends no body", async () => {
+    const fetchStub = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ ok: true }));
+    const api = new TillApi("", fetchStub);
+
+    await api.logout();
+
+    expectTypeOf(api.logout).parameters.toEqualTypeOf<[]>();
+    expect(fetchStub.mock.calls[0]![1]?.body).toBeUndefined();
   });
 });

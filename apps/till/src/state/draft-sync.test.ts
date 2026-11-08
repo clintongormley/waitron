@@ -75,6 +75,25 @@ function sync(personId = "p1", billId = "wo-4"): DraftSync {
   });
 }
 
+/** The next read stays out until `answer` is called with what it is to say. */
+const holdRead = () => {
+  let answer!: (value: Awaited<ReturnType<DraftServer["listDrafts"]>>) => void;
+  server.listDrafts.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+  return (value: Awaited<ReturnType<DraftServer["listDrafts"]>>) => answer(value);
+};
+
+/** The next save reaches the server, and its answer stays out until `release` is called. */
+const holdSaveAnswer = () => {
+  const save = server.saveDraft.getMockImplementation()!;
+  let release!: () => void;
+  server.saveDraft.mockImplementationOnce(async (...args) => {
+    const answer = await save(...args);
+    await new Promise<void>((resolve) => (release = resolve));
+    return answer;
+  });
+  return () => release();
+};
+
 /** Lets the debounce fire and every answer land. */
 async function settle(): Promise<void> {
   await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
@@ -338,7 +357,6 @@ describe("DraftSync: saving", () => {
         revision: 0,
         expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         lines: [expect.objectContaining({ menuItemId: "offer-beer", quantity: "3" })],
-        personId: "p1",
       },
       { signal: expect.any(AbortSignal) },
     );
@@ -367,25 +385,10 @@ describe("DraftSync: saving", () => {
           draftRevision: 1,
         },
         lines: [expect.anything(), expect.anything()],
-        personId: "p1",
       },
       { signal: expect.any(AbortSignal) },
     );
     expect(draft.revision).toBe(2);
-  });
-
-  it("names the sync's person in every save", async () => {
-    server.personId = "p7";
-    const draft = sync("p7");
-    await draft.load();
-    draft.store.addProduct(beer, "1");
-    await settle();
-    expect(server.saveDraft.mock.calls[0]![1].personId).toBe("p7");
-
-    draft.store.addProduct(steak, "1");
-    await settle();
-
-    expect(server.saveDraft.mock.calls[1]![1].personId).toBe("p7");
   });
 
   it("never has two saves out: edits made while one is out go in one save after it answers", async () => {
@@ -422,7 +425,6 @@ describe("DraftSync: saving", () => {
         expect.objectContaining({ menuItemId: "offer-beer", quantity: "1" }),
         expect.objectContaining({ menuItemId: "offer-steak", quantity: "2" }),
       ],
-      personId: "p1",
     });
   });
 
@@ -549,7 +551,7 @@ describe("DraftSync: a refused save", () => {
     server.saveDraft.mockImplementationOnce(
       () =>
         new Promise<never>((_resolve, fail) => {
-          reject = () => fail({ code: "draft.person_not_signed_in", status: 409 });
+          reject = () => fail({ code: "session.person_not_signed_in", status: 409 });
         }),
     );
     draft.store.addProduct(beer, "1");
@@ -565,25 +567,26 @@ describe("DraftSync: a refused save", () => {
     expect(server.listDrafts).toHaveBeenCalledOnce();
   });
 
-  it("still says the order's person is not signed in when a newer edit of the bill arrived while the save was out, and keeps their lines through the close that answers it", async () => {
+  it("answers that the order's person is not signed in, without saying so through onRefused", async () => {
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockRejectedValueOnce({ code: "session.person_not_signed_in", status: 409 });
+    draft.store.addProduct(beer, "1");
+
+    expect(await draft.flush()).toEqual({ refused: "session.person_not_signed_in" });
+
+    expect(refused).toEqual([]);
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+  });
+
+  it("still answers that the order's person is not signed in when a newer edit of the bill arrived while the save was out, and keeps their lines through a close after it", async () => {
     let reject!: () => void;
-    const draft: DraftSync = new DraftSync({
-      api: server,
-      partyId: "v1",
-      billId: "wo-4",
-      personId: "p1",
-      rebuild,
-      onRefused: (code) => {
-        refused.push(code);
-        void draft.close();
-      },
-      requestLimitMs: LIMIT,
-    });
+    const draft = sync();
     await draft.load();
     server.saveDraft.mockImplementationOnce(
       () =>
         new Promise<never>((_resolve, fail) => {
-          reject = () => fail({ code: "draft.person_not_signed_in", status: 409 });
+          reject = () => fail({ code: "session.person_not_signed_in", status: 409 });
         }),
     );
     draft.store.addProduct(beer, "1");
@@ -594,8 +597,9 @@ describe("DraftSync: a refused save", () => {
     expect(rows(draft)).toEqual(["Steak ×1"]);
     reject();
 
-    expect(await queued).toEqual({ refused: "draft.person_not_signed_in" });
-    expect(refused).toEqual(["draft.person_not_signed_in"]);
+    expect(await queued).toEqual({ refused: "session.person_not_signed_in" });
+    void draft.close();
+    expect(refused).toEqual([]);
     expect(draft.candidate?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
     await settle();
     expect(server.saveDraft).toHaveBeenCalledOnce();
@@ -666,6 +670,31 @@ describe("DraftSync: a refused save", () => {
       ["offer-beer", "1"],
     ]);
     draft.drop();
+  });
+
+  it("discarding kept lines before the next read puts the server's lines back at once", async () => {
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockRejectedValueOnce({ code: "group.not_found", status: 409 });
+    draft.store.addProduct(beer, "1");
+    expect(await draft.flush()).toEqual({ refused: "group.not_found" });
+    seed("p2", steak);
+    expect(await draft.correctPlaces(new Map(), new AbortController().signal, () => true)).toEqual({
+      refused: "draft.out_of_date",
+    });
+    expect(draft.candidate?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+
+    draft.resolveCandidate(null);
+
+    expect({
+      screen: rows(draft),
+      waiting: draft.ownEditWaiting,
+      kept: draft.candidate,
+    }).toEqual({ screen: [], waiting: false, kept: null });
+    expect(await draft.load()).toBe(true);
+    expect(draft.candidate).toBeNull();
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    expect(server.saveDraft).toHaveBeenCalledOnce();
   });
 
   it("discarding a candidate after failed recovery never saves its discarded lines on the next read", async () => {
@@ -780,28 +809,6 @@ describe("DraftSync: a refused save", () => {
     expect(rows(draft)).toEqual(["Beer ×1"]);
     expect(refused).toEqual(["party.not_open"]);
   });
-
-  it("accepts a newer save answer after a read with the same observation", async () => {
-    let answer!: () => void;
-    const draft = sync();
-    await draft.load();
-    server.saveDraft.mockImplementationOnce(async (partyId, save) => {
-      await new Promise<void>((resolve) => (answer = resolve));
-      return server.snapshot(server.save(partyId, save));
-    });
-    draft.store.addProduct(beer, "1");
-    const saving = draft.flush();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(server.saveDraft).toHaveBeenCalledOnce();
-    await draft.load();
-
-    answer();
-    await saving;
-
-    expect(draft.draftId).toBe(server.drafts[0]!.id);
-    expect(draft.candidate).toBeNull();
-    expect(rows(draft)).toEqual(["Beer ×1"]);
-  });
 });
 
 describe("DraftSync: a save or read that does not come back", () => {
@@ -914,6 +921,620 @@ describe("DraftSync: signing out", () => {
     await settle();
 
     expect(server.saveDraft).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the person's own lines, not the newer edit on screen, when signing out with a save still out", async () => {
+    let reject!: () => void;
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockImplementationOnce(
+      () =>
+        new Promise<never>((_resolve, fail) => {
+          reject = () => fail({ code: "draft.taken_over", status: 409 });
+        }),
+    );
+    draft.store.addProduct(beer, "1");
+    const queued = draft.flush();
+    await vi.waitFor(() => expect(server.saveDraft).toHaveBeenCalledOnce());
+
+    draft.applyBillSnapshot(server.snapshot(seed("p2", steak)), draft.generation);
+    expect(rows(draft)).toEqual(["Steak ×1"]);
+    const closed = draft.close();
+
+    expect(draft.candidate?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+    reject();
+    await queued;
+    await closed;
+    expect(draft.candidate?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
+  });
+
+  it("refuses a tap once a candidate is kept, so signing out loses no dish on screen", async () => {
+    const wine = dish("wine", "Wine");
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockRejectedValueOnce({ code: "group.not_found", status: 409 });
+    draft.store.addProduct(beer, "1");
+    expect(await draft.flush()).toEqual({ refused: "group.not_found" });
+    seed("p2", steak);
+
+    expect(await draft.correctPlaces(new Map(), new AbortController().signal, () => true)).toEqual({
+      refused: "draft.out_of_date",
+    });
+    draft.store.addProduct(wine, "1");
+    await draft.close();
+
+    expect({
+      screen: rows(draft),
+      kept: draft.candidate?.lines.map((line) => line.product.name),
+    }).toEqual({ screen: ["Beer ×1"], kept: ["Beer"] });
+  });
+});
+
+describe("DraftSync: reads and saves stop passing each other", () => {
+  /** Someone else's draft on the bill that is not on screen. */
+  const seedOther = (ownerId: string, ...products: TillProduct[]): Draft => {
+    const theirs = seed(ownerId, ...products);
+    theirs.billId = "wo-check";
+    return theirs;
+  };
+
+  /** Nothing the till holds says this read took the till's own save for someone else's change. */
+  const notTakenForAnotherChange = (draft: DraftSync, replacedBefore: number) => {
+    expect(draft.candidate).toBeNull();
+    expect(draft.store.editsLocked).toBe(false);
+    expect(replaced).toBe(replacedBefore);
+  };
+
+  it("a read asked for while a save is out waits for the answer, then counts", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    const release = holdSaveAnswer();
+    await settle();
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    const shown = replaced;
+
+    const reading = draft.load();
+    await vi.advanceTimersByTimeAsync(0);
+
+    notTakenForAnotherChange(draft, shown);
+    release();
+    expect(await reading).toBe(true);
+    notTakenForAnotherChange(draft, shown);
+    expect(draft.partyDrafts.map(({ id }) => id)).toEqual([server.drafts[0]!.id]);
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+  });
+
+  it("a read that waited for saves leaves nothing waiting for an abort once it answers", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    const releaseFirst = holdSaveAnswer();
+    await settle();
+    const listening: AbortSignal[] = [];
+    const add = EventTarget.prototype.addEventListener;
+    const listen = vi.spyOn(EventTarget.prototype, "addEventListener").mockImplementation(function (
+      this: EventTarget,
+      type,
+      ...rest
+    ) {
+      if (this instanceof AbortSignal && type === "abort") listening.push(this);
+      add.call(this, type, ...rest);
+    });
+    try {
+      const reading = draft.load();
+      await vi.advanceTimersByTimeAsync(0);
+      draft.store.addProduct(steak, "1");
+      const releaseSecond = holdSaveAnswer();
+      void draft.flush();
+      releaseFirst();
+      await vi.advanceTimersByTimeAsync(0);
+      releaseSecond();
+
+      expect(await reading).toBe(true);
+      expect(listening.length).toBeGreaterThan(1);
+      expect(listening.filter((signal) => !signal.aborted)).toEqual([]);
+    } finally {
+      listen.mockRestore();
+    }
+  });
+
+  it("a save starting while a read is out makes that read not count, and a new one follows the save", async () => {
+    const draft = sync();
+    await draft.load();
+    const answerRead = holdRead();
+    const reading = draft.load();
+    await vi.advanceTimersByTimeAsync(0);
+    draft.store.addProduct(beer, "1");
+    const release = holdSaveAnswer();
+    await settle();
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    const shown = replaced;
+
+    answerRead(await server.listDrafts("v1"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    notTakenForAnotherChange(draft, shown);
+    release();
+    expect(await reading).toBe(true);
+    notTakenForAnotherChange(draft, shown);
+    expect(draft.partyDrafts.map(({ id }) => id)).toEqual([server.drafts[0]!.id]);
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+  });
+
+  it("a save starting during a take-over's wait for the saves is waited for too", async () => {
+    const elsewhere = seedOther("p2", steak);
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    const releaseFirst = holdSaveAnswer();
+    await settle();
+    const outcome = draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
+    await vi.advanceTimersByTimeAsync(0);
+    draft.store.addProduct(steak, "1");
+    const releaseSecond = holdSaveAnswer();
+    void draft.flush();
+    // A read that goes out now answers once the server has taken the second save.
+    const read = server.listDrafts.getMockImplementation()!;
+    server.listDrafts.mockImplementationOnce(async (...args) => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return read(...args);
+    });
+    const shown = replaced;
+
+    releaseFirst();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(server.saveDraft).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(100);
+
+    notTakenForAnotherChange(draft, shown);
+    releaseSecond();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await outcome).toEqual({ taken: true, reloaded: true });
+    notTakenForAnotherChange(draft, shown);
+    expect(rows(draft)).toEqual(["Beer ×1", "Steak ×1"]);
+  });
+
+  it("stops waiting for a save with no answer at the read's own limit, and sends no read", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    server.saveDraft.mockImplementationOnce(noAnswer);
+    await settle();
+    const reads = server.listDrafts.mock.calls.length;
+    let answered = false;
+
+    const reading = draft.load({ limitMs: LIMIT / 5 }).finally(() => (answered = true));
+    await vi.advanceTimersByTimeAsync(LIMIT / 5 - 1);
+    expect(answered).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(await reading).toBe(false);
+    expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+  });
+
+  it("the limit covers the wait and the read together", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    const release = holdSaveAnswer();
+    await settle();
+    server.listDrafts.mockImplementationOnce(noAnswer);
+    let answered = false;
+
+    const reading = draft.load({ limitMs: LIMIT / 5 }).finally(() => (answered = true));
+    await vi.advanceTimersByTimeAsync(LIMIT / 5 - 100);
+    release();
+    await vi.advanceTimersByTimeAsync(99);
+    expect(answered).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(await reading).toBe(false);
+  });
+
+  describe("a limit on the wait for a save alone", () => {
+    const WAIT = LIMIT / 5;
+
+    it("answers false at that limit with no read sent, while a save has no answer", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      server.saveDraft.mockImplementationOnce(noAnswer);
+      await settle();
+      const reads = server.listDrafts.mock.calls.length;
+      let answered = false;
+
+      const reading = draft.load({ waitLimitMs: WAIT }).finally(() => (answered = true));
+      await vi.advanceTimersByTimeAsync(WAIT - 1);
+      expect(answered).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(answered).toBe(true);
+      expect(await reading).toBe(false);
+      expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+    });
+
+    it("leaves a slow read a request's whole limit", async () => {
+      const draft = sync();
+      await draft.load();
+      const read = server.listDrafts.getMockImplementation()!;
+      server.listDrafts.mockImplementationOnce(async (...args) => {
+        await new Promise((resolve) => setTimeout(resolve, LIMIT - 1));
+        return read(...args);
+      });
+
+      const reading = draft.load({ waitLimitMs: WAIT });
+      await vi.advanceTimersByTimeAsync(LIMIT - 1);
+
+      expect(await reading).toBe(true);
+    });
+
+    it("still ends a read with no answer at a request's limit", async () => {
+      const draft = sync();
+      await draft.load();
+      server.listDrafts.mockImplementationOnce(noAnswer);
+      let answered = false;
+
+      const reading = draft.load({ waitLimitMs: WAIT }).finally(() => (answered = true));
+      await vi.advanceTimersByTimeAsync(LIMIT - 1);
+      expect(answered).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(await reading).toBe(false);
+    });
+
+    it("starts again for a save that starts during a slow read", async () => {
+      const draft = sync();
+      await draft.load();
+      const answerRead = holdRead();
+      const reading = draft.load({ waitLimitMs: WAIT });
+      await vi.advanceTimersByTimeAsync(0);
+      draft.store.addProduct(beer, "1");
+      const release = holdSaveAnswer();
+      await settle();
+
+      await vi.advanceTimersByTimeAsync(WAIT);
+      answerRead(await server.listDrafts("v1"));
+      await vi.advanceTimersByTimeAsync(WAIT - 1);
+      release();
+
+      expect(await reading).toBe(true);
+    });
+  });
+
+  it("reads nothing once signed out during the wait, since it could go out under the next session", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(beer, "1");
+    const release = holdSaveAnswer();
+    await settle();
+    const reads = server.listDrafts.mock.calls.length;
+
+    const reading = draft.load();
+    await vi.advanceTimersByTimeAsync(0);
+    const closing = draft.close();
+    release();
+
+    expect(await reading).toBe(false);
+    await closing;
+    expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+  });
+
+  describe("while the read after a refused save has no answer", () => {
+    /** Each save this refuses has been answered, and its read inside the save queue is out. */
+    async function refusedWithReadOut(draft: DraftSync, refusal: unknown): Promise<void> {
+      await draft.load();
+      server.saveDraft.mockRejectedValueOnce(refusal);
+      draft.store.addProduct(beer, "1");
+      server.listDrafts.mockImplementationOnce(noAnswer);
+      await settle();
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+    }
+
+    it.each([
+      ["a refusal of the draft", { code: "draft.out_of_date", status: 409 }],
+      ["no answer", new TypeError("Failed to fetch")],
+    ])("a later read goes out and counts, after %s", async (_name, refusal) => {
+      const draft = sync();
+      await refusedWithReadOut(draft, refusal);
+      const reads = server.listDrafts.mock.calls.length;
+
+      const reading = draft.load({ limitMs: LIMIT / 5 });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(server.listDrafts).toHaveBeenCalledTimes(reads + 1);
+      expect(await reading).toBe(true);
+    });
+
+    it("a read already waiting for that save goes out too, once the read is out", async () => {
+      const draft = sync();
+      await draft.load();
+      server.saveDraft.mockImplementationOnce(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        throw { code: "draft.out_of_date", status: 409 };
+      });
+      draft.store.addProduct(beer, "1");
+      server.listDrafts.mockImplementationOnce(noAnswer);
+      await settle();
+      const reading = draft.load({ limitMs: LIMIT / 5 });
+      const before = server.listDrafts.mock.calls.length;
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(server.listDrafts).toHaveBeenCalledTimes(before + 2);
+      expect(await reading).toBe(true);
+    });
+
+    it("a read still waits for a save queued behind that one", async () => {
+      const draft = sync();
+      await draft.load();
+      server.saveDraft.mockImplementationOnce(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        throw { code: "draft.out_of_date", status: 409 };
+      });
+      draft.store.addProduct(beer, "1");
+      server.listDrafts.mockImplementationOnce(noAnswer);
+      void draft.flush();
+      await vi.advanceTimersByTimeAsync(0);
+      draft.store.addProduct(steak, "1");
+      void draft.flush();
+      await vi.advanceTimersByTimeAsync(100);
+      const reads = server.listDrafts.mock.calls.length;
+
+      const reading = draft.load({ limitMs: LIMIT / 5 });
+      await vi.advanceTimersByTimeAsync(LIMIT / 5);
+
+      expect(await reading).toBe(false);
+      expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+    });
+  });
+
+  describe("a read with a save out that could never go out", () => {
+    const answersAtOnce = async (reading: Promise<boolean>, reads: number) => {
+      let answer: boolean | undefined;
+      void reading.then((read) => (answer = read));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(answer).toBe(false);
+      expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+    };
+
+    /** A draft with one save out, whose answer stays out until `release` is called. */
+    const withSaveOut = async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      const release = holdSaveAnswer();
+      await settle();
+      return { draft, release, reads: server.listDrafts.mock.calls.length };
+    };
+
+    const starts: [string, (draft: DraftSync) => void][] = [
+      ["a command runs", (draft) => void draft.runCommand(async () => "done")],
+      [
+        "the places are being corrected",
+        (draft) => void draft.correctPlaces(new Map(), new AbortController().signal, () => true),
+      ],
+      ["signed out", (draft) => void draft.close()],
+      ["dropped", (draft) => draft.drop()],
+    ];
+
+    it.each(starts)("answers false at once when asked while %s", async (_name, start) => {
+      const { draft, release, reads } = await withSaveOut();
+      start(draft);
+
+      await answersAtOnce(draft.load(), reads);
+
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    it.each(starts)("stops waiting at once when %s", async (_name, start) => {
+      const { draft, release, reads } = await withSaveOut();
+      const reading = draft.load();
+      await vi.advanceTimersByTimeAsync(0);
+      start(draft);
+
+      await answersAtOnce(reading, reads);
+
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  });
+
+  describe("an edit waiting when a read fails", () => {
+    it("is still sent after a plain read fails", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      server.listDrafts.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+      expect(await draft.load()).toBe(false);
+      expect(server.saveDraft).not.toHaveBeenCalled();
+      await settle();
+
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+    });
+
+    it("is still sent after a take-over on another bill whose read fails", async () => {
+      const elsewhere = seedOther("p2", steak);
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      server.listDrafts.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+      expect(await draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision)).toEqual({
+        taken: true,
+        reloaded: false,
+      });
+      expect(server.saveDraft).not.toHaveBeenCalled();
+      await settle();
+
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+    });
+
+    it("is not sent during recovery", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      server.saveDraft.mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 });
+      server.listDrafts.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      await draft.flush();
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+      server.listDrafts.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+      expect(await draft.load()).toBe(false);
+      await settle();
+
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+    });
+
+    it("is not sent while a command runs", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      const release = holdSaveAnswer();
+      await settle();
+      draft.store.addProduct(steak, "1");
+      const stop = new AbortController();
+      const reading = draft.load({ limitMs: LIMIT, stop: stop.signal });
+      await vi.advanceTimersByTimeAsync(0);
+      // The command's own save is still queued behind the save that is out, so the edit is unsaved.
+      const command = draft.runCommand(async () => "done");
+      stop.abort();
+      expect(await reading).toBe(false);
+      await settle();
+
+      // Refused, the edit stays unsaved: a save the read had armed would now send it again.
+      server.saveDraft.mockRejectedValueOnce({ code: "bill.presented", status: 409 });
+      release();
+      expect(await command).toBe("unsaved");
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(server.saveDraft).toHaveBeenCalledTimes(2);
+    });
+
+    it("is not sent while the places are being corrected", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      const stop = new AbortController();
+      server.listDrafts.mockImplementationOnce(noAnswer);
+      const reading = draft.load({ limitMs: LIMIT, stop: stop.signal });
+      await vi.advanceTimersByTimeAsync(0);
+      const cancel = new AbortController();
+      server.listDrafts.mockImplementationOnce(noAnswer);
+      const correcting = draft.correctPlaces(new Map(), cancel.signal, () => true);
+      await vi.advanceTimersByTimeAsync(0);
+
+      stop.abort();
+      expect(await reading).toBe(false);
+      await settle();
+
+      expect(server.saveDraft).not.toHaveBeenCalled();
+      cancel.abort();
+      await correcting;
+    });
+
+    it("is not sent while the store is sending", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      draft.store.sending = true;
+      server.listDrafts.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+      expect(await draft.load()).toBe(false);
+      await settle();
+
+      expect(server.saveDraft).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("during a send or a correction of places, no save timer starts", () => {
+    it("when a read lands during a send, and the next read after it sends the edit", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      draft.store.sending = true;
+
+      expect(await draft.load()).toBe(true);
+      await settle();
+      expect(server.saveDraft).not.toHaveBeenCalled();
+
+      draft.store.sending = false;
+      expect(await draft.load()).toBe(true);
+      await settle();
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+    });
+
+    it("when a read already out lands during a correction", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      const answerRead = holdRead();
+      const reading = draft.load();
+      await vi.advanceTimersByTimeAsync(0);
+      const cancel = new AbortController();
+      server.listDrafts.mockImplementationOnce(noAnswer);
+      const correcting = draft.correctPlaces(new Map(), cancel.signal, () => true);
+      await vi.advanceTimersByTimeAsync(0);
+
+      answerRead(await server.listDrafts("v1"));
+      expect(await reading).toBe(true);
+      await settle();
+
+      expect(server.saveDraft).not.toHaveBeenCalled();
+      cancel.abort();
+      await correcting;
+    });
+
+    it("and a save the read found waiting is not sent again when the send ends", async () => {
+      const draft = sync();
+      await draft.load();
+      server.saveDraft.mockRejectedValueOnce({ code: "group.not_found", status: 409 });
+      draft.store.addProduct(beer, "1");
+      draft.store.sending = true;
+      expect(await draft.flush()).toEqual({ refused: "group.not_found" });
+      expect(await draft.load()).toBe(true);
+
+      draft.store.sending = false;
+      await settle();
+
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+    });
+
+    it("but an edit the store took during the send is saved once the send ends", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      await draft.flush();
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+      draft.store.sending = true;
+
+      draft.store.adoptLines(new Map([[0, { ...draft.store.lines[0]!, note: "Adopted" }]]));
+      await settle();
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+
+      draft.store.sending = false;
+      await settle();
+      expect(server.saveDraft).toHaveBeenCalledTimes(2);
+    });
+
+    it("but an edit waiting on a bill that reopens during the send is saved once the send ends", async () => {
+      const draft = sync();
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      draft.billStatus = "placed";
+      draft.store.sending = true;
+
+      draft.billStatus = "open";
+      await settle();
+      expect(server.saveDraft).not.toHaveBeenCalled();
+
+      draft.store.sending = false;
+      await settle();
+      expect(server.saveDraft).toHaveBeenCalledOnce();
+    });
   });
 });
 
@@ -1460,6 +2081,28 @@ describe("A803 split: taking over the unsent dishes of a bill not on screen", ()
     expect(await outcome).toBe("failed");
   });
 
+  it("a take-over refused while a read overlapped it answers failed, locks nothing and reads no more", async () => {
+    const onScreen = seed("p2", steak);
+    const draft = sync();
+    await draft.load();
+    expect(draft.store.editsLocked).toBe(true);
+    let refuse!: (error: unknown) => void;
+    server.takeOverDraft.mockImplementationOnce(
+      () => new Promise<BillDraftSnapshot>((_resolve, reject) => (refuse = reject)),
+    );
+
+    const outcome = draft.takeOver(onScreen.id, onScreen.revision);
+    await vi.advanceTimersByTimeAsync(0);
+    server.drafts.splice(server.drafts.indexOf(onScreen), 1);
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+    refuse({ code: "draft.out_of_date", status: 409 });
+
+    expect(await outcome).toBe("failed");
+    expect(draft.store.editsLocked).toBe(false);
+    expect(server.listDrafts).toHaveBeenCalledTimes(reads);
+  });
+
   it("A803 split: a read that fails keeps the last read's drafts", async () => {
     const elsewhere = seedOther("p2", steak);
     const draft = sync();
@@ -1630,25 +2273,6 @@ describe("A803 split: taking over the unsent dishes of a bill not on screen", ()
     expect(recorded).toEqual({ billId, editorVersion, draftId, draftRevision });
   };
 
-  /** The next read stays out until `answer` is called with what it is to say. */
-  const holdRead = () => {
-    let answer!: (value: Awaited<ReturnType<DraftServer["listDrafts"]>>) => void;
-    server.listDrafts.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
-    return (value: Awaited<ReturnType<DraftServer["listDrafts"]>>) => answer(value);
-  };
-
-  /** The next save reaches the server, and its answer stays out until `release` is called. */
-  const holdSaveAnswer = () => {
-    const save = server.saveDraft.getMockImplementation()!;
-    let release!: () => void;
-    server.saveDraft.mockImplementationOnce(async (...args) => {
-      const answer = await save(...args);
-      await new Promise<void>((resolve) => (release = resolve));
-      return answer;
-    });
-    return () => release();
-  };
-
   describe("A803 split: taken holds whether or not the read counts", () => {
     let elsewhere: Draft;
     let draft: DraftSync;
@@ -1670,7 +2294,7 @@ describe("A803 split: taking over the unsent dishes of a bill not on screen", ()
       await recordsTheTakeOver(draft, elsewhere.id);
     });
 
-    it("when a command starts during the read and stops at its save", async () => {
+    it("when a command stops at its save during the read, which goes round again and counts", async () => {
       draft.store.addProduct(beer, "1");
       const answerRead = holdRead();
       const outcome = draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
@@ -1680,7 +2304,7 @@ describe("A803 split: taking over the unsent dishes of a bill not on screen", ()
       expect(await draft.runCommand(async () => "done")).toBe("unsaved");
       answerRead(await server.listDrafts("v1"));
 
-      expect(await outcome).toEqual({ taken: true, reloaded: false });
+      expect(await outcome).toEqual({ taken: true, reloaded: true });
       await recordsTheTakeOver(draft, elsewhere.id);
     });
 
@@ -1703,7 +2327,7 @@ describe("A803 split: taking over the unsent dishes of a bill not on screen", ()
       await recordsTheTakeOver(draft, elsewhere.id);
     });
 
-    it("when a save on the bill on screen makes the read older than the bill", async () => {
+    it("when a save on the bill on screen starts during the read, which goes round again and counts", async () => {
       const older = await server.listDrafts("v1");
       const answerRead = holdRead();
       const outcome = draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
@@ -1713,7 +2337,7 @@ describe("A803 split: taking over the unsent dishes of a bill not on screen", ()
 
       answerRead(older);
 
-      expect(await outcome).toEqual({ taken: true, reloaded: false });
+      expect(await outcome).toEqual({ taken: true, reloaded: true });
       await recordsTheTakeOver(draft, elsewhere.id);
     });
 
@@ -2362,5 +2986,169 @@ describe("resendUnanswered: onUnanswered", () => {
       resendUnanswered(send, new AbortController().signal, () => true, onUnanswered),
     ).rejects.toBe(refusal);
     expect(onUnanswered).not.toHaveBeenCalled();
+  });
+});
+
+describe("DraftSync: a request refused because it names someone not signed in", () => {
+  const refusedPerson = { code: "session.person_not_signed_in", status: 409 };
+  const person = { refused: "session.person_not_signed_in" };
+
+  const seedOther = (ownerId: string, ...products: TillProduct[]): Draft => {
+    const theirs = seed(ownerId, ...products);
+    theirs.billId = "wo-check";
+    return theirs;
+  };
+
+  /** Someone else's saved draft on the bill on screen, known to `draft` from a read. */
+  async function withTheirs(draft: DraftSync): Promise<Draft> {
+    const theirs = seed("p2", beer);
+    await draft.load();
+    return theirs;
+  }
+
+  /** The next take-over stays out until `refuse` is called. */
+  const holdTakeOver = () => {
+    let refuse!: (error: unknown) => void;
+    server.takeOverDraft.mockImplementationOnce(
+      () => new Promise<never>((_resolve, fail) => (refuse = fail)),
+    );
+    return (error: unknown) => refuse(error);
+  };
+
+  it("take-over: says so, sends no read under the other person's session, and stays locked until the next read", async () => {
+    const draft = sync();
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+    server.takeOverDraft.mockRejectedValueOnce(refusedPerson);
+
+    expect(await draft.takeOver("draft-of-theirs", 1)).toEqual(person);
+
+    expect(refused).toEqual([]);
+    expect(server.listDrafts.mock.calls.length).toBe(reads);
+    expect(draft.store.editsLocked).toBe(true);
+    expect(draft.store.sending).toBe(false);
+    expect(await draft.load()).toBe(true);
+    expect(server.listDrafts.mock.calls.length).toBe(reads + 1);
+    expect(draft.store.editsLocked).toBe(false);
+  });
+
+  it("take-over: a read that overlapped it does not hide the refusal", async () => {
+    const draft = sync();
+    const theirs = await withTheirs(draft);
+    const refuse = holdTakeOver();
+    const outcome = draft.takeOver(theirs.id, theirs.revision);
+    await vi.waitFor(() => expect(server.takeOverDraft).toHaveBeenCalledOnce());
+    await draft.load();
+
+    refuse(refusedPerson);
+
+    expect(await outcome).toEqual(person);
+    expect(refused).toEqual([]);
+  });
+
+  it("take-over: says nothing once the sync has ended, since the next person may be signed in", async () => {
+    const draft = sync();
+    const theirs = await withTheirs(draft);
+    const reads = server.listDrafts.mock.calls.length;
+    const refuse = holdTakeOver();
+    const outcome = draft.takeOver(theirs.id, theirs.revision);
+    await vi.waitFor(() => expect(server.takeOverDraft).toHaveBeenCalledOnce());
+    void draft.close();
+
+    refuse(refusedPerson);
+
+    expect(await outcome).toBe("failed");
+    expect(refused).toEqual([]);
+    expect(server.listDrafts.mock.calls.length).toBe(reads);
+  });
+
+  it("take-over: keeps the person's unsaved lines for them", async () => {
+    const draft = sync();
+    await draft.load();
+    draft.store.addProduct(steak, "1");
+    server.takeOverDraft.mockRejectedValueOnce(refusedPerson);
+
+    expect(await draft.takeOver("draft-of-theirs", 1)).toEqual(person);
+
+    expect(draft.candidate?.lines.map((line) => line.product.name)).toEqual(["Steak"]);
+    await settle();
+    expect(server.saveDraft).not.toHaveBeenCalled();
+  });
+
+  it("take-over on another bill: says so and sends no read under the other person's session", async () => {
+    const draft = sync();
+    const elsewhere = seedOther("p2", steak);
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+    server.takeOverDraft.mockRejectedValueOnce(refusedPerson);
+
+    expect(await draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision)).toEqual(person);
+
+    expect(refused).toEqual([]);
+    expect(server.listDrafts.mock.calls.length).toBe(reads);
+  });
+
+  it("take-over on another bill: says nothing once the sync has ended", async () => {
+    const draft = sync();
+    const elsewhere = seedOther("p2", steak);
+    await draft.load();
+    const refuse = holdTakeOver();
+    const outcome = draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision);
+    await vi.waitFor(() => expect(server.takeOverDraft).toHaveBeenCalledOnce());
+    void draft.close();
+
+    refuse(refusedPerson);
+
+    expect(await outcome).toBe("failed");
+    expect(refused).toEqual([]);
+  });
+
+  it("command: says so, sends no read under the other person's session, and stays locked until the next read", async () => {
+    const draft = sync();
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+
+    const outcome = await draft.runCommand(async () => {
+      throw refusedPerson;
+    });
+
+    expect(outcome).toEqual(person);
+    expect(refused).toEqual([]);
+    expect(server.listDrafts.mock.calls.length).toBe(reads);
+    expect(draft.store.editsLocked).toBe(true);
+    expect(draft.store.sending).toBe(false);
+    expect(await draft.load()).toBe(true);
+    expect(server.listDrafts.mock.calls.length).toBe(reads + 1);
+    expect(draft.store.editsLocked).toBe(false);
+  });
+
+  it("command: says nothing once the sync has ended", async () => {
+    const draft = sync();
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+
+    const outcome = await draft.runCommand(async () => {
+      void draft.close();
+      throw refusedPerson;
+    });
+
+    expect(outcome).toBe("failed");
+    expect(refused).toEqual([]);
+    expect(server.listDrafts.mock.calls.length).toBe(reads);
+  });
+
+  it("any other refusal of a command still reads first", async () => {
+    const draft = sync();
+    await draft.load();
+    const reads = server.listDrafts.mock.calls.length;
+
+    const outcome = await draft.runCommand(async () => {
+      throw { code: "draft.out_of_date", status: 409 };
+    });
+
+    expect(outcome).toEqual({ refused: "draft.out_of_date" });
+    expect(refused).toEqual([]);
+    expect(server.listDrafts.mock.calls.length).toBe(reads + 1);
+    expect(draft.store.editsLocked).toBe(false);
   });
 });

@@ -3715,6 +3715,31 @@ logs: `~/waitron-campaign-e/receipts/a963-task8-20261028/till-dialog-final.log` 
 `ticket-final.log`. No change to stored identity was involved.
 
 
+## Server tests send the till's person header through one setup file
+
+The server refuses a till request whose `x-waitron-person` header does not name the person signed
+in on the device (`personRefusal` in `apps/server/src/till-session.ts`). So that the other server
+tests send what a correct till sends, `apps/server/vitest.config.ts` loads
+`apps/server/src/testing/tab-person-setup.ts` before every test file. It wraps `loginWithPin`,
+Hono's `request` and the global `fetch`, and notes the person of each session token: the token
+`loginWithPin` returns, and the cookie a successful `POST /api/session` sets when its answer names
+a `personId`. A later request carrying a noted token in its cookie and no person header gains that
+token's person (`initNamingPerson` in `apps/server/src/testing/tab-person.ts`). It never replaces a
+header a test set. A `Request` handed over with no init gains the header in place, so a test that
+reuses that object's headers for another person's request still names the first person. The notes
+are a module's map, reset with the module graph for every test file.
+
+A test of a request naming someone else sets the header itself, and the harness keeps it, as the
+person-refusal cases in `till-api.drafts.test.ts`, `draft-recall.test.ts`,
+`till-api.groups.test.ts` and `draft-discard.test.ts` do. A test of a request naming nobody calls
+`leaveSessionAlone(token)` from `testing/tab-person.ts`: that session's requests then carry only the
+header the test gives them, or none. `till-session.person.test.ts`,
+`till-api.session-person.test.ts`, `till-api.test.ts` and `device-api.test.ts` do. A test that gives a session a token or a person in the database
+itself notes it with `noteSessionPerson(token, personId)`, as the allergy suites and
+`testing/kitchen-allergy-fixture.ts` do. The cost: a server test that sets no header and leaves no
+session alone sends the noted person, so it reaches the refusal only by setting the header itself or
+by calling `leaveSessionAlone`.
+
 ## Root receipts moved on 2026-10-31
 
 These excerpts retain the root instruction receipts from `CLAUDE.md` at

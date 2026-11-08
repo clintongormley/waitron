@@ -101,7 +101,6 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 run one after another, because they share `apps/till/src/till-app.ts`.
 
 - [A1379. A failed setup always offers Start again](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
-- [A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 - [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
 - [A1389. Refuse bad tips and compare the amount captured on the whole-order card path](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
 - [A1398. Pack the other packages' test shards by measured time](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
@@ -825,7 +824,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4c, Split a table through the same
-  picker, has landed; it leaves open A1347–A1366. Remaining: pre-bills through A446, which no longer
+  picker, has landed; it leaves open A1347–A1352, A1358–A1360, A1362, A1365 and A1366. Remaining: pre-bills through A446, which no longer
   waits for asesor S2.
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 
@@ -838,8 +837,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `Paid` (`bill_pay.paid`) or "{amount} is already paid on this bill" (`table.move_dishes_floor`),
   because `paidQuantitiesOf` counts pending item payments. The row's words came with slice 4a.
   [Detail](backlog/till.md#a1350-a-row-can-read-paid-on-money-a-card-in-progress-has-only-reserved)
-
-- **A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person** (bundle of 5, 1 go-live, 2 important, size M). Holds A1357, A1263, A792. [Detail](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 
 - **A1358. A number stepper's − and + are 24 by 32 px, against the 44 px tap size (seen in A803
   slice 4c's LOOK; predates it).** Measured on Split a table's guest steppers at 390 wide. The
@@ -881,7 +878,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/till.md#a1417-after-a-lost-counter-send-reply-a-basket-changed-since-cannot-be-sent-and-the-till-says-only-try-again)
 
 - **A till request refused for naming someone not signed in locks the screen with no sentence (left
-  open by A1382).** The owner has chosen the words; they go in after #2534's rework.
+  open by A1382).** #2534 built the check on every such request; the owner's words are not in yet.
   [Detail](backlog/till.md#a-till-request-refused-for-naming-someone-not-signed-in-locks-the-screen-with-no-sentence)
 
 - **Other till sentences still send the person to somebody else, against the refusal rule (left open

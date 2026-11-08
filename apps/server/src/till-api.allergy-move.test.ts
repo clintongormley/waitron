@@ -29,6 +29,7 @@ import {
 } from "@waitron/venue-service";
 import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
+import { noteSessionPerson } from "./testing/tab-person.js";
 import {
   OPERATOR,
   counterOrder,
@@ -132,6 +133,7 @@ async function fixture(existing = false) {
     deviceId,
     profileId,
     sessionId: session!.id,
+    token,
     body,
     app,
     url,
@@ -236,6 +238,7 @@ it("transports answer and ticks through the move route and replays the original 
     .values({ displayName: "Other operator", role: "staff" })
     .returning();
   await v.db.update(sessions).set({ personId: other!.id }).where(eq(sessions.id, f.sessionId));
+  noteSessionPerson(f.token, other!.id);
   const changedActor = frozen();
   await refused(await f.request("", packet), 409, "submission.id_reused");
   expect(frozen()).toEqual(changedActor);

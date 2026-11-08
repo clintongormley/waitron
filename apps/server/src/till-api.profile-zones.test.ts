@@ -1114,7 +1114,7 @@ const ROUTES: readonly Row[] = [
     "PUT /api/parties/:id/drafts",
     "PUT",
     (x) => `/api/parties/${x.deliParty}/drafts`,
-    () => ({ draftId: null, revision: 0, personId }),
+    () => ({ draftId: null, revision: 0 }),
     deliTableZone,
   ],
   [

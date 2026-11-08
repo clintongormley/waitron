@@ -1770,7 +1770,6 @@ describe("A803 portions: raising a dish", () => {
       revision: draft.revision,
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)),
       lines,
-      personId: venue.operatorId,
     });
   }
 

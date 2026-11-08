@@ -35,7 +35,7 @@ import {
   deviceProfileJoin,
   toDeviceBinding,
 } from "./device-session.js";
-import { assertStillSignedIn, requireSession } from "./till-session.js";
+import { assertStillSignedIn, requireSession, SESSION_STATUS } from "./till-session.js";
 import { reconcileAttendanceBeforeClock } from "./attendance-discovery.js";
 import { parseAttendanceCommand, parseAttendanceDayQuery } from "./attendance-request.js";
 import { withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
@@ -51,7 +51,7 @@ export interface TillAttendanceApiDeps {
 }
 const run = createErrorBoundary(
   {
-    "session.required": 401,
+    ...SESSION_STATUS,
     "session.not_open": 401,
     "device.unauthorized": 403,
     "device.forbidden_action": 403,
@@ -71,7 +71,7 @@ const run = createErrorBoundary(
 );
 const runItem = createErrorBoundary(
   {
-    "session.required": 401,
+    ...SESSION_STATUS,
     "device.unauthorized": 403,
     "device.forbidden_action": 403,
     "attendance.not_permitted": 403,

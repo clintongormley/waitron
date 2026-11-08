@@ -13,7 +13,7 @@ import {
 } from "@waitron/workforce";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
-import { assertRequestDevice, requireSession } from "./till-session.js";
+import { assertRequestDevice, requireSession, SESSION_STATUS } from "./till-session.js";
 import {
   requireBodyUuid,
   requireEnum,
@@ -36,7 +36,7 @@ export interface ScheduleApiDeps {
 
 /** The surface's whole 4xx contract; a registered code absent here defaults to 400. */
 const STATUS: Record<string, ContentfulStatusCode> = {
-  "session.required": 401,
+  ...SESSION_STATUS,
   "device.unauthorized": 401,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,

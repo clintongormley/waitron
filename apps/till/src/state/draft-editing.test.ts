@@ -369,7 +369,6 @@ describe("bill-scoped saved work and retained local candidates", () => {
             expect.objectContaining({ menuItemId: "offer-steak", quantity: "1" }),
             expect.objectContaining({ menuItemId: "offer-salad", quantity: "3" }),
           ],
-          personId: "ana",
         },
         { signal: expect.any(AbortSignal) },
       );
@@ -412,7 +411,6 @@ describe("bill-scoped saved work and retained local candidates", () => {
         revision: 0,
         expectedEdit: { billId: "bill-1", editorVersion: 0, draftId: null, draftRevision: null },
         lines: [expect.objectContaining({ menuItemId: "offer-salad", quantity: "1" })],
-        personId: "ana",
       },
       { signal: expect.any(AbortSignal) },
     );
@@ -531,7 +529,7 @@ describe("bill-scoped saved work and retained local candidates", () => {
     expect(sync.store.editsLocked).toBe(false);
   });
 
-  it("a newer editor read fences an in-flight save and retains its original candidate", async () => {
+  it("a newer editor's snapshot fences an in-flight save and retains its original candidate", async () => {
     const { sync, api, set } = fixture();
     await sync.load();
     sync.store.addProduct(salad, "1");
@@ -540,7 +538,7 @@ describe("bill-scoped saved work and retained local candidates", () => {
     const saving = sync.flush();
     await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalledOnce());
     set(saved("luis", 2));
-    await sync.load();
+    sync.applyBillSnapshot(saved("luis", 2), sync.generation);
     pending.resolve(saved());
     expect(await saving).toBe("failed");
     expect(sync.edit).toEqual(saved("luis", 2).edit);
@@ -610,19 +608,28 @@ describe("bill-scoped saved work and retained local candidates", () => {
     expect(api.saveDraft).toHaveBeenCalledOnce();
   });
 
-  it("an unchanged passive read preserves a newer completing save", async () => {
-    const { sync, api } = fixture();
+  it("a read answering unchanged during a save does not count, and reads again after the save's answer", async () => {
+    const { sync, api, set, wire } = fixture();
     await sync.load();
+    const unchanged = deferred<PartyDraftSnapshot>();
+    api.listDrafts.mockImplementationOnce(() => unchanged.promise);
+    const reading = sync.load();
+    await vi.waitFor(() => expect(api.listDrafts).toHaveBeenCalledTimes(2));
     sync.store.addProduct(salad, "1");
     const pending = deferred<BillDraftSnapshot>();
     api.saveDraft.mockImplementationOnce(() => pending.promise);
     const saving = sync.flush();
     await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalledOnce());
-    await sync.load();
+    unchanged.resolve(wire());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.listDrafts).toHaveBeenCalledTimes(2);
     const answer = saved();
     answer.draft!.lines = [row(salad)];
+    set(answer);
     pending.resolve(answer);
     expect(await saving).toBe("saved");
+    expect(await reading).toBe(true);
+    expect(api.listDrafts).toHaveBeenCalledTimes(3);
     expect(sync.edit).toEqual(answer.edit);
     expect(sync.store.lines[0]?.product.name).toBe("Salad");
     expect(sync.candidate).toBeNull();

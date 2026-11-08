@@ -29,7 +29,7 @@ import { createTable } from "./testing/live-table.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 
 import "./errors.js";
-import { AppError } from "@waitron/shared";
+import { AppError, PERSON_HEADER } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { readPaidQuantities } from "./bill-payments.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
@@ -2052,6 +2052,76 @@ describe("POST /api/parties/:id/groups/:gid/unsnooze", () => {
 });
 
 describe("POST /api/parties/:id/groups/split-line", () => {
+  async function heldTwo() {
+    const party = await seated();
+    const submitted = await submitGrouped(party, [
+      { lines: [dish("Tarta", "2")], release: "hold" },
+    ]);
+    expect(submitted.status).toBe(200);
+    const lineId = (submitted.json as unknown as SubmitAnswer).groups[0]!.lineIds[0]!;
+    return { party, lineId };
+  }
+
+  /** A split whose body names nobody, sent with the person header naming `personId`. */
+  async function splitNamingIn(
+    partyId: string,
+    lineId: string,
+    personId: string,
+    expectedPartyRevision: number,
+  ) {
+    const path = `/api/parties/${partyId}/groups/split-line`;
+    return send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      path,
+      await observedGroupCompositionBody(venue.db, path, {
+        submissionId: randomUUID(),
+        expectedPartyRevision,
+        lineId,
+      }),
+      { [PERSON_HEADER]: personId },
+    );
+  }
+
+  it("refuses 409 session.person_not_signed_in for a split naming someone else, changing nothing, and goes through once it names the session's person", async () => {
+    const { party, lineId } = await heldTwo();
+    const splitNaming = async (personId: string) =>
+      splitNamingIn(party.partyId, lineId, personId, await revisionOf(party.partyId));
+    const before = await snapshot(party);
+
+    for (const named of [venue.adminId, venue.adminId.toUpperCase()]) {
+      const refused = await splitNaming(named);
+      expect(refused.status).toBe(409);
+      expect(refused.json).toEqual(
+        refusal("session.person_not_signed_in", { personId: venue.adminId }),
+      );
+    }
+    expect(await snapshot(party)).toEqual(before);
+
+    const taken = await splitNaming(venue.operatorId);
+    expect(taken.status).toBe(200);
+    expect(taken.json).toEqual({ revision: before.revision + 1 });
+    const after = await snapshot(party);
+    expect(after).not.toEqual(before);
+    expect(after.lines.length).toBeGreaterThan(before.lines.length);
+  });
+
+  it("goes through when the session's person is named with a capitalised id", async () => {
+    const { party, lineId } = await heldTwo();
+    const expectedPartyRevision = await revisionOf(party.partyId);
+
+    const taken = await splitNamingIn(
+      party.partyId,
+      lineId,
+      venue.operatorId.toUpperCase(),
+      expectedPartyRevision,
+    );
+
+    expect(taken.status).toBe(200);
+    expect(taken.json).toEqual({ revision: expectedPartyRevision + 1 });
+  });
+
   it("splits the stored quantity into single units under one revision and replays without writing", async () => {
     const party = await seated();
     const submitted = await submitGrouped(party, [

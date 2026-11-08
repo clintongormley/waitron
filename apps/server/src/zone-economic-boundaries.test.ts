@@ -556,7 +556,6 @@ it("refuses draft-save admission before attempting its first insert", async () =
       method: "PUT",
       headers: { cookie: venue.cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        personId: venue.operatorId,
         billId: party.tabId,
         draftId: null,
         revision: 0,

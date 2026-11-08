@@ -17,6 +17,7 @@ import {
   isValidGuestCount,
   JOIN_SIDES,
   type JoinSide,
+  PERSON_HEADER,
   SUPPORTED_LOCALES,
   thousandthsToDecimal,
 } from "@waitron/shared";
@@ -218,10 +219,13 @@ import {
   canonicaliseUuid,
   clearSessionCookie,
   isUuid,
+  openSessionPerson,
+  personRefusal,
   readSessionToken,
   assertRequestDevice,
   requireSession,
   assertStillSignedIn,
+  SESSION_STATUS,
   setSessionCookie,
 } from "./till-session.js";
 import {
@@ -445,10 +449,10 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   // Authenticated device lacks the action capability or is excluded from the workflow.
   "device.forbidden_action": 403,
   "device.cash_not_allowed": 403,
+  "session.not_open": 401,
   // The same codes and statuses `device-api.ts`'s map assigns.
   "device.unauthorized": 401,
-  "session.not_open": 401,
-  "session.required": 401,
+  ...SESSION_STATUS,
   "locale.unsupported": 400,
   "sale.empty_basket": 400,
   "sale.charged_not_recorded": 507,
@@ -624,7 +628,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "draft.already_submitted": 409,
   "draft.out_of_date": 409,
   "draft.not_found": 404,
-  "draft.person_not_signed_in": 409,
   "group.not_held": 409,
   "group.not_waiting": 409,
   "group.not_found": 404,
@@ -1505,16 +1508,21 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Idempotent: a missing, malformed or closed session still clears the cookie and answers 200.
+  // A sign-out carrying the person header never clears the cookie: its answer can reach the browser after the
+  // next person's sign-in has replaced it.
   app.delete("/api/session", (c) =>
     run(c, log, async () => {
+      const carriesPersonHeader = c.req.header(PERSON_HEADER) !== undefined;
       const token = readSessionToken(c);
-      if (token !== null && isUuid(token)) {
+      if (token !== null && isUuid(token))
         await withTransaction(deps.db, async (tx) => {
+          const holder = await openSessionPerson(tx, token);
+          if (holder === null) return;
+          const refusal = personRefusal(c, holder);
+          if (refusal !== null) throw refusal;
           await endSession(tx, token);
         });
-      }
-      clearSessionCookie(c);
+      if (!carriesPersonHeader) clearSessionCookie(c);
       return c.json({ ok: true });
     }),
   );
@@ -3694,9 +3702,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const draftId = requireDraftId(body.draftId);
       const revision = requireRevision(body.revision);
-      const namedPersonId = requireBodyUuid(body.personId, "personId").toLowerCase();
-      if (namedPersonId !== personId.toLowerCase())
-        throw new AppError("draft.person_not_signed_in", { personId: namedPersonId });
       const draft = await withIssuanceTransaction(
         deps.db,
         async (tx) => {

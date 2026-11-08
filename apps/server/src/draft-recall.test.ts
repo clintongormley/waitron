@@ -23,6 +23,7 @@ import {
   ticketItems,
   workingOrderLines,
 } from "@waitron/db";
+import { PERSON_HEADER } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -75,7 +76,6 @@ async function call(method: string, path: string, body?: unknown) {
       method,
       path,
       await observedGroupSubmitBody(venue.db, path, body),
-      venue.operatorId,
     ),
   );
 }
@@ -121,6 +121,23 @@ async function setup(release: "hold" | "fire", count = 1, shape?: "grouped") {
     .orderBy(asc(workingOrderLines.lineNo));
   return { partyId, tabId, tableLabel, groupId, line: lines[0]!, lines };
 }
+/** A recall whose body names nobody, sent with the person header naming `personId`. */
+async function recallNaming(partyId: string, lineId: string, personId: string) {
+  const path = `/api/parties/${partyId}/lines/${lineId}/recall`;
+  return send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    path,
+    await observedDraftCommandBody(
+      venue.db,
+      "POST",
+      path,
+      await observedGroupSubmitBody(venue.db, path, await command(partyId)),
+    ),
+    { [PERSON_HEADER]: personId },
+  );
+}
 async function recall(partyId: string, lineId: string, body?: unknown) {
   return call(
     "POST",
@@ -150,6 +167,37 @@ async function frozen(partyId: string) {
 }
 
 describe("party Recall to draft", () => {
+  it("refuses 409 session.person_not_signed_in for a recall naming someone else, changing nothing, and goes through once it names the session's person", async () => {
+    const p = await setup("fire");
+    const before = await frozen(p.partyId);
+
+    for (const named of [venue.adminId, venue.adminId.toUpperCase()]) {
+      const refused = await recallNaming(p.partyId, p.line.id, named);
+      expect(refused.status).toBe(409);
+      expect(refused.json).toEqual({
+        code: "session.person_not_signed_in",
+        params: { personId: venue.adminId },
+      });
+    }
+    expect(await frozen(p.partyId)).toEqual(before);
+
+    const taken = await recallNaming(p.partyId, p.line.id, venue.operatorId);
+    expect(taken.status).toBe(200);
+    const after = await frozen(p.partyId);
+    expect(after).not.toEqual(before);
+    expect(after.drafts.map((draft) => draft.ownerId)).toContain(venue.operatorId);
+    expect(after.commands.length).toBe(before.commands.length + 1);
+  });
+
+  it("goes through when the session's person is named with a capitalised id", async () => {
+    const p = await setup("fire");
+
+    const taken = await recallNaming(p.partyId, p.line.id, venue.operatorId.toUpperCase());
+
+    expect(taken.status).toBe(200);
+    expect((taken.json as unknown as { draft: Draft }).draft.ownerId).toBe(venue.operatorId);
+  });
+
   it.each(["retained context", "no retained context"] as const)(
     "saves recalled note, course and station edits with %s without changing the charged family",
     async (context) => {

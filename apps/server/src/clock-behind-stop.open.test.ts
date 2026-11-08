@@ -148,7 +148,6 @@ describe("while the latest record is a day after the box's clock", () => {
       billId: tabId,
       draftId: null,
       revision: 0,
-      personId: venue.operatorId,
       lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }],
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, tabId)),
     });

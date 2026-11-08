@@ -312,11 +312,11 @@ export class TillScheduleScreen extends LitElement {
       this.isConnected && connection === this.#connection && generation === this.#generation;
     const read = async <T>(
       name: ScheduleRead,
-      fetch: () => Promise<T>,
+      load: () => Promise<T>,
       apply: (rows: T) => void,
     ): Promise<void> => {
       try {
-        const rows = await fetch();
+        const rows = await load();
         if (!current()) return;
         apply(rows);
         if (this.failed.has(name)) {

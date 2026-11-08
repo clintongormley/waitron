@@ -111,14 +111,10 @@ export async function observedDraftCommandBody(
   method: string,
   path: string,
   given: unknown,
-  personId?: string,
 ): Promise<unknown> {
   if (given === null || typeof given !== "object" || Array.isArray(given)) return given;
   const save = method === "PUT" && /^\/api\/parties\/[^/]+\/drafts$/.test(path);
-  const ask: Record<string, unknown> =
-    save && personId !== undefined && !Object.hasOwn(given, "personId")
-      ? { ...given, personId }
-      : (given as Record<string, unknown>);
+  const ask = given as Record<string, unknown>;
   if (Object.hasOwn(ask, "expectedEdit")) return ask;
   const recall = /^\/api\/parties\/[^/]+\/lines\/([^/]+)\/recall$/.exec(path);
   const draft = /^\/api\/parties\/[^/]+\/drafts\/([^/]+)\/(take-over|submit)$/.exec(path);

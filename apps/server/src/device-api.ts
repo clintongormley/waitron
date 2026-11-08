@@ -86,6 +86,7 @@ import {
   assertStillSignedIn,
   isUuid,
   requireSession,
+  SESSION_STATUS,
   signedInPersonOn,
 } from "./till-session.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
@@ -173,7 +174,7 @@ function deviceClockOf(value: string | undefined): number | undefined {
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "device.unauthorized": 401,
-  "session.required": 401,
+  ...SESSION_STATUS,
   "device.forbidden_station": 403,
   "device.forbidden_action": 403,
   "device_profile.not_approved": 403,
@@ -354,12 +355,14 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         const kitchenScreens = await VENUE_SERVICE.readDeviceKitchenScreens(tx, device.deviceId);
         const [active, ...alternatives] = await readApprovedProfiles(tx, device.deviceId);
         if (active === undefined) return { approvedProfiles: [], kitchenScreens };
-        const personId = await signedInPersonOn(tx, c, device.deviceId);
-        if (personId === null)
+        // A request naming the wrong person, or nobody, is answered as if nobody were signed in, so a
+        // fresh tab beside a signed-in one still boots.
+        const signedIn = await signedInPersonOn(tx, c, device.deviceId);
+        if (signedIn.outcome !== "person")
           return { approvedProfiles: [active, ...alternatives], kitchenScreens };
         const admitted = await profilesAdmitting(
           tx,
-          personId,
+          signedIn.personId,
           alternatives.map((profile) => profile.id),
         );
         return {
@@ -1089,7 +1092,9 @@ function passBoardAnswer(board: PassBoard, screen: ResolvedKitchenScreen) {
  * The device's kitchen screen of `kind`, and the person signed in on it. Refuses
  * `device.unauthorized` when the device has no screen of that kind, or a narrowing took it, so a
  * kitchen display re-boots to what its identity now says; and, on any device but a kitchen display,
- * where nobody can sign in yet, `session.required` when nobody is signed in on it.
+ * where nobody can sign in yet, `session.required` when nobody is signed in on it and
+ * `session.person_not_signed_in` when the request names someone else or nobody. A kitchen display answers
+ * either as for nobody signed in.
  */
 async function kitchenScreenOf(
   tx: Transaction,
@@ -1101,9 +1106,12 @@ async function kitchenScreenOf(
     (candidate) => candidate.kind === kind,
   );
   if (screen?.available !== true) throw new AppError("device.unauthorized", {});
-  const personId = await signedInPersonOn(tx, c, device.deviceId);
-  if (device.formFactor !== "kds" && personId === null) throw new AppError("session.required", {});
-  return { screen, personId };
+  const signedIn = await signedInPersonOn(tx, c, device.deviceId);
+  if (device.formFactor === "kds")
+    return { screen, personId: signedIn.outcome === "person" ? signedIn.personId : null };
+  if (signedIn.outcome === "refused") throw signedIn.refusal;
+  if (signedIn.outcome === "nobody") throw new AppError("session.required", {});
+  return { screen, personId: signedIn.personId };
 }
 
 async function stationScreenSlots(

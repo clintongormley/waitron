@@ -174,6 +174,7 @@ export { tillProviderForReader, type TillReaderProvider } from "./till-card-prov
 export { firstCodeInCauseChain, MAX_CAUSE_DEPTH } from "./cause-chain.js";
 export { DISK_FULL_RESULT_CODE, diskFullIn, sqliteFailureOf } from "./engine-failure.js";
 export { BUILD_HEADER } from "./build-header.js";
+export { PERSON_HEADER } from "./person-header.js";
 export { quoteLiteral } from "./sql-literal.js";
 export { blankComments, blankCommentsAndLiterals, mapComments } from "./source-comments.js";
 export type { ResourceIdentity, ResourceChange, ChangeSource } from "./live-updates.js";

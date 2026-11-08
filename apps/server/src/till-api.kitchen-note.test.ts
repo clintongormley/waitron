@@ -18,7 +18,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { hashSessionToken, persons, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { nodeId } from "@waitron/shared";
+import { nodeId, PERSON_HEADER } from "@waitron/shared";
 import {
   listDepartments,
   readKitchenNotes,
@@ -439,7 +439,11 @@ describe("whole-order kitchen note routes", () => {
       });
       const raw = new Request(`http://localhost${path(true)}`, {
         method: "PUT",
-        headers: { cookie: requestCookie, "content-type": "application/json" },
+        headers: {
+          cookie: requestCookie,
+          "content-type": "application/json",
+          [PERSON_HEADER]: personId,
+        },
         body: JSON.stringify(command(true)),
       });
       const readText = raw.text.bind(raw);

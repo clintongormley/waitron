@@ -8,6 +8,7 @@ import {
   cleanupWidgets,
   draftServer,
   mountWidget,
+  notingPersonRefusals,
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
@@ -202,6 +203,9 @@ const table9 = {
   zoneId: "z2",
 };
 
+/** The till's limit on a floor read, `FLOOR_POLL_LIMIT_MS`. */
+const FLOOR_READ_LIMIT_MS = 25_000;
+
 const drillFormFactor: FormFactor = "till";
 
 function till(formFactor: FormFactor) {
@@ -229,7 +233,7 @@ let api: Record<string, ReturnType<typeof vi.fn>>;
 
 function stubApi(overrides: Record<string, unknown> = {}) {
   for (const id of ["wo-7", "wo-9", "wo-new"]) server.bills.add(id);
-  return {
+  return notingPersonRefusals({
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(undefined, ["z1"])),
     getContentLanguages: vi
       .fn()
@@ -287,7 +291,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     takeOverDraft: server.takeOverDraft,
     logout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
-  } as Record<string, ReturnType<typeof vi.fn>>;
+  }) as Record<string, ReturnType<typeof vi.fn>>;
 }
 
 async function mountApp(
@@ -724,6 +728,74 @@ describe("A768 the left draft saves in the background", () => {
     emit(tableOrder(el)!, "open-table", { tableId: "t7", seated: true });
     await flush(el);
   }
+
+  it("moving guests reloads the tables within the floor read's limit while a save has no answer", async () => {
+    // A server answers a party's bills, and the editor state of each, for that party's bills only.
+    const billsOf = (partyId: string) => [partyBillOf(partyId, partyId === "v1" ? "wo-4" : "wo-9")];
+    const { el } = await mountApp({
+      getPartyBills: vi.fn(async (partyId: string) => billsOf(partyId)),
+      listDrafts: vi.fn(async (...args: Parameters<DraftServer["listDrafts"]>) => {
+        const answer = await server.listDrafts(...args);
+        const own = new Set(billsOf(args[0]).map((bill) => bill.workingOrderId));
+        return { ...answer, billEdits: answer.billEdits.filter((edit) => own.has(edit.billId)) };
+      }),
+      moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", billIds: ["wo-4"] }),
+    });
+    await openTable(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const reloads = api.getTablesState.mock.calls.length;
+
+      emit(tableOrder(el)!, "move-guests", { toTableId: "t9" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(api.moveGuests).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(FLOOR_READ_LIMIT_MS - 1);
+      expect(api.getTablesState).toHaveBeenCalledTimes(reloads);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(api.getTablesState).toHaveBeenCalledTimes(reloads + 1);
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(savedLines()).toContain("offer-beer ×1");
+  });
+
+  it("a timed read slower than the floor read's limit still shows the order after a read failed", async () => {
+    const SLOW_READ_MS = FLOOR_READ_LIMIT_MS + 5_000;
+    let slow = false;
+    const { el } = await mountApp({
+      listDrafts: vi.fn(async (...args: Parameters<DraftServer["listDrafts"]>) => {
+        if (slow) await new Promise((resolve) => setTimeout(resolve, SLOW_READ_MS));
+        return server.listDrafts(...args);
+      }),
+    });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "screen-select", { screen: "floor" });
+    await flush(el);
+    api.listDrafts.mockRejectedValueOnce(new TypeError("offline"));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(tableOrder(el)!.draftStore).toBeNull();
+      slow = true;
+
+      await vi.advanceTimersByTimeAsync(15_000 + SLOW_READ_MS);
+      await el.updateComplete;
+
+      expect(tableOrder(el)!.draftStore).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("a background save that fails is said on the next table", async () => {
     const { el } = await mountApp();
@@ -1361,6 +1433,78 @@ describe("A768 the left draft saves in the background", () => {
     await flush(el, 6);
     expect(savedBy).toEqual(["p1"]);
     expect(beersOwnedBy("p1")).toEqual(["offer-beer"]);
+  });
+
+  it("after a restart with no sign-out, a left order's save refused for its person once the next person is in signs nobody out", async () => {
+    const { el } = await mountApp();
+    await openTable(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToTable7(el);
+    await restartWithoutSignOut(el);
+    await signIn(el, "p2", "Bea");
+
+    release({ code: "session.person_not_signed_in", status: 409 });
+    await flush(el, 6);
+
+    expect(lock(el)).toBeNull();
+    expect(shell(el)).not.toBeNull();
+    expect(api.logout).not.toHaveBeenCalled();
+  });
+
+  it("after a restart with no sign-out, the on-screen order's save refused for its person while the next person's sign-in loads does not stop that sign-in", async () => {
+    const { el } = await mountApp();
+    await openTable(el);
+    const release = holdNextSave();
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await restartWithoutSignOut(el);
+    const zones = holdNextZones();
+    await signIn(el, "p2", "Bea");
+
+    release({ code: "session.person_not_signed_in", status: 409 });
+    await flush(el, 6);
+    zones();
+    await flush(el, 6);
+
+    expect(lock(el)).toBeNull();
+    expect(shell(el)).not.toBeNull();
+    expect(api.logout).not.toHaveBeenCalled();
+  });
+
+  it("after a restart with no sign-out, a draft opened for one person while their sign-in loads stops reading once another person starts signing in", async () => {
+    const { mounted } = mountRecordingSaves();
+    const { el } = await mounted;
+    await openTable(el);
+    await tap(el, "Beer");
+    const release = holdNextSave();
+    await moveToTable7(el);
+    await back(el);
+    await reopen(el, "t4");
+    await restartWithoutSignOut(el);
+    holdNextZones();
+    await signIn(el, "p2", "Bea");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const settleTimers = async (ms: number) => {
+        await vi.advanceTimersByTimeAsync(ms);
+        for (let i = 0; i < 3; i++) {
+          await vi.advanceTimersByTimeAsync(0);
+          await el.updateComplete;
+        }
+      };
+      release(new TypeError("Failed to fetch"));
+      await settleTimers(0);
+      const reads = api.listDrafts!.mock.calls.length;
+      holdNextZones();
+      server.personId = "p1";
+      server.personName = "Ana";
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await settleTimers(15_000);
+      expect(api.listDrafts!.mock.calls.length).toBe(reads);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a server switch lets go of a left draft whose background save got no answer", async () => {

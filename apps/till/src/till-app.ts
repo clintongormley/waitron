@@ -130,7 +130,6 @@ import {
 import { deriveExtraSelections } from "./state/held-extras.js";
 import { deriveOptionSelections } from "./state/held-options.js";
 import {
-  DRAFT_PERSON_REFUSAL,
   DRAFT_REFUSALS,
   DraftSync,
   TABLE_REQUEST_LIMIT_MS,
@@ -449,6 +448,7 @@ import type {
   ReadOptions,
   KitchenScreenKind,
   ResolvedKitchenScreen,
+  SessionPerson,
 } from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
@@ -536,7 +536,9 @@ interface RefreshRetry {
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 
 /** How long a floor poll's read may stay out before it is cancelled: longer than the floor screen's
- * 15-second re-read, so a slow server's answer still lands, and due before the tick after next. */
+ * 15-second re-read, so a slow server's answer still lands, and due before the tick after next. A
+ * bill's refresh waits this long for a save that is out, so one with no answer holds up what follows
+ * the refresh, such as the tables after Move guests, by no more than a floor poll's limit. */
 const FLOOR_POLL_LIMIT_MS = 25_000;
 /** A refusal's reads hold a waiter at a closed panel with nothing said, and failing one costs no more
  * than the last answer kept, so they take a floor poll's limit rather than a request's. */
@@ -2403,7 +2405,7 @@ export class TillApp extends LitElement {
     // Its own event kind, not `nav`: `#setScreen` below records the nav.
     diag.record("info", "server-switch", { from, to });
     this.operatorPersonId = "";
-    this.#sessionPersonId = "";
+    this.#tabPerson = null;
     this.operatorName = "";
     this.#loginPending = false;
     this.permissions = [];
@@ -2673,6 +2675,9 @@ export class TillApp extends LitElement {
   #setupAsked = 0;
   #setupApplied = 0;
   #preLoginChoice?: string;
+  /** Keys the lock screen: a language picked there draws it afresh, dropping a typed PIN, but one the
+   * till puts back itself must not, or a sign-in still waiting for its answer is lost. */
+  #lockLanguagePicks = 0;
   #venueLocaleReady = false;
   #loginPending = false;
 
@@ -2694,8 +2699,8 @@ export class TillApp extends LitElement {
 
   constructor() {
     super();
-    // Re-renders on a locale switch, so `keyed(currentLocale(), …)` recreates the screens, which read
-    // `t()` at render time.
+    // Re-renders on a locale switch, so `keyed(currentLocale(), …)` recreates the shell's screens,
+    // which read `t()` at render time.
     new LocaleChangeController(this);
     new ThemeChoiceController(this, { applies: true });
     // Subscribed before any widget, so the marks this sets inside the basket's own notification
@@ -3165,7 +3170,16 @@ export class TillApp extends LitElement {
   #operatorSession = 0;
   /** The person the server session now belongs to, and so the person any draft save goes in as. It
    * moves at the start of a sign-in; {@link operatorPersonId} moves only once that sign-in loads. */
-  #sessionPersonId = "";
+  get #sessionPersonId(): string {
+    return this.#tabPerson?.personId ?? "";
+  }
+  /** The person every request names, one object per sign-in: a refusal hands back the object its
+   * request was sent with, so one for an earlier sign-in, even the same person's, is told apart. A
+   * sign-out keeps it, so the sign-out itself names who is leaving. */
+  #tabPerson: SessionPerson | null = null;
+  /** The sign-in the box refused, kept until a boot; a later sign-in or a server switch moves
+   * {@link #tabPerson} away from it. */
+  #refusedPerson: SessionPerson | undefined;
   @state() private deviceZoneSelection: DeviceZoneSelection | null = null;
   @state() private deviceSettingsOpen = false;
   @state() private deviceZonesOpen = false;
@@ -3440,8 +3454,22 @@ export class TillApp extends LitElement {
   } | null = null;
   @state() private formFactor?: FormFactor;
   @state() private capabilities: CapabilityFlag[] = [];
-  /** The non-fatal error to show over the counter, or `undefined` for none. */
-  @state() private errorKey?: CounterError;
+  /** The non-fatal error to show over the counter, or `undefined` for none. While the till is locked
+   * because the box refused this sign-in's person, every error set is dropped: it comes from a request
+   * of the sign-in that just ended, and the lock already says what to do. */
+  @state() private get errorKey(): CounterError | undefined {
+    return this.#errorKey;
+  }
+  private set errorKey(value: CounterError | undefined) {
+    if (
+      value !== undefined &&
+      this.#refusedPerson !== undefined &&
+      this.#refusedPerson === this.#tabPerson
+    )
+      return;
+    this.#errorKey = value;
+  }
+  #errorKey?: CounterError;
   /** What a complete submission of a draft did, said once the till is back on the floor. */
   @state() private submittedNotice: string | null = null;
   @state() private servedCommand: ServedCommand | null = null;
@@ -4495,6 +4523,13 @@ export class TillApp extends LitElement {
     this.#syncEditDeadEnds();
     if (changed.has("api")) {
       this.api.onMadeHere?.(this.#onMadeHere);
+      const api = this.api;
+      api.namePersonFrom?.(
+        () => this.#tabPerson,
+        (person) => {
+          if (api === this.api) this.#onPersonRefused(person);
+        },
+      );
       this.#stopFloorPoll();
       this.#endSplitRefusalReads();
     }
@@ -4539,6 +4574,7 @@ export class TillApp extends LitElement {
     this.#stopDepartmentTransfers();
     this.#battery?.stop();
     const bootGeneration = ++this.#bootGeneration;
+    this.#refusedPerson = undefined;
     this.#setupRead = undefined;
     // A boot a newer one has overtaken writes nothing after its reads answer. A torn-down app's boot
     // writes nothing either: `setLocale` is module-global, and `disconnectedCallback` has already run,
@@ -5437,7 +5473,15 @@ export class TillApp extends LitElement {
     const { locale, ...signedIn } = (event as CustomEvent<LoggedInDetail>).detail;
     setLocale(resolveActiveLocale(locale, this.#venueLocale));
     this.#preLoginChoice = undefined;
+    this.#tabPerson = { personId: signedIn.personId };
     await this.#enterSignedIn(signedIn);
+  }
+
+  /** The device's session belongs to someone else now, so this person has none to end. */
+  #onPersonRefused(person: SessionPerson): void {
+    if (person !== this.#tabPerson || (this.operatorName === "" && !this.#loginPending)) return;
+    this.#refusedPerson = person;
+    void this.#onLogout(false);
   }
 
   /** `switched`: a profile switch, which leaves the screen the old profile was on. */
@@ -5459,8 +5503,7 @@ export class TillApp extends LitElement {
     this.#clockAccessLost = false;
     this.clockedOut = false;
     this.#loginPending = true;
-    if (personId !== this.operatorPersonId) this.#dropOthersDrafts(personId);
-    this.#sessionPersonId = personId;
+    this.#dropOthersDrafts(personId);
     const signIn = ++this.#signIns;
     const session = this.#operatorSession;
     const api = this.api;
@@ -10327,9 +10370,10 @@ export class TillApp extends LitElement {
     this.profileBusy = true;
     const sync = this.#draftSync;
     if (sync !== undefined) {
+      const ownEditWaiting = sync.ownEditWaiting;
       const saved = await sync.flush();
       if (session !== this.#operatorSession) return;
-      if (saved !== "saved") {
+      if (saved !== "saved" && !lostNothing(saved, ownEditWaiting)) {
         this.profileBusy = false;
         this.profileNotice =
           saved !== "failed" && DRAFT_REFUSALS.has(saved.refused)
@@ -11986,7 +12030,9 @@ export class TillApp extends LitElement {
     const before = sync.edit;
     this.#billDraftReading = sync;
     try {
-      const loaded = await sync.load(this.#draftReadBounds());
+      const loaded = await sync.load(
+        this.#draftReadBounds() ?? { waitLimitMs: FLOOR_POLL_LIMIT_MS },
+      );
       if (
         !loaded ||
         sync !== this.#draftSync ||
@@ -12061,12 +12107,6 @@ export class TillApp extends LitElement {
   }
 
   #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
-    if (refusal.refused === DRAFT_PERSON_REFUSAL) {
-      // The device's session belongs to someone else now; ending it would sign them out too.
-      if (sync.personId === this.#sessionPersonId && this.operatorName !== "")
-        void this.#onLogout(false);
-      return;
-    }
     if (sync !== this.#draftSync || refusal.refused === "session.required") return;
     if (this.#billLeft(sync, refusal)) {
       void this.#followLeftBill(sync, refusal);
@@ -20138,6 +20178,7 @@ export class TillApp extends LitElement {
     const { code } = event.detail;
     if (this.screen === "lock" || this.deviceMode) {
       if (this.operatorName === "") this.#preLoginChoice = code;
+      this.#lockLanguagePicks += 1;
       setLocale(code);
       return;
     }
@@ -21342,8 +21383,8 @@ export class TillApp extends LitElement {
                       .canClockIn=${this.clockSnapshot.state?.state === "out"}
                       .error=${this.#clockMessage()}
                     ></till-clock-in-screen>`
-                  : // Keyed on the locale, so a switch rebuilds the subtree in the new language. The lock
-                    // screen also shows after a boot failure, rather than an empty shell.
+                  : // The shell is keyed on the locale, so a switch rebuilds it in the new language. The
+                    // lock screen also shows after a boot failure, rather than an empty shell.
                     shellFormFactor !== undefined
                     ? keyed(
                         currentLocale(),
@@ -21454,7 +21495,7 @@ export class TillApp extends LitElement {
                         </till-shell>`,
                       )
                     : keyed(
-                        `${currentLocale()}:${this.#operatorSession}`,
+                        `${this.#lockLanguagePicks}:${this.#operatorSession}`,
                         html`<till-lock-screen
                           .api=${this.api}
                           .deviceName=${this.deviceName}

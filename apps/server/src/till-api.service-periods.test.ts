@@ -537,7 +537,6 @@ describe("service periods gate only added dishes and added stored quantities", (
     const { partyId, tabId } = seated.body as { partyId: string; tabId: string };
     const saved = await sendAsTill(v, "PUT", `/api/parties/${partyId}/drafts`, {
       billId: tabId,
-      personId: v.personId,
       draftId: null,
       revision: 0,
       lines: [
@@ -1042,7 +1041,6 @@ describe("service periods gate only added dishes and added stored quantities", (
         };
         const saved = await sendAsTill(v, "PUT", `/api/parties/${partyId}/drafts`, {
           billId: tabId,
-          personId: v.personId,
           draftId: null,
           revision: 0,
           lines: [{ menuItemId: v.toast.midday, quantity: "1" }],
@@ -1121,7 +1119,6 @@ describe("service periods gate only added dishes and added stored quantities", (
       const menuItemId = meal === "lunch" ? v.toast.midday : v.toast.breakfast;
       const saved = await sendAsTill(v, "PUT", `/api/parties/${partyId}/drafts`, {
         billId: tabId,
-        personId: v.personId,
         draftId: null,
         revision: 0,
         lines: [{ menuItemId, quantity: "1" }],

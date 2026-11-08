@@ -9,13 +9,15 @@ import type { DeviceOrigin } from "@waitron/shared";
 import type { TradingContext } from "../trading-context.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { deviceCookieForTest } from "./enrol.js";
+import { noteSessionPerson } from "./tab-person.js";
 
 /** Adds device proof to a fixture's existing shift session, replacing its device token. */
 export async function sessionCookieForTest(db: Database, token: string): Promise<string> {
   const [session] = await db
-    .select({ deviceId: sessions.deviceId })
+    .select({ deviceId: sessions.deviceId, personId: sessions.personId })
     .from(sessions)
     .where(eq(sessions.tokenHash, hashSessionToken(token)));
+  noteSessionPerson(token, session!.personId);
   return `${SESSION_COOKIE}=${token}; ${await deviceCookieForTest(db, session!.deviceId)}`;
 }
 

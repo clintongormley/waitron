@@ -3,6 +3,7 @@ export async function readTransferEvents(
   fetchImpl: typeof fetch,
   reload: (event: "ready" | "change") => void,
   signal?: AbortSignal,
+  onRefused: (code: string) => void = () => {},
 ): Promise<void> {
   const response = await fetchImpl(url, {
     method: "GET",
@@ -21,6 +22,7 @@ export async function readTransferEvents(
       typeof error.code === "string"
         ? error.code
         : "server.internal";
+    onRefused(code);
     throw { code, status: response.status };
   }
   if (response.body === null) throw new TypeError("Transfer stream has no body");

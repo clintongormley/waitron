@@ -1439,33 +1439,6 @@ already lays itself out again (A768's default; the owner has not decided). Decid
 them should follow a profile edit made on the dashboard while the till is open.
 
 
-## A take-over or a recall into the order acts as whoever the session is (left open by A791 #1943, 2026-10-21).
-
-Both are started by a tap and sent after the order's save queue
-(`apps/till/src/state/draft-sync.ts` `#takeOver` and `runCommand`); one started by one person and
-sent after the next person's sign-in answer would act as the next person (read, not run). Whether
-the lock screen always stops such a command first is not traced. If it does not, name the person
-in those requests as A791 did for the save.
-
-
-## A sign-out while an order save is waiting may keep the wrong lines (left open by A791 #1943, 2026-10-21).
-
-If someone signs out while a save of their order is still out and a newer version
-of the bill has already reached the till, their kept unsaved lines could be replaced by the ones
-on screen (suspected by reading `DraftSync.#saveNow`'s error handling in
-`apps/till/src/state/draft-sync.ts`, not reproduced). Reproduce it with a test before changing
-anything; #1943 fixed the same mix-up for its own refusal only.
-
-
-## A792. Two smaller points A768's last review left (2026-10-17).
-
-Signing out with a kept,
-unsaved order on a dead connection now waits up to 150 s before the till tells the server (the
-screen is already locked). Two of the checks that keep one person's order away from the next
-person have no test, and the sign-in drop compares with the person on screen rather than the one
-signed in. Read, not run: confirm each, then test or narrow it.
-
-
 ## An element inside a shadow root attached after a drag starts keeps its own cursor rule during that drag
 
 — left open by A642. The drag's override sheet is added to the document and to every
@@ -2053,30 +2026,6 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
   unless the owner says otherwise.
   [Detail](till.md#a841-slice-11-waitrons-own-headings-are-one-step-lighter-2026-10-27)
 
-## Bundle A1380: Saves, reads and sign-outs that can lose a dish or act as the wrong person
-
-5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1357. The till's draft saves and reads can still pass each other (seen in A803 slice 4c's
-  review; two of the three are the same on main).** A failed read leaves a waiting edit unsent until
-  the next read or edit, a plain read can overtake a save's answer, and a save starting while a
-  take-over waits can race the read after it (`apps/till/src/state/draft-sync.ts`).
-  [Detail](till.md#a1357-the-tills-draft-saves-and-reads-can-still-pass-each-other)
-- **A1263. Switching profile after only viewing another person's draft would say "draft replaced"
-  (left open by A803 slice 3, #2360).** `#switchProfile` in `apps/till/src/till-app.ts` reads a
-  taken-over answer as a lost change even when this till had nothing of its own to save.
-  [Detail](till.md#a1263-switching-profile-after-only-viewing-another-persons-draft-would-say-draft-replaced)
-- **A take-over or a recall into the order acts as whoever the session is (left open by A791 #1943,
-  2026-10-21).** Whether the lock screen always stops such a command first is not traced.
-  [Detail](till.md#a-take-over-or-a-recall-into-the-order-acts-as-whoever-the-session-is-left-open-by-a791-1943-2026-10-21)
-- **A sign-out while an order save is waiting may keep the wrong lines (left open by A791 #1943,
-  2026-10-21).** Reproduce it with a test before changing anything; #1943 fixed the same mix-up for
-  its own refusal only.
-  [Detail](till.md#a-sign-out-while-an-order-save-is-waiting-may-keep-the-wrong-lines-left-open-by-a791-1943-2026-10-21)
-- **A792. Two smaller points A768's last review left (2026-10-17).** Read, not run: confirm each,
-  then test or narrow it.
-  [Detail](till.md#a792-two-smaller-points-a768s-last-review-left-2026-10-17)
-
 ## A1416. A started dish whose option was renamed blocks every save of its order until it is cancelled
 
 Left open by A1382. The order holds a dish the kitchen has started, and that dish's options list or
@@ -2149,10 +2098,11 @@ the answer is unknown, so no change can be made, and add no sentence.
 
 ## A till request refused for naming someone not signed in locks the screen with no sentence
 
-Left open by A1382. On main an order save does this; #2534's rework puts one check on every request
-that needs a signed-in person, so any of them can. The owner chose the words on 2026-11-07: "You have
-been logged out because somebody else has logged in on this device." They go in after #2534's
-rework, which shares the path; the Spanish is not yet written.
+Left open by A1382. #2534 built one check on every request that needs a signed-in person, so a
+refusal from any of them locks the till, and the sign-in screen says nothing about why
+([One editor per bill](#one-editor-per-bill-owner-2026-10-17-a773)). The owner chose the words on
+2026-11-07: "You have been logged out because somebody else has logged in on this device." They are
+not in yet, and the Spanish is not written.
 
 ## Other till sentences still send the person to somebody else, against the refusal rule
 
@@ -2955,6 +2905,13 @@ Printer identity is separate from the till route inventory.
 
 ## Decisions and deliberate limits
 
+- **One person check for every till request that needs a signed-in person (owner, 2026-11-07,
+  A1380).** "The till's API client adds the tab's person to every request in one place, and the box
+  refuses, once, any session request whose named person is not the session's person. New routes are
+  then covered with nothing to remember." Requests made before anyone signs in carry no person and
+  are not refused for that. A session request naming nobody is refused too (lane C and the watcher,
+  2026-11-08). Built by #2534: [One editor per bill](#one-editor-per-bill-owner-2026-10-17-a773).
+
 - **An order with no service zone is warned about only once one of its dishes waits (A773-2 PR C,
   D101).** In a venue with zones, the Prep stations coverage warning checks each waiting station
   against each active zone; a dish on an order with no service zone needs a pass screen on every
@@ -3163,13 +3120,48 @@ only the bill to the survivor refuses `draft.out_of_date`. Both the direct comma
 survivor's current edit state succeeds and retains the separately marked lines. These cases
 replace Task 7's unrun consumed-draft observation; they do not establish the till's recovery UI.
 
-Each order save names the person whose order it is, and the server refuses
-`draft.person_not_signed_in` (409) unless that is the person signed in on the device (owner, Q35,
-A791). When the till meets that refusal while that person is still the one signed in on it, it
-locks to the sign-in screen and keeps their unsaved lines for their next sign-in, without signing
-out the device's session, which belongs to someone else. The server cases are in
-`apps/server/src/till-api.drafts.test.ts`; the app cases are in
-`apps/till/src/till-app-drafts.test.ts`.
+Every request through the till's API client (`TillApi`, `apps/till/src/api/client.ts`), except
+the sign-in itself (`POST /api/session`), names the person signed in on that tab in an
+`x-waitron-person` header (`PERSON_HEADER`, `packages/shared/src/person-header.ts`). The server
+probes in `apps/till/src/api/server-router.ts` and the `/api/theme` read (`apps/till/src/main.ts`)
+bypass it and name nobody. A tab nobody has signed in on names nobody; after a sign-out a tab keeps naming its last person
+until the next sign-in or a move to another server. The server checks the
+header where it reads the device's sign-in: `requireSession` and `signedInPersonOn` in
+`apps/server/src/till-session.ts`, and the sign-out. While a session is open, a request with no
+header, an empty one, one that is not an id, or one naming anyone but that session's person is
+refused `session.person_not_signed_in` (409) (owner, 2026-11-07, A1380; see Decisions), before
+`requireSession` stamps, checks a permission or a profile action. A request whose cookie names no open session still gets
+`session.required`. `GET /api/device/me`, and kitchen-screen requests from a kitchen display, answer
+such a request as if nobody were signed in, so a new tab beside a signed-in one still starts; a
+kitchen-screen request from any other device is refused.
+
+When a request named a person and comes back with that refusal, whatever its status, the till locks
+to the sign-in screen once and keeps that person's unsaved lines for their next sign-in, without
+signing out the device's session, which belongs to someone else. While the till is locked this way
+it shows no error from the refused sign-in's requests. A refusal for a request sent under an earlier
+sign-in, the same person's included, or through a client the till no longer holds, does not lock
+it: that request fails with its usual error.
+
+A sign-out (`DELETE /api/session`) is sent once the person's saves have finished, and names, in the
+same header, the person signed in on that tab when the sign-out began. None is sent if a later
+sign-in was answered meanwhile (`#onLogout`, `apps/till/src/till-app.ts`); the leaving person's
+session then stays open on the server, since a sign-in ends no other session (`loginWithPin`,
+`packages/identity/src/login.ts`, only adds one). With a session open, a
+sign-out naming its person ends it; one naming nobody or anyone else is refused the same way and
+ends nothing. A sign-out carrying the header never clears the cookie, because its answer can reach
+the browser after the next person's sign-in. With no session open it answers `{ ok: true }`, and
+clears the cookie only when it carries no person header.
+
+The server cases are in `apps/server/src/till-session.person.test.ts`, the walk of every till,
+device and schedule route in `till-api.session-person.test.ts`, `GET /api/device/me`'s in
+`device-api.test.ts`, more sign-out cases in `till-api.test.ts`, and the refusals of a save, a
+take-over, a recall, a line split and a discard naming someone else in `till-api.drafts.test.ts`,
+`draft-recall.test.ts`, `till-api.groups.test.ts` and `draft-discard.test.ts`. The till's are in
+`apps/till/src/api/client.test.ts` ("TillApi: the tab's person on every request") and
+`apps/till/src/till-app-person-refusal.test.ts`, which drives the app through its real client. The
+other server tests send the signed-in person's header through
+`apps/server/src/testing/tab-person-setup.ts`, as a correct till does
+([testing guide](../developers/testing-guide.md#server-tests-send-the-tills-person-header-through-one-setup-file)).
 
 ### Permanent group numbers (A773)
 
@@ -4326,10 +4318,10 @@ of page colour round every badge in `wt-help-tooltip`, which changes every badge
 ticket/receipt grouping, has landed. What it leaves open is A1191–A1198, A1201, A1202, A1217 and the store limit under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
 landed; it leaves open A1235–A1238. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
-main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1263–A1267 and A1269. Slice
+main bill, has landed (#2360); it leaves open A1256, A1258, A1261, A1264–A1267 and A1269. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1287–A1294 and A1299–A1300. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
-dishes in one panel, has landed; it leaves open A1347–A1366. Remaining: pre-bills through A446, which
+dishes in one panel, has landed; it leaves open A1347–A1352, A1358–A1360, A1362, A1365 and A1366. Remaining: pre-bills through A446, which
 no longer waits for asesor S2. One payment pays one bill. Station modes, pass naming and grouped cross-bill
 firing no longer wait for A773-2; the seams a cross-bill ticket changes are in the A803 plan's
 "A773-2 PR D handoff" paragraph. New Spanish wording requires approval
@@ -4354,25 +4346,6 @@ So a waiter can read Paid on a dish whose card is then declined. The row's words
 (`9a7efbb6b0`). The picker's floor itself still counts the reserved money, which is what keeps that
 money with its bill.
 
-## A1357. The till's draft saves and reads can still pass each other
-
-**A1357. The till's draft saves and reads can still pass each other (seen in A803 slice 4c's
-review; two of the three are the same on main).** All three are in `DraftSync`
-(`apps/till/src/state/draft-sync.ts`), found with its fake draft server, not the real app:
-
-- **A failed read leaves a waiting edit unsent until the next read or edit** (same on main). `#load`
-  cancels the save timer before it reads and its failure restarts nothing. Example: Ana adds a dish,
-  takes over within the save delay, and the read fails; the dish is on this till only until the next
-  read, and is lost if the browser dies first. Do not add a bare restart to `#load`'s catch: `#saveNow`
-  checks neither recovery nor a running command, so a save could go out during one.
-- **A plain read can overtake a save's answer** (same on main). `load()` does not wait for the save
-  queue. When a save has reached the server and its answer is slow, a read sees the till's own save
-  as someone else's change: the dishes go to the kept candidate, the bill locks, and the waiter has
-  to review their own dishes. Nothing is lost.
-- **A save that starts while a take-over waits can race the read after it** (4c's own). After a
-  take-over, `#readAfterTakeOver` waits for the save queue and then reads; a save started during that
-  wait is not waited for.
-
 ## A1261. A full invoice for a bill already paid, from the table's ⋮
 
 **A1261. A full invoice for a bill already paid, from the table's ⋮ (left open by A803 slice 3,
@@ -4380,14 +4353,6 @@ Owner question 2, #2360).** As built, the ⋮ offers Full invoice only for a bil
 not yet invoiced; for a paid bill it is a correction, which A802 has not built. Once A802 gives
 the till a way in, offer it from the ⋮ for a paid bill. If the owner instead picks "show it
 quiet and explain on tap", that needs a new sentence in English and Spanish first.
-
-## A1263. Switching profile after only viewing another person's draft would say "draft replaced"
-
-**A1263. Switching profile after only viewing another person's draft would say "draft
-replaced" (left open by A803 slice 3, #2360).** `#switchProfile` in `apps/till/src/till-app.ts`
-reads a taken-over answer as a lost change even when this till had nothing of its own to save.
-The LOOK fix F3 stopped this at seven other leave points by checking `DraftSync.ownEditWaiting`
-first; this one was found by reading, not run.
 
 ## A1264. A bill another till merged or moved away is noticed only on the 15-second timer
 

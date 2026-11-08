@@ -1450,7 +1450,6 @@ describe("made-here route wiring", () => {
         draftId: null,
         revision: 0,
         lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
-        personId: venue.operatorId,
       },
     );
     expect(saved.status).toBe(200);

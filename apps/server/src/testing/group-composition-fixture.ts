@@ -18,8 +18,15 @@ export function observedGroupSender(
   database: () => Database,
   send: typeof import("./bill-venue.js").send,
 ): typeof send {
-  return async (app, cookie, method, path, body) =>
-    send(app, cookie, method, path, await observedGroupCompositionBody(database(), path, body));
+  return async (app, cookie, method, path, body, headers) =>
+    send(
+      app,
+      cookie,
+      method,
+      path,
+      await observedGroupCompositionBody(database(), path, body),
+      headers,
+    );
 }
 
 type Observations = { expectedEdit?: BillEditExpected; expectedEdits?: BillEditExpected[] };

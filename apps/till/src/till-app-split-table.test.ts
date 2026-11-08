@@ -4835,6 +4835,31 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       expect(row(el, "b2")).not.toBeNull();
     });
 
+    it.each([
+      ["another bill", "b2"],
+      ["the bill on screen", "wo-4"],
+    ])(
+      "take-over of %s refused for its person: locks with no message of any kind",
+      async (_bill, billId) => {
+        server.drafts.push(luisOn(billId));
+        const el = await panelWith({
+          takeOverDraft: vi
+            .fn()
+            .mockRejectedValue({ code: "session.person_not_signed_in", status: 409 }),
+        });
+        const reads = api.listDrafts!.mock.calls.length;
+
+        await taken(el, billId);
+
+        expect(lock(el)).not.toBeNull();
+        expect(shell(el)).toBeNull();
+        expect(tableOrder(el)).toBeNull();
+        expect(el.shadowRoot!.querySelector(".error")).toBeNull();
+        expect(api.logout).not.toHaveBeenCalled();
+        expect(api.listDrafts!.mock.calls.length).toBe(reads);
+      },
+    );
+
     it("take-over: another bill's sends that bill's own edit, not the on-screen bill's", async () => {
       server.drafts.push(luisOn("b2"));
       const el = await panelWith({});

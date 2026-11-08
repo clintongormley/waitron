@@ -1972,7 +1972,6 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
           revision: recalled.revision,
           expectedEdit: (await expected()).expectedEdit,
           lines: [{ ...recalled.lines[0]!, quantity }],
-          personId: venue.managerId,
         }),
       ) as unknown as BillDraftSnapshot
     ).draft!;
@@ -3412,7 +3411,6 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
         revision: draft.revision,
         expectedEdit: (await expected()).expectedEdit,
         lines: [{ ...draft.lines[0]!, quantity: "3" }],
-        personId: venue.managerId,
       });
       expect(saved.status, JSON.stringify(saved.json)).toBe(200);
       await inTx(venue, async (tx) => {

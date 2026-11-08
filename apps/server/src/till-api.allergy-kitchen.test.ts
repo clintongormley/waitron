@@ -21,6 +21,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { submitGroups } from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { boardItems } from "./testing/pass-board-probe.js";
+import { noteSessionPerson } from "./testing/tab-person.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const original: KitchenAllergyBlock = {
@@ -47,6 +48,7 @@ async function fixture() {
     .update(sessions)
     .set({ tokenHash: hashSessionToken(token) })
     .where(eq(sessions.id, v.operator.sessionId));
+  noteSessionPerson(token, v.operator.personId);
   const party = await seat(v, await v.table("Kitchen HTTP"));
   await inTx(v, async (tx) =>
     submitGroups(tx, v.cfg, party.partyId, {

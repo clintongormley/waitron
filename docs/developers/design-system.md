@@ -2689,7 +2689,8 @@ message. While a ticked bill is held that is the held sentence, and each says so
 does not: what stands in the way, and that the take-over failed. With no ticked bill held, it sits
 beside a no-field refusal or a stopped press's sentence if one is showing; a case pins the no-field
 refusal's pair, and none the stopped press's. The line goes when the next take-over is pressed, when a press of Split gets past
-the hold, and when the panel closes. A marked count's bottom message still follows both.
+the hold, and when the panel closes. A marked count's bottom message still follows both. A take-over
+refused because it names someone not signed in has no line: the till locks instead.
 
 - mark every required field with `required`; `wt-input` renders the visible asterisk and forwards
   the native constraint. A field with `hide-label` draws no asterisk, so where one sits in a table
@@ -5978,7 +5979,8 @@ same `till-portion-picker`, with these additions.
   is not ticked its tick is disabled, tied to `table.split_take_over_first` by `aria-describedby`.
   Split is quiet and disabled while a take-over is out. On the answer the bill's row goes and it keeps
   its tick and picks; a refusal goes at the foot ([Forms](#forms)), and the bill stays held unless the
-  read after it shows the order gone.
+  read after it shows the order gone. A refusal saying it names someone not signed in locks the till
+  instead, with nothing at the foot.
 - **A presented bill** goes whole or stays: `table.split_presented` under its header, its tick
   working, its rows pale and disabled with that sentence as their `aria-description`, and no picks.
 - **Everything ticked.** When a press finds nothing would stay (`nothingStays`), the action row gives

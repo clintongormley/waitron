@@ -250,7 +250,6 @@ describe("adjusting an owned recalled family", () => {
     const p = await setup("hold", "grouped");
     const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
       billId: p.billId,
-      personId: venue.staffId,
       draftId: p.draft.id,
       revision: p.draft.revision,
       lines: [
@@ -498,7 +497,6 @@ describe("adjusting an owned recalled family", () => {
       expect(await frozen()).toEqual(after);
       const stale = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
         billId: p.billId,
-        personId: venue.staffId,
         draftId: p.draft.id,
         revision: p.draft.revision,
         lines: p.draft.lines,
@@ -507,7 +505,6 @@ describe("adjusting an owned recalled family", () => {
       expect(await frozen()).toEqual(after);
       const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
         billId: p.billId,
-        personId: venue.staffId,
         draftId: read.id,
         revision: read.revision,
         lines: read.lines,

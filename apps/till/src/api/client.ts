@@ -60,7 +60,7 @@ import type {
   TransactionsPage,
   TransactionsQuery,
 } from "./find-bill-types.js";
-import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
+import { PERSON_HEADER, compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import type {
   AttendanceCommand,
   AttendanceCommandResult,
@@ -99,6 +99,13 @@ export type {
 
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 export type FetchLike = typeof fetch;
+
+export const SESSION_PERSON_REFUSAL = "session.person_not_signed_in";
+
+/** One sign-in's person. A refusal hands back the very object its request named. */
+export interface SessionPerson {
+  personId: string;
+}
 
 /** A plain (non-array, non-null) object — the only parsed body shape an error envelope can be read from. */
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -803,9 +810,6 @@ export interface DraftSave {
   revision: number;
   expectedEdit: BillEditExpected;
   lines: DraftLineInput[];
-  /** The person whose order this is; the server refuses the save unless it is the person signed
-   * in on this device. */
-  personId: string;
 }
 
 export interface BillEditState {
@@ -2605,6 +2609,46 @@ export class TillApi {
     this.#fetchImpl = fetchImpl;
   }
 
+  #personSource?: () => SessionPerson | null;
+  #personRefused?: (person: SessionPerson) => void;
+
+  /** Every request but the sign-in names `source()`'s person; a request the server refuses for
+   * naming someone not signed in calls `onRefused` with the person it named, whatever the status. */
+  namePersonFrom(
+    source: () => SessionPerson | null,
+    onRefused: (person: SessionPerson) => void,
+  ): void {
+    this.#personSource = source;
+    this.#personRefused = onRefused;
+  }
+
+  /**
+   * The one place a request gets its `fetch`: it names `person` on every call when there is one.
+   * `fetchImpl` is read into a local so it is invoked as a free function, not as a method of `this`
+   * (which would rebind a native `fetch`).
+   */
+  #fetchFor(person: SessionPerson | null): FetchLike {
+    const fetchImpl = this.#fetchImpl;
+    if (person === null) return fetchImpl;
+    return (input, init) =>
+      fetchImpl(input, {
+        ...init,
+        headers: {
+          ...(init?.headers as Record<string, string> | undefined),
+          [PERSON_HEADER]: person.personId,
+        },
+      });
+  }
+
+  #noticeRefusal(code: string, person: SessionPerson | null): void {
+    if (person === null || code !== SESSION_PERSON_REFUSAL) return;
+    try {
+      this.#personRefused?.(person);
+    } catch {
+      // The caller still sees the server's refusal, not the listener's failure.
+    }
+  }
+
   listDepartmentTransferDestinations(options: ReadOptions = {}): Promise<{
     destinations: { id: string; name: string }[];
   }> {
@@ -2697,11 +2741,13 @@ export class TillApi {
     reload: (event: "ready" | "change") => void,
     options: ReadOptions = {},
   ): Promise<void> {
+    const person = this.#personSource?.() ?? null;
     return readTransferEvents(
       this.#baseUrl + "/api/department-transfers/events",
-      this.#fetchImpl,
+      this.#fetchFor(person),
       reload,
       options.signal,
+      (code) => this.#noticeRefusal(code, person),
     );
   }
 
@@ -2740,7 +2786,9 @@ export class TillApi {
   }
 
   login(personId: string, pin: string): Promise<SessionResult> {
-    return this.#request<SessionResult>("/api/session", "POST", { personId, pin });
+    return this.#request<SessionResult>("/api/session", "POST", { personId, pin }, undefined, {
+      namesPerson: false,
+    });
   }
 
   async logout(): Promise<void> {
@@ -3589,7 +3637,7 @@ export class TillApi {
       "GET",
       undefined,
       options.signal,
-      { "x-waitron-device-clock": String(Date.now()) },
+      { headers: { "x-waitron-device-clock": String(Date.now()) } },
     );
   }
 
@@ -4852,13 +4900,11 @@ export class TillApi {
   }
 
   /**
-   * The one request path every method funnels through. A non-2xx becomes a rejected
+   * The request path every method but the transfer stream takes; both get their `fetch` from
+   * `#fetchFor`. A non-2xx becomes a rejected
    * `{ ...params, code, status }` read from the server's `{ error: { code, params } }` envelope, falling
    * back to `server.internal` when the body names no code, so callers branch on a stable domain code;
    * `status` is the answered HTTP status.
-   *
-   * `fetchImpl` is read into a local so it is invoked as a free function, not as a method of `this`
-   * (which would rebind a native `fetch`).
    *
    * A 2xx with an EMPTY body resolves to `undefined`, where `res.json()` would throw; a method
    * whose route answers one types `T` as `void`.
@@ -4868,9 +4914,11 @@ export class TillApi {
     method: string,
     body?: unknown,
     signal?: AbortSignal,
-    headers?: Record<string, string>,
+    {
+      headers,
+      namesPerson = true,
+    }: { headers?: Record<string, string>; namesPerson?: boolean } = {},
   ): Promise<T> {
-    const fetchImpl = this.#fetchImpl;
     const init: RequestInit =
       body === undefined
         ? { method, credentials: "include" }
@@ -4880,10 +4928,11 @@ export class TillApi {
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
           };
+    const person = namesPerson ? (this.#personSource?.() ?? null) : null;
     if (headers !== undefined)
       init.headers = { ...(init.headers as Record<string, string> | undefined), ...headers };
     if (signal !== undefined) init.signal = signal;
-    const res = await fetchImpl(this.#baseUrl + path, init);
+    const res = await this.#fetchFor(person)(this.#baseUrl + path, init);
     if (!res.ok) {
       // The body is untrusted: it may not be JSON, and the literal `null` is valid JSON, so the parsed
       // value is checked for being an object before `.error` is read off it.
@@ -4893,6 +4942,7 @@ export class TillApi {
       const code = typeof rawCode === "string" ? rawCode : "server.internal";
       const rawParams = envelope?.params;
       const params = isRecord(rawParams) ? rawParams : undefined;
+      this.#noticeRefusal(code, person);
       // `params` first, so a `code` or `status` key inside it cannot overwrite the validated ones.
       throw { ...params, code, status: res.status };
     }

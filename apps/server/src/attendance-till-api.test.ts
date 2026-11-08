@@ -129,7 +129,6 @@ describe("till attendance recorder admission", () => {
           revision: draft.revision,
           expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
           lines: [],
-          personId: OPERATOR,
           at: "2026-10-15T20:00:00Z",
         }),
       });
@@ -397,7 +396,6 @@ describe("till attendance recorder admission", () => {
         expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, tabId)),
         draftId: null,
         revision: 0,
-        personId: OPERATOR,
         lines: [
           {
             menuItemId: v.item("Burger"),

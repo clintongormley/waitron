@@ -433,7 +433,6 @@ describe("bill editor in real save and takeover commands", () => {
       revision: 0,
       lines: [fresh()],
       expectedEdit: blank(p.tabId),
-      personId: venue.operatorId,
     };
     const response = await send(
       venue.app,
@@ -616,7 +615,6 @@ describe("bill editor in real save and takeover commands", () => {
       draftId: null,
       revision: 0,
       lines: [fresh()],
-      personId: venue.operatorId,
     });
     expect(answer).toEqual({
       status: 400,
