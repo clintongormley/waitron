@@ -10,6 +10,7 @@ import {
   startStaffListener,
 } from "./cloud-remote.js";
 import forge from "node-forge";
+import type { Logger } from "./logger.js";
 it("public availability exposes no venue data and reevaluates its supplied serving check", async () => {
   const app = new Hono();
   let serving = true;
@@ -212,9 +213,8 @@ it("refuses another venue hostname and does not accept a remote marker from HTTP
 it("serves the dashboard over a separate TLS listener and closes it", async () => {
   const { mintSelfSignedServerCert } = await import("./self-signed-cert.js");
   const { get } = await import("node:https");
-  const { freePorts } = await import("./testing/free-ports.js");
   const root = await mkdtemp(join(tmpdir(), "waitron-staff-listen-"));
-  const [port] = await freePorts(1);
+  let port = 0;
   const material = mintSelfSignedServerCert({
     now: new Date(),
     hostnames: ["staff.example.test"],
@@ -225,9 +225,9 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
   const app = new Hono();
   app.get("/manage", (c) => c.text("dashboard"));
   app.get("/setup", (c) => c.text("setup must stay local"));
-  const lines: unknown[] = [];
+  const lines: Parameters<Logger>[] = [];
   const server = startStaffListener(
-    { staff: { origin: "https://staff.example.test", host: "127.0.0.1", port }, stateDir: root },
+    { staff: { origin: "https://staff.example.test", host: "127.0.0.1", port: 0 }, stateDir: root },
     app,
     (...args) => lines.push(args),
   );
@@ -254,9 +254,16 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
       request.on("error", reject);
     });
   try {
-    expect(server).toBeDefined();
-    await vi.waitFor(() =>
-      expect(lines.some((line) => JSON.stringify(line).includes("server.listening"))).toBe(true),
+    expect(server, JSON.stringify(lines)).toBeDefined();
+    // TLS setup shares busy CI workers; retain the listener log when readiness fails.
+    port = await vi.waitFor(
+      () => {
+        const listening = lines.find(([, event]) => event === "server.listening");
+        expect(listening, JSON.stringify(lines)).toBeDefined();
+        expect(listening![2]?.port, JSON.stringify(lines)).toBeGreaterThan(0);
+        return Number(listening![2]!.port);
+      },
+      { timeout: 10_000 },
     );
     expect(await ask("/manage")).toEqual({ status: 200, text: "dashboard" });
     expect((await ask("/setup")).status).toBe(404);
