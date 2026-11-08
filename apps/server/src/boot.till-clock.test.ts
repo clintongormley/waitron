@@ -1,3 +1,4 @@
+import { convenioConfig } from "@waitron/workforce-es";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { once } from "node:events";
 import { request as httpsRequest } from "node:https";
@@ -10,17 +11,22 @@ import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { CORE_MIGRATIONS, stampDeployment, writeNodeMembership } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  stampDeployment,
+  writeNodeMembership,
+  withTransaction,
+} from "@waitron/db";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { Hono } from "hono";
-import { nodeId } from "@waitron/shared";
+import { nodeId, jobOrigin } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import { ALL_MODULES } from "./modules.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillClockState } from "./till-clock-state.js";
-import { timeEntries } from "@waitron/workforce";
+import { timeEntries, WorkforceBackend } from "@waitron/workforce";
 import { createClockVenue } from "./testing/clock-venue.js";
 import { awaitListening, copyMigrationsRoot } from "./testing/boot-harness.js";
 import { serverFixture } from "./testing/server-fixture.js";
@@ -305,11 +311,15 @@ describe("read-only real boot clocking", () => {
   );
 });
 
-for (const enabled of [true, false]) {
-  describe(`real trading listener with workforce ${enabled ? "on" : "off"}`, () => {
+for (const [enabled, spain] of [
+  [true, false],
+  [false, false],
+  [true, true],
+] as const) {
+  describe(`real trading listener with workforce ${enabled ? "on" : "off"}, Spain ${spain ? "on" : "off"}`, () => {
     const disabled = new Set([
       "fiscal-none",
-      "workforce-es",
+      ...(spain ? [] : ["workforce-es"]),
       ...(enabled ? [] : ["workforce", "staffing"]),
     ]);
     const modules = ALL_MODULES.filter((m) => !disabled.has(m.name));
@@ -322,11 +332,44 @@ for (const enabled of [true, false]) {
 
     it(
       enabled
-        ? "clocks through the real login and all four writes without workforce-es"
+        ? spain
+          ? "carries the enabled paid-break policy through real boot"
+          : "clocks through the real login and all four writes without workforce-es"
         : "signs in normally without workforce tables and serves no clock routes",
       async () => {
         beforeServerStarts();
         const venue = await createClockVenue(suite.db, () => new Date(), modules);
+        let priorOutId: string | null = null;
+        if (spain) {
+          await suite.db.insert(convenioConfig).values({
+            locationId: venue.cfg.locationId,
+            breakThresholdMinutes: 300,
+            splitMinSegmentMinutes: 180,
+            splitMaxSegmentMinutes: 300,
+            splitMinGapMinutes: 90,
+            continuousPaidBreakMinutes: 20,
+          });
+          const backend = new WorkforceBackend();
+          for (const [kind, at] of [
+            ["clockIn", "09:00"],
+            ["breakStart", "12:00"],
+            ["breakEnd", "12:20"],
+            ["clockOut", "15:40"],
+          ] as const) {
+            await withTransaction(suite.db, (tx) =>
+              backend[kind](tx, {
+                nodeId: venue.cfg.nodeId,
+                personId: venue.personId,
+                at: `2026-01-05T${at}:00Z`,
+                offsetMinutes: 0,
+                origin: jobOrigin("dashboard"),
+              }),
+            );
+          }
+          priorOutId = (await suite.db.select().from(timeEntries)).find(
+            (row) => row.entryKind === "out",
+          )!.id;
+        }
         const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-till-clock-"));
         let server: StartedServer | undefined;
         try {
@@ -381,7 +424,7 @@ for (const enabled of [true, false]) {
             expect(state).toMatchObject({
               personId: venue.personId,
               state: "out",
-              lastEntryId: null,
+              lastEntryId: priorOutId,
               firstClockIn: true,
             });
             for (const [path, wanted] of [
@@ -404,6 +447,18 @@ for (const enabled of [true, false]) {
               });
             }
             expect(await read()).toEqual(state);
+            const hours = await fetch(`${origin}/api/attendance/hours?kind=month&date=2026-01-05`, {
+              headers: { cookie },
+            });
+            expect(hours.status).toBe(200);
+            expect((await hours.json()).workedMinutes).toBe(spain ? 400 : 0);
+            const day = await fetch(`${origin}/api/attendance/day?date=2026-01-05`, {
+              headers: { cookie },
+            });
+            expect(day.status).toBe(200);
+            expect((await day.json()).record.sessions).toEqual(
+              spain ? [expect.objectContaining({ workedMinutes: 400, breakMinutes: 20 })] : [],
+            );
           } else {
             for (const path of ["state", "in", "out", "break-start", "break-end"]) {
               const response = await fetch(`${origin}/api/clock/${path}`, {
@@ -427,7 +482,7 @@ for (const enabled of [true, false]) {
           suite.db.all(
             sql`select name from sqlite_schema where type = 'table' and name = 'convenio_config'`,
           ),
-        ).toHaveLength(0);
+        ).toHaveLength(spain ? 1 : 0);
       },
       60_000,
     );

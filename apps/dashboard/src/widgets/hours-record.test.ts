@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { hoursView, hoursWithPending } from "../../test/hours-fixtures.js";
 import { attendancePrompt } from "../../test/attendance-fixtures.js";
 import type { HoursRecord } from "./hours-record.js";
@@ -127,3 +127,15 @@ it("does not describe a replaced automatic finish as still counted", async () =>
   const { el } = await mount(view);
   expect(el.shadowRoot!.textContent).not.toContain("This automatic finish already counts");
 });
+
+it.each(["en-GB", "es-ES"] as const)(
+  "explains credited breaks beside completed time in %s",
+  async (language) => {
+    const { el } = await mount();
+    setLocale(language);
+    await el.updateComplete;
+    const total = el.shadowRoot!.querySelector("[data-total]")!;
+    expect(total.nextElementSibling?.textContent?.trim()).toBe(t("hours.paidBreakNote"));
+    expect(total.textContent).toContain("8 h 00 min");
+  },
+);

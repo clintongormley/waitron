@@ -77,6 +77,7 @@ export const en = {
   "hours.previous": "Previous",
   "hours.next": "Next",
   "hours.total": "Worked time",
+  "hours.paidBreakNote": "Paid totals may include breaks; recorded pauses stay visible.",
   "hours.open_shift": "Open shift",
   "hours.breaks": "Breaks",
   "hours.pending": "Waiting for an answer",
@@ -3903,6 +3904,8 @@ export const es: Record<StringKey, string> = {
   "hours.previous": "Anterior",
   "hours.next": "Siguiente",
   "hours.total": "Tiempo trabajado",
+  "hours.paidBreakNote":
+    "Los totales pagados pueden incluir descansos; las pausas registradas siguen visibles.",
   "hours.open_shift": "Jornada abierta",
   "hours.breaks": "Descansos",
   "hours.pending": "Pendiente de respuesta",

@@ -8248,3 +8248,63 @@ describe("A773 pass display policy", () => {
     ]);
   });
 });
+
+it.each([true, false])(
+  "imports a current-version paid-break policy, configured=%s",
+  async (configured) => {
+    const source = await applyVenue(planVenue(venue("B12345678"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await suite.db
+      .insert(convenioConfig)
+      .values({
+        locationId: await venueLocationId(suite.db),
+        breakThresholdMinutes: 300,
+        splitMinSegmentMinutes: 180,
+        splitMaxSegmentMinutes: 300,
+        splitMinGapMinutes: 90,
+        continuousPaidBreakMinutes: 20,
+      });
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const prepared = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-01-01T00:00:00Z"),
+      versions,
+    );
+    const corrupt = structuredClone(prepared);
+    corrupt.tables.convenio_config![0]!.continuous_paid_break_minutes = 0;
+    expect(() => validateConfigurationBundle(corrupt, ALL_MODULES, versions)).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "convenio_config.continuous_paid_break_minutes" },
+      }),
+    );
+    if (!configured)
+      for (const name of [
+        "split_min_segment_minutes",
+        "split_max_segment_minutes",
+        "split_min_gap_minutes",
+        "continuous_paid_break_minutes",
+      ])
+        delete prepared.tables.convenio_config![0]![name];
+    await applyVenue(planVenue(venue("B87654323"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, prepared, ALL_MODULES, versions),
+    });
+    const [row] = await targetSuite.db.select().from(convenioConfig);
+    expect(row).toMatchObject({
+      splitMinSegmentMinutes: configured ? 180 : null,
+      splitMaxSegmentMinutes: configured ? 300 : null,
+      splitMinGapMinutes: configured ? 90 : null,
+      continuousPaidBreakMinutes: configured ? 20 : null,
+      breaksCountAsWorked: false,
+    });
+  },
+);

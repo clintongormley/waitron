@@ -1,3 +1,4 @@
+import { convenioConfig, WORKFORCE_ES_RECORD_EXPORT } from "@waitron/workforce-es";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -915,3 +916,52 @@ it.each(["{", "null", "[]"])(
     expect(await snapshot()).toEqual(before);
   },
 );
+
+it("delivers paid totals through every attendance read route", async () => {
+  await suite.db.insert(convenioConfig).values({
+    locationId: venue.cfg.locationId,
+    breakThresholdMinutes: 300,
+    splitMinSegmentMinutes: 180,
+    splitMaxSegmentMinutes: 300,
+    splitMinGapMinutes: 90,
+    continuousPaidBreakMinutes: 20,
+  });
+  const backend = new WorkforceBackend();
+  for (const [kind, at] of [
+    ["clockIn", "09:00"],
+    ["breakStart", "12:00"],
+    ["breakEnd", "12:20"],
+    ["clockOut", "15:40"],
+  ] as const)
+    await withTransaction(suite.db, (tx) =>
+      backend[kind](tx, {
+        nodeId: venue.cfg.nodeId,
+        personId: venue.personId,
+        at: `2026-01-06T${at}:00Z`,
+        offsetMinutes: 0,
+        origin: deviceOrigin(venue.deviceId),
+      }),
+    );
+  const paid = new Hono();
+  mountTillAttendanceApi(
+    paid,
+    {
+      db: suite.db,
+      cfg: venue.cfg,
+      now: () => new Date("2026-01-07T09:00:00Z"),
+      attemptsFor: (id) => ({ throttle, slot: id }),
+      exporter: WORKFORCE_ES_RECORD_EXPORT,
+    },
+    () => {},
+  );
+  for (const path of ["day?date=2026-01-06", "hours?kind=month&date=2026-01-06"]) {
+    const response = await paid.request(`/api/attendance/${path}`, {
+      headers: { cookie: venue.cookie },
+    });
+    expect(response.status).toBe(200);
+    const value = await response.json();
+    expect(
+      value.record.sessions.find((row: { workDate: string }) => row.workDate === "2026-01-06"),
+    ).toMatchObject({ workedMinutes: 400, breakMinutes: 20 });
+  }
+});

@@ -104,7 +104,7 @@ export type {
   WorkSummaryQuery,
   WorkSummaryRuleset,
 } from "./clocking.js";
-export type { WorkTimeRuleset } from "./ruleset.js";
+export type { WorkTimeRuleset, PaidBreakPolicy } from "./ruleset.js";
 export { validateRoster } from "./roster-validation.js";
 export type {
   BreakOwedBreach,

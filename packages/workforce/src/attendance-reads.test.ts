@@ -633,3 +633,23 @@ it("approves an older missing out behind a newer actual in without closing the c
   );
   expect((await day("2026-01-06")).record.sessions.map((s) => s.workedMinutes)).toEqual([480]);
 });
+
+it("shows paid time and the actual pause in the attendance day", async () => {
+  for (const [kind, at] of [
+    ["clockIn", "09:00"],
+    ["breakStart", "12:00"],
+    ["breakEnd", "12:20"],
+    ["clockOut", "15:40"],
+  ] as const)
+    await run((tx) =>
+      backend[kind](tx, { nodeId, personId, at: `2026-01-05T${at}:00Z`, offsetMinutes: 0, origin }),
+    );
+  const view = await run((tx) =>
+    api.readAttendanceDay(
+      tx,
+      { personId, date: "2026-01-05" },
+      { thresholdMinutes: 300, allowanceMinutes: 20, splitGapMinutes: 90 },
+    ),
+  );
+  expect(view.record.sessions[0]).toMatchObject({ workedMinutes: 400, breakMinutes: 20 });
+});

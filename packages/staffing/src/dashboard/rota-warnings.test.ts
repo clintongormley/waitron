@@ -100,3 +100,39 @@ it("localizes warning facts and preserves their numeric values in Spanish", () =
       .replace("{requiredMinutes}", "12"),
   );
 });
+
+it.each(["en", "es"] as const)(
+  "uses whole minutes for owed breaks and split warnings in %s",
+  (language) => {
+    setLocale(language);
+    expect(
+      breachText({
+        kind: "break_owed",
+        personId: "ana",
+        shiftId: "s",
+        plannedMinutes: 400,
+        thresholdMinutes: 300,
+        minBreakMinutes: 20,
+      }),
+    ).toContain("20 min");
+  },
+);
+it.each(["en", "es"] as const)("uses whole minutes for each split warning in %s", (language) => {
+  setLocale(language);
+  expect(
+    breachText({
+      kind: "split_gap_too_short",
+      personId: "ana",
+      shiftId: "s",
+      gapMinutes: 89,
+      requiredMinutes: 90,
+    }),
+  ).toContain("89 min");
+  for (const [kind, plannedMinutes] of [
+    ["split_segment_too_short", 179],
+    ["split_segment_too_long", 301],
+  ] as const)
+    expect(
+      breachText({ kind, personId: "ana", shiftId: "s", plannedMinutes, limitMinutes: 180 }),
+    ).toContain(`${plannedMinutes} min`);
+});

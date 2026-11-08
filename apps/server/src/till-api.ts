@@ -1,3 +1,4 @@
+import type { ModuleTimeRecordExport } from "@waitron/module";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
@@ -280,6 +281,7 @@ import {
 } from "./zone-access.js";
 
 export interface TillApiDeps {
+  exporter?: ModuleTimeRecordExport;
   admission: TradingAdmission;
   attendance?: AttendanceRecorder;
   liveEvents?: LiveEvents;
@@ -1333,6 +1335,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         cfg: deps.cfg,
         now: () => deps.clock.now().instant,
         attemptsFor: (deviceId) => overridePinAttempts(pinThrottle, deviceId),
+        exporter: deps.exporter,
       },
       log,
     );

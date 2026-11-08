@@ -1,3 +1,4 @@
+import type { PaidBreakPolicy } from "./ruleset.js";
 import { desc, eq } from "drizzle-orm";
 import { newId, type Database, type Transaction } from "@waitron/db";
 import {
@@ -80,6 +81,7 @@ export async function closePayPeriod(
     clock: BusinessDayClock;
     now: string;
     ruleset: WorkSummaryRuleset;
+    paidBreakPolicy: PaidBreakPolicy | null;
     origin: JobOrigin;
   },
 ): Promise<PayPeriodClosure> {
@@ -123,13 +125,19 @@ export async function closePayPeriod(
       payPeriodClosureId: closureId,
     },
   }));
-  const counted = recordInPeriod(projectTimeRecord([...entries, ...virtual]), input.period);
+  const counted = recordInPeriod(
+    projectTimeRecord([...entries, ...virtual], [], input.paidBreakPolicy),
+    input.period,
+  );
   const eligible = candidates.filter((e) =>
     counted.sessions.some((s) => s.personId === e.personId && s.endedAt === e.eventAt),
   );
   const eligibleIds = new Set(eligible.map((e) => e.entryId));
   const markers = virtual.filter((e) => eligibleIds.has(e.extension.respondsToEntryId));
-  const record = recordInPeriod(projectTimeRecord([...entries, ...markers]), input.period);
+  const record = recordInPeriod(
+    projectTimeRecord([...entries, ...markers], [], input.paidBreakPolicy),
+    input.period,
+  );
   const markerIds = new Set(markers.map((e) => e.entryId));
   const snapshot: PayPeriodClosure["snapshot"] = {
     sessions: record.sessions,

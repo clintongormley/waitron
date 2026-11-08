@@ -4,6 +4,7 @@ import { compareBackupTables } from "@waitron/db";
 import type { BackupModuleStatus, BackupVerificationContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue, BackupRow } from "@waitron/store";
 import { WORKFORCE_ES_CLASSIFICATION } from "./classification.js";
+import { POLICY_COLUMNS, policyRowFault } from "./convenio.js";
 import * as schema from "./schema/index.js";
 
 const tables = WORKFORCE_ES_CLASSIFICATION.map((c) => c.table);
@@ -30,7 +31,10 @@ export const WORKFORCE_ES_BACKUP_VERIFICATION: BackupVerificationContribution = 
       policies: tables.map((table) => ({
         table,
         immutable: immutableTables.includes(table),
-        addedColumns: {},
+        addedColumns:
+          table === "convenio_config"
+            ? Object.fromEntries(POLICY_COLUMNS.map((name) => [name, null]))
+            : {},
       })),
     });
     const sourceValid = await checkData(context.before);
@@ -110,6 +114,14 @@ const optionalIntegers = [
 ];
 function rowValid(row: BackupRow): boolean {
   return (
+    policyRowFault(
+      Object.fromEntries(
+        [...POLICY_COLUMNS, "break_threshold_minutes"].map((name) => [
+          name,
+          typeof row[name] === "bigint" ? Number(row[name]) : row[name],
+        ]),
+      ),
+    ) === null &&
     requiredIntegers.every((name) => typeof row[name] === "bigint") &&
     optionalIntegers.every((name) => row[name] === null || typeof row[name] === "bigint") &&
     typeof row.working_days_per_week === "bigint" &&

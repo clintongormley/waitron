@@ -2293,6 +2293,7 @@ async function bootServer(
   );
   const workforceEnabled =
     !fencedOrMirror && setsToMigrate.some((module) => module.name === "workforce");
+  const timeRecordExporter = selectTimeRecordExport(setsToMigrate);
   const attendanceRecorder = workforceEnabled ? recordAttendanceFact : undefined;
   const invoiceEmailAvailable = async () =>
     (await resolveInvoiceEmailDelivery(db, ring, config)).mode !== "unconfigured";
@@ -2300,6 +2301,7 @@ async function bootServer(
     app,
     {
       db,
+      exporter: timeRecordExporter,
       backend: nodeBackend,
       admission: tradingAdmission,
       liveEvents,
@@ -2789,7 +2791,11 @@ async function bootServer(
     },
     log,
   );
-  mountWorkforceApi(app, { db, cfg: { nodeId: tradingContext.nodeId } }, log);
+  mountWorkforceApi(
+    app,
+    { db, cfg: { nodeId: tradingContext.nodeId }, exporter: timeRecordExporter },
+    log,
+  );
   if (workforceEnabled && isSingletonPrimary)
     mountManagementAttendanceApi(
       app,
@@ -2797,7 +2803,7 @@ async function bootServer(
         db,
         cfg: { nodeId: tradingContext.nodeId },
         now,
-        exporter: selectTimeRecordExport(setsToMigrate),
+        exporter: timeRecordExporter,
       },
       log,
     );

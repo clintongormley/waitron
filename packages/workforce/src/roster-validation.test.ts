@@ -511,3 +511,97 @@ describe("validateRoster — weekly rest (art. 37.1)", () => {
     ]);
   });
 });
+
+describe("split stretches", () => {
+  const rules = () => ({
+    ...makeRuleset(),
+    splitMinSegmentMinutes: 180,
+    splitMaxSegmentMinutes: 300,
+    splitMinGapMinutes: 90,
+  });
+  const at = (minutes: number) =>
+    new Date(Date.parse("2026-01-05T08:00:00Z") + minutes * 60000).toISOString();
+  const part = (id: string, start: number, end: number) =>
+    shift("p1", at(start), at(end), { shiftId: id });
+  const split = (rows: PlannedShift[]) =>
+    validateRoster(rows, rules()).filter((b) => b.kind.startsWith("split_"));
+  it.each([
+    [179, "split_segment_too_short"],
+    [180, null],
+    [300, null],
+    [301, "split_segment_too_long"],
+  ] as const)("checks inclusive segment boundary %s", (length, kind) => {
+    const breaches = split([part("a", 0, length), part("b", length + 90, length + 270)]);
+    expect(breaches).toEqual(
+      kind === null
+        ? []
+        : [
+            {
+              kind,
+              personId: "p1",
+              shiftId: "a",
+              plannedMinutes: length,
+              limitMinutes: kind === "split_segment_too_short" ? 180 : 300,
+            },
+          ],
+    );
+  });
+  it.each([
+    [89, 1],
+    [90, 0],
+    [-10, 1],
+  ] as const)("attaches gap %s to the later shift", (gap, count) => {
+    const rows = split([part("a", 0, 180), part("b", 180 + gap, 360 + gap)]);
+    expect(rows).toEqual(
+      count
+        ? [
+            {
+              kind: "split_gap_too_short",
+              personId: "p1",
+              shiftId: "b",
+              gapMinutes: gap,
+              requiredMinutes: 90,
+            },
+          ]
+        : [],
+    );
+  });
+  it("treats touching assignments as one stretch and leaves a single eight-hour shift alone", () => {
+    expect(split([part("a", 0, 240), part("b", 240, 480)])).toEqual([]);
+    expect(split([part("a", 0, 480)])).toEqual([]);
+    expect(split([part("a", 0, 90), part("b", 90, 180), part("c", 270, 450)])).toEqual([]);
+  });
+  it("measures the next gap from the latest end, even across a nested assignment", () => {
+    const rows = split([part("a", 0, 300), part("nested", 60, 240), part("b", 390, 570)]);
+    expect(rows.filter((b) => "shiftId" in b && b.shiftId === "b")).toEqual([]);
+    expect(rows).toContainEqual({
+      kind: "split_gap_too_short",
+      personId: "p1",
+      shiftId: "nested",
+      gapMinutes: -240,
+      requiredMinutes: 90,
+    });
+  });
+  it.each([
+    { splitMinSegmentMinutes: 180 },
+    { splitMinSegmentMinutes: 180, splitMaxSegmentMinutes: 300 },
+  ])("does not invent absent split bounds %j", (partial) => {
+    expect(
+      validateRoster([part("a", 0, 60), part("b", 70, 130)], {
+        ...makeRuleset(),
+        ...partial,
+      }).filter((b) => b.kind.startsWith("split_")),
+    ).toEqual([]);
+  });
+  it("keeps different people or local start days out of split checks", () => {
+    expect(split([part("a", 0, 60), { ...part("b", 150, 210), personId: "other" }])).toEqual([]);
+    expect(
+      split([part("a", 0, 60), { ...part("b", 150, 210), startsOffsetMinutes: -840 }]),
+    ).toEqual([]);
+    expect(
+      validateRoster([part("a", 0, 60), part("b", 150, 210)], makeRuleset()).filter((b) =>
+        b.kind.startsWith("split_"),
+      ),
+    ).toEqual([]);
+  });
+});

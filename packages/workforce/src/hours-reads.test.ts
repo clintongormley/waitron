@@ -107,6 +107,7 @@ async function automatic() {
 function freeze() {
   return f.run((tx) =>
     api.closePayPeriod(tx, {
+      paidBreakPolicy: null,
       nodeId: f.nodeId,
       period: { start: "2026-01-01", end: "2026-02-01" },
       clock,
@@ -469,4 +470,28 @@ it("refuses empty scopes and unknown window kinds instead of reading the venue",
   await expect(read({ kind: "fortnight" } as unknown as HoursSelection)).rejects.toMatchObject({
     code: "attendance.invalid",
   });
+});
+
+it("uses the paid policy for worker and manager hours while retaining raw pauses", async () => {
+  for (const [kind, at] of [
+    ["clockIn", "09:00"],
+    ["breakStart", "12:00"],
+    ["breakEnd", "12:20"],
+    ["clockOut", "15:40"],
+  ] as const)
+    await event(kind, `2026-01-05T${at}:00Z`);
+  const policy = { thresholdMinutes: 300, allowanceMinutes: 20, splitGapMinutes: 90 };
+  const input = { selection: { kind: "month" as const, date: "2026-01-05" }, clock, now };
+  const own = await f.run((tx) =>
+    api.readPersonHours(tx, { ...input, personId: f.personId }, policy),
+  );
+  const team = await f.run((tx) => api.readManagerHours(tx, input, policy));
+  expect(own.workedMinutes).toBe(400);
+  expect(own.days.find((day) => day.date === "2026-01-05")!.sessions[0]).toMatchObject({
+    workedMinutes: 400,
+    breakMinutes: 20,
+  });
+  expect(team.people.find((person) => person.personId === f.personId)!.hours.workedMinutes).toBe(
+    400,
+  );
 });

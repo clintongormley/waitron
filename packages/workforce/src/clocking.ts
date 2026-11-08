@@ -44,7 +44,7 @@ import {
 } from "./roster-validation.js";
 import { comparePlannedVsActual, type PlannedVsActual } from "./planned-vs-actual.js";
 import { shiftLocalDate } from "./shift-local-date.js";
-import type { WorkTimeRuleset } from "./ruleset.js";
+import type { WorkTimeRuleset, PaidBreakPolicy } from "./ruleset.js";
 // Side-effect: registers this package's codes on the shared AppError registry.
 import "./errors.js";
 
@@ -215,10 +215,14 @@ export class WorkforceBackend {
   }
 
   /** Planned = the currently-PUBLISHED roster version's shifts; actual = the projected work sessions. */
-  async getPlannedVsActual(tx: Transaction, query: { period: Period }): Promise<PlannedVsActual[]> {
+  async getPlannedVsActual(
+    tx: Transaction,
+    query: { period: Period },
+    policy: PaidBreakPolicy | null = null,
+  ): Promise<PlannedVsActual[]> {
     const plannedShifts = await this.plannedShiftsInPeriod(tx, query.period);
     const entries = await readRecordedEntries(tx, {});
-    const sessions = projectWorkSessions(entries).filter(
+    const sessions = projectWorkSessions(entries, policy).filter(
       (s) => s.workDate >= query.period.start && s.workDate < query.period.end,
     );
     return comparePlannedVsActual(plannedShifts, sessions);
@@ -252,8 +256,12 @@ export class WorkforceBackend {
     }));
   }
 
-  timeRecord(tx: Transaction, query: TimeRecordQuery): Promise<TimeRecord> {
-    return readTimeRecord(tx, query);
+  timeRecord(
+    tx: Transaction,
+    query: TimeRecordQuery,
+    policy: PaidBreakPolicy | null = null,
+  ): Promise<TimeRecord> {
+    return readTimeRecord(tx, query, policy);
   }
   requestCorrection(tx: Transaction, input: CorrectionRequestInput): Promise<string> {
     return requestCorrection(tx, input);

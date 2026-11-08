@@ -141,6 +141,7 @@ it("scopes frozen snapshots and current entries to the session person", async ()
     await backend.clockIn(tx, { ...common, at: "2026-01-05T09:00:00Z" });
     await backend.clockOut(tx, { ...common, at: "2026-01-05T18:00:00Z" });
     await closePayPeriod(tx, {
+      paidBreakPolicy: null,
       ...venue.cfg,
       period: { start: "2026-01-01", end: "2026-02-01" },
       clock: { timeZone: "Europe/Madrid", dayCutover: "05:00", cutoverChanges: [] },

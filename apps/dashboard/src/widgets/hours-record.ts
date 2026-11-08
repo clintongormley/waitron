@@ -109,6 +109,7 @@ export class HoursRecord extends LitElement {
     return html`<div class="content">
       <p>${view.period.start} · ${dateAfter(view.period.end, -1)}</p>
       <p data-total>${t("hours.total")}: ${duration(view.workedMinutes)}</p>
+      <p data-paid-break-note>${t("hours.paidBreakNote")}</p>
       ${view.openShifts.map(
         (open) =>
           html`<article data-open-shift>

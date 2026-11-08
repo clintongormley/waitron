@@ -11,9 +11,15 @@ import type { RosterBreach } from "@waitron/workforce/roster-validation";
 import { tf } from "./strings.js";
 export function breachText(breach: RosterBreach): string {
   const values: Record<string, string> = {};
-  for (const [key, value] of Object.entries(breach))
+  for (const [key, value] of Object.entries(breach)) {
+    const wholeMinutes =
+      breach.kind.startsWith("split_") ||
+      (breach.kind === "break_owed" && key === "minBreakMinutes");
     values[key] =
-      typeof value === "number" && key.endsWith("Minutes") ? String(value / 60) : String(value);
+      typeof value === "number" && key.endsWith("Minutes") && !wholeMinutes
+        ? String(value / 60)
+        : String(value);
+  }
   return tf(`staffing.breach.${breach.kind}`, values);
 }
 export function shiftBreaches(breaches: readonly RosterBreach[], shiftId: string): RosterBreach[] {

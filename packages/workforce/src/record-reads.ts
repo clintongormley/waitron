@@ -1,3 +1,4 @@
+import type { PaidBreakPolicy } from "./ruleset.js";
 import { and, eq, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { readOrigin } from "@waitron/shared";
@@ -21,6 +22,7 @@ export interface TimeRecordQuery {
 export async function readTimeRecord(
   tx: Database | Transaction,
   query: TimeRecordQuery,
+  policy: PaidBreakPolicy | null = null,
 ): Promise<TimeRecord> {
   if (
     (query.personId !== undefined && (typeof query.personId !== "string" || !query.personId)) ||
@@ -40,6 +42,7 @@ export async function readTimeRecord(
       personId === undefined
         ? closures
         : closures.map((c) => ({ ...c, snapshot: snapshotOf(c.snapshot, personId) })),
+      policy,
     ),
     query.period,
   );

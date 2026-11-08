@@ -1,3 +1,4 @@
+import type { PaidBreakPolicy } from "./ruleset.js";
 import { compareEvents, effectiveClockEntries, originalEntry } from "./effective-entries.js";
 import type { RecordAttribution } from "./record-types.js";
 /**
@@ -27,7 +28,6 @@ export interface TimeEntryRecord extends RecordAttribution {
   correctionStatus?: CorrectionStatus | null;
 }
 
-/** One projected workday: an `in`→`out` shift with its breaks netted out. */
 export interface WorkSession {
   personId: string;
   /** The worker's LOCAL calendar day. */
@@ -107,11 +107,23 @@ export function localWallClock(instant: string, offsetMinutes: number): string {
 interface OpenShift {
   start: TimeEntryRecord;
   breakMs: number;
+  longestBreakMs: number;
   breakStartedAt: string | undefined;
 }
 
-function closeShift(personId: string, open: OpenShift, out: TimeEntryRecord): WorkSession {
+function closeShift(
+  personId: string,
+  open: OpenShift,
+  out: TimeEntryRecord,
+  policy: PaidBreakPolicy | null,
+): WorkSession {
   const spanMs = Date.parse(out.eventAt) - Date.parse(open.start.eventAt);
+  const creditMs =
+    policy !== null &&
+    spanMs > policy.thresholdMinutes * MS_PER_MINUTE &&
+    open.longestBreakMs < policy.splitGapMinutes * MS_PER_MINUTE
+      ? Math.min(open.breakMs, policy.allowanceMinutes * MS_PER_MINUTE)
+      : 0;
   return {
     personId,
     workDate: localDate(open.start.eventAt, open.start.offsetMinutes),
@@ -120,7 +132,7 @@ function closeShift(personId: string, open: OpenShift, out: TimeEntryRecord): Wo
     endedAt: out.eventAt,
     endOffsetMinutes: out.offsetMinutes,
     breakMinutes: Math.round(open.breakMs / MS_PER_MINUTE),
-    workedMinutes: Math.round((spanMs - open.breakMs) / MS_PER_MINUTE),
+    workedMinutes: Math.round((spanMs - open.breakMs + creditMs) / MS_PER_MINUTE),
   };
 }
 
@@ -139,7 +151,10 @@ function groupByPerson(entries: readonly TimeEntryRecord[]): Map<string, TimeEnt
  * which need not be event-time order. A stray event with no matching open shift is dropped rather
  * than throwing, so a projection over historical data stays total.
  */
-export function projectWorkSessions(entries: readonly TimeEntryRecord[]): WorkSession[] {
+export function projectWorkSessions(
+  entries: readonly TimeEntryRecord[],
+  policy: PaidBreakPolicy | null = null,
+): WorkSession[] {
   const sessions: WorkSession[] = [];
   const byId = new Map(entries.map((e) => [e.entryId, e]));
   for (const [personId, personEntries] of groupByPerson(effectiveClockEntries(entries))) {
@@ -148,14 +163,16 @@ export function projectWorkSessions(entries: readonly TimeEntryRecord[]): WorkSe
     for (const e of ordered) {
       switch (e.entryKind) {
         case "in":
-          open = { start: e, breakMs: 0, breakStartedAt: undefined };
+          open = { start: e, breakMs: 0, longestBreakMs: 0, breakStartedAt: undefined };
           break;
         case "break_start":
           if (open !== undefined) open.breakStartedAt = e.eventAt;
           break;
         case "break_end":
           if (open !== undefined && open.breakStartedAt !== undefined) {
-            open.breakMs += Date.parse(e.eventAt) - Date.parse(open.breakStartedAt);
+            const pauseMs = Date.parse(e.eventAt) - Date.parse(open.breakStartedAt);
+            open.breakMs += pauseMs;
+            open.longestBreakMs = Math.max(open.longestBreakMs, pauseMs);
             open.breakStartedAt = undefined;
           }
           break;
@@ -165,9 +182,11 @@ export function projectWorkSessions(entries: readonly TimeEntryRecord[]): WorkSe
               originalEntry(e, byId).extension?.authorKind === "automatic" &&
               open.breakStartedAt !== undefined
             ) {
-              open.breakMs += Date.parse(e.eventAt) - Date.parse(open.breakStartedAt);
+              const pauseMs = Date.parse(e.eventAt) - Date.parse(open.breakStartedAt);
+              open.breakMs += pauseMs;
+              open.longestBreakMs = Math.max(open.longestBreakMs, pauseMs);
             }
-            sessions.push(closeShift(personId, open, e));
+            sessions.push(closeShift(personId, open, e, policy));
             open = undefined;
           }
           break;

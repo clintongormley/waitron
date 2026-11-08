@@ -55,8 +55,14 @@ const en = {
   "staffing.breach.exceeds_weekly_max": "{plannedMinutes} h planned; weekly maximum {maxMinutes} h",
   "staffing.breach.weekly_rest_insufficient":
     "{longestRestMinutes} h weekly rest; minimum {requiredMinutes} h",
-  "staffing.breach.break_owed": "{minBreakMinutes} h break owed after {thresholdMinutes} h",
+  "staffing.breach.break_owed": "{minBreakMinutes} min break owed after {thresholdMinutes} h",
   "staffing.breach.night_work": "{nightMinutes} h night work",
+  "staffing.breach.split_segment_too_short":
+    "Split stretch {plannedMinutes} min; minimum {limitMinutes} min",
+  "staffing.breach.split_segment_too_long":
+    "Split stretch {plannedMinutes} min; maximum {limitMinutes} min",
+  "staffing.breach.split_gap_too_short":
+    "Split gap {gapMinutes} min; minimum {requiredMinutes} min",
   "staffing.breach.overtime_cap_exceeded": "{overtimeMinutes} h overtime; cap {capMinutes} h",
 
   "staffing.rota.unfilled_count": "{count} unfilled",
@@ -278,8 +284,14 @@ const es: Record<keyof typeof en, string> = {
     "{plannedMinutes} h previstas; máximo semanal {maxMinutes} h",
   "staffing.breach.weekly_rest_insufficient":
     "{longestRestMinutes} h de descanso semanal; mínimo {requiredMinutes} h",
-  "staffing.breach.break_owed": "{minBreakMinutes} h de pausa tras {thresholdMinutes} h",
+  "staffing.breach.break_owed": "{minBreakMinutes} min de pausa tras {thresholdMinutes} h",
   "staffing.breach.night_work": "{nightMinutes} h de trabajo nocturno",
+  "staffing.breach.split_segment_too_short":
+    "Turno partido de {plannedMinutes} min; mínimo {limitMinutes} min",
+  "staffing.breach.split_segment_too_long":
+    "Turno partido de {plannedMinutes} min; máximo {limitMinutes} min",
+  "staffing.breach.split_gap_too_short":
+    "Pausa entre turnos de {gapMinutes} min; mínimo {requiredMinutes} min",
   "staffing.breach.overtime_cap_exceeded": "{overtimeMinutes} h extra; límite {capMinutes} h",
 
   "staffing.rota.unfilled_count": "{count} sin cubrir",

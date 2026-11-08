@@ -260,3 +260,21 @@ describe("inspectable record projection", () => {
     expect(projection.projectTimeRecord(equal).sessions[0]!.workedMinutes).toBe(0);
   });
 });
+
+it("projects paid worked time without changing recorded pauses or entry facts", () => {
+  const entries = [
+    start,
+    entry("pause", "break_start", "2026-01-05T12:00:00Z"),
+    entry("resume", "break_end", "2026-01-05T12:20:00Z"),
+    { ...end, eventAt: "2026-01-05T15:40:00Z" },
+  ];
+  const record = projection.projectTimeRecord(entries, [], {
+    thresholdMinutes: 300,
+    allowanceMinutes: 20,
+    splitGapMinutes: 90,
+  });
+  expect(record.sessions[0]).toMatchObject({ workedMinutes: 400, breakMinutes: 20 });
+  expect(record.entries.map((row) => row.entry)).toEqual(
+    [...entries].sort((a, b) => a.sequenceNo - b.sequenceNo || a.entryId.localeCompare(b.entryId)),
+  );
+});

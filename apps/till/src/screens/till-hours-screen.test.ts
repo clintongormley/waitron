@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { mountWidget, cleanupWidgets } from "../widgets/test-helpers.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { hoursView, hoursWithPending } from "../../test/hours-fixtures.js";
 import { attendanceItem, attendancePrompt } from "../../test/attendance-fixtures.js";
 import type { TillHoursScreen } from "./till-hours-screen.js";
@@ -272,3 +272,15 @@ it("a proposal can be accepted only when ready, while disagreement and missing-t
     { promptId: "proposal-prompt", action: "accept" },
   ]);
 });
+
+it.each(["en-GB", "es-ES"] as const)(
+  "explains credited breaks beside completed time in %s",
+  async (language) => {
+    const { el } = await mount();
+    setLocale(language);
+    await el.updateComplete;
+    const total = el.shadowRoot!.querySelector("[data-total]")!;
+    expect(total.nextElementSibling?.textContent?.trim()).toBe(t("hours.paidBreakNote"));
+    expect(total.textContent).toContain("8 h 00 min");
+  },
+);

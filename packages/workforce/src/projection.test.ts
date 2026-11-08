@@ -524,3 +524,88 @@ describe("summarisePeriod (BOTH overtime models, side by side)", () => {
     ]);
   });
 });
+
+describe("continuous paid breaks", () => {
+  const policy = { thresholdMinutes: 300, allowanceMinutes: 20, splitGapMinutes: 90 };
+  const at = (minutes: number) =>
+    new Date(Date.parse("2026-01-05T08:00:00Z") + minutes * 60000).toISOString();
+  const session = (span: number, pause: number) => [
+    entry("paid-worker", "in", at(0)),
+    entry("paid-worker", "break_start", at(120)),
+    entry("paid-worker", "break_end", at(120 + pause)),
+    entry("paid-worker", "out", at(span)),
+  ];
+  it.each([
+    [400, 20, 400, 20],
+    [300, 20, 280, 20],
+    [301, 20, 301, 20],
+    [300.5, 20, 301, 20],
+    [300 + 1 / 3, 20, 300, 20],
+    [400, 10, 400, 10],
+    [400, 30, 390, 30],
+    [400, 90, 310, 90],
+    [400, 89 + 2 / 3, 330, 90],
+    [400 + 1 / 3, 19 + 2 / 3, 400, 20],
+    [400, 0, 400, 0],
+  ])("credits exact span %s and pause %s once", (span, pause, worked, raw) => {
+    expect(projectWorkSessions(session(span, pause), policy)[0]).toMatchObject({
+      workedMinutes: worked,
+      breakMinutes: raw,
+    });
+  });
+  it("keeps the neutral result and credits each continuous session independently", () => {
+    expect(projectWorkSessions(session(400, 20))[0]!.workedMinutes).toBe(380);
+    const second = session(400, 20).map((e) => ({
+      ...e,
+      eventAt: new Date(Date.parse(e.eventAt) + 86400000).toISOString(),
+    }));
+    expect(
+      projectWorkSessions([...session(400, 20), ...second], policy).map((s) => s.workedMinutes),
+    ).toEqual([400, 400]);
+  });
+  it("caps the aggregate of short pauses without treating their sum as a split", () => {
+    const events = [entry("paid-worker", "in", at(0))];
+    for (const start of [60, 180, 300])
+      events.push(
+        entry("paid-worker", "break_start", at(start)),
+        entry("paid-worker", "break_end", at(start + 30)),
+      );
+    events.push(entry("paid-worker", "out", at(400)));
+    expect(projectWorkSessions(events, policy)[0]).toMatchObject({
+      workedMinutes: 330,
+      breakMinutes: 90,
+    });
+  });
+  it("withholds credit when an automatic finish ends a long open pause", () => {
+    const events = session(400, 20);
+    events.splice(2, 1);
+    events[2] = {
+      ...events[2]!,
+      recordedByPersonId: null,
+      extension: {
+        authorKind: "automatic",
+        direction: null,
+        missingEntryKind: null,
+        respondsToEntryId: null,
+        payPeriodClosureId: null,
+      },
+    };
+    expect(projectWorkSessions(events, policy)[0]).toMatchObject({
+      workedMinutes: 120,
+      breakMinutes: 280,
+    });
+  });
+  it("uses effective corrected pauses for split classification", () => {
+    const events = session(400, 20);
+    events.push(
+      entry("paid-worker", "correction", at(210), {
+        correctsEntryId: events[2]!.entryId,
+        correctionStatus: "approved",
+      }),
+    );
+    expect(projectWorkSessions(events, policy)[0]).toMatchObject({
+      workedMinutes: 310,
+      breakMinutes: 90,
+    });
+  });
+});

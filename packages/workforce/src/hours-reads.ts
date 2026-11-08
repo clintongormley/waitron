@@ -1,3 +1,4 @@
+import type { PaidBreakPolicy } from "./ruleset.js";
 import { asc } from "drizzle-orm";
 import { type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
@@ -93,12 +94,13 @@ async function personInWindow(
   tx: Transaction,
   input: HoursInput & { personId: string },
   window: { period: Period; businessDay: string },
+  policy: PaidBreakPolicy | null,
 ): Promise<PersonHours> {
   const { personId } = input;
   if (typeof personId !== "string" || !personId) throw invalid();
   const { period, businessDay } = window;
   const entries = await readRecordedEntries(tx, { personId });
-  const record = await readTimeRecord(tx, { personId, period });
+  const record = await readTimeRecord(tx, { personId, period }, policy);
   const inbox = await readAttendanceInbox(tx, personId);
   const fullRecord = projectTimeRecord(entries);
   const openShifts = openShiftsFor(entries);
@@ -173,10 +175,15 @@ async function personInWindow(
 export async function readPersonHours(
   tx: Transaction,
   input: HoursInput & { personId: string },
+  policy: PaidBreakPolicy | null = null,
 ): Promise<PersonHours> {
-  return personInWindow(tx, input, await windowFor(tx, input));
+  return personInWindow(tx, input, await windowFor(tx, input), policy);
 }
-export async function readManagerHours(tx: Transaction, input: HoursInput): Promise<ManagerHours> {
+export async function readManagerHours(
+  tx: Transaction,
+  input: HoursInput,
+  policy: PaidBreakPolicy | null = null,
+): Promise<ManagerHours> {
   const window = await windowFor(tx, input);
   const rows = await tx
     .select({ personId: persons.id, displayName: persons.displayName })
@@ -186,7 +193,7 @@ export async function readManagerHours(tx: Transaction, input: HoursInput): Prom
   for (const row of rows)
     people.push({
       ...row,
-      hours: await personInWindow(tx, { ...input, personId: row.personId }, window),
+      hours: await personInWindow(tx, { ...input, personId: row.personId }, window, policy),
     });
   return {
     selection: { ...input.selection },

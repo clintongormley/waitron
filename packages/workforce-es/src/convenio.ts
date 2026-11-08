@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { venueLocationId, type Database, type Transaction } from "@waitron/db";
 import { AppError, basisPointsToDecimal, centsToDecimal } from "@waitron/shared";
-import type { OvertimeModel, WorkTimeRuleset } from "@waitron/workforce";
+import type { OvertimeModel, WorkTimeRuleset, PaidBreakPolicy } from "@waitron/workforce";
 import { convenioConfig } from "./schema/convenio-config.js";
 // Side-effect: registers this package's convenio.* code so `new AppError(...)` below type-checks
 // against the shared registry (packages/shared reachability rule).
@@ -56,6 +56,9 @@ export async function resolveWorkTimeRuleset(tx: Transaction | Database): Promis
       nightPremiumPct: convenioConfig.nightPremiumPct,
       splitShiftPremium: convenioConfig.splitShiftPremium,
       breaksCountAsWorked: convenioConfig.breaksCountAsWorked,
+      splitMinSegmentMinutes: convenioConfig.splitMinSegmentMinutes,
+      splitMaxSegmentMinutes: convenioConfig.splitMaxSegmentMinutes,
+      splitMinGapMinutes: convenioConfig.splitMinGapMinutes,
     })
     .from(convenioConfig)
     .where(eq(convenioConfig.locationId, await venueLocationId(tx)))
@@ -72,5 +75,59 @@ export async function resolveWorkTimeRuleset(tx: Transaction | Database): Promis
     overtimeModel: DB_TO_OVERTIME_MODEL[row.overtimeModel],
     nightPremiumPct: rateNum(row.nightPremiumPct),
     splitShiftPremium: moneyNum(row.splitShiftPremium),
+  };
+}
+
+export const POLICY_COLUMNS = [
+  "split_min_segment_minutes",
+  "split_max_segment_minutes",
+  "split_min_gap_minutes",
+  "continuous_paid_break_minutes",
+] as const;
+export function policyRowFault(row: Readonly<Record<string, unknown>>): string | null {
+  for (const key of POLICY_COLUMNS) {
+    const value = row[key];
+    if (value != null && (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0))
+      return key;
+  }
+  const min = row.split_min_segment_minutes as number | null | undefined;
+  const max = row.split_max_segment_minutes as number | null | undefined;
+  const gap = row.split_min_gap_minutes;
+  if ((min != null || max != null) && (min == null || max == null || gap == null || min > max))
+    return "split_min_segment_minutes";
+  if (row.continuous_paid_break_minutes != null) {
+    if (gap == null) return "split_min_gap_minutes";
+    const threshold = row.break_threshold_minutes;
+    if (
+      threshold !== undefined &&
+      (typeof threshold !== "number" || !Number.isSafeInteger(threshold) || threshold <= 0)
+    )
+      return "break_threshold_minutes";
+  }
+  return null;
+}
+export async function resolvePaidBreakPolicy(
+  tx: Transaction | Database,
+): Promise<PaidBreakPolicy | null> {
+  const [row] = await tx
+    .select()
+    .from(convenioConfig)
+    .where(eq(convenioConfig.locationId, await venueLocationId(tx)))
+    .limit(1);
+  if (row === undefined || row.continuousPaidBreakMinutes === null) return null;
+  if (
+    policyRowFault({
+      split_min_segment_minutes: row.splitMinSegmentMinutes,
+      split_max_segment_minutes: row.splitMaxSegmentMinutes,
+      split_min_gap_minutes: row.splitMinGapMinutes,
+      continuous_paid_break_minutes: row.continuousPaidBreakMinutes,
+      break_threshold_minutes: row.breakThresholdMinutes,
+    }) !== null
+  )
+    return null;
+  return {
+    thresholdMinutes: row.breakThresholdMinutes,
+    allowanceMinutes: row.continuousPaidBreakMinutes,
+    splitGapMinutes: row.splitMinGapMinutes!,
   };
 }

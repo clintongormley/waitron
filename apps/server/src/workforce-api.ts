@@ -1,3 +1,4 @@
+import type { ModuleTimeRecordExport } from "@waitron/module";
 // Loads the host registry for `management.request_invalid`, thrown by the screens below.
 import "./errors.js";
 import type { Hono } from "hono";
@@ -26,6 +27,7 @@ import type { Logger } from "./logger.js";
 import { markAttendanceSourceChanged } from "./attendance-source-changes.js";
 
 export interface WorkforceApiDeps {
+  exporter?: ModuleTimeRecordExport;
   db: Database;
   // The chain a clock event or correction would be appended under. No handler below reads it yet:
   // it is plumbed ahead of a clock-in route.
@@ -163,6 +165,9 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
           switch (breach.kind) {
             case "rest_too_short":
               return inWeek.has(breach.shiftId) || inWeek.has(breach.previousShiftId);
+            case "split_segment_too_short":
+            case "split_segment_too_long":
+            case "split_gap_too_short":
             case "break_owed":
             case "night_work":
               return inWeek.has(breach.shiftId);
@@ -376,8 +381,12 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const from = requirePeriod(c.req.query("from"), "from");
       const to = requirePeriod(c.req.query("to"), "to");
-      const rows = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
-        backend.getPlannedVsActual(tx, { period: { start: from, end: to } }),
+      const rows = await gated(sessionId, SCHEDULE_PERMISSION, async (tx) =>
+        backend.getPlannedVsActual(
+          tx,
+          { period: { start: from, end: to } },
+          (await deps.exporter?.paidBreakPolicy?.(tx)) ?? null,
+        ),
       );
       return c.json(rows);
     }),

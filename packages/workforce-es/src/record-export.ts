@@ -1,3 +1,4 @@
+import { resolvePaidBreakPolicy } from "./convenio.js";
 import { inArray } from "drizzle-orm";
 import { readVenue, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
@@ -158,10 +159,14 @@ export async function prepareTimeRecordExport(
     audience: input.audience,
     locale: input.locale,
   };
-  const record = await new WorkforceBackend().timeRecord(tx, {
-    personId: selected.personId,
-    period: selected.period,
-  });
+  const record = await new WorkforceBackend().timeRecord(
+    tx,
+    {
+      personId: selected.personId,
+      period: selected.period,
+    },
+    await resolvePaidBreakPolicy(tx),
+  );
   const ids = new Set<string>();
   const collect = (value: Pick<TimeRecord, "sessions" | "entries">) => {
     for (const session of value.sessions) ids.add(session.personId);
@@ -186,7 +191,10 @@ export async function prepareTimeRecordExport(
   const { name: venueName } = await readVenue(tx);
   return async () => formatTimeRecordExport(record, selected, people, venueName);
 }
-export const WORKFORCE_ES_RECORD_EXPORT = { prepare: prepareTimeRecordExport };
+export const WORKFORCE_ES_RECORD_EXPORT = {
+  prepare: prepareTimeRecordExport,
+  paidBreakPolicy: resolvePaidBreakPolicy,
+};
 
 export function formatTimeRecordExport(
   record: TimeRecord,
@@ -422,6 +430,10 @@ export function formatTimeRecordExport(
     audience: input.audience,
     period: { start: input.period.start, end: input.period.end },
     notes: [
+      [
+        "Paid totals may include breaks; recorded pauses stay visible.",
+        "Los totales pagados pueden incluir descansos; las pausas registradas siguen visibles.",
+      ][language]!,
       [
         "From is included; Before is excluded. Names are current display names.",
         "Desde está incluido; Antes de está excluido. Los nombres son los actuales.",

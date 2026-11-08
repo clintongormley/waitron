@@ -5,6 +5,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import type { WorkTimeRuleset } from "@waitron/workforce";
+import * as convenio from "./convenio.js";
+import { WORKFORCE_ES_CONFIGURATION_TRANSFER as transfer } from "./configuration-transfer.js";
 import { resolveWorkTimeRuleset } from "./convenio.js";
 import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
 import { seedConvenioConfig } from "../test/fixtures.js";
@@ -46,6 +48,9 @@ const DEFAULT_RULESET: WorkTimeRuleset = {
   nightPremiumPct: null,
   splitShiftPremium: null,
   breaksCountAsWorked: false,
+  splitMinSegmentMinutes: null,
+  splitMaxSegmentMinutes: null,
+  splitMinGapMinutes: null,
 };
 
 describe("resolveWorkTimeRuleset", () => {
@@ -98,6 +103,9 @@ describe("resolveWorkTimeRuleset", () => {
       nightPremiumPct: 25,
       splitShiftPremium: 12.5,
       breaksCountAsWorked: true,
+      splitMinSegmentMinutes: null,
+      splitMaxSegmentMinutes: null,
+      splitMinGapMinutes: null,
     });
   });
 
@@ -128,4 +136,86 @@ describe("resolveWorkTimeRuleset", () => {
     expect((error as AppError).code).toBe("convenio.not_found");
     expect((error as AppError).params).toEqual({});
   });
+});
+
+const splitColumns = [
+  "split_min_segment_minutes",
+  "split_max_segment_minutes",
+  "split_min_gap_minutes",
+  "continuous_paid_break_minutes",
+];
+it("stores new policies as null until the agreement row configures them", async () => {
+  const columns = suite.db.all<{ name: string }>(sql`pragma table_info(convenio_config)`);
+  expect(columns.map((c) => c.name)).toEqual(expect.arrayContaining(splitColumns));
+  await seedConvenioConfig(suite.db, { locationId: await venueLocationId(suite.db) });
+  const row = suite.db.all<Record<string, unknown>>(sql`select * from convenio_config`)[0]!;
+  for (const name of splitColumns) expect(row[name]).toBeNull();
+  expect(await convenio.resolvePaidBreakPolicy(suite.db)).toBeNull();
+});
+it("resolves the configured continuous policy independently of the split flag", async () => {
+  expect(convenio).toHaveProperty("resolvePaidBreakPolicy", expect.any(Function));
+  expect(await convenio.resolvePaidBreakPolicy(suite.db)).toBeNull();
+  await seedConvenioConfig(suite.db, { locationId: await venueLocationId(suite.db) });
+  await suite.db.execute(sql`update convenio_config set breaks_count_as_worked=true`);
+  expect(await convenio.resolvePaidBreakPolicy(suite.db)).toBeNull();
+  await suite.db.execute(
+    sql`update convenio_config set break_threshold_minutes=300, split_min_segment_minutes=180, split_max_segment_minutes=300, split_min_gap_minutes=90, continuous_paid_break_minutes=20, breaks_count_as_worked=false`,
+  );
+  expect(await convenio.resolvePaidBreakPolicy(suite.db)).toEqual({
+    thresholdMinutes: 300,
+    allowanceMinutes: 20,
+    splitGapMinutes: 90,
+  });
+  expect(await resolveWorkTimeRuleset(suite.db)).toMatchObject({
+    splitMinSegmentMinutes: 180,
+    splitMaxSegmentMinutes: 300,
+    splitMinGapMinutes: 90,
+  });
+  await suite.db.execute(sql`update convenio_config set continuous_paid_break_minutes=-1`);
+  expect(await convenio.resolvePaidBreakPolicy(suite.db)).toBeNull();
+});
+it.each([
+  { continuous_paid_break_minutes: 0 },
+  { continuous_paid_break_minutes: "20" },
+  { continuous_paid_break_minutes: 1.5 },
+  { continuous_paid_break_minutes: 20 },
+  { split_min_segment_minutes: 180 },
+  { split_min_segment_minutes: 300, split_max_segment_minutes: 180, split_min_gap_minutes: 90 },
+  {
+    split_min_segment_minutes: 180,
+    split_max_segment_minutes: 300,
+    split_min_gap_minutes: 9007199254740992,
+  },
+])("refuses invalid imported policy values %j", (row) => {
+  expect(transfer).toHaveProperty("validate", expect.any(Function));
+  expect(() => transfer.validate({ convenio_config: [row] })).toThrowError(
+    expect.objectContaining({ code: "setup.request_invalid" }),
+  );
+});
+it.each([
+  { split_max_segment_minutes: 300 },
+  { split_min_segment_minutes: 180, split_max_segment_minutes: 300 },
+  ...[0, 1.5, "300", Number.MAX_SAFE_INTEGER + 1].map((break_threshold_minutes) => ({
+    split_min_gap_minutes: 90,
+    continuous_paid_break_minutes: 20,
+    break_threshold_minutes,
+  })),
+])("refuses partial bounds or invalid paid thresholds %j", (row) => {
+  expect(() => transfer.validate({ convenio_config: [row] })).toThrowError(
+    expect.objectContaining({ code: "setup.request_invalid" }),
+  );
+});
+it("accepts absent and null policies and a complete configured row at the transfer boundary", () => {
+  expect(transfer).toHaveProperty("validate", expect.any(Function));
+  for (const row of [
+    {},
+    Object.fromEntries(splitColumns.map((name) => [name, null])),
+    {
+      split_min_segment_minutes: 180,
+      split_max_segment_minutes: 300,
+      split_min_gap_minutes: 90,
+      continuous_paid_break_minutes: 20,
+    },
+  ])
+    expect(() => transfer.validate({ convenio_config: [row] })).not.toThrow();
 });

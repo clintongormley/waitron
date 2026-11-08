@@ -1,3 +1,4 @@
+import type { ModuleTimeRecordExport } from "@waitron/module";
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -42,6 +43,7 @@ import { parseHoursQuery } from "./hours-request.js";
 import type { Logger } from "./logger.js";
 
 export interface TillAttendanceApiDeps {
+  exporter?: ModuleTimeRecordExport;
   db: Database;
   cfg: { nodeId: string };
   now: () => Date;
@@ -140,7 +142,11 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
           await admit(tx, session);
           const now = deps.now();
           const clock = await readVenueClock(tx);
-          return readPersonHours(tx, { ...scope, personId: session.personId, clock, now });
+          return readPersonHours(
+            tx,
+            { ...scope, personId: session.personId, clock, now },
+            (await deps.exporter?.paidBreakPolicy?.(tx)) ?? null,
+          );
         }),
       );
     }),
@@ -170,7 +176,11 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           await admit(tx, session);
-          return readAttendanceDay(tx, { ...scope, personId: session.personId });
+          return readAttendanceDay(
+            tx,
+            { ...scope, personId: session.personId },
+            (await deps.exporter?.paidBreakPolicy?.(tx)) ?? null,
+          );
         }),
       );
     }),

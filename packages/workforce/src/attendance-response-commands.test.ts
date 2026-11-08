@@ -923,6 +923,7 @@ it("approval after a frozen 480-minute period adds a live 60-minute impact witho
   const { questionId, automaticEntryId } = await automaticQuestion();
   const frozen = await run((tx) =>
     api.closePayPeriod(tx, {
+      paidBreakPolicy: null,
       nodeId,
       period: { start: "2026-01-01", end: "2026-02-01" },
       clock: { timeZone: "UTC", dayCutover: "04:00", cutoverChanges: [] },
