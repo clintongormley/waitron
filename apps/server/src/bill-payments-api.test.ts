@@ -2151,7 +2151,8 @@ describe("the invoice at full payment (design §8 test 8)", () => {
           ["live", false, false],
           ["demo", false, true],
           ["live", true, true],
-          ["prepare", false, true],
+          ["prepare", false, false],
+          ["prepare", true, true],
         ] as const) {
           invoiceMailMode = { onboardingIntent, devMode };
           expect(await request("GET", "/api/invoice-delivery-options")).toEqual({
@@ -2298,7 +2299,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
 
     it.each([
       ["demo", false],
-      ["prepare", false],
+      ["prepare", true],
       ["live", true],
     ] as const)(
       "stages captured email in %s development=%s for the authenticated staff member",
@@ -2377,28 +2378,32 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       });
     });
 
-    it("refuses unconfigured live invoice mail despite client-forged availability", async () => {
-      await withContact(async () => {
-        const billId = await tabWith("Chuletón");
-        const [before] = await inTx((tx) =>
-          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
-        );
-        expect(
-          await request(
-            "PUT",
-            `/api/working-orders/${billId}/invoice-choice`,
-            emailChoice(before!.revision),
-          ),
-        ).toEqual({
-          status: 409,
-          json: { code: "invoice_delivery.email_unavailable", params: {} },
+    it.each(["live", "prepare"] as const)(
+      "refuses unconfigured %s invoice mail despite client-forged availability",
+      async (onboardingIntent) => {
+        invoiceMailMode = { onboardingIntent, devMode: false };
+        await withContact(async () => {
+          const billId = await tabWith("Chuletón");
+          const [before] = await inTx((tx) =>
+            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+          );
+          expect(
+            await request(
+              "PUT",
+              `/api/working-orders/${billId}/invoice-choice`,
+              emailChoice(before!.revision),
+            ),
+          ).toEqual({
+            status: 409,
+            json: { code: "invoice_delivery.email_unavailable", params: {} },
+          });
+          const [after] = await inTx((tx) =>
+            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+          );
+          expect(after).toEqual(before);
         });
-        const [after] = await inTx((tx) =>
-          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
-        );
-        expect(after).toEqual(before);
-      });
-    });
+      },
+    );
 
     it("refuses an email choice when the mail server's credential cannot be read", async () => {
       await withContact(async () => {
@@ -2433,54 +2438,58 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       });
     });
 
-    it("reads current SMTP availability for each choice without restarting the API", async () => {
-      await withContact(async () => {
-        try {
-          await inTx((tx) =>
-            putCredential(tx, invoiceMailRing, {
-              purpose: "email.smtp",
-              value: { url: "smtp://smtp.example.test:2525", from: "Venue <venue@example.test>" },
-            }),
-          );
-          const billId = await tabWith("Chuletón");
-          const [before] = await inTx((tx) =>
-            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
-          );
-          expect(
-            await request(
-              "PUT",
-              `/api/working-orders/${billId}/invoice-choice`,
-              emailChoice(before!.revision),
-            ),
-          ).toEqual({ status: 200, json: { revision: before!.revision + 1 } });
-          const [saved] = await inTx((tx) =>
-            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
-          );
-          expect(saved!.invoiceDelivery).toMatchObject({
-            medium: "email",
-            recipient: "customer@example.test",
-            personId: venue.staffId,
-          });
-          await inTx((tx) => deleteCredential(tx, { purpose: "email.smtp" }));
-          expect(
-            await request(
-              "PUT",
-              `/api/working-orders/${billId}/invoice-choice`,
-              emailChoice(saved!.revision),
-            ),
-          ).toEqual({
-            status: 409,
-            json: { code: "invoice_delivery.email_unavailable", params: {} },
-          });
-          const [after] = await inTx((tx) =>
-            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
-          );
-          expect(after).toEqual(saved);
-        } finally {
-          await inTx((tx) => deleteCredential(tx, { purpose: "email.smtp" }));
-        }
-      });
-    });
+    it.each(["live", "prepare"] as const)(
+      "reads current %s SMTP availability for each choice without restarting the API",
+      async (onboardingIntent) => {
+        invoiceMailMode = { onboardingIntent, devMode: false };
+        await withContact(async () => {
+          try {
+            await inTx((tx) =>
+              putCredential(tx, invoiceMailRing, {
+                purpose: "email.smtp",
+                value: { url: "smtp://smtp.example.test:2525", from: "Venue <venue@example.test>" },
+              }),
+            );
+            const billId = await tabWith("Chuletón");
+            const [before] = await inTx((tx) =>
+              tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+            );
+            expect(
+              await request(
+                "PUT",
+                `/api/working-orders/${billId}/invoice-choice`,
+                emailChoice(before!.revision),
+              ),
+            ).toEqual({ status: 200, json: { revision: before!.revision + 1 } });
+            const [saved] = await inTx((tx) =>
+              tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+            );
+            expect(saved!.invoiceDelivery).toMatchObject({
+              medium: "email",
+              recipient: "customer@example.test",
+              personId: venue.staffId,
+            });
+            await inTx((tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+            expect(
+              await request(
+                "PUT",
+                `/api/working-orders/${billId}/invoice-choice`,
+                emailChoice(saved!.revision),
+              ),
+            ).toEqual({
+              status: 409,
+              json: { code: "invoice_delivery.email_unavailable", params: {} },
+            });
+            const [after] = await inTx((tx) =>
+              tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+            );
+            expect(after).toEqual(saved);
+          } finally {
+            await inTx((tx) => deleteCredential(tx, { purpose: "email.smtp" }));
+          }
+        });
+      },
+    );
   });
 
   it("saves a requested F1 recipient on the bill under its revision before payment", async () => {

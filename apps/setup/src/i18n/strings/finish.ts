@@ -48,8 +48,7 @@ export const finishEn = {
   "done.description.dashboard":
     "Set up your menu, staff, devices and settings, and see your sales.",
   "done.description.till": "Take orders and payments.",
-  "done.description.email":
-    "Read account emails captured locally, such as invitations and password resets.",
+  "done.description.email": "Read Demo account emails, such as invitations and password resets.",
   "done.link.till": "Till",
   "done.link.dashboard": "Dashboard",
   "done.link.email": "Email inbox",
@@ -131,7 +130,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
     "Configura la carta, el personal, los dispositivos y los ajustes, y consulta tus ventas.",
   "done.description.till": "Toma pedidos y cobra.",
   "done.description.email":
-    "Lee los correos de cuentas capturados localmente, como invitaciones y restablecimientos de contraseña.",
+    "Lee los correos de cuentas de demostración, como invitaciones y restablecimientos de contraseña.",
   "done.link.till": "Caja",
   "done.link.dashboard": "Panel",
   "done.link.email": "Bandeja de correo",

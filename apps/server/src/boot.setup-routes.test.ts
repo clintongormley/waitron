@@ -558,7 +558,16 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
         const response = await post("/setup-api/provision", {
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ mode: "prepare", venue: provisionVenueBody("60000011A") }),
+          body: JSON.stringify({
+            mode: "prepare",
+            venue: provisionVenueBody("60000011A"),
+            email: {
+              server: "smtp.example.test",
+              port: 587,
+              encryption: "starttls",
+              from: "venue@example.test",
+            },
+          }),
         });
         expect(response.status, await response.clone().text()).toBe(200);
         await poll(() => (kills.length > 0 ? kills.length : undefined));

@@ -280,7 +280,7 @@ async function askToRemove(el: Panel) {
 }
 
 it.each([
-  ["prepare", "smtp", "test inbox"],
+  ["prepare", "smtp", "cannot be sent"],
   ["live", "smtp", "cannot be sent"],
   ["live", "local_capture", "test inbox"],
 ] as const)("explains removal in %s with %s delivery", async (intent, mode, consequence) => {

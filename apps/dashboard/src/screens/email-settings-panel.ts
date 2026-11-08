@@ -250,7 +250,7 @@ export class EmailSettingsPanel extends LitElement {
       >
         <p>
           ${t(
-            this.intent === "prepare" || this.view?.mode === "local_capture"
+            this.view?.mode === "local_capture"
               ? "email.settings.remove_capture"
               : "email.settings.remove_live",
           )}

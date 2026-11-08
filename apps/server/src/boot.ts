@@ -2089,6 +2089,8 @@ async function bootServer(
     operationDescriptionDefault,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
   };
+  const captureAccountEmail = config.devMode || config.onboardingIntent === "demo";
+  const resolveAccountEmail = () => resolveEmailDelivery(db, ring, captureAccountEmail);
   // Interim: the venue row's id; removed by S18e or S28.
   const venueId = await venueLocationId(db);
   // The venue's default DISPLAY locale. The override is the RAW `tradingContext.localeOverride`, not the
@@ -2133,7 +2135,7 @@ async function bootServer(
       Parameters<typeof mountManagementApi>[1]["sendAccountEmail"]
     > = async (message) => {
       const [delivery, timeZone] = await Promise.all([
-        resolveEmailDelivery(db, ring, config.devMode || tradingContext.practiceMode === true),
+        resolveAccountEmail(),
         readVenueTimeZone(db),
       ]);
       if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
@@ -2442,8 +2444,7 @@ async function bootServer(
       isPrimary: () => holders.singletonRole.current === "primary",
       signal: attendanceController.signal,
       venueLocale: venueLocale === "es-ES" ? "es" : "en",
-      resolveDelivery: () =>
-        resolveEmailDelivery(db, ring, config.devMode || tradingContext.practiceMode === true),
+      resolveDelivery: resolveAccountEmail,
       send: createAttendanceEmailSender(),
       onError: (error) => log("error", "attendance.email_failed", { errorCode: codeOf(error) }),
     });
@@ -2465,8 +2466,7 @@ async function bootServer(
       now,
       isPrimary: () => holders.singletonRole.current === "primary",
       signal: reminderController.signal,
-      resolveDelivery: () =>
-        resolveEmailDelivery(db, ring, config.devMode || tradingContext.practiceMode === true),
+      resolveDelivery: resolveAccountEmail,
       send: createCertificateReminderSender(),
       onError: (error) =>
         log("error", "fiscal.certificate_reminder_failed", { errorCode: codeOf(error) }),
@@ -2585,8 +2585,6 @@ async function bootServer(
       log,
     );
   }
-  const resolveAccountEmail = () =>
-    resolveEmailDelivery(db, ring, config.devMode || tradingContext.practiceMode === true);
   // Resolved on every send, so a newly configured or rotated SMTP gateway, a changed time zone
   // or a saved privacy page takes effect at once.
   const sendAccountEmail: AccountEmailSender = async (message) => {
@@ -2993,7 +2991,7 @@ async function bootServer(
     context: () =>
       readBoxEmailContext(db, {
         ring,
-        practiceMode: config.devMode || tradingContext.practiceMode === true,
+        practiceMode: captureAccountEmail,
         venueLanguage: venueLocale === "es-ES" ? "es" : "en",
       }),
     send: createTextEmailSender(),

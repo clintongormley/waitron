@@ -105,7 +105,7 @@ describe("invoice email routing", () => {
   it.each([
     ["demo", false, false, "local_capture"],
     ["demo", false, true, "local_capture"],
-    ["prepare", false, false, "local_capture"],
+    ["prepare", false, false, "unconfigured"],
     ["prepare", false, true, "smtp"],
     ["live", false, false, "unconfigured"],
     ["live", false, true, "smtp"],

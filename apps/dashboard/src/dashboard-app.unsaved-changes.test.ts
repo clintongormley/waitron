@@ -770,9 +770,9 @@ it.each(["same-app", "device"] as const)(
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
         venueName: "Venue",
-        permissions: [],
+        permissions: ["person.admin"],
         modules: [],
-        onboardingIntent: "prepare",
+        onboardingIntent: "demo",
       }),
       getEmailInbox: async () => ({ mode: "unconfigured", count: 0, messages: [] }),
     });

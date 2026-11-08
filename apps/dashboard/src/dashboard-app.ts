@@ -2068,7 +2068,8 @@ export class DashboardApp extends LitElement {
     const links = [
       { label: t("demo_bar.dashboard"), href: "/manage", current: true },
       { label: t("demo_bar.device"), href: "/" },
-      ...(!authenticated || this.#canOpenScreen("email")
+      ...(this.onboardingIntent === "demo" &&
+      (!authenticated || this.#sessionPermissions.includes("person.admin"))
         ? [{ label: t("nav.email_inbox"), href: "/manage/email" }]
         : []),
       ...(!authenticated || this.#canOpenScreen("demo-printer")

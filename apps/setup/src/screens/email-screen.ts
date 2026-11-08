@@ -47,6 +47,7 @@ export class SetupEmailScreen extends LitElement {
   @property({ attribute: false }) email?: EmailSettingsDraft;
   @property() errorMessage?: string;
   @property() adminEmail = "";
+  @property() mode: "live" | "prepare" = "live";
   @property() backScreen: "venue" | "fiscal-test" | "cert" | "first-owner" = "venue";
   @property({ type: Boolean }) publicationOnly = false;
   @property({ attribute: false }) api: Pick<SetupApi, "runEmailTest"> = new SetupApi();
@@ -87,7 +88,7 @@ export class SetupEmailScreen extends LitElement {
     super.disconnectedCallback();
   }
   override willUpdate(changed: Map<string, unknown>): void {
-    if (changed.has("adminEmail")) this.#invalidate();
+    if (changed.has("adminEmail") || changed.has("mode")) this.#invalidate();
     if (!this.#seeded) {
       this.#seeded = true;
       if (this.email) this.values = { ...this.email, port: String(this.email.port) };
@@ -160,7 +161,7 @@ export class SetupEmailScreen extends LitElement {
       recipient = this.adminEmail;
     this.running = true;
     try {
-      const result = await this.api.runEmailTest(this.#settings(), recipient);
+      const result = await this.api.runEmailTest(this.#settings(), recipient, this.mode);
       if (
         !this.isConnected ||
         generation !== this.#generation ||

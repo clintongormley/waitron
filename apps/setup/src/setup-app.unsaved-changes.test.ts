@@ -1268,11 +1268,11 @@ it("the actual Done links leave a successfully provisioned root without another 
   await expect.poll(() => (el as unknown as State).screen).toBe("done");
   const done = el.shadowRoot!.querySelector("setup-done-screen")!;
   await done.updateComplete;
+  expect(done.shadowRoot!.querySelector("[data-test=link-email]")).toBeNull();
   const links: [HTMLAnchorElement, string][] = [];
   for (const [id, path] of [
     ["till", "/"],
     ["dashboard", "/manage"],
-    ["email", "/manage/email"],
   ]) {
     const choice = done.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-choice-row"]>(
       `[data-test=link-${id}]`,

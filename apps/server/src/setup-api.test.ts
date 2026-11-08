@@ -187,7 +187,7 @@ function liveBody(): Record<string, unknown> {
 }
 
 function prepareBody(): Record<string, unknown> {
-  return { ...demoBody(), mode: "prepare" };
+  return { ...liveBody(), mode: "prepare" };
 }
 
 // A well-formed AEAT-cert wire blob (the shape the wizard POSTs as `aeatCert`). A plain object, not
@@ -257,10 +257,9 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   });
   const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
   const assertFiscalReady = vi.fn().mockResolvedValue(undefined);
-  let credentialWrites = 0;
   const db = {
     withWriteLock: async () => {
-      calls.push(credentialWrites++ === 0 ? "sealAeat" : "sealEmail");
+      calls.push("sealCredential");
     },
   } as unknown as Database;
   const ring = {} as unknown as KeyRing;
@@ -319,7 +318,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       },
     });
     mountSetup(app, deps.deps, noopLog);
-    const response = await postProvision(app, { ...demoBody(), mode: "prepare" });
+    const response = await postProvision(app, prepareBody());
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ provisioned: true, restarting: true });
     await vi.waitFor(() => expect(deps.requestRestart).toHaveBeenCalledOnce());
@@ -335,7 +334,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
         readOpeningHours: async () => ({ departmentId: "first-department" }),
       } as Partial<SetupDeps>);
       mountSetup(app, deps.deps, noopLog);
-      const body = { ...demoBody(), mode: "prepare" };
+      const body = prepareBody();
       expect(await (await postProvision(app, body)).json()).toEqual({
         provisioned: true,
         restarting: true,
@@ -531,7 +530,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(seedMembership).toHaveBeenCalledWith(NODE_ID);
 
     // Demo → no AEAT cert seal (the seal is never reached), and the fiscal environment is preproduction.
-    expect(calls).not.toContain("sealAeat");
+    expect(calls).not.toContain("sealCredential");
     const req = provisionRequests[0];
     expect(req.environment).toBe("preproduction");
 
@@ -559,7 +558,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(res.status).toBe(200);
     await tick();
     expect(provisionRequests[0].environment).toBe("preproduction");
-    expect(calls).not.toContain("sealAeat");
+    expect(calls.filter((call) => call === "sealCredential")).toHaveLength(1);
     expect(calls).not.toContain("seedDemo");
     expect(persistTrading.mock.calls[0][0]).toMatchObject({
       environment: "preproduction",
@@ -1025,8 +1024,8 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       "provision",
       "establishIdentity",
       "seedMembership",
-      "sealAeat",
-      "sealEmail",
+      "sealCredential",
+      "sealCredential",
       "persistTrading",
       "requestRestart",
     ]);
@@ -1045,7 +1044,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(json.error.code).toBe("setup.request_invalid");
     expect(json.error.params.field).toBe("aeatCert");
     expect(provision).not.toHaveBeenCalled();
-    expect(calls).not.toContain("sealAeat");
+    expect(calls).not.toContain("sealCredential");
     await tick();
     expect(requestRestart).not.toHaveBeenCalled();
   });
@@ -1062,7 +1061,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       error: { code: "setup.request_invalid", params: { field: "aeatCert" } },
     });
     expect(provision).not.toHaveBeenCalled();
-    expect(calls).not.toContain("sealAeat");
+    expect(calls).not.toContain("sealCredential");
   });
 
   // The presence gate runs before the regime's `validate` seat: a cert that is refused regardless
@@ -1086,7 +1085,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(json.error.params.field).toBe("aeatCert");
     expect(json.error.params.field).not.toBe("pfxBase64");
     expect(provision).not.toHaveBeenCalled();
-    expect(calls).not.toContain("sealAeat");
+    expect(calls).not.toContain("sealCredential");
     await tick();
     expect(requestRestart).not.toHaveBeenCalled();
   });

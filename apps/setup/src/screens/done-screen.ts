@@ -200,9 +200,16 @@ export class SetupDoneScreen extends LitElement {
         <wt-choice-row data-test="link-till" heading=${t("done.link.till")} href="/"
           >${t("done.description.till")}</wt-choice-row
         >
-        <wt-choice-row data-test="link-email" heading=${t("done.link.email")} href="/manage/email"
-          >${t("done.description.email")}</wt-choice-row
-        >
+        ${
+          this.onboardingIntent === "demo"
+            ? html`<wt-choice-row
+                data-test="link-email"
+                heading=${t("done.link.email")}
+                href="/manage/email"
+                >${t("done.description.email")}</wt-choice-row
+              >`
+            : nothing
+        }
       </div>
       ${
         this.openingHours === undefined

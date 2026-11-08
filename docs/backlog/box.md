@@ -365,8 +365,10 @@ Cut A supplies the structured failure classifier, bounded account sends and remi
 its diagnostics preserve rejected versus unknown outcomes. Cut B shows those diagnostics beside
 the relevant field or at the bottom of both SMTP forms, with the matching English and Spanish
 guide. Cut C opens Prepare settings, adds admin removal and Settings navigation, and shows stored
-settings separately from invoice capture on development boxes. Continue with the atomic Prepare
-wizard/routing cut, then invoice sender naming. Prepare still captures mail when no relay is saved.
+settings separately from invoice capture on development boxes. The Prepare wizard now collects and
+tests SMTP outside development; ordinary Prepare uses the relay or reports unavailable mail. Demo's
+inbox link is offered publicly and to signed-in admins. Left: account delivery details and sender
+naming for account, setup and invoice envelopes.
 Cloud delivery, including Demo with a Cloud account, waits for D102's released interface and
 joint tests. An unavailable Cloud route cannot satisfy setup or silently fall back to capture.
 The setup-test network-target issue below remains separate open work.

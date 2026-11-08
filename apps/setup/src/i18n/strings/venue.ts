@@ -1,7 +1,7 @@
 // The venue, review and cert screens, and certificate-export-help.ts.
 
 export const venueEn = {
-  "email.required": "Send an accepted test message before completing live setup.",
+  "email.required": "Send an accepted test message before completing setup.",
   "email.show_password": "Show password",
   "email.hide_password": "Hide password",
   "email.heading": "Set up email",
@@ -252,8 +252,7 @@ export const venueEn = {
 } as const;
 
 export const venueEs: Record<keyof typeof venueEn, string> = {
-  "email.required":
-    "Envía un mensaje de prueba aceptado antes de completar la configuración en vivo.",
+  "email.required": "Envía un mensaje de prueba aceptado antes de completar la configuración.",
   "email.show_password": "Mostrar contraseña",
   "email.hide_password": "Ocultar contraseña",
   "email.heading": "Configura el correo electrónico",

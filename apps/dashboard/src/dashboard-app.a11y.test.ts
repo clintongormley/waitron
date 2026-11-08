@@ -132,13 +132,15 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
   });
 
   it.each([
-    ["demo", "signed in", true],
-    ["demo", "signed out", false],
-    ["prepare", "signed in", true],
-    ["prepare", "signed out", false],
+    ["demo", "signed in as an administrator", true, ["person.admin"], true],
+    ["demo", "signed in as a manager", true, [], false],
+    ["demo", "signed out", false, [], true],
+    ["prepare", "signed in as an administrator", true, ["person.admin"], false],
+    ["prepare", "signed in as a manager", true, [], false],
+    ["prepare", "signed out", false, [], false],
   ] as const)(
     "when the intent is %s, the shared bar and banner render accessibly %s",
-    async (intent, _state, signedIn) => {
+    async (intent, _state, signedIn, permissions, showInbox) => {
       const api = signedIn
         ? stubApi({
             getMe: vi.fn().mockResolvedValue({
@@ -149,7 +151,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
               sessionDefault: "es-ES",
               venueName: "Deli Test SL",
               onboardingIntent: intent,
-              permissions: [],
+              permissions,
               modules: [],
             }),
           })
@@ -165,11 +167,11 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
           });
       const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
       await flush(el);
-      expect(
-        el
-          .shadowRoot!.querySelector("wt-demo-bar")
-          ?.shadowRoot!.querySelector('a[href="/manage/email"]'),
-      ).toBeTruthy();
+      const bar = el.shadowRoot!.querySelector("wt-demo-bar")!;
+      expect(bar).toBeTruthy();
+      await bar.updateComplete;
+      expect(bar.shadowRoot!.querySelector('a[href="/"]')).toBeTruthy();
+      expect(Boolean(bar.shadowRoot!.querySelector('a[href="/manage/email"]'))).toBe(showInbox);
       await expectNoA11yViolations(host);
     },
   );

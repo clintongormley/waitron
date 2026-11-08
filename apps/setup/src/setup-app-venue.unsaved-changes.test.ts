@@ -242,7 +242,7 @@ describe("setup venue unsaved changes", () => {
       dirtyAtAdvance = coordinator.isDirty([venue]);
     });
     next(venue);
-    await expect.poll(() => (el as unknown as State).screen).toBe("review");
+    await expect.poll(() => (el as unknown as State).screen).toBe("email");
     expect(coordinator.isDirty([venue])).toBe(false);
     expect(dirtyAtAdvance).toBe(false);
     expect(warning(el).open).toBe(false);
@@ -260,10 +260,10 @@ describe("setup venue unsaved changes", () => {
     back(venue);
     await expect.poll(() => warning(el).open).toBe(true);
     next(venue);
-    await expect.poll(() => (el as unknown as State).screen).toBe("review");
+    await expect.poll(() => (el as unknown as State).screen).toBe("email");
     await expect.poll(() => warning(el).open).toBe(false);
     await choose(el, "discard");
-    expect((el as unknown as State).screen).toBe("review");
+    expect((el as unknown as State).screen).toBe("email");
     expect((el as unknown as State).draft.venue!.city).toBe("New city");
   });
 

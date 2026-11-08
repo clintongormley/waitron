@@ -587,6 +587,23 @@ describe("setup email test", () => {
       }),
     });
   });
+  it("sends Prepare mode and the current administrator to the setup email test", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ accepted: true }));
+    const api = new SetupApi("https://box.test", fetchImpl);
+    await expect(api.runEmailTest(email, "prepare-admin@example.com", "prepare")).resolves.toEqual({
+      accepted: true,
+    });
+    expect(fetchImpl).toHaveBeenCalledWith("https://box.test/setup-api/email-test", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode: "prepare",
+        email,
+        venue: { admin: { email: "prepare-admin@example.com" } },
+      }),
+    });
+  });
   it("preserves a named invalid field for the email screen", async () => {
     const api = new SetupApi(
       "",
