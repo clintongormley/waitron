@@ -110,50 +110,82 @@ const familiesByKey: Record<string, { file: string; pattern: string; root?: stri
     root: "../../packages/fiscal-verifactu",
   },
 };
-async function families(directory: string, family: string) {
-  const selected = familiesByKey[family];
-  if (selected === undefined) throw new Error("Unknown issuance family");
-  const report = join(directory, "family-results.json");
-  await promisify(execFile)(
-    process.execPath,
-    [
-      resolve("node_modules/vitest/vitest.mjs"),
-      "run",
-      selected.file,
-      "--testNamePattern",
-      selected.pattern,
-      "--reporter=default",
-      "--reporter=json",
-      `--outputFile=${report}`,
-      "--maxWorkers=1",
-      "--coverage.enabled=false",
-    ],
-    {
-      cwd: resolve(selected.root ?? "."),
-      timeout: 75_000,
-      maxBuffer: 8 * 1024 * 1024,
-      env: { ...process.env, ZONE_PROCESS_MATRIX_TZ: process.env.TZ },
-    },
-  ).catch((error: unknown) => {
-    const output = error as { stdout?: string; stderr?: string };
-    process.stderr.write((output.stdout ?? "") + (output.stderr ?? ""));
-    throw error;
-  });
-  const result = JSON.parse(await readFile(report, "utf8")) as {
-    success: boolean;
-    numPassedTests: number;
-    testResults: { name: string; assertionResults: { fullName: string; status: string }[] }[];
-  };
+type Report = {
+  success: boolean;
+  testResults: { name: string; assertionResults: { fullName: string; status: string }[] }[];
+};
+
+async function families(directory: string, requested: string) {
+  const keys = requested.split(",");
+  const groups = new Map<string, { root: string; pattern: string; keys: string[] }>();
+  for (const key of keys) {
+    const selected = familiesByKey[key];
+    if (selected === undefined) throw new Error("Unknown issuance family");
+    const root = selected.root ?? ".";
+    const id = `${root}\0${selected.pattern === "." ? "whole" : "named"}`;
+    const group = groups.get(id) ?? { root, pattern: selected.pattern, keys: [] };
+    group.keys.push(key);
+    groups.set(id, group);
+  }
+  const reports = new Map<string, Report>();
+  let index = 0;
+  for (const group of groups.values()) {
+    const report = join(directory, `family-results-${index++}.json`);
+    const pattern =
+      group.pattern === "."
+        ? "."
+        : group.keys.map((key) => `(${familiesByKey[key]!.pattern})`).join("|");
+    await promisify(execFile)(
+      process.execPath,
+      [
+        resolve("node_modules/vitest/vitest.mjs"),
+        "run",
+        ...group.keys.map((key) => familiesByKey[key]!.file),
+        "--testNamePattern",
+        pattern,
+        "--reporter=default",
+        "--reporter=json",
+        `--outputFile=${report}`,
+        "--maxWorkers=1",
+        "--coverage.enabled=false",
+      ],
+      {
+        cwd: resolve(group.root),
+        timeout: 150_000,
+        maxBuffer: 8 * 1024 * 1024,
+        env: { ...process.env, ZONE_PROCESS_MATRIX_TZ: process.env.TZ },
+      },
+    ).catch((error: unknown) => {
+      const output = error as { stdout?: string; stderr?: string };
+      process.stderr.write((output.stdout ?? "") + (output.stderr ?? ""));
+      throw error;
+    });
+    const result = JSON.parse(await readFile(report, "utf8")) as Report;
+    for (const key of group.keys) reports.set(key, result);
+  }
   return {
-    success: result.success,
-    casesRun: result.numPassedTests,
-    results: result.testResults.map((test) => ({
-      key: family,
-      source: test.name.split("/").at(-1),
-      tests: test.assertionResults.filter(
-        (test) => test.status !== "pending" && test.status !== "skipped",
-      ),
-    })),
+    success: [...new Set(reports.values())].every((report) => report.success),
+    results: keys.map((key) => {
+      const selected = familiesByKey[key]!;
+      const named = selected.pattern === "." ? undefined : new RegExp(selected.pattern);
+      const files = reports
+        .get(key)!
+        .testResults.filter((test) => test.name === resolve(selected.root ?? ".", selected.file));
+      const tests = files
+        .flatMap((test) => test.assertionResults)
+        .filter(
+          (test) =>
+            test.status !== "pending" &&
+            test.status !== "skipped" &&
+            (named === undefined || named.test(test.fullName)),
+        );
+      return {
+        key,
+        source: files.map((test) => test.name.split("/").at(-1)).join(","),
+        casesRun: tests.filter((test) => test.status === "passed").length,
+        tests,
+      };
+    }),
   };
 }
 

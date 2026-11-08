@@ -32,7 +32,7 @@ checks were removed from `zone-script-callers.test.ts`: the child ran four cases
 `src/testing/zone-process-matrix.ts` still expected eleven. The local wrapper reproduced both
 failures. The correction retains the live script cases and adds the replacement catalogue and
 reporting suites to both fresh UTC and Madrid processes. Run
-`pnpm --filter @waitron/server exec vitest run src/zone-process-matrix.callers.test.ts`
+`pnpm --filter @waitron/server exec vitest run src/zone-process-matrix.whole-files.test.ts`
 to exercise the child dispatch, exact counts, source names and original behavioral assertions.
 
 ## Keep original identities distinct after applying comparison mappings
