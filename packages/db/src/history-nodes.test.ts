@@ -52,8 +52,8 @@ describe("readHistoryNodes", () => {
 
   it("a box reached by two paths is listed once", async () => {
     await handover(m1, m2, "2026-11-01T10:00:00.000Z");
-    await handover(m1, m3, "2026-11-02T10:00:00.000Z");
     await handover(m2, m3, "2026-11-03T10:00:00.000Z");
+    await handover(m1, m3, "2026-11-02T10:00:00.000Z");
 
     expect(await readHistoryNodes(suite.db, m3)).toEqual([m3, m1, m2]);
   });
