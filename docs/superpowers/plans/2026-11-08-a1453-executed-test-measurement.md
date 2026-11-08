@@ -1,6 +1,6 @@
 # A1453: measure test selection and remembered results
 
-**Pending watcher approval.** You get numbers for selecting tests by executed functions and
+**Upper-bound-first approved by the watcher at 17:50; remaining review choices pending.** You get numbers for selecting tests by executed functions and
 reusing earlier passing results, not a selector or result store. Lane D's queue assignment
 (2026-11-08 17:36) quotes the owner: “it doesn't need to run all the tests”. The watcher added
 remembered results at 17:39, recording owner “y”, and raised the budget to three active hours.
@@ -18,12 +18,13 @@ nightly `server-blob-2` from run 42437905513 has merged coverage, not per-test-f
 
 1. **Freeze the sample and ceiling first (30 minutes, proposed simpler route).** Pin the latest
    40 merged PRs, historical base/head SHAs and all recorded CI attempts. Before results, define
-   the denominator as four-suite file execution seconds from each PR's last completed run on its
-   final head, using `[file-progress] end` logs; absent files/logs make evidence incomplete.
+   the denominator as files actually run in the four suites on each PR's last completed final-head run,
+   using `[file-progress] end` logs; omitted packages save nothing, missing executed-file logs are gaps.
+   Report zero-test PRs separately and stratify the fixed 40 by coverage/scoping regime, never pool unlike runs.
    Compare within the same job/runner and coverage mode; do not turn concurrent file time into
    job minutes. Count full-suite fallbacks, then bound combined selection/reuse savings by giving
    every remaining test a free skip, except known required tests. A ceiling below 30% is a drop;
-   above 30% proves nothing. Watcher approval must resolve whether this early stop replaces collection.
+   above 30% proves nothing. The watcher approved this early stop and conditional temporary instrumentation at 17:50.
 
 2. **Qualify then collect (65 minutes).** After hosted-route approval, collect at or before the
    oldest sampled PR's base, matching that historical base version, never a future head. Retain
@@ -39,19 +40,23 @@ nightly `server-blob-2` from run 42437905513 has merged coverage, not per-test-f
 3. **Replay selection and reuse (60 minutes).** Use each attempt's own base/head diff. Changed
    production top-level code/config/migrations/lockfiles, new/deleted production functions,
    indirect assets, shared helpers and uncertain correspondence fall back to affected packages
-   and dependents; unknown scope means all four. Changed tests always run. Match source/ranges,
+   and dependents; unknown scope means all four. Tests changed since the map always run. Match source/ranges,
    not names; report stale-map fallbacks by PR age. Keep all other packages/checks unchanged.
    Replay passing results chronologically across PR/main/other recorded runs; only an earlier pass
    is reusable. Proposed measurement key: test/project, test/setup/helper/config/lockfile/runtime
-   identity, executed function bodies and their files' top-level code. Unknown external inputs or
+   identity, executed function bodies, their files' top-level code and all files changed by the PR. An old
+   execution set cannot establish later dependencies: invalidate reuse after mapped code changes; otherwise
+   call the estimate an upper bound, never verified reusable results. Unknown external inputs or
    unqualified execution prevent reuse; fallbacks cannot be bypassed by reuse. Report selection
-   alone, extra reuse, remaining files per PR, store entries/bytes, map bytes and rebuild overhead.
+   alone, extra reuse, changed-test counts, remaining files per PR (p50/p90), store entries/bytes and map bytes.
+   Separately report all completed attempts, and time per-PR map download, matching and install overhead.
    Audit every observed failed test on every head/attempt against both selection and reuse. List
    misses and known recurring failures separately; a passing rerun alone proves neither flakiness
    nor safety. Missing heads/logs remain gaps. Report “no miss among N observed failures”, not safety.
 
 4. **Write the decision (25 minutes).** Reject under 30% combined file-time saving after fallbacks,
    or any missed observed failure not covered by a justified fallback; missing evidence is inconclusive.
+   The optimistic ceiling ignores selection cost; actual estimates subtract it. Historical failures do not prove general safety.
    Qualify hosted timing via incident history, no download 5xx and checkout under about 10 seconds.
    Report estimated file seconds separately from actual jobs/minutes, empty-job opportunities,
    unchanged setup/checks, runner/concurrency effects, map/result-store size and nightly rebuild cost.
