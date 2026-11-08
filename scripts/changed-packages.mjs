@@ -124,7 +124,7 @@ function owningPackage(path, packages) {
  * `loadPackages` is a THUNK, not a value: the hook's thunk shells out to `pnpm ls -r`, and the
  * documentation, undetermined and root outcomes return without calling it.
  *
- * When `kind` is neither "packages" nor "brand" the list is EMPTY rather than partial, so a caller that reads it
+ * When `kind` is neither "packages" nor "brand" the list is EMPTY rather than partial. Reading it
  * without checking `kind` narrows to nothing visible instead of to a plausible-looking subset.
  */
 export function scopeForPaths(changedPaths, loadPackages) {

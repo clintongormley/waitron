@@ -10,7 +10,8 @@ loads the till router by path, outside the workspace dependency graph.
 
 Brand PNG, SVG and ICO files under `packages/ui/brand/`, and its `README.md`, select
 exactly UI, dashboard, setup and till tests. Paths already classified as documentation may
-accompany them. Any other path keeps the ordinary selection. CI retains root guards and
+accompany them. Any other path keeps the ordinary selection. The hook and CI disable rename
+detection when listing changed paths, so a move contributes both its old and new locations. CI retains root guards and
 bundle-smoke; the hook typechecks those four readers without expanding to their dependents.
 The UI job omits ui-core's suite and package check for this scope. Full runs still select all.
 The readers include UI's lockup decoding tests, dashboard's direct SVG imports, setup's

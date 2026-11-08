@@ -235,8 +235,9 @@ jobs:
       # (`<pkg>...` is the other direction, a package and its dependencies, and would gate on the
       # wrong set). Only the attribution moved out of pnpm's hands.
       #
-      # Brand scope uses exact readers; packages scope includes dependents. Other scopes run unscoped: `global` because an unattributable path
-      # could affect anything, `documentation` and `root` because the gates are ANDed with `code`
+      # Brand scope uses exact readers; packages scope includes dependents. Other scopes run unscoped:
+      # `global` because an unattributable path could affect anything, `documentation` and `root`
+      # because the gates are ANDed with `code`
       # anyway, and an empty or unexpected value because a scope nobody can read is not a reason to
       # skip a suite.
       # The `--unscoped` flag emits every gate as true from the script's own SCOPE_GATES list, so a

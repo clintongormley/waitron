@@ -415,3 +415,28 @@ describe("main CI recovery", () => {
     expect(publishing).toContain("scripts/main-tag-guard.sh");
   });
 });
+
+describe("renamed paths", () => {
+  it("keeps the server path when an asset moves into brand", () => {
+    const head = git("rev-parse", "HEAD");
+    try {
+      git("checkout", "--detach", head);
+      mkdirSync(join(fixture, "packages/ui/brand"), { recursive: true });
+      git("mv", "apps/server/src/mail.ts", "packages/ui/brand/logo.svg");
+      git("commit", "-s", "-m", "Move into brand");
+      const result = spawnSync("bash", [join(root, "scripts/ci-diff-paths.sh")], {
+        cwd: fixture,
+        encoding: "utf8",
+        timeout: 10000,
+        env: { ...env, EVENT: "pull_request", BASE_REF: "main" },
+      });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout.trim().split("\n")).toEqual([
+        "apps/server/src/mail.ts",
+        "packages/ui/brand/logo.svg",
+      ]);
+    } finally {
+      git("checkout", "main");
+    }
+  });
+});

@@ -53,14 +53,14 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
       continue
     }
   fi
-  range_paths=$(git -c core.quotePath=false diff --name-only "$base..$local_sha" 2>/dev/null) || {
+  range_paths=$(git -c core.quotePath=false diff --no-renames --name-only "$base..$local_sha" 2>/dev/null) || {
     range_unknown=1
     continue
   }
   # After a rebase, old-tip..new-tip can miss the branch's own changes; add them since it left main.
   if [ -n "$main_tip" ] && fork=$(git merge-base "$main_tip" "$local_sha" 2>/dev/null) &&
     [ "$fork" != "$base" ]; then
-    own_paths=$(git -c core.quotePath=false diff --name-only "$fork..$local_sha" 2>/dev/null) || {
+    own_paths=$(git -c core.quotePath=false diff --no-renames --name-only "$fork..$local_sha" 2>/dev/null) || {
       range_unknown=1
       continue
     }
