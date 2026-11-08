@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
-import { LeaveController, type WtDialog, type WtTextarea } from "@waitron/ui";
+import { LeaveController, type WtDialog, type WtRowActions, type WtTextarea } from "@waitron/ui";
 import type { BillBalance, CurrentOrders, PartyBill, TabLine } from "../api/client.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -300,7 +300,13 @@ it("keeps Change dish quiet and disabled until the dish changes, and again once 
   expect(button.getAttribute("variant")).toBe("secondary");
 });
 
-it("names the fields to fix above the buttons after Change dish with a refused quantity", async () => {
+/** The dialog's footer sentence, which wt-dialog draws above the footer's row of buttons. */
+function footerSentence(el: TillTableOrderScreen): HTMLElement | null {
+  const dialog = q<WtDialog>(el, "[data-sent-line-dialog]")!;
+  return dialog.shadowRoot!.querySelector<HTMLElement>(".footer > .form-message");
+}
+
+it("names the fields to fix on its own line above the buttons after Change dish with a refused quantity", async () => {
   const el = await openRow({ lines: [line()] });
   const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
   picker
@@ -308,17 +314,62 @@ it("names the fields to fix above the buttons after Change dish with a refused q
     .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "1.5" } }));
   await picker.updateComplete;
   await el.updateComplete;
-  expect(q(el, "[data-sent-change-fix]")).toBeNull();
+  expect(footerSentence(el)?.textContent?.trim() ?? "").toBe("");
   const button = q(el, "[data-sent-change]")!;
   expect(button.hasAttribute("disabled")).toBe(false);
   await userEvent.click(button);
   await picker.updateComplete;
   await el.updateComplete;
-  const fix = q(el, "[data-sent-change-fix]")!;
-  expect(fix.textContent!.trim()).toBe(t("form.fix_fields"));
-  expect(fix.getAttribute("slot")).toBe("footer");
-  expect(fix.nextElementSibling).toBe(q(el, "[data-sent-line-dialog] .cancel-actions"));
+  await expect.poll(() => footerSentence(el)?.textContent?.trim()).toBe(t("form.fix_fields"));
+  const sentence = footerSentence(el)!.getBoundingClientRect();
+  for (const action of [q(el, "[data-sent-line-close]")!, button])
+    expect(sentence.bottom).toBeLessThanOrEqual(action.getBoundingClientRect().top);
   expect(button.hasAttribute("disabled")).toBe(true);
+});
+
+it("opens a row with no note unchanged", async () => {
+  const el = await openRow({ lines: [line({ note: null })] });
+  const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
+  await picker.updateComplete;
+  await el.updateComplete;
+  expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(true);
+});
+
+it("offers no Change dish on a row partly served", async () => {
+  expect(
+    await offeredFor(
+      {
+        lines: [
+          line({
+            id: "l-croq",
+            name: "Croquetas",
+            quantity: "4.000",
+            groupId: "g1",
+            sentAt: sent,
+            firedAt: sent,
+          }),
+        ],
+      },
+      "l-croq",
+      null,
+    ),
+  ).toBe(false);
+});
+
+it("shows the note only in its field while the dish can be changed", async () => {
+  const orders: CurrentOrders = structuredClone(current());
+  orders.groups[2]!.rows[0]!.note = "warm";
+  const el = await openRow({ currentOrders: orders, lines: [line()] });
+  const dialog = q(el, "[data-sent-line-dialog]")!;
+  expect(dialog.textContent).not.toContain(`${t("line.note.label")}: warm`);
+  cleanupWidgets();
+  const readOnly = await openRow({
+    currentOrders: orders,
+    lines: [line({ changesAfterSending: "never" })],
+  });
+  expect(q(readOnly, "[data-sent-line-dialog]")!.textContent).toContain(
+    `${t("line.note.label")}: warm`,
+  );
 });
 
 it("opens a fresh, unchanged window for another row", async () => {
@@ -352,7 +403,7 @@ class SentChangeLeaveApp extends LitElement {
 }
 customElements.define("sent-change-leave-test-app", SentChangeLeaveApp);
 
-it("asks once before Close throws a change away, and keeps the change on Keep", async () => {
+async function openInApp() {
   const { el: app } = await mountWidget<SentChangeLeaveApp>("sent-change-leave-test-app", {});
   const el = app.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
   el.style.width = "1280px";
@@ -363,20 +414,72 @@ it("asks once before Close throws a change away, and keeps the change on Keep", 
   await panel.updateComplete;
   await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-flan"]')!);
   await el.updateComplete;
-  await editNote(el, "warm, no cream");
+  const coordinator = app.leave.coordinator;
+  const request = coordinator.request.bind(coordinator);
+  const asked = { count: 0 };
+  coordinator.request = (leave) => {
+    asked.count++;
+    return request(leave);
+  };
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  const answer = async (choice: "keep" | "discard") => {
+    await expect.poll(() => question.open).toBe(true);
+    await question.updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${choice}]`)!.click();
+    await expect.poll(() => question.open).toBe(false);
+  };
+  return { el, asked, answer, dialog: q<WtDialog>(el, "[data-sent-line-dialog]")! };
+}
+
+it("asks once before Close throws a change away, and keeps the change on Keep", async () => {
+  const { el, asked, answer, dialog } = await openInApp();
+  await editNote(el, "warm, no cream");
   q(el, "[data-sent-line-close]")!.click();
-  await expect.poll(() => question.open).toBe(true);
-  await question.updateComplete;
-  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
-  await expect.poll(() => question.open).toBe(false);
-  const dialog = q<WtDialog>(el, "[data-sent-line-dialog]")!;
+  await answer("keep");
   expect(dialog.open).toBe(true);
   expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(false);
   q(el, "[data-sent-line-close]")!.click();
-  await expect.poll(() => question.open).toBe(true);
-  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await answer("discard");
   await expect.poll(() => dialog.open).toBe(false);
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  expect(question.open).toBe(false);
+  await expect.poll(() => q(el, "till-modifier-picker")).toBeNull();
+  expect(asked.count).toBe(2);
 });
+
+it.each([
+  ["fire", "fire-held-line"],
+  ["void", "cancel-item"],
+] as const)(
+  "asks before %s throws a change away, and acts only on Discard",
+  async (action, type) => {
+    const { el, asked, answer, dialog } = await openInApp();
+    const events: unknown[] = [];
+    el.addEventListener(type, (event) => events.push((event as CustomEvent).detail));
+    const press = async () => {
+      const more = q(el, "[data-sent-line-dialog] wt-row-actions") as WtRowActions;
+      await more.updateComplete;
+      await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+      q(el, `[data-sent-line-${action}]`)!.click();
+    };
+    await press();
+    await expect.poll(() => events).toHaveLength(1);
+    await expect.poll(() => dialog.open).toBe(false);
+    expect(asked.count).toBe(0);
+    events.length = 0;
+    const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+    await userEvent.click(
+      panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-flan"]')!,
+    );
+    await el.updateComplete;
+    await editNote(el, "warm, no cream");
+    await press();
+    await answer("keep");
+    expect(events).toEqual([]);
+    expect(dialog.open).toBe(true);
+    expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(false);
+    await press();
+    await answer("discard");
+    await expect.poll(() => events).toHaveLength(1);
+    await expect.poll(() => dialog.open).toBe(false);
+    expect(asked.count).toBe(2);
+  },
+);

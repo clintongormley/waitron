@@ -2518,32 +2518,57 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
+  #productIndex?: {
+    products: readonly TillProduct[];
+    byOffer: Map<string, TillProduct>;
+    byId: Map<string, TillProduct>;
+  };
+
   #liveProduct(line: TabLine): TillProduct | undefined {
+    if (this.#productIndex?.products !== this.products) {
+      const byOffer = new Map<string, TillProduct>();
+      const byId = new Map<string, TillProduct>();
+      for (const product of this.products) {
+        if (product.menuItemId !== undefined && !byOffer.has(product.menuItemId))
+          byOffer.set(product.menuItemId, product);
+        if (!byId.has(product.id)) byId.set(product.id, product);
+      }
+      this.#productIndex = { products: this.products, byOffer, byId };
+    }
+    const { byOffer, byId } = this.#productIndex;
     const productId = line.parentProductId ?? line.productId;
     return (
-      (line.menuItemId === null
-        ? undefined
-        : this.products.find((product) => product.menuItemId === line.menuItemId)) ??
-      (productId === null ? undefined : this.products.find((product) => product.id === productId))
+      (line.menuItemId === null ? undefined : byOffer.get(line.menuItemId)) ??
+      (productId === null ? undefined : byId.get(productId))
     );
   }
 
   /** The dish line of each member a Sent window can change, or undefined when it is read-only. */
   #sentChangeLines(members: readonly SentSlice[]): TabLine[] | undefined {
-    if (members.some((member) => member.kind !== "held" && member.kind !== "fired")) return;
+    const zero = decimal("0");
+    if (
+      members.some(
+        (member) =>
+          (member.kind !== "held" && member.kind !== "fired") ||
+          compareDecimal(decimal(member.row.servedQuantity), zero) > 0,
+      )
+    )
+      return;
     const lines = members.map((member) => this.#sentOrderLine(member));
     if (lines.some((line) => line === undefined)) return;
-    const recalled = this.#recalledLineIds();
     const balance = this.#balanceShown();
     const paid = balance === null ? undefined : paidQuantities(balance);
-    const paidSome = (row: TabLine) =>
-      compareDecimal(decimal(paid?.get(row.lineNo) ?? "0"), decimal("0")) > 0;
+    // A dish is paid when it or any of its extras is, so its parent's number stands for both.
+    const paidDishes = new Set<number>();
+    for (const row of this.lines)
+      if (compareDecimal(decimal(paid?.get(row.lineNo) ?? "0"), zero) > 0)
+        paidDishes.add(row.parentLineNo ?? row.lineNo);
+    const recalled = this.#recalledLineIds();
     const editable = (line: TabLine) =>
-      this.#stationsAllowChange(line) &&
-      this.#liveProduct(line) !== undefined &&
+      !paidDishes.has(line.lineNo) &&
       !recalled.has(line.id) &&
-      !paidSome(line) &&
-      !this.lines.some((extra) => extra.parentLineNo === line.lineNo && paidSome(extra));
+      this.#liveProduct(line) !== undefined &&
+      this.#stationsAllowChange(line);
     return (lines as TabLine[]).every(editable) ? (lines as TabLine[]) : undefined;
   }
 
@@ -3067,7 +3092,7 @@ export class TillTableOrderScreen extends LitElement {
     return members;
   }
 
-  #serveFromSentLine(pending: typeof this.sentLinePending, undo: boolean): void {
+  #serveFromSentLine(pending: typeof this.sentLinePending, undo: boolean, asked = false): void {
     if (
       pending === null ||
       pending !== this.sentLinePending ||
@@ -3076,6 +3101,10 @@ export class TillTableOrderScreen extends LitElement {
       this.groupCommandBusy
     )
       return;
+    if (!asked && this.#sentChangeHeld(pending)) {
+      this.#askSentChangeLeave(() => this.#serveFromSentLine(pending, undo, true));
+      return;
+    }
     const members = this.#sentLineMembers();
     if (
       members === undefined ||
@@ -3094,6 +3123,20 @@ export class TillTableOrderScreen extends LitElement {
       undo,
       members.length === 1 ? undefined : members.map((member) => member.row),
     );
+  }
+
+  /** The open window's fields hold a change that another of its actions would throw away. */
+  #sentChangeHeld(pending: NonNullable<typeof this.sentLinePending>): boolean {
+    return this.sentChange?.pending === pending && this.sentChange.detail.changed;
+  }
+
+  /** Asks the window's leave question, as Close does, and runs `act` only on Discard. */
+  #askSentChangeLeave(act: () => void): void {
+    const picker = this.renderRoot.querySelector<TillModifierPicker>("[data-sent-change-fields]");
+    if (picker === null) return;
+    void picker.requestLeave("cancel").then((leave) => {
+      if (leave) act();
+    });
   }
 
   #sentBillOpen(row: CurrentOrderRow): boolean {
@@ -3177,6 +3220,7 @@ export class TillTableOrderScreen extends LitElement {
   #actOnSentLine(
     pending: typeof this.sentLinePending,
     action: "fire" | "recall" | "station" | "void" | "comp",
+    asked = false,
   ): void {
     if (
       pending === null ||
@@ -3186,6 +3230,10 @@ export class TillTableOrderScreen extends LitElement {
       this.groupCommandBusy
     )
       return;
+    if (!asked && this.#sentChangeHeld(pending)) {
+      this.#askSentChangeLeave(() => this.#actOnSentLine(pending, action, true));
+      return;
+    }
     const members = this.#sentLineMembers();
     const slice = members?.[0];
     if (
@@ -3402,7 +3450,7 @@ export class TillTableOrderScreen extends LitElement {
                 >
               </div>
               ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${this.#displayQty(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, times(decimal(extra.netAmount)), extra, count)}</span></div>`)}
-              ${row.note === null ? nothing : html`<p>${t("line.note.label")}: ${row.note}</p>`}
+              ${row.note === null || seed !== undefined ? nothing : html`<p>${t("line.note.label")}: ${row.note}</p>`}
               ${this.#sentCourse(row.courseId, this.currentOrders?.retainedCourses.find((course) => course.id === row.courseId) ?? this.lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo)?.course)}
               <p data-sent-line-status>
                 ${station === undefined ? nothing : html`${station.name} · `}${status}
@@ -3415,9 +3463,9 @@ export class TillTableOrderScreen extends LitElement {
               </div>
             `
       }
-      ${change?.fixFields ? html`<p slot="footer" class="form-message" role="alert" data-sent-change-fix>${t("form.fix_fields")}</p>` : nothing}
-      <div slot="footer" class="cancel-actions">
+      <wt-form-actions slot="footer" .error=${change?.fixFields ? t("form.fix_fields") : ""}>
         <wt-button
+          slot="cancel"
           variant="secondary"
           data-sent-line-close
           @click=${(event: Event) => {
@@ -3432,7 +3480,7 @@ export class TillTableOrderScreen extends LitElement {
         ${seed === undefined ? nothing : html`<wt-button data-sent-change variant=${changeReady ? "primary" : "secondary"} ?disabled=${!changeReady} @click=${() => this.renderRoot.querySelector<TillModifierPicker>("[data-sent-change-fields]")?.confirm()}>${t("table.change_dish")}</wt-button>`}
         ${slice?.kind === "fired" && slice.row.released ? html`<wt-button data-sent-line-serve aria-label=${`${t("table.serve")} · ${slice.row.name}`} variant=${disabled ? "secondary" : "primary"} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, false)}>${t("table.serve")}</wt-button>` : nothing}
         ${this.#sentLineMore(members)}
-      </div>
+      </wt-form-actions>
     </wt-dialog>`;
   }
 
