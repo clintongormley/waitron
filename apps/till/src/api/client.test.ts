@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { PERSON_HEADER } from "@waitron/shared";
-import { SESSION_PERSON_REFUSAL } from "../state/draft-sync.js";
 import {
+  SESSION_PERSON_REFUSAL,
   TillApi,
   isNetworkFailure,
   menuOfferToTillProduct,

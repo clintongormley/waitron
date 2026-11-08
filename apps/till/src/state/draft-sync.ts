@@ -30,8 +30,6 @@ export const DRAFT_REFUSALS: ReadonlySet<string> = new Set([
   "draft.already_submitted",
 ]);
 
-export { SESSION_PERSON_REFUSAL };
-
 /** A table draft: a tap adds into a line that orders the same thing, as the server's save does. */
 export class DraftStore extends WorkingOrderStore {
   #billStatus: WorkingOrderStatus = "open";
@@ -163,8 +161,8 @@ export interface DraftSyncOptions {
   personId: string;
   /** The saved lines as the till shows them, from the table's offers. */
   rebuild: (lines: readonly DraftLine[]) => OrderLine[];
-  /** A save was refused, or a take-over, recall or split was refused for its person. When a save's
-   * draft itself was refused, the drafts have been read again first; a person refusal reads nothing. */
+  /** A save was refused, other than for naming someone not signed in. When a save's draft itself was
+   * refused, the drafts have been read again first. */
   onRefused: (code: string, ownerName?: string) => void;
   /** The server's draft has replaced what the store held. */
   onReplaced?: () => void;
@@ -716,7 +714,7 @@ export class DraftSync {
       if (refusal?.refused === SESSION_PERSON_REFUSAL) {
         this.#recoveryRequired = true;
         this.#lockAuthority();
-        return this.#refusedPerson(refusal);
+        return refusal;
       }
       if (read !== this.#reads) return "failed";
       this.#recoveryRequired = true;
@@ -754,7 +752,7 @@ export class DraftSync {
     } catch (error) {
       if (this.#ended) return "failed";
       const refusal = asRefusal(error);
-      if (refusal?.refused === SESSION_PERSON_REFUSAL) return this.#refusedPerson(refusal);
+      if (refusal?.refused === SESSION_PERSON_REFUSAL) return refusal;
       await this.load();
       return this.#ended ? "failed" : (refusal ?? "failed");
     } finally {
@@ -764,12 +762,6 @@ export class DraftSync {
     this.#recordTakeOver(taken, draftId);
     const reloaded = await this.load();
     return this.#ended ? "failed" : { taken: true, reloaded };
-  }
-
-  /** The device's session is someone else's, so a read now would run as them: none is sent. */
-  #refusedPerson(refusal: DraftRefused): DraftRefused {
-    this.#options.onRefused(refusal.refused);
-    return refusal;
   }
 
   #recordTakeOver({ draft, edit }: BillDraftSnapshot, draftId: string): void {
@@ -819,7 +811,7 @@ export class DraftSync {
       } catch (error) {
         if (this.#ended) return "failed";
         const refusal = asRefusal(error);
-        if (refusal?.refused === SESSION_PERSON_REFUSAL) return this.#refusedPerson(refusal);
+        if (refusal?.refused === SESSION_PERSON_REFUSAL) return refusal;
         await this.#load();
         return refusal ?? "failed";
       }
@@ -974,9 +966,7 @@ export class DraftSync {
       if (this.#ended) return "failed";
       if (!this.#invalidateSave(expectedEdit)) return await this.#refused(error);
       const refusal = asRefusal(error);
-      if (refusal?.refused !== SESSION_PERSON_REFUSAL) return "failed";
-      this.#options.onRefused(refusal.refused);
-      return refusal;
+      return refusal?.refused === SESSION_PERSON_REFUSAL ? refusal : "failed";
     } finally {
       this.#saving = false;
       limit.done();
@@ -1029,7 +1019,8 @@ export class DraftSync {
       this.#lockAuthority();
       await this.#readInQueue();
     } else this.#unsaved = true;
-    this.#options.onRefused(refusal.refused, refusal.ownerName);
+    if (refusal.refused !== SESSION_PERSON_REFUSAL)
+      this.#options.onRefused(refusal.refused, refusal.ownerName);
     return refusal;
   }
 

@@ -132,7 +132,6 @@ import { deriveOptionSelections } from "./state/held-options.js";
 import {
   DRAFT_REFUSALS,
   DraftSync,
-  SESSION_PERSON_REFUSAL,
   TABLE_REQUEST_LIMIT_MS,
   asRefusal,
   limited,
@@ -12105,8 +12104,6 @@ export class TillApp extends LitElement {
   }
 
   #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
-    // The client's refusal listener has already locked the till for this one.
-    if (refusal.refused === SESSION_PERSON_REFUSAL) return;
     if (sync !== this.#draftSync || refusal.refused === "session.required") return;
     if (this.#billLeft(sync, refusal)) {
       void this.#followLeftBill(sync, refusal);

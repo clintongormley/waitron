@@ -567,20 +567,21 @@ describe("DraftSync: a refused save", () => {
     expect(server.listDrafts).toHaveBeenCalledOnce();
   });
 
-  it("still says the order's person is not signed in when a newer edit of the bill arrived while the save was out, and keeps their lines through the close that answers it", async () => {
+  it("answers that the order's person is not signed in, without saying so through onRefused", async () => {
+    const draft = sync();
+    await draft.load();
+    server.saveDraft.mockRejectedValueOnce({ code: "session.person_not_signed_in", status: 409 });
+    draft.store.addProduct(beer, "1");
+
+    expect(await draft.flush()).toEqual({ refused: "session.person_not_signed_in" });
+
+    expect(refused).toEqual([]);
+    expect(rows(draft)).toEqual(["Beer ×1"]);
+  });
+
+  it("still answers that the order's person is not signed in when a newer edit of the bill arrived while the save was out, and keeps their lines through a close after it", async () => {
     let reject!: () => void;
-    const draft: DraftSync = new DraftSync({
-      api: server,
-      partyId: "v1",
-      billId: "wo-4",
-      personId: "p1",
-      rebuild,
-      onRefused: (code) => {
-        refused.push(code);
-        void draft.close();
-      },
-      requestLimitMs: LIMIT,
-    });
+    const draft = sync();
     await draft.load();
     server.saveDraft.mockImplementationOnce(
       () =>
@@ -597,7 +598,8 @@ describe("DraftSync: a refused save", () => {
     reject();
 
     expect(await queued).toEqual({ refused: "session.person_not_signed_in" });
-    expect(refused).toEqual(["session.person_not_signed_in"]);
+    void draft.close();
+    expect(refused).toEqual([]);
     expect(draft.candidate?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
     await settle();
     expect(server.saveDraft).toHaveBeenCalledOnce();
@@ -2987,7 +2989,7 @@ describe("DraftSync: a request refused because it names someone not signed in", 
 
     expect(await draft.takeOver("draft-of-theirs", 1)).toEqual(person);
 
-    expect(refused).toEqual(["session.person_not_signed_in"]);
+    expect(refused).toEqual([]);
     expect(server.listDrafts.mock.calls.length).toBe(reads);
     expect(draft.store.editsLocked).toBe(true);
     expect(draft.store.sending).toBe(false);
@@ -3007,7 +3009,7 @@ describe("DraftSync: a request refused because it names someone not signed in", 
     refuse(refusedPerson);
 
     expect(await outcome).toEqual(person);
-    expect(refused).toEqual(["session.person_not_signed_in"]);
+    expect(refused).toEqual([]);
   });
 
   it("take-over: says nothing once the sync has ended, since the next person may be signed in", async () => {
@@ -3048,7 +3050,7 @@ describe("DraftSync: a request refused because it names someone not signed in", 
 
     expect(await draft.takeOverOn("wo-check", elsewhere.id, elsewhere.revision)).toEqual(person);
 
-    expect(refused).toEqual(["session.person_not_signed_in"]);
+    expect(refused).toEqual([]);
     expect(server.listDrafts.mock.calls.length).toBe(reads);
   });
 
@@ -3077,7 +3079,7 @@ describe("DraftSync: a request refused because it names someone not signed in", 
     });
 
     expect(outcome).toEqual(person);
-    expect(refused).toEqual(["session.person_not_signed_in"]);
+    expect(refused).toEqual([]);
     expect(server.listDrafts.mock.calls.length).toBe(reads);
     expect(draft.store.editsLocked).toBe(true);
     expect(draft.store.sending).toBe(false);
