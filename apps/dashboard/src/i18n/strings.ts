@@ -2130,7 +2130,8 @@ export const en = {
   "stream.form.test": "Test",
   "stream.form.save": "Save and turn on",
   "stream.form.cancel": "Cancel",
-  "stream.form.test_passed": "The bucket passed every check.",
+  "stream.form.test_passed":
+    "The bucket passed the access and safe-write checks. Save also checks encryption support.",
   "stream.field.bucket_characters": "Use only lowercase letters, digits, dots and hyphens.",
   "stream.field.prefix_folders":
     'Two slashes in a row, or a folder named "." or "..", cannot be used.',
@@ -2150,6 +2151,10 @@ export const en = {
   "stream.change": "Change bucket",
   "stream.turn_off": "Turn off",
   "stream.turn_off_confirm": "Turn off this copy?",
+  "stream.probe.encryption_unavailable":
+    "The bucket refused the encryption check. Allow customer-supplied encryption keys in its settings, or use a bucket login allowed to change that setting. Then save again.",
+  "stream.probe.encryption_ignored":
+    "This provider lets a file be read without its encryption key. Choose a provider that supports customer-supplied encryption keys, then save again.",
   "stream.probe.access_denied": "The bucket refused this access key.",
   "stream.probe.conditional_write_unsupported":
     "This storage does not support the safe-write check Waitron needs.",
@@ -5996,7 +6001,8 @@ export const es: Record<StringKey, string> = {
   "stream.form.test": "Probar",
   "stream.form.save": "Guardar y activar",
   "stream.form.cancel": "Cancelar",
-  "stream.form.test_passed": "El bucket ha superado todas las comprobaciones.",
+  "stream.form.test_passed":
+    "El bucket ha superado las comprobaciones de acceso y escritura segura. Al guardar también se comprueba el cifrado.",
   "stream.field.bucket_characters": "Usa solo minúsculas, cifras, puntos y guiones.",
   "stream.field.prefix_folders":
     'No se pueden usar dos barras seguidas ni una carpeta llamada "." o "..".',
@@ -6016,6 +6022,10 @@ export const es: Record<StringKey, string> = {
   "stream.change": "Cambiar de bucket",
   "stream.turn_off": "Desactivar",
   "stream.turn_off_confirm": "¿Desactivar esta copia?",
+  "stream.probe.encryption_unavailable":
+    "El bucket ha rechazado la comprobación de cifrado. Permite claves de cifrado proporcionadas por el cliente en sus ajustes o usa un acceso al bucket con permiso para cambiar ese ajuste. Después, vuelve a guardar.",
+  "stream.probe.encryption_ignored":
+    "Este proveedor permite leer un archivo sin su clave de cifrado. Elige un proveedor que admita claves de cifrado proporcionadas por el cliente y vuelve a guardar.",
   "stream.probe.access_denied": "El bucket ha rechazado esta clave de acceso.",
   "stream.probe.conditional_write_unsupported":
     "Este almacenamiento no admite la comprobación de escritura segura que Waitron necesita.",

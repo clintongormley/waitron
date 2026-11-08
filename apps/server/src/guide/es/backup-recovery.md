@@ -133,7 +133,7 @@ destinos y aplícalos. Conserva las claves de recuperación y los archivos de co
 
 Si la copia en el bucket indica que no se han podido usar sus ajustes de forma segura, elige
 **Cambiar de bucket** en **Copias de seguridad**. Corrige los campos señalados. **Probar** comprueba
-el bucket sin guardar ajustes; **Guardar y activar** los aplica. **Cancelar** deja los ajustes
+el bucket sin guardar ajustes; **Guardar y activar** también comprueba que el proveedor proteja un archivo de prueba con una clave de cifrado proporcionada por el cliente antes de aplicar los ajustes. Si rechaza el bucket, sigue el mensaje para permitir esas claves o elige otro proveedor. **Cancelar** deja los ajustes
 guardados como estaban. Este formulario no puede diagnosticar un fallo de configuración del propio
 equipo. Conserva las claves de recuperación y las copias existentes si el rechazo persiste.
 

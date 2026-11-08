@@ -287,6 +287,34 @@ describe("stream-settings-panel: the bucket form", () => {
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   });
 
+  it.each(["en-GB", "es-ES"] as const)(
+    "Save explains customer-key refusals in %s and leaves the draft usable",
+    async (locale) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        for (const reason of ["encryption_unavailable", "encryption_ignored"] as const) {
+          const api = stubApi({
+            saveStreamSettings: vi.fn().mockRejectedValue({
+              code: "backup.stream_test_failed",
+              params: { reason },
+              status: 422,
+            }),
+          });
+          const { el } = await mount(api);
+          fillRequired(el);
+          await press(el, "save");
+          expect(text(el, "[role=alert]")).toContain(t(`stream.probe.${reason}`));
+          expect(text(el, "[role=alert]")).not.toContain(reason);
+          expect(field(el, "bucket-name").value).toBe("venue-copy");
+          expect(disabled(el, "save")).toBe(false);
+        }
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
+
   it("a failed Test shows the localised refusal and the failed check in words", async () => {
     const api = stubApi({
       testStreamBucket: vi.fn().mockRejectedValue({

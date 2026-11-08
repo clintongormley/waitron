@@ -52,6 +52,7 @@ export interface StreamApiDeps {
   sealedState: Pick<SealedStateRefresher, "refresh">;
   /** Throws when the bucket gives no answer at all. */
   probe: (bucket: BucketConfig) => Promise<ProbeResult>;
+  prepareEncryption: (bucket: BucketConfig) => Promise<ProbeResult>;
   /** Shared with the backup routes, which also read and then write the key in `backup.env`. */
   turns: Turns;
 }
@@ -232,6 +233,10 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       const bucket = await readBucketBody(c);
       await refuseArchiveOverlap(bucket);
       await probeOrRefuse(bucket);
+      const encryption = await deps.prepareEncryption(bucket);
+      if (!encryption.ok) {
+        throw new AppError("backup.stream_test_failed", { reason: encryption.reason });
+      }
       return deps.turns(async () => {
         guardPrimary();
         await refuseArchiveOverlap(bucket); // Again: archive settings may have changed meanwhile.

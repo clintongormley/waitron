@@ -7,6 +7,8 @@ import type { ListedObject, ObjectStore, StoreCall, StoredObject } from "./objec
 export const PROBE_PREFIX = "waitron-probe/";
 
 export type ProbeFailure =
+  | "encryption_unavailable"
+  | "encryption_ignored"
   | "access_denied"
   | "conditional_write_unsupported"
   | "write_failed"
