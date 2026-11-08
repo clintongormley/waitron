@@ -107,7 +107,6 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
   const guardPrimary = (): void => {
     if (!deps.isPrimary()) throw new AppError("backup.not_primary", {});
   };
-  // The payload is built and discarded for its refusals, so Test refuses what Save would.
   const readBucketBody = async (c: Context): Promise<BucketConfig> => {
     const bucket = readBucketConfig(await readJsonBody<unknown>(c), (field) => {
       throw new AppError("backup.request_invalid", { field });

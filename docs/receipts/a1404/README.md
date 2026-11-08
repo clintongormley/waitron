@@ -30,3 +30,8 @@ Save's provider check uses a disposable key and object. Tests exercise the real 
 controlled HTTP responses; they are not Amazon qualification. The actual stream is encrypted in
 the next slice. A crash followed by changing the key while the box is down remains untested.
 A later provider policy change appearing as a stream failure is also untested.
+
+| Provider source | Source's words | Setup meaning |
+| --- | --- | --- |
+| [Amazon: blocking or unblocking customer keys](https://docs.aws.amazon.com/AmazonS3/latest/userguide/blocking-unblocking-s3-c-encryption-gpb.html), read 8 November 2026 | `s3:PutEncryptionConfiguration`; `"EncryptionType": ["NONE"]` | Save changes the existing blocking setting when it can read its current rules; actual object controls still decide support. |
+| [Amazon: GetBucketEncryption](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html), read 8 November 2026 | “Returns the default encryption configuration” | Reading before writing preserves default encryption and bucket-key settings. |
