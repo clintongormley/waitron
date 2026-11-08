@@ -319,18 +319,6 @@ missing" in words of its own, which would stay green if Part A's comparison had 
 anything. Without a control at all, "the restore plus the ship gave us 1..6" is unfalsifiable: a
 restore that had somehow carried 5 and 6 would look exactly like a ship that worked.
 
-**Unreadable Part B controls (8 November 2026).** SQLite can throw while opening or reading the
-mixed file, before the comparison above runs. This control records only native SQLite corruption
-(`ERR_SQLITE_ERROR`, result code 11) from that read. Its row count and node list then read
-`unreadable`, with SQLite's message in the integrity and refusal fields. The restore command runs
-outside this handling. Other read failures still throw, as do corruption errors in the direct,
-mirrored and same-lineage restores.
-
-Run the deterministic native-SQLite regression checks with
-`node --test bench/sqlite-failover/test/additive-control.test.ts` from the repository root. They
-check an unreadable control, a readable result and unrelated failures. The whole bench command
-above exercises the scenario wiring; these standalone checks are not part of package CI.
-
 **Part C is a MEASUREMENT and decides nothing.** It leaves out the sync that would carry box-a's
 filing state to the store, which is the route "What S2 measures, and what it does not" describes and
 says S2 does not drive: the box files records 1..4 and dies before that `envios` update syncs, so the
@@ -506,6 +494,19 @@ holds **box-b's nine rows** — `control-rows=9 control-nodes=[box-b]` — and S
 integrity check rather than the row comparison. Both the integrity string and the refusal's own
 words are printed, because a later run refusing at the row comparison instead would be a different
 finding and should read as one.
+
+**Unreadable Part B controls (8 November 2026).** SQLite can throw while opening or reading the
+mixed file, before the comparison above runs. This control records only native SQLite corruption
+(`ERR_SQLITE_ERROR`, primary result code 11) from that read. The read happens inside the
+shared comparison so a missing comparison still fails the control. Its row count and node list then read
+`unreadable`, with SQLite's message in the integrity and refusal fields. The restore command runs
+outside this handling. Other read failures still throw, as do corruption errors in the direct,
+mirrored and same-lineage restores.
+
+Run the deterministic native-SQLite regression checks with
+`node --test bench/sqlite-failover/test/additive-control.test.ts` from the repository root. They
+check an unreadable control, a readable result and unrelated failures. The whole bench command
+above exercises the scenario wiring; these standalone checks are not part of package CI.
 
 **Part C is a MEASUREMENT and decides nothing.** It is the control plan Task 8 asked for, and **it
 does not reproduce the opposite result on this pin**. The plan expected an additive copy to diverge

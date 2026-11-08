@@ -10,7 +10,8 @@ export function readAdditiveControl<T>(read: () => T): {
       !("code" in error) ||
       error.code !== "ERR_SQLITE_ERROR" ||
       !("errcode" in error) ||
-      error.errcode !== 11
+      typeof error.errcode !== "number" ||
+      (error.errcode & 0xff) !== 11
     ) {
       throw error;
     }

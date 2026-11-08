@@ -1227,3 +1227,19 @@ with the classification in place. These checks are standalone, outside package C
 
 The remaining provider checks and promotion/Cloud contract are still listed under
 [the prototype's loose ends](../backlog/replication-cloud.md#loose-ends-left-by-the-sqlite-failover-loop-prototype-gate).
+
+
+Claude's 451-second run-it review reproduced the faster-write failure four times on the original
+code and four passing repaired probes. It also found that the unreadable path could bypass the
+control's check of the comparison itself. The corrected comparison now invokes that read; a
+no-comparison mutation must fail the control even when the file would have been unreadable.
+The test directory is included in package typechecking. Extended corruption classification
+has a synthetic result-code case; no native extended corruption was reproduced.
+
+| Source | Exact words | What they establish |
+| --- | --- | --- |
+| [SQLite result codes, §2](https://www.sqlite.org/rescode.html#primary_result_codes_versus_extended_result_codes), read 8 November 2026 | “The least significant 8 bits of the result code define a broad category” | Masking an extended numeric code to its low byte obtains the primary category. The classifier still requires Node's SQLite error marker. |
+
+The final repaired probe passed at both 50 ms (107 direct/mirrored rows) and 250 ms (19 rows).
+Removing the shared comparison was rejected at both rates. All eight standalone checks passed,
+and the compiler's file list includes the test file.

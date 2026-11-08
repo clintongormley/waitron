@@ -63,3 +63,19 @@ for (const error of [
     );
   });
 }
+
+test("records an extended SQLite corruption code", () => {
+  const error = Object.assign(new Error("damaged index"), {
+    code: "ERR_SQLITE_ERROR",
+    errcode: 779,
+  });
+  assert.deepEqual(
+    readAdditiveControl(() => {
+      throw error;
+    }),
+    {
+      value: null,
+      corruption: "damaged index",
+    },
+  );
+});

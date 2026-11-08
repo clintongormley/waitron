@@ -412,41 +412,42 @@ async function additiveIntoDirtyDestination(
     "restored-control",
     source,
   );
-  const control = readAdditiveControl(() => readRestored(controlPath));
-  if (!control.value) {
-    assert.ok(control.corruption);
-    return {
-      foreignKeys,
-      copied,
-      stale: stale.length,
-      rows: null,
-      nodes: null,
-      integrity: control.corruption,
-      refusal: `SQLite refused to read the additive control: ${control.corruption}`,
-    };
-  }
-  const controlRestore = control.value;
-
+  const observed: { restored: Restored | null; corruption: string | null } = {
+    restored: null,
+    corruption: null,
+  };
   let refusal: string | null = null;
   try {
-    assertSameDatabase(controlRestore, direct, source.boxARows);
+    const result = readAdditiveControl(() =>
+      assertSameDatabase(
+        () => {
+          observed.restored = readRestored(controlPath);
+          return observed.restored;
+        },
+        direct,
+        source.boxARows,
+      ),
+    );
+    observed.corruption = result.corruption;
+    if (result.corruption) {
+      refusal = `SQLite refused to read the additive control: ${result.corruption}`;
+    }
   } catch (error) {
-    // Only an assertion, and nothing else: a helper that threw a TypeError would otherwise be
-    // recorded as Part A's comparison doing its job.
     if (!(error instanceof assert.AssertionError)) throw error;
     refusal = error.message.split("\n")[0] ?? "";
   }
   assert.ok(refusal, "Part A's comparison refuses the database the additive copy restores");
 
+  const controlRestore = observed.restored;
   return {
     foreignKeys,
     copied,
     stale: stale.length,
-    rows: controlRestore.records.length,
-    // Which venue's ledger came back, and what SQLite makes of the file it came out of — both read
-    // off the restored database rather than assumed.
-    nodes: [...new Set(controlRestore.records.map((row) => String(row.node_id)))].sort(),
-    integrity: controlRestore.integrity.split("\n")[0] ?? "",
+    rows: controlRestore?.records.length ?? null,
+    nodes: controlRestore
+      ? [...new Set(controlRestore.records.map((row) => String(row.node_id)))].sort()
+      : null,
+    integrity: (controlRestore?.integrity ?? observed.corruption ?? "").split("\n")[0] ?? "",
     refusal,
   };
 }
@@ -579,7 +580,13 @@ function isRestoreRefusal(error: unknown): boolean {
  * ledger satisfies a count (`CLAUDE.md` §4). The rows are also compared against what BOX-A wrote,
  * not only against each other — two restores of the same wrong prefix agree with one another.
  */
-function assertSameDatabase(copied: Restored, direct: Restored, boxARows: RecordRow[]): void {
+function assertSameDatabase(
+  readCopied: Restored | (() => Restored),
+  direct: Restored,
+  boxARows: RecordRow[],
+): void {
+  // Read inside the comparison so removing it also removes the control's rejection.
+  const copied = typeof readCopied === "function" ? readCopied() : readCopied;
   assert.equal(direct.integrity, "ok", "the directly streamed replica restores an intact database");
   assert.equal(copied.integrity, "ok", "the copied replica restores an intact database");
   assert.deepStrictEqual(
