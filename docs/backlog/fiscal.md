@@ -1051,8 +1051,8 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
 ### A1425 part 1: after a takeover (owner, 2026-11-08)
 
 A box the held membership chart does not name `serving-primary` refuses a sale before any money moves.
-A conflict AEAT reports on a record inherited from a box this one took over from is recorded, as an
-incident and a filing case, and stops nothing. Approved with #2570; the note is in the campaign's
+A conflict AEAT reports on a record inherited from a box this one took over from is recorded and does
+not stop this box. Approved with #2570; the note is in the campaign's
 `questions.md`, 2026-11-08 10:44.
 
 ### W41s-7: administrator conflict switching only (owner, 2026-11-01)

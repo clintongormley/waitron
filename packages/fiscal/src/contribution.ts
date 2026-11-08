@@ -110,7 +110,7 @@ export interface FiscalCertificateSeat {
     body: unknown,
     now: Date,
   ): Promise<FiscalCertificateAnswer>;
-  /** The ongoing expiry alerts for the certificate `nodeId` installed last, read in `tx`. */
+  /** The ongoing expiry alerts for the newest certificate install on `nodeId` or any box it took over from, read in `tx`. */
   alerts(
     tx: Transaction,
     deps: { nodeId: string },
@@ -125,7 +125,7 @@ export interface FiscalCertificateSeat {
       screen?: string;
     }[]
   >;
-  /** Expiry emails for the certificate `nodeId` installed last: at most one per person per stage. */
+  /** Expiry emails for the newest certificate install on `nodeId` or any box it took over from: at most one per person per stage. */
   reminders: {
     /** Claims the next email due, or `null`; the caller sends it, then reports how it ended. */
     claim(

@@ -522,12 +522,13 @@ and refuses sales and bill payments before money moves; refunds call `refuseNewR
 read the chart, so they still go through. The filing loop (`packages/fiscal-verifactu/src/drain.ts`)
 does not read the chart, so it still sends the records it wrote before.
 
-Such a box also keeps its tills, because it still answers that it accepts sales, at the same term as
-the main box, and the till's server router stays where it is on a tie. So the till's 'Wait for the
-till to move to the main server' does not come true there until this entry is done. In #2570's review
-on 2026-11-08 the real `/api/node` handler and `ServerRouter`, given those answers, stayed on the old
-box for ten polling rounds, and moved to the main box when the old box answered `acceptingSales:
-false`. A real three-box start has not been run for this.
+A box left `serving-secondary` this way also keeps the tills opened from it, because it still answers
+that it accepts sales, at the same term as the main box, and on a tie the till's server router takes
+the first server in its list, which is the address the till's page came from. So on those tills 'Wait
+for the till to move to the main server' does not come true until this entry is done. In #2570's
+review on 2026-11-08 the real `/api/node` handler and `ServerRouter`, given those answers and opened
+from the old box, stayed on the old box for ten polling rounds, and moved to the main box when the old
+box answered `acceptingSales: false`. A real three-box start has not been run for this.
 
 The same class, from the 5.8b review: a chart naming a third box main with M2 `serving-secondary`,
 saved after the role, then a kill: the real start answers `acceptingSales: true`, with M2 `activated`

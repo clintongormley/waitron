@@ -89,7 +89,7 @@ never remembered the sale being cancelled. That fix belongs in the build.
 from. Today only card payments read it. This design makes it the one answer to "whose history is
 mine?", and records a restore into it the same way a handover activation does.
 **2026-11-08, as built for part 1:** the walk is `readHistoryNodes` in `@waitron/db` (this box and the
-boxes it took over from), which reports, reconciliation and the certificate read. Card payments still
+boxes it took over from), which reports, reconciliation, the certificate read, corrections and record remedies read. Card payments still
 call `readTakenOverFrom`, the same list without this box, and the backup check has its own copy of the
 walk.
 
@@ -227,7 +227,7 @@ built: no backlog entry needs a staff route that cancels a sale before go-live.
 ## 9. Left to the builder
 
 - How a restore is written into the taken-over-from list: a handover activation row or a row of its
-  own, as long as `readTakenOverFrom` and `readHistoryNodes` (§2) read both.
+  own, as long as `readHistoryNodes` and the backup check's copy of its walk (§2) read both.
 - Order numbers continue from the highest number any box in the list gave out (my call; one counter
   for the venue is also fine). Either way, no number repeats. Numbers the dead box gave out after the
   backup are lost with the rest of that tail, as a restore already accepts.
