@@ -1514,7 +1514,7 @@ describe("the workflow's concurrency group", () => {
   it("has the publish job ask before it moves the `:main` tag, and obey the answer", () => {
     const body = job("publish").body;
     const text = body.join("\n");
-    expect(text).toMatch(/decision=\$\(scripts\/main-tag-guard\.sh[^)]*\)/);
+    expect(text).toMatch(/decision=\$\((?:timeout \d+ )?scripts\/main-tag-guard\.sh[^)]*\)/);
 
     // Asking is not obeying: a `tags=` line that added `:main` unconditionally would leave the call
     // above in place and still publish the backwards tag.
@@ -5040,7 +5040,8 @@ describe("CI image provenance", () => {
     (file) => {
       const workflow = readFileSync(join(repoRoot, ".github", "workflows", file), "utf8");
       const builds = workflow.split(/uses: docker\/build-push-action@[^\n]+/).slice(1);
-      expect(builds).toHaveLength(2);
+      // ci.yml builds the app image twice: once to check, once to push.
+      expect(builds).toHaveLength(file === "ci.yml" ? 3 : 2);
       for (const build of builds) {
         const withBlock = build.split(/\n {6}- /)[0];
         expect(withBlock).toContain("org.opencontainers.image.revision=${{ github.sha }}");
@@ -6325,5 +6326,296 @@ describe("scoped selection commands", () => {
     expect(Boolean(runInNewContext(packageCheck.if, { needs }))).toBe(
       want.includes("@waitron/ui-core"),
     );
+  });
+});
+
+const PRODUCER_SETTINGS = [
+  "WAITRON_PRODUCER_NAME",
+  "WAITRON_PRODUCER_TAX_ID",
+  "WAITRON_PRODUCER_ADDRESS",
+];
+const PRODUCER_VALUES = {
+  WAITRON_PRODUCER_NAME: "PRODUCER PERSON",
+  WAITRON_PRODUCER_TAX_ID: "00000000T",
+  WAITRON_PRODUCER_ADDRESS: "1 Example Street, 00000 Nowhere (Province), Spain",
+};
+const PRODUCER_EMPTY_STEP = "Refuse to publish without the producer's three settings";
+const PRODUCER_CHANGE_STEP = "Refuse a change of the producer's tax number that nobody allowed";
+const PRODUCER_LOAD_STEP = "Build the app image for checking";
+const PRODUCER_CHECK_STEP = "Check the producer's settings inside the built image";
+
+/**
+ * The publish job's steps in order: each one's lines, its `name:` and its `run: |` script,
+ * dedented. Weaker than GitHub: expressions in `env:` and `with:` are read as text.
+ */
+function publishSteps() {
+  const body = job("publish").body;
+  const stepsAt = body.findIndex((line) => /^ {4}steps:\s*$/.test(line));
+  if (stepsAt === -1) throw new Error("the `publish` job has no `steps:`");
+  const starts = [];
+  for (let at = stepsAt + 1; at < body.length; at++) if (/^ {6}- /.test(body[at])) starts.push(at);
+  return starts.map((start, index) => {
+    const step = body.slice(start, starts[index + 1] ?? body.length);
+    const name =
+      step
+        .find((line, at) => (at === 0 || /^ {8}\S/.test(line)) && /^(- )?name: /.test(line.trim()))
+        ?.trim()
+        .replace(/^(- )?name: /, "") ?? null;
+    const runAt = step.findIndex((line) => /^ {8}run: \|\s*$/.test(line));
+    const script = [];
+    if (runAt !== -1)
+      for (const line of step.slice(runAt + 1)) {
+        if (line.trim() !== "" && !line.startsWith(" ".repeat(10))) break;
+        script.push(line.slice(10));
+      }
+    const envOf = (key) =>
+      step
+        .find((line) => new RegExp(`^ {10}${key}: `).test(line))
+        ?.replace(new RegExp(`^ {10}${key}: `), "")
+        .trim();
+    return { step, text: step.join("\n"), name, script: script.join("\n"), envOf };
+  });
+}
+
+function publishStepNamed(name) {
+  const named = publishSteps().filter((step) => step.name === name);
+  if (named.length !== 1)
+    throw new Error(`the \`publish\` job has ${named.length} steps named "${name}", not one`);
+  return named[0];
+}
+
+/** A build step's `with:` block, one line per key or list entry, its comments dropped. */
+const withBlock = (step) => {
+  const at = step.step.findIndex((line) => /^ {8}with:\s*$/.test(line));
+  if (at === -1) throw new Error(`the step "${step.name}" has no \`with:\``);
+  const block = [];
+  for (const line of step.step.slice(at + 1)) {
+    if (line.trim() !== "" && !line.startsWith(" ".repeat(10))) break;
+    if (line.trim() !== "" && !/^\s*#/.test(line)) block.push(line);
+  }
+  return block;
+};
+
+function runPublishScript(script, env, bin) {
+  return spawnSync("bash", ["-c", script], {
+    encoding: "utf8",
+    timeout: 30_000,
+    env: { PATH: bin ? `${bin}:${process.env.PATH}` : process.env.PATH, HOME: tmpdir(), ...env },
+  });
+}
+
+describe("the publish job carries the producer's settings into the image", () => {
+  const steps = publishSteps();
+  const appBuilds = steps.filter(
+    (step) => /uses: docker\/build-push-action@/.test(step.text) && !/target:/.test(step.text),
+  );
+
+  it("passes the three secrets to both app builds, which differ only in load, push and tags", () => {
+    expect(appBuilds.map((step) => step.name)).toEqual([PRODUCER_LOAD_STEP, "Publish to GHCR"]);
+    const [load, push] = appBuilds.map(withBlock);
+    for (const block of [load, push]) {
+      expect(block).toContain("            WAITRON_BUILD_ID=${{ github.sha }}");
+      for (const setting of PRODUCER_SETTINGS)
+        expect(block).toContain(`            ${setting}=\${{ secrets.${setting} }}`);
+    }
+    expect(load).toContain("          load: true");
+    expect(load.join("\n")).not.toMatch(/push: true/);
+    expect(push).toContain("          push: true");
+    expect(push).toContain("          tags: ${{ steps.tags.outputs.tags }}");
+    expect(push.join("\n")).not.toMatch(/load: true/);
+    const shared = (block) => block.filter((line) => !/^ {10}(load|push|tags):/.test(line));
+    expect(shared(load)).toEqual(shared(push));
+  });
+
+  it("passes them to neither the print-agent build nor image-smoke", () => {
+    const agent = steps.filter((step) => /target: print-agent/.test(step.text));
+    expect(agent).toHaveLength(1);
+    expect(agent[0].text).not.toMatch(/WAITRON_PRODUCER_/);
+    const smoke = readFileSync(join(repoRoot, ".github", "workflows", "image-smoke.yml"), "utf8");
+    expect(smoke).toContain("docker/build-push-action");
+    expect(smoke).not.toMatch(/WAITRON_PRODUCER_/);
+  });
+
+  it("checks, guards, builds, compares and only then pushes", () => {
+    const at = (name) => steps.findIndex((step) => step.name === name);
+    const order = [
+      PRODUCER_EMPTY_STEP,
+      "Work out the tags to publish",
+      PRODUCER_CHANGE_STEP,
+      PRODUCER_LOAD_STEP,
+      PRODUCER_CHECK_STEP,
+      "Publish to GHCR",
+    ].map(at);
+    expect(order.every((index) => index > -1)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    // The image the comparison runs is the one the load build tagged.
+    const loadTags = withBlock(appBuilds[0]).find((line) => /^ {10}tags: /.test(line));
+    const checked = publishStepNamed(PRODUCER_CHECK_STEP).envOf("CHECK_IMAGE");
+    expect(checked).toMatch(/^\S+$/);
+    expect(loadTags).toBe(`          tags: ${checked}`);
+  });
+
+  it("asks main-tag-guard.sh under a time limit, and reads `:main`'s settings from its hand-back", () => {
+    const tagsStep = publishStepNamed("Work out the tags to publish");
+    expect(tagsStep.script).toMatch(/decision=\$\(timeout \d+ scripts\/main-tag-guard\.sh /);
+    const out = tagsStep.envOf("MAIN_TAG_GUARD_ENV_OUT");
+    expect(out).toMatch(/^\$\{\{ runner\.temp \}\}\/\S+$/);
+    expect(publishStepNamed(PRODUCER_CHANGE_STEP).envOf("MAIN_IMAGE_ENV")).toBe(out);
+  });
+
+  describe("the empty-secret check", () => {
+    const step = () => publishStepNamed(PRODUCER_EMPTY_STEP);
+
+    it("reads each setting from its secret", () => {
+      for (const setting of PRODUCER_SETTINGS)
+        expect(step().envOf(setting)).toBe(`\${{ secrets.${setting} }}`);
+    });
+
+    it("passes all three set, printing lengths and never a value", () => {
+      const result = runPublishScript(step().script, PRODUCER_VALUES);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("WAITRON_PRODUCER_ADDRESS: 49 characters");
+      for (const value of Object.values(PRODUCER_VALUES))
+        expect(result.stdout + result.stderr).not.toContain(value);
+    });
+
+    it.each(PRODUCER_SETTINGS)("fails when %s is empty", (setting) => {
+      const result = runPublishScript(step().script, { ...PRODUCER_VALUES, [setting]: "" });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain(setting);
+    });
+  });
+
+  describe("the tax-number change guard", () => {
+    const step = () => publishStepNamed(PRODUCER_CHANGE_STEP);
+    const OTHER = "11111111H";
+    const run = ({ published, allowed = "", ref = "refs/heads/main" }) => {
+      const dir = mkdtempSync(join(tmpdir(), "producer-change-"));
+      try {
+        const file = join(dir, "main.env");
+        if (published !== undefined) writeFileSync(file, published);
+        return runPublishScript(step().script, {
+          MAIN_IMAGE_ENV: file,
+          REF: ref,
+          WAITRON_PRODUCER_TAX_ID: PRODUCER_VALUES.WAITRON_PRODUCER_TAX_ID,
+          WAITRON_PRODUCER_CHANGE_ALLOWED: allowed,
+        });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+
+    it("reads the new number from its secret and the allowance from a repository variable", () => {
+      expect(step().envOf("WAITRON_PRODUCER_TAX_ID")).toBe(
+        "${{ secrets.WAITRON_PRODUCER_TAX_ID }}",
+      );
+      expect(step().envOf("WAITRON_PRODUCER_CHANGE_ALLOWED")).toBe(
+        "${{ vars.WAITRON_PRODUCER_CHANGE_ALLOWED }}",
+      );
+    });
+
+    it("passes when `:main` carries no tax number, or nothing is published", () => {
+      expect(run({ published: "PATH=/usr/bin\nWAITRON_BUILD_ID=abc\n" }).status).toBe(0);
+      expect(run({ published: "" }).status).toBe(0);
+    });
+
+    it("passes when `:main` carries the same tax number", () => {
+      const result = run({
+        published: `WAITRON_PRODUCER_TAX_ID=${PRODUCER_VALUES.WAITRON_PRODUCER_TAX_ID}\n`,
+      });
+      expect(result.status, result.stderr).toBe(0);
+    });
+
+    it("fails on a different tax number, printing neither", () => {
+      const result = run({ published: `WAITRON_PRODUCER_TAX_ID=${OTHER}\n` });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("WAITRON_PRODUCER_CHANGE_ALLOWED");
+      expect(result.stdout + result.stderr).not.toContain(OTHER);
+      expect(result.stdout + result.stderr).not.toContain(PRODUCER_VALUES.WAITRON_PRODUCER_TAX_ID);
+    });
+
+    it("passes a different tax number when the variable holds the new one", () => {
+      const result = run({
+        published: `WAITRON_PRODUCER_TAX_ID=${OTHER}\n`,
+        allowed: PRODUCER_VALUES.WAITRON_PRODUCER_TAX_ID,
+      });
+      expect(result.status, result.stderr).toBe(0);
+    });
+
+    it("fails a different tax number when the variable holds any other value", () => {
+      expect(
+        run({ published: `WAITRON_PRODUCER_TAX_ID=${OTHER}\n`, allowed: OTHER }).status,
+      ).not.toBe(0);
+    });
+
+    it("fails when there is no read of `:main` to compare with", () => {
+      expect(run({ published: undefined }).status).not.toBe(0);
+      expect(run({ published: undefined, ref: "refs/tags/v1.0.0" }).status).not.toBe(0);
+    });
+  });
+
+  describe("the in-image comparison", () => {
+    const step = () => publishStepNamed(PRODUCER_CHECK_STEP);
+    // `docker run … printenv NAME` answered from the environment the stub is given, prefixed INSIDE_.
+    const bin = mkdtempSync(join(tmpdir(), "producer-check-bin-"));
+    afterAll(() => rmSync(bin, { recursive: true, force: true }));
+    writeFileSync(
+      join(bin, "docker"),
+      '#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" >> "$DOCKER_ARGS"\nname="INSIDE_${!#}"\n' +
+        '[ -n "${!name+set}" ] || exit 1\nprintf \'%s\\n\' "${!name}"\n',
+    );
+    chmodSync(join(bin, "docker"), 0o755);
+    const run = (inside) => {
+      const dir = mkdtempSync(join(tmpdir(), "producer-check-"));
+      try {
+        const args = join(dir, "docker.args");
+        const result = runPublishScript(
+          step().script,
+          {
+            ...PRODUCER_VALUES,
+            CHECK_IMAGE: "waitron:check",
+            DOCKER_ARGS: args,
+            ...Object.fromEntries(Object.entries(inside).map(([k, v]) => [`INSIDE_${k}`, v])),
+          },
+          bin,
+        );
+        return { ...result, dockerArgs: existsSync(args) ? readFileSync(args, "utf8") : "" };
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+
+    it("reads each secret", () => {
+      for (const setting of PRODUCER_SETTINGS)
+        expect(step().envOf(setting)).toBe(`\${{ secrets.${setting} }}`);
+    });
+
+    it("passes when the image carries each secret exactly, printing no value", () => {
+      const result = run(PRODUCER_VALUES);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.dockerArgs).toContain("waitron:check");
+      for (const setting of PRODUCER_SETTINGS) expect(result.dockerArgs).toContain(setting);
+      for (const value of Object.values(PRODUCER_VALUES))
+        expect(result.stdout + result.stderr).not.toContain(value);
+    });
+
+    it.each(PRODUCER_SETTINGS)(
+      "fails when %s inside the image differs, printing neither",
+      (setting) => {
+        const result = run({ ...PRODUCER_VALUES, [setting]: "SOMETHING ELSE" });
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain(setting);
+        expect(result.stdout + result.stderr).not.toContain("SOMETHING ELSE");
+        expect(result.stdout + result.stderr).not.toContain(PRODUCER_VALUES[setting]);
+      },
+    );
+
+    it("fails when a setting is missing from the image", () => {
+      const rest = { ...PRODUCER_VALUES };
+      delete rest.WAITRON_PRODUCER_ADDRESS;
+      const result = run(rest);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("WAITRON_PRODUCER_ADDRESS is not set inside the built image");
+    });
   });
 });

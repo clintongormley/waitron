@@ -263,9 +263,18 @@ COPY --from=build --chown=waitron:waitron /third-party/libvips/ /app/third-party
 # QR URL — by scripts/deploy-image-env.test.ts, which is what makes a change to one of the four
 # fail rather than ship a box whose certificate, QR and relying party disagree.
 ARG WAITRON_BUILD_ID
+# The software producer's settings, which the release records carry. CI passes them from repository
+# secrets; a build given none gets them set and empty, which the server reads as unset. compose.yml
+# names none of them, so a box's .env cannot change them (scripts/deploy-image-env.test.ts).
+ARG WAITRON_PRODUCER_NAME
+ARG WAITRON_PRODUCER_TAX_ID
+ARG WAITRON_PRODUCER_ADDRESS
 
 ENV WAITRON_STATE_DIR=/var/lib/waitron/state \
   WAITRON_BUILD_ID=${WAITRON_BUILD_ID} \
+  WAITRON_PRODUCER_NAME=${WAITRON_PRODUCER_NAME} \
+  WAITRON_PRODUCER_TAX_ID=${WAITRON_PRODUCER_TAX_ID} \
+  WAITRON_PRODUCER_ADDRESS=${WAITRON_PRODUCER_ADDRESS} \
   WAITRON_LOG_DIR=/var/lib/waitron/logs \
   WAITRON_DEMO_MEDIA_SOURCE=/app/demo-media \
   WAITRON_MIGRATIONS_DIR=/app/drizzle \

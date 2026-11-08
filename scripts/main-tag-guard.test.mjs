@@ -62,7 +62,7 @@ for (const name of ["docker", "gh"]) {
   chmodSync(path, 0o755);
 }
 
-function runGuard({ docker, gh, argv = [IMAGE, REPOSITORY, SHA] }) {
+function runGuard({ docker, gh, argv = [IMAGE, REPOSITORY, SHA], env = {} }) {
   const dir = mkdtempSync(join(tmpdir(), "main-tag-guard-"));
   temporaryDirectories.push(dir);
 
@@ -82,6 +82,7 @@ function runGuard({ docker, gh, argv = [IMAGE, REPOSITORY, SHA] }) {
       PATH: `${STUB_BIN}:${process.env.PATH}`,
       WT_ARGS_DIR: dir,
       ...outputs,
+      ...env,
     },
   });
 
@@ -185,6 +186,43 @@ describe("main-tag-guard.sh", () => {
     const result = runGuard({ docker: { stdout: imageEnv(OLDER) }, gh: { stdout: "\n" } });
     expect(result.status).not.toBe(0);
     expect(result.stdout).not.toContain("move");
+  });
+
+  // The publish job's producer guard reads `:main`'s tax number from this hand-back rather than
+  // asking the registry a second time.
+  describe("with MAIN_TAG_GUARD_ENV_OUT naming a file", () => {
+    const withOut = (options) => {
+      const out = join(mkdtempSync(join(tmpdir(), "main-tag-guard-out-")), "main.env");
+      temporaryDirectories.push(join(out, ".."));
+      const result = runGuard({ ...options, env: { MAIN_TAG_GUARD_ENV_OUT: out } });
+      return { ...result, out };
+    };
+
+    it("hands back the environment it read, whatever it decides", () => {
+      const published = `${imageEnv(OLDER)}WAITRON_PRODUCER_TAX_ID=00000000T\n`;
+      const result = withOut({ docker: { stdout: published }, gh: { stdout: "behind\n" } });
+      expect(result.status).toBe(0);
+      expect(result.stdout.trim()).toBe("hold");
+      expect(readFileSync(result.out, "utf8")).toContain("WAITRON_PRODUCER_TAX_ID=00000000T");
+    });
+
+    it("hands back an empty file when nothing is published under the tag yet", () => {
+      const result = withOut({
+        docker: { stdout: "", stderr: `ERROR: ${IMAGE}: not found`, status: 1 },
+        gh: ghMustNotRun,
+      });
+      expect(result.stdout.trim()).toBe("move");
+      expect(readFileSync(result.out, "utf8")).toBe("");
+    });
+
+    it("hands back nothing when the registry refuses the read", () => {
+      const result = withOut({
+        docker: { stdout: "", stderr: "ERROR: 403 Forbidden", status: 1 },
+        gh: ghMustNotRun,
+      });
+      expect(result.status).not.toBe(0);
+      expect(existsSync(result.out)).toBe(false);
+    });
   });
 
   it("refuses to run without its three arguments, reaching nothing", () => {

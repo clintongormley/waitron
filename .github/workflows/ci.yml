@@ -4302,6 +4302,26 @@ jobs:
           git rev-parse --is-shallow-repository
           find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
+      # The release image carries the software producer's settings from three repository secrets. A
+      # fork has none of them until it sets its own, so its publish stops here.
+      - name: Refuse to publish without the producer's three settings
+        env:
+          WAITRON_PRODUCER_NAME: ${{ secrets.WAITRON_PRODUCER_NAME }}
+          WAITRON_PRODUCER_TAX_ID: ${{ secrets.WAITRON_PRODUCER_TAX_ID }}
+          WAITRON_PRODUCER_ADDRESS: ${{ secrets.WAITRON_PRODUCER_ADDRESS }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in WAITRON_PRODUCER_NAME WAITRON_PRODUCER_TAX_ID WAITRON_PRODUCER_ADDRESS; do
+            value=${!name}
+            echo "$name: ${#value} characters"
+            if [ -z "$value" ]; then
+              echo "the repository secret $name is empty or not set" >&2
+              missing=1
+            fi
+          done
+          exit "$missing"
+
       - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v4
@@ -4318,6 +4338,7 @@ jobs:
           SHA: ${{ github.sha }}
           REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAIN_TAG_GUARD_ENV_OUT: ${{ runner.temp }}/main-image.env
         run: |
           set -euo pipefail
           # GHCR refuses an uppercase path, and github.repository_owner keeps the account's casing.
@@ -4337,7 +4358,8 @@ jobs:
               # Assigned on its own line, deliberately: `errexit` is SUSPENDED for a command inside
               # an `if` condition, so a failing guard would read there as "do not move the tag" and
               # turn an error into a silently skipped tag move. As an assignment it fails the step.
-              decision=$(scripts/main-tag-guard.sh "$repo:main" "$REPOSITORY" "$SHA")
+              # The time limit fails the step, as any other failure of the guard does.
+              decision=$(timeout 120 scripts/main-tag-guard.sh "$repo:main" "$REPOSITORY" "$SHA")
               case "$decision" in
                 move)
                   tags="$tags,$repo:main"
@@ -4357,6 +4379,43 @@ jobs:
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "agent_tags=$agent_tags" >> "$GITHUB_OUTPUT"
 
+      # A production box refuses to start on a chain made under another producer tax number
+      # (`sif.producer_changed`), and nothing can open the new installation a new producer needs
+      # until A993. So a new tax number reaches an image only when the repository variable
+      # WAITRON_PRODUCER_CHANGE_ALLOWED holds that new number: one change, and a value left set
+      # allows nothing further. A change of name or address alone is not compared.
+      - name: Refuse a change of the producer's tax number that nobody allowed
+        env:
+          REF: ${{ github.ref }}
+          MAIN_IMAGE_ENV: ${{ runner.temp }}/main-image.env
+          WAITRON_PRODUCER_TAX_ID: ${{ secrets.WAITRON_PRODUCER_TAX_ID }}
+          WAITRON_PRODUCER_CHANGE_ALLOWED: ${{ vars.WAITRON_PRODUCER_CHANGE_ALLOWED }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$MAIN_IMAGE_ENV" ]; then
+            # Only a push to main reads :main (main-tag-guard.sh, in the step above).
+            echo "no read of :main's settings to compare the producer tax number with on $REF" >&2
+            exit 1
+          fi
+          if [ -z "$WAITRON_PRODUCER_TAX_ID" ]; then
+            echo "the repository secret WAITRON_PRODUCER_TAX_ID is empty or not set" >&2
+            exit 1
+          fi
+          published=$(sed -n 's/^WAITRON_PRODUCER_TAX_ID=//p' "$MAIN_IMAGE_ENV" | head -n 1)
+          if [ -z "$published" ]; then
+            echo ":main carries no producer tax number yet, so this is not a change"
+          elif [ "$published" = "$WAITRON_PRODUCER_TAX_ID" ]; then
+            echo "the producer tax number is the one :main carries"
+          elif [ "$WAITRON_PRODUCER_CHANGE_ALLOWED" = "$WAITRON_PRODUCER_TAX_ID" ]; then
+            echo "the producer tax number changes from :main's; WAITRON_PRODUCER_CHANGE_ALLOWED allows it"
+          else
+            echo "the secret WAITRON_PRODUCER_TAX_ID differs from the one :main carries, and production" >&2
+            echo "boxes refuse to start on it until A993. To publish it anyway, set the repository" >&2
+            echo "variable WAITRON_PRODUCER_CHANGE_ALLOWED to the new tax number, then start a new run" >&2
+            echo "(a re-run of this job may not read a variable set after its first attempt)." >&2
+            exit 1
+          fi
+
       # Single platform: amd64 is what every box runs. The runner is x86, so a second platform would
       # be built under QEMU. Pay that on a release tag, not on every merge to `main` — and re-add
       # `docker/setup-qemu-action` when you do, since buildx alone registers no binfmt handler and an
@@ -4369,6 +4428,51 @@ jobs:
           mkdir -p build
           git show -s --format='%H:%ct' "$GITHUB_SHA" > build/source-metadata
 
+      # Loaded into the runner's Docker, which takes one platform; a second platform needs this
+      # rechecked. The push below is built again from the builder's cache rather than `docker push`ed,
+      # so the published index keeps its provenance attestation.
+      - name: Build the app image for checking
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: waitron-publish-check:local
+          build-args: |
+            WAITRON_BUILD_ID=${{ github.sha }}
+            WAITRON_PRODUCER_NAME=${{ secrets.WAITRON_PRODUCER_NAME }}
+            WAITRON_PRODUCER_TAX_ID=${{ secrets.WAITRON_PRODUCER_TAX_ID }}
+            WAITRON_PRODUCER_ADDRESS=${{ secrets.WAITRON_PRODUCER_ADDRESS }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
+            org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
+
+      - name: Check the producer's settings inside the built image
+        env:
+          CHECK_IMAGE: waitron-publish-check:local
+          WAITRON_PRODUCER_NAME: ${{ secrets.WAITRON_PRODUCER_NAME }}
+          WAITRON_PRODUCER_TAX_ID: ${{ secrets.WAITRON_PRODUCER_TAX_ID }}
+          WAITRON_PRODUCER_ADDRESS: ${{ secrets.WAITRON_PRODUCER_ADDRESS }}
+        run: |
+          set -euo pipefail
+          # Compared here and never printed: GitHub masks a secret only where it appears verbatim.
+          failed=0
+          for name in WAITRON_PRODUCER_NAME WAITRON_PRODUCER_TAX_ID WAITRON_PRODUCER_ADDRESS; do
+            expected=${!name}
+            if ! inside=$(docker run --rm --pull never --entrypoint printenv "$CHECK_IMAGE" "$name"); then
+              echo "$name is not set inside the built image" >&2
+              failed=1
+            elif [ "$inside" != "$expected" ]; then
+              echo "$name inside the built image differs from its secret (${#inside} characters, the secret ${#expected})" >&2
+              failed=1
+            else
+              echo "$name inside the built image matches its secret (${#inside} characters)"
+            fi
+          done
+          exit "$failed"
+
       - name: Publish to GHCR
         uses: docker/build-push-action@v7
         with:
@@ -4377,7 +4481,11 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
-          build-args: WAITRON_BUILD_ID=${{ github.sha }}
+          build-args: |
+            WAITRON_BUILD_ID=${{ github.sha }}
+            WAITRON_PRODUCER_NAME=${{ secrets.WAITRON_PRODUCER_NAME }}
+            WAITRON_PRODUCER_TAX_ID=${{ secrets.WAITRON_PRODUCER_TAX_ID }}
+            WAITRON_PRODUCER_ADDRESS=${{ secrets.WAITRON_PRODUCER_ADDRESS }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.provenance.outputs.created }}

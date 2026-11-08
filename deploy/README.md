@@ -754,6 +754,12 @@ CI prepares the same metadata in its build context. `waitron.sh install <ref>` s
 both image targets and needs `jq` to read the commit response; it installs `jq` through apt when
 absent. On a host without apt, install `jq` before using a branch or commit ref.
 
+An image you build yourself names you as the software's producer: pass
+`--build-arg WAITRON_PRODUCER_NAME=…`, `--build-arg WAITRON_PRODUCER_TAX_ID=…` and
+`--build-arg WAITRON_PRODUCER_ADDRESS=…` (the address on one line), or its production start refuses
+with `sif.producer_unset`. A fork's publish job reads three repository secrets of those names and
+stops when any is empty, so a fork sets its own.
+
 Then point the compose at both in `.env`: `WAITRON_IMAGE=waitron:dev` and
 `WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:dev`. The print agent is an on-by-default service, so
 without the second one a local `docker compose up` still pulls the published

@@ -1896,6 +1896,31 @@ GitHub no longer holds after a rewrite.
 
 Its suite, `scripts/main-tag-guard.test.mjs`, runs the real script against a stubbed `docker` and `gh`.
 
+### The publish job requires, guards and checks the producer's settings
+
+The app image carries `WAITRON_PRODUCER_NAME`, `WAITRON_PRODUCER_TAX_ID` and
+`WAITRON_PRODUCER_ADDRESS` from three repository secrets of those names, passed as build arguments
+to the app build only. In order, the publish job:
+
+1. fails when any of the three secrets is empty, printing each one's length and never its value;
+2. asks `main-tag-guard.sh` under `timeout 120`, which also writes the environment it read off
+   `:main` to the file `MAIN_TAG_GUARD_ENV_OUT` names, so no second registry read is made;
+3. fails when that environment's `WAITRON_PRODUCER_TAX_ID` differs from the secret, unless the
+   repository variable `WAITRON_PRODUCER_CHANGE_ALLOWED` holds the new tax number itself. A `:main`
+   carrying no tax number, or no `:main` at all, is no difference. Only a push to `main` reads
+   `:main`, so a `v*` tag publish stops here until release tags get a read of their own;
+4. builds the app image with `load: true` (one platform; a second needs this rechecked);
+5. compares each of the three inside that image (`docker run … printenv`) with its secret in the
+   shell, printing lengths only;
+6. builds again with `push: true` from the builder's cache, with the tags step's tags, then pushes
+   the print-agent image, which takes none of the three.
+
+The pushed image is rebuilt from cache rather than `docker push`ed from the loaded one, so it is
+built from the same arguments but is not byte-for-byte the compared image. Guards:
+`scripts/ci-workflow.test.mjs` (runs the three step scripts against fixtures and a stand-in
+`docker`, and reads the rest as text), `scripts/deploy-image-env.test.ts` (reads the Dockerfile and
+`compose.yml` as text) and `scripts/main-tag-guard.test.mjs` (the hand-back). None runs the job.
+
 ### Compare database files as bytes
 
 For a database-file preservation check, use `Buffer.equals` on the two `readFile` results.

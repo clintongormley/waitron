@@ -17,6 +17,9 @@
 #            of the GitHub repository, and the commit being published.
 #   stdout   `move` (this commit may take the tag) or `hold` (a newer commit already has it).
 #   exit     0 with a decision; non-zero with a message on stderr when it cannot reach one.
+#   env      MAIN_TAG_GUARD_ENV_OUT, optional: a file this writes the published image's environment
+#            to after a successful read (empty when nothing is published yet), so the publish job's
+#            producer guard needs no second registry read. Not written when the read fails.
 #
 # It fails rather than guessing. For a transient registry error the next full nightly or manual run can retry it. Two
 # states are NOT self-repairing and need a person: a `:main` carrying no `WAITRON_BUILD_ID`, and one
@@ -53,11 +56,19 @@ trap 'rm -f "$errors"' EXIT
 # a missing `docker` binary, and reading any of those as "no tag yet" would publish the backwards
 # tag this script exists to prevent. Anything else, including the `403 Forbidden` GHCR answers for a
 # package that does not exist at all, stops the publish and prints the registry's own words.
+hand_back() {
+  if [ -n "${MAIN_TAG_GUARD_ENV_OUT:-}" ]; then
+    printf '%s' "$published_env" >"$MAIN_TAG_GUARD_ENV_OUT"
+  fi
+}
+
 if published_env=$(docker buildx imagetools inspect "$IMAGE" \
   --format '{{range .Image.Config.Env}}{{println .}}{{end}}' 2>"$errors"); then
-  :
+  hand_back
 elif grep -qF "$IMAGE: not found" "$errors"; then
   cat "$errors" >&2
+  published_env=
+  hand_back
   echo move
   exit 0
 else
