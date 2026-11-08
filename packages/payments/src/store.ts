@@ -176,12 +176,13 @@ export async function insertAttempting(
 /** Matches only a row still `attempting`; otherwise throws `payment.not_found`. */
 export async function captureAttempting(
   tx: Transaction,
-  params: Key & { settledAt: Date; externalRef: string; card?: CardDetails },
+  params: Key & { settledAt: Date; externalRef: string; card?: CardDetails; amount?: Decimal },
 ): Promise<PaymentRow> {
   return resolveAttempting(tx, params, "captured", {
     settledAt: params.settledAt.toISOString(),
     externalRef: params.externalRef,
     card: params.card,
+    amount: params.amount,
   });
 }
 
@@ -194,7 +195,7 @@ async function resolveAttempting(
   tx: Transaction,
   params: Key,
   state: "captured" | "failed",
-  extra: { settledAt?: string; externalRef?: string; card?: CardDetails },
+  extra: { settledAt?: string; externalRef?: string; card?: CardDetails; amount?: Decimal },
 ): Promise<PaymentRow> {
   const mismatch = await findActiveCaptureMismatch(tx, { payment: params });
   if (mismatch !== undefined)
@@ -206,6 +207,7 @@ async function resolveAttempting(
     .update(payments)
     .set({
       state,
+      amount: extra.amount === undefined ? undefined : decimalToCents(extra.amount),
       settledAt: extra.settledAt ?? null,
       externalRef: extra.externalRef ?? null,
       cardScheme: extra.card?.scheme ?? null,

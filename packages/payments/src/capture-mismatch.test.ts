@@ -8,6 +8,7 @@ import {
   assertReaderStartable,
   captureAttempting,
   failAttempting,
+  getPaymentByRef,
   insertAttempting,
 } from "./store.js";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
@@ -22,6 +23,48 @@ import {
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 const sink = { raise: recordIncidentOnce, handle: markIncidentHandled };
 const now = new Date("2026-11-07T03:00:00.000Z");
+
+it.each(["12.00", "13.00"])("saves a confirmed capture of %s exactly once", async (actual) => {
+  const seeded = await seedWorkingOrder(suite.db);
+  const key = { provider: "stripe", paymentRef: "actual-amount" };
+  await withTransaction(suite.db, (tx) =>
+    insertAttempting(tx, {
+      ...key,
+      origin: deviceOrigin(seeded.deviceId),
+      workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
+      amount: decimal("12.10"),
+    }),
+  );
+  await withTransaction(suite.db, (tx) =>
+    captureAttempting(tx, {
+      ...key,
+      amount: decimal(actual),
+      settledAt: now,
+      externalRef: "pi_actual",
+    }),
+  );
+  await expect(withTransaction(suite.db, (tx) => getPaymentByRef(tx, key))).resolves.toMatchObject({
+    state: "captured",
+    amount: actual,
+    externalRef: "pi_actual",
+  });
+  await expect(
+    withTransaction(suite.db, (tx) =>
+      captureAttempting(tx, {
+        ...key,
+        amount: decimal("99.00"),
+        settledAt: now,
+        externalRef: "pi_later",
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "payment.not_found" });
+  await expect(withTransaction(suite.db, (tx) => getPaymentByRef(tx, key))).resolves.toMatchObject({
+    amount: actual,
+    externalRef: "pi_actual",
+  });
+});
+
 const mismatch = (paymentRef: string, provider = "stripe") => ({
   provider,
   paymentRef,
