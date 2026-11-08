@@ -22,7 +22,6 @@ import {
   expectNoA11yViolations,
   draftServer,
   mountWidget,
-  openedSyncs,
   servedMenus,
   type DraftServer,
 } from "./widgets/test-helpers.js";
@@ -7551,24 +7550,6 @@ describe("till-app: the order's groups", () => {
         ["Flan ×1"],
         ["Fish ×1"],
       ]);
-    });
-
-    it("names the draft sync's person on a held split, not the person the screen shows", async () => {
-      const { syncs, restore } = openedSyncs();
-      try {
-        const server = editServer("2.000");
-        const { el } = await mountApp(server);
-        await openGroups(el);
-        Object.assign(syncs.at(-1)!, { personId: "p-sync" });
-        requestHeldSplit(el, "2.000");
-        await flush(el);
-        expect(server.splitHeldLineIntoUnits).toHaveBeenCalledOnce();
-        expect(server.splitHeldLineIntoUnits.mock.calls[0]![2]).toMatchObject({
-          personId: "p-sync",
-        });
-      } finally {
-        restore();
-      }
     });
 
     it.each([2, 3, 4])(

@@ -18,7 +18,6 @@ import {
   draftServer,
   floorPartyBills,
   mountWidget,
-  openedSyncs,
   partyBillOf,
   type DraftServer,
 } from "./widgets/test-helpers.js";
@@ -3274,7 +3273,7 @@ describe("till-app: signing out while a save is out", () => {
     await flush(el);
 
     expect(api.logout).toHaveBeenCalledOnce();
-    expect(api.logout).toHaveBeenCalledWith("p1");
+    expect(api.logout).toHaveBeenCalledWith();
   });
 
   it("names whoever signed in last, on a tab with no sign-out between them", async () => {
@@ -3288,7 +3287,7 @@ describe("till-app: signing out while a save is out", () => {
     await flush(el);
 
     expect(api.logout).toHaveBeenCalledOnce();
-    expect(api.logout).toHaveBeenCalledWith("p2");
+    expect(api.logout).toHaveBeenCalledWith();
   });
 
   it("leaves the next person in when the save is refused for its person after sign-out", async () => {
@@ -8383,34 +8382,6 @@ describe("recalled draft source splitting", () => {
     return { ...mounted, order, button };
   }
 
-  it("names the person the draft sync hands it on a split, not the person the screen shows", async () => {
-    const runCommand = DraftSync.prototype.runCommand;
-    const command = vi.spyOn(DraftSync.prototype, "runCommand").mockImplementation(async function <
-      T,
-    >(
-      this: DraftSync,
-      send: (state: DraftCommandState, options: { signal: AbortSignal }) => Promise<T>,
-    ): Promise<DraftCommandOutcome<T>> {
-      return (runCommand<T>).call(this, (state, options) =>
-        send({ ...state, personId: "p-sync" }, options),
-      );
-    });
-    try {
-      const split = vi.fn(async () => {
-        saveSplit();
-        return { revision: 4 };
-      });
-      const { el, button } = await opening(split);
-      await userEvent.click(button);
-      await flush(el);
-      expect(split.mock.calls).toEqual([
-        ["v1", "source-7", expect.objectContaining({ personId: "p-sync" }), expect.anything()],
-      ]);
-    } finally {
-      command.mockRestore();
-    }
-  });
-
   it("keeps the original family until the server splits and hydrates distinct recorded charges", async () => {
     let answer!: () => void;
     const split = vi.fn(async () => {
@@ -8853,19 +8824,6 @@ describe("recalled draft source splitting", () => {
       const order = await openTable(mounted.el);
       return { ...mounted, order };
     }
-
-    it("names the draft sync's person on a recall, not the person the screen shows", async () => {
-      const { syncs, restore } = openedSyncs();
-      try {
-        const { el, order } = await recallOpening();
-        Object.assign(syncs.at(-1)!, { personId: "p-sync" });
-        emit(order, "recall-lines", { lineNos: [7] });
-        await flush(el, 6);
-        expect(api.recallToDraft.mock.calls[0]![2].personId).toBe("p-sync");
-      } finally {
-        restore();
-      }
-    });
 
     it("locks the screen, ends no server session, and leaves the saved lines for the person, when a recall is refused for them", async () => {
       const { el, order } = await recallOpening({
@@ -10062,26 +10020,6 @@ describe("A773 retained bill candidates in the app", () => {
     await flush(el, 6);
     await reopen(el, "p1", "Ana");
     expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer"]);
-  });
-
-  it("names the signed-in person in each save, and the next person in theirs", async () => {
-    const { el } = await mountApp();
-    await openTable(el);
-    await tap(el, "Beer");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 20));
-    await flush(el);
-    expect(api.saveDraft.mock.calls.at(-1)![1].personId).toBe("p1");
-    emit(tableOrder(el)!, "logout");
-    await flush(el, 6);
-    await signIn(el, "p2", "Luis");
-    emit(shell(el), "screen-select", { screen: "floor" });
-    await flush(el);
-    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
-    await flush(el, 6);
-    await tap(el, "Steak");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 20));
-    await flush(el);
-    expect(api.saveDraft.mock.calls.at(-1)![1].personId).toBe("p2");
   });
 
   it.each([

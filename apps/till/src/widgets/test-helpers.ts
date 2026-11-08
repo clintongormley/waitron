@@ -24,7 +24,6 @@ import type { DocumentMember, ServedMenu } from "@waitron/shared";
 import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import { png } from "@waitron/ui/test/venue-logo-fixture.js";
 import indexHtml from "../../index.html?raw";
-import { DraftSync } from "../state/draft-sync.js";
 import type { TillShell } from "./till-shell.js";
 
 declare module "vitest/browser" {
@@ -878,19 +877,4 @@ export function floorPartyBills(
       ),
     );
   });
-}
-
-/** The syncs the app opens from here on. A test changes one's person to tell it apart from the
- * screen's, a state no real sign-in reaches, because a sign-in drops the old person's sync. */
-export function openedSyncs(): { syncs: DraftSync[]; restore: () => void } {
-  const syncs: DraftSync[] = [];
-  const load = DraftSync.prototype.load;
-  const spy = vi.spyOn(DraftSync.prototype, "load").mockImplementation(function (
-    this: DraftSync,
-    ...args: Parameters<DraftSync["load"]>
-  ) {
-    syncs.push(this);
-    return load.apply(this, args);
-  });
-  return { syncs, restore: () => spy.mockRestore() };
 }

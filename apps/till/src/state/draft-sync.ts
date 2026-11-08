@@ -144,7 +144,6 @@ export type DraftCommandOutcome<T> =
 export interface DraftCommandState {
   draftId: string | null;
   revision: number;
-  personId: string;
   expectedEdit: BillEditExpected;
 }
 
@@ -813,7 +812,6 @@ export class DraftSync {
           {
             draftId: this.#draftId,
             revision: this.#revision,
-            personId: this.personId,
             expectedEdit: this.expectedEdit!,
           },
           { signal: limit.signal },
