@@ -63,6 +63,11 @@ export interface ErrorParams {
   /** The box's disk is full, so a write was refused. `restartDeletesLogs` says restarting the box
    *  deletes old logs to make room; absent, the answer says nothing about restarting. */
   "storage.disk_full": { restartDeletesLogs?: true };
+  /** Names the SETTING, never its value. */
+  "software_producer.invalid": {
+    setting: string;
+    reason: "missing" | "too_long" | "line_break" | "partial";
+  };
   /** A key in a product's allergen declaration is not one of the EU-14 codes. */
   "allergen.invalid_code": { code: string };
   "allergen.kinds_required": { code: string };
