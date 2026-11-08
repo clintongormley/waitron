@@ -2257,7 +2257,10 @@ describe("till-app simplified-invoice limit", () => {
   });
 
   it.each([
-    ["en-GB", "A dish's period has ended."],
+    [
+      "en-GB",
+      "A dish's period has ended. Review the order and remove dishes from ended periods before sending again.",
+    ],
     ["es-ES", codeMessage("menu_period.ended", "es-ES")],
   ])("says a dish's period has ended in %s and keeps its basket", async (locale, message) => {
     try {
