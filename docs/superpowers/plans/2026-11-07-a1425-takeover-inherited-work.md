@@ -48,6 +48,11 @@ chart names as the serving primary appends to a chain.
 3. **A cancellation's original is found by its invoice, not its chain.** Drop `original.sif_id =
    r.sif_id` (and its `prior_original`, `-held` and `heldRecords` twins). The invoice key plus "not
    replaced" already names one row: `registros_identidad_uq` (`packages/fiscal-verifactu/src/schema/registros.ts:123-125`).
+   **As built (2026-11-08):** one exception. An original that is held (`detenido`) holds back its
+   cancellation only when both are on the same chain: the outbox keeps `original.sif_id = r.sif_id`
+   (and its `prior_original` twin) on the `detenido` branch only (`packages/fiscal-verifactu/src/drain.ts:670, 691`),
+   and `heldRecords` keeps its original-to-case map per chain (`packages/fiscal-verifactu/src/filing-cases.ts:274-285`),
+   not across chains as Task 5c below says.
 4. **The append guard reads the held chart, not clocks.** `handover_activations.activated_at` comes
    from two boxes' clocks (`apps/server/src/handover-activation.ts:124`), so "newest activation"
    could refuse a box that took back. Instead `appendToChain` refuses when the held chart

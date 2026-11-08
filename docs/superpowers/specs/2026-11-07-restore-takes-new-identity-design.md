@@ -102,6 +102,9 @@ Each reader that today filters by "this box" is judged on its own, into one of t
    and covers everything since its last close, so the old box's cash is counted once. If part 1 lands
    before A1325, a close counts only the old box's sales that no close of the old box's own already
    covers (my call).
+   **2026-11-08, as planned for part 1:** the recorded daily close is left alone for A1325 to
+   replace, and the daily-close report reads the list like every other report (plan decision 5,
+   `docs/superpowers/plans/2026-11-07-a1425-takeover-inherited-work.md`).
 3. **This box only, on purpose**: its own invoice chain and series, its own signing key, its own
    mode and mirror link. A new record always goes on this box's chain.
 
@@ -210,6 +213,9 @@ one current (owner). Wording and placement are the builder's, under the design s
    one name, and A1188's emergency copy gets the restore it needs.
 
 Planning: part 1 is planned in full now; part 3 gets an outline until Cloud has answered.
+
+**2026-11-08:** part 1 is built on branch `feat/a1425-takeover-inherited-work` (A1425). Part 2 is not
+built: no backlog entry needs a staff route that cancels a sale before go-live.
 
 ## 9. Left to the builder
 
