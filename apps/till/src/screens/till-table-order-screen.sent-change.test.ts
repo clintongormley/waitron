@@ -2,16 +2,35 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, type WtDialog, type WtRowActions, type WtTextarea } from "@waitron/ui";
-import type { BillBalance, CurrentOrders, PartyBill, TabLine } from "../api/client.js";
+import type {
+  BillBalance,
+  BillEditExpected,
+  CurrentOrders,
+  PartyBill,
+  TabLine,
+} from "../api/client.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { flan, menuOf, mount, products, resized } from "./till-table-order-screen.test-helpers.js";
-import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
+import {
+  burger,
+  flan,
+  menuOf,
+  mount,
+  products,
+  resized,
+} from "./till-table-order-screen.test-helpers.js";
+import {
+  current,
+  currentGroup,
+  groups,
+  now,
+  row,
+} from "./till-table-order-screen.current-orders.test-helpers.js";
 import "./till-table-order-screen.js";
-import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import type { ChangeLineDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -483,3 +502,234 @@ it.each([
     expect(asked.count).toBe(2);
   },
 );
+
+const billEdit: BillEditExpected = {
+  billId: "wo-4",
+  editorVersion: 3,
+  draftId: "draft-1",
+  draftRevision: 2,
+};
+
+/** Every `change-line` the screen sends. */
+function changes(el: TillTableOrderScreen): ChangeLineDetail[] {
+  const seen: ChangeLineDetail[] = [];
+  el.addEventListener("change-line", (event) =>
+    seen.push((event as CustomEvent<ChangeLineDetail>).detail),
+  );
+  return seen;
+}
+
+async function setQuantity(el: TillTableOrderScreen, value: string) {
+  const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
+  picker
+    .shadowRoot!.querySelector('[name="quantity"]')!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+  await picker.updateComplete;
+  await el.updateComplete;
+}
+
+async function pressChange(el: TillTableOrderScreen) {
+  const button = q(el, "[data-sent-change]")!;
+  expect(button.hasAttribute("disabled")).toBe(false);
+  await userEvent.click(button);
+  await el.updateComplete;
+}
+
+const doneness = burger.offeredModifiers!.find((list) => list.kind === "options")!;
+const steakish = { ...burger, offeredModifiers: [doneness] };
+const rare = {
+  listName: { en: "Doneness" },
+  listCustomerName: { es: "Punto carta" },
+  listKitchenName: "Punto KDS",
+  labelName: { en: "Rare" },
+  labelCustomerName: { es: "Poco hecha carta" },
+  labelKitchenName: "Poco hecha KDS",
+};
+
+it("sends a note change for the row and closes the window", async () => {
+  const el = await openRow({ lines: [line()], revision: 9, billEdit });
+  const seen = changes(el);
+  await editNote(el, "warm, no cream");
+  await pressChange(el);
+  expect(seen).toEqual([
+    {
+      lineNo: 1,
+      lineName: "Flan",
+      patch: { note: "warm, no cream", portionLineNos: [] },
+      revision: 9,
+      expectedEdit: billEdit,
+      saleLine: {
+        menuItemId: "offer-flan",
+        quantity: "2",
+        options: [],
+        extras: [],
+        note: "warm, no cream",
+      },
+    },
+  ]);
+  await expect.poll(() => q<WtDialog>(el, "[data-sent-line-dialog]")!.open).toBe(false);
+});
+
+it("sends a cleared note as null, and a note that opened empty as null", async () => {
+  const el = await openRow({ lines: [line()], revision: 9, billEdit });
+  const seen = changes(el);
+  await editNote(el, "");
+  await pressChange(el);
+  expect(seen[0]!.patch).toEqual({ note: null, portionLineNos: [] });
+  cleanupWidgets();
+  const empty = await openRow({ lines: [line({ note: null })], revision: 9, billEdit });
+  const sent = changes(empty);
+  await setQuantity(empty, "3");
+  await pressChange(empty);
+  expect(sent[0]!.patch).toEqual({ note: null, portionLineNos: [], quantity: "3" });
+});
+
+it("sends a changed answer, and leaves the answers out when only the note changed", async () => {
+  const lines = [
+    line({ productId: "burger", menuItemId: "offer-burger", optionSnapshots: [rare] }),
+  ];
+  const el = await openRow({ lines, products: [flan, steakish], revision: 9, billEdit });
+  const seen = changes(el);
+  const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
+  await picker.updateComplete;
+  picker.shadowRoot!.querySelector<HTMLInputElement>("#label-list-cooked-label-medium")!.click();
+  await picker.updateComplete;
+  await el.updateComplete;
+  await pressChange(el);
+  expect(seen[0]!.patch).toEqual({
+    note: "warm",
+    portionLineNos: [],
+    options: [{ listId: "list-cooked", labelId: "label-medium" }],
+  });
+  expect(seen[0]!.saleLine).toMatchObject({
+    menuItemId: "offer-burger",
+    options: [{ listId: "list-cooked", labelId: "label-medium" }],
+  });
+  cleanupWidgets();
+  const noteOnly = await openRow({ lines, products: [flan, steakish], revision: 9, billEdit });
+  const sent = changes(noteOnly);
+  await editNote(noteOnly, "warm, no salt");
+  await pressChange(noteOnly);
+  expect(sent[0]!.patch).toEqual({ note: "warm, no salt", portionLineNos: [] });
+});
+
+it("hides the dish's answers above the fields while they can be changed", async () => {
+  const lines = (changesAfterSending: TabLine["changesAfterSending"]) => [
+    line({
+      productId: "burger",
+      menuItemId: "offer-burger",
+      optionSnapshots: [rare],
+      changesAfterSending,
+    }),
+  ];
+  const el = await openRow({ lines: lines("held-or-waiting"), products: [flan, steakish] });
+  expect(q(el, "[data-sent-line-dialog] .move-dish .modifier-answer")).toBeNull();
+  cleanupWidgets();
+  const readOnly = await openRow({ lines: lines("never"), products: [flan, steakish] });
+  expect(q(readOnly, "[data-sent-line-dialog] .move-dish .modifier-answer")).not.toBeNull();
+});
+
+it("raises a row of 2 as one save naming both dishes, with the row's new total", async () => {
+  const portion = (lineId: string, lineNo: number) =>
+    row(lineId, "Flan", "1.000", {
+      lineNo,
+      released: false,
+      firedAt: null,
+      kitchen: { stationId: null, movable: false, state: "queued", firedAt: null },
+    });
+  const orders = current();
+  orders.groups[2] = currentGroup("g3", 3, "held", [portion("l-flan", 1), portion("l-flan-2", 2)]);
+  const el = await openRow({
+    currentOrders: orders,
+    lines: [
+      line({ quantity: "1.000", portion: true }),
+      line({ id: "l-flan-2", lineNo: 2, quantity: "1.000", portion: true }),
+    ],
+    revision: 9,
+    billEdit,
+  });
+  const seen = changes(el);
+  const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
+  expect(picker.quantity).toBe("2");
+  await setQuantity(el, "3");
+  await pressChange(el);
+  expect(seen).toEqual([
+    {
+      lineNo: 1,
+      lineName: "Flan",
+      patch: { note: "warm", portionLineNos: [2], quantity: "3" },
+      revision: 9,
+      expectedEdit: billEdit,
+      saleLine: { menuItemId: "offer-flan", quantity: "3", options: [], extras: [], note: "warm" },
+    },
+  ]);
+});
+
+it("shows a weighed dish's quantity read-only and sends its note change without a quantity", async () => {
+  const orders: CurrentOrders = structuredClone(current());
+  Object.assign(orders.groups[2]!.rows[0]!, { quantity: "0.350", unitPrecision: 3, extras: [] });
+  const el = await openRow({
+    currentOrders: orders,
+    lines: [
+      line({
+        productId: "jamon",
+        menuItemId: "offer-jamon",
+        quantity: "0.350",
+        unitPrecision: 3,
+      }),
+    ],
+    revision: 9,
+    billEdit,
+  });
+  const seen = changes(el);
+  const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
+  await picker.updateComplete;
+  expect(picker.shadowRoot!.querySelector('[name="quantity"]')).toBeNull();
+  expect(q(el, "[data-sent-line-dialog] .move-dish")!.textContent).toContain("×0.35");
+  await editNote(el, "thin slices");
+  await pressChange(el);
+  expect(seen).toEqual([
+    {
+      lineNo: 1,
+      lineName: "Flan",
+      patch: { note: "thin slices", portionLineNos: [] },
+      revision: 9,
+      expectedEdit: billEdit,
+      saleLine: {
+        menuItemId: "offer-jamon",
+        quantity: "0.350",
+        options: [],
+        extras: [],
+        note: "thin slices",
+      },
+    },
+  ]);
+});
+
+it("sends nothing for a lower total and points to Void…, which asks before opening Void for the row", async () => {
+  setLocale("es");
+  const { el, answer, dialog } = await openInApp();
+  const seen = changes(el);
+  const voids: unknown[] = [];
+  el.addEventListener("cancel-item", (event) => voids.push((event as CustomEvent).detail));
+  expect(q(el, "[data-sent-change-lower]")).toBeNull();
+  await editNote(el, "warm, no cream");
+  await setQuantity(el, "1");
+  await pressChange(el);
+  expect(seen).toEqual([]);
+  expect(dialog.open).toBe(true);
+  const lower = q(el, "[data-sent-change-lower]")!;
+  expect(lower.textContent).toContain("Para quitar uno, usa Cancelar…");
+  const voidButton = q(el, "[data-sent-change-void]")!;
+  expect(voidButton.textContent!.trim()).toBe("Cancelar…");
+  expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(false);
+  voidButton.click();
+  await answer("keep");
+  expect(voids).toEqual([]);
+  expect(dialog.open).toBe(true);
+  q(el, "[data-sent-change-void]")!.click();
+  await answer("discard");
+  await expect.poll(() => voids).toEqual([{ lineId: "l-flan" }]);
+  await expect.poll(() => dialog.open).toBe(false);
+  expect(seen).toEqual([]);
+});

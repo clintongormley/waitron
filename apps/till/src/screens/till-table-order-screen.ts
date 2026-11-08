@@ -88,9 +88,13 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
 import "../widgets/modifier-picker.js";
-import type { ModifierChangeDetail, TillModifierPicker } from "../widgets/modifier-picker.js";
+import type {
+  ModifierChangeDetail,
+  ModifierConfirmDetail,
+  TillModifierPicker,
+} from "../widgets/modifier-picker.js";
 import { deriveExtraSelections } from "../state/held-extras.js";
-import { deriveOptionSelections } from "../state/held-options.js";
+import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
 import { offeredListsOf } from "../state/order-line.js";
 import type { LineSelection, SelectedExtra } from "../state/working-order.js";
 import {
@@ -1345,6 +1349,9 @@ export class TillTableOrderScreen extends LitElement {
     pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
     detail: ModifierChangeDetail;
   } | null = null;
+  /** The open Sent window whose Change dish was pressed with a lower total. */
+  @state() private sentChangeLowered: NonNullable<TillTableOrderScreen["sentLinePending"]> | null =
+    null;
   /** The product and selection the open Sent window's fields started from. */
   #sentChangeSeed?: {
     pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
@@ -3125,6 +3132,77 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
+  /** A whole dish's field names a total below what the row holds now. */
+  #sentChangeLowers(selection: ModifierConfirmDetail | undefined, total: Decimal): boolean {
+    if (selection?.quantity === undefined) return false;
+    try {
+      return compareDecimal(decimal(selection.quantity), total) < 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Sends Change dish for the open row; false when nothing was sent. */
+  #changeSentLine(
+    pending: NonNullable<typeof this.sentLinePending>,
+    detail: ModifierConfirmDetail,
+  ): boolean {
+    if (pending !== this.sentLinePending || !this.isConnected || this.busy || this.groupCommandBusy)
+      return false;
+    const members = this.#sentLineMembers();
+    const lines = members === undefined ? undefined : this.#sentChangeLines(members);
+    const seed = this.#sentChangeSeed;
+    if (lines === undefined || seed?.pending !== pending) return false;
+    const total = multiplyDecimal(
+      decimal(members![0]!.row.quantity),
+      decimal(String(members!.length)),
+    );
+    const [line, ...others] = [...lines].sort((a, b) => a.lineNo - b.lineNo) as [
+      TabLine,
+      ...TabLine[],
+    ];
+    if (this.#sentChangeLowers(detail, total)) {
+      this.sentChangeLowered = pending;
+      return false;
+    }
+    const offered = offeredListsOf(seed.product);
+    const patch: OrderLinePatch = {
+      note: detail.note ?? null,
+      portionLineNos: others.map((other) => other.lineNo),
+    };
+    if (detail.quantity !== undefined && compareDecimal(decimal(detail.quantity), total) !== 0)
+      patch.quantity = detail.quantity;
+    const options = detail.options ?? [];
+    if (
+      offered.some((entry) => entry.kind === "options") &&
+      !sameOptionSelections(options, seed.selection.options ?? [])
+    )
+      patch.options = options;
+    const extras = toWireModifiers({ extras: detail.extras }).extras ?? [];
+    if (offered.some((entry) => entry.kind === "extras")) patch.extras = extras;
+    const change: ChangeLineDetail = {
+      lineNo: line.lineNo,
+      lineName: this.#nameForLine(line),
+      patch,
+      revision: this.revision,
+      expectedEdit: this.billEdit,
+      saleLine: {
+        menuItemId: line.menuItemId ?? undefined,
+        ...(line.parentProductId === null || line.productId === null
+          ? {}
+          : { variantId: line.productId }),
+        quantity: detail.quantity ?? line.quantity,
+        options,
+        extras,
+        ...(detail.note ? { note: detail.note } : {}),
+      },
+    };
+    this.sentLinePending = null;
+    this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
+    this.#dispatch("change-line", change);
+    return true;
+  }
+
   /** The open window's fields hold a change that another of its actions would throw away. */
   #sentChangeHeld(pending: NonNullable<typeof this.sentLinePending>): boolean {
     return this.sentChange?.pending === pending && this.sentChange.detail.changed;
@@ -3385,6 +3463,12 @@ export class TillTableOrderScreen extends LitElement {
       changeLines === undefined ? undefined : this.#sentChangeSeedFor(pending!, changeLines[0]!);
     const change = this.sentChange?.pending === pending ? this.sentChange.detail : undefined;
     const changeReady = change?.changed === true && change.savable && !disabled;
+    // More of a weighed dish is weighed on its own, so it goes in the New order.
+    const weighed = changeLines !== undefined && (changeLines[0]!.unitPrecision ?? 0) > 0;
+    const lowered =
+      seed !== undefined &&
+      this.sentChangeLowered === pending &&
+      this.#sentChangeLowers(change?.selection, decimal(shownQuantity));
     const status =
       slice?.kind === "cancelled_charged"
         ? t("table.cancelled_charged")
@@ -3411,7 +3495,7 @@ export class TillTableOrderScreen extends LitElement {
           : html`
               <p class="move-dish">
                 ${row.name}${this.#nutrition(row)} ×${this.#displayQty(shownQuantity)}
-                ${this.#sentDetails(row)}
+                ${seed === undefined ? this.#sentDetails(row) : nothing}
                 ${allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: row.lineId })}
               </p>
               ${lineNutrition(row.nutrition)}
@@ -3425,7 +3509,7 @@ export class TillTableOrderScreen extends LitElement {
                         data-sent-change-fields
                         inline
                         withNote
-                        lineDetails
+                        ?lineDetails=${!weighed}
                         .draftParent=${this}
                         .product=${seed.product}
                         .quantity=${this.#displayQty(shownQuantity)}
@@ -3436,12 +3520,26 @@ export class TillTableOrderScreen extends LitElement {
                           if (pending === this.sentLinePending)
                             this.sentChange = { pending: pending!, detail: event.detail };
                         }}
-                        @wt-modifier-confirm=${(event: Event) => {
+                        @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
                           event.stopPropagation();
-                          event.preventDefault();
+                          if (!this.#changeSentLine(pending!, event.detail)) event.preventDefault();
                         }}
                       ></till-modifier-picker>`,
                     )
+              }
+              ${
+                lowered
+                  ? html`<div class="total-row" data-sent-change-lower role="alert">
+                      <span>${t("table.change_dish_lower")}</span>
+                      <wt-button
+                        variant="secondary"
+                        data-sent-change-void
+                        ?disabled=${disabled}
+                        @click=${() => this.#actOnSentLine(pending, "void")}
+                        >${t("table.void_line")}</wt-button
+                      >
+                    </div>`
+                  : nothing
               }
               <div class="total-row">
                 <span>${row.name}</span
