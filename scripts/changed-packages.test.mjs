@@ -930,3 +930,39 @@ describe("implicit package test readers", () => {
     });
   });
 });
+
+describe("brand selection", () => {
+  const readers = ["dashboard", "setup", "till", "ui"];
+  const packages = readers.map((name) => ({
+    name: `@waitron/${name}`,
+    dir: name === "ui" ? "packages/ui" : `apps/${name}`,
+  }));
+  it.each(["png/waitron-mark.png", "public/icon.ico", "logo.svg", "README.md"])(
+    "narrows %s with or without documentation",
+    (file) => {
+      for (const docs of [[], ["docs/backlog.md", "README.md"]]) {
+        const scope = scopeForPaths([`packages/ui/brand/${file}`, ...docs], () => packages);
+        expect(formatScope(scope)).toBe(
+          "code=true\nscope=brand\npackages=@waitron/dashboard @waitron/setup @waitron/till @waitron/ui\nroot=false\ndeploy=false",
+        );
+      }
+    },
+  );
+  it.each([
+    "packages/ui/src/index.ts",
+    "packages/ui/brand/build-icons.mjs",
+    "packages/ui/brand/unknown.txt",
+    "packages/ui/brand-extra/icon.png",
+  ])("keeps normal selection alongside %s", (path) => {
+    expect(scopeForPaths(["packages/ui/brand/logo.svg", path], () => packages)).toMatchObject({
+      kind: "packages",
+      packages: ["@waitron/ui"],
+    });
+  });
+  it.each([null, ...readers.map((_, i) => packages.filter((__, at) => at !== i))])(
+    "fails closed for missing readers: %j",
+    (members) => {
+      expect(scopeForPaths(["packages/ui/brand/logo.svg"], () => members).kind).toBe("global");
+    },
+  );
+});

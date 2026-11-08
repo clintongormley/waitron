@@ -173,7 +173,7 @@ jobs:
 
           paths=$(bash scripts/ci-diff-paths.sh)
 
-          # Five lines out — `code=`, `scope=` (one of documentation, root, global, packages),
+          # Five lines out — `code=`, `scope=` (one of documentation, root, global, packages, brand),
           # `packages=`, `root=` and `deploy=` — from ONE classifier call, which is also the one
           # `.husky/pre-push` makes. Four become job outputs: `root=` is emitted for the record and
           # read by no consumer today — the hook routes a root-only push on `scope=root` — while
@@ -182,7 +182,7 @@ jobs:
           #
           # `set -e` is what makes a classifier that cannot run FAIL this step rather than quietly
           # emit nothing, and it matters for ONE of the outputs rather than being a nicety for all of
-          # them: `code`. An empty `scope` would be safe: it is not the literal `packages`, so
+          # them: `code`. An empty `scope` would be safe: it is neither `packages` nor `brand`, so
           # every branch below falls through to running everything. An empty `code` would NOT be —
           # every code-gated job tests `needs.changes.outputs.code == 'true'` (bundle-smoke,
           # typecheck, all test shards and both mutation runs), so an empty value skips them, and
@@ -235,7 +235,7 @@ jobs:
       # (`<pkg>...` is the other direction, a package and its dependencies, and would gate on the
       # wrong set). Only the attribution moved out of pnpm's hands.
       #
-      # Anything that is not `scope=packages` runs unscoped: `global` because an unattributable path
+      # Brand scope uses exact readers; packages scope includes dependents. Other scopes run unscoped: `global` because an unattributable path
       # could affect anything, `documentation` and `root` because the gates are ANDed with `code`
       # anyway, and an empty or unexpected value because a scope nobody can read is not a reason to
       # skip a suite.
@@ -248,7 +248,7 @@ jobs:
           PACKAGES: ${{ steps.classify.outputs.packages }}
         run: |
           set -euo pipefail
-          if [ "$SCOPE" != "packages" ] || [ -z "$PACKAGES" ]; then
+          if { [ "$SCOPE" != "packages" ] && [ "$SCOPE" != "brand" ]; } || [ -z "$PACKAGES" ]; then
             node scripts/changed-scope.mjs --unscoped >> "$GITHUB_OUTPUT"
           else
             # The filters are accumulated as POSITIONAL PARAMETERS rather than concatenated into a
@@ -278,7 +278,9 @@ jobs:
             # exits 1 when the corrupted name was the whole scope. This job has no equivalent.
             set -f
             set --
-            for pkg in $PACKAGES; do set -- "$@" --filter "...$pkg"; done
+            prefix="..."
+            [ "$SCOPE" != "brand" ] || prefix=""
+            for pkg in $PACKAGES; do set -- "$@" --filter "$prefix$pkg"; done
             set +f
 
             # stderr is deliberately NOT discarded: only stdout is piped, so anything pnpm says goes
@@ -1741,12 +1743,20 @@ jobs:
       - name: Run the ui shard
         run: |
           set -euo pipefail
+          if [ "${{ needs.changes.outputs.scope }}" = "brand" ]; then
+            pnpm --filter "@waitron/ui" ls --depth -1 --json \
+              | node scripts/changed-packages.mjs runnable test:coverage
+            node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/ui" --workspace-concurrency=1 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
+              --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+            exit 0
+          fi
           pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
           node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/ui" --filter "@waitron/ui-core" --workspace-concurrency=1 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
       - run: pnpm --filter @waitron/ui-core test:package
+        if: needs.changes.outputs.scope != 'brand'
 
   # apps/till alone: the Counter POS browser app, the workspace's SECOND Chromium consumer after
   # packages/ui. It has a shard of its own for the same reason test-ui does — a browser-mode

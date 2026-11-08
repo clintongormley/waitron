@@ -8,6 +8,16 @@ before treating a green run as evidence about the workspace. Root coverage, muta
 other selected checks remain in place. Till changes also select the server: its handover test
 loads the till router by path, outside the workspace dependency graph.
 
+Brand PNG, SVG and ICO files under `packages/ui/brand/`, and its `README.md`, select
+exactly UI, dashboard, setup and till tests. Paths already classified as documentation may
+accompany them. Any other path keeps the ordinary selection. CI retains root guards and
+bundle-smoke; the hook typechecks those four readers without expanding to their dependents.
+The UI job omits ui-core's suite and package check for this scope. Full runs still select all.
+The readers include UI's lockup decoding tests, dashboard's direct SVG imports, setup's
+imported lockup, and till's powered-by image check; the three app builds also copy brand/public.
+The reader list is explicit: a new consumer needs that list updated. The selection tests exercise
+the classifier, real workflow gate shell and hook; they do not discover new asset consumers.
+
 The full CI run starts nightly at 02:00 UTC, on manual dispatch and on `v*` releases. It tests all
 packages, collects coverage and requires the existing merged `98/98/98/95` thresholds. Scoped
 runs skip coverage transfers and merge jobs. Shards retain their existing allocation and check

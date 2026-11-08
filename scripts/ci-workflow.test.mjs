@@ -3565,8 +3565,10 @@ describe("the test shards", () => {
       }
     }
 
-    // Every shard job, and the stream step, runs exactly one test command.
-    expect(commands.map(({ id }) => id).sort()).toEqual(steps.map(({ id }) => id).sort());
+    // Every shard job and the stream step has a test command; branches may select different commands.
+    expect([...new Set(commands.map(({ id }) => id))].sort()).toEqual(
+      steps.map(({ id }) => id).sort(),
+    );
     for (const { id, script, command } of commands) {
       expect(command, id).toContain(progress);
       // test:coverage passes no reporter of its own, so a lone --reporter would REPLACE the
@@ -6089,4 +6091,34 @@ describe("scoped shards retain their empty-selection guard", () => {
       expect(guard, id).toBeLessThan(run);
     },
   );
+});
+
+it("brand gates select all four readers and no other package jobs", () => {
+  const command = workflowSteps(job("changes").body.join("\n")).find(
+    (step) => step.id === "gates",
+  ).command;
+  const dir = mkdtempSync(join(tmpdir(), "brand-gates-"));
+  try {
+    const output = join(dir, "output");
+    const result = spawnSync("bash", ["-c", command], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      timeout: 15000,
+      env: {
+        ...process.env,
+        SCOPE: "brand",
+        PACKAGES: "@waitron/dashboard @waitron/setup @waitron/till @waitron/ui",
+        GITHUB_OUTPUT: output,
+      },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    const enabled = readFileSync(output, "utf8")
+      .trim()
+      .split("\n")
+      .filter((line) => line.endsWith("=true"))
+      .sort();
+    expect(enabled).toEqual(["dashboard=true", "setup=true", "till=true", "ui=true"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

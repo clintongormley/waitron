@@ -132,15 +132,18 @@ set --
 repro_filters=""
 scope_label="whole workspace"
 
-if [ "$scope_kind" = "packages" ] && [ -n "$scope_packages" ]; then
+if { [ "$scope_kind" = "packages" ] || [ "$scope_kind" = "brand" ]; } && [ -n "$scope_packages" ]; then
   # Split the classifier's package list into arguments without expanding shell globs.
+  prefix="..."
+  [ "$scope_kind" != "brand" ] || prefix=""
   set -f
   for pkg in $scope_packages; do
-    set -- "$@" --filter "...$pkg"
-    repro_filters="$repro_filters --filter \"...$pkg\""
+    set -- "$@" --filter "$prefix$pkg"
+    repro_filters="$repro_filters --filter \"$prefix$pkg\""
   done
   set +f
   scope_label="$scope_packages + dependents"
+  [ "$scope_kind" != "brand" ] || scope_label="$scope_packages (brand readers)"
 fi
 
 check_changed() {
