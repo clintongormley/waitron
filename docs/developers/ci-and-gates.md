@@ -125,16 +125,16 @@ External provenance, read 2026-11-06:
 
 Set `DISPOSABLE_TESTS_MODE=server` to route CI jobs to Lane I's disposable Linux
 runners. Same-repository pull requests, main pushes, tags, schedules, manual runs and
-ordinary reruns use the server route. Fork pull requests stay hosted. The first `changes`
-job and `server-queue-watchdog` stay on GitHub so they can run when server assignment
-stops (watcher, 2026-11-08 14:20). The reusable image smoke job uses this route when
+ordinary reruns use the server route. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
+GitHub so routing, recovery and the required result can still run when server assignment
+stops (watcher, 2026-11-08 16:00). The reusable image smoke job uses this route when
 called by CI; its other callers retain their existing routing.
 
 The workflow no longer uses `DISPOSABLE_TESTS_*_JOBS` family caps. The controller's
 measured global pool limits simultaneous guests. Removing a workflow cap does not add
 memory or runner slots. Publish matching controller and host job-key support before
-activating this workflow; the controller must recognise stream, merge, summary, image
-and publication jobs as well as package shards.
+activating this workflow; the controller must recognise stream, merge and image
+jobs as well as package shards.
 
 Set `DISPOSABLE_TESTS_HEAD` to one full source SHA to select that commit, or unset it
 for ordinary traffic. The watchdog uses the same selection. The selection reads the PR

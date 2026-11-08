@@ -300,7 +300,8 @@ describe("disposable server routing", () => {
     expect(job("changes").body).toContain("    runs-on: ubuntu-latest");
     for (const entry of jobs) {
       const routing = entry.body.find((line) => /^ {4}runs-on:/.test(line));
-      if (!routing || ["changes", "server-queue-watchdog"].includes(entry.id)) continue;
+      if (!routing || ["changes", "server-queue-watchdog", "publish", "ci"].includes(entry.id))
+        continue;
       for (const event of ["pull_request", "push", "workflow_dispatch", "schedule"]) {
         const context = routingContext();
         context.github.event_name = event;
