@@ -15,9 +15,9 @@ table row `printer_lists`, "A stale id is not harmless on a printer list"), §1.
 Rules: [slice rules](2026-11-08-a1308-slice-rules.md). Area order:
 [dv1](2026-11-08-a1308-dv1-devices-row.md).
 
-**Base:** `main` after dv6. Lines read at `a086eedfb7`; dv4 already took the `page_printer_id`
+**Base:** `main` after dv6. Lines read at `a086eedfb7`; dv5 already took the `page_printer_id`
 reads out of the files cited here, so their line numbers have moved within those functions. A cite
-whose function no longer does what this plan says is a stop (rules §5.1).
+whose function no longer does what this plan says is a stop (rules §5.1); a cite that only moved is not.
 
 **Owner lands:** no (rules §6).
 
@@ -89,7 +89,10 @@ printerLists: json<StoredPrinterLists>("printer_lists").notNull().default({}),
 **Modify**
 - `packages/db/src/schema/device-profiles.ts`; delete `packages/db/src/schema/device-profile-printers.ts`
   and its test; `packages/db/src/schema/index.ts:41`, `packages/db/src/index.ts:185-188`;
-  `packages/db/src/classification.ts:111`; `packages/db/src/configuration-transfer.ts:76`, `:102`.
+  `packages/db/src/classification.ts:111`; `packages/db/src/configuration-transfer.ts:76`, `:102`;
+  `packages/provisioning/src/configuration-transfer.ts:123`, `:160`, `:473`, `:476` (the bundle loses
+  a table and `device_profiles` rows change shape: its format version goes up by one, rules §9, as
+  dv2 did).
 - `packages/layouts/src/device-printers.ts`, `device-equipment.ts` (the profile-list reads near
   `:150-172`, `:368-382`, `:500-517`), `device-profile-store.ts:113-129`, `:300-303` (a profile
   delete no longer deletes rows; a copy copies the column), `errors.ts:31-41`.
@@ -103,7 +106,7 @@ printerLists: json<StoredPrinterLists>("printer_lists").notNull().default({}),
 - `apps/dashboard/src/api/live-queries.ts:106`, `:121`, `:399`; `apps/dashboard/src/i18n/codes.ts`
   (decision 3, if needed).
 - `scripts/schema-constraints.test.ts:100-101`.
-- Tests writing `device_profile_printers` directly (17 files): set-up through
+- Tests writing `device_profile_printers` directly (21 files): set-up through
   `setProfilePrinterLists` or a raw column write.
 - Generated: core's starting migration files and the epoch file.
 
@@ -114,9 +117,9 @@ JSON round trip).
 
 | Counted | Lines |
 | --- | --- |
-| Code: schema 20, device-printers 70, device-equipment 60, profile store 20, printer delete 40, demo printer, equipment scan and used-by 40, transfer 5, errors and words 10, lists 10 | ~275 |
-| Tests: writer test 90, set-up re-pointed in 17 files 170, M4 extension 50, guard lists 10 | ~320 |
-| **Total** | **~595** |
+| Code: schema 20, device-printers 70, device-equipment 60, profile store 20, printer delete 40, demo printer, equipment scan and used-by 40, transfer and version 10, errors and words 10, lists 10 | ~280 |
+| Tests: writer test 90, set-up re-pointed in 21 files 210, M4 extension 50, guard lists 10 | ~360 |
+| **Total** | **~640** |
 
 About 2½ hours.
 
@@ -155,7 +158,7 @@ CHECK — **given up**: `setProfilePrinterLists` refuses a default off its list,
 printer and, on any list but the invoice one, an A4 printer. One default per role is the shape.
 Duplicates within a role are refused by the route … so the writer takes that check over";
 "FKs to printers, restrict — clearing moved to `deletePrinter`". (The target CHECK and the
-page-printer key left in dv4.)
+page-printer key left in dv5.)
 
 ## Stop points (beyond rules §5)
 
@@ -166,7 +169,7 @@ page-printer key left in dv4.)
 
 ## Needs
 
-dv6 (the `device_profiles` transfer declaration), dv4 (one printer id space), dv0.
+dv6 (the `device_profiles` transfer declaration), dv5 (one printer id space), dv0.
 
 ## In-flight work folded in (rules §8)
 
@@ -183,7 +186,11 @@ dv6 (the `device_profiles` transfer declaration), dv4 (one printer id space), dv
 
 - [ ] **Step 1:** extend dv6's `describe("device profile scope round trip (M4)")` with: profile P1
   lists receipt printers `[R1, R2]` with default R2, invoice printers `[R1, A1]` (A1 an A4 printer)
-  with default A1; a printer R3 deleted through `deletePrinter` was on P1's slip list. Export,
+  with default A1, and slip printers `[R3]`; then R3 is marked deleted **by a raw write**
+  (`update printers set active = 0, deleted_at = …`), leaving it on the list. The product never
+  reaches this state: `deletePrinter` clears a printer from every list in the same transaction
+  (`apps/server/src/printer-delete.ts:178`), so this part tests the export's defence against a state
+  the product prevents, and passes the same before and after the change. Export,
   import, read P1's lists through `readProfilePrinterLists`: each id names a printer of the new
   venue, in the same order, defaults kept, and R3 absent. Run on the base table: PASS (baseline).
   **Failing result after Task 2:** an old venue's id, a missing printer, or R3 present. Commit.
@@ -198,7 +205,7 @@ dv6 (the `device_profiles` transfer declaration), dv4 (one printer id space), dv
   Run: FAIL.
 - [ ] **Step 2:** schema; delete the table; rebuild core; the writer and readers as above; the
   profile store, equipment reads, delete flow, demo printer, pickup scan, used-by; the test helper.
-  Re-point the 17 test files' set-up. Run the finish line's layouts and server suites: PASS.
+  Re-point the 21 test files' set-up. Run the finish line's layouts and server suites: PASS.
   Commit.
 
 ### Task 3: transfer, M4, lists

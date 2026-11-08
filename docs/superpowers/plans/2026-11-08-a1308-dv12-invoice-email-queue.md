@@ -23,7 +23,7 @@ this plan uses its names and does not change them, except one optional member (d
 [slice rules](2026-11-08-a1308-slice-rules.md). Area order: [dv1](2026-11-08-a1308-dv1-devices-row.md).
 
 **Base:** `main` after dv11 and slice 3a. Lines read at `a086eedfb7`; cites into 3a's code are to its
-plan's names. A cite that no longer says what this plan says is a stop (rules §5.1).
+plan's names. A cite that no longer says what this plan says is a stop (rules §5.1); a cite that only moved is not.
 
 **Owner lands:** no (rules §6). The PDF is rendered by today's unchanged `renderInvoicePdf`
 (`apps/server/src/invoice-email.ts:75`) from the recorded sale; no invoice number, series or hashed

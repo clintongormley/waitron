@@ -17,7 +17,7 @@ approval — Also forgets the floor zones it chose under that profile");
 [slice rules](2026-11-08-a1308-slice-rules.md). Area order: [dv1](2026-11-08-a1308-dv1-devices-row.md).
 
 **Base:** `main` after dv9. Lines read at `a086eedfb7`; a cite that no longer says what this plan
-says is a stop (rules §5.1).
+says is a stop (rules §5.1); a cite that only moved is not.
 
 **Owner lands:** no (rules §6).
 
@@ -36,7 +36,7 @@ before this cannot be restored or imported."
 | `zone_ids` (`zoneIds`) | `json<string[] \| null>`, null | `null` = the device never saved a zone choice under this profile; `[]` = saved, then a delete took its last zone |
 
 CHECKs: `device_approved_profiles_start_ck` (`starting_zone_id is null or zone_ids is not null`) and
-`device_approved_profiles_zone_ids_ck` (`jsonShapeCheck(t.zoneIds, "array", { nullable: true })`).
+`device_approved_profiles_zone_ids_ck` (`jsonShapeCheck(t.zoneIds, "array")`; a null passes it, dv0).
 `device_zone_selections` and `device_zone_selection_zones` are deleted.
 
 **What a row means now** (§1.3): the device's active profile still counts as approved with or

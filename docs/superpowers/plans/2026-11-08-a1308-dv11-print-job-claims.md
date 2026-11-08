@@ -29,7 +29,7 @@ plan says is a stop (rules §5.1), one that only moved is not.
 before this cannot be restored or imported. Print agents must run this release: the invoice claim in
 the agent's messages changes."
 
-**Size, both parts:** about 380 + 470 = **~850** counted lines (each part's table below; the M1 and
+**Size, both parts:** about 360 + 470 = **~830** counted lines (each part's table below; the M1 and
 retry docs are counted once). About 3½ hours.
 
 **Expected protection-list difference, both parts:** under all six headers, part A's seven lines and
@@ -138,9 +138,9 @@ virtual PDF printer" entry (`:312-327`), which holds the retention question, as 
 | Counted | Lines |
 | --- | --- |
 | Code: schema 15, receipt handover 20, runtime retry 35 | ~70 |
-| Tests: retry test 190, handover schema test 60, set-up re-pointed 20, coverage and guard lists 5 | ~225 |
+| Tests: retry test 190, handover schema test 60, set-up re-pointed 20, coverage and guard lists 5 | ~275 |
 | Docs: clock-step row, backlog edits, M1 line | ~15 |
-| **Total** | **~310** |
+| **Total** | **~360** |
 
 About 1½ hours plus M1.
 

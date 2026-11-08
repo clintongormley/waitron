@@ -19,7 +19,7 @@ rows and `device_kitchen_screen_removals`, §6 items 1–2, §8 M2. Rules:
 
 **Base:** `main` after dv8. Lines read at `a086eedfb7`; dv8 rewrote the profile half of
 `packages/venue-service/src/kitchen-screens.ts`, so the device-half lines cited here have moved
-within the file; a cited function that no longer does what this plan says is a stop (rules §5.1).
+within the file; a cited function that no longer does what this plan says is a stop (rules §5.1); a cite that only moved is not.
 
 **Owner lands:** no (rules §6).
 
@@ -38,7 +38,12 @@ and its profile's current views, by this rule:
 - in an explicit station or zone list the device chose, an id the profile's view no longer allows
   (the profile's list is explicit and lacks it) is taken away;
 - a list the device left as "every" loses nothing: it shows what the profile allows, and nothing is
-  listed as no longer available.
+  listed as no longer available;
+- **when every id of an explicit station or zone list is taken away, the whole view is taken away**,
+  as today: `lessRemovals` drops a kind whose explicit list has nothing left
+  (`kitchen-screens.ts:458-461`, `if (stationIds?.length === 0 || zoneIds?.length === 0)
+  choice.delete(kind)`), so a kitchen display left with no view still meets
+  `assertKitchenDisplayHasScreen`'s refusal (`:928-942`) exactly as it does now.
 
 Then: `pnpm --filter @waitron/venue-service exec vitest run src/kitchen-screens.test.ts` and
 `pnpm --filter @waitron/server exec vitest run src/device-api.test.ts src/device-api.pass.test.ts src/device-api.station-move.test.ts src/management-api.device-profiles.test.ts`.
@@ -201,8 +206,9 @@ dv8 (the shared type; the profile half already on JSON), dv0 (`removeIdFromJson`
   removal rows are still written). Run the five suites. Write every failing case's name and why it
   failed into the pull request description draft.
 - [ ] **Step 2:** if every failure is in the predicted class, change those assertions to the new
-  behaviour (each with a one-line comment naming README §10's decision) and commit "M2: taken away
-  is worked out from the profile". Otherwise stop (fallback above).
+  behaviour, list each in the pull request with README §10's decision as the reason (no comment in
+  the test: the reason belongs in the pull request), and commit "M2: taken away is worked out from the
+  profile". Otherwise stop (fallback above).
 
 ### Task 2: the column
 

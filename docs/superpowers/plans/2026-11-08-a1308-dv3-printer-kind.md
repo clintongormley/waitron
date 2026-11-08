@@ -21,7 +21,7 @@ printer", §8 M5; README §3 R9. Rules: [slice rules](2026-11-08-a1308-slice-rul
 Area order: [dv1](2026-11-08-a1308-dv1-devices-row.md).
 
 **Base:** `main` after dv2. Lines read at `a086eedfb7`; a cite that no longer says what this plan
-says is a stop (rules §5.1). The floor and kitchen slice may have moved the station-printer reads
+says is a stop (rules §5.1); a cite that only moved is not. The floor and kitchen slice may have moved the station-printer reads
 (`station_printers` becomes `kitchen_stations.printer_ids`); follow them to their new place, the
 rule below still applies.
 

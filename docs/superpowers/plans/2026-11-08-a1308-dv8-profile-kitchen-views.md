@@ -17,7 +17,7 @@ table rows `kitchen_views`; the value shape; "Separate columns rather than one d
 [slice rules](2026-11-08-a1308-slice-rules.md). Area order: [dv1](2026-11-08-a1308-dv1-devices-row.md).
 
 **Base:** `main` after dv7. Lines read at `a086eedfb7`; a cite whose function no longer does what
-this plan says is a stop (rules §5.1).
+this plan says is a stop (rules §5.1); a cite that only moved is not.
 
 **Owner lands:** no (rules §6).
 
@@ -86,7 +86,10 @@ kitchenViews: json<StoredKitchenViews>("kitchen_views").notNull().default({}),
   (delete the three tables, add the types); `packages/db/src/index.ts` and
   `packages/venue-service/src/index.ts` (their exports); `packages/db/src/classification.ts:342-344`;
   `packages/venue-service/src/classification.ts:24-26`; `packages/db/src/configuration-transfer.ts:76`;
-  `packages/venue-service/src/configuration-transfer.ts:707-709`.
+  `packages/venue-service/src/configuration-transfer.ts:707-709`;
+  `packages/provisioning/src/configuration-transfer.ts:123`, `:160`, `:473`, `:476` (the bundle loses
+  three tables and `device_profiles` rows change shape: its format version goes up by one, rules §9,
+  as dv2 did).
 - `packages/venue-service/src/kitchen-screens.ts:1-343`; `station-delete-settings.ts:25-121`,
   `:146-148`; `service-delete-settings.ts:398-400` (and its impact read of profile zone rows, if any).
 - `apps/dashboard/src/api/live-queries.ts:56-58`; `packages/venue-service/src/dashboard/live-queries.ts`.
@@ -108,9 +111,9 @@ already covered in `packages/venue-service/src/kitchen-screens.test.ts`).
 
 | Counted | Lines |
 | --- | --- |
-| Code: schema and types 30, `kitchen-screens.ts` profile half 120, delete flows 30, transfer 5, lists 10 | ~195 |
+| Code: schema and types 30, `kitchen-screens.ts` profile half 120, delete flows 30, transfer and version 10, lists 10 | ~200 |
 | Tests: shape test 50, set-up re-pointed (`kitchen-screens.test.ts`, the server and venue-service suites) 230, M4 extension 50, guard lists 10 | ~340 |
-| **Total** | **~535** |
+| **Total** | **~540** |
 
 About 2½ hours.
 
@@ -181,8 +184,12 @@ dv7 (last change to `device_profiles`' transfer declaration), dv0.
 
 ### Task 1: M4's kitchen part, against today's tables
 
-- [ ] Extend dv6's M4 `describe`: profile P1's pass view lists stations `[S1, S2]` (S2 switched
-  off) and zones `[Z1]`; its station view lists every station (`null`). Export, import, read with
+- [ ] Extend dv6's M4 `describe`: profile P1's pass view lists stations `[S1, S2]` and zones
+  `[Z1]`; its station view lists every station (`null`); then S2 is switched off **by a raw write**
+  (`update kitchen_stations set active = 0`). The product never reaches this state for a deleted
+  station (`station-delete-settings.ts:145-147` clears it from every view), and a switched-off one is
+  dropped at read; this part tests the export's defence against a state the product prevents, and
+  passes the same before and after the change. Export, import, read with
   `readProfileKitchenScreens`: the pass view lists S1's new id only, zones Z1's new id, the station
   view still `null`. Run on the base: PASS (baseline). **Failing result after Task 2:** an old id,
   S2 carried across, or a view missing. Commit.

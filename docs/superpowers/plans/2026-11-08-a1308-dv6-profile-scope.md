@@ -16,8 +16,9 @@ table, row `order_zone_ids`), §1.2 (the three columns, the two new CHECKs), §4
 row, §7 gaps 2–3 and M4. Rules: [slice rules](2026-11-08-a1308-slice-rules.md). Area order:
 [dv1](2026-11-08-a1308-dv1-devices-row.md). Uses [dv0](2026-11-08-a1308-dv0-json-list-references.md).
 
-**Base:** `main` after dv4 and A1002's second cut (see "In-flight work"). Lines read at
-`a086eedfb7`; a cite that no longer says what this plan says is a stop (rules §5.1).
+**Base:** `main` after dv5, and after A1002's second cut **if lane K is building it** (decision 1).
+Lines read at `a086eedfb7`; a cite whose code no longer says what this plan says is a stop (rules
+§5.1), one that only moved is not.
 
 **Owner lands:** no (rules §6).
 
@@ -38,7 +39,8 @@ CHECKs:
 - `device_profiles_order_scope_ck` — `(order_department_id is null) = (order_starting_zone_id is
   null) and (order_department_id is not null or order_zone_ids is null)` (the side table's NOT
   NULLs restated, §1.2).
-- `device_profiles_order_zone_ids_ck` — `jsonShapeCheck(t.orderZoneIds, "array", { nullable: true })`.
+- `device_profiles_order_zone_ids_ck` — `jsonShapeCheck(t.orderZoneIds, "array")` (a null passes it,
+  dv0).
 - `device_profiles_kds_timeout_ck` — `form_factor <> 'kds' or inactivity_timeout_seconds is null`
   (§1.2; today only `validateInactivityTimeout` forces it, `packages/db/src/schema/device-profiles.ts:40-41`).
 
@@ -68,12 +70,14 @@ department or zone, because switching one off refuses while a live profile uses 
 ## M4: the measurement, written before the code
 
 **What runs** (Task 1, before any schema change, against today's tables so the result is a
-baseline): a venue with a department D1 (on), a department D2 (switched off), zones Z1 (on, in D1),
-Z2 (switched off, in D1), Z3 (in D2); profile P1 scoped to D1 starting at Z1 with zones
-`[Z1, Z2]`, with Z2 switched off by a raw column write after P1 is scoped (the product refuses this
-order, `service-delete.ts:217-226`; the case writes it to prove the export prunes). No profile is
-scoped to D2: that state cannot be reached (dv0 decision 4). Export, import into a fresh venue, read
-P1. **Today's expected result:** P1 arrives and keeps D1, Z1 and the zone list `[Z1]`. **After the change, the same assertions must pass.** **The failing
+baseline): a venue with a department D1 and zones Z1 and Z2 in it; profile P1 scoped to D1 starting
+at Z1 with zones `[Z1, Z2]`; then Z2 is switched off **by a raw write** (`update floor_zones set
+active = 0`). The product never reaches this state: switching a zone off while a live profile uses it
+is refused (`packages/venue-service/src/service-delete.ts:217-226`), and deleting a zone already
+clears it from every profile (`service-delete-settings.ts:383-386`). So this case tests the export's
+defence against a state the product prevents, and it passes the same before and after the change.
+Export, import into a fresh venue, read P1. **Expected, before and after:** P1 arrives and keeps D1,
+Z1 and the zone list `[Z1]`. **The failing
 result** (design §8 M4): a profile missing, an id from the old venue in a list, or a dead id
 carried across. The design's fallback is the export code itself ("Export has to clear those
 columns instead"); if the `jsonReferences` declaration cannot give today's result, stop (rules §5.4).
@@ -90,8 +94,13 @@ printer and kitchen-view parts to it.
    it needs only slices 2 and 3a (build order). This slice does not touch admission. If A1002's cut
    has **not** landed when this starts, this slice still does not touch admission (rules §8: it is
    built on the new shape afterwards); `device_profile_admission_persons` then goes with A1002, as
-   the owner decided (README U6). Ask A1002 to name its column `admitted_role_ids` with a
-   `jsonShapeCheck` and a dv0 `jsonReferences` entry, so its name says it holds ids. The backlog
+   the owner decided (README U6). A1002's plan names no column; use the design's
+   `device_profiles.admitted_roles` (`tables-devices.md` §1.2), with a `jsonShapeCheck` and a dv0
+   `jsonReferences` entry. For A1002: dv0's import refuses an id not in the bundle, so built-in roles
+   that import keeps under fixed ids must be in its id map (dv0 decision 3, "a row an import keeps
+   by a fixed key"). **If this slice goes first** (A1002's cut not started), rules §8 then holds
+   A1002's cut 2 until the devices area has finished with `device_profiles` (after dv8), because its
+   admission column is a schema change in an area A1308 is changing. The backlog
    entry "Task 2's review found no test that fails when `device_profile_admission_roles` or
    `device_profile_admission_persons` is left out of `apps/server/src/testing/clear-provision-fixture.ts`"
    (`docs/backlog/architecture.md:1315-1316`) is finished by whichever change deletes those tables
@@ -128,10 +137,13 @@ printer and kitchen-view parts to it.
 - `apps/dashboard/src/api/live-queries.ts:50-51`, `:108`, `:401-402`;
   `packages/venue-service/src/dashboard/live-queries.ts` (if it names either table).
 - `apps/server/src/testing/clear-provision-fixture.ts:23-24`.
+- `packages/provisioning/src/configuration-transfer.ts:123`, `:160`, `:473`, `:476`: the bundle's
+  `device_profiles` rows change shape and two tables leave it, so its format version goes up by one
+  (rules §9; as dv2 did).
 - `scripts/schema-constraints.test.ts:103-107`.
 - `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` (two tables to `REMOVED_TABLES`;
   `device_profiles` column edits).
-- Tests that write either table directly (13 files; `git grep -l "deviceProfileServiceAccess\|deviceProfileZones\|device_profile_service_access\|device_profile_zones" -- '*.test.ts'`):
+- Tests that write either table directly (20 files; `git grep -l "deviceProfileServiceAccess\|deviceProfileZones\|device_profile_service_access\|device_profile_zones" -- '*.test.ts'`):
   set-up only, through `setProfileServiceScope` where they can, raw column writes where a case
   needs a shape the writer refuses.
 - Generated: core's starting migration files and the epoch file.
@@ -142,9 +154,9 @@ printer and kitchen-view parts to it.
 
 | Counted | Lines |
 | --- | --- |
-| Code: schema 35, profile-access 110, provisioning and the two delete flows 45, transfer declarations 10, lists 10 | ~210 |
-| Tests: scope CHECK test 110, M4 case 120, set-up re-pointed in 13 files 200, guard lists 10 | ~440 |
-| **Total** | **~650** |
+| Code: schema 35, profile-access 110, provisioning and the two delete flows 45, transfer declarations and version 15, lists 10 | ~215 |
+| Tests: scope CHECK test 110, M4 case 100, set-up re-pointed in 20 files 280, guard lists 10 | ~500 |
+| **Total** | **~715** |
 
 Not counted: generated files; deleted schema text. About 2½ hours.
 
@@ -204,8 +216,8 @@ is new (§1.2).
 
 ## Needs
 
-dv0 (declarations, `jsonShapeCheck`, `removeIdFromJson`); dv4 (last change to core before this);
-A1002's second cut landed (decision 1), or explicitly not started.
+dv0 (declarations, `jsonShapeCheck`, `removeIdFromJson`); dv5 (last change to core before this).
+A1002's second cut: landed, or not started (then it waits for the devices area, decision 1).
 
 ## In-flight work folded in (rules §8)
 
@@ -221,10 +233,9 @@ A1002's second cut landed (decision 1), or explicitly not started.
 
 ### Task 1: M4 against today's tables
 
-- [ ] **Step 1:** write the M4 case as described, using the existing writers
-  (`setProfileServiceScope`, the department and zone switch-off routes the suite already calls).
-  Run it on the base tables: it must PASS (today's behaviour is the baseline). If it fails on the
-  base, stop: today's export does not do what the design read says.
+- [ ] **Step 1:** write the M4 case as described: P1 scoped with `setProfileServiceScope`, Z2
+  switched off by the raw write. Run it on the base tables: it must PASS (today's behaviour is the
+  baseline). If it fails on the base, stop: today's export does not do what this plan reads.
 - [ ] **Step 2:** commit the case.
 
 ### Task 2: the columns, the CHECKs, the readers
@@ -236,7 +247,7 @@ A1002's second cut landed (decision 1), or explicitly not started.
   a zone list that is not an array" (`{}` raises `device_profiles_order_zone_ids_ck`); "refuses a
   timeout on a kds profile, keeps one on a till" (`device_profiles_kds_timeout_ck`). Run: FAIL.
 - [ ] **Step 2:** schema; delete the two tables; rebuild core. Run: PASS.
-- [ ] **Step 3:** re-point the 13 test files' set-up (assertions unchanged). Rewrite
+- [ ] **Step 3:** re-point the 20 test files' set-up (assertions unchanged). Rewrite
   `profile-access.ts` over the columns (decision 2), `provisioning.ts`'s "unscoped" read
   (`isNull(deviceProfiles.orderDepartmentId)`), `service-delete.ts`'s scope read, and decision 3 in
   `service-delete-settings.ts`. Run the venue-service and server suites in the finish line: PASS.

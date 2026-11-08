@@ -15,7 +15,7 @@ columns, which are dv4's), §4 rows `printers` and `printer_holders`, §5 rows `
 Area overview and order: [dv1](2026-11-08-a1308-dv1-devices-row.md).
 
 **Base:** `main` after dv1. Line numbers read at `a086eedfb7`; a cite that no longer says what this
-plan says is a stop (rules §5.1), except moves caused by slice 5's location sweep in the same file.
+plan says is a stop (rules §5.1); a cite that only moved is not.
 
 **Owner lands:** no (rules §6: nothing fiscal, no invoice number, no hashed value).
 
