@@ -588,7 +588,8 @@ called weaker than its name, the topic file lists what it does not see.
   inside `requireSession`, `signedInPersonOn` and sign-out; read the session's person only through
   them.** Guard: `apps/server/src/till-api.session-person.test.ts`, weaker than its name: only the
   till, device and schedule mounts' routes, statuses rather than bodies, and a text check for the
-  cookie. [Receipt](docs/developers/conventions-data.md#a-till-requests-person-is-checked-where-the-sign-in-is-read).
+  cookie. A new route the walk sees answered as with nobody signed in goes in its `BLIND` list, and
+  one that needs a body in `BODIES`. [Receipt](docs/developers/conventions-data.md#a-till-requests-person-is-checked-where-the-sign-in-is-read).
 - **A module with a migration set names in `requires` every other set its SQL references, puts a
   trigger on, names in a trigger body or writes at top level.** Guard: `scripts/module-graph-honesty.test.ts`,
   weaker than its name: text scan recognising fixed SQL shapes.
@@ -663,8 +664,8 @@ passed while proving nothing.
 - **Don't own a database in a suite — let `useVenueDb` own it.** Raw `beforeAll`/`afterAll` only
   when the suite legitimately builds its own resource, and then guarded. Guard:
   `scripts/guarded-teardowns.test.ts`.
-- **Server tests send the till's person header through `src/testing/tab-person-setup.ts`; a test of
-  a request naming nobody leaves its session alone.**
+- **Server tests send the till's person header through `apps/server/src/testing/tab-person-setup.ts`;
+  a test of a request naming nobody leaves its session alone.** Nothing guards it.
   [Detail](docs/developers/testing-guide.md#server-tests-send-the-tills-person-header-through-one-setup-file).
 - **An insert whose rows grow with an order must go through `insertInChunks` or `statementChunks`**;
   the table round's `insertTabRound` does not yet, and no sweep has read every insert (see the backlog). Cost: a 2,001-dish order passed locally and

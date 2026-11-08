@@ -355,7 +355,8 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         const kitchenScreens = await VENUE_SERVICE.readDeviceKitchenScreens(tx, device.deviceId);
         const [active, ...alternatives] = await readApprovedProfiles(tx, device.deviceId);
         if (active === undefined) return { approvedProfiles: [], kitchenScreens };
-        // A refusal judges by no one, so a fresh tab beside a signed-in one still boots.
+        // A request naming the wrong person, or nobody, is answered as if nobody were signed in, so a
+        // fresh tab beside a signed-in one still boots.
         const signedIn = await signedInPersonOn(tx, c, device.deviceId);
         if (signedIn.outcome !== "person")
           return { approvedProfiles: [active, ...alternatives], kitchenScreens };
@@ -1092,7 +1093,7 @@ function passBoardAnswer(board: PassBoard, screen: ResolvedKitchenScreen) {
  * `device.unauthorized` when the device has no screen of that kind, or a narrowing took it, so a
  * kitchen display re-boots to what its identity now says; and, on any device but a kitchen display,
  * where nobody can sign in yet, `session.required` when nobody is signed in on it and
- * `session.person_not_signed_in` when the request names someone else. A kitchen display answers
+ * `session.person_not_signed_in` when the request names someone else or nobody. A kitchen display answers
  * either as for nobody signed in.
  */
 async function kitchenScreenOf(

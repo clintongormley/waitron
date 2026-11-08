@@ -3,7 +3,8 @@
  * and the theme's) calls `fetch`.
  *
  * Weaker than its name: it reads TEXT, so it sees only a call written as `fetch(…)` or
- * `<something>.fetch(…)`; a fetch reached by another name (`const load = fetch; load(…)`) passes.
+ * `<something>.fetch(…)`; a fetch reached by another name (`const load = fetch; load(…)`) passes, and
+ * a file whose name contains `test-helpers` is skipped.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";

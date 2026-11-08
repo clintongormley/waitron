@@ -3117,12 +3117,12 @@ Every request through the till's API client (`TillApi`, `apps/till/src/api/clien
 the sign-in itself (`POST /api/session`), names the person signed in on that tab in an
 `x-waitron-person` header (`PERSON_HEADER`, `packages/shared/src/person-header.ts`). The server
 probes in `apps/till/src/api/server-router.ts` and the `/api/theme` read (`apps/till/src/main.ts`)
-bypass it and name nobody. A tab nobody has signed in on names nobody. The server checks the
+bypass it and name nobody. A tab nobody has signed in on names nobody; after a sign-out a tab keeps naming its last person until the next sign-in. The server checks the
 header where it reads the device's sign-in: `requireSession` and `signedInPersonOn` in
 `apps/server/src/till-session.ts`, and the sign-out. While a session is open, a request with no
 header, an empty one, one that is not an id, or one naming anyone but that session's person is
 refused `session.person_not_signed_in` (409), before `requireSession` stamps, checks a permission
-or a profile action (owner, Q35, A791). A request whose cookie names no open session still gets
+or a profile action (owner, 2026-11-07, A1380). A request whose cookie names no open session still gets
 `session.required`. `GET /api/device/me`, and kitchen-screen requests from a kitchen display, answer
 such a request as if nobody were signed in, so a new tab beside a signed-in one still starts; a
 kitchen-screen request from any other device is refused.
@@ -3142,7 +3142,7 @@ session then stays open on the server, since a sign-in ends no other session (`l
 sign-out naming its person ends it; one naming nobody or anyone else is refused the same way and
 ends nothing. A sign-out carrying the header never clears the cookie, because its answer can reach
 the browser after the next person's sign-in. With no session open it answers `{ ok: true }`, and
-clears the cookie only when it names nobody.
+clears the cookie only when it carries no person header.
 
 The server cases are in `apps/server/src/till-session.person.test.ts`, the walk of every till,
 device and schedule route in `till-api.session-person.test.ts`, `GET /api/device/me`'s in

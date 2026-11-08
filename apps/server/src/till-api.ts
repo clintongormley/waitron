@@ -1508,7 +1508,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // A sign-out naming anyone never clears the cookie: its answer can reach the browser after the
+  // A sign-out carrying the person header never clears the cookie: its answer can reach the browser after the
   // next person's sign-in has replaced it.
   app.delete("/api/session", (c) =>
     run(c, log, async () => {

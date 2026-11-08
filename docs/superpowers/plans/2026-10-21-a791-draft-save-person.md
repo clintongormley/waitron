@@ -1,5 +1,7 @@
 # A791: each draft save names whose order it is — Implementation Plan
 
+> 2026-11-08: retired by #2534 (A1380). No body names a person now; every till request names it in an `x-waitron-person` header, refused `session.person_not_signed_in`. See `docs/backlog/till.md`, "One editor per bill".
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`.
 
 **Goal:** A till's order save says which person's order it is, and the server refuses a save whose person is not the one signed in on that device, so an order typed by Ana can never be saved as Ben's.
