@@ -521,13 +521,10 @@ except the last, added on 2026-11-07.
   or a child that exits once its result is flushed), to be proved by a reproduction that delays the
   child's exit.
 
-## Bundle: Replace 15 "if it happens again" entries with one table in `docs/backlog/ci
+## Bundle: Replace 14 "if it happens again" entries with one table in `docs/backlog/ci
 
-15 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+14 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **Store bound-value test timeout** (left open by A1332, #2458). One CI run timed out while checking
-  the reader and writer limits; the slow phase remains unknown. Keep the assertions and deadline.
-  [Detail](ci.md#store-bound-value-test-timeout).
 - **Find why GitHub created no workflows for A987's main merge (A1022).** The runs API
   returned no runs for `e7ce92a7c`; the cause remains unverified. Recovery and the successful-CI
   baseline do not explain the missing trigger. Retain the after-merge run check.
@@ -1542,23 +1539,22 @@ existing one in #2395, and two of its new cases sit apart from the cases they ex
 new setup into the existing helper and move the two cases beside their neighbours; no assertion
 changes.
 
-## Store bound-value test timeout
+## A1432. Store commit notifications on the Debian test box
 
-[CI run 41879243123, light-a job 126747319929](https://github.com/clintongormley/waitron/actions/runs/41879243123/job/126747319929)
-timed out after 5,000 ms in `packages/store/src/index.test.ts`'s reader/writer bound-value case
-on 4 November. The other 319 store cases passed. The log does not identify the slow phase.
-A790's corrected head and the later A1009 PR passed this package; that does not repair the
-unexplained timeout. A1332's unchanged local file passed 54 cases; a separate traced copy kept
-all assertions and reported store opening and all twelve query-construction/execution timings.
-The first Linux attempts were refused while other lanes held the shared test box. Once acquired,
-the x86_64 Linux 7.0.0 / Node 26.11.1 trace passed: opening took 7.8 ms, query construction
-35–67 ms per call and execution 95–142 ms per call. The unchanged full package then passed
-320 cases with coverage above its thresholds. Neither run reproduced the timeout; neither
-establishes what delayed the original CI case.
+`packages/store/src/index.test.ts`, "tells listeners about a commit that rewrites the side file
+from its beginning at the same size", received zero notifications where it expected one on the
+Debian test box during A1431. It failed in three untouched-production baseline runs at
+`961977794ebf8bac10c50a69295e0188f19e428e` and again after the bound-value fixture changed.
+The focused 54-case file passed on macOS. No notification assertion or store implementation changed.
 
-If it recurs, retain phase timings and a stack sample before changing the fixture or deadline.
-The original investigation read 94 earlier failed-run logs without a matching failure; five
-historical logs were unavailable. There is no established root cause or store fix.
+The Linux runs restricted the process to two CPUs with `taskset -c 0,1` and enabled coverage.
+The last two ran store and shared concurrently with
+`pnpm --filter @waitron/store --filter @waitron/shared -r --parallel test:coverage`.
+`packages/store/src/connections.ts:152–155` documents that a same-size commit in the same
+modification-time tick can go unreported, measured on APFS only. Capture those marks around the
+failed write and check that limit on the box's filesystem; the cause here remains unverified.
+A1432 determines whether the store or the test's timing needs correction, preserving the
+notification and same-size assertions. A1431's PR retains the logs.
 
 ## Shared logo retry checks use the retained timing list
 

@@ -637,7 +637,7 @@ describe("openVenueStore's bound-value limit", () => {
   /** A statement binding `count` values, on whichever connection `db` routes it to. */
   const binding = (count: number) =>
     sql`select count(*) as n from (select 1) where 1 in (${sql.join(
-      Array.from({ length: count }, () => sql`${1}`),
+      Array.from({ length: count }, () => 1),
       sql`, `,
     )})`;
 
