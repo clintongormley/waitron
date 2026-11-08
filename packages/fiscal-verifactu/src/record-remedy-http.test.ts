@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { beforeEach, expect, it } from "vitest";
+import { StatementSync } from "node:sqlite";
+import { beforeEach, expect, it, vi } from "vitest";
 import { withTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -715,6 +716,29 @@ it("a refused record of the box this one took over from can be remedied here", a
   expect(await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId))).toEqual(
     before.head,
   );
+});
+
+it("walks the takeover history once to remedy a record of the box this one took over from", async () => {
+  const successor = await seedNode(suite.db, "B");
+  await recordTakeover(suite.db, node.nodeId, successor.nodeId);
+  generationNode = successor.nodeId;
+  let reads = 0;
+  const all = StatementSync.prototype.all;
+  const spy = vi.spyOn(StatementSync.prototype, "all").mockImplementation(function (
+    this: StatementSync,
+    ...args
+  ) {
+    if (/\bfrom\s+"handover_activations"/i.test(this.sourceSQL)) reads++;
+    return Reflect.apply(all, this, args) as never;
+  });
+  try {
+    expect((await send()).status).toBe(200);
+  } finally {
+    spy.mockRestore();
+  }
+
+  // One walk reads the activations once for each of the two boxes it lists.
+  expect(reads).toBe(2);
 });
 
 it("a record of an unrelated box is still refused", async () => {

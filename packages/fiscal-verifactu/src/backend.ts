@@ -37,6 +37,7 @@ import type {
 } from "@waitron/fiscal";
 import { formatInvoiceNumber } from "@waitron/core";
 import { buildQrPayload } from "@waitron/verifactu";
+import type { SignedMembershipDocument } from "@waitron/membership";
 import type {
   AltaInput,
   AnulacionInput,
@@ -180,8 +181,17 @@ export class VerifactuBackend implements FiscalBackend {
   }
 
   async refuseNewIssuance(tx: Transaction, nodeId: NodeId): Promise<void> {
-    await refuseUnlessServingPrimary(tx, nodeId);
+    await this.admitIssuance(tx, nodeId);
+  }
+
+  /** `refuseNewIssuance`, returning the chart it read so the append checks it without a reread. */
+  private async admitIssuance(
+    tx: Transaction,
+    nodeId: NodeId,
+  ): Promise<SignedMembershipDocument | null> {
+    const chart = await refuseUnlessServingPrimary(tx, nodeId);
     await assertNoActiveConflict(tx, nodeId);
+    return chart;
   }
 
   refuseNewRefund(tx: Transaction, nodeId: NodeId): Promise<void> {
@@ -287,7 +297,7 @@ export class VerifactuBackend implements FiscalBackend {
    * took for the sale row, so the sale and its fiscal record carry one instant.
    */
   async recordSale(tx: Transaction, sale: SaleForFiscalRecord): Promise<FiscalRecordRef> {
-    await this.refuseNewIssuance(tx, sale.nodeId);
+    const chart = await this.admitIssuance(tx, sale.nodeId);
     const sif = await currentSif(tx, sale.nodeId);
     const tenant = await this.taxpayer(tx);
 
@@ -330,7 +340,7 @@ export class VerifactuBackend implements FiscalBackend {
         entorno: this.deploymentEnvironment,
         input,
       },
-      sif,
+      { sif, chart },
     );
 
     // Every column's default: `pendiente`, nothing sent.
@@ -437,7 +447,7 @@ export class VerifactuBackend implements FiscalBackend {
     // The anulación extends the ISSUING box's chain, under that box's SIF, and inherits the
     // original's origin and invoice identity.
     const origin = readSaleOrigin(original.source, original.device_id);
-    await this.refuseNewIssuance(tx, issuingNodeId);
+    const chart = await this.admitIssuance(tx, issuingNodeId);
     const sif = await currentSif(tx, issuingNodeId);
     const tenant = await this.taxpayer(tx);
     const now = this.clock.now();
@@ -471,7 +481,7 @@ export class VerifactuBackend implements FiscalBackend {
         nombreRazonEmisor: tenant.legalName,
         input,
       },
-      sif,
+      { sif, chart },
     );
 
     await tx.insert(envios).values({ registroId: appended.id });
@@ -490,7 +500,7 @@ export class VerifactuBackend implements FiscalBackend {
     sale: SaleForFiscalRecord,
     correction: { correctsSaleId: SaleId },
   ): Promise<FiscalRecordRef> {
-    await this.refuseNewIssuance(tx, sale.nodeId);
+    const chart = await this.admitIssuance(tx, sale.nodeId);
     const { rows } = await tx.execute<OriginalAltaForCorrection>(sql`
       select id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura
       from registros_facturacion
@@ -562,7 +572,7 @@ export class VerifactuBackend implements FiscalBackend {
         entorno: this.deploymentEnvironment,
         input,
       },
-      sif,
+      { sif, chart },
     );
 
     await tx.insert(envios).values({ registroId: appended.id });
@@ -595,7 +605,7 @@ export class VerifactuBackend implements FiscalBackend {
     sale: SaleForFiscalRecord,
     substitution: { substitutedSaleIds: SaleId[] },
   ): Promise<FiscalRecordRef> {
-    await this.refuseNewIssuance(tx, sale.nodeId);
+    const chart = await this.admitIssuance(tx, sale.nodeId);
     // Checked here as well as by the caller: a wrong filing is unrepairable.
     if (substitution.substitutedSaleIds.length === 0) {
       throw new Error(
@@ -690,7 +700,7 @@ export class VerifactuBackend implements FiscalBackend {
         entorno: this.deploymentEnvironment,
         input,
       },
-      sif,
+      { sif, chart },
     );
 
     await tx.insert(envios).values({ registroId: appended.id });

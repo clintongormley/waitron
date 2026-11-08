@@ -152,7 +152,7 @@ export async function applyAbsentOriginalCancellation(
         offsetMinutes: reading.offsetMinutes,
       },
     },
-    sif,
+    { sif },
   );
   await tx.insert(envios).values({ registroId: appended.id, proximoIntentoEn: reading.instant });
   const event = await recordCaseEvent(tx, {

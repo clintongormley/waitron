@@ -83,9 +83,9 @@ declare module "@waitron/shared" {
      */
     "chain.append_contention": { nodeId: string; attempts: number };
 
-    /** Thrown by `refuseUnlessServingPrimary` (./chain.ts), from `appendToChain` before anything is
-     * written and from the backend's `refuseNewIssuance`, when a membership chart is held and does
-     * not name `nodeId` the serving primary. */
+    /** Thrown from `appendToChain` (./chain.ts) before anything is written, and from the backend's
+     * `refuseNewIssuance`, when a membership chart is held and does not name `nodeId` the serving
+     * primary. */
     "fiscal.chain_handed_over": { nodeId: string };
 
     /**

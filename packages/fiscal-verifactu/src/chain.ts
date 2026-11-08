@@ -12,6 +12,7 @@ import {
   readNodeMembership,
   type Transaction,
 } from "@waitron/db";
+import { servingPrimaryNodeId, type SignedMembershipDocument } from "@waitron/membership";
 import type {
   AltaInput,
   AnulacionInput,
@@ -136,13 +137,24 @@ export async function readChainHead(tx: Transaction, nodeId: NodeId): Promise<Ch
   return created;
 }
 
+/**
+ * What a caller already read in the append's transaction, so the append does not read it again.
+ * `chart` is the held membership chart (`null`: none held); `history` is `readHistoryNodes` of the
+ * appending node.
+ */
+export interface AppendReads {
+  sif?: SifRegistration;
+  chart?: SignedMembershipDocument | null;
+  history?: readonly NodeId[];
+}
+
 async function attemptAppend(
   tx: Transaction,
   nodeId: NodeId,
   registro: PendingRegistro,
-  sif?: SifRegistration,
+  sif: SifRegistration | undefined,
+  history: readonly NodeId[] | undefined,
 ): Promise<{ id: string; secuencia: number; huella: string }> {
-  await refuseUnlessServingPrimary(tx, nodeId);
   await refuseWhileClockBehind(tx, {
     instant: registro.input.generadoEn,
     offsetMinutes: registro.input.offsetMinutes,
@@ -234,10 +246,9 @@ async function attemptAppend(
       .where(eq(registrosFacturacion.id, registro.correctsRegistroId));
     // A correction may name a record of this box or of a box it took over from; it is always
     // appended to this box's chain.
-    const history = await readHistoryNodes(tx, nodeId);
     if (
       target === undefined ||
-      !history.some((id) => id === target.nodeId) ||
+      !history?.some((id) => id === target.nodeId) ||
       target.saleId !== registro.saleId ||
       target.tipoRegistro !== "alta" ||
       target.idEmisorFactura !== row.idEmisorFactura ||
@@ -310,20 +321,31 @@ async function raiseWarning(
 
 /**
  * Refuses unless the held membership chart names `nodeId` the serving primary; with no chart held,
- * nothing is refused. Read off the chart, never off activation times: those come from two boxes'
- * clocks, while a chart moves by term, so a box that takes back is named primary again.
+ * nothing is refused. Returns the chart it read. Read off the chart, never off activation times:
+ * those come from two boxes' clocks, while a chart moves by term, so a box that takes back is named
+ * primary again.
  * An `IssuanceRefusedError`, so a refusal after money moved is answered as charged-not-recorded.
  */
-export async function refuseUnlessServingPrimary(tx: Transaction, nodeId: NodeId): Promise<void> {
+export async function refuseUnlessServingPrimary(
+  tx: Transaction,
+  nodeId: NodeId,
+): Promise<SignedMembershipDocument | null> {
   const chart = await readNodeMembership(tx);
-  if (chart === null) return;
-  // `servingPrimaryNodeId` in packages/membership/src/fence.ts, which this package does not import.
-  const primary = chart.body.nodes.find((n) => n.standing === "serving-primary")?.nodeId;
-  if (primary !== nodeId) throw new IssuanceRefusedError("fiscal.chain_handed_over", { nodeId });
+  refuseUnlessPrimaryIn(chart, nodeId);
+  return chart;
+}
+
+function refuseUnlessPrimaryIn(chart: SignedMembershipDocument | null, nodeId: NodeId): void {
+  if (chart !== null && servingPrimaryNodeId(chart) !== nodeId) {
+    throw new IssuanceRefusedError("fiscal.chain_handed_over", { nodeId });
+  }
 }
 
 /**
  * Appends one record to the node's chain, in the caller's transaction.
+ *
+ * The chart and the takeover history are read once, before the attempts: every attempt runs in the
+ * caller's one transaction, so neither can change between them.
  *
  * Each attempt runs inside a nested `tx.transaction()`, which the adapter emits as a savepoint
  * because a transaction is already open (`packages/store/src/node-sqlite-adapter.ts`). SQLite backs
@@ -338,11 +360,19 @@ export async function appendToChain(
   tx: Transaction,
   nodeId: NodeId,
   registro: PendingRegistro,
-  sif?: SifRegistration,
+  reads: AppendReads = {},
 ): Promise<{ id: string; secuencia: number; huella: string }> {
+  if (reads.chart === undefined) await refuseUnlessServingPrimary(tx, nodeId);
+  else refuseUnlessPrimaryIn(reads.chart, nodeId);
+  const history =
+    registro.tipo === "alta" && registro.correctsRegistroId !== undefined
+      ? (reads.history ?? (await readHistoryNodes(tx, nodeId)))
+      : undefined;
   for (let attempt = 1; attempt <= MAX_APPEND_ATTEMPTS; attempt++) {
     try {
-      return await tx.transaction((nested) => attemptAppend(nested, nodeId, registro, sif));
+      return await tx.transaction((nested) =>
+        attemptAppend(nested, nodeId, registro, reads.sif, history),
+      );
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
       const target = constraintTarget(error);

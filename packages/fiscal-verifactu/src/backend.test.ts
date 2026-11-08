@@ -1,8 +1,15 @@
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { StatementSync } from "node:sqlite";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
-import { captureError, sales, withTransaction } from "@waitron/db";
+import {
+  captureError,
+  invoiceSeries,
+  sales,
+  withTransaction,
+  writeNodeMembership,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import { AppError, deviceOrigin, jobOrigin } from "@waitron/shared";
@@ -14,6 +21,7 @@ import {
   multiplyDecimal,
   nodeId as brandNodeId,
   saleId as brandSaleId,
+  seriesId as brandSeriesId,
 } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { currentSif } from "./registro-sif.js";
@@ -758,6 +766,109 @@ describe("recordSale — invoice type selection", () => {
       .from(registrosFacturacion)
       .where(eq(registrosFacturacion.numSerieFactura, "A/997"));
     expect(rows).toEqual([]);
+  });
+});
+
+describe("the membership chart on each record", () => {
+  /** The statements that read the held chart while `body` runs. */
+  async function chartReads<T>(body: () => Promise<T>): Promise<number> {
+    let reads = 0;
+    const count = (method: "all" | "get") => {
+      const original = StatementSync.prototype[method];
+      return vi.spyOn(StatementSync.prototype, method).mockImplementation(function (
+        this: StatementSync,
+        ...args
+      ) {
+        if (/\bfrom\s+"node_membership"/i.test(this.sourceSQL)) reads++;
+        return Reflect.apply(original, this, args) as never;
+      });
+    };
+    const spies = [count("all"), count("get")];
+    try {
+      await body();
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+    return reads;
+  }
+
+  beforeEach(async () => {
+    await writeNodeMembership(suite.db, {
+      body: {
+        term: 2,
+        nodes: [{ nodeId, contactUrl: "https://primary", standing: "serving-primary" }],
+      },
+      signerNodeId: nodeId,
+      signature: "sig-2",
+      endorsements: [],
+    });
+  });
+
+  it("reads the chart once to record a sale", async () => {
+    expect(await chartReads(() => sell())).toBe(1);
+  });
+
+  it("reads the chart once to record a cancellation", async () => {
+    const { saleId } = await sell();
+    expect(
+      await chartReads(() =>
+        withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", nodeId)),
+      ),
+    ).toBe(1);
+  });
+
+  it("reads the chart once to record a correction", async () => {
+    const { saleId: correctsSaleId } = await sell();
+    const reads = await chartReads(() =>
+      withTransaction(suite.db, async (tx) => {
+        const [series] = await tx
+          .insert(invoiceSeries)
+          .values({ nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
+          .returning({ id: invoiceSeries.id });
+        const issuedAt = steadyClock.now().instant;
+        const [corrective] = await tx
+          .insert(sales)
+          .values({
+            source: "device",
+            deviceId,
+            nodeId,
+            seriesId: series!.id,
+            invoiceNumber: 1,
+            issuedAt: issuedAt.toISOString(),
+            issuedOffsetMinutes: 60,
+            total: -1441,
+            vatBreakdown: [],
+            correctsSaleId,
+            locale: "es",
+            invoiceLocales: ["es"],
+            fiscalBackend: "verifactu",
+            fiscalState: "recorded",
+          })
+          .returning({ id: sales.id });
+        await backend.recordCorrection(
+          tx,
+          {
+            origin: deviceOrigin(deviceId),
+            nodeId,
+            saleId: brandSaleId(corrective!.id),
+            seriesId: brandSeriesId(series!.id),
+            seriesCode: "R",
+            invoiceNumber: 1,
+            issuedAt,
+            offsetMinutes: 60,
+            descriptionOfOperation: "Rectificacion por diferencias",
+            total: decimal("-14.41"),
+            vatBreakdown: [
+              { rate: decimal("21.00"), base: decimal("-10.00"), tax: decimal("-2.10") },
+              { rate: decimal("10.00"), base: decimal("-2.10"), tax: decimal("-0.21") },
+            ],
+            counterparty: null,
+          },
+          { correctsSaleId },
+        );
+      }),
+    );
+    expect(reads).toBe(1);
   });
 });
 
