@@ -287,7 +287,7 @@ describe("POST /api/pay when the sale fails for a full disk after the card was c
 
   it("passes another coded refusal after the charge through with its own code and status", async () => {
     const { log, charged } = capturingLog();
-    const params = { clockAt: "2001-01-01T00:00:00.000Z", offsetMinutes: 60 };
+    const params = { reason: "same_machine" } as const;
     vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(
       new AppError("clock.set_refused", params),
     );
