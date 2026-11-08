@@ -20,6 +20,8 @@ _2026-10-22, A973: the invoice-first settlement operator script and its test are
 
 > 2026-10-29: A1189 removed the server's Cloud allocation client and report journal with `cloud-fiscal-allocation-client.test.ts` and `cloud-fiscal-reconciliation.test.ts`, and renamed `cloud-fiscal-allocation.test.ts`, unchanged, to `hour-restore-retired-inputs.test.ts`.
 
+> 2026-11-08: the three `first-fiscal-hour*` end-to-end files that import `test/first-fiscal-hour-entry.ts` now start bundles of the server and command programs, built once per test file (A1444-2); where "Repair listener and actual entry processes, 2026-10-18" below says the test launches the actual source, it records the earlier tree.
+
 Use this inventory to review changes to checks that existed before the replacement setup flow.
 It records changes on the candidate branch, not acceptance of the finished product.
 

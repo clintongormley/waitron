@@ -1312,13 +1312,9 @@ within a test file, migrated `heldSetup`'s databases once per file, sealed the t
 under one salt per file and split `first-fiscal-hour.e2e.test.ts`. Its investigators measured or named
 these, which it did not build (local figures, 2 November 2026):
 
-- **Other tests' child processes still load through `tsx`.** A1444 (8 November 2026) moved
-  `kitchen-allergy.restart.test.ts` and `party-allergy.restart.test.ts` to a bundle of `src/bin.ts`
-  built once per file, and changed no other test. Among those left, `test/first-fiscal-hour-entry.ts`
-  starts the real `src/bin.ts` and `src/node-entry.ts` for the `first-fiscal-hour*` end-to-end files
-  that import it, and `hour-recovery-placement-1`, `hour-recovery-placement-2`,
-  `handover-stepdown.crash.test.ts` and `handover-activation-repair.test.ts` replace modules at load
-  time through `registerHooks`.
+- **Some server tests' child processes still load through `tsx`.** Among those,
+  `hour-recovery-placement-1`, `hour-recovery-placement-2`, `handover-stepdown.crash.test.ts` and
+  `handover-activation-repair.test.ts` replace modules at load time through `registerHooks`.
 - **One migrated template for every `useVenueDb` suite: measured and not worth building** (A1443,
   8 November 2026). The 0.85 s per file recorded on 2 November predates [PR #2539](https://github.com/clintongormley/waitron/pull/2539),
   which took the repository from 405 migration files to 7. Timed on one Mac in a new process per run

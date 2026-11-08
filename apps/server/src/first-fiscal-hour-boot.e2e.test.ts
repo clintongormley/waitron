@@ -8,8 +8,10 @@ import { request, PASSWORD } from "../test/first-fiscal.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { childProcess, entryWorkspaces, ready } from "../test/first-fiscal-hour-entry.js";
+import { useBuiltServer } from "./testing/built-server.js";
 
 const fixture = entryWorkspaces();
+const built = useBuiltServer(["src/bin.ts", "src/node-entry.ts"]);
 
 it.each(["src/bin.ts", "src/node-entry.ts"])(
   "%s recovers the original password over its retained trusted HTTPS without creating the missing database",
@@ -29,7 +31,7 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
     });
     const ca = await readFile(join(f.stateDir, "tls", "ca.crt"));
     const agent = new Agent({ connect: { ca } });
-    const child = await childProcess(script, { ...f.env, WAITRON_ENV: "production" });
+    const child = await childProcess(built(script), { ...f.env, WAITRON_ENV: "production" });
     try {
       const origin = `https://127.0.0.1:${child.port}`;
       expect(await ready(child, origin, agent)).toEqual({ claimed: true, resolution: true });
@@ -88,7 +90,7 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
     let child: Awaited<ReturnType<typeof childProcess>> | undefined;
     let agent: Agent | undefined;
     try {
-      child = await childProcess(script, f.env);
+      child = await childProcess(built(script), f.env);
       await expect
         .poll(async () => readFile(join(f.stateDir, "tls", "ca.crt")), {
           timeout: 45_000,
@@ -101,7 +103,7 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       });
       expect((await stat(join(f.venueDir, "venue.db"))).size).toBeGreaterThan(0);
       await child.stop();
-      child = await childProcess(script, f.env);
+      child = await childProcess(built(script), f.env);
       expect(await ready(child, `https://127.0.0.1:${child.port}`, agent)).toEqual({
         claimed: false,
       });
