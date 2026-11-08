@@ -571,7 +571,9 @@ A1424's live qualification was added on 7 November 2026.
   have been removed, and routing, recovery, the final aggregate and publication stay hosted.
   The health check chooses hosted while the server queue is stuck, and the independent
   watchdog cancels and reruns stuck workflows. Qualify its actual workflow-token permissions,
-  the idle probe, browser/stream guest requirements and current-head coverage/aggregate results.
+  the idle probe, browser guest requirements and current-head coverage/aggregate results.
+  The successful stream job in main run 42506794616 applied loopback MTU 1500 and
+  `TMPDIR=/dev/shm`; this is that job’s receipt, not a full guest qualification.
   Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
   drills. Job-by-job overflow, the remaining workflows, second-host registration and first-day
   queue measurements remain open. Never drain other lanes' work for a drill.

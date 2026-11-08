@@ -4,7 +4,7 @@ import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
-async function inventory(request, path, key) {
+async function inventory(request, path, key, limit) {
   const entries = [];
   let total;
   for (let page = 1; ; page++) {
@@ -15,7 +15,7 @@ async function inventory(request, path, key) {
     assert.ok(
       Number.isSafeInteger(total) &&
         total >= 0 &&
-        total <= 1000 &&
+        (limit !== undefined || total <= 1000) &&
         answer.total_count === total &&
         Array.isArray(answer[key]),
       "Incomplete server inventory",
@@ -25,8 +25,12 @@ async function inventory(request, path, key) {
       entries.length <= total && new Set(entries.map((entry) => entry.id)).size === entries.length,
       "Duplicate server inventory",
     );
-    if (entries.length === total) return entries;
-    assert.equal(answer[key].length, 100, "Incomplete server inventory page");
+    if (entries.length >= Math.min(total, limit ?? total))
+      return entries.slice(0, limit ?? entries.length);
+    assert.ok(
+      answer[key].length > 0,
+      `Incomplete server inventory: empty page after ${entries.length} of ${total} entries`,
+    );
   }
 }
 
@@ -74,7 +78,7 @@ export async function serverHealth(options) {
   for (const status of ["queued", "in_progress"]) {
     for (const run of await inventory(
       request,
-      `/repos/${repository}/actions/runs?status=${status}`,
+      `/repos/${repository}/actions/workflows/ci.yml/runs?status=${status}`,
       "workflow_runs",
     )) {
       if (owned(run, repositoryId)) runs.set(run.id, run);
@@ -82,24 +86,30 @@ export async function serverHealth(options) {
   }
   const stuck = [];
   let running = 0,
+    progressing = false,
     recent = false;
   for (const run of runs.values()) {
     const jobs = await serverJobs(options, run);
     running += jobs.filter(assigned).length;
+    progressing ||= jobs.some(
+      (job) =>
+        job.runner_id > 0 &&
+        [job.started_at, job.completed_at].some((time) => now - Date.parse(time) < 300_000),
+    );
     recent ||= jobs.some(
       (job) =>
         job.status === "queued" ||
         assigned(job) ||
-        (job.runner_id > 0 && now - Date.parse(job.completed_at) < 900_000),
+        (job.runner_id > 0 && now - Date.parse(job.completed_at) < 300_000),
     );
     if (jobs.some((job) => job.status === "queued" && !job.runner_id && old(job, run, now)))
       stuck.push(run);
   }
-  return { stuck: running ? [] : stuck, running, recent };
+  return { stuck: running || progressing ? [] : stuck, running, recent };
 }
 
 export async function serverRoute(options) {
-  const { runId, attempt = 1, request, repository, repositoryId, now = Date.now() } = options;
+  const { runId, attempt = 1, request, repository, repositoryId } = options;
   if (attempt > 1) {
     const run = await request(`/repos/${repository}/actions/runs/${runId}`);
     assert.ok(run.id === runId && owned(run, repositoryId), "Foreign retry run");
@@ -110,7 +120,7 @@ export async function serverRoute(options) {
           job.status === "completed" &&
           job.conclusion === "cancelled" &&
           !job.runner_id &&
-          old(job, run, now),
+          old(job, run, Date.parse(job.completed_at)),
       )
     ) {
       return {
@@ -132,7 +142,12 @@ export async function recoverServer(options) {
   const { request, repository, wait = delay } = options;
   const retried = [],
     state = await serverHealth(options);
-  for (const run of state.stuck) {
+  if (state.stuck.length && (await completedServerTraffic(options))) return { retried };
+  const oldest = state.stuck.sort(
+    (a, b) =>
+      Date.parse(a.run_started_at || a.created_at) - Date.parse(b.run_started_at || b.created_at),
+  );
+  for (const run of oldest.slice(0, 1)) {
     if (
       !(await serverHealth(options)).stuck.some(
         (current) => current.id === run.id && current.run_attempt === run.run_attempt,
@@ -169,28 +184,28 @@ export async function recoverServer(options) {
   return { retried };
 }
 
-export async function needsServerProbe(options) {
+async function completedServerTraffic(options) {
   const { request, repository, repositoryId, now = Date.now() } = options;
-  if ((await serverHealth(options)).recent) return false;
-  const recent = await request(
-    `/repos/${repository}/actions/runs?status=completed&per_page=100&page=1`,
+  const runs = await inventory(
+    request,
+    `/repos/${repository}/actions/workflows/ci.yml/runs?status=completed`,
+    "workflow_runs",
+    100,
   );
-  assert.ok(
-    Array.isArray(recent.workflow_runs) &&
-      recent.workflow_runs.length === Math.min(recent.total_count, 100),
-    "Incomplete recent run inventory",
-  );
-  const runs = recent.workflow_runs;
   for (const run of runs) {
     if (!owned(run, repositoryId)) continue;
     if (
       (await serverJobs(options, run)).some(
-        (job) => job.runner_id > 0 && now - Date.parse(job.completed_at) < 900_000,
+        (job) => job.runner_id > 0 && now - Date.parse(job.completed_at) < 300_000,
       )
     )
-      return false;
+      return true;
   }
-  return true;
+  return false;
+}
+
+export async function needsServerProbe(options) {
+  return !(await serverHealth(options)).recent && !(await completedServerTraffic(options));
 }
 
 export async function healthCommand(command, options, { report, output }) {
@@ -207,7 +222,7 @@ export async function healthCommand(command, options, { report, output }) {
     const { retried } = await recoverServer(options);
     report(
       retried.length
-        ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned server work.`
+        ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned or recently progressing server work.`
         : "No stalled server run needed recovery.",
     );
   } else {
