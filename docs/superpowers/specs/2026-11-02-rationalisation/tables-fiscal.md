@@ -271,6 +271,15 @@ the schema: a promotion whose old box gave up filing stores a version 2 approval
 - **Start again** is allowed only while no record exists (`start-again-holdings.ts:13-27`). It deletes
   these rows the way it deletes `fiscal_allocations` today (`FISCAL_START_AGAIN_DELETABLE`,
   `start-again-holdings.ts:6`).
+  - *Note, 2026-11-08 (A1308 fi9 plan, code read at `9c66ef0356`; the text above is left as
+    approved):* the bullet does not match the code. Start again deletes no rows. The list only
+    stops a listed append-only table's rows from counting as kept records, which refuse Start again
+    (`apps/server/src/first-setup-database-holdings.ts:207-236`, `first-setup-resolution.ts:62-71`);
+    Start again then removes the attempt's database files
+    (`packages/provisioning/src/first-setup-start-again-deletion.ts:535-559`), or, where it finds
+    files it did not expect, offers to move them aside (`apps/server/src/recovery-start-again.ts:69-73`).
+    `verifactu_identities` is not append-only, so its rows never count as kept; after the fold the
+    list is empty and goes, and the identity's no-delete trigger is never reached by Start again.
 - **Rows:** 1, plus one per restore or promotion.
 
 Why the fold is sound:
