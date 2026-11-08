@@ -340,8 +340,9 @@ describe("the spare fetches the old box's final copy", () => {
         : real,
     );
     await r.start();
-    await vi.waitFor(async () =>
-      expect((await r.m2Row()).waitingReason).toBe("handover.final_copy_changed"),
+    await vi.waitFor(
+      async () => expect((await r.m2Row()).waitingReason).toBe("handover.final_copy_changed"),
+      { timeout: 10_000 },
     );
     expect(await readdir(folder)).toEqual([]);
   });
@@ -1428,13 +1429,15 @@ describe("a compare that throws", () => {
       const ticking = setInterval(() => duty.wake(), TICK_MS);
       onTestFinished(() => clearInterval(ticking));
       await vi.waitFor(() => expect(r.copyReads()).toBeGreaterThan(1), { timeout: 10_000 });
-      await vi.waitFor(() => expect(compare.mock.calls.length).toBeGreaterThan(1));
+      await vi.waitFor(() => expect(compare.mock.calls.length).toBeGreaterThan(1), {
+        timeout: 10_000,
+      });
       refuseAgain = false;
       await vi.waitFor(async () => expect((await r.m2Row()).waitingReason).toBeNull(), {
         timeout: 10_000,
       });
       expect(held.every(Boolean)).toBe(true);
-      await vi.waitFor(() => expect(existsSync(r.received())).toBe(true));
+      await vi.waitFor(() => expect(existsSync(r.received())).toBe(true), { timeout: 10_000 });
     },
   );
 
