@@ -64,6 +64,7 @@ import {
 import "./errors.js";
 import { BASIC_ACTIONS, deviceRequestCfg } from "./testing/session-device.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
+import { leaveSessionAlone } from "./testing/tab-person.js";
 
 // Every test provisions its OWN tenant, and `tenants` is a singleton (id = 1), so the per-test reset
 // is what makes that legal twice in one file: `useVenueDb` empties every data table after each `it`.
@@ -4353,6 +4354,26 @@ describe("a device's approved profiles and switching its active one", () => {
         t.profileId,
         managersOnly,
       ]);
+    });
+
+    it("judges by no one when the request names nobody", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const t = await till(app, venue);
+      const managersOnly = await seedProfile("till");
+      await approve(app, venue, t.deviceId, [managersOnly]);
+      await admitOnly(managersOnly, "manager");
+      const ben = await signIn(t, "staff");
+      leaveSessionAlone(ben.cookie.slice(`${SESSION_COOKIE}=`.length, ben.cookie.indexOf(";")));
+
+      const res = await app.request("/api/device/me", { headers: { cookie: ben.cookie } });
+
+      expect(res.status).toBe(200);
+      expect(
+        ((await res.json()) as { approvedProfiles: { id: string }[] }).approvedProfiles.map(
+          (profile) => profile.id,
+        ),
+      ).toEqual([t.profileId, managersOnly]);
     });
 
     it("judges by no one when the session belongs to another device", async () => {

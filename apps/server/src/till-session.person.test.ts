@@ -121,6 +121,9 @@ async function call(
   return { status: response.status, json: (await response.json()) as unknown };
 }
 
+/** The session token in a cookie string ending `…; waitron_till_session=<token>`. */
+const tokenOf = (cookie: string) => cookie.slice(cookie.lastIndexOf("=") + 1);
+
 const refusal = (personId: string | null) => ({
   status: 409,
   json: { error: { code: "session.person_not_signed_in", params: { personId } } },
@@ -141,10 +144,10 @@ describe("a session route and the person header", () => {
     expect((await stations(f.till.ana, f.ana)).status).toBe(200);
   });
 
-  it("serves a request with no header as before", async () => {
+  it("refuses a request with no header as naming nobody", async () => {
     const f = await fixture();
-    leaveSessionAlone(f.till.ben.slice(f.till.ben.indexOf("=") + 1));
-    expect((await call(f.app, "/api/stations", f.till.ben)).status).toBe(200);
+    leaveSessionAlone(tokenOf(f.till.ben));
+    expect(await call(f.app, "/api/stations", f.till.ben)).toMatchObject(refusal(null));
   });
 
   it("answers session.required, not the person refusal, when the cookie names no open session", async () => {
@@ -175,6 +178,9 @@ describe("kitchen screens and the person header", () => {
       refusal(f.ana),
     );
     expect((await call(f.app, "/api/device/station-screen", station.ben, f.ben)).status).toBe(200);
+    expect(await call(f.app, "/api/device/station-screen", station.ben)).toMatchObject(
+      refusal(null),
+    );
 
     const pass = await f.device("till", { kitchenScreen: { kind: "pass" } });
     expect(
@@ -191,6 +197,7 @@ describe("kitchen screens and the person header", () => {
     const nobody = await call(f.app, "/api/device/station-screen", station.jar);
     expect(nobody.status).toBe(200);
     expect(await call(f.app, "/api/device/station-screen", station.ben, f.ana)).toEqual(nobody);
+    expect(await call(f.app, "/api/device/station-screen", station.ben)).toEqual(nobody);
 
     const pass = await f.device("kds", { kitchenScreen: { kind: "pass" } });
     const release = (cookie: string, person?: string) =>
@@ -198,5 +205,20 @@ describe("kitchen screens and the person header", () => {
     const anonymous = await release(pass.jar);
     expect(anonymous).toMatchObject({ status: 400 });
     expect(await release(pass.ben, f.ana)).toEqual(anonymous);
+    expect(await release(pass.ben)).toEqual(anonymous);
+  });
+});
+
+describe("a sign-out and the person header", () => {
+  it("refuses a sign-out with no header while a session is open, and ends nothing", async () => {
+    const f = await fixture();
+    leaveSessionAlone(tokenOf(f.till.ben));
+    const response = await f.app.request("/api/session", {
+      method: "DELETE",
+      headers: { cookie: f.till.ben },
+    });
+    expect({ status: response.status, json: await response.json() }).toMatchObject(refusal(null));
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect((await call(f.app, "/api/stations", f.till.ben, f.ben)).status).toBe(200);
   });
 });

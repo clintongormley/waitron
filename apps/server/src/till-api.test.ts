@@ -707,13 +707,12 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
       async (_what, body) => {
         const app = signOutApp();
         const token = await openSession(suite.db);
-        leaveSessionAlone(token);
 
         const del = await signOut(app, token, body === undefined ? {} : { body });
 
         expect(del.status).toBe(200);
         expect(await del.json()).toEqual({ ok: true });
-        expect(del.headers.get("set-cookie")).toMatch(/waitron_till_session=;/);
+        expect(del.headers.get("set-cookie")).toBeNull();
         expect(await isOpen(app, token)).toBe(false);
       },
     );

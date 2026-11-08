@@ -79,14 +79,12 @@ export async function openSessionPerson(
 }
 
 /**
- * The refusal for a request whose person header names someone other than `personId`, the person
- * of its open session; `null` when it names that person or carries no header. A header naming no
- * one, empty or not a UUID, is refused as another person is, and echoes no id.
+ * The refusal for a request whose person header does not name `personId`, the person of its open
+ * session; `null` when it names that person. A request naming no one, with no header, an empty one
+ * or one that is not a UUID, is refused as another person is, and echoes no id.
  */
 export function personRefusal(c: Context, personId: string): AppError | null {
-  const header = c.req.header(PERSON_HEADER);
-  if (header === undefined) return null;
-  const named = canonicaliseUuid(header);
+  const named = canonicaliseUuid(c.req.header(PERSON_HEADER));
   if (named !== null && named === canonicaliseUuid(personId)) return null;
   return new AppError("session.person_not_signed_in", { personId: named });
 }
@@ -98,8 +96,8 @@ export type SignedInPerson =
   | { outcome: "refused"; refusal: AppError };
 
 /** The person of the request's open session on `deviceId`. Nobody when there is none: a missing,
- * unknown or ended session, or one opened on another device. Refused when the request names
- * someone other than that session's person. */
+ * unknown or ended session, or one opened on another device. Refused when the request does not
+ * name that session's person. */
 export async function signedInPersonOn(
   tx: Transaction,
   c: Context,
@@ -128,7 +126,7 @@ export async function signedInPersonOn(
  * Resolves the request's cookie to an OPEN shift session and the device it was opened on, or throws
  * `session.required`. The lookup is by the token's hash with `ended_at IS NULL`, so an unknown token
  * and a logged-out session fail as a missing cookie does. A session whose device has been revoked
- * throws `device.unauthorized`, and a request naming another person `session.person_not_signed_in`.
+ * throws `device.unauthorized`, and a request not naming its person `session.person_not_signed_in`.
  * Login and logout deliberately do not call this. With `permission`,
  * the session's person must also hold it (`authorize`, no override), checked in the same
  * transaction; with `action`, the device's active profile must permit it (`assertProfileAction`)
