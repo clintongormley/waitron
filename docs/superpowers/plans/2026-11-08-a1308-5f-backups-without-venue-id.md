@@ -96,7 +96,12 @@ block keeps its generation and block-id checks (`paper-evidence.ts:533-536`). No
    still refusing `provisioning.second_venue` (design §3). Readers: `adopt.ts:131`, `boot.ts:1121,1752`,
    `reserved-identity.ts:68`, `reset-request.ts:62`,
    `packages/provisioning/src/first-setup-resolution-inspection.ts:93`. "Exactly one" becomes "the row
-   exists": the primary key on `module` makes a second impossible.
+   exists": the primary key on `module` makes a second impossible. The two interim second-venue
+   refusals on the restore and promotion paths (`apps/server/src/restore.ts:935-936` in
+   `resolveArtifactNode`, `promote.ts:256-257`) call `readVenueSettings` instead of `venueLocationId`:
+   a copy with no venue document is still refused `venue.not_found`, and a second venue cannot exist.
+   They are on paths that start a new chain (CLAUDE.md §5), so they move here, in an owner-landed
+   slice, and 5h's `locations` drop touches no fiscal path.
 9. **Backup verification's venue check reads the row** (tables-venuebox §2.4): `verifyCoreBackupData`
    (`packages/db/src/backup-evidence.ts:258-275`) asks `select count(*) as n from settings where module = 'venue'` = 1;
    the compatibility check's table test (`backup-verification-compatibility.ts:368`) asks for
@@ -109,7 +114,7 @@ block keeps its generation and block-id checks (`paper-evidence.ts:533-536`). No
 | The stream's folder (`venuePrefix`), pointer, generation marker and stream id; the recovery kit; the bucket restore and rebuild reads; operation ids `stream:${kit.venueId}:…` | 5g, with the Cloud change |
 | Pairing v2, `cloudVenueId` | 5g |
 | `void cfg;` in `till-sale.ts` and `working-order.ts` | [5f-ii](2026-11-08-a1308-5f-ii-invoice-path-parameters.md) (owner) |
-| `locations`, `venueLocationId` | 5g |
+| `locations`, `venueLocationId` | 5h |
 
 ## Work beside this slice (rules §8)
 
@@ -131,7 +136,7 @@ Modify — server: `archive-settings.ts`, `storage-backend.ts`, `backup-config.t
 `backup-supervisor.ts`, `backup-settings-evidence.ts`, `backup-api.ts`, `archive-recovery-pack.ts`,
 `backup-recovery-pack-api.ts` (archive part), `restore.ts`, `backup-data-placement.ts`,
 `backup-verification.ts`, `backup-verification-secrets.ts`, `backup-verification-compatibility.ts`,
-`recovery-pack.ts`, `reserved-identity.ts`, `adopt.ts`, `reset-request.ts`, `boot.ts`;
+`recovery-pack.ts`, `reserved-identity.ts`, `adopt.ts`, `reset-request.ts`, `promote.ts`, `boot.ts`;
 `apps/server/scripts/dev-setup.ts`, `cloud-integration-fixture.ts`, `cloud-recovery-client-fixture.ts`.
 
 Modify — elsewhere: `apps/dashboard/src/screens/backup-destination-model.ts`; `packages/module/src/module.ts:1427`;
@@ -159,16 +164,16 @@ Regenerated: `packages/db/drizzle/**`, `scripts/migration-baseline-epoch.json`.
 | Backup checks without the copy's venue row | ~30 + ~40 |
 | Fiscal recovery-pack check, per the answer | ~60 |
 | `nodes` column, writers, copy checks, seed, fixtures; hand fixture edits | ~55 + ~80 |
-| Live-venue guard and its six readers; verification's venue check | ~60 + ~70 |
+| Live-venue guard and its six readers; the two interim refusals; verification's venue check | ~70 + ~80 |
 | Guides EN/ES, boot, Madrid | ~40 |
-| **Total** | **~710** |
+| **Total** | **~730** |
 
 Not counted: the script's output for `nodes`, deletions, regenerated files.
 
 ## Finish line
 
 1. The fiscal pair passes unedited (A1301 plan, "The fiscal pair"), in every task.
-2. `pnpm --filter @waitron/server exec vitest run src/archive-settings.test.ts src/backup-config.test.ts src/backup-api.test.ts src/backup-verification.test.ts src/backup-data-placement.test.ts src/archive-recovery-pack.test.ts src/reserved-identity.test.ts src/adoption-allocation-refusal.test.ts src/adopt.test.ts src/reset-request.test.ts src/boot.test.ts src/backup-verification-compatibility.test.ts` passes.
+2. `pnpm --filter @waitron/server exec vitest run src/archive-settings.test.ts src/backup-config.test.ts src/backup-api.route.test.ts src/backup-verification.test.ts src/backup-data-placement.test.ts src/archive-recovery-pack.test.ts src/reserved-identity.test.ts src/adoption-allocation-refusal.test.ts src/adopt.test.ts src/reset-request.test.ts src/boot.test.ts src/backup-verification-compatibility.test.ts` passes.
 3. `pnpm --filter @waitron/provisioning exec vitest run src/tenant-guard.db.test.ts src/first-setup-resolution-inspection.test.ts src/venue-apply.test.ts` and
    `pnpm --filter @waitron/db exec vitest run src/backup-evidence.test.ts` pass; `pnpm --filter @waitron/server typecheck` passes (it includes `scripts/`).
 4. `git grep -n -w -E "readCopyNodeAndVenue|readOperationalVenueIds|assertSingleOperationalVenue" -- apps packages` prints nothing.

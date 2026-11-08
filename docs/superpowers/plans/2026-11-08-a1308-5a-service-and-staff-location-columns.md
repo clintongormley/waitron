@@ -17,19 +17,21 @@ not need 1b. In the build order it is the first part of slice 5.
 ## The location sweep, in one place
 
 The location sweep is A1301's last work (its design's S18e and S20–S28), rebuilt on A1308's fresh
-starting migrations. Seven pull requests, in this strict order (three landed by the owner):
+starting migrations. Nine pull requests, in this strict order (four landed by the owner):
 
 | Part | What | Lands | Needs |
 | --- | --- | --- | --- |
 | **5a (this)** | `location_id` leaves the service, calendar, staff and booking tables | lane | 1a |
-| [5b](2026-11-08-a1308-5b-venue-document.md) | The venue document (`settings.venue`): name, receipt languages, address; the language triggers read it | lane | 5a, 1b-i, 1b-ii |
-| [5c](2026-11-08-a1308-5c-holiday-area-and-default-menu.md) | Content languages and the holiday area join the venue document; the default menu becomes a flag on `catalogues` | lane | 5b, 4a-ii |
+| [5b](2026-11-08-a1308-5b-venue-document.md) | The venue document (`settings.venue`): name and address | lane | 5a, 1b-i, 1b-ii |
+| [5c](2026-11-08-a1308-5c-languages-and-holiday-area.md) | Receipt languages (with the language triggers and the §8.2 timing), content languages and the holiday area join the venue document | lane | 5b |
 | [5d](2026-11-08-a1308-5d-venue-clock-and-fiscal-settings.md) | The venue's clock (time zone, day start), fiscal territory and operation description leave `locations`; the fiscal pair stops reading a location | **owner** | 5c |
-| [5e](2026-11-08-a1308-5e-floor-and-device-location-columns.md) | `location_id` leaves the floor, kitchen, printing, device, order, refund and join tables | lane | 5d |
-| [5f](2026-11-08-a1308-5f-backups-without-venue-id.md) | Backups and recovery packs name no venue id (S18e, Waitron only); `nodes` loses `location_id` | **owner** | 5e, the owner's answer to the venue-id design's question 6 |
-| [5g](2026-11-08-a1308-5g-cloud-venue-id-and-locations-drop.md) | Cloud assigns the venue's id (S18e, with the Cloud lane); the live-venue guard reads the `settings` row; `locations` and `venueLocationId` go | **owner** | 5f, the Cloud lanes' change |
+| [5e](2026-11-08-a1308-5e-floor-and-device-location-columns.md) | `location_id` leaves the floor, kitchen, printing, device, order, refund and join tables; the default menu becomes a flag on `catalogues` | lane (the owner may take it: refund trigger) | 5d, 4a-ii |
+| [5f](2026-11-08-a1308-5f-backups-without-venue-id.md) | Archives name no venue id; the fiscal recovery-pack check; `nodes` loses `location_id`; the live-venue guard reads the venue document | **owner** | 5e, the owner's answer to the venue-id design's question 6 |
+| [5f-ii](2026-11-08-a1308-5f-ii-invoice-path-parameters.md) | The unread `cfg` parameters on the invoice path go | **owner** | 5f |
+| [5g](2026-11-08-a1308-5g-cloud-venue-id.md) | Cloud assigns the venue's id (pairing v2); the bucket stream and recovery kit name no venue id | **owner**, with the Cloud lane | 5f-ii, the Cloud lane's plan and pull request |
+| [5h](2026-11-08-a1308-5h-locations-drop.md) | `locations` and `venueLocationId` go; the whole-tree check | lane | 5g |
 
-Words used in all seven:
+Words used in all nine:
 
 - A **location** is today's `locations` row; the **venue** is the premises, the only place there is
   once the sweep ends (A1301 design §1).
@@ -132,7 +134,7 @@ schema edit plus the rebuild command; there are no table rebuilds, trigger dance
    (zone service policies).
 10. **A committed, idempotent script** removes the `locationId` key from inserts into these tables
    across the tree: `scripts/a1308/drop-location-id.mjs` with its test (Task 1). 5d, 5e and 5f re-run it
-   with their own table lists.
+   with their own table lists; 5h deletes it.
 
 ## What it leaves out
 
@@ -638,7 +640,7 @@ Split point: a fresh implementer may take this task from the Task 3 commit.
   (item 8).
 - [ ] **Step 2:** Backlog: in `docs/backlog/architecture.md`'s A1301 entry, delete the S20/S21/S22
   points this finishes (`bookingsOnDay`'s kept condition, `staffRolesNamed`'s, the `seedLocation`
-  branch, the personal-data `location` key); update "Still open" to "5b–5g of A1308's slice 5".
+  branch, the personal-data `location` key); update "Still open" to "5b–5h of A1308's slice 5".
 - [ ] **Step 3:** From `apps/server`, `pnpm protection-list list --out <B>` and
   `pnpm protection-list compare --old <A> --new <B> --report <file>`; paste the report into the pull
   request and mark each line against the prediction (rules §3).

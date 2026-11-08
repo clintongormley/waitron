@@ -135,7 +135,7 @@ default-menu work below assumes both are gone).
 | `nodes.location_id`, `seedNode`'s location argument | 5f (owner) |
 | `void cfg;` in `till-sale.ts` and `working-order.ts` | 5f-ii (owner, as the backlog records) |
 | Renaming `catalogues` → `menus` | menu and photos |
-| `bump_mode`, `fire_control`, `locations`, `venueLocationId`, its last callers (`promote.ts:257`, `restore.ts:936`, `reserved-identity.ts:76`, `boot.ts:2095` and test helpers) | 5f, 5g |
+| `bump_mode`, `fire_control`, `locations`, `venueLocationId`, its last callers (`promote.ts:257`, `restore.ts:936`, `reserved-identity.ts:76`, `boot.ts:2095` and test helpers) | 5f, 5g, 5h |
 | The devices area's own redesign of `devices` (dv1 plan), the floor area's `floor_zones` work (fk1) | those slices, which assume this one landed (their plans say "slice 5 (already landed)") |
 | `print_jobs`' next-attempt column (README "Additions of 6 November 2026") | devices and printing |
 

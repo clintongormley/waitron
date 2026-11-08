@@ -110,14 +110,14 @@ pair's `write-path.e2e.test.ts` (line 32 and lines 552–555); no assertion chan
    (tables-venuebox §1.10); and making the field required changes the input of every
    `recordSale`/`recordCorrection`/`recordSubstitution` caller (`git grep -l -P "\brecord(Sale|Correction|Substitution)\(" -- apps packages`
    lists 137 files at `a086eedfb7`), which is a sweep of its own. The field's declaration says, in
-   one line, that §6.5 removes it.
+   one line, that vb6 removes it ([plan](2026-11-08-a1308-vb6-operation-description.md)).
    Writer: setup (`venue-apply.ts`) only; venue details shows the territory read-only
    (`readOnlyVenueFields`, `venue-details.ts:33-38`) and does not change. `seedVenueSettings`' defaults
    gain `fiscalTerritory: "ES-common"` and `operationDescription: "Restaurant"`. The bundle's `venue` keeps both keys (`configuration-transfer.ts:38-56`),
    so the export format does not change.
 5. **`locations` keeps only `id`, `bump_mode` and `fire_control`.** `time_zone`, `day_cutover`,
    `fiscal_territory` and `operation_description` go. `readVenue` reads nothing else from it;
-   `venueLocationId` still reads its id until 5g.
+   `venueLocationId` still reads its id until 5h.
 6. **The fiscal pair stops reading a location** (before 5e drops `devices.location_id`):
    `packages/fiscal-verifactu/src/write-path.e2e.test.ts:552-555` read the first device's
    `location_id` and seed a second device there. They become one line,
@@ -180,10 +180,10 @@ pair's `write-path.e2e.test.ts` (line 32 and lines 552–555); no assertion chan
 
 | Left out | Taken by |
 | --- | --- |
-| §6.5: deleting the venue's operation description and making it required to record a sale | venue-and-box area slice (owner) |
+| §6.5: deleting the venue's operation description and making it required to record a sale | vb6, owner-landed ([plan](2026-11-08-a1308-vb6-operation-description.md)) |
 | `nodes.location_id` | 5f (owner), with the backup copy reads that join `nodes` to `locations` |
 | `location_id` on devices, orders, refunds, floor, kitchen and printing tables | 5e |
-| `bump_mode`, `fire_control`, the `locations` table, `venueLocationId` | 5g |
+| `bump_mode`, `fire_control`, the `locations` table, `venueLocationId` | 5h |
 | The live-venue guard | 5f |
 | The default menu | 5e |
 
