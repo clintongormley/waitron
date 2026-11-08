@@ -305,8 +305,9 @@ jobs:
               | node scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
           fi
 
-      # These two stay last: `lint`, `root-guards` and `server-queue-watchdog` still run when this
-      # job fails and read its outputs, which a step failing earlier would leave empty.
+      # These two stay last so the outputs are set even when one fails: `lint`, `root-guards` and
+      # `server-queue-watchdog` still run then and read them. Set outputs no longer show a failure,
+      # so a job that runs after one and must not act on the scope checks `needs.changes.result`.
       - name: Verify LICENSE byte-for-byte
         run: |
           echo "48255018b41fc0e965b1115af7e6779bc218bb8a6747d561da800d5022622aa2  LICENSE" \
@@ -3750,7 +3751,7 @@ jobs:
 
   mutation-shared-aggregate:
     needs: [changes, mutation-shared]
-    if: always() && (needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true')
+    if: always() && needs.changes.result == 'success' && (needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true')
     runs-on: ${{ needs.changes.outputs.server_route == 'server' && vars.DISPOSABLE_TESTS_MODE == 'server' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository)) && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == (github.event.pull_request.head.sha || github.sha)) && fromJSON(vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS || '{}')[github.run_id] != github.run_attempt && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-mutation-shared-aggregate-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, 1)))) || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
@@ -3832,30 +3833,30 @@ jobs:
           LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
           FAMILIES: >-
             [
-            {"id":"test-server","count":24,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true')) }}},
-            {"id":"test-heavy","count":3,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true')) }}},
-            {"id":"test-fiscal-verifactu","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true')) }}},
-            {"id":"test-ui","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && (needs.changes.outputs.ui == 'true' || needs.changes.outputs.ui_core == 'true'))) }}},
-            {"id":"test-till","count":7,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true')) }}},
-            {"id":"test-dashboard","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true')) }}},
-            {"id":"test-setup","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true')) }}},
-            {"id":"test-venue-service","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true')) }}},
-            {"id":"test-adjustments","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true')) }}},
-            {"id":"test-staffing","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true')) }}},
-            {"id":"test-bookings","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true')) }}},
-            {"id":"test-media","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true')) }}},
-            {"id":"test-payments-stripe","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true')) }}},
-            {"id":"test-payments-sumup","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true')) }}},
-            {"id":"test-provisioning","count":6,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.provisioning == 'true')) }}},
-            {"id":"test-identity","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.identity == 'true')) }}},
-            {"id":"test-workforce","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.workforce == 'true')) }}},
-            {"id":"test-light-a","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.light_a == 'true')) }}},
-            {"id":"test-light-b","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.light_b == 'true')) }}},
-            {"id":"mutation-shared","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true')) }}},
-            {"id":"typecheck","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true')) }}},
+            {"id":"test-server","count":24,"matrix":true,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true')) }}},
+            {"id":"test-heavy","count":3,"matrix":true,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true')) }}},
+            {"id":"test-fiscal-verifactu","count":4,"matrix":true,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true')) }}},
+            {"id":"test-ui","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && (needs.changes.outputs.ui == 'true' || needs.changes.outputs.ui_core == 'true'))) }}},
+            {"id":"test-till","count":7,"matrix":true,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true')) }}},
+            {"id":"test-dashboard","count":4,"matrix":true,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true')) }}},
+            {"id":"test-setup","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true')) }}},
+            {"id":"test-venue-service","count":4,"matrix":true,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true')) }}},
+            {"id":"test-adjustments","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true')) }}},
+            {"id":"test-staffing","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true')) }}},
+            {"id":"test-bookings","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true')) }}},
+            {"id":"test-media","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true')) }}},
+            {"id":"test-payments-stripe","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true')) }}},
+            {"id":"test-payments-sumup","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true')) }}},
+            {"id":"test-provisioning","count":6,"matrix":true,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.provisioning == 'true')) }}},
+            {"id":"test-identity","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.identity == 'true')) }}},
+            {"id":"test-workforce","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.workforce == 'true')) }}},
+            {"id":"test-light-a","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.light_a == 'true')) }}},
+            {"id":"test-light-b","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.light_b == 'true')) }}},
+            {"id":"mutation-shared","count":4,"matrix":true,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true')) }}},
+            {"id":"typecheck","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true')) }}},
             {"id":"lint","count":1,"matrix":false,"enabled":${{ (true) }}},
             {"id":"root-guards","count":1,"matrix":false,"enabled":${{ (true) }}},
-            {"id":"bundle-smoke","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true')) }}}
+            {"id":"bundle-smoke","count":1,"matrix":false,"enabled":${{ needs.changes.result == 'success' && ((needs.changes.outputs.code == 'true')) }}}
             ]
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
