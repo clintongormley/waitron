@@ -125,7 +125,10 @@ describe("durationSequencer", () => {
 
   it("returns every spec in exactly one shard, and writes one line per shard", async () => {
     const lines = [];
-    const Sequencer = durationSequencer(seconds, { write: (line) => lines.push(line) });
+    const Sequencer = durationSequencer(seconds, {
+      write: (line) => lines.push(line),
+      warn: () => {},
+    });
     const seen = [];
     for (let index = 1; index <= 3; index += 1) {
       seen.push(...(await new Sequencer(ctx(index)).shard(specs)));
@@ -202,7 +205,7 @@ describe("durationSequencer", () => {
   });
 
   it("returns the shard Vitest asked for", async () => {
-    const Sequencer = durationSequencer(seconds, { write: () => {} });
+    const Sequencer = durationSequencer(seconds, { write: () => {}, warn: () => {} });
     const shard = await new Sequencer(ctx(3)).shard(specs);
     expect(shard).toEqual([specs[2], specs[5]]);
   });
@@ -211,7 +214,7 @@ describe("durationSequencer", () => {
     const lines = [];
     const Sequencer = durationSequencer(
       { "src/a.test.ts": 1.2, "src/b.test.ts": 1.4 },
-      { write: (line) => lines.push(line) },
+      { write: (line) => lines.push(line), warn: () => {} },
     );
     const absent = ["z", "y", "a", "b"].map((n) => ({ moduleId: `/r/src/${n}.test.ts` }));
     await new Sequencer({ config: { root: "/r", shard: { index: 1, count: 1 } } }).shard(absent);
