@@ -100,7 +100,6 @@ export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDat
    * not reported, nor one made by issuing `begin` and `commit` as statements, as Drizzle's migrator
    * does. One that set rows to the values they held is not reported either, except straight after
    * a schema-only commit.
-   * `Connections.reportIfChanged` in `./connections.ts` has what the side-file comparison can miss.
    */
   onCommit: (listener: CommitListener) => () => void;
   /**

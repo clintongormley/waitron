@@ -5,6 +5,25 @@ This file holds the evidence behind the data- and module-boundary conventions in
 that paid for each rule. `CLAUDE.md` keeps the one-line version of each rule and points here for the
 rest.
 
+## A write-ahead-file timestamp can stay unchanged across a commit
+
+A1432 reproduced the existing same-size rewrite case on the Debian 13 test box on 8 November
+2026. On `/tmp` (tmpfs), the before and after files were both 90,672 bytes and both had modification
+and change time `1794115538563113148` ns. Their headers differed, and the listener received zero
+notifications. A disk-directory control advanced the timestamp and delivered one notification.
+
+The store compares the first 32 bytes as well as size and modification time. It reads at most 32
+bytes and closes its descriptor in `finally`; it does not read the growing file into memory.
+Run `pnpm --filter @waitron/store exec vitest run src/connections.test.ts src/index.test.ts`.
+The deterministic header case gives both marks the same modification time and checks that the
+rewrite is detected. The existing real-store case retains its same-size and one-notification
+assertions. The complete Debian store suite passed 323 cases with coverage 100/99.56/100/100;
+this is the measured Debian run, not a measurement on every filesystem.
+
+| Source, checked 8 November 2026 | Exact words | What the comparison uses |
+| --- | --- | --- |
+| [SQLite file format, §§4.1 and 4.4](https://www.sqlite.org/fileformat2.html#wal_file_format) | “The WAL header is 32 bytes in size”; “the WAL header salt-1 value is incremented” | The bounded header includes the salt that changes when SQLite resets the WAL. |
+
 **A note on the error codes.** `node:sqlite` reports a numeric `errcode`. Measured 2026-09-22 on
 Node v26.7.0, in one transaction: a duplicate primary key is 1555, a null in a `not null` column
 1299, and a trigger's `RAISE(ABORT)` 1811. The tree spells it that way too

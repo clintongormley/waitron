@@ -1031,8 +1031,6 @@ describe("onCommit", () => {
     expect(heard).toHaveLength(0);
   });
 
-  // After a checkpoint the next commit writes the side file from its beginning, so while it fits
-  // in the old length the file's size does not change; only its modification time does.
   it("tells listeners about a commit that rewrites the side file from its beginning at the same size", async () => {
     const { store, directory, heard } = await setUp();
     for (let i = 0; i < 20; i += 1) store.venue.run(sql`insert into sales (total) values (${i})`);

@@ -287,6 +287,21 @@ describe("the side file's mark", () => {
     expect(sameWal(first, walMark(path))).toBe(false);
   });
 
+  it("sees a rewritten WAL header even when size and modification time are unchanged", () => {
+    const path = join(directory(), "venue.db-wal");
+    const header = Buffer.alloc(32);
+    writeFileSync(path, header);
+    const before = walMark(path);
+    header.writeUInt32BE(1, 16);
+    writeFileSync(path, header);
+    const after = walMark(path);
+    if (typeof before === "string" || typeof after === "string") {
+      throw new Error("Expected two readable side-file marks");
+    }
+    expect(after.size).toBe(before.size);
+    expect(sameWal(before, { ...after, mtimeNs: before.mtimeNs })).toBe(false);
+  });
+
   // A reading that failed says nothing, so the commit is reported rather than lost.
   it("never reads a side file it could not examine as unchanged", () => {
     // Longer than a file name may be, so the lookup is refused rather than answered "missing".
