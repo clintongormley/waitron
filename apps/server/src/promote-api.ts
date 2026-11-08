@@ -94,24 +94,15 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
       deps.nodePreparation !== undefined &&
       body.noParallelRecovery !== undefined;
     const recoveryKey = typeof body.breakGlass === "string" || (prepared && "breakGlass" in body);
-    // A changed recovery-key guess must not select a fresh failure budget.
-    const key = recoveryKey
-      ? "recovery-key"
-      : typeof body.personId === "string"
-        ? `person:${body.personId}`
-        : "missing-person";
+    if (recoveryKey) return perform();
+    const key = typeof body.personId === "string" ? `person:${body.personId}` : "missing-person";
     const finish = throttle.begin(key);
     try {
       const result = await perform();
       finish("success");
       return result;
     } catch (error) {
-      finish(
-        isAppError(error) &&
-          ["password.invalid", "promotion.break_glass_invalid"].includes(error.code)
-          ? "invalid"
-          : "error",
-      );
+      finish(isAppError(error) && error.code === "password.invalid" ? "invalid" : "error");
       throw error;
     }
   };

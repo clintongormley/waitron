@@ -3,13 +3,13 @@ import type { SupportedLocale } from "@waitron/shared";
 export const SPARE_WORDS: Record<SupportedLocale, { title: string; body: string; status: string }> =
   {
     "en-GB": {
-      title: "This box is the spare",
+      title: "Restaurant screens are closed here",
       body: "Open the main box's address for restaurant screens and data.",
-      status: "This box is not taking sales.",
+      status: "This box started as the spare and is not taking sales.",
     },
     "es-ES": {
-      title: "Este es el equipo de reserva",
+      title: "Las pantallas del local están cerradas aquí",
       body: "Abre la dirección del equipo principal para acceder a las pantallas y los datos del local.",
-      status: "Este equipo no acepta ventas.",
+      status: "Este equipo se ha iniciado como reserva y no acepta ventas.",
     },
   };

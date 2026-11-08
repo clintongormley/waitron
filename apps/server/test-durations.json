@@ -701,6 +701,7 @@
   "src/menu-activation.test.ts": 7.2,
   "src/menu-patch-open-lines.test.ts": 7.5,
   "src/menu-publication-time.test.ts": 1.9,
+  "src/mirror-bind-guard.test.ts": 0.2,
   "src/mirror-bundle-api.test.ts": 19.8,
   "src/mirror-bundle-fetch.test.ts": 5.8,
   "src/mirror-bundle.test.ts": 14.9,

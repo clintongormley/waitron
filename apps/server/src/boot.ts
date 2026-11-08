@@ -408,6 +408,7 @@ import { readOnlyGate } from "./read-only-gate.js";
 import { isReadOnlyExempt } from "./read-only-exemptions.js";
 import { isFenced } from "./membership-fence.js";
 import { endMirrorViewer } from "./mirror-session.js";
+import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { spareReadGate } from "./spare-read-gate.js";
 import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
@@ -1702,7 +1703,6 @@ async function bootServer(
   // no deployment axes or membership.
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
-    // Unauthenticated and deliberately minimal: no ambient viewer exists yet.
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
     mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: config.node.nodeId }, log);
     mountNodeMembershipApi(app, { db, node: store.node, nodeId: config.node.nodeId }, log);
@@ -2028,6 +2028,7 @@ async function bootServer(
   // Asked on each call, unlike `isSingletonPrimary`: the role can change while the box runs.
   const filesRecords = () =>
     fiscalDrainEnabled(config) && holders.singletonRole.current === "primary";
+  assertMirrorBindSafe(config, isMirror, env);
   const secureCookies = resolveTradingTls(config) !== undefined;
   const isReadOnly = () => holders.mode.current === "mirror" || fenced;
   if (fencedOrMirror) {

@@ -258,7 +258,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
         expect(page.status).toBe(200);
         expect(page.headers.get("set-cookie")).toBeNull();
         expect(page.headers.get("cache-control")).toBe("no-store");
-        expect(await page.text()).toContain("This box is the spare");
+        expect(await page.text()).toContain("Restaurant screens are closed here");
       }
       for (const path of [
         "/management-api/catalogues",
@@ -269,7 +269,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
         expect(read.headers.get("set-cookie")).toBeNull();
         expect(await read.json()).toMatchObject({ error: { code: "node.spare", params: {} } });
       }
-      const cookie = "waitron_management=forged";
+      const cookie = `${MANAGEMENT_COOKIE}=forged`;
       for (const path of ["", "/export"]) {
         const invoiceCustomer = await fetch(
           `${base}/management-api/invoice-customers/personal-data${path}?taxId=12345678Z`,
@@ -485,51 +485,56 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     }
   }, 60_000);
 
-  it("a primary boot ends the mirror viewer's session, so a cookie a browser kept from the mirror is refused", async () => {
-    // Resolving the token before the boot is the control: without it, a refusal afterwards would
-    // look the same whether or not boot acted.
-    beforeServerStarts();
-    const token = mintSessionToken();
-    await withTransaction(db.primary, async (tx) => {
-      await tx
-        .insert(persons)
-        .values({ id: MIRROR_VIEWER_PERSON_ID, displayName: "Old viewer", role: "admin" });
-      await tx
-        .insert(managementSessions)
-        .values({
+  it.each(["primary", "mirror"] as const)(
+    "%s boot revokes a previously valid viewer token",
+    async (venue) => {
+      // Resolving the token before the boot is the control: without it, a refusal afterwards would
+      // look the same whether or not boot acted.
+      beforeServerStarts();
+      const token = mintSessionToken();
+      await withTransaction(db[venue], async (tx) => {
+        await tx
+          .insert(persons)
+          .values({ id: MIRROR_VIEWER_PERSON_ID, displayName: "Old viewer", role: "admin" });
+        await tx.insert(managementSessions).values({
           id: MIRROR_VIEWER_SESSION_ID,
           personId: MIRROR_VIEWER_PERSON_ID,
           tokenHash: hashSessionToken(token),
         });
-    });
-    await expect(
-      withTransaction(db.primary, (tx) => resolveManagementSession(tx, token)),
-    ).resolves.toMatchObject({ role: "admin" });
+      });
+      await expect(
+        withTransaction(db[venue], (tx) => resolveManagementSession(tx, token)),
+      ).resolves.toMatchObject({ role: "admin" });
 
-    const port = await freePort();
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: venueDir.primary,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    });
-    const base = `http://127.0.0.1:${httpPort()}`;
-    try {
-      const read = await fetch(`${base}/management-api/catalogues`, {
-        headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
+      const port = await freePort();
+      const server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: venueDir[venue],
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
       });
-      expect(read.status).toBe(401);
-      expect(await read.json()).toEqual({
-        error: { code: "management_session.required", params: {} },
-      });
-    } finally {
-      await server.close();
-    }
-    beforeServerStarts();
-    await expect(
-      withTransaction(db.primary, (tx) => resolveManagementSession(tx, token)),
-    ).rejects.toMatchObject({ code: "management_session.required" });
-  }, 60_000);
+      const base = `http://127.0.0.1:${httpPort()}`;
+      try {
+        const read = await fetch(`${base}/management-api/catalogues`, {
+          headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
+        });
+        expect(read.status).toBe(venue === "mirror" ? 403 : 401);
+        expect(await read.json()).toMatchObject({
+          error: {
+            code: venue === "mirror" ? "node.spare" : "management_session.required",
+            params: {},
+          },
+        });
+      } finally {
+        await server.close();
+      }
+      beforeServerStarts();
+      await expect(
+        withTransaction(db[venue], (tx) => resolveManagementSession(tx, token)),
+      ).rejects.toMatchObject({ code: "management_session.required" });
+    },
+    60_000,
+  );
 
   it("refuses private reads even with a real administrator session cookie", async () => {
     beforeServerStarts();
@@ -575,12 +580,32 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     ).resolves.toMatchObject({ role: "admin" });
   }, 60_000);
 
-  it("binds a mirror on a non-loopback host while refusing private reads without an opt-in", async () => {
+  it("refuses a non-loopback mirror without the existing opt-in", async () => {
+    let server: Awaited<ReturnType<typeof startServer>> | undefined;
+    let caught: unknown;
+    try {
+      server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: venueDir.mirror,
+        WAITRON_HTTP_HOST: "0.0.0.0",
+        WAITRON_HTTP_PORT: String(await freePort()),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      });
+    } catch (error) {
+      caught = error;
+    } finally {
+      await server?.close();
+    }
+    expect(caught).toMatchObject({ code: "server.mirror_bind_exposed" });
+  }, 60_000);
+
+  it("keeps private reads closed with the existing non-loopback opt-in", async () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
       WAITRON_VENUE_DIR: venueDir.mirror,
       WAITRON_HTTP_HOST: "0.0.0.0",
+      WAITRON_MIRROR_ALLOW_EXPOSED: "true",
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });

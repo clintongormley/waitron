@@ -1,3 +1,4 @@
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import { spareReadGate } from "./spare-read-gate.js";
@@ -37,7 +38,7 @@ it.each(["GET", "HEAD", "OPTIONS"])(
     ]) {
       const response = await fixture().request(path, {
         method,
-        headers: { cookie: "waitron_management=kept" },
+        headers: { cookie: `${MANAGEMENT_COOKIE}=kept` },
       });
       expect(response.status).toBe(403);
       expect(response.headers.get("cache-control")).toBe("no-store");

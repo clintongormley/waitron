@@ -5,6 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { withNodeTransaction } from "@waitron/db";
+import { setRecoveryKeyTx } from "@waitron/node-db";
+import { makeBreakGlassSecret } from "./break-glass.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPassword, persons } from "@waitron/identity";
@@ -145,27 +148,24 @@ it("shares the failure budget across preparation and promotion", async () => {
   expect((await send(service, "", body(PASSWORD))).status).toBe(429);
 });
 
-it("limits wrong recovery keys without letting a changed guess choose a new bucket", async () => {
-  const service = app();
-  for (let i = 0; i < 4; i++) {
-    expect(
-      (await send(service, "", { breakGlass: `wrong-key-${i}`, oldNodeNeutralised: true })).status,
-    ).toBe(401);
-  }
-  const refused = await send(service, "", {
-    breakGlass: "another-guess",
-    oldNodeNeutralised: true,
-  });
-  expect(refused.status).toBe(429);
-  expect(refused.body.error.code).toBe("password.throttled");
-});
-
-it("does not let a malformed person id consume the recovery-key budget", async () => {
-  const service = app();
-  for (let i = 0; i < 4; i++) {
-    expect((await send(service, "", { personId: "recovery-key", password: "wrong" })).status).toBe(
-      401,
+it.each(["legacy", "module", "preparation"])(
+  "keeps the real recovery key usable after wrong guesses on %s",
+  async (kind) => {
+    const made = makeBreakGlassSecret();
+    await withNodeTransaction(suite.node, (tx) =>
+      setRecoveryKeyTx(tx, NODE, made.verifier, "test-key"),
     );
-  }
-  expect((await send(service, "", { breakGlass: "wrong-key" })).status).toBe(401);
-});
+    const service = app();
+    const request = (breakGlass: string) =>
+      kind === "legacy" ? { breakGlass, oldNodeNeutralised: true } : { ...body(), breakGlass };
+    const suffix = kind === "preparation" ? "/preparation" : "";
+    for (let i = 0; i < 12; i++) {
+      const refused = await send(service, suffix, request(`wrong-key-${i}`));
+      expect(refused.status).toBe(401);
+      expect(refused.body.error.code).toBe("promotion.break_glass_invalid");
+    }
+    expect((await send(service, suffix, request(made.secret))).status).toBe(200);
+    // Recovery attempts do not consume a person's password allowance.
+    expect((await send(service, "", body(PASSWORD))).status).toBe(200);
+  },
+);

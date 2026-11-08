@@ -2,8 +2,9 @@
 
 # Environment variables — a rationalised design
 
-> **2026-11-08, A1113:** the ambient mirror viewer and its keepalive are removed, and
-> `WAITRON_MIRROR_ALLOW_EXPOSED` is retired. Existing viewer-session revocation remains at boot.
+> **2026-11-08, A1113:** the ambient mirror viewer and its keepalive are removed. Existing viewer-session
+> revocation remains at boot. The bind guard and `WAITRON_MIRROR_ALLOW_EXPOSED` remain for the
+> promotion routes; how a spare listens on the network stays with A947 slice3b.
 > The authenticated spare switch screen belongs to A947.
 
 

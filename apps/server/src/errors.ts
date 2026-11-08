@@ -347,6 +347,7 @@ declare module "@waitron/shared" {
      * logs the `codeOf` classification under `till.failed`.
      */
     "server.internal": Record<string, never>;
+    "server.mirror_bind_exposed": { host: string };
     /**
      * The container's start-up program was given arguments, which it never takes: `docker compose
      * run app <command>` appends `<command>` to it. No params: the arguments are operator input.
