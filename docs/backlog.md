@@ -2132,8 +2132,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-See [CI decisions](backlog/ci.md#decisions-and-deliberate-limits) for workflow limits, including browser smoke checks on older PR heads.
-
 - **Add a control to each check that cannot fail** (bundle of 4, size S). [Detail](backlog/ci.md#bundle-add-a-control-to-each-check-that-cannot-fail)
 
 - **The logo retry checks' deadline and counting** (bundle of 2, size S). [Detail](backlog/ci.md#bundle-the-logo-retry-checks-deadline-and-counting)
@@ -2529,6 +2527,8 @@ shipping-style wizard; `wa-wt reset demo|onboarding [worktree-name]` wipes and r
 ---
 
 ## Standing decisions
+
+- **Older PR heads may lack a newer workflow's browser smoke script (watcher, 2026-11-08, A1402).** Skip only an absent script with a notice; current source guards require it and existing script failures stay fatal. [Decision and limits](backlog/ci.md#decisions-and-deliberate-limits).
 
 - **Investigate CI failures before retrying (owner, 2026-10-31, A1243).**
   [Decision and limits](backlog/ci.md#decisions-and-deliberate-limits).

@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { URL } from "node:url";
@@ -51,6 +59,10 @@ it("requires installing Chromium and opening the built setup page, with failures
   );
   mandatory(install);
   mandatory(open);
+  expect(existsSync(new URL("apps/setup/test/bundle-smoke.mjs", root))).toBe(true);
+  expect(open).toMatch(
+    /^ {12}timeout 90 pnpm --filter @waitron\/setup exec node test\/bundle-smoke\.mjs$/m,
+  );
 });
 
 it.each(["absent", "passes", "fails"])(

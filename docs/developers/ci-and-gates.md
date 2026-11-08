@@ -365,7 +365,8 @@ that head has no `apps/setup/test/bundle-smoke.mjs`, the browser step prints a
 notice and skips that check; the application builds and other smoke checks
 still run. When the script exists, its failure fails the job. The root guard
 executes the workflow's shell against absent, passing and failing scripts using
-real pnpm and Node in a temporary workspace.
+real pnpm and Node in a temporary workspace. It also requires the script in the
+current source tree, so deleting it from a branch with that guard fails there.
 
 You can run the page check after building setup:
 
