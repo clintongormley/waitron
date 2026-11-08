@@ -340,31 +340,40 @@ describe("the page's language", () => {
   });
 });
 
-describe("the producer the build does not yet name", () => {
-  const code = "sif.producer_unset";
+describe("the producer the build does not name, or names wrongly", () => {
+  const action = {
+    "en-GB":
+      "Install an official Waitron update on this box. If you build Waitron yourself, build it with your own producer's details.",
+    "es-ES":
+      "Instala en este equipo una actualización oficial de Waitron. Si creas Waitron tú mismo, créalo con los datos de tu propio productor.",
+  };
+  const unset = {
+    "en-GB":
+      "This copy of Waitron was built without the name, tax number and address of its producer, so it cannot be used for real sales.",
+    "es-ES":
+      "Esta copia de Waitron se creó sin el nombre, el NIF y la dirección de quien la produce, así que no puede usarse para ventas reales.",
+  };
+  const malformed = {
+    "en-GB":
+      "This copy of Waitron was built with its producer's details incomplete or in the wrong form, so it cannot be used.",
+    "es-ES":
+      "Esta copia de Waitron se creó con los datos de quien la produce incompletos o mal escritos, así que no puede usarse.",
+  };
 
-  it("names the missing producer, in each language", async () => {
-    const english = await pageFor(code, undefined, "en-GB");
-    expect(english).toContain(
-      escapeHtml(
-        "This version of Waitron does not yet name its producer, so it cannot be used for real sales.",
-      ),
-    );
-    expect(english).toContain(
-      escapeHtml("Ask whoever installed this box to install a version that names its producer."),
-    );
-    const spanish = await pageFor(code, undefined, SPANISH);
-    expect(spanish).toContain(
-      escapeHtml(
-        "Esta versión de Waitron todavía no indica quién la produce, así que no puede usarse para ventas reales.",
-      ),
-    );
-    expect(spanish).toContain(
-      escapeHtml(
-        "Pide a quien instaló este equipo que instale una versión que indique quién la produce.",
-      ),
-    );
-  });
+  for (const [code, title] of [
+    ["sif.producer_unset", unset],
+    ["software_producer.invalid", malformed],
+    ["sif.producer_invalid", malformed],
+  ] as const) {
+    it(`names ${code}, in each language`, async () => {
+      const english = await pageFor(code, undefined, "en-GB");
+      expect(english).toContain(escapeHtml(title["en-GB"]));
+      expect(english).toContain(escapeHtml(action["en-GB"]));
+      const spanish = await pageFor(code, undefined, SPANISH);
+      expect(spanish).toContain(escapeHtml(title["es-ES"]));
+      expect(spanish).toContain(escapeHtml(action["es-ES"]));
+    });
+  }
 });
 
 describe("curated operator text", () => {
