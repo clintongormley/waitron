@@ -1,5 +1,6 @@
 import { cors } from "hono/cors";
 import type { MiddlewareHandler } from "hono";
+import { PERSON_HEADER } from "@waitron/shared";
 import type { OriginAllowlist } from "./allowed-origins.js";
 import { DEVICE_CLOCK_HEADER, DEV_DEVICE_HEADER } from "./device-session.js";
 
@@ -15,7 +16,7 @@ export function corsForVenue(allow: OriginAllowlist): MiddlewareHandler {
   const middleware = cors({
     origin: async (origin) => ((await allow(origin)) ? origin : null),
     credentials: true,
-    allowHeaders: ["content-type", DEV_DEVICE_HEADER, DEVICE_CLOCK_HEADER],
+    allowHeaders: ["content-type", DEV_DEVICE_HEADER, DEVICE_CLOCK_HEADER, PERSON_HEADER],
     allowMethods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     maxAge: 600,
   });
