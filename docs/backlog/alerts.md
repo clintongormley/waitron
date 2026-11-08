@@ -90,7 +90,9 @@ leaves open. Cloud's approved [monitoring design](https://github.com/waitron-io/
 sort reports by urgency. A report's errors, version and installation details go at once; the
 typed description goes only when someone with the venue's admin permission sends it (owner:
 "make it an admin decision to send", keeping A980's O9). A box that cannot reach Cloud keeps
-the report and sends it later, and the sender sees which.
+the report and sends it later, and the sender sees which. Before reports are sent, add Waitron as a
+recipient to the venue privacy-notice checklist and update both language guides (adviser privacy
+research, Q57-3).
 
 ## A1048. Opt-in automatic error reports to Waitron Cloud
 

@@ -13,7 +13,7 @@ used. So the duties are yours. Waitron is the program you use to carry some of t
 duties include these:
 
 - Tell people about their data when you collect it. The sections below give you short notices for
-  staff, invoice customers and guests who book, and a checklist for your full notice.
+  staff, invoice customers, guests who book and guests with allergies, and a checklist for your full notice.
 - Answer a person who asks to see, correct or delete their data, or to restrict or object to its
   use, or to receive it to take elsewhere, without undue delay and within one month of receiving the
   request. If a request is complex, or you have many, the law lets you take two more months where
@@ -59,8 +59,9 @@ Copy and adapt the next paragraph:
 **Data protection.** Controller: _your venue's legal name_ (_your tax number_), _your address_,
 _your privacy email address_. We use your data to manage your contract, your access to Waitron and
 the daily working-time record, which the law requires us to keep for four years. Waitron records
-which member of staff rang up a sale, authorised a void, asked for or authorised a refund, and
-opened the cash drawer or authorised its opening. You can exercise your rights of access,
+which member of staff rang up a sale, changed an order, authorised a void, asked for or authorised a
+refund, and opened the cash drawer or authorised its opening. It also records the device used to
+clock in. You can exercise your rights of access,
 rectification, erasure, restriction, objection and portability by writing to _your privacy email
 address_, and you can complain to the AEPD. More information: _the address of your privacy page_.
 
@@ -111,7 +112,7 @@ your invoice. Rights and more: _the address of your privacy page_.
 
 Whether the law asks for a privacy line on the invoice itself is a question for your adviser.
 
-## What to tell a guest who books {#booking-notice}
+## What to tell guests who book or have allergies {#booking-notice}
 
 A booking in Waitron holds the guest's name, an optional telephone number and notes, and no email
 address, so Waitron cannot write to the guest. Staff take the booking, so the short notice is what
@@ -124,13 +125,26 @@ tell us about an allergy, we note it so we can prepare your food safely. You can
 correct or delete your details, or use your other data protection rights, and there is more
 information at _the address of your privacy page_.
 
+The till asks staff to answer **Any allergies at this table?** before the first send. Give guests
+the allergy notice before taking their details, whether they booked or walked in. You can put it
+on the menu or allergen sheet and explain it at the table. The **Who** field can hold a guest's
+name, so include these guests in your privacy notice too.
+
+Copy and adapt the next paragraph:
+
+**Allergies.** _Your venue's legal name_ records who an allergy concerns, the allergens and any
+kitchen note you give us so we can prepare your food safely. These details go to the kitchen.
+You can ask us to see, correct or delete your details, or use your other data protection rights.
+More information: _your privacy email address_, _the address of your privacy page_.
+
 ## The full notice on your web page {#full-notice}
 
 The full notice is the one each short notice points to. Put it on your own web page and use that
 page's address in the short notices. Enter the same address on the **Privacy** card, so that
 Waitron links to it (see
 [Your privacy page and email in Waitron](data-protection.md#privacy-settings)). Cover each group of
-people you hold data about: staff, invoice customers and guests who book. For each group, the law
+people you hold data about: staff, invoice customers, guests who book and guests with allergies.
+For each group, the law
 asks the notice to say:
 
 - who you are, and how to contact you; if you have a representative, who they are and how to
@@ -223,6 +237,9 @@ one:
   everything below. Whether any data goes to a third country depends on the providers you chose, and
   Waitron does not check where they keep data, so check with each provider.
 
+For the bucket, use an access key limited to that bucket and leave public access blocked. Turn on
+two-step sign-in for your account with the storage provider to add a second check at sign-in. These are settings at your provider; Waitron does not set them for you.
+
 Copy and adapt the next paragraph to open the record, then each entry after it, up to the next
 heading:
 
@@ -273,12 +290,12 @@ working hours the law requires.
 - Security: Waitron refuses to change or delete an entry once it is written. Each person's copy of
   their own data includes their working-time record.
 
-**Who did what at the till.** Waitron records who rang up sales, who authorised voids, who asked for
-or authorised refunds, and who opened the cash drawer or authorised it.
+**Who did what at the till.** Waitron records who rang up sales, who changed orders, who authorised
+voids, who asked for or authorised refunds, and who opened the cash drawer or authorised it.
 
-- Purpose: know who made each sale, void, refund and cash-drawer opening.
+- Purpose: know who made each sale, order change, void, refund and cash-drawer opening.
 - Whose data: staff.
-- What data: who rang up a sale, who authorised a void, who asked for, authorised or recorded the
+- What data: who rang up a sale, who changed an order, who authorised a void, who asked for, authorised or recorded the
   outcome of a refund, who opened the cash drawer or authorised it, and when; and who confirmed or
   set the box's clock from a till, kept in a table whose rows cannot be changed or deleted.
 - Who receives it: _anyone you share it with_.
@@ -335,13 +352,14 @@ notes on an order or a dish for the kitchen.
   database too.
 - Security: as for every entry. Notes are free text, so ask staff to write only what service needs.
 
-**Allergies.** Staff note a table's allergies so the kitchen can prepare food safely.
+**Allergies.** Staff must answer whether anyone at the table has an allergy before the first send
+to the kitchen. They record the details so the kitchen can prepare food safely.
 
 - Purpose: prepare each guest's food safely.
 - Whose data: guests at a table.
-- What data: a short description of who has the allergy, which allergens, and a note. Waitron keeps
-  a copy with each kitchen ticket. This can be health data, so ask your adviser to confirm how to
-  treat it.
+- What data: who has the allergy, which can be the guest's name, the allergens, and a note. Waitron
+  keeps a copy with each kitchen ticket. Allergy details linked to a guest are health data; agree
+  their legal basis and retention with your adviser before using the notes.
 - Who receives it: _anyone you share it with_.
 - How long: _set with your adviser_. Waitron keeps every ticket it sends to a kitchen printer and
   deletes none of them, so the allergy details printed on kitchen tickets stay in the database too.
@@ -449,7 +467,9 @@ what the dashboard can show you.
   drawer, or authorised it, is in the `actions.json` file of that person's copy of their data.
 - **Diagnostics** shows the box's recent log lines. Where Waitron writes a person's name, email or
   tax number as a detail it marks as personal, the line shows only a few of its characters.
-  **Alerts** lists the alerts the box has raised.
+  **Alerts** lists the alerts the box has raised. Masked log lines are still personal data: the
+  remaining characters, identifiers and other details can link them to someone. Limit who can
+  see or receive a copy, just as you do with other personal data.
 
 Waitron does not record who opened or read a record on a screen, or the network address a sign-in
 came from. The one address it takes from a request's connection and keeps is that of a device whose
