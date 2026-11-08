@@ -6343,6 +6343,8 @@ const PRODUCER_EMPTY_STEP = "Refuse to publish without the producer's three sett
 const PRODUCER_CHANGE_STEP = "Refuse a change of the producer's tax number that nobody allowed";
 const PRODUCER_LOAD_STEP = "Build the app image for checking";
 const PRODUCER_CHECK_STEP = "Check the producer's settings inside the built image";
+const PRODUCER_VALID_STEP =
+  "Run the box's own checks of the producer's settings in the built image";
 
 /**
  * The publish job's steps in order: each one's lines, its `name:` and its `run: |` script,
@@ -6396,10 +6398,10 @@ const withBlock = (step) => {
   return block;
 };
 
-function runPublishScript(script, env, bin) {
+function runPublishScript(script, env, bin, timeout = 30_000) {
   return spawnSync("bash", ["-c", script], {
     encoding: "utf8",
-    timeout: 30_000,
+    timeout,
     env: { PATH: bin ? `${bin}:${process.env.PATH}` : process.env.PATH, HOME: tmpdir(), ...env },
   });
 }
@@ -6444,6 +6446,7 @@ describe("the publish job carries the producer's settings into the image", () =>
       PRODUCER_CHANGE_STEP,
       PRODUCER_LOAD_STEP,
       PRODUCER_CHECK_STEP,
+      PRODUCER_VALID_STEP,
       "Publish to GHCR",
     ].map(at);
     expect(order.every((index) => index > -1)).toBe(true);
@@ -6453,6 +6456,7 @@ describe("the publish job carries the producer's settings into the image", () =>
     const checked = publishStepNamed(PRODUCER_CHECK_STEP).envOf("CHECK_IMAGE");
     expect(checked).toMatch(/^\S+$/);
     expect(loadTags).toBe(`          tags: ${checked}`);
+    expect(publishStepNamed(PRODUCER_VALID_STEP).envOf("CHECK_IMAGE")).toBe(checked);
   });
 
   it("asks main-tag-guard.sh under a time limit, and reads `:main`'s settings from its hand-back", () => {
@@ -6675,6 +6679,10 @@ describe("the publish job carries the producer's settings into the image", () =>
         expect(step().envOf(setting)).toBe(`\${{ secrets.${setting} }}`);
     });
 
+    it("reads the image under an outer timeout", () => {
+      expect(step().script).toMatch(/\$\(timeout \d+ docker run /);
+    });
+
     it("passes when the image carries each secret exactly, printing no value", () => {
       const result = run(PRODUCER_VALUES);
       expect(result.status, result.stderr).toBe(0);
@@ -6700,7 +6708,134 @@ describe("the publish job carries the producer's settings into the image", () =>
       delete rest.WAITRON_PRODUCER_ADDRESS;
       const result = run(rest);
       expect(result.status).not.toBe(0);
-      expect(result.stderr).toContain("WAITRON_PRODUCER_ADDRESS is not set inside the built image");
+      expect(result.stderr).toContain(
+        "could not read WAITRON_PRODUCER_ADDRESS inside the built image (exit 1)",
+      );
+    });
+  });
+
+  describe("the box's own checks, run in the built image", () => {
+    const step = () => publishStepNamed(PRODUCER_VALID_STEP);
+    // `docker run … node /app/producer-check.js` answered by the entry's source under tsx, with the
+    // image's environment taken from the stub's INSIDE_-prefixed variables.
+    const bin = mkdtempSync(join(tmpdir(), "producer-valid-bin-"));
+    afterAll(() => rmSync(bin, { recursive: true, force: true }));
+    writeFileSync(
+      join(bin, "docker"),
+      [
+        "#!/usr/bin/env bash",
+        'printf \'%s\\n\' "$*" >> "$DOCKER_ARGS"',
+        '[ "${!#}" = /app/producer-check.js ] || exit 97',
+        "for name in WAITRON_PRODUCER_NAME WAITRON_PRODUCER_TAX_ID WAITRON_PRODUCER_ADDRESS; do",
+        '  inside="INSIDE_$name"',
+        '  if [ -n "${!inside+set}" ]; then export "$name=${!inside}"; else unset "$name"; fi',
+        '  unset "$inside"',
+        "done",
+        'exec "$TSX" "$ENTRY"',
+        "",
+      ].join("\n"),
+    );
+    chmodSync(join(bin, "docker"), 0o755);
+    const run = (inside) => {
+      const dir = mkdtempSync(join(tmpdir(), "producer-valid-"));
+      try {
+        const args = join(dir, "docker.args");
+        const result = runPublishScript(
+          step().script,
+          {
+            CHECK_IMAGE: "waitron:check",
+            DOCKER_ARGS: args,
+            TSX: join(repoRoot, "apps", "server", "node_modules", ".bin", "tsx"),
+            ENTRY: join(repoRoot, "apps", "server", "src", "producer-check-entry.ts"),
+            ...Object.fromEntries(Object.entries(inside).map(([k, v]) => [`INSIDE_${k}`, v])),
+          },
+          bin,
+          90_000,
+        );
+        return { ...result, dockerArgs: existsSync(args) ? readFileSync(args, "utf8") : "" };
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+    const printed = (result) => result.stdout + result.stderr;
+
+    it("runs the loaded image's own entry, without a pull or a network, under a time limit", () => {
+      expect(step().envOf("CHECK_IMAGE")).toMatch(/^\S+$/);
+      expect(step().script).toMatch(/^timeout \d+ docker run /m);
+      expect(step().text).not.toMatch(/secrets\./);
+    });
+
+    // Text only: image-smoke builds the image, but nothing in a pull request runs this entry in it.
+    it("names an entry the server build bundles and the image copies, with its notices", () => {
+      const build = JSON.parse(
+        readFileSync(join(repoRoot, "apps", "server", "package.json"), "utf8"),
+      ).scripts.build;
+      expect(build.split(" ")).toContain("src/producer-check-entry.ts=dist/producer-check.js");
+      const copies = (
+        readFileSync(join(repoRoot, "deploy", "Dockerfile"), "utf8").match(
+          /^COPY\b(?:[^\n]*\\\n)*[^\n]*/gm,
+        ) ?? []
+      ).map((copy) => copy.replace(/\\\n\s*/g, " ").split(/\s+/));
+      const copied = (source, target) =>
+        copies.some((words) => words.includes(source) && words.at(-1) === target);
+      expect(copied("/src/apps/server/dist/producer-check.js", "/app/")).toBe(true);
+      expect(
+        copied(
+          "/src/apps/server/dist/producer-check.js.NOTICES.txt",
+          "/app/third-party/npm/server/",
+        ),
+      ).toBe(true);
+    });
+
+    it("passes the made-up producer, printing no value", { timeout: 120_000 }, () => {
+      const result = run(PRODUCER_VALUES);
+      expect(result.status, printed(result)).toBe(0);
+      expect(result.stdout).toContain("verifactu: the settings pass");
+      expect(result.dockerArgs.trim().split(" ")).toEqual([
+        "run",
+        "--rm",
+        "--pull",
+        "never",
+        "--network",
+        "none",
+        "--entrypoint",
+        "node",
+        "waitron:check",
+        "/app/producer-check.js",
+      ]);
+      for (const value of Object.values(PRODUCER_VALUES))
+        expect(printed(result)).not.toContain(value);
+    });
+
+    it("refuses an address of spaces alone, as a start does", { timeout: 120_000 }, () => {
+      const result = run({ ...PRODUCER_VALUES, WAITRON_PRODUCER_ADDRESS: "   " });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain(
+        "verifactu: software_producer.invalid (setting WAITRON_PRODUCER_ADDRESS, reason missing)",
+      );
+      expect(printed(result)).not.toContain(PRODUCER_VALUES.WAITRON_PRODUCER_NAME);
+      expect(printed(result)).not.toContain(PRODUCER_VALUES.WAITRON_PRODUCER_TAX_ID);
+    });
+
+    it(
+      "refuses a tax number whose check letter is wrong, printing no value",
+      { timeout: 120_000 },
+      () => {
+        const result = run({ ...PRODUCER_VALUES, WAITRON_PRODUCER_TAX_ID: "00000000A" });
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain(
+          "verifactu: sif.producer_invalid (setting WAITRON_PRODUCER_TAX_ID, reason check_failed)",
+        );
+        expect(printed(result)).not.toContain("00000000A");
+        expect(printed(result)).not.toContain(PRODUCER_VALUES.WAITRON_PRODUCER_NAME);
+        expect(printed(result)).not.toContain(PRODUCER_VALUES.WAITRON_PRODUCER_ADDRESS);
+      },
+    );
+
+    it("refuses an image that carries no producer at all", { timeout: 120_000 }, () => {
+      const result = run({});
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("verifactu: sif.producer_unset");
     });
   });
 });

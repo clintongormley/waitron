@@ -98,6 +98,41 @@ describe("the producer settings at backend construction", () => {
     const backend = makeVerifactuBackend({ db: STUB_DB, clock, environment: "preproduction" });
     expect(backend.id).toBe("verifactu");
   });
+
+  describe("refuseSettings, with no database", () => {
+    it("accepts the settings a production start accepts", () => {
+      setProducer(PRODUCER);
+      expect(FISCAL_SLOT.refuseSettings!("production")).toBeUndefined();
+    });
+
+    it("refuses production with none set, and accepts preproduction", () => {
+      setProducer({});
+      expect(() => FISCAL_SLOT.refuseSettings!("production")).toThrow(
+        expect.objectContaining({ code: "sif.producer_unset" }),
+      );
+      expect(FISCAL_SLOT.refuseSettings!("preproduction")).toBeUndefined();
+    });
+
+    it("refuses an address of spaces alone with the shared check's code", () => {
+      setProducer({ ...PRODUCER, WAITRON_PRODUCER_ADDRESS: "   " });
+      expect(() => FISCAL_SLOT.refuseSettings!("production")).toThrow(
+        expect.objectContaining({
+          code: "software_producer.invalid",
+          params: { setting: "WAITRON_PRODUCER_ADDRESS", reason: "missing" },
+        }),
+      );
+    });
+
+    it("refuses a wrong check letter with Veri*Factu's code", () => {
+      setProducer({ ...PRODUCER, WAITRON_PRODUCER_TAX_ID: "00000000A" });
+      expect(() => FISCAL_SLOT.refuseSettings!("production")).toThrow(
+        expect.objectContaining({
+          code: "sif.producer_invalid",
+          params: { setting: "WAITRON_PRODUCER_TAX_ID", reason: "check_failed" },
+        }),
+      );
+    });
+  });
 });
 
 describe("FISCAL_SLOT.drain", () => {

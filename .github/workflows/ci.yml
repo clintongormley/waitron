@@ -4394,7 +4394,7 @@ jobs:
       # (`sif.producer_changed`), and nothing can open the new installation a new producer needs
       # until A993. So a new tax number reaches an image only when the repository variable
       # WAITRON_PRODUCER_CHANGE_ALLOWED holds that new number. A value left set lets through only a
-      # change to that same number, later included. A change of name or address alone is not compared.
+      # change to that same number, later ones included. A change of name or address alone is not compared.
       - name: Refuse a change of the producer's tax number that nobody allowed
         env:
           REF: ${{ github.ref }}
@@ -4429,7 +4429,7 @@ jobs:
           fi
 
       # Single platform: amd64 is what every box runs. The runner is x86, so a second platform would
-      # be built under QEMU. Pay that on a release tag, not on every merge to `main` — and re-add
+      # be built under QEMU. Pay that on a release tag, not on every full run on `main` — and re-add
       # `docker/setup-qemu-action` when you do, since buildx alone registers no binfmt handler and an
       # emulated stage would fail at its first `RUN`.
       - name: Record image build time
@@ -4473,8 +4473,10 @@ jobs:
           failed=0
           for name in WAITRON_PRODUCER_NAME WAITRON_PRODUCER_TAX_ID WAITRON_PRODUCER_ADDRESS; do
             expected=${!name}
-            if ! inside=$(docker run --rm --pull never --entrypoint printenv "$CHECK_IMAGE" "$name"); then
-              echo "$name is not set inside the built image" >&2
+            status=0
+            inside=$(timeout 60 docker run --rm --pull never --entrypoint printenv "$CHECK_IMAGE" "$name") || status=$?
+            if [ "$status" -ne 0 ]; then
+              echo "could not read $name inside the built image (exit $status)" >&2
               failed=1
             elif [ "$inside" != "$expected" ]; then
               echo "$name inside the built image differs from its secret (${#inside} characters, the secret ${#expected})" >&2
@@ -4484,6 +4486,15 @@ jobs:
             fi
           done
           exit "$failed"
+
+      # The image's own entry runs each fiscal module's start-up check of the settings, for
+      # production. It prints error codes, setting names and reasons, never a value.
+      - name: Run the box's own checks of the producer's settings in the built image
+        env:
+          CHECK_IMAGE: waitron-publish-check:local
+        run: |
+          set -euo pipefail
+          timeout 120 docker run --rm --pull never --network none --entrypoint node "$CHECK_IMAGE" /app/producer-check.js
 
       - name: Publish to GHCR
         uses: docker/build-push-action@v7

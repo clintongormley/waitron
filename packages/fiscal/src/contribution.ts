@@ -181,6 +181,9 @@ export interface FiscalContribution {
   /** The SALE-PATH backend: it records locally and never contacts an authority — nothing external
    * may block a sale. */
   makeBackend(deps: FiscalBackendDeps): FiscalBackend;
+  /** Throws what `makeBackend` in `environment` would throw over the process's settings, with no
+   * database. A refusal carries no setting's value. */
+  refuseSettings?(environment: DeploymentEnvironment): void;
   /** One runtime submission pass: the seat that does contact the authority. */
   drain(deps: FiscalDutyDeps, now: Date): Promise<DrainResult>;
   /** Built once per server start; the host runs it separately from submission and sales. */

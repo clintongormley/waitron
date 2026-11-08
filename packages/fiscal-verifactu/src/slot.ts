@@ -74,6 +74,9 @@ export const FISCAL_SLOT: FiscalContribution = {
       .where(eq(envios.estado, "rechazado"))
       .orderBy(envios.registroId),
   makeBackend: (deps) => makeVerifactuBackend(deps),
+  refuseSettings: (environment) => {
+    runningIdentity(environment);
+  },
   // The runtime submission pass. The regime OWNS its transport: it builds a per-pass mTLS resolver
   // (one TLS pool per pass with due work, released in `finally`) and hands `runDrain` only the
   // vault-scoped `resolveClient`. `environment` doubles as `runDrain`'s `Entorno` guard and

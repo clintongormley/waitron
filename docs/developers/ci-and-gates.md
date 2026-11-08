@@ -1870,7 +1870,8 @@ Three things that came out of those commands and are easy to get wrong:
   arg only in the app stage — so the guard reads the app image and the print-agent tag rides along
   on that decision.
 
-The script fails rather than guessing. A transient registry error is repaired by the next merge, but
+The script fails rather than guessing. A transient registry error is repaired by the next full run on `main` (the nightly or a manual
+run), but
 two states are NOT self-repairing: a `:main` carrying no build id, and one built from a commit
 GitHub's comparison cannot place against the commit being published. Both wedge every later publish
 until `:main` is deleted or retagged by hand. While the guard fails, nothing is published, the
@@ -1916,13 +1917,18 @@ to the app build only. In order, the publish job:
 4. builds the app image with `load: true` (one platform; a second needs this rechecked);
 5. compares each of the three inside that image (`docker run … printenv`) with its secret in the
    shell, printing lengths only;
-6. builds again with `push: true` from the builder's cache, with the tags step's tags, then pushes
+6. runs `/app/producer-check.js` in that image, under `timeout 120` and with no network: each
+   fiscal module's `refuseSettings` seat checks the image's own environment as a production start
+   does (for Veri\*Factu, the shared `software_producer.invalid` checks and its own
+   `sif.producer_invalid` ones), and a refusal prints its code, setting and reason, never a value;
+7. builds again with `push: true` from the builder's cache, with the tags step's tags, then pushes
    the print-agent image, which takes none of the three.
 
 The pushed image is rebuilt from cache rather than `docker push`ed from the loaded one, so it is
 built from the same arguments but is not byte-for-byte the compared image. Guards:
-`scripts/ci-workflow.test.mjs` (runs the three producer step scripts, and the tags step on a
-release tag, against fixtures and a stand-in `docker`, and reads the rest as text),
+`scripts/ci-workflow.test.mjs` (runs the four producer step scripts, and the tags step on a
+release tag, against fixtures and a stand-in `docker`; for step 6 the stand-in runs the entry's
+source under `tsx`, not the bundle in an image; it reads the rest as text),
 `scripts/deploy-image-env.test.ts` (reads the Dockerfile and `compose.yml` as text) and
 `scripts/main-tag-guard.test.mjs` (the hand-back and `published-image-env.sh`, against a stubbed
 `docker`). None runs the job.
