@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import nativeFs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
-import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rename, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -544,6 +544,58 @@ it("retains a started request when the destination path is not a regular file", 
   expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(f.key.secret);
 });
 
+it("refuses a destination link before opening or migrating its target", async () => {
+  const f = await stage("archive");
+  const target = join(f.root, "linked.db");
+  const original = Buffer.alloc(0);
+  await writeFile(target, original);
+  await symlink(target, join(f.venueDir, "venue.db"));
+  const markerPath = await markPlaced(f.stateDir);
+  const marker = await readFile(markerPath, "utf8");
+  const journal = f.journal();
+  await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
+  expect((await readFile(target)).byteLength).toBe(original.byteLength);
+  expect(await readFile(markerPath, "utf8")).toBe(marker);
+  expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(f.key.secret);
+  expect(f.journal()).toBe(journal);
+});
+
+it("keeps a corrupt destination as evidence and retries the same request after it is moved aside", async () => {
+  const f = await stage("archive");
+  const file = join(f.venueDir, "venue.db");
+  const corrupt = Buffer.from("not a SQLite database");
+  await writeFile(file, corrupt);
+  const markerPath = await markPlaced(f.stateDir);
+  const marker = await readFile(markerPath, "utf8");
+  const journal = f.journal();
+  await expect(f.run()).rejects.toMatchObject({ code: "ERR_SQLITE_ERROR", errcode: 26 });
+  await expect(f.nextEvent()).rejects.toMatchObject({ code: "module.operation_invalid" });
+  expect(await readFile(markerPath, "utf8")).toBe(marker);
+  expect(await readFile(file)).toEqual(corrupt);
+  expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(f.key.secret);
+  const kept = join(f.venueDir, "venue.db.unreadable");
+  await rename(file, kept);
+  await expect(f.run()).resolves.toBe(true);
+  expect(await readFile(kept)).toEqual(corrupt);
+  await expectFinishedRetry(f, journal);
+});
+
+it("refuses a changed target node before reading destination recovery state", async () => {
+  const f = await stage("archive");
+  await f.seedDestination();
+  const markerPath = await markPlaced(f.stateDir);
+  const marker = JSON.parse(await readFile(markerPath, "utf8"));
+  marker.recoveryOperation.binding.targetNodeId = "00000000-0000-4000-8000-000000000001";
+  const altered = JSON.stringify(marker);
+  await writeFile(markerPath, altered);
+  const original = await f.snapshot();
+  const journal = f.journal();
+  await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
+  expect(await readFile(markerPath, "utf8")).toBe(altered);
+  expect(await f.snapshot()).toEqual(original);
+  expect(f.journal()).toBe(journal);
+});
+
 it("refuses a destination with the selected node but invalid recovery facts", async () => {
   const f = await stage("archive");
   await applyMigrations(f.venueDir, migrationOptionsFor(orderedMigrationSets(ALL_MODULES), null));
@@ -597,10 +649,10 @@ it.each(["unknown", "throw"] as const)(
     const operations = ALL_MODULES.find((module) => module.name === f.binding.module)!.operations!;
     const read = vi.spyOn(operations, "readRecoveryState");
     if (state === "throw")
-      read.mockRejectedValue(
+      read.mockRejectedValueOnce(
         new AppError("module.operation_invalid", { module: f.binding.module }),
       );
-    else read.mockResolvedValue({ priorActivation: "unknown" } as never);
+    else read.mockResolvedValueOnce({ priorActivation: "unknown" } as never);
     await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
     expect(await readFile(markerPath, "utf8")).toBe(marker);
     expect(await f.snapshot()).toEqual(original);

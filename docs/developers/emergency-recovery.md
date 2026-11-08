@@ -157,8 +157,8 @@ archive and prepared-stream paths flush the started-placement marker and its dir
 placement. A stream also flushes its retained source.
 A stream uses a separate placement copy, so leave room for that additional database file.
 
-On restart, leave the staged request and its key in place. The selected source's exact bytes,
-the staged node key and current outside confirmation still authenticate the attempt. For a request
+On restart, leave the staged request and its key in place. The selected source's exact bytes and
+the staged node key still authenticate the attempt. For a request
 carrying its recovery selection, the host checks the destination before choosing what to do:
 
 - If activation committed for this event, it uses the placed database. The module checks the event,
@@ -168,16 +168,18 @@ carrying its recovery selection, the host checks the destination before choosing
   node, also takes this path. An existing destination is checked against the image and migrated
   before its current-schema recovery state is read.
 - An unreadable, corrupt or uncertain destination refuses recovery and retains staging. A newer
-  image's database is refused before migration. Keep the incident evidence; if you cannot resume,
-  prepare a new event against current outside history and submit a fresh restore request.
+  image's database is refused before migration. Keep the incident evidence. If the file is corrupt,
+  preparing a fresh event also refuses: stop the box and move the bad `venue.db` aside, keeping it
+  as evidence, before restarting with the same staged request. For a readable but invalid
+  destination, you can prepare a new event against current outside history and submit a fresh request.
 
 A stage marker alone grants no activation authority. Requests without saved recovery selection
 keep their existing committed-replay path. A deliberate fresh request can restore the old backup
 again, but it does not free the interrupted event's spent name. Never delete the old incident to
 reuse that name.
 
-An error before the restore hooks' transaction body returns normally puts the original request
-back. If that write fails or the process stops first, the next start checks the saved activation
+On the first attempt, an error before the restore hooks' transaction body returns normally puts
+the original request back. If that write fails or the process stops first, the next start checks the saved activation
 state as above. Errors after the body returns keep the started request and its owner-only key,
 including a failed trading-settings write or outside-result publication after activation commits.
 A refusal while resuming keeps them for another checked attempt. A completed restore removes them.

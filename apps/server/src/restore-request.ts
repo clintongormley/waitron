@@ -8,7 +8,17 @@ import { nodes, openVenueDatabase } from "@waitron/db";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, type OperationBinding, type ProvisionedNode } from "@waitron/module";
 import { eq } from "drizzle-orm";
-import { chmod, copyFile, mkdtemp, open, readFile, rename, rm, stat } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  lstat,
+  mkdtemp,
+  open,
+  readFile,
+  rename,
+  rm,
+  stat,
+} from "node:fs/promises";
 import { VENUE_FILE } from "@waitron/store";
 import { join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
@@ -447,9 +457,9 @@ async function restartUncommittedPlacement(
   };
   const reader = ALL_MODULES.find((module) => module.name === binding.module)?.operations
     ?.readRecoveryState;
-  if (reader === undefined || binding.targetNodeId !== node.nodeId) return refuse();
+  if (reader === undefined) return refuse();
   try {
-    if (!(await stat(join(deps.venueDir, VENUE_FILE))).isFile()) return refuse();
+    if (!(await lstat(join(deps.venueDir, VENUE_FILE))).isFile()) return refuse();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
     throw error;

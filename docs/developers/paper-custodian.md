@@ -496,8 +496,7 @@ The candidate public restore forms collect this credential. A host request suppl
 `restore-request.node-key` with mode `0600`, not into the JSON marker. On the first attempt, the selected
 backup's verifier checks it again. A committed interrupted attempt uses the placed database's
 verifier. Since A1415, a request carrying its recovery selection restarts from the authenticated
-source when no activation was saved for that event; it keeps the same event and name. Both paths
-reread current outside evidence. A missing or
+source when no activation was saved for that event; it keeps the same event and name. A missing or
 invalid staged credential refuses recovery rather than falling back to an environment key.
 
 For requests carrying a staged node key, bind `recoveryOperation.binding.sourceId` to the selected
@@ -513,7 +512,7 @@ attempt removes the staged key after success or a refusal before placement is ma
 a venue-lock refusal keeps it for another fresh attempt. Once placement is marked started, any
 failure keeps the request and key for a checked resume, including a thrown file-write error after
 activation commits. A successful resume removes them. Restaging replaces the credential. Each attempt
-still authenticates the key and collects current outside evidence. See
+still authenticates the key. See
 [interrupted staged restores](emergency-recovery.md#resume-an-interrupted-staged-restore). An interrupted write with no marker leaves no runnable request, and the
 next entry pass removes the orphaned node-key file. These rules do not establish that a copied
 marker proves an allocation can be reused. Environment-only command inputs retain their existing
@@ -529,4 +528,4 @@ still `recoveryKey`. The browser API client and candidate restore screens forwar
 The setup request's saved hash includes the operation and node key, so a completed request cannot
 be replayed with different inputs. Its saved progress contains neither key. Forwarding the operation
 does not supply outside authority: after restart, recovery still checks the selected database's node
-key and collects current outside evidence. These API checks do not complete the offline procedure.
+key. These API checks do not complete the offline procedure.
