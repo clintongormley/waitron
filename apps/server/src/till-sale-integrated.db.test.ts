@@ -3148,12 +3148,12 @@ describe("an order being paid by card cannot be changed from another device (pla
   });
 
   it("clears a stale payment mark when a free order settles by reader", async () => {
-    const { cfg, cafe } = await setupVenue();
+    const { cfg, coffee } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
-      zoneId: cafe.zoneId,
-      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      zoneId: coffee.zoneId,
+      lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
     });
     await withTransaction(suite.db, async (tx) => {
       await tx
