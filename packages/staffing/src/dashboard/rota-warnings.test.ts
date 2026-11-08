@@ -136,18 +136,22 @@ it.each(["en", "es"] as const)("uses whole minutes for each split warning in %s"
       breachText({ kind, personId: "ana", shiftId: "s", plannedMinutes, limitMinutes: 180 }),
     ).toContain(`${plannedMinutes} min`);
 });
-it.each([
-  ["en", "Shifts overlap by 10 min; minimum gap 90 min"],
-  ["es", "Los turnos se solapan 10 min; pausa mínima de 90 min"],
-] as const)("describes overlapping shifts without a negative pause in %s", (language, text) => {
-  setLocale(language);
-  expect(
-    breachText({
-      kind: "split_gap_too_short",
-      personId: "ana",
-      shiftId: "s",
-      gapMinutes: -10,
-      requiredMinutes: 90,
-    }),
-  ).toBe(text);
-});
+it.each(["en", "es"] as const)(
+  "describes overlapping shifts without a negative pause in %s",
+  (language) => {
+    setLocale(language);
+    expect(
+      breachText({
+        kind: "split_gap_too_short",
+        personId: "ana",
+        shiftId: "s",
+        gapMinutes: -10,
+        requiredMinutes: 90,
+      }),
+    ).toBe(
+      STAFFING_STRINGS[language]["staffing.breach.split_gap_overlap"]
+        .replace("{overlapMinutes}", "10")
+        .replace("{requiredMinutes}", "90"),
+    );
+  },
+);
