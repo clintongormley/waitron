@@ -4,9 +4,9 @@ import { installShutdownHandlers } from "./run-server.js";
 import { runServerCommand } from "./server-command.js";
 import "./errors.js";
 
-const command = process.argv[2];
-if (command !== undefined) {
-  process.exitCode = runServerCommand(command, console);
+const args = process.argv.slice(2);
+if (args.length > 0) {
+  process.exitCode = runServerCommand(args, console);
 } else {
   nameVenueHolder("server", process.env);
   const server = await startServerOrFirstSetupResolution(process.env);

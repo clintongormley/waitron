@@ -23,7 +23,7 @@ function stubProducer(values: Record<string, string>) {
 it("check-producer answers 0 when the real modules accept the process's settings", () => {
   stubProducer(TEST_PRODUCER);
   const { out, log, error } = output();
-  expect(runServerCommand("check-producer", out)).toBe(0);
+  expect(runServerCommand(["check-producer"], out)).toBe(0);
   expect(log).toEqual(["verifactu: the settings pass"]);
   expect(error).toEqual([]);
 });
@@ -31,17 +31,35 @@ it("check-producer answers 0 when the real modules accept the process's settings
 it("check-producer answers 1 and names the refusal when the real modules refuse", () => {
   stubProducer({ ...TEST_PRODUCER, WAITRON_PRODUCER_TAX_ID: "00000000A" });
   const { out, log, error } = output();
-  expect(runServerCommand("check-producer", out)).toBe(1);
+  expect(runServerCommand(["check-producer"], out)).toBe(1);
   expect(log).toEqual([]);
   expect(error).toEqual([
     "verifactu: sif.producer_invalid (setting WAITRON_PRODUCER_TAX_ID, reason check_failed)",
   ]);
 });
 
-it("refuses a command it does not know without checking anything", () => {
+const USAGE = "usage: waitron-server [check-producer]";
+
+it.each([
+  ["an unknown word", ["check-producers"]],
+  ["a word after the command", ["check-producer", "extra"]],
+  ["an empty word", [""]],
+  ["nothing at all", []],
+])("answers usage and 2 without checking anything, given %s", (_case, args) => {
   stubProducer(TEST_PRODUCER);
   const { out, log, error } = output();
-  expect(runServerCommand("check-producers", out)).toBe(1);
+  expect(runServerCommand(args, out)).toBe(2);
   expect(log).toEqual([]);
-  expect(error).toEqual(["unknown command: check-producers"]);
+  expect(error).toEqual([USAGE]);
+});
+
+it.each([
+  ["a first word", ["https://person:hunter2@bucket.example/x"]],
+  ["a later word", ["check-producer", "https://person:hunter2@bucket.example/x"]],
+])("does not print what was typed: %s can carry a secret", (_case, args) => {
+  stubProducer(TEST_PRODUCER);
+  const { out, log, error } = output();
+  expect(runServerCommand(args, out)).toBe(2);
+  expect([...log, ...error].join("\n")).not.toContain("hunter2");
+  expect([...log, ...error].join("\n")).not.toContain("bucket.example");
 });
