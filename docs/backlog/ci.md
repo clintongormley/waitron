@@ -1331,8 +1331,16 @@ these, which it did not build (local figures, 2 November 2026):
   took 2.3–2.5 s per process on a busy machine; `kitchen-allergy.restart.test.ts` starts 15,
   `hour-recovery-placement-*` 2–4 each. A bundle's start time was not measured, and an earlier attempt
   to bundle `bin.ts` failed resolving `ui-core` and the assets' font path.
-- **One migrated template for every `useVenueDb` suite** (`packages/db/src/testing/venue-db.ts`):
-  about 0.85 s of migration per file, across several hundred suites.
+- **One migrated template for every `useVenueDb` suite: measured and not worth building** (A1443,
+  8 November 2026). The 0.85 s above predates [PR #2539](https://github.com/clintongormley/waitron/pull/2539),
+  which took the repository from 405 migration files to 7. Timed on one Mac in a new process per run
+  (every file is its own process under Vitest's defaults) with the full manifest: migrating takes a
+  median of 65 ms and copying an already migrated database 18 ms, a saving of 47 ms per file. The same
+  timing on the commit before #2539 gave about 1.9 s against 23 ms, so the timing can see a real gain.
+  Across the 826 server test files in `apps/server/test-durations.json` that is about 39 s of 12,724 s
+  recorded, or 0.3%; three times that, for a slower CI machine, is still under 1%. The 5% bar would need
+  about 770 ms per file. Measured locally only: no CI run was made. Measure again only if the
+  migration history grows back to hundreds of files.
 - **The `zone-process-matrix.*` files** run other test files in nested Vitest runs; child processes
   were 47–54 s of their 49–57 s locally. Not investigated further.
 - **The remaining random salts in test setup:** `src/testing/staged-hour-restore.ts` and
