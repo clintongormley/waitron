@@ -1,4 +1,3 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -7,7 +6,7 @@ import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { profileAllows } from "@waitron/layouts";
 import type { CapabilityFlag, FormFactor, ProfileAction } from "@waitron/layouts";
-import { verifySecretAsync } from "@waitron/identity";
+import { createVerifiedTokenMemory, verifySecretAsync } from "@waitron/identity";
 // Side-effect only: keeps `device.unauthorized` (errors.ts) reachable from the file that throws it.
 import "./errors.js";
 
@@ -108,33 +107,8 @@ export const deviceBindingColumns = {
   capabilities: deviceProfiles.capabilities,
 };
 
-/**
- * Devices whose token has already passed scrypt: the stored hash it passed against and the SHA-256
- * of that token. Skipping scrypt on a match is safe because the row's CURRENT hash is re-read on
- * every request and must equal the remembered one, and because the token is `randomBytes(32)`
- * (`join-requests.ts`), not a password, so a fast digest of it is not open to guessing.
- */
-const verifiedTokens = new Map<string, { tokenHash: string; tokenDigest: Buffer }>();
 export const VERIFIED_TOKENS_LIMIT = 256;
-
-const digestOf = (token: string): Buffer => createHash("sha256").update(token).digest();
-
-function alreadyVerified(deviceId: string, token: string, tokenHash: string): boolean {
-  const entry = verifiedTokens.get(deviceId);
-  if (entry === undefined) return false;
-  if (entry.tokenHash !== tokenHash) {
-    verifiedTokens.delete(deviceId);
-    return false;
-  }
-  return timingSafeEqual(entry.tokenDigest, digestOf(token));
-}
-
-function rememberVerified(deviceId: string, token: string, tokenHash: string): void {
-  verifiedTokens.delete(deviceId);
-  if (verifiedTokens.size >= VERIFIED_TOKENS_LIMIT)
-    verifiedTokens.delete(verifiedTokens.keys().next().value!);
-  verifiedTokens.set(deviceId, { tokenHash, tokenDigest: digestOf(token) });
-}
+const verifiedTokens = createVerifiedTokenMemory(VERIFIED_TOKENS_LIMIT);
 
 /**
  * Carries NO authentication: the caller has already fetched an `active` row and, on the cookie
@@ -175,8 +149,7 @@ export interface DeviceProof {
 /**
  * Reads and authenticates the request's device, returning its {@link DeviceProof} or `null` at
  * EVERY miss — a missing or malformed cookie, an unknown or revoked device, or a token that does
- * not verify — so `requireDevice`'s `device.unauthorized` confirms neither a device's existence
- * nor its revocation state. The id selects the row because scrypt is per-row-salted; the token
+ * not verify. The id selects the row because scrypt is per-row-salted; the token
  * validates it. Only a cookie read that verifies writes (the `last_seen_at` sighting), and only
  * when a sighting is due and the read is not passive.
  *
@@ -225,10 +198,10 @@ async function readDeviceProof(
   };
   let row = await readRow();
   if (row === undefined) {
-    verifiedTokens.delete(deviceId);
+    verifiedTokens.forget(deviceId);
     return null;
   }
-  if (!alreadyVerified(deviceId, token, row.tokenHash)) {
+  if (!verifiedTokens.alreadyVerified(deviceId, token, row.tokenHash)) {
     const checkedHash = row.tokenHash;
     // Constant-time: the token is never compared with `===`.
     if (!(await verifySecretAsync(token, checkedHash))) return null;
@@ -236,7 +209,7 @@ async function readDeviceProof(
     // checked.
     row = await readRow();
     if (row === undefined || row.tokenHash !== checkedHash) return null;
-    rememberVerified(deviceId, token, checkedHash);
+    verifiedTokens.remember(deviceId, token, checkedHash);
   }
 
   // The check on the row read spares a request the write lock.
@@ -260,7 +233,7 @@ async function readDeviceProof(
       locked = stillCurrent(await readRow());
     }
     if (locked === undefined) {
-      verifiedTokens.delete(deviceId);
+      verifiedTokens.forget(deviceId);
       return null;
     }
     row = locked;

@@ -30,8 +30,7 @@ declare module "@waitron/shared" {
     "printer.deleted": Record<string, never>;
     /** No print agent carries this id. `id` is the id looked up. */
     "agent.not_found": { id: string };
-    /** The bearer token did not verify, or the agent is revoked. No params, so the failure never
-     * discloses which agent ids exist. */
+    /** The bearer token did not verify, or the agent is revoked. */
     "agent.unauthorized": Record<string, never>;
     /** An ongoing dashboard alert: agent `{agent}` has not checked in for several minutes. Not thrown;
      * raised by the printing alert source. */

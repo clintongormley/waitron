@@ -1054,8 +1054,7 @@ declare module "@waitron/shared" {
      * A request to a device-authenticated route carried no usable device identity — the
      * `waitron_device` cookie was absent, malformed, named no device, carried a wrong token, or
      * named a revoked device — or a till sign-in session's device has been revoked
-     * (`requireSession`). One code for all, so the answer does not confirm a device's existence or
-     * revocation. NO params: the cookie is a bearer secret.
+     * (`requireSession`). NO params: the cookie is a bearer secret.
      */
     "device.unauthorized": Record<string, never>;
     /**

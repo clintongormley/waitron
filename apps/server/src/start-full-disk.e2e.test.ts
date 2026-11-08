@@ -2,6 +2,7 @@
 // image the harness makes with hdiutil (`./testing/full-disk.ts`). Without one each case is reported
 // SKIPPED; with CI=true or WAITRON_REQUIRE_FULL_DISK=1 it FAILS instead (testing-guide.md, "The
 // full-disk start tests run on a small filesystem").
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   mkdirSync,
   mkdtempSync,
@@ -25,7 +26,9 @@ import {
   drawerOpens,
   invoiceSeries,
   openVenueDatabase,
+  printAgents,
   sales,
+  venueLocationId,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -41,6 +44,7 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { authenticateAgent } from "@waitron/printing";
 import {
   START_AGAIN_CHOICES_DIR,
   START_AGAIN_GUESSES_FILE,
@@ -83,6 +87,7 @@ import { runEntry, serveRecovery, type RecoveryServeOptions } from "./node-entry
 import { FRESH, readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { actionsPersonalData } from "./personal-data-actions.js";
+import { mountPrintApi } from "./print-api.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
@@ -1067,6 +1072,127 @@ describe("a start on a real full disk", () => {
       small.unfill();
       await store.close();
     }
+  });
+
+  describe("a print agent with a stamp due", () => {
+    const longAgo = "2020-01-01T00:00:00.000Z";
+
+    async function agentVenue(small: SmallDisk, folder: string) {
+      const dir = realpathSync(small.folder(folder));
+      await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+      const store = await openVenueDatabase(dir);
+      const db = store.venue;
+      const secret = randomBytes(32).toString("base64url");
+      let agentId: string;
+      try {
+        await seedVenue(db, {
+          name: "Main",
+          invoiceLocales: ["en-GB"],
+          operationDescription: "Sale",
+        });
+        const [row] = await db
+          .insert(printAgents)
+          .values({
+            locationId: await venueLocationId(db),
+            name: "Agent",
+            tokenHash: hashSecret(secret),
+            active: true,
+          })
+          .returning({ id: printAgents.id });
+        agentId = row!.id;
+      } catch (error) {
+        await store.close();
+        throw error;
+      }
+      const lastSeen = async () => {
+        const [found] = await db
+          .select({ lastSeenAt: printAgents.lastSeenAt })
+          .from(printAgents)
+          .where(eq(printAgents.id, agentId));
+        return found!.lastSeenAt;
+      };
+      const changedWhileFull = async (change: Partial<typeof printAgents.$inferInsert>) => {
+        small.unfill();
+        await db.update(printAgents).set(change).where(eq(printAgents.id, agentId));
+        db.all(sql`pragma wal_checkpoint(truncate)`);
+        small.fill(0);
+      };
+      return { store, db, agentId, token: `${agentId}.${secret}`, lastSeen, changedWhileFull };
+    }
+
+    const codeOf = (attempt: Promise<unknown>) =>
+      attempt.then(
+        () => undefined,
+        (error: { code?: string }) => error.code,
+      );
+
+    it("is accepted unstamped, refused once revoked or given a new key, and stamped once there is room", async (ctx) => {
+      const small = needDisk(ctx);
+      const { store, db, agentId, token, lastSeen, changedWhileFull } = await agentVenue(
+        small,
+        "agent-auth",
+      );
+      try {
+        await changedWhileFull({ lastSeenAt: longAgo });
+        expect(await authenticateAgent(db, token)).toEqual({ agentId });
+        expect(await authenticateAgent(db, token)).toEqual({ agentId });
+        expect(await lastSeen()).toBe(longAgo);
+
+        await changedWhileFull({ active: false });
+        expect(await codeOf(authenticateAgent(db, token))).toBe("agent.unauthorized");
+
+        const newSecret = randomBytes(32).toString("base64url");
+        await changedWhileFull({ active: true, tokenHash: hashSecret(newSecret) });
+        expect(await codeOf(authenticateAgent(db, token))).toBe("agent.unauthorized");
+        const newToken = `${agentId}.${newSecret}`;
+        expect(await authenticateAgent(db, newToken)).toEqual({ agentId });
+        expect(await lastSeen()).toBe(longAgo);
+
+        small.unfill();
+        expect(await authenticateAgent(db, newToken)).toEqual({ agentId });
+        expect(await lastSeen()).not.toBe(longAgo);
+      } finally {
+        small.unfill();
+        await store.close();
+      }
+    });
+
+    it("is answered with no jobs when it polls with nothing waiting and its host name unchanged, and saves no stamp", async (ctx) => {
+      const small = needDisk(ctx);
+      const { store, db, token, lastSeen, changedWhileFull } = await agentVenue(
+        small,
+        "agent-poll",
+      );
+      try {
+        const app = new Hono();
+        mountPrintApi(
+          app,
+          {
+            db,
+            cfg: { nodeId: brandNodeId(randomUUID()), locale: "en-GB" } as never,
+            pairingMode: createPairingMode(),
+            readMembership: () => Promise.resolve(null),
+            readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+            venueLocale: "en-GB",
+          },
+          () => {},
+        );
+        await changedWhileFull({ lastSeenAt: longAgo, host: "agent-host" });
+
+        const res = await app.request("/print-api/agent/jobs", {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({ host: "agent-host" }),
+        });
+
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({ jobs: [] });
+        expect(await lastSeen()).toBe(longAgo);
+      } finally {
+        small.unfill();
+        await store.close();
+      }
+    });
   });
 
   it("the till's reads answer on a full disk with a stamp due, and PIN sign-in still refuses", async (ctx) => {
