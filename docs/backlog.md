@@ -104,7 +104,7 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1380. Saves, reads and sign-outs that can lose a dish or act as the wrong person](backlog/till.md#bundle-a1380-saves-reads-and-sign-outs-that-can-lose-a-dish-or-act-as-the-wrong-person)
 - [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
 - [A1389. Refuse bad tips and compare the amount captured on the whole-order card path](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
-- [A1398. Pack the other packages' test shards by measured time, and check the packing on every run](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time-and-check-the-packing-on-every-run)
+- [A1398. Pack the other packages' test shards by measured time](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
 - [A1400. An older copy must not undo a save](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
 
 **3. The foundation, already running.** A1308 stays first in lane A, with
@@ -2208,7 +2208,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**
   [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run).
 
-- **A1398. Pack the other packages' test shards by measured time, and check the packing on every run** (bundle of 3, 1 important, size M). [Detail](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time-and-check-the-packing-on-every-run)
+- **A1398. Pack the other packages' test shards by measured time** (bundle of 2, 1 important, size M). [Detail](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
 
 - **Tests copy the dashboard shell's link handler instead of calling it.**
   [Detail](backlog/ci.md#tests-copy-the-dashboard-shells-link-handler-instead-of-calling-it).

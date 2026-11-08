@@ -1929,7 +1929,30 @@ Guards, each weaker than the rule: the 90-second warning above names a slow FILE
 job; the "pin each sharded package's shard count" case in `scripts/ci-workflow.test.mjs` holds the
 counts, not the times; and each test job's 10-minute `timeout-minutes` (the "bounds every test job"
 case in the same file) is the only one that stops a job: GitHub cancels it at 10 minutes, which fails
-the `ci` check. Nothing measures a job's time against 4 minutes.
+the `ci` check. The final `ci` job also warns when a server or stream job exceeds four minutes,
+as described below.
+
+### Inspect duration warnings before refreshing the table
+
+A file absent from the server's duration table gets the table's mean estimate. The sequencer
+keeps that fallback and emits a missing-file annotation for its shard, so you can see when the
+packing uses an estimate rather than a recorded time.
+
+The final `ci` job reads its attempt's paginated job records and prints each selected server or
+stream job's wall time. It combines jobs over 240 seconds and unavailable selected-job metadata
+into one advisory annotation. Skipped jobs and cancellations without an assigned runner stay
+quiet. An API failure or its 45-second deadline produces an unavailable warning; it does not
+change the two existing CI gates.
+
+Inspect the job's setup and test steps before deciding to refresh the table: wall time includes
+both, and a slow runner is not evidence that the packing changed. The stream job has no duration
+table to refresh. Refresh the server table manually only after the health checks below.
+
+After changing the warning, publish your feature branch and run full verification on it with
+`gh workflow run ci.yml --ref "$(git branch --show-current)"`. Read that exact head's warning
+step log as well as the CI result: it must show real server/stream rows without an unavailable
+warning. The local extracted-shell tests use controlled API replies and cannot establish hosted
+API access.
 
 ### What to do when CI fails
 

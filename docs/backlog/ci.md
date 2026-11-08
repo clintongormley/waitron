@@ -99,11 +99,6 @@ the fix at the cause. On main run 40597297102 (head `8e454b1eb`, 2026-10-27) the
 shards' runs took about 115, 202, 235 and 239 s, and shard 4's job 4 min 46 s.
 [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
-## Nothing checks, on every CI run, that each server test file ran in exactly one shard.
-
-A standing check, for example in `test-server-merge` comparing the shards' `end`
-lines with the file list, is open. Left open by A938. [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
-
 ## Venue-service browser startup remains unexplained (#1557)
 
 On 2026-10-11, [CI attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)
@@ -468,17 +463,14 @@ fixture must abort and await that call during teardown. Those runs did not estab
 sends any further requests after the fake printer closes or retains a live resource; do not
 infer either from the missing outcome alone.
 
-## Bundle A1398: Pack the other packages' test shards by measured time, and check the packing on every run
+## Bundle A1398: Pack the other packages' test shards by measured time
 
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size M. Duration warnings are implemented separately. For later packing comparisons,
+use qualified runs with one coverage mode; never mix runs from before and after A1427.
 
-- **The server's duration table needs a staleness warning.** Flag missing files and
-  shards over four minutes from CI measurements; refreshing the table remains manual.
-  [Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 - **The other sharded packages still use Vitest's file-count split.**
   [Detail](ci.md#the-other-sharded-packages-still-use-vitests-file-count-split)
-- **Nothing checks, on every CI run, that each server test file ran in exactly one shard.**
-  [Detail](ci.md#nothing-checks-on-every-ci-run-that-each-server-test-file-ran-in-exactly-one-shard)
+- an inventory of run test files, only if a same-count wrong-files case is ever seen
 
 ## Bundle: Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)
 

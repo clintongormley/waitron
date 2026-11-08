@@ -2061,6 +2061,235 @@ echo "$1" >> "$STUB_DIR/sleeps"
 `;
 const STUBS = { gh: GH_STUB, sleep: SLEEP_STUB };
 
+describe("the final shard duration warning", () => {
+  let root;
+  let bin;
+  let realTimeout;
+  const name = "Warn about slow server test jobs";
+  beforeAll(() => {
+    realTimeout = spawnSync(
+      "sh",
+      ["-c", "command -v gnutimeout || command -v gtimeout || command -v timeout"],
+      { encoding: "utf8" },
+    ).stdout.trim();
+    expect(realTimeout).not.toBe("");
+    root = mkdtempSync(join(tmpdir(), "ci-shard-duration-"));
+    bin = join(root, "bin");
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, "gh"),
+      '#!/usr/bin/env bash\necho "$$" > "$STUB_DIR/gh-pid"\nif [ "${GH_STUB_IGNORE_TERM:-}" = 1 ]; then trap \'\' TERM; fi\n' +
+        GH_STUB.slice(GH_STUB.indexOf("\n") + 1),
+    );
+    chmodSync(join(bin, "gh"), 0o755);
+    writeFileSync(
+      join(bin, "gnutimeout"),
+      '#!/bin/sh\necho "$$" > "$STUB_DIR/timeout-pid"\nprintf \'%s\\n\' "$*" > "$STUB_DIR/deadline"\nexec "$REAL_TIMEOUT" "$@"\n',
+    );
+    chmodSync(join(bin, "gnutimeout"), 0o755);
+  });
+  afterAll(() => {
+    if (root !== undefined) rmSync(root, { recursive: true, force: true });
+  });
+
+  const timedJob = (jobName, completedAt, extra = {}) => ({
+    id: 1,
+    name: jobName,
+    status: "completed",
+    conclusion: "success",
+    runner_id: 1,
+    started_at: "2026-11-08T00:00:00Z",
+    completed_at: completedAt,
+    ...extra,
+  });
+  function runWarning(
+    rows,
+    { needs = { "test-server": { result: "success" } }, pages, apiStatus = 0, ...env } = {},
+  ) {
+    const state = mkdtempSync(join(root, "run-"));
+    writeFileSync(
+      join(state, "out.1"),
+      pages ?? JSON.stringify({ total_count: rows.length, jobs: rows }),
+    );
+    writeFileSync(join(state, "status.1"), String(apiStatus));
+    const result = spawnSync("bash", ["-e", "-c", ciStepNamed(name).script], {
+      encoding: "utf8",
+      timeout: 5_000,
+      env: {
+        PATH: `${bin}:${process.env.PATH}`,
+        STUB_DIR: state,
+        REAL_TIMEOUT: realTimeout,
+        GH_TOKEN: "token",
+        REPO: "o/r",
+        RUN_ID: "123",
+        RUN_ATTEMPT: "2",
+        NEEDS: JSON.stringify(needs),
+        ...env,
+      },
+    });
+    if (result.error) {
+      for (const file of ["timeout-pid", "gh-pid"]) {
+        const path = join(state, file);
+        if (!existsSync(path)) continue;
+        try {
+          process.kill(Number(readFileSync(path, "utf8").trim()), "SIGKILL");
+        } catch (error) {
+          if (error.code !== "ESRCH") throw error;
+        }
+      }
+      throw result.error;
+    }
+    return { status: result.status, output: result.stdout + result.stderr, state };
+  }
+
+  it("warns above four minutes of job time but stays quiet at exactly four minutes", () => {
+    const atLimit = runWarning([timedJob("test-server (1)", "2026-11-08T00:04:00Z")]);
+    expect(atLimit.status).toBe(0);
+    expect(atLimit.output).not.toContain("::warning::");
+    const over = runWarning([timedJob("test-server (1)", "2026-11-08T00:04:01Z")]);
+    expect(over.status).toBe(0);
+    expect(over.output).toContain("::warning::");
+    expect(over.output).toContain("test-server (1): 241s");
+  });
+
+  it("times the stream job and ignores unrelated and reuse jobs", () => {
+    const result = runWarning(
+      [
+        timedJob("test-server-stream", "2026-11-08T00:04:01Z"),
+        timedJob("test-till (1)", "2026-11-08T00:09:00Z"),
+        timedJob("reuse-pr", "2026-11-08T00:09:00Z"),
+      ],
+      {
+        needs: { "test-server-stream": { result: "success" }, "test-till": { result: "success" } },
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("test-server-stream: 241s");
+    expect(result.output).not.toContain("test-till");
+    expect(result.output).not.toContain("reuse-pr");
+    expect(result.output.toLowerCase()).not.toContain("refresh");
+  });
+
+  it("stays quiet for skipped families, including an unexpanded matrix, without asking the API", () => {
+    const result = runWarning(
+      [timedJob("test-server", null, { conclusion: "skipped", runner_id: 0 })],
+      { needs: { "test-server": { result: "skipped" } }, apiStatus: 1 },
+    );
+    expect(result.status).toBe(0);
+    expect(result.output).not.toContain("::warning::");
+    expect(existsSync(join(result.state, "args.1"))).toBe(false);
+  });
+
+  it("does not time a skipped API row even if the family ran", () => {
+    const result = runWarning([
+      timedJob("test-server (1)", "2026-11-08T00:04:00Z"),
+      timedJob("test-server (2)", null, { conclusion: "skipped" }),
+    ]);
+    expect(result.status).toBe(0);
+    expect(result.output).not.toContain("::warning::");
+  });
+
+  it("combines more than ten slow jobs into one annotation", () => {
+    const result = runWarning(
+      Array.from({ length: 12 }, (_, index) =>
+        timedJob(`test-server (${index + 1})`, "2026-11-08T00:04:01Z", { id: index + 1 }),
+      ),
+    );
+    expect(result.status).toBe(0);
+    expect(result.output.match(/::warning::/g)).toHaveLength(1);
+    expect(result.output).toContain("test-server (1): 241s");
+    expect(result.output).toContain("test-server (12): 241s");
+  });
+
+  it("reads every page from this run attempt and reports real selected rows", () => {
+    const rows = [
+      timedJob("test-server (1)", "2026-11-08T00:04:00Z"),
+      timedJob("test-server (2)", "2026-11-08T00:04:01Z", { id: 2 }),
+    ];
+    const result = runWarning([], {
+      pages: rows.map((row) => JSON.stringify({ total_count: 2, jobs: [row] })).join("\n"),
+    });
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("test-server (1): 240s");
+    expect(result.output).toContain("test-server (2): 241s");
+    expect(readFileSync(join(result.state, "args.1"), "utf8").trim().split("\n")).toEqual([
+      "api",
+      "--paginate",
+      "repos/o/r/actions/runs/123/attempts/2/jobs?per_page=30",
+    ]);
+  });
+
+  it.each([
+    ["missing family", []],
+    ["renamed family", [timedJob("server-tests (1)", "2026-11-08T00:04:01Z")]],
+    ["unfinished job", [timedJob("test-server (1)", null, { status: "in_progress" })]],
+    ["malformed date", [timedJob("test-server (1)", "invalid")]],
+    ["negative interval", [timedJob("test-server (1)", "2026-11-07T23:59:59Z")]],
+  ])("warns instead of failing when selected metadata has a %s", (_label, rows) => {
+    const result = runWarning(rows);
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("::warning::");
+    expect(result.output).toContain("unavailable");
+    expect(result.output).toContain("test-server");
+  });
+
+  it.each([
+    ["API refusal", { apiStatus: 1 }],
+    ["invalid JSON", { pages: "not json" }],
+    ["partial pagination", { pages: JSON.stringify({ total_count: 2, jobs: [] }) }],
+  ])("warns without failing for %s", (_label, options) => {
+    const result = runWarning([], options);
+    expect(result.status).toBe(0);
+    expect(result.output.match(/::warning::/g)).toHaveLength(1);
+    expect(result.output).toContain("unavailable");
+  });
+
+  it("bounds a hung API call inside the step and warns on its timeout", () => {
+    const result = runWarning([], { GH_STUB_HOLD: "1", SHARD_DURATION_API_TIMEOUT: "1" });
+    expect(result.status).toBe(0);
+    expect(existsSync(join(result.state, "held"))).toBe(true);
+    expect(readFileSync(join(result.state, "deadline"), "utf8")).toContain("1 gh api");
+    expect(result.output).toContain("::warning::");
+    expect(result.output).toContain("unavailable");
+  });
+
+  it("also bounds an API process that ignores the polite timeout signal", () => {
+    const result = runWarning([], {
+      GH_STUB_HOLD: "1",
+      GH_STUB_IGNORE_TERM: "1",
+      SHARD_DURATION_API_TIMEOUT: "1",
+    });
+    expect(result.status).toBe(0);
+    expect(existsSync(join(result.state, "held"))).toBe(true);
+    expect(result.output).toContain("::warning::");
+    expect(result.output).toContain("unavailable");
+  });
+
+  it("times a cancelled running job but ignores an unassigned cancellation", () => {
+    const ran = runWarning(
+      [timedJob("test-server (1)", "2026-11-08T00:04:01Z", { conclusion: "cancelled" })],
+      { needs: { "test-server": { result: "cancelled" } } },
+    );
+    expect(ran.status).toBe(0);
+    expect(ran.output).toContain("test-server (1): 241s");
+    expect(ran.output).toContain("::warning::");
+    const unassigned = runWarning([
+      timedJob("test-server (1)", null, { conclusion: "cancelled", runner_id: 0 }),
+    ]);
+    expect(unassigned.status).toBe(0);
+    expect(unassigned.output).not.toContain("::warning::");
+  });
+
+  it("keeps the existing gate first and runs the bounded advisory step even after failure", () => {
+    const { keys } = ciStepNamed(name);
+    expect(keys).toContain("        if: always()");
+    expect(keys).toContain("        timeout-minutes: 1");
+    expect(keys).toContain("        continue-on-error: true");
+    const body = job("ci").body.join("\n");
+    expect(body.indexOf(`name: ${name}`)).toBeGreaterThan(body.indexOf(`name: ${JOBS_API_STEP}`));
+  });
+});
+
 describe("the `ci` aggregate's jobs API cross-check", () => {
   // The stubs are built once; each run gets its own state directory, because a killed run's
   // leftover `gh` call still writes to the one it was given (the leftover-call case below).
