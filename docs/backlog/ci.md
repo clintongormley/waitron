@@ -726,6 +726,42 @@ A1424's live qualification was added on 7 November 2026.
 
 ## Decisions and deliberate limits
 
+- **A1459: measured shared startup, with child internals still unknown (2026-11-08).**
+
+  The [coverage-on nightly](https://github.com/clintongormley/waitron/actions/runs/42437905513) saved 1,275 files and 11,903.6 summed file-seconds, split into 27.0% import/collection, 4.3% shared hooks and residual execution, 68.1% case intervals including per-case hooks and 0.6% runner/setup work; the [single coverage-off probe](https://github.com/clintongormley/waitron/actions/runs/42517343026) below passed all 1,280 captured files on a newer revision, so these totals are separate workloads rather than a before/after comparison.
+
+  The table ranks the twenty files with the most measured shared-helper time, in seconds, with nested intervals removed from starred columns in migration, watchdog, database-setup, boot, listener order; its total also includes 70.8 seconds of runner preparation, environment and setup-file work omitted from those columns, and both runs passed the incident-history, setup-download and checkout checks, with maximum checkouts of 10 and 9 seconds respectively.
+
+  The factory at `packages/store/src/venue-liveness.ts:223` creates a watchdog thread through `startWatchdog`, `beginHolding`, `lockVenueDirectory` and `openVenueStore`, gated by exclusive/monitored opens and whether a watchdog already exists; A1453's older capture records 1,818 factory calls in 921 files and 489 child-process API calls in 76 files, which are calls rather than successful starts, and `?` means that capture provides no call record for the row.
+
+  Known helper waits total 495.2 seconds, 4.91% of this probe's file-time, comprising 628 `startServer` settlements, 99 listener waits, 950 database-setup hooks, 20,451 migration calls and 1,701 watchdog-creation spans; the remaining 6,408.5 execution seconds still include test work, child startup, teardown and unmeasured paths, while bundle loading, child readiness, asynchronous watchdog bootstrap and instrumentation overhead remain unknown.
+
+  No compatible group sharing a server was demonstrated, so there is no numeric warm-server estimate: `apps/server/vitest.config.ts` retains Vitest's measured `isolate: true` default and the 27.0% nightly import share, or 30.9% in the probe, is not counted as saved; per-file timings, mock/fake-clock/seeding flags, thirteen source-reference-without-span flags, qualification logs and the executable controls are retained in `~/waitron-campaign-d/receipts/a1459-20261108/` alongside the [approved plan](../superpowers/plans/2026-11-08-a1459-process-startup-measurement.md).
+
+  | File | File seconds | Import | DB setup* | Migration* | Server boot* | Listen* | Watchdog* | Remaining execution | Past child / worker calls |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | **Total** | 10094.7 | 3120.2 | 161.4 | 118.2 | 212.7 | 0.2 | 2.79 | 6408.5 | separate capture |
+  | `src/boot.test.ts` | 35.0 | 7.6 | 0.0 | 0.9 | 16.6 | 0.0 | 0.00 | 9.8 | ? / 2 |
+  | `src/boot.place-copy.test.ts` | 162.5 | 12.4 | 0.1 | 0.2 | 14.7 | 0.0 | 0.00 | 135.0 | 14 / 1 |
+  | `src/boot.failed-start.test.ts` | 20.7 | 6.0 | 0.0 | 0.4 | 11.9 | 0.0 | 0.08 | 2.3 | ? / 201 |
+  | `src/boot.setup-routes.test.ts` | 41.1 | 10.6 | 0.0 | 2.7 | 8.9 | 0.0 | 0.01 | 18.8 | 1 / 2 |
+  | `src/boot.invoice-delivery.test.ts` | 21.1 | 4.1 | 0.1 | 0.2 | 10.3 | 0.0 | 0.00 | 6.4 | ? / 1 |
+  | `src/first-fiscal-setup.e2e.test.ts` | 39.6 | 13.9 | 0.1 | 2.2 | 5.4 | 0.0 | 0.00 | 17.8 | ? / 1 |
+  | `src/boot.restricted.test.ts` | 18.5 | 4.0 | 0.1 | 0.2 | 7.4 | 0.0 | 0.00 | 6.8 | ? / 2 |
+  | `src/boot.disk-full-wiring.test.ts` | 13.8 | 4.4 | 0.1 | 0.2 | 6.1 | 0.0 | 0.00 | 2.9 | ? / 1 |
+  | `src/boot.backup-network.test.ts` | 12.9 | 3.2 | 0.7 | 0.1 | 5.4 | 0.0 | 0.00 | 3.5 | ? / 1 |
+  | `src/boot.restore.test.ts` | 17.6 | 7.7 | 0.0 | 1.2 | 3.5 | 0.0 | 0.00 | 5.2 | ? / 2 |
+  | `src/boot.certificate-diagnosis.test.ts` | 10.7 | 4.1 | 0.1 | 0.2 | 4.4 | 0.0 | 0.00 | 2.0 | ? / 1 |
+  | `src/boot.handover-chart-moved-on.test.ts` | 16.9 | 4.6 | 0.1 | 0.3 | 3.7 | 0.0 | 0.00 | 8.0 | ? / 1 |
+  | `src/boot.attendance.test.ts` | 44.8 | 7.9 | 0.1 | 0.2 | 3.8 | 0.0 | 0.01 | 32.7 | ? / 2 |
+  | `src/handover-controlled.e2e.test.ts` | 26.6 | 7.5 | 0.0 | 0.2 | 3.7 | 0.0 | 0.00 | 15.1 | ? / 1 |
+  | `src/boot.attendance-export.test.ts` | 10.7 | 3.8 | 0.1 | 0.3 | 3.4 | 0.0 | 0.00 | 2.9 | ? / 3 |
+  | `src/boot.node-configuration.test.ts` | 8.7 | 3.0 | 0.0 | 0.1 | 3.7 | 0.0 | 0.00 | 1.8 | ? / 1 |
+  | `src/boot.box-emails.test.ts` | 8.2 | 2.4 | 0.0 | 0.1 | 3.7 | 0.0 | 0.00 | 1.9 | ? / 1 |
+  | `src/boot.venue-details.test.ts` | 11.8 | 3.0 | 0.0 | 0.1 | 3.5 | 0.0 | 0.00 | 5.1 | ? / 1 |
+  | `src/boot.hours.test.ts` | 10.0 | 3.6 | 0.1 | 0.2 | 3.3 | 0.0 | 0.00 | 2.7 | ? / 2 |
+  | `src/boot.zone-admission.test.ts` | 10.4 | 2.7 | 0.0 | 0.1 | 3.4 | 0.0 | 0.00 | 4.1 | ? / 1 |
+
 - **A1446 closed without a production cache (watcher, 2026-11-08).** The baseline and cold-cache runs each passed 31,487 server tests across 24 shards. The experimental cache occupied 263,556,548 stored bytes. A deliberately wrong sender name failed six existing local tests; restoring it passed all 13. The hosted changed-source control and restored warm run did not complete before the 19:30 stop, so warm savings and hosted invalidation remain unverified. Disposable PR #2613 closed without merging. Keep the cache disabled; [the dated result](../superpowers/plans/2026-11-08-a1446-server-module-cache.md#experiment-disposition-8-november-2026) records the runs and measurement limits.
 
 - **A1452, owner 2026-11-08:** ordinary main pushes keep quick checks and skip package tests/shared mutation in `ci.yml`. PR selection and full nightly/manual/release testing remain. UI registry publication and deploy-selected image smoke keep their checks. BEHIND merges retain their existing rule; package-level failures caused only by combining branches wait for the next full run. Watcher approval and owner risk acceptance: Lane F, 17:48, confirming the owner’s 17:35 decision.
