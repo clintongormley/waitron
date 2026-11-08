@@ -315,6 +315,17 @@ describe("drawer delivery time limits", () => {
       attempts: 0,
       lastError: "print_job.drawer_expired",
     });
+    const [waitingDocument] = await suite.db
+      .select()
+      .from(printJobs)
+      .where(eq(printJobs.id, document.jobId));
+    expect(waitingDocument).toMatchObject({
+      status: "queued",
+      attempts: 0,
+      lastError: null,
+      claimedAt: null,
+      claimedBy: null,
+    });
     await suite.db.update(printers).set({ active: true }).where(eq(printers.id, ctx.printerId));
     expect((await pull(ctx.b)).map((job) => job.id)).toEqual([document.jobId]);
   });
@@ -348,6 +359,36 @@ describe("drawer delivery time limits", () => {
             ).toEqual({ updated: false });
     },
   );
+
+  it("counts time waiting behind earlier documents toward the drawer limit", async () => {
+    const ctx = await drawer();
+    const documents: string[] = [];
+    for (let index = 0; index < 3; index++) {
+      const job = await withTransaction(suite.db, (tx) =>
+        enqueuePrintJob(tx, ctx.printerId, new Uint8Array([index])),
+      );
+      documents.push(job.jobId);
+      await suite.db
+        .update(printJobs)
+        .set({ createdAt: "2026-11-08T11:59:59.000Z" })
+        .where(eq(printJobs.id, job.jobId));
+    }
+    for (const [index, id] of documents.entries()) {
+      vi.setSystemTime(new Date(Date.parse("2026-11-08T12:00:00.000Z") + index * 11_000));
+      expect((await pull(ctx.a)).map((job) => job.id)).toEqual([id]);
+      await withTransaction(suite.db, (tx) =>
+        reportPrintJob(tx, { agentId: ctx.a, jobId: id, outcome: { status: "done" } }),
+      );
+    }
+    vi.setSystemTime(new Date("2026-11-08T12:00:33.000Z"));
+    expect(await pull(ctx.a)).toEqual([]);
+    const [row] = await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.tail));
+    expect(row).toMatchObject({
+      status: "failed",
+      lastError: "print_job.drawer_expired",
+      attempts: 0,
+    });
+  });
 
   it("ends a drawer with a missing claim stamp without another delivery", async () => {
     const ctx = await drawer();

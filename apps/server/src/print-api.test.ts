@@ -6046,6 +6046,51 @@ describe("drawer expiry and printer visibility in the queue", () => {
       .where(eq(printers.id, printerId));
     expect((await listed(app)).find((row) => row.id === network)?.waitReason).toBeUndefined();
   });
+  it("only gives unfinished jobs a visibility reason", async () => {
+    const app = mountApp();
+    const printerId = await createUsbPrinter(app, "MATRIX-USB", "Queue matrix");
+    const states = [
+      { kind: "document", status: "queued", attempts: 0, waiting: true },
+      { kind: "document", status: "printing", attempts: 0, waiting: true },
+      { kind: "document", status: "failed", attempts: 4, waiting: true },
+      { kind: "document", status: "failed", attempts: 5, waiting: false },
+      { kind: "document", status: "done", attempts: 0, waiting: false },
+      { kind: "drawer", status: "queued", attempts: 0, waiting: true },
+      { kind: "drawer", status: "printing", attempts: 0, waiting: true },
+      { kind: "drawer", status: "failed", attempts: 0, waiting: false },
+      { kind: "drawer", status: "failed", attempts: 1, waiting: false },
+      { kind: "drawer", status: "done", attempts: 0, waiting: false },
+    ] as const;
+    const jobs = states.map((state) => ({
+      id: randomUUID(),
+      locationId,
+      printerId,
+      payload: Buffer.from([1]),
+      kind: state.kind,
+      status: state.status,
+      attempts: state.attempts,
+    }));
+    await suite.db.insert(printJobs).values(jobs);
+    const before = await suite.db
+      .select()
+      .from(printJobs)
+      .where(eq(printJobs.printerId, printerId))
+      .orderBy(printJobs.id);
+    const rows = await listed(app);
+    for (const [index, state] of states.entries()) {
+      const row = rows.find((item) => item.id === jobs[index]!.id);
+      expect(row).toBeDefined();
+      expect(row!.waitReason).toBe(state.waiting ? "printer.not_visible" : undefined);
+    }
+    expect(
+      await suite.db
+        .select()
+        .from(printJobs)
+        .where(eq(printJobs.printerId, printerId))
+        .orderBy(printJobs.id),
+    ).toEqual(before);
+  });
+
   it("does not give the in-process Demo printer an agent-visibility reason", async () => {
     const app = mountApp({ practiceMode: true });
     const printerId = await createUsbPrinter(app, "WAITRON-DEMO-PRINTER", "Demo printer");

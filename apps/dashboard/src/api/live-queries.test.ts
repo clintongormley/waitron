@@ -1288,3 +1288,61 @@ it("refreshes the live menu read only when a publication or version changes", as
     observed.unsubscribe();
   }
 });
+
+it("refreshes print queue visibility after fifteen seconds without table changes and keeps it passive", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  let reads = 0;
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(async () => {
+    reads++;
+    return new Response(
+      JSON.stringify([
+        {
+          id: "job",
+          printerId: "printer",
+          printerName: "USB",
+          status: "queued",
+          attempts: 0,
+          lastError: null,
+          createdAt: "2026-11-08T12:00:00.000Z",
+          deliveredAt: null,
+          canResend: false,
+          ...(reads === 1 ? {} : { waitReason: "printer.not_visible" }),
+        },
+      ]),
+    );
+  });
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  let firstReady!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    firstReady = resolve;
+  });
+  let refreshReady!: () => void;
+  const refreshed = new Promise<void>((resolve) => {
+    refreshReady = resolve;
+  });
+  const observed = api.liveData.observe(dashboardQuery(api, "listRecentJobs", []), () => {
+    if (observed.snapshot.status === "ready") firstReady();
+    if (observed.snapshot.value?.[0]?.waitReason === "printer.not_visible") refreshReady();
+  });
+  try {
+    await ready;
+    expect(observed.snapshot.value?.[0]?.waitReason).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(reads).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(reads).toBe(2);
+    await refreshed;
+    expect(observed.snapshot.value?.[0]?.waitReason).toBe("printer.not_visible");
+    expect(fetchImpl.mock.calls.map((call) => call[0])).toEqual([
+      "/management-api/print-jobs",
+      "/management-api/print-jobs",
+    ]);
+    expect(new Headers(fetchImpl.mock.calls[0]![1].headers).has("x-waitron-live")).toBe(false);
+    expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+    expect(active).toHaveBeenCalledOnce();
+  } finally {
+    observed.unsubscribe();
+    vi.useRealTimers();
+  }
+});

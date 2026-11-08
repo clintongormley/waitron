@@ -9903,26 +9903,28 @@ describe("Bluetooth calibration transport outcomes", () => {
             expect(text(el, "[data-test=job-error-expired]")).toBe(
               locale === "en"
                 ? "The drawer command expired before it was sent. Open the drawer again if needed."
-                : "La orden del cajón caducó antes de enviarse. Vuelve a abrirlo si hace falta.",
+                : codeMessage("print_job.drawer_expired"),
             );
             expect(text(el, "[data-test=job-error-unknown]")).toBe(
               locale === "en"
                 ? "No result was reported. The drawer may have opened. This command will not be retried."
-                : "No se recibió el resultado. El cajón puede haberse abierto. Esta orden no se volverá a intentar.",
+                : codeMessage("print_job.drawer_outcome_unknown"),
             );
             expect(text(el, "[data-test=job-wait-waiting]")).toBe(
               locale === "en"
                 ? "No print agent currently sees this printer. Check the printer connection and print agent."
-                : "Ningún agente de impresión ve esta impresora ahora. Comprueba la conexión de la impresora y el agente.",
+                : codeMessage("printer.not_visible"),
             );
+            expect(text(el, "[data-test=job-error-expired]")).not.toBe("print_job.drawer_expired");
+            expect(text(el, "[data-test=job-error-unknown]")).not.toBe(
+              "print_job.drawer_outcome_unknown",
+            );
+            expect(text(el, "[data-test=job-wait-waiting]")).not.toBe("printer.not_visible");
             expect(text(el, "[data-test=job-error-waiting]")).toBe("paper out");
             expect(text(el, "[data-test=job-attempts-expired]")).toBe("0");
             expect(text(el, "[data-test=job-attempts-unknown]")).toBe("0");
             expect(q(el, "[data-test=resend-job-expired]")).toBeNull();
             expect(q(el, "[data-test=resend-job-unknown]")).toBeNull();
-            await page.screenshot({
-              path: `__screenshots__/d1-jobs-${theme}-${locale}-${width}.png`,
-            });
           } finally {
             setLocale(before);
             await page.viewport(1280, 900);
