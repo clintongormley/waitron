@@ -149,8 +149,7 @@ export interface DeviceProof {
 /**
  * Reads and authenticates the request's device, returning its {@link DeviceProof} or `null` at
  * EVERY miss — a missing or malformed cookie, an unknown or revoked device, or a token that does
- * not verify — so `requireDevice`'s `device.unauthorized` confirms neither a device's existence
- * nor its revocation state. The id selects the row because scrypt is per-row-salted; the token
+ * not verify. The id selects the row because scrypt is per-row-salted; the token
  * validates it. Only a cookie read that verifies writes (the `last_seen_at` sighting), and only
  * when a sighting is due and the read is not passive.
  *
