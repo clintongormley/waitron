@@ -170,6 +170,7 @@ jobs:
         name: Choose a responsive CI route
         if: vars.DISPOSABLE_TESTS_MODE == 'server'
         timeout-minutes: 2
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
@@ -779,6 +780,8 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/image-smoke.yml
+    with:
+      server_route: ${{ needs.changes.outputs.server_route }}
 
   # TypeScript project-wide type check. No Playwright/Chromium involved.
   typecheck:

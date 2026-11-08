@@ -583,7 +583,7 @@ exit "$status"
     expect(result.status, result.output).toBe(0);
     expect(recoveryDispatches(result)).toEqual([]);
   });
-  it("names the waiting browser family when both cancellation requests fail", () => {
+  it("names the waiting browser family when both recovery dispatches fail", () => {
     const ui = familyRows("test-ui", 1, false, 100);
     const result = runWatch(
       {
@@ -755,32 +755,29 @@ exit "$status"
     "string labels",
     "wrong label",
     "changing total",
-  ])(
-    "never accepts %s inventory and requests visible cancellation after the allowance",
-    (fault) => {
-      const entries = inventory((rows) => {
-        Object.assign(rows[0], { status: "in_progress", runner_id: 9 });
-        if (fault === "missing") rows.pop();
-        if (fault === "duplicate") rows[1].id = rows[0].id;
-        if (fault === "foreign identity") rows[0].run_id = 5678;
-        if (fault === "foreign attempt") rows[0].run_attempt = 2;
-        if (fault === "foreign head") rows[0].head_sha = "b".repeat(40);
-        if (fault === "zero job ID") rows[0].id = 0;
-        if (fault === "fractional job ID") rows[0].id = 1.5;
-        if (fault === "string labels") rows[0].labels = "self-hosted dt-42-1234-1-test-server-1";
-        if (fault === "wrong label") rows[0].labels[1] = "dt-42-5678-1-test-server-1";
-        if (fault === "changing total")
-          rows.push(
-            ...Array.from({ length: 10 }, (_, at) => ({ id: 100 + at, name: `other-${at}` })),
-          );
-      });
-      const listing = pages(entries);
-      if (fault === "changing total") listing[1].total_count++;
-      const result = runWatch({ polls: [listing] });
-      expect(result.status, result.output).not.toBe(0);
-      expect(recoveryDispatches(result)).toHaveLength(1);
-    },
-  );
+  ])("never accepts %s inventory and requests visible recovery after the allowance", (fault) => {
+    const entries = inventory((rows) => {
+      Object.assign(rows[0], { status: "in_progress", runner_id: 9 });
+      if (fault === "missing") rows.pop();
+      if (fault === "duplicate") rows[1].id = rows[0].id;
+      if (fault === "foreign identity") rows[0].run_id = 5678;
+      if (fault === "foreign attempt") rows[0].run_attempt = 2;
+      if (fault === "foreign head") rows[0].head_sha = "b".repeat(40);
+      if (fault === "zero job ID") rows[0].id = 0;
+      if (fault === "fractional job ID") rows[0].id = 1.5;
+      if (fault === "string labels") rows[0].labels = "self-hosted dt-42-1234-1-test-server-1";
+      if (fault === "wrong label") rows[0].labels[1] = "dt-42-5678-1-test-server-1";
+      if (fault === "changing total")
+        rows.push(
+          ...Array.from({ length: 10 }, (_, at) => ({ id: 100 + at, name: `other-${at}` })),
+        );
+    });
+    const listing = pages(entries);
+    if (fault === "changing total") listing[1].total_count++;
+    const result = runWatch({ polls: [listing] });
+    expect(result.status, result.output).not.toBe(0);
+    expect(recoveryDispatches(result)).toHaveLength(1);
+  });
   it("refuses more than thirty records in one API page", () => {
     const entries = inventory((rows) => {
       Object.assign(rows[0], { status: "in_progress", runner_id: 9 });
@@ -848,7 +845,7 @@ exit "$status"
     expect(recoveryDispatches(result)).toEqual([]);
   });
   it.each([{ id: 999 }, { run_attempt: 2 }, { head_sha: "b".repeat(40) }])(
-    "refuses cancellation after an identity change %j",
+    "refuses recovery dispatch after an identity change %j",
     (change) => {
       const result = runWatch({ runs: [{ out: { ...identity, ...change } }] });
       expect(result.status, result.output).not.toBe(0);
@@ -860,7 +857,7 @@ exit "$status"
     expect(result.status, result.output).toBe(0);
     expect(recoveryDispatches(result)).toHaveLength(2);
   });
-  it("accepts a 409 only when the same run attempt is read back completed", () => {
+  it("stops retrying a refused recovery dispatch once the same run attempt has completed", () => {
     const result = runWatch({
       cancel: [{ status: 1, error: "HTTP 409" }],
       runs: [{ out: identity }, { out: { ...identity, status: "completed" } }],

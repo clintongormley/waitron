@@ -27,7 +27,7 @@ function route(
   } = {},
 ) {
   const context = {
-    inputs: { server_probe: probe },
+    inputs: { server_probe: probe, server_route: health },
     vars: new Proxy(
       {
         DISPOSABLE_TESTS_MODE: mode,
@@ -92,11 +92,21 @@ describe("server-first workflow routing", () => {
   });
   it("keeps new work on GitHub while the routing job observes a stalled server", () => {
     for (const job of jobs.filter(
-      (job) =>
-        !["changes", "server-queue-watchdog", "ci", "publish", "image-smoke"].includes(job.id),
+      (job) => !["changes", "server-queue-watchdog", "ci", "publish"].includes(job.id),
     )) {
       expect(route(job.route, { health: "hosted" }), job.id).toBe("ubuntu-latest");
     }
+  });
+  it("passes the routing decision into the reusable image workflow", () => {
+    const image = yaml.match(/^ {2}image:\n([\s\S]*?)(?=^ {2}[\w-]+:)/m)[1];
+    const input = image.match(/^ {6}server_route: (.+)$/m)?.[1];
+    expect(input).toBeDefined();
+    for (const health of ["server", "hosted", ""]) expect(route(input, { health })).toBe(health);
+  });
+  it("keeps a timed-out route read from failing changes and defaults every job to hosted", () => {
+    const step = yaml.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {6}- )/)[1];
+    expect(step).toMatch(/^ {8}continue-on-error: true$/m);
+    for (const job of jobs) expect(route(job.route, { health: "" }), job.id).toBe("ubuntu-latest");
   });
   it.each(["pull_request", "push", "schedule", "workflow_dispatch"])(
     "sends every direct %s job to a server on first and later attempts",

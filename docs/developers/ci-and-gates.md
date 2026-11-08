@@ -134,8 +134,8 @@ Set `DISPOSABLE_TESTS_MODE=server` to route CI jobs to Lane I's disposable Linux
 runners. Same-repository pull requests, main pushes, tags, schedules, manual runs and
 ordinary reruns use the server route. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
 GitHub so routing, recovery and the required result can still run when server assignment
-stops (watcher, 2026-11-08 16:00). The reusable image smoke job uses this route when
-called by CI; its other callers retain their existing routing.
+stops (watcher, 2026-11-08 16:00). CI passes its routing result explicitly into the reusable image smoke workflow;
+its other callers retain their existing hosted routing.
 
 The workflow no longer uses `DISPOSABLE_TESTS_*_JOBS` family caps. The controller's
 measured global pool limits simultaneous guests. Removing a workflow cap does not add
@@ -159,10 +159,12 @@ single job. The reusable image job uses logical key `image-smoke-1`; GitHub repo
 job name as `image / smoke`. Existing check names, test commands, coverage merges,
 setup retries and execution limits remain unchanged.
 
-The routing job checks this repository's queued and running workflows with its own
+The routing job checks CI's queued and running workflows with its own
 read-only Actions token. If a server job has waited five minutes and no server job is
-assigned or running, this run uses GitHub and records the reason in its summary. An
-unverifiable inventory also chooses GitHub. This does not change the human routing switch.
+assigned or running, and no assigned job in those runs started or finished within five
+minutes, this run uses GitHub and records the reason in its summary. An unverifiable
+inventory also chooses GitHub; a timed-out routing step leaves an empty result, which
+every routed job treats as hosted. This does not change the human routing switch.
 A retry reads the previous attempt: an unassigned server job cancelled after that wait
 keeps the retry hosted even after the old queue has disappeared.
 
@@ -177,9 +179,23 @@ watchdog; incomplete inventories and refused dispatches fail it. The shell retai
 
 The independent Server health workflow runs on GitHub every five minutes, or by manual
 dispatch, on trusted `main` only. With its own Actions write token it rechecks that no
-server work is assigned or running, force-cancels a stuck run, waits for that cancellation
-to complete, then reruns the whole workflow so routing runs again. It reports the affected
-run IDs in its summary. A changed run identity or an incomplete inventory refuses recovery.
+server work is assigned or running, and no assigned job in active CI runs started or
+finished within five minutes. It also checks the latest 100 completed CI runs for server
+work finished within five minutes, skipping job reads for runs whose `updated_at` is over
+five minutes old; missing or invalid update times still get job reads. It selects only the
+oldest stuck run, repeats the global
+active-work check, force-cancels that run, waits for cancellation to complete, then reruns
+the whole workflow so routing runs again. Other candidates wait for the next invocation.
+It reports the affected run ID in its summary. A refused force-cancel names that run for
+intervention; until it is resolved, younger candidates wait. A changed run identity or an incomplete
+inventory refuses recovery. Short non-final pages continue until the advertised count; an
+early empty page, duplicate ID or changed count stops the read. Recovery and probing report
+that the inventory is unavailable and make no change; the command passes so an uncertain
+read does not itself become a stuck-server alarm. Routing chooses GitHub on an uncertain read.
+The completed-history filter assumes GitHub updates a completed run no earlier than its
+last job finishes. A 2026-11-08 read of 15 completed CI runs and all 855 of their jobs found
+no job completion later than its run's `updated_at`. This observation is not an API
+guarantee; the owner accepted that limit to avoid up to 100 old job-inventory reads per pass.
 It does not restart ordinary failed runs. If the recovery job stops after cancellation
 but before rerun, you must rerun that cancelled run yourself. GitHub scheduling and hosted
 runner availability can delay both watchdogs; five minutes is the observed queue threshold,
@@ -188,7 +204,8 @@ not a wall-clock recovery guarantee.
 Every fifteen minutes, Server health also checks for idle server capacity when the human
 switch is `server`. It suppresses its probe while server work is queued or assigned, or
 when current active runs or the latest 100 completed runs contain assigned server work completed
-within fifteen minutes. An unassigned cancellation or a hosted retry is not server traffic. Otherwise it dispatches CI with `server_probe=true`: only a tiny
+within five minutes. This lets a short idle probe run again at the next fifteen-minute
+check. An unassigned cancellation or a hosted retry is not server traffic. Otherwise it dispatches CI with `server_probe=true`: only a tiny
 Node job and the final aggregate run. Its first attempt requests a server; later attempts
 use GitHub, allowing the independent recovery workflow to finish a failed pickup drill.
 A successful hosted retry proves recovery only; it does not establish server health.

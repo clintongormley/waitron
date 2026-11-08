@@ -30,7 +30,7 @@ function fixture() {
   const calls = [];
   const request = async (path, options = {}) => {
     calls.push([path, options]);
-    if (path.includes("/actions/runs?"))
+    if (path.includes("/runs?"))
       return {
         total_count: path.includes("status=in_progress") ? 1 : 0,
         workflow_runs: path.includes("status=in_progress") ? [{ ...run }] : [],
@@ -60,6 +60,31 @@ function fixture() {
 }
 
 describe("server health recovery", () => {
+  it.each(["started_at", "completed_at"])(
+    "preserves queued work after recent server %s activity",
+    async (field) => {
+      const f = fixture(),
+        request = f.request;
+      const finished = {
+        ...f.job,
+        id: 124,
+        status: "completed",
+        conclusion: "success",
+        runner_id: 7,
+        started_at: date(7),
+        completed_at: null,
+        [field]: date(0.5),
+      };
+      f.options.request = async (path, options) =>
+        path.includes("/jobs?")
+          ? { total_count: 2, jobs: [f.job, finished] }
+          : request(path, options);
+      expect((await health.recoverServer(f.options)).retried).toEqual([]);
+      expect(f.calls.some(([, options]) => options.method)).toBe(false);
+      finished[field] = date(5.1);
+      expect((await health.serverHealth(f.options)).stuck.map((run) => run.id)).toEqual([12]);
+    },
+  );
   it("writes the real workflow output and summary files", async () => {
     const directory = mkdtempSync(tmpdir() + "/health-output-");
     try {
@@ -222,23 +247,58 @@ describe("server health recovery", () => {
     expect(await health.needsServerProbe(f.options)).toBe(false);
   });
 
-  it("does not probe within fifteen minutes of completed server traffic", async () => {
+  it("does not probe within five minutes of completed server traffic", async () => {
     const f = fixture(),
       request = f.request;
     f.job.status = "completed";
-    f.job.completed_at = date(14);
+    f.job.completed_at = date(4);
     f.job.runner_id = 7;
     f.run.status = "completed";
     f.options.request = async (path, options) =>
-      path.includes("/actions/runs?")
+      path.includes("/runs?")
         ? {
             total_count: path.includes("status=completed") ? 1 : 0,
             workflow_runs: path.includes("status=completed") ? [f.run] : [],
           }
         : request(path, options);
     expect(await health.needsServerProbe(f.options)).toBe(false);
-    f.job.completed_at = date(16);
+    f.job.completed_at = date(6);
     expect(await health.needsServerProbe(f.options)).toBe(true);
+  });
+
+  it("probes at the next fifteen-minute tick after a two-minute idle probe", async () => {
+    const f = fixture(),
+      request = f.request;
+    f.run.status = "completed";
+    Object.assign(f.job, {
+      status: "completed",
+      runner_id: 7,
+      started_at: date(15),
+      completed_at: date(13),
+      labels: ["self-hosted", "dt-42-12-1-server-probe-1"],
+    });
+    f.options.request = async (path, options) =>
+      path.includes("/runs?")
+        ? {
+            total_count: path.includes("status=completed") ? 1 : 0,
+            workflow_runs: path.includes("status=completed") ? [f.run] : [],
+          }
+        : request(path, options);
+    expect(await health.needsServerProbe(f.options)).toBe(true);
+  });
+
+  it("does not treat a short cancelled wait as five minutes when retried later", async () => {
+    const f = fixture();
+    Object.assign(f.run, { status: "completed", conclusion: "cancelled" });
+    Object.assign(f.job, {
+      status: "completed",
+      conclusion: "cancelled",
+      started_at: date(10),
+      completed_at: new Date(now - 595_000).toISOString(),
+    });
+    expect((await health.serverRoute({ ...f.options, runId: 12, attempt: 2 })).route).toBe(
+      "server",
+    );
   });
 
   it("does not count an unassigned cancellation or a hosted retry as server traffic", async () => {
@@ -249,7 +309,7 @@ describe("server health recovery", () => {
     f.job.conclusion = "cancelled";
     f.job.completed_at = date(1);
     f.options.request = async (path, options) =>
-      path.includes("/actions/runs?")
+      path.includes("/runs?")
         ? {
             total_count: path.includes("status=completed") ? 1 : 0,
             workflow_runs: path.includes("status=completed") ? [f.run] : [],
@@ -295,6 +355,71 @@ describe("server health recovery", () => {
     expect((await health.recoverServer(f.options)).retried).toEqual([]);
   });
 
+  it.each([false, true])(
+    "recovers only the oldest run per invocation when rerun refusal is %s",
+    async (refused) => {
+      const f = fixture(),
+        g = fixture();
+      g.run.id = 13;
+      f.run.run_started_at = date(7);
+      Object.assign(g.job, { id: 124, run_id: 13, labels: ["self-hosted", "dt-42-13-1-lint-1"] });
+      const writes = [];
+      const request = async (path, options = {}) => {
+        const target = path.includes("/runs/13") ? g : f;
+        if (path.includes("/runs?")) {
+          const runs = [g.run, f.run].filter((run) => path.includes("status=" + run.status));
+          return { total_count: runs.length, workflow_runs: runs.map((run) => ({ ...run })) };
+        }
+        if (options.method) {
+          writes.push(path);
+          if (path.endsWith("/force-cancel")) {
+            target.run.status = "completed";
+            target.run.conclusion = "cancelled";
+          }
+          if (refused && path.endsWith("/12/rerun")) throw new Error("rerun refused");
+          return null;
+        }
+        if (path.includes("/jobs?")) return { total_count: 1, jobs: [{ ...target.job }] };
+        return { ...target.run };
+      };
+      if (refused)
+        await expect(health.recoverServer({ ...f.options, request })).rejects.toThrow(
+          /rerun refused/,
+        );
+      else expect((await health.recoverServer({ ...f.options, request })).retried).toEqual([12]);
+      expect(writes).not.toContain("/repos/fixture/waitron/actions/runs/13/force-cancel");
+      expect((await health.recoverServer({ ...f.options, request })).retried).toEqual([13]);
+      expect(writes).toContain("/repos/fixture/waitron/actions/runs/13/rerun");
+    },
+  );
+
+  it("reads CI workflow inventories without listing unrelated workflows", async () => {
+    const f = fixture();
+    f.options.request = async (path, options) => {
+      if (path.includes("/actions/runs?")) throw new Error("Unrelated workflow inventory");
+      return f.request(path.replace("/workflows/ci.yml", ""), options);
+    };
+    expect((await health.serverHealth(f.options)).stuck.map((run) => run.id)).toEqual([12]);
+  });
+
+  it("ignores unassigned cancellations in an active run when deciding whether to probe", async () => {
+    const f = fixture();
+    Object.assign(f.job, { status: "completed", conclusion: "cancelled", completed_at: date(1) });
+    expect(await health.needsServerProbe(f.options)).toBe(true);
+  });
+
+  it("refuses a changed head while cancellation is settling", async () => {
+    const f = fixture(),
+      request = f.request;
+    f.options.request = async (path, options) => {
+      const result = await request(path, options);
+      if (path.endsWith("/force-cancel")) f.run.head_sha = "b".repeat(40);
+      return result;
+    };
+    await expect(health.recoverServer(f.options)).rejects.toThrow(/changed during cancellation/);
+    expect(f.calls.some(([path]) => path.endsWith("/rerun"))).toBe(false);
+  });
+
   it("moves a five-minute unassigned queue to a completed cancellation before requesting its retry", async () => {
     const f = fixture();
     const result = await health.recoverServer(f.options);
@@ -332,6 +457,7 @@ describe("server health recovery", () => {
     f.run.conclusion = "cancelled";
     f.job.status = "completed";
     f.job.conclusion = "cancelled";
+    f.job.completed_at = date(0);
     expect(await health.serverRoute({ ...f.options, runId: 12, attempt: 2 })).toMatchObject({
       route: "hosted",
       reason: expect.stringContaining("previous"),
@@ -381,6 +507,94 @@ describe("server health recovery", () => {
     expect((await health.serverHealth(f.options)).stuck.map((run) => run.id)).toEqual([12]);
   });
 
+  it("reads a later run page after GitHub returns a short non-final page", async () => {
+    const f = fixture(),
+      request = f.request;
+    f.options.request = async (path, options) =>
+      path.includes("status=in_progress")
+        ? {
+            total_count: 2,
+            workflow_runs: path.endsWith("&page=1")
+              ? [{ ...f.run, id: 99, head_repository: { id: 99 } }]
+              : [f.run],
+          }
+        : request(path, options);
+    expect((await health.serverHealth(f.options)).stuck.map((run) => run.id)).toEqual([12]);
+  });
+
+  it("finds recent server traffic after a short completed-run page", async () => {
+    const f = fixture(),
+      request = f.request;
+    Object.assign(f.run, { status: "completed" });
+    Object.assign(f.job, { status: "completed", runner_id: 7, completed_at: date(1) });
+    f.options.request = async (path, options) => {
+      if (path.includes("status=completed"))
+        return {
+          total_count: 2,
+          workflow_runs: path.endsWith("&page=1")
+            ? [{ ...f.run, id: 99, head_repository: { id: 99 } }]
+            : [f.run],
+        };
+      if (path.includes("/runs?")) return { total_count: 0, workflow_runs: [] };
+      return request(path, options);
+    };
+    expect(await health.needsServerProbe(f.options)).toBe(false);
+  });
+
+  it("preserves a waiting run after another workflow finished server work recently", async () => {
+    const f = fixture(),
+      request = f.request;
+    f.options.request = async (path, options) => {
+      if (path.includes("status=completed"))
+        return { total_count: 1, workflow_runs: [{ ...f.run, id: 13, status: "completed" }] };
+      if (path.includes("/runs/13/attempts/"))
+        return {
+          total_count: 1,
+          jobs: [
+            {
+              ...f.job,
+              id: 124,
+              run_id: 13,
+              labels: ["self-hosted", "dt-42-13-1-lint-1"],
+              status: "completed",
+              runner_id: 7,
+              completed_at: date(0.5),
+            },
+          ],
+        };
+      return request(path, options);
+    };
+    expect((await health.recoverServer(f.options)).retried).toEqual([]);
+    expect(f.calls.some(([, options]) => options.method)).toBe(false);
+  });
+
+  it("finds assigned server work on a short later jobs page", async () => {
+    const f = fixture(),
+      request = f.request;
+    f.options.request = async (path, options) =>
+      path.includes("/jobs?")
+        ? {
+            total_count: 2,
+            jobs: path.endsWith("&page=1")
+              ? [f.job]
+              : [{ ...f.job, id: 124, runner_id: 7, status: "in_progress" }],
+          }
+        : request(path, options);
+    expect((await health.recoverServer(f.options)).retried).toEqual([]);
+    expect(f.calls.some(([, options]) => options.method)).toBe(false);
+  });
+
+  it("refuses an empty page before the advertised inventory is complete", async () => {
+    const f = fixture(),
+      request = f.request;
+    f.options.request = async (path, options) =>
+      path.includes("/jobs?")
+        ? { total_count: 2, jobs: path.endsWith("&page=1") ? [f.job] : [] }
+        : request(path, options);
+    await expect(health.recoverServer(f.options)).rejects.toThrow(/Incomplete.*empty.*1.*2/);
+    expect(f.calls.some(([, options]) => options.method)).toBe(false);
+  });
+
   it("does not cancel a waiting run while another run has server work", async () => {
     const f = fixture(),
       request = f.request;
@@ -413,5 +627,182 @@ describe("server health recovery", () => {
       path.includes("/jobs?") ? { total_count: 2, jobs: [f.job] } : request(path, options);
     await expect(health.recoverServer(f.options)).rejects.toThrow(/inventory/);
     expect(f.calls.filter(([, options]) => options.method === "POST")).toEqual([]);
+  });
+  it.each(["recover", "probe"])(
+    "reports an incomplete inventory without writes or a failed %s command",
+    async (command) => {
+      const f = fixture(),
+        request = f.request,
+        reports = [];
+      f.options.request = async (path, options) =>
+        path.includes("/jobs?")
+          ? { total_count: 2, jobs: path.endsWith("&page=1") ? [f.job] : [] }
+          : request(path, options);
+      await health.healthCommand(command, f.options, {
+        report: (line) => reports.push(line),
+        output: () => {},
+      });
+      expect(reports.join("\n")).toMatch(/inventory.*unavailable/i);
+      expect(f.calls.some(([, options]) => options.method)).toBe(false);
+    },
+  );
+
+  it("keeps an API permission refusal visible during recovery", async () => {
+    const f = fixture();
+    f.options.request = async () => {
+      throw new Error("HTTP 403 forbidden");
+    };
+    await expect(
+      health.healthCommand("recover", f.options, { report: () => {}, output: () => {} }),
+    ).rejects.toThrow("HTTP 403");
+  });
+
+  it("does not count a recently cancelled unassigned job as server progress", async () => {
+    const f = fixture(),
+      request = f.request;
+    f.options.request = async (path, options) =>
+      path.includes("/jobs?")
+        ? {
+            total_count: 2,
+            jobs: [
+              f.job,
+              {
+                ...f.job,
+                id: 124,
+                status: "completed",
+                runner_id: 0,
+                conclusion: "cancelled",
+                started_at: date(0.5),
+                completed_at: date(0.5),
+              },
+            ],
+          }
+        : request(path, options);
+    expect((await health.recoverServer(f.options)).retried).toEqual([12]);
+  });
+
+  it("stops completed CI history at 100 even when more than 1000 runs exist", async () => {
+    const f = fixture(),
+      reads = [];
+    f.options.request = async (path) => {
+      reads.push(path);
+      if (path.includes("status=completed")) {
+        expect(path).toContain("/actions/workflows/ci.yml/runs?");
+        expect(path).toMatch(/page=[12]$/);
+        const second = path.endsWith("&page=2");
+        return {
+          total_count: 1500,
+          workflow_runs: Array.from({ length: second ? 100 : 50 }, (_, i) => ({
+            ...f.run,
+            id: i + (second ? 150 : 100),
+            head_repository: { id: second && i === 50 ? 42 : 99 },
+          })),
+        };
+      }
+      expect(path).toContain("/runs?");
+      return { total_count: 0, workflow_runs: [] };
+    };
+    expect(await health.needsServerProbe(f.options)).toBe(true);
+    expect(reads.filter((path) => path.includes("status=completed"))).toHaveLength(2);
+  });
+  it("does not read completed history when the active queue needs no recovery", async () => {
+    const f = fixture(),
+      request = f.request;
+    f.job.runner_id = 7;
+    f.options.request = async (path, options) => {
+      if (path.includes("status=completed")) throw new Error("Unnecessary history request");
+      return request(path, options);
+    };
+    expect((await health.recoverServer(f.options)).retried).toEqual([]);
+  });
+
+  it.each(["duplicate", "changed-count"])(
+    "reports a moving completed history as unavailable: %s",
+    async (change) => {
+      const f = fixture(),
+        request = f.request,
+        reports = [];
+      f.options.request = async (path, options) => {
+        if (path.includes("status=completed"))
+          return {
+            total_count: change === "changed-count" && path.endsWith("&page=2") ? 3 : 2,
+            workflow_runs: [
+              {
+                ...f.run,
+                id: change === "duplicate" || path.endsWith("&page=1") ? 98 : 99,
+                head_repository: { id: 99 },
+              },
+            ],
+          };
+        return request(path, options);
+      };
+      await health.healthCommand("recover", f.options, {
+        report: (line) => reports.push(line),
+        output: () => {},
+      });
+      expect(reports.join("\n")).toMatch(/inventory.*unavailable/i);
+      expect(f.calls.some(([, options]) => options.method)).toBe(false);
+    },
+  );
+  it.each(["old", "boundary", "recent", "missing", "invalid"])(
+    "bounds completed-history job reads for an %s update",
+    async (state) => {
+      const f = fixture(),
+        request = f.request,
+        reads = [];
+      f.options.request = async (path, options) => {
+        if (path.includes("status=completed"))
+          return {
+            total_count: 1,
+            workflow_runs: [
+              {
+                ...f.run,
+                id: 13,
+                status: "completed",
+                updated_at: {
+                  old: date(5.001),
+                  boundary: date(5),
+                  recent: date(1),
+                  missing: undefined,
+                  invalid: "invalid",
+                }[state],
+              },
+            ],
+          };
+        if (path.includes("/runs/13/attempts/")) {
+          reads.push(path);
+          return {
+            total_count: 1,
+            jobs: [
+              {
+                ...f.job,
+                id: 124,
+                run_id: 13,
+                labels: ["self-hosted", "dt-42-13-1-lint-1"],
+                status: "completed",
+                runner_id: 7,
+                completed_at: state === "old" ? date(6) : date(1),
+              },
+            ],
+          };
+        }
+        return request(path, options);
+      };
+      expect((await health.recoverServer(f.options)).retried).toEqual(state === "old" ? [12] : []);
+      expect(reads).toHaveLength(state === "old" ? 0 : 1);
+    },
+  );
+
+  it("names the stuck run when force-cancel needs intervention", async () => {
+    const f = fixture(),
+      request = f.request;
+    f.options.request = async (path, options) => {
+      if (path.endsWith("/force-cancel")) throw new Error("HTTP 403 forbidden");
+      return request(path, options);
+    };
+    await expect(health.recoverServer(f.options)).rejects.toThrow(
+      /Stuck run 12.*force-cancel.*HTTP 403/,
+    );
+    expect(f.calls.some(([path]) => path.endsWith("/rerun"))).toBe(false);
   });
 });
