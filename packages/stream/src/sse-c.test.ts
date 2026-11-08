@@ -14,13 +14,15 @@ type Behavior = {
   getSetting?: number;
   putSetting?: number;
   ignoreKeys?: boolean;
-  refuseUpload?: boolean;
   badBody?: boolean;
   controlStatus?: number;
   alreadyEnabled?: boolean;
   noSettings?: boolean;
   refuseDelete?: boolean;
   otherRule?: boolean;
+  dropSettings?: boolean;
+  dropRead?: "correct" | "control";
+  loseUploadReply?: boolean;
 };
 
 async function provider(behavior: Behavior = {}) {
@@ -62,6 +64,10 @@ async function provider(behavior: Behavior = {}) {
       });
       if (url.searchParams.has("encryption")) {
         if (req.method === "GET") {
+          if (behavior.dropSettings) {
+            req.socket.destroy();
+            return;
+          }
           if (behavior.getSetting !== undefined) return fail(res, behavior.getSetting);
           res.writeHead(200, xml);
           if (behavior.noSettings) {
@@ -80,8 +86,14 @@ async function provider(behavior: Behavior = {}) {
         return;
       }
       if (req.method === "PUT") {
-        if (behavior.refuseUpload || blocked) return fail(res, 403);
+        if (blocked) return fail(res, 403);
+        if (objects.has(url.pathname) && req.headers["if-none-match"] === "*")
+          return fail(res, 412);
         objects.set(url.pathname, { body, key: key! });
+        if (behavior.loseUploadReply) {
+          req.socket.destroy();
+          return;
+        }
         res.writeHead(200, { etag: '"encrypted-probe"' });
         res.end();
         return;
@@ -95,6 +107,13 @@ async function provider(behavior: Behavior = {}) {
       }
       const object = objects.get(url.pathname);
       if (!object) return fail(res, 404);
+      if (
+        (behavior.dropRead === "correct" && key === object.key) ||
+        (behavior.dropRead === "control" && key !== object.key)
+      ) {
+        req.socket.destroy();
+        return;
+      }
       if (!behavior.ignoreKeys && key !== object.key)
         return fail(res, behavior.controlStatus ?? (key === undefined ? 400 : 403));
       res.writeHead(200, { etag: '"encrypted-probe"' });
@@ -225,6 +244,36 @@ describe("Save's encryption capability check over the real S3 client", () => {
 
   it("refuses a keyed read that returns different bytes, then removes the object", async () => {
     const { bucket, objects } = await provider({ badBody: true });
+    expect(await prepareBucketEncryption(bucket)).toMatchObject({
+      ok: false,
+      reason: "encryption_unavailable",
+    });
+    expect(objects.size).toBe(0);
+  });
+
+  it("a settings connection that gives no answer is unreachable, not a provider refusal", async () => {
+    const { bucket, seen } = await provider({ dropSettings: true });
+    await expect(prepareBucketEncryption(bucket)).rejects.toMatchObject({
+      code: "backup.stream_request_failed",
+      params: { operation: "get", key: "venue-copy", status: null },
+    });
+    expect(seen.every((call) => call.method === "GET")).toBe(true);
+  });
+
+  it.each(["correct", "control"] as const)(
+    "a lost %s read is unreachable and its object is cleaned",
+    async (dropRead) => {
+      const { bucket, objects } = await provider({ dropRead });
+      await expect(prepareBucketEncryption(bucket)).rejects.toMatchObject({
+        code: "backup.stream_request_failed",
+        params: { operation: "get", status: null },
+      });
+      expect(objects.size).toBe(0);
+    },
+  );
+
+  it("cleans an upload whose reply was lost even though Save is refused", async () => {
+    const { bucket, objects } = await provider({ loseUploadReply: true });
     expect(await prepareBucketEncryption(bucket)).toMatchObject({
       ok: false,
       reason: "encryption_unavailable",

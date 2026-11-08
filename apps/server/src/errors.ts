@@ -1444,8 +1444,6 @@ declare module "@waitron/shared" {
      * destination loaded and no key held. `field`
      * names the offending field, never the value, which could be the recovery key. */
     "backup.request_invalid": { field: string };
-    /** The stream settings' Test, or the same check Save runs first, refused the owner's bucket.
-     * `reason` is `probeBucket`'s short reason (`@waitron/stream`), naming which check failed. */
     "backup.stream_test_failed": { reason: ProbeFailure };
     /** Archives in the stream's bucket were asked for while no bucket is configured. */
     "backup.stream_not_configured": Record<string, never>;

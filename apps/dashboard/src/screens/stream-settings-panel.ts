@@ -596,6 +596,7 @@ export class StreamSettingsPanel extends LitElement {
               </p>`
             : nothing
         }
+        <p class="hint" data-test="encryption-setting">${t("stream.form.encryption_setting")}</p>
         <wt-form-actions .error=${marked ? t("form.fix_fields") : ""}>
           ${
             canCancel

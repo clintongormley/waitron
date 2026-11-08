@@ -467,6 +467,7 @@ describe("stream settings routes", () => {
     const cookie = await login(app);
     const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
     expect(res.status).toBe(422);
+    expect(deps.prepareEncryption).not.toHaveBeenCalled();
     expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
     expect(await storedBucket()).toBeNull();
@@ -867,6 +868,7 @@ describe("stream settings routes", () => {
           error: { code: "backup.archive_namespace_overlap" },
         });
         expect(deps.probe).not.toHaveBeenCalled();
+        expect(deps.prepareEncryption).not.toHaveBeenCalled();
         expect(reload).not.toHaveBeenCalled();
         expect(await storedBucket()).toBeNull();
 

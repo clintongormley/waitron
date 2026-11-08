@@ -2129,6 +2129,8 @@ export const en = {
     "Enter the full address, starting with https:// or http://, with no user name, password, ? or # in it.",
   "stream.form.test": "Test",
   "stream.form.save": "Save and turn on",
+  "stream.form.encryption_setting":
+    "Save can allow customer-supplied encryption keys in your bucket’s settings. That change remains if a later check fails.",
   "stream.form.cancel": "Cancel",
   "stream.form.test_passed":
     "The bucket passed the access and safe-write checks. Save also checks encryption support.",
@@ -6000,6 +6002,8 @@ export const es: Record<StringKey, string> = {
     "Escribe la dirección completa, empezando por https:// o http://, sin usuario, contraseña, ? ni #.",
   "stream.form.test": "Probar",
   "stream.form.save": "Guardar y activar",
+  "stream.form.encryption_setting":
+    "Guardar puede permitir claves de cifrado proporcionadas por el cliente en los ajustes del bucket. Ese cambio se mantiene si una comprobación posterior falla.",
   "stream.form.cancel": "Cancelar",
   "stream.form.test_passed":
     "El bucket ha superado las comprobaciones de acceso y escritura segura. Al guardar también se comprueba el cifrado.",

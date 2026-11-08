@@ -302,6 +302,10 @@ describe("stream-settings-panel: the bucket form", () => {
             }),
           });
           const { el } = await mount(api);
+          expect(q(el, "[data-test=encryption-setting]")).not.toBeNull();
+          expect(text(el, "[data-test=encryption-setting]")).toBe(
+            t("stream.form.encryption_setting"),
+          );
           fillRequired(el);
           await press(el, "save");
           expect(text(el, "[role=alert]")).toContain(t(`stream.probe.${reason}`));

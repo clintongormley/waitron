@@ -481,6 +481,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
             writeRecoveryKey(sc.stateDir, { recoveryKey, keyRotatedAt: undefined }),
           sealedState: { refresh: async () => "sealed" },
           probe: async () => ({ ok: true }),
+          prepareEncryption: async () => ({ ok: true }),
           turns,
         },
         capture(sc),

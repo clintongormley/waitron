@@ -8,7 +8,13 @@ import {
 } from "@aws-sdk/client-s3";
 import { bucketKey } from "./names.js";
 import { PROBE_PREFIX, type ProbeResult } from "./probe.js";
-import { createBucketClient, statusOf, type BucketConfig } from "./s3-client.js";
+import {
+  createBucketClient,
+  nameOf,
+  requestFailed,
+  statusOf,
+  type BucketConfig,
+} from "./s3-client.js";
 
 /** A failed settings read must never be followed by replacing unknown bucket rules. */
 export async function prepareBucketEncryption(bucket: BucketConfig): Promise<ProbeResult> {
@@ -22,6 +28,8 @@ export async function prepareBucketEncryption(bucket: BucketConfig): Promise<Pro
   });
   const secret = randomBytes(32);
   let wrote = false;
+  let operation: "get" | "put" = "get";
+  let requestedKey = bucket.bucket;
   const unavailable = (): ProbeResult => ({
     ok: false,
     reason: "encryption_unavailable",
@@ -37,6 +45,7 @@ export async function prepareBucketEncryption(bucket: BucketConfig): Promise<Pro
           rule.BlockedEncryptionTypes?.EncryptionType?.includes("SSE-C"),
         )
       ) {
+        operation = "put";
         await client.send(
           new PutBucketEncryptionCommand({
             Bucket: bucket.bucket,
@@ -52,10 +61,14 @@ export async function prepareBucketEncryption(bucket: BucketConfig): Promise<Pro
           }),
         );
       }
-    } catch {
+    } catch (error) {
+      if (statusOf(error) === null) throw error;
       // A provider may already honour keys without offering this settings API or Put permission.
       // Only the object controls below decide whether these settings can be saved.
     }
+    requestedKey = key;
+    operation = "put";
+    wrote = true;
     await client.send(
       new PutObjectCommand({
         Bucket: bucket.bucket,
@@ -65,7 +78,7 @@ export async function prepareBucketEncryption(bucket: BucketConfig): Promise<Pro
         ...headers(secret),
       }),
     );
-    wrote = true;
+    operation = "get";
     const correct = await client.send(
       new GetObjectCommand({ Bucket: bucket.bucket, Key: key, ...headers(secret) }),
     );
@@ -88,11 +101,13 @@ export async function prepareBucketEncryption(bucket: BucketConfig): Promise<Pro
         };
       } catch (error) {
         const status = statusOf(error);
+        if (status === null) throw error;
         if (status !== 400 && status !== 403) return unavailable();
       }
     }
     return { ok: true };
-  } catch {
+  } catch (error) {
+    if (statusOf(error) === null) throw requestFailed(operation, requestedKey, null, nameOf(error));
     return unavailable();
   } finally {
     try {
