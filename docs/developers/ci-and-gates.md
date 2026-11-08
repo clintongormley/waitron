@@ -3326,6 +3326,34 @@ WHICH entries a new export competes with, list them with sizes and last-access t
 (`gh api "repos/:owner/:repo/actions/caches?per_page=100" --paginate`, or `gh cache list`) and name
 them before adding the export.
 
+### The lint job reuses earlier results except on a full run
+
+On a pull request or an ordinary push to `main`, the `lint` job starts from the results of an earlier
+`main` run, so ESLint and Prettier re-check only files whose content changed. A nightly, manual or
+release run (`full` is `true`) restores nothing and checks every file. So does any run whose
+`changes` job failed, because the step tests for `full` being exactly `false`.
+
+The results are kept once a day for each combination of `eslint.config.js`, `pnpm-lock.yaml` and
+every `package.json`, and only by a push to `main`; a pull request reads them and saves nothing. A
+run restores before `pnpm install`, because afterwards `**/package.json` would also match the files
+under `node_modules`. If the restore or the save fails, the job carries on and checks without them.
+
+**What this can miss.** `import-x/no-restricted-paths` reads files other than the one it is
+checking, and neither tool's cache watches those. A cached "passed" for an unchanged file can
+therefore hide a restricted import that a change to another file caused. The next full run checks
+everything, at most a day later on the nightly schedule. A change to the three inputs above starts
+a new set of results.
+
+**What it costs the shared cache.** Its entries compete with the `node-cache-*` entries (about
+167 MB each) and `playwright-*` (about 279 MB). A whole-repository run on 2026-11-08 left 5.7 MB of
+result files, 0.74 MB after `zstd -3`, so a day adds a few MB at most for each set of inputs. The
+same two runs measured the benefit on that Mac: the second, with nothing changed, took ESLint 2 s
+against 60 s and Prettier 4 s against 85 s.
+
+Guard: the "reuse lint results only on runs that are not full" case in
+`scripts/ci-workflow.test.mjs`, weaker than its name: it reads the workflow as text, and no hosted
+run has been observed restoring or saving an entry.
+
 ### CodeQL scans `main` nightly, and nothing waits for it
 
 `.github/workflows/codeql.yml` runs at 01:37 UTC on the default branch and on request (`gh workflow

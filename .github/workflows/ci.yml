@@ -347,11 +347,36 @@ jobs:
           node-version-file: ".nvmrc"
           cache: pnpm
 
+      - id: lint-cache-day
+        if: needs.changes.outputs.full == 'false'
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+      # Before install: afterwards `**/package.json` would also hash node_modules. The key names these
+      # files because the import-boundary rule reads files the tools' own caches do not watch.
+      - id: lint-cache
+        name: Restore the lint results main kept
+        if: needs.changes.outputs.full == 'false'
+        uses: actions/cache/restore@v6
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/lint-cache
+          key: lint-results-${{ runner.os }}-${{ hashFiles('eslint.config.js', 'pnpm-lock.yaml', '**/package.json') }}-${{ steps.lint-cache-day.outputs.day }}
+          restore-keys: lint-results-${{ runner.os }}-${{ hashFiles('eslint.config.js', 'pnpm-lock.yaml', '**/package.json') }}-
+
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm lint
+      - run: pnpm lint ${{ needs.changes.outputs.full == 'false' && '--cache --cache-strategy content --cache-location "$RUNNER_TEMP/lint-cache/eslint"' || '' }}
 
-      - run: pnpm format:check
+      - run: pnpm format:check ${{ needs.changes.outputs.full == 'false' && '--cache --cache-strategy content --cache-location "$RUNNER_TEMP/lint-cache/prettier"' || '' }}
+
+      - name: Keep the lint results for later runs
+        if: needs.changes.outputs.full == 'false' && github.ref == 'refs/heads/main' && steps.lint-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/lint-cache
+          key: ${{ steps.lint-cache.outputs.cache-primary-key }}
 
   root-guards:
     needs: changes
