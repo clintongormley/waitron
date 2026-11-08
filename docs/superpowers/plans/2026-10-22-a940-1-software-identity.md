@@ -736,7 +736,7 @@ is why the start check under "The catch" exists.
      against the live image, printing only a count: today's `:main` carries 12 `WAITRON_` settings
      and no `WAITRON_PRODUCER_` one), and fails when the new secret's differs, unless the repository
      variable `WAITRON_PRODUCER_CHANGE_ALLOWED` holds that new tax number — a deliberate act that
-     allows exactly one change. The nightly run has no person to give a workflow input, so a
+     allows a change to that one number. The nightly run has no person to give a workflow input, so a
      variable stands in for one. An image with no tax number yet (today's `:main`) is no difference, so the first
      publish passes. The read runs under an outer timeout and fails the job on an error or a
      timeout.
@@ -1139,7 +1139,8 @@ The publish job, in order:
    (the script hands back the line, or the step that calls it does the reading once for both)
    rather than adding a second. A difference fails the job unless the repository variable
    `WAITRON_PRODUCER_CHANGE_ALLOWED` holds **the new tax number itself** (public), so it lets
-   exactly one change through and a value left set allows nothing further. Whether a re-run of a
+   through only a change to that number, and a value left set lets a later change to the same
+   number through too. Whether a re-run of a
    failed job reads a variable set after its first attempt is unverified; the step says "set the
    variable, then start a new run" (corrected 2026-11-08 from "push again": a push to `main` does
    not publish). That read runs under an outer `timeout` and
@@ -1158,6 +1159,10 @@ The publish job, in order:
    byte-for-byte the compared one, but it is built from the same build arguments. `docker push` of
    the loaded image is not used: I believe, not run, that it would drop the provenance attestation
    the published index carries (`main-tag-guard.sh:48`).
+
+(2026-11-08: a step between 4 and 5 now runs the server's own producer check,
+`/app/producer-check.js`, inside the loaded image; `docs/developers/ci-and-gates.md` lists the job
+as built.)
 
 - [ ] **Step 1: failing guard cases** in the two script tests; run
   `pnpm exec vitest run scripts/deploy-image-env.test.ts scripts/ci-workflow.test.mjs` — FAIL.

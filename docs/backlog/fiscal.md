@@ -1307,15 +1307,11 @@ built from its [plan](../superpowers/plans/2026-10-22-a940-1-software-identity.m
 2026-10-23 (pull request #2000): every record kind's software block, built in
 `buildSistemaInformatico` (`packages/fiscal-verifactu/src/backend.ts`), names "Waitron", the
 build's version (`0.0.0-dev`, plus the build's commit on a published build) instead of `0.0.0`,
-and `TipoUsoPosibleMultiOT = N`. The producer is a marked placeholder until the owner supplies
-his name and NIF: meanwhile records still carry the taxpayer's name and NIF there, and a
-published build set to production refuses to trade (`sif.producer_unset`; 2026-11-08: Task 8
-replaces this — see below). Two test checks
+and `TipoUsoPosibleMultiOT = N`. Two test checks
 changed with it: the Spanish practice sales were re-recorded (only their software block moved),
 and the pinned digest of the shipped XML in `apps/server/src/full-comp.fiscal-identity.test.ts`
 changed (the owner accepted it on 2026-10-23). [Task 8](../superpowers/plans/2026-10-22-a940-1-software-identity.md),
-rewritten on 2026-11-06 for the owner's answers of 4 and 6 November, was built on 2026-11-08 on
-branch `feat/a940-task8-producer-settings` and is parked for the owner. The name, tax number and
+rewritten on 2026-11-06 for the owner's answers of 4 and 6 November, has landed. The name, tax number and
 postal address are public; they are three settings named for the software's producer
 (`WAITRON_PRODUCER_NAME`, `WAITRON_PRODUCER_TAX_ID`, `WAITRON_PRODUCER_ADDRESS`), carried by each
 official image from repository secrets of the same names and never committed, so a fork builds with
@@ -1323,15 +1319,14 @@ its own. A production start with none refuses (`sif.producer_unset`) whether or 
 published; a partly set or malformed value refuses in every environment; and a production start
 whose open chain was made under another tax number refuses (`sif.producer_changed`) until A993 can
 open the new installation, so a change of producer is blocked in production until A993 lands.
-Before Task 8 lands, the owner or the watcher sets the three secrets:
-`gh secret set --env-file ~/waitron-campaign-shared/private/producer-identity.env --app actions --repo clintongormley/waitron`
-(after landing, every full run's publish job fails while they are missing). After that, the tax
-number must not change until A993 lands: the publish job runs on every full run (the nightly, a
+The three secrets were not set on 2026-11-08; set them before landing with
+`gh secret set --env-file ~/waitron-campaign-shared/private/producer-identity.env --app actions --repo clintongormley/waitron`;
+every full run's publish job fails while any is missing. The tax number must not change until A993 lands: the publish job runs on every full run (the nightly, a
 manual run on `main`, a `v*` tag), so a changed name or address reaches boxes as they update, but a
 changed tax number fails the publish unless the repository variable
-`WAITRON_PRODUCER_CHANGE_ALLOWED` holds it. Watch the first nightly or manual publish after landing:
-the job now builds with `load: true`, checks the three values inside the image, then pushes from
-the builder's cache, and that sequence has never run on GitHub's runners. The real-fork test (the
+`WAITRON_PRODUCER_CHANGE_ALLOWED` holds it. Watch the first nightly or manual publish:
+the job builds with `load: true`, checks the three values inside the image and runs the server's
+own producer check there, then pushes from the builder's cache, and that sequence has never run on GitHub's runners. The real-fork test (the
 plan's 8g Step 5) waits for the secrets.
 Then slices 1b to 6, and A993's plan. Still needed from outside: the asesor's answer to Q53. The
 owner's address is settled: supplied on 2026-11-04, it travels with the other two.

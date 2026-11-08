@@ -376,6 +376,9 @@ images from that full commit. No checkout or `pnpm` is needed; a failed resoluti
 sudo bash waitron.sh install <branch-or-ref>
 ```
 
+The image it builds names no software producer, so on a Veri\*Factu box set to production it refuses to start trading
+(`sif.producer_unset`); try branches on a preproduction box.
+
 It tags the image after the ref (`waitron:<ref>`, with unsafe characters dashed and the name capped
 to a valid length) and writes that tag into `.env` as `WAITRON_IMAGE` (and the print agent's
 equivalent as `WAITRON_PRINT_AGENT_IMAGE`), so the box STAYS on that build across reboots and a bare

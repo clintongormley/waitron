@@ -547,8 +547,9 @@ export interface FiscalBackend {
   checkIntegrity(tx: Transaction, nodeId: NodeId): Promise<IntegrityReport>;
 
   /**
-   * Throws when this node's open chain was made under a different software producer from the one
-   * this backend files under. Reads only. Optional: a backend that names no producer omits it.
+   * Throws when this backend's producer settings are malformed, and, in production, when this
+   * node's open chain was made under a different software producer from the one this backend files
+   * under. Reads only. Optional: a backend that names no producer omits it.
    */
   checkFilingIdentity?(tx: Transaction, nodeId: NodeId): Promise<void>;
 

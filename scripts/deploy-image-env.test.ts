@@ -278,8 +278,6 @@ describe("the producer's settings", () => {
     expect(stage("print-agent")).not.toMatch(/WAITRON_PRODUCER_/);
   });
 
-  // The image's ENV beats the box's state files (box-env.ts), so compose.yml is the only way a box's
-  // .env could reach them; naming none keeps the image their one source on an official install.
   it("are named nowhere in compose.yml, so a box's .env cannot set them", () => {
     expect(COMPOSE).toContain("WAITRON_MANAGEMENT_RP_ID");
     expect(COMPOSE).not.toMatch(/WAITRON_PRODUCER_/);
