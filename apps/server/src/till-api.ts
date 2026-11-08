@@ -1514,15 +1514,14 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const namesSomeone = c.req.header(PERSON_HEADER) !== undefined;
       const token = readSessionToken(c);
-      const holder =
-        token !== null && isUuid(token) ? await openSessionPerson(deps.db, token) : null;
-      if (token !== null && holder !== null) {
-        const refusal = personRefusal(c, holder);
-        if (refusal !== null) throw refusal;
+      if (token !== null && isUuid(token))
         await withTransaction(deps.db, async (tx) => {
+          const holder = await openSessionPerson(tx, token);
+          if (holder === null) return;
+          const refusal = personRefusal(c, holder);
+          if (refusal !== null) throw refusal;
           await endSession(tx, token);
         });
-      }
       if (!namesSomeone) clearSessionCookie(c);
       return c.json({ ok: true });
     }),

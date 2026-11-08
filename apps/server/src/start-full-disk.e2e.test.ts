@@ -57,7 +57,7 @@ import {
   START_AGAIN_ADMIN_PASSWORD,
   startAgainAttempt,
 } from "@waitron/provisioning/testing/start-again-attempt";
-import { jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
+import { PERSON_HEADER, jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import { openVenueStore } from "@waitron/store";
 import { WorkforceBackend } from "@waitron/workforce";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -102,6 +102,7 @@ import { provisionBillVenue } from "./testing/bill-venue.js";
 import { freePorts } from "./testing/free-ports.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 import { systemClock } from "./till-backend.js";
+import { SESSION_COOKIE } from "./till-session.js";
 
 const MiB = 1024 * 1024;
 const FLOOR = 8 * MiB;
@@ -1195,7 +1196,7 @@ describe("a start on a real full disk", () => {
     });
   });
 
-  it("the till's reads answer on a full disk with a stamp due, and PIN sign-in still refuses", async (ctx) => {
+  it("the till's reads answer on a full disk with a stamp due, PIN sign-in still refuses, and a sign-out ends only what it can write", async (ctx) => {
     const small = needDisk(ctx);
     const dir = realpathSync(small.folder("till-session"));
     await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
@@ -1240,6 +1241,21 @@ describe("a start on a real full disk", () => {
       expect(signIn.status).toBe(507);
       expect(await signIn.json()).toMatchObject({ error: { code: "storage.disk_full" } });
       expect(sessionCount()).toBe(before);
+
+      const openSessions = () =>
+        db.all<{ n: number }>(sql`select count(*) as n from sessions where ended_at is null`)[0]!.n;
+      const signOut = (cookie: string) =>
+        venue.app.request("/api/session", {
+          method: "DELETE",
+          headers: { cookie, [PERSON_HEADER]: venue.operatorId },
+        });
+      const open = openSessions();
+      const unknown = await signOut(`${SESSION_COOKIE}=${randomUUID()}; ${deviceCookie}`);
+      expect(unknown.status).toBe(200);
+      const own = await signOut(venue.cookie);
+      expect(own.status).toBe(507);
+      expect(await own.json()).toMatchObject({ error: { code: "storage.disk_full" } });
+      expect(openSessions()).toBe(open);
 
       small.unfill();
       expect((await request("/api/working-orders", venue.cookie)).status).toBe(200);
