@@ -11,7 +11,8 @@ const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
  * Builds `src/bin.ts` for this test file and returns a reader of the bundle's path. No release is
  * passed because a `tsx` run has none either. The directory is per file so that files running at
  * once cannot collide and a bundle is never older than the source; it sits under `apps/server` so
- * the `sharp` external resolves.
+ * the `sharp` external resolves with no linked `node_modules`, through which `copy-migrations.mjs`
+ * would replace the real `@waitron/ui-core` link.
  */
 export function useBuiltServer(): () => string {
   let directory: string | undefined;

@@ -26,13 +26,14 @@ describe("useBuiltServer", () => {
   const builtServer = useBuiltServer();
   const otherBuiltServer = useBuiltServer();
 
-  it("builds server.js and copies beside it the files the bundle reads at load", () => {
+  it("builds server.js and copies beside it what copy-migrations.mjs writes", () => {
     const directory = dirname(builtServer());
     usedDirectory = directory;
     expect(builtServer()).toBe(join(directory, "server.js"));
     expect(statSync(builtServer()).size).toBeGreaterThan(0);
     for (const file of [
       "assets/invoice-noto-sans.ttf",
+      "node_modules/@waitron/ui-core/package.json",
       "node_modules/@waitron/ui-core/src/tokens/colors.css",
       "node_modules/@waitron/ui-core/src/tokens/structure.css",
       "drizzle",
