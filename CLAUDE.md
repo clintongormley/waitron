@@ -134,7 +134,7 @@ hook, or how tests are scheduled:
   mutation**, depending on the package's coverage settings and Stryker `mutate` list.
 - **CI does not run every check on every push.** Read `changes` outputs `code`, `scope`, `packages`
   and `full`. Main uses the newest completed successful main ancestor to scope quick checks;
-  no baseline selects global change scope. Main's named package gates are false even when `scope`
+  without a baseline, change scope is global. Main's named package gates are false even when `scope`
   and `packages` name code changes. PR evidence is not reused. Container publication, including `:main`, follows
   full scheduled/manual main verification or a fully checked release tag, never an ordinary main
   push. [Modes and limits](docs/developers/ci-and-gates.md#scoped-tests-and-full-verification).
