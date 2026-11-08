@@ -355,36 +355,43 @@ describe("server health recovery", () => {
     expect((await health.recoverServer(f.options)).retried).toEqual([]);
   });
 
-  it("recovers another stalled run on the next invocation after a refused rerun", async () => {
-    const f = fixture(),
-      g = fixture();
-    g.run.id = 13;
-    f.run.run_started_at = date(7);
-    Object.assign(g.job, { id: 124, run_id: 13, labels: ["self-hosted", "dt-42-13-1-lint-1"] });
-    const writes = [];
-    const request = async (path, options = {}) => {
-      const target = path.includes("/runs/13") ? g : f;
-      if (path.includes("/runs?")) {
-        const runs = [g.run, f.run].filter((run) => path.includes("status=" + run.status));
-        return { total_count: runs.length, workflow_runs: runs.map((run) => ({ ...run })) };
-      }
-      if (options.method) {
-        writes.push(path);
-        if (path.endsWith("/force-cancel")) {
-          target.run.status = "completed";
-          target.run.conclusion = "cancelled";
+  it.each([false, true])(
+    "recovers only the oldest run per invocation when rerun refusal is %s",
+    async (refused) => {
+      const f = fixture(),
+        g = fixture();
+      g.run.id = 13;
+      f.run.run_started_at = date(7);
+      Object.assign(g.job, { id: 124, run_id: 13, labels: ["self-hosted", "dt-42-13-1-lint-1"] });
+      const writes = [];
+      const request = async (path, options = {}) => {
+        const target = path.includes("/runs/13") ? g : f;
+        if (path.includes("/runs?")) {
+          const runs = [g.run, f.run].filter((run) => path.includes("status=" + run.status));
+          return { total_count: runs.length, workflow_runs: runs.map((run) => ({ ...run })) };
         }
-        if (path.endsWith("/12/rerun")) throw new Error("rerun refused");
-        return null;
-      }
-      if (path.includes("/jobs?")) return { total_count: 1, jobs: [{ ...target.job }] };
-      return { ...target.run };
-    };
-    await expect(health.recoverServer({ ...f.options, request })).rejects.toThrow(/rerun refused/);
-    expect(writes).not.toContain("/repos/fixture/waitron/actions/runs/13/force-cancel");
-    expect((await health.recoverServer({ ...f.options, request })).retried).toEqual([13]);
-    expect(writes).toContain("/repos/fixture/waitron/actions/runs/13/rerun");
-  });
+        if (options.method) {
+          writes.push(path);
+          if (path.endsWith("/force-cancel")) {
+            target.run.status = "completed";
+            target.run.conclusion = "cancelled";
+          }
+          if (refused && path.endsWith("/12/rerun")) throw new Error("rerun refused");
+          return null;
+        }
+        if (path.includes("/jobs?")) return { total_count: 1, jobs: [{ ...target.job }] };
+        return { ...target.run };
+      };
+      if (refused)
+        await expect(health.recoverServer({ ...f.options, request })).rejects.toThrow(
+          /rerun refused/,
+        );
+      else expect((await health.recoverServer({ ...f.options, request })).retried).toEqual([12]);
+      expect(writes).not.toContain("/repos/fixture/waitron/actions/runs/13/force-cancel");
+      expect((await health.recoverServer({ ...f.options, request })).retried).toEqual([13]);
+      expect(writes).toContain("/repos/fixture/waitron/actions/runs/13/rerun");
+    },
+  );
 
   it("reads CI workflow inventories without listing unrelated workflows", async () => {
     const f = fixture();
