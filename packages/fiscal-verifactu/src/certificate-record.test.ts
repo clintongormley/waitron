@@ -1,9 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
+import * as database from "@waitron/db";
 import { nodes, withTransaction } from "@waitron/db";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { makeAuthority } from "../test/certificate-fixtures.js";
 import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -158,6 +159,26 @@ describe("sealAeatSecret's install record", () => {
     expect(latest?.installedAt).toEqual(new Date("2026-10-18T10:00:00.001Z"));
   });
 
+  it("a seal reads the takeover history once", async () => {
+    await seedTenantNodeSif(suite.db);
+    const reads = vi.spyOn(database, "readHistoryNodes");
+    try {
+      await sealAeatSecret(
+        {
+          db: suite.db,
+          ring: testRing(),
+          nodeId: TENANT_A.nodeId,
+          now: at("2026-10-18T10:00:00.000Z"),
+        },
+        certOf(candidate),
+      );
+      expect(reads).toHaveBeenCalledTimes(1);
+    } finally {
+      reads.mockRestore();
+    }
+    expect(await installRows()).toHaveLength(1);
+  });
+
   it("a file that does not open is sealed with no install row", async () => {
     await seedTenantNodeSif(suite.db);
     const ring = testRing();
@@ -255,6 +276,17 @@ describe("latestInstall after a handover", () => {
       nodeId: TENANT_A.nodeId,
       fingerprint: "m1-only",
     });
+  });
+
+  it("an install written behind the newest install of the box this one took over from is stamped after it", async () => {
+    await seedBoxes();
+    await installOn(TENANT_A.nodeId, "2026-10-18T10:00:00.000Z", "m1-only");
+    await recordTakeover(suite.db, TENANT_A.nodeId, TENANT_A.nodeId2);
+    await installOn(TENANT_A.nodeId2, "2026-10-18T09:59:00.000Z", "m2-behind");
+
+    const latest = await latestOn(TENANT_A.nodeId2);
+    expect(latest).toMatchObject({ nodeId: TENANT_A.nodeId2, fingerprint: "m2-behind" });
+    expect(latest?.installedAt).toEqual(new Date("2026-10-18T10:00:00.001Z"));
   });
 
   it("the box that handed over does not find the install of the box that took over", async () => {

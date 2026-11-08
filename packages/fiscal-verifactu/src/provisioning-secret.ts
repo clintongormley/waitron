@@ -111,18 +111,22 @@ export async function sealAeatSecret(
     const { details } = opened;
     const latest = await latestInstall(tx, deps.nodeId);
     if (latest?.fingerprint === details.fingerprint) return;
-    await recordInstall(tx, {
-      nodeId: deps.nodeId,
-      installedAt: (deps.now ?? (() => new Date()))(),
-      source: "setup",
-      personId: null,
-      kind: cert.certKind,
-      fingerprint: details.fingerprint,
-      organisation: details.organisation,
-      taxId: details.taxId,
-      issuer: details.issuer,
-      validFrom: details.validFrom,
-      validUntil: details.validUntil,
-    });
+    await recordInstall(
+      tx,
+      {
+        nodeId: deps.nodeId,
+        installedAt: (deps.now ?? (() => new Date()))(),
+        source: "setup",
+        personId: null,
+        kind: cert.certKind,
+        fingerprint: details.fingerprint,
+        organisation: details.organisation,
+        taxId: details.taxId,
+        issuer: details.issuer,
+        validFrom: details.validFrom,
+        validUntil: details.validUntil,
+      },
+      latest,
+    );
   });
 }

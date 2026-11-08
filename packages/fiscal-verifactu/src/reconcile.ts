@@ -317,7 +317,7 @@ async function rowsForPeriod(
         select json_group_array(
           json_array(
             known.huella, json_extract(known.sistema_informatico, '$.NumeroInstalacion')
-          ) order by known.secuencia
+          )
         )
         from registros_facturacion known
         where ${sameInvoice}
@@ -451,8 +451,8 @@ async function fetchAuthority(
         const reportedHuella =
           typeof data.Huella === "string" && data.Huella.length > 0 ? data.Huella : null;
         const reportedInstallation = system?.installation ?? null;
-        // Matched separately: AEAT may report a cancelled invoice with the cancellation's
-        // fingerprint and the issuing installation, which no single stored record holds.
+        // Matched separately: a cancelled invoice's lookup carries the cancellation's fingerprint
+        // (docs/compliance/verifactu-findings.md §19); which installation it names is unmeasured.
         const stored = JSON.parse(row.known_records) as [string, unknown][];
         const known =
           (reportedHuella === null || stored.some(([huella]) => huella === reportedHuella)) &&

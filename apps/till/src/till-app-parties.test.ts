@@ -5561,6 +5561,21 @@ describe("till-app: paying a bill by its state", () => {
       if (absent !== null) expect(banner(el)!.textContent).not.toContain(t(absent));
     },
   );
+
+  it("a manual card single payment refused because this is no longer the main server adds the card advice", async () => {
+    const { el } = await mountApp({
+      recordSale: vi
+        .fn()
+        .mockRejectedValue({ code: "fiscal.chain_handed_over", status: 409, nodeId: "this-box" }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "pay-tab", { method: "card", amount: "14.00" });
+    await flush(el);
+
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    expect(banner(el)!.textContent).toContain(t("sale.chain_handed_over_manual_card"));
+  });
 });
 
 describe("till-app: opening a seated table", () => {

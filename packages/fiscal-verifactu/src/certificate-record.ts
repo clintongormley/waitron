@@ -32,13 +32,14 @@ export async function latestInstallAmong(
  * Writes an install, taking `installedAt` as the writer's clock: the row is stamped then, but never
  * at or below the newest install `latestInstall` finds, so a clock stepped back, or a box whose
  * clock runs behind the one it took over from, cannot sort the new install below the one it
- * replaces.
+ * replaces. A caller that has just read `latestInstall` in this transaction passes it as `known`.
  */
 export async function recordInstall(
   tx: Transaction,
   row: typeof fiscalCertificateInstalls.$inferInsert,
+  known?: InstallRow | null,
 ): Promise<void> {
-  const latest = await latestInstall(tx, row.nodeId);
+  const latest = known === undefined ? await latestInstall(tx, row.nodeId) : known;
   const now = row.installedAt.getTime();
   const installedAt =
     latest === null ? row.installedAt : new Date(Math.max(now, latest.installedAt.getTime() + 1));

@@ -1364,7 +1364,7 @@ describe("listHeldOrders", () => {
     const idB = randomUUID();
 
     // A: one Coffee × 2. B: Coffee × 1 and Water × 3, and NO label (the null branch). A is
-    // parked first, so its per-node number is 1 and B's is 2 — the order the list must come back in.
+    // parked first, so its order number is 1 and B's is 2 — the order the list must come back in.
     const linesA = [{ productId: coffeeId, quantity: "2" }];
     const linesB = [
       { productId: coffeeId, quantity: "1" },

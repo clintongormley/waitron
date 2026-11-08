@@ -384,7 +384,7 @@ describe("GET /management-api/reports/categories", () => {
     expect(treeRows(off.tree)[2]).toBe("(uncategorised): 1.65/1.50 (2)");
   });
 
-  it("marks a range with a line recorded before classification began as incomplete, for this node", async () => {
+  it("marks a range with a line recorded before classification began as incomplete", async () => {
     const res = await report(`from=${DAY1}&to=${DAY2}&mode=current`);
     const body = (await res.json()) as CategoryReport;
     expect(body).toMatchObject({ grossComplete: false, linesWithoutGross: 1, net: "10.50" });

@@ -994,6 +994,38 @@ describe("reconcile — an invoice the old box issued and the box that took over
       withTransaction(suite.db, (tx) => backend.refuseNewIssuance(tx, selling)),
     ).resolves.toBeUndefined();
   });
+
+  it("still reports a conflict when AEAT reports another sale's fingerprint for this invoice", async () => {
+    const { aeat, issued, cancellation, deps } = await crossBox();
+    const client = aeat.client();
+    const other = (await suite.db.select().from(registrosFacturacion)).find(
+      (row) => row.id !== issued.id && row.id !== cancellation,
+    )!;
+    expect(other.saleId).not.toBe(issued.saleId);
+    const othersFingerprint: VerifactuClient = {
+      submit: (...args) => client.submit(...args),
+      consultar: async (...args) => {
+        const response = await client.consultar(...args);
+        return {
+          ...response,
+          registros: response.registros.map((r) =>
+            r.IDFactura.NumSerieFactura !== issued.numSerieFactura
+              ? r
+              : {
+                  ...r,
+                  DatosRegistroFacturacion: { ...r.DatosRegistroFacturacion, Huella: other.huella },
+                },
+          ),
+        };
+      },
+    };
+
+    const result = await reconcile(deps(othersFingerprint), PERIOD);
+
+    expect(result.conflicts?.map((row) => row.recordId).sort()).toEqual(
+      [issued.id, cancellation].sort(),
+    );
+  });
 });
 
 describe("reconcile — a conflict on a record of the box this one took over from", () => {
