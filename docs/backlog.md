@@ -109,7 +109,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1399. What happens when a bill payment is sent again under one id](backlog/payments.md#bundle-a1399-what-happens-when-a-bill-payment-is-sent-again-under-one-id)
 - [A1400. An older copy must not undo a save](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
 - [A1401. Find out why the failover bench reports a corrupt database](backlog/replication-cloud.md#bundle-a1401-find-out-why-the-failover-bench-reports-a-corrupt-database)
-- [A1402. Build the front-end and the other Node bundles in CI, and open one](backlog/ci.md#bundle-a1402-build-the-front-end-and-the-other-node-bundles-in-ci-and-open-one)
 
 **3. The foundation, already running.** A1308 stays first in lane A, with
 [Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).
@@ -2238,7 +2237,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **Process-started servers, remaining setup/recovery suites and configured-port boot cases still release probes before binding (A80/#740, A907, A1152).**
   [Detail](backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open).
 
-- **A1402. Build the front-end and the other Node bundles in CI, and open one** (bundle of 2, 1 important, size M). [Detail](backlog/ci.md#bundle-a1402-build-the-front-end-and-the-other-node-bundles-in-ci-and-open-one)
 
 - **A throwaway script found six comments that described code that was no longer there, and it is not a guard yet**
   [Detail](backlog/ci.md#a-throwaway-script-found-six-comments-that-described-code-that-was-no-longer-there-and-it-is-not-a-guard-yet).
