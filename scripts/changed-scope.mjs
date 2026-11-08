@@ -365,12 +365,15 @@ const lightGate = (bin) => (inScope) => [...inScope].some(runsInLightShard(bin))
  * shard subtracts OWN_SHARD_PACKAGES and the other bin, so it has work exactly when the scope holds a
  * member of its own bin that is not in PACKAGES_WITHOUT_TESTS.
  *
+ * `test-ui` runs two packages, so it reads two gates, `ui` and `ui_core`, and runs when either is on.
+ *
  * The `inScope === null` fail-closed case is applied by `gateOutputs` before any predicate is called,
  * so a predicate only ever sees a real Set.
  */
 export const SCOPE_GATES = [
   { output: "heavy", covers: membership(HEAVY_PACKAGE) },
-  { output: "ui", covers: (scope) => scope.has(UI_PACKAGE) || scope.has(UI_CORE_PACKAGE) },
+  { output: "ui", covers: membership(UI_PACKAGE) },
+  { output: "ui_core", covers: membership(UI_CORE_PACKAGE) },
   { output: "till", covers: membership(TILL_PACKAGE) },
   { output: "dashboard", covers: membership(DASHBOARD_PACKAGE) },
   { output: "setup", covers: membership(SETUP_PACKAGE) },

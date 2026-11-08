@@ -347,10 +347,11 @@ the guard reported only the `text` one. Two things about it belong here, because
 rather than mechanism:
 
 - **It is a ROOT guard, not a case in `packages/db`'s own suite**, which is where the plan put it. CI
-  runs a package's suite only when the scoping selects it, and the expansion is to a changed
-  package's DEPENDENTS: measured 2026-09-18, `pnpm --filter "...@waitron/bookings" ls --depth -1
-  --json` lists seven packages and `@waitron/db` is not among them, so the check would never have run
-  on a pull request adding a table file in `packages/bookings`. Same defect that moved the repo-wide
+  runs a package's suite only when the scoping selects it, and a pull request selects only the
+  changed packages (A1461, 2026-11-08; before that it added their dependents, and measured
+  2026-09-18, `pnpm --filter "...@waitron/bookings" ls --depth -1 --json` listed seven packages
+  without `@waitron/db`), so the check would never have run on a pull request adding a table file
+  in `packages/bookings`. Same defect that moved the repo-wide
   guards out of `packages/db` on 2026-08-01; the root `vitest.config.ts` header carries that history.
 - **One exception, scoped to a single builder rather than to the file**: `text` in
   `packages/fiscal-verifactu/src/schema/registros.ts`, whose `cuota_total` and `importe_total` store

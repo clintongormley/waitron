@@ -10,7 +10,8 @@ package checks, and deploy-selected image smoke still runs.
 
 A pull request tests only the changed packages themselves, not the packages that depend on them
 (owner, 2026-11-08, A1461): a change to `packages/db` runs db's tests, not the server's. Within the
-UI job, only whichever of `@waitron/ui` and `@waitron/ui-core` changed runs. The trade-off: the
+UI job, only whichever of `@waitron/ui` and `@waitron/ui-core` changed runs: each has its own gate,
+`ui` and `ui_core`, and ui-core's package check reads `ui_core` too. The trade-off: the
 `typecheck` job still checks the whole workspace on every code change, so a renamed or changed
 export fails the pull request, but a behaviour break in a dependent shows up only at the next
 nightly or manual full run. To catch it before merging, run the affected dependents' tests
@@ -423,10 +424,11 @@ pnpm --filter @waitron/setup exec node test/bundle-smoke.mjs
 A successful check prints `Built setup bundle rendered and advanced to the setup choices.`
 Chromium must be installed for the setup package's Playwright version.
 
-A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after lint — unless it changes a file `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) names, which
-also selects the members listed against it (those that read it, or whose CI test job runs it),
-which the hook typechecks with their dependents and CI tests alone, or a file `GLOBAL_ROOT_FILES` there names (the test-progress reporter every CI
-test command loads), which typechecks the whole workspace here and runs every package in CI. A documentation-only push stops after formatting. Deletion-only pushes run no
+A machinery-only push (`scripts/`, `.husky/`, `.github/`) is `scope=root` and stops after lint — unless it changes a file `ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`)
+names, or a file `GLOBAL_ROOT_FILES` there names (the test-progress reporter every CI test command
+loads). A `ROOT_SCOPE_CONSUMERS` file selects the members listed against it (those that read it, or
+whose CI test job runs it): the hook typechecks them with their dependents, and CI tests them
+without. A `GLOBAL_ROOT_FILES` file typechecks the whole workspace here and runs every package in CI. A documentation-only push stops after formatting. Deletion-only pushes run no
 checks. Unknown ranges keep the full local gate, including workspace typechecking.
 
 The hook no longer runs `pnpm reap`, and what is left to run it by hand FOR has narrowed to one of
@@ -1544,7 +1546,9 @@ from `GLOBAL_ROOT_FILES`, a file there is no such reporter, or one is also in
 text, so in a member file only a relative `../scripts/…` spelling counts, a path built from parts
 is invisible to it, and a comment spelling the path counts as a reference; in ci.yml, and no other
 workflow, only a line starting `node scripts/…` counts, in a job that tests a member through one
-quoted `pnpm --filter "<name>" test:shard`, `test:coverage` or `test:merge` — so a script fed from a pipe does
+quoted `pnpm --filter "<name>" test:shard`, `test:coverage` or `test:merge`, or, for a wrapped
+command taking `"$@"`, through each double-quoted literal positive `--filter` on any `set --` line in the job,
+whichever branch sets it — so a script fed from a pipe does
 not count, and a step an `if:` switches off does; a reporter counts only in a `--reporter=` flag
 on a `pnpm … test:shard` or `test:coverage` line, never one set in a package's own config; and only
 root `scripts/` is scanned.
@@ -3574,7 +3578,8 @@ stored stay until GitHub evicts them (see "Neither image build uses the remote l
 2026-09-26: `printf 'scripts/setup-litestream.mjs\n' | node scripts/changed-packages.mjs`, and the
 same for `scripts/setup-s3-test-server.mjs`, each printed `code=true`, `scope=packages`,
 `packages=@waitron/server`; and `pnpm --filter "...@waitron/server" ls --depth -1 --json | node
-scripts/changed-scope.mjs`, the `changes` job's gate step for that scope, printed `server=true` with
+scripts/changed-scope.mjs`, the gate step as it then stood (since A1461 the step passes
+`--filter "@waitron/server"`), printed `server=true` with
 every other gate false. `test-server`'s and `test-server-stream`'s `if:` ask for `code` and
 `server` both true. PR ranges select those server jobs without package coverage; ordinary main
 pushes emit `server=false` and skip them. Their merge job runs only in full verification. Type
