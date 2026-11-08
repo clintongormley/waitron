@@ -391,29 +391,29 @@ A1113 owns mirror-principal retirement, as stated in §9.
 
 | Consumer and current source                                                                                                                                                                                                                         | Proposed replacement / fact to retain                                                                                                                                                                                                                                                                                                                                                                       |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ladder/catalog, `packages/identity/src/permissions.ts:43`, `:104`; module contract `packages/module/src/module.ts:104`; composition `packages/composition/src/role-parity.ts:5` | Role IDs, memberships and permission JSON; explicit ordinary preset defaults and declaration contract (§3). Protected Admin gets all declared constants through code, with no stored grants or reconciliation pass. No seniority or unknown-string authority. |
-| Staff target-role checks, `packages/identity/src/staff.ts:210`, `:259`, `:502`, `:507` | Compare the actor and target/result WHOLE privilege unions across all memberships. Membership edits require person.admin, expected-set comparison and fresh context checks even for equal unions. Keep outstanding links; redemption reads current authority. |
-| Last Admin queries, `packages/identity/src/staff.ts:193`, `:271`, `:315`; alternate mutators `:497`, `:567`, `:579` | Shared serialized final-state check counts distinct usable active humans whose membership set contains canonical Admin. Additional role rows never inflate the count; no helper bypass. |
-| Sign-in takeover boundary, `packages/identity/src/staff.ts:131`, `:233`, `:395`; server routes `apps/server/src/management-api.ts:1125`, `:1209` | Retain A998/A1000 and compare the target whole union, including every retained role. person.manage alone never invites, changes sign-in, resets or reactivates another person. |
-| Dashboard sessions, `packages/identity/src/management-session.ts:60`; manager authorization `packages/identity/src/manager-login.ts:162` | Resolve active human, all memberships and current grants per request. Return request-local role IDs and union; no selected-role authorization. |
-| Till/session and PIN authorization, `packages/identity/src/authorize.ts:43`, `:74`; `apps/server/src/till-session.ts:99`; `packages/identity/src/credential.ts:43` | Resolve live status, all memberships, union and profile admission in the action transaction, including routes without a permission option. Old PIN results confer no old authority; apply §6 if membership is empty. |
-| Early PIN preparation, `apps/server/src/pin-check-ahead.ts:55`; refund confirmation `apps/server/src/bill-refunds.ts:696`, `apps/server/src/tender-refund-authorization.ts:144` | Early reads use the whole union only to prepare costly credential work. Final actions re-read membership, policy and grants. Retain outside-transaction hashing, throttles and generic refusals. |
-| Approver lists, `packages/identity/src/staff.ts:613`, `:621`; query parser `apps/server/src/adjustments-api.ts:88` | Return each active eligible person once, testing union privilege AND any-role policy match. Never accept client role IDs as authority. Recheck on PIN submit after list or membership/policy changes. |
-| Attendance views, `apps/server/src/management-attendance-api.ts:206`, `apps/server/src/till-attendance-api.ts:226` | Compute canSelfApprove from the whole union containing BOTH workforce.correct and workforce.self_approve, even across two roles. person.admin alone does not suffice; picker and write agree. |
-| Attendance domain, `packages/workforce/src/corrections.ts:35`, `:42`, `:252`, `:360`; `packages/workforce/src/attendance-response-commands.ts:119` | Replace MANAGER_ROLES and named Admin exceptions with whole-person privilege checks. Preserve own subject/requester, direction and approve-only limits, including refusal to decline your own request. Stored author-kind remains historical. |
-| Adjustment decisions, `packages/adjustments/src/policy.ts:142`, `:171`, `:185`; `apps/server/src/adjustments-apply.ts:558`, `:770` | Use whole union for adjustment.apply/adjustment.approve and any held role for the applicable reason/bill list, as independent gates. Preserve sale.refund cancellation checks, stages, amounts and policy limits. |
-| Adjustment policy/storage/seeds, `packages/adjustments/src/schema/reasons.ts:42`, `packages/adjustments/src/schema/settings.ts:6`, `packages/adjustments/src/provisioning.ts:6` | Resolve preset seed keys to IDs. Keep Complaint S, On the house M, Staff meal T with 50% limit and M approval, Discount M. `apply_roles`, `approver_roles` and `billApproverRoles` become role IDs in JSON (§4). No new/copied role joins lists. Delete references explicitly; empty approval is blocked. |
-| Adjustment client seniority, `packages/adjustments/src/dashboard/reasons-screen.ts:43`, `:94`, `:1251`; client union `packages/adjustments/src/dashboard/client.ts:9`; till text `apps/till/src/widgets/adjustment-dialog.ts:112` | Replace hardcoded role lists/order with role IDs, localized label sorting and set equality. Edit role-list restrictions and preview complete person unions; selected current IDs never mean future roles. |
-| PIN prompt wording, `apps/till/src/widgets/supervisor-override-dialog.ts:76`, `:115` | Describe required action/policy and actual eligible people, each once. Remove the default supervisor authority claim; custom role names are literal, never translation keys. |
-| Device admission, `packages/identity/src/profile-admission.ts:15`, `:50`, `:181`; schema `packages/identity/src/schema/profile-admission.ts:9` | Any held role may match the explicit set, with status/eligibility checks; per-person exceptions are deleted (owner, 2026-11-04). Profile actions/zones AND union privileges still bound actions. Replace empty/every sentinel; deletion cannot open admission. No-role outcome follows §6. |
-| Dashboard forms/filter/labels, `apps/dashboard/src/widgets/person-form.ts:291`, `widgets/person-edit.ts:332`, `screens/staff-screen.ts:376`, `i18n/domain.ts:147`; unions `apps/dashboard/src/api/client.ts:336`, `apps/till/src/api/client.ts:904` | Multi-select roleIds, display every membership, sort translated built-ins/literal customs by locale and filter by held ID (any selected match). Include the approved No role filter. No hardcoded Staff fallback. |
-| Shell and permission projections, `apps/dashboard/src/dashboard-app.ts:1178`, `apps/server/src/me-api.ts:331`, `apps/server/src/till-api.ts:1426`, `apps/server/src/alerts-api.ts:46` | Return roleIds and the current whole-person privilege union, with display metadata. Refresh passively on changes/refusals; navigation is presentation. Delayed updates cannot retain server authority. |
-| Scheduling/workforce/reporting, `apps/server/src/workforce-api.ts:35`, `packages/staffing/src/routes.ts:194`, `apps/server/src/attendance-export-api.ts:45`, `apps/server/src/orders-api.ts:145` | Use accepted catalog names and whole unions. Preserve own-person exports and Orders non-report scope. Staffing's job roles join the one role list (§3). |
-| Other direct lookups, `packages/venue-service/src/routes.ts:703`, `apps/server/src/email-settings-api.ts:50`, `apps/server/src/email-inbox-api.ts:39` | Replace roleHasPermission with current whole-person grants, retaining default-setting and sign-in-mail conditions under accepted catalog names. |
-| Provisioning/recovery, `packages/provisioning/src/venue-apply.ts:196`, `packages/provisioning/src/recover-provisioned-venue.ts:46`; CLI `apps/server/src/break-glass-command.ts:94` | Create protected built-ins and a usable active human containing Admin; code supplies Admin authority. Resume checks recorded identity/current whole union and protected integrity. Recovery chooses an existing person.admin holder, changes no role, and keeps the anchor. |
-| Transfers, `packages/identity/src/configuration-transfer.ts:1`, `packages/adjustments/src/configuration-transfer.ts:34`, `packages/provisioning/src/configuration-transfer.ts:700`, `:724`, `:737` | Carry definitions with permission JSON, memberships and live policy references through existing transfer mapping, including IDs inside JSON. Preserve normal input/reference integrity, entry-path authority and the protected Admin invariant; imported people stay suspended. Later reactivation checks whole current target unions; no extra import privilege/provenance scheme. |
-| Automatic work, `apps/server/src/certificate-reminder-worker.ts:62`; authenticated operations `apps/server/src/operation-authentication.ts:87` | Select eligible recipients once per person from live whole unions; recheck actor-bound pending operations on execution. Service duties use explicit authority/current mode, never synthetic human roles. Committed fiscal/outbox duties retain existing authority. |
-| Fixtures and constraints, `packages/identity/test/fixtures.ts:57`, `apps/server/scripts/demo-seed/staff.ts:18`, `packages/identity/src/schema/persons.ts:6`, `:76` | Create roles with permission JSON before membership rows; Admin authority is code-defined. Include two-role and no-role cases, fixed built-in names, changed ordinary preset grants, custom IDs and shared grants. Replace singular enums/API fields; preserve status and behavioral assertions. |
+| Ladder/catalog, `packages/identity/src/permissions.ts:43`, `:104`; module contract `packages/module/src/module.ts:104`; composition `packages/composition/src/role-parity.ts:5` | Role IDs, permission JSON and explicit defaults (§3); Admin authority comes from code. |
+| Staff target-role checks, `packages/identity/src/staff.ts:210`, `:259`, `:502`, `:507` | Whole-target union and expected-set checks (§5); link redemption reads current authority. |
+| Last Admin queries, `packages/identity/src/staff.ts:193`, `:271`, `:315`; alternate mutators `:497`, `:567`, `:579` | Count distinct usable active humans holding protected Admin, in the final transaction state (§5). |
+| Sign-in takeover boundary, `packages/identity/src/staff.ts:131`, `:233`, `:395`; server routes `apps/server/src/management-api.ts:1125`, `:1209` | Retain A998/A1000; require person.admin and whole-target authority (§5). |
+| Dashboard sessions, `packages/identity/src/management-session.ts:60`; manager authorization `packages/identity/src/manager-login.ts:162` | Resolve live status and complete memberships/union per request. |
+| Till/session and PIN authorization, `packages/identity/src/authorize.ts:43`, `:74`; `apps/server/src/till-session.ts:99`; `packages/identity/src/credential.ts:43` | Read live status, union and profile admission in the action transaction, including routes with no permission option (§3, §6). |
+| Early PIN preparation, `apps/server/src/pin-check-ahead.ts:55`; refund confirmation `apps/server/src/bill-refunds.ts:696`, `apps/server/src/tender-refund-authorization.ts:144` | Keep hashing outside the transaction, throttles and generic refusals; re-read authority for the action. |
+| Approver lists, `packages/identity/src/staff.ts:613`, `:621`; query parser `apps/server/src/adjustments-api.ts:88` | One entry per eligible person; privilege AND policy match; recheck on PIN submission. |
+| Attendance views, `apps/server/src/management-attendance-api.ts:206`, `apps/server/src/till-attendance-api.ts:226` | Self-approval needs both workforce privileges across the union, independently of person.admin. |
+| Attendance domain, `packages/workforce/src/corrections.ts:35`, `:42`, `:252`, `:360`; `packages/workforce/src/attendance-response-commands.ts:119` | Use privileges; keep subject/requester, direction and approve-only limits, own-decline refusal and historical author-kind. |
+| Adjustment decisions, `packages/adjustments/src/policy.ts:142`, `:171`, `:185`; `apps/server/src/adjustments-apply.ts:558`, `:770` | Independent action/policy gates; retain sale.refund cancellation checks, stages, amounts and limits. |
+| Adjustment policy/storage/seeds, `packages/adjustments/src/schema/reasons.ts:42`, `packages/adjustments/src/schema/settings.ts:6`, `packages/adjustments/src/provisioning.ts:6` | JSON role IDs; retain Complaint S, On the house M, Staff meal T with 50% limit/M approval, Discount M. Empty approval stays blocked. |
+| Adjustment client seniority, `packages/adjustments/src/dashboard/reasons-screen.ts:43`, `:94`, `:1251`; client union `packages/adjustments/src/dashboard/client.ts:9`; till text `apps/till/src/widgets/adjustment-dialog.ts:112` | Role IDs, localized sorting and set equality; current selections never include future roles. |
+| PIN prompt wording, `apps/till/src/widgets/supervisor-override-dialog.ts:76`, `:115` | Name the action/policy and eligible people; custom names stay literal. |
+| Device admission, `packages/identity/src/profile-admission.ts:15`, `:50`, `:181`; schema `packages/identity/src/schema/profile-admission.ts:9` | Explicit role lists, no person exceptions; retain eligibility and profile action/zone limits (§3, §6). |
+| Dashboard forms/filter/labels, `apps/dashboard/src/widgets/person-form.ts:291`, `widgets/person-edit.ts:332`, `screens/staff-screen.ts:376`, `i18n/domain.ts:147`; unions `apps/dashboard/src/api/client.ts:336`, `apps/till/src/api/client.ts:904` | roleIds multi-selection, complete labels, any-selected filtering and No role; no Staff fallback (§8). |
+| Shell and permission projections, `apps/dashboard/src/dashboard-app.ts:1178`, `apps/server/src/me-api.ts:331`, `apps/server/src/till-api.ts:1426`, `apps/server/src/alerts-api.ts:46` | Project current roleIds/union; passive refresh is presentation, never retained server authority. |
+| Scheduling/workforce/reporting, `apps/server/src/workforce-api.ts:35`, `packages/staffing/src/routes.ts:194`, `apps/server/src/attendance-export-api.ts:45`, `apps/server/src/orders-api.ts:145` | Accepted names/whole unions; keep own-person exports and Orders non-report scope; one access/rota role list. |
+| Other direct lookups, `packages/venue-service/src/routes.ts:703`, `apps/server/src/email-settings-api.ts:50`, `apps/server/src/email-inbox-api.ts:39` | Current whole-person authority; retain default-setting and sign-in-mail conditions. |
+| Provisioning/recovery, `packages/provisioning/src/venue-apply.ts:196`, `packages/provisioning/src/recover-provisioned-venue.ts:46`; CLI `apps/server/src/break-glass-command.ts:94` | Create built-ins/initial human; preserve recorded setup identity, live authority and the Admin anchor. Recovery changes no roles. |
+| Transfers, `packages/identity/src/configuration-transfer.ts:1`, `packages/adjustments/src/configuration-transfer.ts:34`, `packages/provisioning/src/configuration-transfer.ts:700`, `:724`, `:737` | Ordinary transfer mapping, including JSON references; imported people stay suspended. Reactivation follows §5. |
+| Automatic work, `apps/server/src/certificate-reminder-worker.ts:62`; authenticated operations `apps/server/src/operation-authentication.ts:87` | Distinct live eligible recipients; recheck actor-bound work. Keep service authority/current mode and committed fiscal/outbox authority. |
+| Fixtures and constraints, `packages/identity/test/fixtures.ts:57`, `apps/server/scripts/demo-seed/staff.ts:18`, `packages/identity/src/schema/persons.ts:6`, `:76` | Replace singular role fields with memberships; retain behavioral assertions and status cases. |
 
 ### Bounded current-source additions, reading only, 2026-10-28
 
@@ -422,12 +422,12 @@ They do not establish runtime behavior or complete the later implementation audi
 
 | Reading receipt | Proposed consequence |
 | --- | --- |
-| `packages/identity/src/permissions.ts:18`, `:78`, `:84` declare `personal_data.export` and include it in Admin's full catalog set. | Keep the one existing §2 entry. No unlanded O5 placeholder or second export permission. |
-| `packages/identity/src/personal-data.ts:29`, `:42` selects a singular role into profile output. | Export the complete membership set with role IDs/labels, including an empty set for a person with no role. This is personal-data output, not configuration transfer or a live authority snapshot. |
-| `apps/server/src/personal-data-export-api.ts:117`, `:123` and `:136`, `:145` separate own identity from another person's privileged export; `apps/server/src/invoice-customer-data-api.ts:57` requires the same privilege. | Resolve whole-person authority for privileged exports; preserve own-person identity access and customer-route scope. No new privilege or broader search authority. |
-| `apps/server/src/manager-email-recipients.ts:13`, `:22`, `:33` filters active people with email by singular-role `system.manage`; called by `certificate-reminder-worker.ts:60` and `box-alert-email.ts:153` under `apps/server/src/`. | Select on the whole union at execution, retain active/email/language checks and return each human once. No role means no privileged recipient eligibility. |
-| `packages/identity/src/profile-admission.ts:28`, `:54`, `:111` reads empty as every and gives explicit person exceptions precedence. | Replace that sentinel explicitly. Per-person exceptions are deleted (owner, 2026-11-04). Lists and unions remain independent gates. |
-| `packages/provisioning/src/venue-apply.ts:99`, `:371`, `:374`, `:500`, `:548` queries singular Admin membership for setup ordering, the initial module operator and profile seeding. | Use the recorded initial human ID and complete membership set for setup integrity. Resume checks current whole-person grants; domain actions use privileges, never a label or an arbitrary first matching role holder. |
+| `packages/identity/src/permissions.ts:18`, `:78`, `:84` declare `personal_data.export` and include it in Admin's full catalog set. | Keep the single §2 entry. |
+| `packages/identity/src/personal-data.ts:29`, `:42` selects a singular role into profile output. | Export all role IDs/labels, including an empty set; this output grants no authority. |
+| `apps/server/src/personal-data-export-api.ts:117`, `:123` and `:136`, `:145` separate own identity from another person's privileged export; `apps/server/src/invoice-customer-data-api.ts:57` requires the same privilege. | Keep own-person identity access and privileged/customer scope. |
+| `apps/server/src/manager-email-recipients.ts:13`, `:22`, `:33` filters active people with email by singular-role `system.manage`; called by `certificate-reminder-worker.ts:60` and `box-alert-email.ts:153` under `apps/server/src/`. | Distinct live eligible recipients using whole unions; no privileged recipients without roles. |
+| `packages/identity/src/profile-admission.ts:28`, `:54`, `:111` reads empty as every and gives explicit person exceptions precedence. | Explicit lists, no person exceptions (§3). |
+| `packages/provisioning/src/venue-apply.ts:99`, `:371`, `:374`, `:500`, `:548` queries singular Admin membership for setup ordering, the initial module operator and profile seeding. | Use the recorded initial human and current union for setup/resume; no arbitrary matching role holder. |
 
 ### Additions from A1308, reading only, 2026-11-04
 
@@ -436,54 +436,34 @@ draws the tables). They do not establish runtime behavior.
 
 | Reading receipt | Proposed consequence |
 | --- | --- |
-| `packages/staffing/src/staff-roles.ts:124` lists every staff role, and `packages/staffing/src/rota.ts:53` reads that list; `packages/staffing/src/dashboard/rota-cards.ts:158` finds a shift's role in it. | The rota lists on-rota roles, plus every role that week's shifts name, retired or off the rota, so a past shift keeps its name. |
-| `packages/staffing/src/routes.ts:161-162`, `:337-345` gate holders with `staffing.manage`. | Changing who holds a role moves to §5's membership change. The routes and `dashboard-staff-roles-screen` (`packages/staffing/src/dashboard/index.ts:94`) become part of Roles, or call it. |
-| `packages/staffing/src/configuration-transfer.ts:3-11` exports `staff_roles` and `person_staff_roles`. | Both leave staffing's list for §7's role export. A retired role does not travel: no shift is in that list. |
-| `packages/adjustments/src/schema/settings.ts:30` CHECKs that `billApproverRoles` is not empty. | That check moves to A1308's settings validator, which must accept the emptied list §6 keeps as blocked. |
-| `packages/staffing/src/staff-roles.ts:57-66` compares a name exactly after trimming. | Job role names move to §3's Unicode folding, so “Café” and “CAFE” clash. |
+| `packages/staffing/src/staff-roles.ts:124` lists every staff role, and `packages/staffing/src/rota.ts:53` reads that list; `packages/staffing/src/dashboard/rota-cards.ts:158` finds a shift's role in it. | Include on-rota roles and every role named by that week’s shifts, including retired/off-rota roles. |
+| `packages/staffing/src/routes.ts:161-162`, `:337-345` gate holders with `staffing.manage`. | Membership changes use §5; staffing routes/screen join Roles or call it. |
+| `packages/staffing/src/configuration-transfer.ts:3-11` exports `staff_roles` and `person_staff_roles`. | Move both to identity transfer; retired roles do not travel because shifts do not. |
+| `packages/adjustments/src/schema/settings.ts:30` CHECKs that `billApproverRoles` is not empty. | A1308’s settings validator accepts the emptied list as blocked (§6). |
+| `packages/staffing/src/staff-roles.ts:57-66` compares a name exactly after trimming. | Use §3’s Unicode folding for job-role names too. |
 
 ### Imports and complete API/client shapes
 
-Carry role definitions, permission JSON, person-role memberships and device/reason/bill-limit
-references through the existing configuration transfer. Remap role IDs in memberships and inside
-JSON role lists. A generic scalar ID remapper does not traverse JSON; this is reference mapping,
-not a new import authorization scheme.
+Carry role definitions/permission JSON, memberships and device/reason/bill-limit references through
+existing transfer mapping, including IDs inside JSON. Preserve normal input/reference checks,
+entry-path authority, fixed built-in identities and the last usable Admin. Imported people stay
+suspended; later invitation/reactivation follows §5. No login secrets/sessions travel. No special
+canonical-marker, provenance, context-gain or privilege-hardening scheme, compatibility or migration.
 
-Preserve the normal supported-input and reference checks, each existing entry path's authority and
-the protected built-in/last usable Admin invariant. Map built-in references to the target built-ins
-and custom references to their imported roles; keep fixed built-in names and Admin's code rule.
-Do not introduce special canonical-marker validation, author provenance, contextual-gain previews
-or per-role/retained-holder privilege hardening for import. No backwards compatibility or migration
-is designed here. All imported people stay suspended and cannot replace the usable human anchor.
-Their later invitation/reactivation uses §5's ordinary whole-current-target checks. Login secrets
-and sessions do not travel. §7's current readings below distinguish the existing transfer from this
-approved replacement for the singular role field.
-
-Replace singular-role HTTP DTOs (request/response shapes), validators, domain inputs, clients,
-sessions, login/credential results, Staff/approver lists and personal-data output with
-`roleIds: RoleId[]` and role display metadata. Request-local authority also carries the current
-union. Assignment sends the complete intended set and the expected membership set it read; reject
-duplicates, unknown IDs and explicit null, and compare sets without ordering. There is no primary
-`role`, first element, most senior role or absent-field Staff default. An absent membership field
-on an ordinary employment edit leaves membership alone. `roleIds: []` carries no operational or
-list authority.
+Replace singular-role request/response, domain, session, credential, Staff/approver and personal-data
+shapes with `roleIds: RoleId[]` and display metadata; request-local authority includes the current
+union. Assignment sends intended and expected membership sets. Reject duplicates, unknown IDs and
+null; compare sets without ordering. An absent field on an employment edit leaves membership alone.
+There is no primary/first/senior role or Staff default; `roleIds: []` has no operational/list authority.
 
 ### Activity and role-change email, owner addition 2026-11-07 22:53
 
-Every role given to or removed from a person, every permission added to or removed from a role,
-and each creation, rename, retirement or deletion of a role produces one entry in the venue's
-existing activity log. Bulk changes produce one entry per actual change, including membership
-removals caused by deletion/retirement. No-op saves produce none. Store the acting person's identity,
-the subject person/role, the specific change and time. A rename records old and new role names;
-a permission change records its permission ID. These are facts about what changed, never copies of
-the actor's or approver's role/permission sets. Do not rewrite existing history or use log entries
-as authority. Clearing permissions on retirement/deletion records their removals too.
-
-Proposed entry codes follow the domain/action form used by A1308's `drawer.opened` kind.
-These names and copy are design choices under the approved addition, not existing source constants.
-`{actor}`, `{person}` and `{role}` denote display text; identity IDs remain the recorded subjects.
-Store the permission ID and render `{permission}` as its translated privilege label. Custom role
-names stay literal; built-in labels translate.
+Record each actual membership/permission change and role creation, rename, retirement or deletion
+in the venue's activity log: actor identity, subject person/role, change and time. Include bulk
+removals and cleared permissions on deletion/retirement; no-op saves add nothing. Keep old/new names
+for renames and the permission ID for permission changes, never the actor's role set. History is
+not authority. The proposed codes below use A1308's domain/action convention; placeholders display
+names and translated privilege labels, while recorded subjects remain IDs.
 
 | Proposed code | English activity text | Spanish activity text |
 | --- | --- | --- |
@@ -496,47 +476,42 @@ names stay literal; built-in labels translate.
 | `role.retired` | {actor} retired {role}. | {actor} retiró el rol {role}. |
 | `role.deleted` | {actor} deleted {role}. | {actor} eliminó el rol {role}. |
 
-Give or remove a role: email that person if they have an address on file, in their language,
-including pending or suspended people. No address means no email; the activity entry still stands.
-A loss of the last role still gets its notice. Permission edits, rename and retirement/deletion
-alone do not email all holders; the membership removals they cause do. Use one proposed template,
-`role_membership_changed`, with added/removed wording. Follow the sibling `ATTENDANCE_EMAIL_WORDS`
-pattern as `ROLE_MEMBERSHIP_EMAIL_WORDS`; this names copy, not another service or queue.
+Email each person given or losing a role if they have an address, including pending/suspended
+people and those losing their last role. Without an address, the log entry still stands. Permission
+edits do not email holders; deletion/retirement emails only for membership removals. One proposed
+template, `role_membership_changed`, uses EN/ES wording (`ROLE_MEMBERSHIP_EMAIL_WORDS`, following the
+attendance sender's word-object convention). Custom names stay literal; built-in labels translate.
 
 | Action | English subject and text | Spanish subject and text |
 | --- | --- | --- |
 | Added | **Role added: {role}**. {actor} added you to {role} on {when}. | **Rol añadido: {role}**. {actor} te añadió al rol {role} el {when}. |
 | Removed | **Role removed: {role}**. {actor} removed you from {role} on {when}. | **Rol quitado: {role}**. {actor} te quitó del rol {role} el {when}. |
 
-Format `{when}` in the recipient's language and venue time zone, including the zone. These notices
-contain no invitation/reset link and no copy of the recipient's other roles. Submit them to the
-existing shared mail path; its delivery policy remains its own. Do not wait for SMTP to commit a
-role change, promise transactional delivery, or add a queue, notification service or retry scheme.
+Format `{when}` in the recipient's language and venue time zone. Use the shared mail path's delivery
+policy; SMTP never holds the role-change transaction. No new log, queue, notification service,
+transactional-delivery guarantee or retry scheme.
 
-**Integration gap at the source pin below:** no shared activity writer/event-source registry or
-general queued-email API was located for these entries and this template by the search below.
-The logger writes JSON lines to a sink; account emails send SMTP directly. The existing queued
-attendance and invoice paths require their own domain subjects. They cannot be named as a general
-role-notice queue. A1308 defines shared `activity_log` and `outgoing_mail`; reuse those paths when
-available, through their writer and queue API and inherited delivery policy. This design adds no replacement infrastructure.
-The later required Claude read must resolve that dependency against the then-current source before
-building this addition. The missing generic writer/queue is a source gap, not missing owner approval.
+**Unbuilt dependency:** no shared activity writer or general queued-mail API was located at the
+source pin below. A1308's `activity_log`/`outgoing_mail` must supply those seams before this addition
+is built. Reuse them; do not adapt the domain-specific attendance/invoice queues or add infrastructure.
 
 ### Current-source receipts for this correction, 2026-11-08
 
-**SOURCE READ ONLY**, all at `e0e4f5b8fda194814a6280340f1b93bb7569307a`.
-No runtime, SMTP, queue delivery or activity-screen behavior was exercised.
+**SOURCE READ ONLY**, at `e0e4f5b8fda194814a6280340f1b93bb7569307a`; no runtime verification.
 
-| Source read | Observation and design consequence |
-| --- | --- |
-| `packages/identity/src/permissions.ts:7-43`, `:78-85`, `:108-121` | Core permission constants, Admin's `ALL` set and boot-time module registration are code. Target keeps declarations in code, drops the module ladder and stores only ordinary role permission JSON. |
-| `packages/identity/src/account-action.ts:83-117`, `:129-141`, `:281-302`, `:311-342`; `management-session.ts:58-85` in the same directory | Issuance replaces same-purpose links; completion reads current person status and starts a session by identity. Session resolution selects current singular role/status. These reads do not prove issuer/whole-union checks already exist; §5 requires their multi-role target without cancellation on role changes. |
-| `packages/identity/src/configuration-transfer.ts:1-23`; `packages/provisioning/src/configuration-transfer.ts:622-631`, `:680-698`, `:724-755` | Transfer declarations omit login secrets; the importer validates the bundle, builds a scalar ID map, clears imported credentials and sets people suspended. Add role/member/JSON-reference mapping to this transfer, not special provenance or privilege hardening. |
-| `apps/server/src/boot.ts:1570-1606`; `packages/provisioning/src/first-setup-command-deployment.ts:299-310`; `apps/server/src/configuration-export-api.ts:45-55` | Import is called inside the two setup paths' existing venue creation; export checks `system.manage`. Preserve each entry path's existing authority; do not describe a new universal `person.admin` import gate as already present. |
-| `apps/server/src/logger.ts:15-23`; search `rg -n -e activity_log -e outgoing_mail apps packages` (exit 1, no matches) | The inspected logger calls an injected line sink; the search found neither shared table name in source. No activity writer/event-source registry or shared queue was located at this pin. |
-| `apps/server/src/attendance-email-worker.ts:75-143`; `apps/server/src/invoice-email-worker.ts:50-105` | The existing queue consumers join attendance questions or invoice deliveries, claim work, send outside the claim transaction and record an outcome. They are domain-specific, not a role-mail enqueue API. |
-| `apps/server/src/email-delivery.ts:16-40`; `apps/server/src/attendance-email.ts:15-29`; `apps/server/src/i18n/attendance-email.ts:1-18`; `apps/server/src/account-email.ts:48-76`, `:111-120` | Delivery selection reads SMTP credentials or local capture; senders use `sendSmtpMessage` and EN/ES word objects. Account copy formats dates in the venue time zone. Reuse these delivery/wording conventions; they establish no general queue. |
-| `docs/superpowers/specs/2026-11-02-rationalisation/README.md:107-114`; `jobs.md:284-339` in that directory | Design text, not implementation: A1308 defines append-only `activity_log` and the shared `outgoing_mail` draft. Its listed mail kinds lack role notices. Register this addition there when the shared seam exists; inherit its limits rather than inventing them here. |
+- `apps/server/src/logger.ts:15-23` writes to a line sink; `account-email.ts:111-120` in the same
+  directory sends SMTP directly. `attendance-email-worker.ts:75-143` and
+  `invoice-email-worker.ts:50-105` consume domain-specific queues, not a general role-mail API.
+  A1308's proposed shared seams are in `docs/superpowers/specs/2026-11-02-rationalisation/README.md:107-114`
+  and `jobs.md:284-339` there; these are design text, not source implementation.
+- `apps/server/src/email-delivery.ts:16-40`, `attendance-email.ts:15-29`,
+  `i18n/attendance-email.ts:1-18` and `account-email.ts:48-76` there supply delivery selection,
+  EN/ES word objects and venue-zone date formatting.
+- `packages/identity/src/account-action.ts:281-342` and `management-session.ts:58-85` there read
+  current status/session role, not the target issuer/whole-union checks. Transfer mapping and
+  suspension are in `packages/provisioning/src/configuration-transfer.ts:622-755`; setup callers
+  are `apps/server/src/boot.ts:1570-1606` and
+  `packages/provisioning/src/first-setup-command-deployment.ts:299-310`.
 
 ## 8. Dashboard flow, text wireframes only
 
@@ -633,150 +608,49 @@ later implementation must be inspected in light/dark, EN/ES, phone/desktop.
 
 ## 9. Boundaries before any plan or build
 
-The full design is OWNER APPROVED with the 2026-11-07 22:51 corrections and 22:53 addition (§11).
-The A760 hold has lifted (historical RUNNER top: main `eed41cc3c0`, #2539). No reapproval of settled
-choices is needed. The required Claude read remains before plan/build, and this firing creates
-neither. The shared activity/queued-mail source gap is recorded in §7, not filled by A1002 machinery.
+The design is OWNER APPROVED (§11). Complete the required Claude read before plan/build; this
+firing starts neither. The A760 hold has lifted (historical RUNNER: `eed41cc3c0`, #2539).
+Resolve §7's unbuilt shared activity/mail dependency against the then-current source.
 
-A later approved plan must cover the whole authority transition: catalog consumers, membership
-storage/provisioning, live checks at link redemption, deletion/references, transfer, clients/UI/guides,
-activity/email integration and service-duty recipients. Do not enable editable authority with a
-remaining single-role or name bypass. Retire misleading current prose during implementation, including the permanent permission-name
-claim at historical `packages/identity/src/permissions.ts:1`; audit the complete changed prose path set.
+The later transition must cover every consumer, membership storage, live checks/link redemption,
+references, transfer, clients/UI/guides and automatic recipients. Leave no singular-role/name bypass
+or stale prose, including the historical permanent-permission-name claim in
+`packages/identity/src/permissions.ts:1`. No fiscal or money behavior changes.
 
-The original needed service-duty treatment stays: explicit service authority and current node mode,
-without synthetic human roles or reauthorizing already committed fiscal/outbox facts as a former
-employee. A1113 owns mirror dashboard/viewer removal; other node work owns synchronization and
-promotion. A1002 defines only the compatibility constraints in §3. It adds no mirror role, UI,
-scoped-reader grants or tokens, and does not claim that retirement has landed.
-The root backlog still carries an A1111 proposal; the owner's later A1113 decision supersedes it
-for this design. That unrelated backlog row is outside this revision's permitted edit scope.
+Service duties retain explicit authority and current node mode, without synthetic human roles or
+reauthorizing committed fiscal/outbox facts. A1113 owns mirror dashboard/viewer removal; node work
+owns synchronization and promotion. A1002 adds neither mirror UI nor node infrastructure.
 
-## 10. Acceptance evidence the later build must produce, test first
+## 10. Acceptance evidence
 
-These are future acceptance requirements, not results from this documentation revision.
+Future acceptance, not results of this documentation revision. The later plan holds detailed cases.
 
-- Use real database cases with two independent roles, overlapping grants, zero-grant roles and
-  role order changes. Prove union authorization and separate any-role policy matching, including
-  a privilege from one role and a policy match from another. Neither gate alone suffices.
-  Removing a role with equal grants still changes contextual access when its policy memberships differ.
-  Never choose the first/most senior role or add per-person privilege overrides.
-- Refuse rename/deletion/conversion/key changes for all built-ins and narrowing of Admin.
-  Ordinary built-in grant edits change no other role. Copy every preset as a custom role without
-  preset identity, future grants or list memberships. A later privilege reaches Admin alone.
-  Custom labels convey no authority, and disabled-module availability does not alter saved grants.
-- Exercise dashboard/till sessions, both PIN authorizers, early credential preparation followed
-  by revocation, approver lists followed by membership/policy changes, and routes with no explicit
-  permission option. Recheck live status, full membership union, admission and action/profile limits.
-  Reject pending/suspended humans and duplicate approver/recipient entries.
-- For every §5 mutator, assert the domain refusal and unchanged roles, memberships, grants, references
-  and history. Prevent adding a narrow role to conceal a stronger retained role during assignment,
-  invitation/reactivation or other-person login takeover. Include self-membership changes, stale
-  full-body employment writes, and context gains with identical privilege unions.
-- Compete two transactions removing Admin membership or suspending/resetting the last two usable
-  active humans. Exactly one may commit. Count distinct humans, not memberships/methods.
-  A PIN-only Admin, pending person or custom all-current-grants holder cannot replace the anchor.
-  Exercise method removal, recovery and import through the same check, with same-transaction
-  replacement allowed only when another usable active human containing canonical Admin remains.
-  Read committed rows; deletion of the shared check must fail the retained behavioral assertions.
-- Delete a populated custom role across active/pending/suspended people and every device/reason/
-  bill-limit reference. Assert that only the deleted role's membership is removed from multi-role holders, history
-  stays, empty lists do not become all and blocked approvals are refused. Links remain usable only
-  under current authority; deletion does not cancel them.
-  Force a final refusal and read back complete rollback. Retire a role a shift has used: it leaves
-  every membership, list and picker, its name can be reused, and past shifts and past rota weeks still
-  show it. Prove the JSON-list enumeration by adding a list and watching the test fail.
-  Assert that deleting a sole role leaves `roleIds: []`, preserves identity/status/credentials and
-  permits only own-identity/security/data self-service for otherwise eligible authentication, with
-  no operational or list authority. Pending people remain pending and gain no session; suspended
-  people remain suspended. Multi-role holders retain exactly their other roles.
-- Keep invitation/reset/email-change links through membership and role-permission changes, including
-  equal-union changes and sole-role deletion. Redemption rechecks current target roles/status and,
-  for administrator-issued links, current issuer authority and whole-target bounds. Old links cannot
-  restore memberships. Self-service needs no admin issuer and cannot remove the last usable Admin.
-  Retain normal expiry/single-use checks. Stale role/member/list edits compare expected field values
-  and sets, keep the draft on refusal and introduce no counters or authority hashes.
-- Attendance self-approval requires both workforce privileges, even when held through separate
-  roles; neither `person.admin` nor either workforce privilege alone suffices. Preserve subject,
-  requester, direction and approve-only limits, including own-decline refusal, in HTTP and commands.
-  Preserve adjustment thresholds, fired/served cancellation `sale.refund` checks and snapshots.
-  Keep `sale.void`, `sale.refund` and `sale.rectify` separately effective; no fiscal behavior change.
-- Verify merged `node.manage` defaults to Admin alone and is assignable through ordinary permission
-  checks. There is no separate `node.promote` grant in target constants, UI, APIs or consumers.
-  A custom holder still needs the recovery operation and every other promotion condition.
-  Do not change fiscal, mirror, promotion implementation or host policy behavior.
-- Provision and restart with fixed built-in names and ordinary role edits/deletions preserved.
-  Admin gets every new declared permission through code alone, without stored grants or seed
-  bookkeeping; unknown strings never authorize. Copying Admin produces only today's constants in
-  an ordinary custom JSON list, with no future authority. Roles and memberships are the only two
-  role tables. Use the node work's existing primary-write/compatible-code boundaries; do not build
-  a mirror dashboard, catalog reconciliation or authority-counter scheme.
-- Transfer definitions, permission JSON, memberships and every JSON role reference through normal
-  ID mapping and input/reference checks. Preserve entry-path authority, fixed built-in identities
-  and last usable Admin; imported people stay suspended. Later reactivation checks current whole
-  target unions. No special import markers, provenance or extra privilege-hardening scheme.
-  Personal-data output lists all held roles; automatic privileged email recipients are distinct
-  eligible humans selected by current union.
-- New approval records retain actor/authorizer identity without role/permission snapshots; existing
-  immutable records and their business-policy facts remain unchanged.
-- When the shared activity/mail seams are available, assert every actual membership/permission
-  change and role lifecycle action records its §7 code, actor, subject, change and time. Include
-  bulk deletion/retirement removals, no-op saves and rollback. Email each membership change only to
-  its subject with an address, including pending/suspended/no-role people, with the one template,
-  correct added/removed EN/ES wording, actor, role and time. No email for permission-only changes,
-  and no-address cases still log. Exercise the inherited delivery policy; SMTP does not hold a
-  role-change transaction. Do not substitute a process log for the venue activity log.
-- Browser/API checks cover role arrays, duplicate/unknown/null refusals, complete member labels,
-  any-selected filtering, locale sorting, one deletion confirmation, built-in fixed-name controls,
-  draft retention, leave protection, duplicate saves, late refreshes, keyboard focus and messages.
-  Inspect long names and removal impacts at phone width in both themes; run relevant accessibility
-  checks. Preserve existing behavioral assertions and compile-time rejection of invalid preset keys.
+- Demonstrate whole-person union authorization and independent any-role policy matching, including
+  empty lists, no roles and membership changes that preserve the privilege union.
+- Preserve fixed built-in identities/names, ordinary editable permissions, code-defined Admin
+  authority and the last usable active human Admin. Copying Admin creates only an ordinary custom
+  with current constants. Role storage uses exactly the two tables in §4.
+- Enforce §5's whole-target checks, live status/authority at actions and link redemption, and field/set
+  stale-edit protection. Role changes retain outstanding links; no counters or role snapshots return.
+- Delete/retire through §6's single impact confirmation, with complete reference removal and rollback;
+  preserve no-role identity/status/credentials, other memberships, past shifts and immutable history.
+- Keep the accepted permission inventory and `node.manage` merge, Admin-only by default and assignable,
+  with promotion conditions, attendance limits, adjustment policies and money/fiscal invariants unchanged.
+- Transfer definitions, memberships and JSON references normally; imported people stay suspended and
+  later reactivation checks current whole-target authority. Privileged recipients remain distinct.
+- Record §7's eight activity kinds and send its single localized membership template through the
+  shared seams, including no-address logging and no permission-edit mail to holders.
+- Verify complete role arrays/labels, filtering, locale sorting, drafts, leave protection, refusal
+  wording, accessibility and phone layouts in both themes and languages; retain behavioral assertions.
 
 ## 11. Approval provenance and the required Claude read
 
-The earlier receipts below are historical owner decisions. The full-design approval and addition
-are quoted after them, with their corrections to the earlier target. Keep the timestamps and
-source pinning; the 2026-11-07 full approval governs the target behavior throughout this document.
-**G archive** = `~/waitron-campaign-g/archive/questions-to-2026-10-23.md`.
-**F answers** = `~/waitron-campaign-f/questions.md`, the named OWNER ANSWER sections near the end.
-The earlier permission-review and custom-role decisions remain recorded in the dated discussion at
-`docs/backlog/dashboard.md`. No settled choice is queued again.
-
-**2026-11-07 provenance for the two incorporated approvals:** this excerpt is from Lane K queue A1002's
-**WATCHER 2026-10-31 ~14:35** note, relayed from F when the queue items moved on **2026-11-07 21:19**:
-
-> the owner answered the sole-role question on 2026-10-28 ~11:40 (questions.md: the person is LEFT WITH NO ROLE) and on 2026-10-29 ~09:25 said node.promote is administrators-only by default but assignable to other roles (A1188). Fold BOTH into the design's affected sections (fresh check as usual), then post ONE full-design approval request in questions.md for the owner.
-
-This supplied relay records the two earlier sub-decisions. Its request for full-design approval
-is historical: the approval below supplies it. The later approval also confirms the node merge,
-correcting the separate-grant interpretation in the earlier 7 November revision. Neither settled
-answer is reasked. Source audits stay pinned; the later implementation audit remains required.
-
-**Historical receipt table, preserved:** its earlier effect descriptions are qualified by the
-2026-11-08 correction immediately below the full approval quotes.
-
-| Owner decision | Receipt and effect on this revision |
-| --- | --- |
-| One `person.admin`; privileges determine actions; nobody grants an unheld privilege | 2026-10-22 ~06:35 decision retained in G archive's A1002 07:07 entry; ~08:40 OWNER ANSWER retains the grant rule. Applies to custom holders and whole-person unions. |
-| Admin has every current/future declared grant | G archive, OWNER ANSWER question 1, 2026-10-22 ~08:40. No reset/first-grant question remains. |
-| Immutable Admin key, no deletion/conversion/narrowing, usable active human anchor | G archive, OWNER ANSWER Admin protection, 2026-10-22 ~12:05. Its “can be renamed” allowance is historical and superseded by F Names on 2026-10-28. Other protection stays accepted. |
-| Non-fiscal catalog/defaults accepted; retain the three sale IDs | F Catalog, 2026-10-28 ~10:50. No sale-merge alternative or queued fiscal gate remains. |
-| `workforce.self_approve` plus `workforce.correct`, Admin default | F Attendance, 2026-10-28 ~10:52. No `person.admin` tie or extra Supervisor grant. |
-| Lists restrict actions; new/copied roles join none | F Context policies, 2026-10-28 ~10:54. No inherited context memberships or future-role bypass. |
-| Several roles per person; removal-only deletion | F Deletion and membership, 2026-10-28 ~11:00: “Just delete the role, no need to replace things” and “Users can have more than one role.” Union/any-role matching remains the driver's inference. Sole-role outcome is accepted in the separate row below. |
-| Sole-role deletion leaves the person with no role | OWNER 2026-10-28 ~11:40, relayed in the exact Lane K WATCHER note quoted above. §6 defines preserved identity/status/credentials, including pending/suspended status, eligible own-person self-service and no operational/list rights; multi-role holders keep their other roles. |
-| `node.promote` is Admin-only by default and assignable to other roles | OWNER 2026-10-29 ~09:25 (A1188), relayed in the same quoted note. Keep it as a normal editable privilege; preserve the recovery operation and every other promotion condition. |
-| All four built-ins never renamed/deleted; other built-in grants editable | F Names, 2026-10-28 ~11:05: “Built in roles should not be renamed or deleted.” Supersedes the earlier rename allowance; built-in labels always translate. |
-| No mirror dashboard; built-in viewer retirement belongs to A1113 | F OWNER DECISION A1111 withdrawn, 2026-10-26 ~04:25; restated under F Names, 2026-10-28. Retirement remains blocked; no new mirror role is proposed. |
-| Own staff download; separate privilege for other people's/customer data | Owner A980 O5 ~03:45, 2026-10-22, retained in §1. Existing `personal_data.export` is reconciled by §7's current reading, not a new owner question. |
-| One role list for access and rota; no per-person exceptions; a role a shift used is retired; Manager holds `person.admin` by default; role lists as JSON; recipes removed | Owner, 2026-11-04, in the review of A1308: `docs/superpowers/specs/2026-11-02-rationalisation/README.md` §10. Effects in §1. |
-
-### Full-design approval and activity/email addition, incorporated 2026-11-08
+Earlier receipts remain in this document at historical commit `e0e4f5b8fda194814a6280340f1b93bb7569307a`.
+The dated full approval below supersedes earlier contrary interpretations.
 
 **Location:** `/Users/clintongormley/waitron-campaign-k/questions.md`,
 **WATCHER2026-11-07 22:51**, OWNER APPROVED the full design with changes ('y').
-The parent supplied this exact authority text for inclusion so a restricted Claude seat can read
-it here without access to the campaign file:
+Exact authority supplied by the parent for restricted-seat verification:
 
 > 1. No change counters ('revisions') on persons, roles or lists, and no cancelling of outstanding invitation/reset/email-change links when roles change: a link already re-checks the person's current roles when used. Keep ordinary 'this changed while you were editing' protection.
 > 2. Admin can do everything is a rule in the code, not stored permission rows filled in at start-up; no seed-completion record.
@@ -795,18 +669,6 @@ it here without access to the campaign file:
 > 2. Email: when a person is given or loses a role, email that person (in their language) saying which role, who changed it and when. Only people with an email address on file; someone without one gets no message and the log entry still stands. Permission changes to a role do not email everyone who holds it. Use the existing email path.
 > Name the log entry codes and the email template in the design; English and Spanish wording.
 
-**Dated correction to the historical rows above:** the union/any-role interpretation is now approved;
-the separate `node.promote` target is superseded by merged `node.manage`, Admin-only by default and
-assignable. Admin's protected identity and last usable human invariant remain, with effective
-permissions supplied only by code. No historical actor/authorizer record is rewritten. §7 names the
-new activity codes and one mail template, and records the shared-seam source gap rather than
-claiming it already exists. These changes supersede the earlier pending-full-approval instructions.
-
-### Sequence after this documentation firing
-
-Design is OWNER APPROVED with these corrections and addition. Do not ask the owner to reapprove
-settled points. This firing writes no plan and starts no build. Before either starts, complete the
-required Claude read; every later plan also receives Claude's required read before its build, and
-a plan longer than one page goes to the owner under the quoted instruction. Approval here does not
-waive that sequence. Recheck the pre-live/reset assumption, then-current consumers and the shared
-activity/queued-mail dependency before implementation; source reading here is not runtime evidence.
+Design is OWNER APPROVED with these corrections and addition; no settled choice needs reapproval.
+This firing creates no plan/build. The parent obtains the fresh Claude read before either starts;
+every later plan also needs Claude's read before build, and one longer than a page goes to the owner.
