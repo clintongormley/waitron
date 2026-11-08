@@ -28,20 +28,39 @@ export async function latestInstallAmong(
   return row ?? null;
 }
 
+type InstallInsert = typeof fiscalCertificateInstalls.$inferInsert;
+
 /**
  * Writes an install, taking `installedAt` as the writer's clock: the row is stamped then, but never
  * at or below the newest install `latestInstall` finds, so a clock stepped back, or a box whose
  * clock runs behind the one it took over from, cannot sort the new install below the one it
- * replaces. A caller that has just read `latestInstall` in this transaction passes it as `known`.
+ * replaces.
  */
-export async function recordInstall(
+export async function recordInstall(tx: Transaction, row: InstallInsert): Promise<void> {
+  await (await installsOf(tx, row.nodeId)).record(row);
+}
+
+/**
+ * The newest install `nodeId` finds, and a writer bound to the same transaction and box that
+ * stamps a new install after it, so a caller that checks the newest install reads it once.
+ */
+export async function installsOf(
   tx: Transaction,
-  row: typeof fiscalCertificateInstalls.$inferInsert,
-  known?: InstallRow | null,
-): Promise<void> {
-  const latest = known === undefined ? await latestInstall(tx, row.nodeId) : known;
-  const now = row.installedAt.getTime();
-  const installedAt =
-    latest === null ? row.installedAt : new Date(Math.max(now, latest.installedAt.getTime() + 1));
-  await tx.insert(fiscalCertificateInstalls).values({ ...row, installedAt });
+  nodeId: string,
+): Promise<{
+  latest: InstallRow | null;
+  record: (row: Omit<InstallInsert, "nodeId">) => Promise<void>;
+}> {
+  const latest = await latestInstall(tx, nodeId);
+  return {
+    latest,
+    record: async (row) => {
+      const now = row.installedAt.getTime();
+      const installedAt =
+        latest === null
+          ? row.installedAt
+          : new Date(Math.max(now, latest.installedAt.getTime() + 1));
+      await tx.insert(fiscalCertificateInstalls).values({ ...row, nodeId, installedAt });
+    },
+  };
 }

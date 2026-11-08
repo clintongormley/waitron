@@ -5574,7 +5574,7 @@ describe("till-app: paying a bill by its state", () => {
     await flush(el);
 
     expect(api.recordSale).toHaveBeenCalledOnce();
-    expect(banner(el)!.textContent).toContain(t("sale.chain_handed_over_manual_card"));
+    expect(banner(el)?.textContent?.trim()).toBe(t("sale.chain_handed_over_manual_card"));
   });
 });
 

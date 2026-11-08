@@ -196,6 +196,7 @@ it("opens captured PFX without signing or network and emits only a fixed result"
     vi.spyOn(checks, "checkWithAuthority").mockImplementation(forbidden),
     vi.spyOn(installs, "installCertificate").mockImplementation(forbidden),
     vi.spyOn(records, "recordInstall").mockImplementation(forbidden),
+    vi.spyOn(records, "installsOf").mockImplementation(forbidden),
     vi.spyOn(credentials, "putCredential").mockImplementation(forbidden),
     vi.spyOn(transport, "mtlsFetch").mockImplementation(forbidden),
     vi.spyOn(crypto.default, "sign").mockImplementation(forbidden),
