@@ -25,11 +25,7 @@ import {
   servedMenus,
 } from "../widgets/test-helpers.js";
 import { openDraftLine, resized } from "./till-table-order-screen.test-helpers.js";
-import {
-  TillTableOrderScreen,
-  type AdjustDetail,
-  type TableRelocationOpenDetail,
-} from "./till-table-order-screen.js";
+import { TillTableOrderScreen, type TableRelocationOpenDetail } from "./till-table-order-screen.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -2246,51 +2242,6 @@ describe("till-table-order-screen", () => {
       expect([fire.open, move.open]).toEqual([false, false]);
     });
 
-    it("takes the app's Cancel offer for a held dish", async () => {
-      const { el } = await mountGroups();
-      const asked = capture(el, "adjust");
-
-      el.cancelOffer = 3;
-      await el.updateComplete;
-
-      expect(asked.map((event) => event.detail)).toEqual([
-        {
-          kind: "cancel",
-          offered: true,
-          target: {
-            lineId: "l-croq",
-            name: "Croquetas",
-            quantity: "1",
-            total: "10.00",
-            unitTotal: null,
-            started: false,
-          },
-        },
-      ]);
-    });
-
-    it("takes the app's Cancel offer for a held dish that goes to no kitchen", async () => {
-      const water = dishLine("l-water", 7, "Water", "1.000", "g5", { state: null });
-      const { el } = await mountGroups({
-        lines: [...tabLines, water],
-        groups: groups.map((row) =>
-          row.id === "g5" ? { ...row, lineIds: [...row.lineIds, "l-water"] } : row,
-        ),
-      });
-      const asked = capture(el, "adjust");
-
-      el.cancelOffer = 7;
-      await el.updateComplete;
-
-      expect(asked.map((event) => event.detail)).toEqual([
-        {
-          kind: "cancel",
-          offered: true,
-          target: expect.objectContaining({ lineId: "l-water", started: false }),
-        },
-      ]);
-    });
-
     it("gives every held group's control, and its dialogs' buttons, a tap target of 44 px each way", async () => {
       const { el, panel } = await mountSentGroups({ fireControl: "waiter" });
       const listed = panel.shadowRoot!.querySelectorAll("[data-group-fire], [data-group-more]");
@@ -3032,25 +2983,12 @@ describe("till-table-order-screen", () => {
       expect(captured!.bubbles).toBe(true);
     });
 
-    it("offers Void in Sent for a started line and preserves the app cancellation target", async () => {
+    it("offers Void rather than Recall in Sent for a started line", async () => {
       const { el } = await mount({ lines: [preparingLine], courses });
       const cancel = await voidControl(el, 1);
       expect(cancel).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[data-send-line="1"]')).toBeNull();
       expect(await recallControl(el, 1)).toBeNull();
-
-      let captured: CustomEvent | undefined;
-      el.addEventListener("adjust", (e) => (captured = e as CustomEvent));
-      el.cancelOffer = 1;
-      await el.updateComplete;
-      expect(captured).toBeInstanceOf(CustomEvent);
-      expect(captured!.detail).toEqual({
-        kind: "cancel",
-        offered: true,
-        target: expect.objectContaining({ lineId: pendingLine.id, started: true }),
-      });
-      expect(captured!.composed).toBe(true);
-      expect(captured!.bubbles).toBe(true);
     });
 
     it("offers Void rather than Recall in Sent for a ready line", async () => {
@@ -3822,109 +3760,6 @@ describe("till-table-order-screen", () => {
       expect(row.querySelector(".line-total")!.textContent).toBe(
         formatMoney("9.50", currentLocale()),
       );
-    });
-
-    describe("the app's Cancel offer on a line of more than one", () => {
-      const pair: TabLine = { ...burgerLine, quantity: "2.000" };
-      function captureCancel(el: TillTableOrderScreen): AdjustDetail[] {
-        const seen: AdjustDetail[] = [];
-        el.addEventListener("adjust", (e) => {
-          expect(e.bubbles && e.composed).toBe(true);
-          seen.push((e as CustomEvent<AdjustDetail>).detail);
-        });
-        return seen;
-      }
-      async function acceptCancelOffer(
-        el: TillTableOrderScreen,
-        lineNo: number,
-      ): Promise<AdjustDetail> {
-        const seen = captureCancel(el);
-        el.cancelOffer = lineNo;
-        await el.updateComplete;
-        expect(seen).toHaveLength(1);
-        expect(seen[0]!.kind).toBe("cancel");
-        expect(seen[0]!.offered).toBe(true);
-        return seen[0]!;
-      }
-
-      it("lets the dialog cancel one of them, at one unit's price", async () => {
-        const { el } = await mountLines([pair]);
-        const { target } = await acceptCancelOffer(el, 5);
-        expect(target).toEqual({
-          lineId: "line-5",
-          name: "Burger",
-          quantity: "2",
-          total: "19.00",
-          unitTotal: "9.50",
-          started: false,
-        });
-      });
-
-      it("keeps the started wording, and one at a time, when the kitchen has started the pair", async () => {
-        const { el } = await mountLines([{ ...pair, state: "preparing" }]);
-        const { target } = await acceptCancelOffer(el, 5);
-        expect(target.started).toBe(true);
-        expect(target.unitTotal).toBe("9.50");
-      });
-
-      it("does not offer one at a time on a line of one", async () => {
-        const { el } = await mountLines([burgerLine]);
-        const { target } = await acceptCancelOffer(el, 5);
-        expect(target.quantity).toBe("1");
-        expect(target.unitTotal).toBeNull();
-      });
-
-      it("cancels a weighed line whole", async () => {
-        const weighed: TabLine = {
-          ...burgerLine,
-          productId: "jamon",
-          menuItemId: "menu-item-jamon",
-          name: "Jamón",
-          quantity: "2.000",
-          unitPrecision: 3,
-          state: "preparing",
-        };
-        const { el } = await mountLines([weighed]);
-        const { target } = await acceptCancelOffer(el, 5);
-        expect(target.unitTotal).toBeNull();
-      });
-
-      it("tells the app it has taken a Cancel offer, so the offer is shown once", async () => {
-        const { el } = await mountLines([preparingBurger]);
-        let taken: Event | undefined;
-        el.addEventListener("cancel-offer-taken", (e) => (taken = e));
-        el.cancelOffer = 9;
-        await el.updateComplete;
-        expect(taken).toBeInstanceOf(CustomEvent);
-        expect(taken!.bubbles).toBe(true);
-        expect(taken!.composed).toBe(true);
-      });
-
-      it("opens nothing when the line the app offers Cancel for is no longer on the tab", async () => {
-        const { el } = await mountLines([preparingBurger]);
-        const seen = captureCancel(el);
-        let taken: Event | undefined;
-        el.addEventListener("cancel-offer-taken", (e) => (taken = e));
-        el.cancelOffer = 42;
-        await el.updateComplete;
-        expect(seen).toEqual([]);
-        // Taken all the same: a later mount must not open it on whatever line 42 then is.
-        expect(taken).toBeInstanceOf(CustomEvent);
-      });
-
-      it("opens Cancel on the line the app offers it for after a refused change", async () => {
-        const { el } = await mountLines([preparingBurger]);
-        const seen = captureCancel(el);
-        el.cancelOffer = 9;
-        await el.updateComplete;
-        expect(seen).toEqual([
-          {
-            kind: "cancel",
-            target: expect.objectContaining({ lineId: "line-5", name: "Burger", started: true }),
-            offered: true,
-          },
-        ]);
-      });
     });
   });
 

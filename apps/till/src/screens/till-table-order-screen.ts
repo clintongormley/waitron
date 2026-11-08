@@ -504,8 +504,6 @@ export interface AdjustDetail {
   combined?: true;
   kind: AdjustKind;
   target: AdjustTarget;
-  /** Opened by the app's Cancel offer, so the message saying why stays on screen. */
-  offered?: true;
   /** Pressed in the counter's basket, on the stored order it holds, rather than on the table's
    * open bill. */
   counter?: true;
@@ -1391,9 +1389,6 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) billEdit: BillEditExpected | null = null;
   @property({ attribute: false }) routingRevision: number | null = null;
   @property({ attribute: false }) billEdits: readonly BillEditExpected[] = [];
-  /** Set by the app when a change was refused because the kitchen had started the line: that line's
-   * Cancel opens. */
-  @property({ attribute: false }) cancelOffer: number | null = null;
 
   /** The held group whose Fire waits for confirmation. */
   @state() private fireGroupPending: OrderGroup | null = null;
@@ -2272,17 +2267,8 @@ export class TillTableOrderScreen extends LitElement {
       this.billNaming = null;
       this.counting = null;
     }
-    if (changed.has("cancelOffer") && this.cancelOffer !== null) {
-      const offered = this.lines.find(
-        (line) => line.lineNo === this.cancelOffer && !this.#isChild(line),
-      );
-      this.#offeredCancel = offered;
-      this.#offerTaken = true;
-    }
   }
 
-  /** The app clears its offer on this event, so a screen mounted later does not open it again. Taken
-   * even when the line is gone, for the same reason. */
   override updated(changed: PropertyValues<this>): void {
     this.#refocusMenu();
     this.#placeStepFocus();
@@ -2291,14 +2277,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#sizeDraftBar();
     this.#observeSplit();
     this.#tellSplitDeclined();
-    if (!this.#offerTaken) return;
-    this.#offerTaken = false;
-    const offered = this.#offeredCancel;
-    this.#offeredCancel = undefined;
-    if (offered !== undefined) this.#adjust("cancel", this.#lineTarget(offered), { offered: true });
-    this.dispatchEvent(
-      new CustomEvent("cancel-offer-taken", { detail: {}, bubbles: true, composed: true }),
-    );
   }
 
   /** The naming and guests windows open from the ⋮, so focus goes back to it when the last of them
@@ -2423,9 +2401,6 @@ export class TillTableOrderScreen extends LitElement {
     }
     if (bar !== undefined) barSize(bar, bar.getBoundingClientRect().height);
   }
-
-  #offerTaken = false;
-  #offeredCancel: TabLine | undefined;
 
   #lineGross(line: TabLine): Decimal {
     return this.#lineGrossByLineNo.get(line.lineNo)!;
@@ -2645,12 +2620,6 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #lineTarget(line: TabLine): AdjustTarget {
-    return lineAdjustTarget(line, this.lines, this.#adjustName(line), (row) =>
-      this.#lineGross(row),
-    );
-  }
-
   /** A dish's name, and an extra's with its dish's, so two extras of one name can be told apart. */
   #adjustName(line: TabLine): string {
     const dish = this.#isChild(line) ? this.#lineByNo.get(line.parentLineNo!) : undefined;
@@ -2661,8 +2630,8 @@ export class TillTableOrderScreen extends LitElement {
           .replace("{dish}", () => this.#nameForLine(dish));
   }
 
-  #adjust(kind: AdjustKind, target: AdjustTarget, also: { offered?: true } = {}): void {
-    const detail: AdjustDetail = { kind, target, ...also };
+  #adjust(kind: AdjustKind, target: AdjustTarget): void {
+    const detail: AdjustDetail = { kind, target };
     this.dispatchEvent(new CustomEvent("adjust", { detail, bubbles: true, composed: true }));
   }
 

@@ -1244,8 +1244,6 @@ interface Adjusting {
   preview: AdjustmentPreview | null;
   refusal: string | null;
   busy: boolean;
-  /** The banner that offered this cancel, which goes once the cancel is made. */
-  offer: CounterError | undefined;
   source?: {
     sync: DraftSync;
     lineId: string;
@@ -3375,8 +3373,6 @@ export class TillApp extends LitElement {
    * {@link #readSplitSources}. Null until a panel's first read answers; "failed" only while no read
    * has answered. */
   @state() private splitRead: SplitSources | "failed" | null = null;
-  /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
-  @state() private cancelOffer: number | null = null;
   @state() private editDeadEnds: {
     answer: DeadEndAnswer;
     change: ChangeLineDetail;
@@ -11382,7 +11378,6 @@ export class TillApp extends LitElement {
     this.movingStation = null;
     this.makingAt = null;
     this.#clearErrorKeepingLateChange();
-    this.cancelOffer = null;
     this.#tableOpensPending++;
     const session = this.#operatorSession;
     if (showAtOnce) this.#showOrderScreen(tableId);
@@ -14687,8 +14682,7 @@ export class TillApp extends LitElement {
   }
 
   async #onAdjust(event: Event): Promise<void> {
-    const { kind, target, offered, counter, combined } = (event as CustomEvent<AdjustDetail>)
-      .detail;
+    const { kind, target, counter, combined } = (event as CustomEvent<AdjustDetail>).detail;
     const surface = counter === true ? "counter" : "table";
     const orderId = surface === "counter" ? this.#store.id : this.activeTabId;
     if (
@@ -14711,8 +14705,7 @@ export class TillApp extends LitElement {
       visit: surface === "counter" ? session : this.#orderVisit,
     } as const;
     if (surface === "counter" && !this.#counterStillAdjustable(opened)) return;
-    if (offered !== true) this.errorKey = undefined;
-    const offer = offered === true ? this.errorKey : undefined;
+    this.errorKey = undefined;
     this.#adjustOpening = true;
     let reasons: AdjustmentReason[];
     try {
@@ -14745,7 +14738,6 @@ export class TillApp extends LitElement {
       preview: null,
       refusal: null,
       busy: false,
-      offer,
     };
   }
 
@@ -14820,7 +14812,6 @@ export class TillApp extends LitElement {
         preview: null,
         refusal: null,
         busy: false,
-        offer: undefined,
         source: {
           sync,
           lineId: sourceId,
@@ -15041,7 +15032,6 @@ export class TillApp extends LitElement {
         )?.closeSaved();
         this.#closeAdjust();
       }
-      if (this.errorKey === open.offer) this.errorKey = undefined;
       if (this.#hasLeftAdjusted(open)) return;
       await this.#rereadAdjusted(open);
     } catch (error) {
@@ -15291,7 +15281,6 @@ export class TillApp extends LitElement {
     // The screen that sent the change, which alone can reopen its window.
     const sender = event.target as Element | null;
     this.errorKey = undefined;
-    this.cancelOffer = null;
     this.changeRefusal = null;
     let outcome: { saved: { revision: number; party: BillParty } } | { error: unknown };
     try {
@@ -20245,7 +20234,6 @@ export class TillApp extends LitElement {
   #onBackToFloor(): void {
     if (!this.#inShell()) return;
     this.#orderVisit++;
-    this.cancelOffer = null;
     this.changeRefusal = null;
     const session = this.#operatorSession;
     const flushed = this.#flushDraft(true);
@@ -20526,7 +20514,6 @@ export class TillApp extends LitElement {
       .printProblems=${this.printProblems}
       .reprintSent=${this.reprintSent}
       .revision=${this.tabRevision}
-      .cancelOffer=${this.cancelOffer}
       .products=${this.tableProducts}
       .menus=${this.tableMenus}
       .service=${this.tableService}
@@ -20704,7 +20691,6 @@ export class TillApp extends LitElement {
           .printProblems=${this.printProblems}
           .reprintSent=${this.reprintSent}
           .revision=${this.tabRevision}
-          .cancelOffer=${this.cancelOffer}
           .products=${this.tableProducts}
           .menus=${this.tableMenus}
           .service=${this.tableService}
@@ -21093,7 +21079,6 @@ export class TillApp extends LitElement {
         @adjust=${(event: Event) => void this.#onAdjust(event)}
         @cancel-item=${(event: CustomEvent<{ lineId: string; lineIds?: string[] }>) => void this.#onCancelItem(event)}
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
-        @cancel-offer-taken=${() => (this.cancelOffer = null)}
         @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}
         @move-guests=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveGuests(event))}
         @move-bill=${(event: Event) =>
