@@ -287,13 +287,22 @@ draft** button, the buttons that start a payment look quiet. They still respond:
 payment and says why, such as **Bill 1. Send or remove the unsent dishes before paying.** Send or
 remove your own dishes. For someone else's, tap **Take over draft** first, then send or remove them.
 Unsent dishes on another bill at the table do not hold this one back. If a payment of this bill was
-sent and got no answer, the pay buttons other than **Cash** and **Card** still reopen it, so you can
-find out whether it went through; that window takes no new payment while the dishes are unsent.
+sent and its result is unconfirmed, the pay buttons other than **Cash** and **Card** still reopen
+it, so you can find out whether it went through; that window takes no new payment while the dishes
+are unsent.
 
 If you choose **Finish table** while a bill is still unpaid, the till says **A bill for this table
 is still unpaid. Take payment before finishing the table** above the foot. **Take payment** puts an
 unpaid bill on screen so you can take its payment, and **Record unpaid departure** records that the
 guests left without paying.
+
+If a payment is recorded as not taken, you can try it again. If its result is unconfirmed, choose
+**Check again** to continue the same payment before taking another. If it was not recorded, this
+may charge the card or record the cash payment.
+If a payment stays pending, or the card was charged but the payment was not recorded, choose
+**Card payments / sign in**. Do not charge an already charged card again. Sign in there to check or
+record the provider’s confirmed outcome. Reopen the bill payment after it is recorded to see the
+result.
 
 ## Move dishes to another bill {#move-dishes}
 

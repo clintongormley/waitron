@@ -5,6 +5,7 @@ interface RecoveryRefusal {
   code: string;
   recoveryUrl?: string;
   manualCard?: true;
+  reason?: string;
 }
 
 function recoveryPath(refusal: RecoveryRefusal | null): string | null {
@@ -23,7 +24,21 @@ export function recoveryRefusalOf(value: unknown): RecoveryRefusal | undefined {
 }
 
 export function recoveryRefusalText(refusal: RecoveryRefusal): string | null {
-  if (recoveryPath(refusal) === null) return null;
+  const path = recoveryPath(refusal);
+  if (path === null) return null;
+  if (path === "/manage/payments") {
+    if (refusal.code !== "sale.charged_not_recorded") return null;
+    const charged = t(
+      refusal.reason === "disk_full"
+        ? "sale.charged_disk_full"
+        : refusal.reason === "clock_behind_chain"
+          ? "bill_pay.charged_clock_behind"
+          : refusal.reason === "clock_unusable"
+            ? "bill_pay.charged_clock_unusable"
+            : "recovery.charged",
+    );
+    return `${charged} ${t("bill_pay.card_recovery")}`;
+  }
   const next = t("recovery.issuance_stopped");
   if (refusal.manualCard === true) return `${t("recovery.manual_card")} ${next}`;
   return refusal.code === "sale.charged_not_recorded" ? `${t("recovery.charged")} ${next}` : next;
@@ -40,6 +55,6 @@ export function recoveryLink(refusal: RecoveryRefusal | null, onDanger = false) 
         target="_blank"
         rel="noopener"
         style=${onDanger ? "color: var(--wt-color-on-danger)" : "color: var(--wt-color-primary-text)"}
-        >${t("recovery.open")}</a
+        >${t(path === "/manage/payments" ? "bill_pay.card_recovery_open" : "recovery.open")}</a
       >`;
 }

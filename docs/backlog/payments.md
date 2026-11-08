@@ -307,19 +307,6 @@ payment is still on the bill. Move dishes… refuses `bill.refund_in_progress` o
 (`apps/server/src/move-dishes.test.ts`). Next: one route case each during a pending refund, then fix the
 design's wording, or the code if a move can change what a bill charges (ask the owner first).
 
-## The next identical bill payment can be answered with one that got a server error
-
-(narrowed
-by A796). A payment that got no answer, or is still being sent, now holds the bill on its locked
-confirmation (A773-1, #1897, and A796). What is left: a first send answered with a 5xx or an
-error with no code keeps its submission without holding the bill (`unansweredAfter`,
-`apps/till/src/state/bill-payment.ts`), so if the server did record it, the next
-identical payment on that bill from this phone reuses its id (`submissionFor`, same
-file) and the server replays the first (`beginBillPayment`, `apps/server/src/bill-payments.ts`):
-the second guest's payment is never recorded. A796's plan ran the scratch case (a contribution
-refused `server.internal` with status 502 left the dialog unlocked) and chose not to hold the
-bill, because a server that kept failing would hold it for good (plan, decision 1, B5).
-
 ## Check first: on a venue with no fiscal module, replaying a settled bill may throw
 
 (read, not
@@ -430,19 +417,6 @@ and shows a clear message.
   limit here, and bring any real route that produces it to the watcher.
   [Detail](payments.md#a-whole-order-payment-records-the-amount-it-expected-not-the-amount-captured)
 
-## Bundle A1399: What happens when a bill payment is sent again under one id
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The next identical bill payment can be answered with one that got a server error** (narrowed
-  by A796). What is left: a first send answered with a 5xx or an error with no code keeps its
-  submission without holding the bill, so the second guest's identical payment may be replayed.
-  [Detail](payments.md#the-next-identical-bill-payment-can-be-answered-with-one-that-got-a-server-error)
-- **If the till never receives a bill reader payment's `device.profile_changed` answer**, its
-  automatic resend under the same id gets the failed payment back and tells staff the card was
-  declined: no card was charged, but the reason shown is wrong; the next tap starts a fresh
-  payment (read, not run). Left open by W97 (#1311).
-
 ## Bundle: Stripe adapter upkeep
 
 5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -497,6 +471,24 @@ and shows a clear message.
   [Detail](payments.md#the-w48-test-does-not-measure-a-real-silent-provider-or-the-boxs-http11-connection-limit)
 
 ## Decisions and deliberate limits
+
+- **An uncertain bill payment keeps its original confirmation** (A1399, watcher answer,
+  2026-11-06 23:12). A server error or code-less answer that does not prove the payment was refused
+  uses the existing hold and **Check again**, with the same complete request. An empty balance
+  read never releases it. Repeated server errors keep the bill held until the box answers; there
+  is no timeout. The watcher’s 2026-11-07 00:09 answer keeps known-charge advice while its row
+  is pending, including after reopening or rechecking. A coded refusal whose balance names the
+  retained pending submission also holds that confirmation until a recorded end. Cash and
+  hand-keyed full-disk refusals with no row keep their specific refusal without a new hold.
+  A recheck refused before lookup (such as `reader.not_held`) retains the existing release with
+  a warning: the first payment may have gone through, so inspect the bill’s payments before
+  taking it again. That answer does not establish the first payment’s outcome. The watcher’s
+  2026-11-07 00:29 clarification keeps a known charge held through every refusal until its row
+  reaches a recorded end. Its warning links to Card payments, including dashboard sign-in,
+  where the existing bill-payment recovery records the provider’s confirmed outcome. If the
+  retained payment is read as received and settles the bill, reopening reads its stored receipt
+  without resending to the reader; a receipt-read failure leaves it recorded and its hold ended.
+  Every held pending row offers the existing Card payments sign-in, including after a coded refusal.
 
 - **Handheld reader selection** (owner decisions 2026-09-18)
   ([2026-09-18-handheld-and-till-hardware-decisions.md](../superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)

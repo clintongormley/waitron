@@ -105,7 +105,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
 - [A1389. Refuse bad tips and compare the amount captured on the whole-order card path](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
 - [A1398. Pack the other packages' test shards by measured time, and check the packing on every run](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time-and-check-the-packing-on-every-run)
-- [A1399. What happens when a bill payment is sent again under one id](backlog/payments.md#bundle-a1399-what-happens-when-a-bill-payment-is-sent-again-under-one-id)
 - [A1400. An older copy must not undo a save](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
 
 **3. The foundation, already running.** A1308 stays first in lane A, with
@@ -1393,7 +1392,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **A user guide for the till's payment sheet** (left open by A796). No guide under
   `apps/server/src/guide/` covers it.
 
-- **A1399. What happens when a bill payment is sent again under one id** (bundle of 2, 1 important, size S). [Detail](backlog/payments.md#bundle-a1399-what-happens-when-a-bill-payment-is-sent-again-under-one-id)
 
 - **A796 does not hold a bill across phones while a payment is out.** The hold is the phone's own:
   "no new payment … can be started on that bill from this phone" (A796 design §4, "The phone loses

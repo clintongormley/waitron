@@ -8,7 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPaymentPolicy } from "@waitron/payments/test/seed.js";
 import { insertAcceptedOffline, payments } from "@waitron/payments";
-import { centsToDecimal } from "@waitron/shared";
+import { AppError, centsToDecimal } from "@waitron/shared";
 import {
   inTx,
   paymentRows,
@@ -782,6 +782,52 @@ describe("retries (design §8 test 10, §5.1)", () => {
 
     expect(retry.json).toMatchObject({ outcome: "failed", payment: { state: "failed" } });
     expect(venue.card.collectCalls.length).toBe(calls);
+  });
+
+  it("replays a profile-change refusal as failed without charging, then accepts a fresh payment", async () => {
+    const billId = await tabWithDishes("Paella");
+    const body: Body = {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "10.00",
+      method: "card",
+      entry: "reader",
+      applied: "10.00",
+      tip: "0.00",
+    };
+    const calls = venue.card.collectCalls.length;
+    const collect = vi
+      .spyOn(venue.card, "collect")
+      .mockRejectedValueOnce(new AppError("device.profile_changed", {}));
+    const earlierCalls = collect.mock.calls.length;
+    try {
+      const refused = await pay(billId, body);
+      expect(refused.status).toBe(409);
+      expect(refused.json).toMatchObject({ code: "device.profile_changed" });
+
+      const retry = await pay(billId, body);
+      expect(retry.status).toBe(200);
+      expect(retry.json).toMatchObject({
+        outcome: "failed",
+        payment: { state: "failed", submissionId: body.submissionId },
+        balance: { received: "0.00", reserved: "0.00", outstanding: "35.00" },
+      });
+      expect(await paymentRows(venue, billId)).toHaveLength(1);
+      expect(collect).toHaveBeenCalledTimes(earlierCalls + 1);
+      expect(venue.card.collectCalls).toHaveLength(calls);
+
+      const fresh = await pay(billId, { ...body, submissionId: randomUUID() });
+      expect(fresh.status).toBe(200);
+      expect(fresh.json).toMatchObject({
+        outcome: "received",
+        payment: { state: "received" },
+        balance: { received: "10.00", reserved: "0.00", outstanding: "25.00" },
+      });
+      expect(await paymentRows(venue, billId)).toHaveLength(2);
+      expect(venue.card.collectCalls).toHaveLength(calls + 1);
+    } finally {
+      collect.mockRestore();
+    }
   });
 
   it("refuses the id with another amount: submission.id_reused, charging nothing", async () => {
