@@ -579,7 +579,10 @@ A1424's live qualification was added on 7 November 2026.
   keep it set during selected-head trials. Finish the selected PR's coverage merge and aggregate,
   then qualify mixed-workload capacity and the unavailable-label and server-down paths through
   visible failure/cancellation and hosted attempt two.
-  Browser/heavy routing caps are separate and default to zero. Qualify full Chromium and
+  Each routed job family has a separate cap defaulting to zero, including the additional PR test
+  families, shared mutation, typecheck, lint, root guards and bundle smoke. Lane I still qualifies
+  each family before enabling it; the stream job stays hosted pending its guest setup. Qualify
+  full Chromium and
   its system libraries, venue-service sudo and shared memory, and an actual till browser
   job within its existing deadline. Retain runner identity, unchanged source head, coverage
   merge and aggregate results.

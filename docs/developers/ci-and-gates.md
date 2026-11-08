@@ -113,7 +113,8 @@ External provenance, read 2026-11-06:
 ## Disposable server-test runners
 
 When hosted jobs spend longer waiting than testing, you can move selected server, heavy and
-browser test jobs to Lane I's disposable Linux runners. Routing is disabled by default.
+browser test jobs, mutation jobs and PR checks to Lane I's disposable Linux runners. Routing
+is disabled by default.
 After the runner qualification below, set `DISPOSABLE_TESTS_MODE=server` and
 `DISPOSABLE_TESTS_SERVER_JOBS=1` for the first measured slot. Increase the job count only
 from measured capacity; one runner slot does not make several shards run in parallel. Count
@@ -146,15 +147,29 @@ limits that job family independently. `test-ui` includes both ui and ui-core.
 | `DISPOSABLE_TESTS_MEDIA_JOBS` | `test-media` |
 | `DISPOSABLE_TESTS_PAYMENTS_STRIPE_JOBS` | `test-payments-stripe` |
 | `DISPOSABLE_TESTS_PAYMENTS_SUMUP_JOBS` | `test-payments-sumup` |
+| `DISPOSABLE_TESTS_PROVISIONING_JOBS` | `test-provisioning` |
+| `DISPOSABLE_TESTS_IDENTITY_JOBS` | `test-identity` |
+| `DISPOSABLE_TESTS_WORKFORCE_JOBS` | `test-workforce` |
+| `DISPOSABLE_TESTS_LIGHT_A_JOBS` | `test-light-a` |
+| `DISPOSABLE_TESTS_LIGHT_B_JOBS` | `test-light-b` |
+| `DISPOSABLE_TESTS_MUTATION_SHARED_JOBS` | `mutation-shared` |
+| `DISPOSABLE_TESTS_TYPECHECK_JOBS` | `typecheck` |
+| `DISPOSABLE_TESTS_LINT_JOBS` | `lint` |
+| `DISPOSABLE_TESTS_ROOT_GUARDS_JOBS` | `root-guards` |
+| `DISPOSABLE_TESTS_BUNDLE_SMOKE_JOBS` | `bundle-smoke` |
 
 Only the first attempt of a same-repository pull request uses this route. Main pushes, tags,
 manual runs, forks and every retry use GitHub-hosted runners. This includes retries that
 retain the successful `changes` job's outputs: routing reads the current attempt directly.
 Same-repository bot branches also satisfy the routing condition; confirm their admission
-with the controller before enabling it.
+with the controller before enabling it. The planner, final CI summary and queue watchdog stay
+hosted, as does mutation scoring after its shards finish. Full-only coverage merges cannot
+use this PR-only route, and image builds and
+publication retain their hosted runners. The stream job also stays hosted until its guest
+setup is qualified, including loopback MTU, shared memory and the backup test binaries.
 
 `DISPOSABLE_TESTS_LABEL_PREFIX` defaults to `dt`. Each selected shard requests `self-hosted`
-and `dt-REPOSITORY_ID-RUN_ID-ATTEMPT-test-FAMILY-N`, where FAMILY is the job suffix in the
+and `dt-REPOSITORY_ID-RUN_ID-ATTEMPT-JOB-N`, where JOB is the job name in the
 table and N is its existing shard number, or 1 for an unsharded job. Lane I currently
 provisions the `dt` prefix. Use a deliberately unavailable prefix only for the fallback
 drill; do not register a runner for that prefix. The settings affect the existing jobs,
@@ -167,8 +182,9 @@ failures. Each complete paginated read has ten seconds. It polls at thirty-secon
 for up to twenty minutes, at most forty polls and 200 API calls including pagination and
 cancellation. It requires every member of each enabled family, unique job IDs, consistent
 totals within that read and matching run, attempt, head and routing labels. Totals may grow
-between reads. A family is enabled only when its package is in scope and its cap is
-positive. Unsharded jobs match their exact API name; sharded jobs match their numbered
+between reads. A family is enabled only when its ordinary job condition holds and its cap is
+positive. Lint and root guards run even when classification fails, so their watcher entries do
+too. Unsharded jobs match their exact API name; sharded jobs match their numbered
 names. Each enabled family must contain a routed job; an entirely hosted enabled family
 fails immediately without cancellation, even when another family is assigned. A routed job
 is assigned when it is in progress with a positive runner ID; a completed job also ends its
@@ -187,9 +203,17 @@ prefer `gnutimeout`, then `gtimeout`, then `timeout`. Run the root shell checks 
 these commands installed; the selection test wraps the actual timeout command and checks
 which executable the workflow chooses.
 
-The watchdog keeps common admission in `SHOULD_WATCH` and each family's scope and cap in
-`FAMILIES`. Outside an admitted attempt, or when no family is enabled, the shell exits successfully
-without an API call. The job still reports to the aggregate.
+The watchdog job starts only for an admitted attempt that is not cancelled. It keeps the same
+admission in `SHOULD_WATCH` and each family's scope and cap in `FAMILIES`. With no enabled family,
+the shell exits successfully without an API call. The aggregate accepts a skipped watchdog on
+other attempts.
+
+The watch-list evaluator withholds the four job-status functions from step environment
+expressions. Its “evaluates watch-list environment expressions without job-status functions”
+case guards that boundary; it does not validate every GitHub expression rule. A1429's original
+watch list passed the older local model but failed actionlint 1.7.12. The unchanged base and
+corrected workflow both passed that validator.
+
 
 Before activation, have I confirm Linux tools, `/proc`, Node/pnpm/cache support, measured
 global capacity and ordinary PR admission. Server jobs need Chromium headless-shell
@@ -212,6 +236,7 @@ before enabling a slot.
 | Source, checked 7 November 2026 | Source's words | Application |
 | --- | --- | --- |
 | [GitHub contexts](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts) | “If you attempt to dereference a nonexistent property, it will evaluate to an empty string.” | The unset selection uses the gate's empty-string arm. |
+| [Context availability](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#context-availability), checked 8 November 2026 | `jobs.<job_id>.steps.env`: “hashFiles”; `jobs.<job_id>.if`: “always, cancelled, success, failure” | Keep status functions in job conditions; use ordinary booleans in the watch-list environment. |
 | [GitHub runner hardening](https://docs.github.com/en/enterprise-cloud@latest/actions/reference/security/secure-use#hardening-for-self-hosted-runners) | “can be persistently compromised by untrusted code in a workflow” | Disposable VMs and contributor approval reduce exposure without establishing isolation. |
 | [Self-hosted routing](https://docs.github.com/en/actions/reference/runners/self-hosted-runners#routing-precedence-for-self-hosted-runners) | “the job will remain queued until a runner comes online” | Execution limits alone do not stop an unavailable-label queue; the watchdog needs hosted availability. |
 | [REST rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) | “1,000 requests per hour per repository” | The watchdog uses bounded polling and a 200-call cap; this is not a reservation of the repository's shared allowance. |

@@ -42,7 +42,7 @@ import {
 // file ever starts disagreeing with the workflow.
 
 // eslint.config.js gives `scripts/**/*.mjs` only `console` and `process` as globals.
-const { AbortController } = globalThis;
+const { AbortController, structuredClone } = globalThis;
 
 const repoRoot = join(import.meta.dirname, "..");
 const lines = readFileSync(join(repoRoot, ".github", "workflows", "ci.yml"), "utf8").split("\n");
@@ -62,6 +62,18 @@ const DISPOSABLE_FAMILIES = [
   "media",
   "payments-stripe",
   "payments-sumup",
+];
+const ADDITIONAL_ROUTES = [
+  ["test-provisioning", "PROVISIONING", "provisioning"],
+  ["test-identity", "IDENTITY", "identity"],
+  ["test-workforce", "WORKFORCE", "workforce"],
+  ["test-light-a", "LIGHT_A", "light_a"],
+  ["test-light-b", "LIGHT_B", "light_b"],
+  ["mutation-shared", "MUTATION_SHARED", "shared"],
+  ["typecheck", "TYPECHECK", null],
+  ["lint", "LINT", null, false],
+  ["root-guards", "ROOT_GUARDS", null, false],
+  ["bundle-smoke", "BUNDLE_SMOKE", null],
 ];
 const familyCap = (family) => `DISPOSABLE_TESTS_${family.replaceAll("-", "_").toUpperCase()}_JOBS`;
 function routingContext(family = "server") {
@@ -97,6 +109,8 @@ function routingContext(family = "server") {
       },
     },
     matrix: { shard: 1 },
+    always: () => true,
+    cancelled: () => false,
     fromJSON: JSON.parse,
     toJSON: JSON.stringify,
     format: (template, ...values) => template.replace(/\{(\d+)\}/g, (_, at) => values[Number(at)]),
@@ -106,6 +120,10 @@ function expressionValue(line, context) {
   const start = line.indexOf("${{ ");
   expect(start, line).toBeGreaterThan(-1);
   return runInNewContext(line.slice(start + 4, line.lastIndexOf(" }}")), context);
+}
+function jobCondition(body, context) {
+  const expression = body.find((line) => /^ {4}if:/.test(line)).slice(8);
+  return runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ""), context);
 }
 function watchFamilies(context) {
   const body = job("server-queue-watchdog").body;
@@ -117,15 +135,25 @@ function watchFamilies(context) {
     rows.push(line.trim());
   }
   return JSON.parse(
-    rows
-      .join(" ")
-      .replace(/\$\{\{ (.*?) \}\}/g, (_, source) =>
-        JSON.stringify(runInNewContext(source, context)),
+    rows.join(" ").replace(/\$\{\{ (.*?) \}\}/g, (_, source) =>
+      JSON.stringify(
+        runInNewContext(source, {
+          ...context,
+          always: undefined,
+          success: undefined,
+          failure: undefined,
+          cancelled: undefined,
+        }),
       ),
+    ),
   );
 }
 
 describe("disposable family routing", () => {
+  it("evaluates watch-list environment expressions without job-status functions", () => {
+    expect(() => watchFamilies(routingContext())).not.toThrow();
+  });
+
   it.each(DISPOSABLE_FAMILIES)("routes only admitted %s jobs within their own cap", (family) => {
     const routing = job(`test-${family}`).body.find((line) => /^ {4}runs-on:/.test(line));
     const watch = job("server-queue-watchdog").body.find((line) => line.includes("SHOULD_WATCH:"));
@@ -204,13 +232,13 @@ describe("disposable family routing", () => {
     const watchdog = job("server-queue-watchdog").body;
     const rows = watchFamilies(context);
     expect(rows.map((row) => row.id).sort()).toEqual(
-      DISPOSABLE_FAMILIES.map((f) => `test-${f}`).sort(),
+      [
+        ...DISPOSABLE_FAMILIES.map((f) => `test-${f}`),
+        ...ADDITIONAL_ROUTES.map(([id]) => id),
+      ].sort(),
     );
-    const gates = [];
     for (const family of DISPOSABLE_FAMILIES) {
       const body = job(`test-${family}`).body;
-      const gate = body.find((line) => /^ {4}if:/.test(line)).slice(8);
-      gates.push(`(${gate})`);
       const row = rows.find((entry) => entry.id === `test-${family}`);
       expect(row.count).toBe(matrixShards(body)?.length ?? 1);
       expect(row.matrix).toBe(matrixShards(body) !== undefined);
@@ -226,7 +254,74 @@ describe("disposable family routing", () => {
       expect(routing).toContain(`vars.${familyCap(family)} || '0'`);
       expect(routing).toContain(`-test-${family}-`);
     }
-    expect(watchdog.find((line) => /^ {4}if:/.test(line))).toBe(`    if: ${gates.join(" || ")}`);
+    for (const row of rows) {
+      const body = job(row.id).body;
+      const routing = body.find((line) => /^ {4}runs-on:/.test(line));
+      const condition = body.find((line) => /^ {4}if:/.test(line));
+      const admitted = routingContext();
+      const caps = [...lines.join("\n").matchAll(/vars\.(DISPOSABLE_TESTS_\w+_JOBS)/g)].map(
+        (match) => match[1],
+      );
+      for (const cap of caps) admitted.vars[cap] = "0";
+      admitted.vars[/vars\.(DISPOSABLE_TESTS_\w+_JOBS)/.exec(routing)[1]] = "1";
+      const outputs = [...condition.matchAll(/needs\.changes\.outputs\.(\w+)/g)].map(
+        (match) => match[1],
+      );
+      for (const output of Object.keys(admitted.needs.changes.outputs))
+        admitted.needs.changes.outputs[output] = "false";
+      for (const output of outputs) admitted.needs.changes.outputs[output] = "true";
+      if (!row.matrix) delete admitted.matrix;
+      expect(jobCondition(body, admitted), row.id).toBe(true);
+      expect(expressionValue(routing, admitted), row.id).toEqual([
+        "self-hosted",
+        `dt-42-1234-1-${row.id}-1`,
+      ]);
+      expect(jobCondition(watchdog, admitted), row.id).toBe(true);
+      admitted.needs.changes.result = "failure";
+      admitted.needs.changes.outputs = {};
+      if (jobCondition(body, admitted)) expect(jobCondition(watchdog, admitted), row.id).toBe(true);
+    }
+  });
+
+  it("starts the watchdog only for admitted, uncancelled attempts", () => {
+    const body = job("server-queue-watchdog").body;
+    const context = routingContext();
+    expect(jobCondition(body, context)).toBe(true);
+    context.vars.DISPOSABLE_TESTS_HEAD = "a".repeat(40);
+    expect(jobCondition(body, context)).toBe(true);
+    for (const reject of [
+      (c) => {
+        c.cancelled = () => true;
+      },
+      (c) => {
+        c.github.run_attempt = 2;
+      },
+      (c) => {
+        c.github.event_name = "push";
+      },
+      (c) => {
+        c.github.event_name = "workflow_dispatch";
+      },
+      (c) => {
+        c.github.event_name = "schedule";
+      },
+      (c) => {
+        c.github.event.pull_request.head.repo.id = 9;
+      },
+      (c) => {
+        c.github.event.pull_request.head.repo.full_name = "other/repo";
+      },
+      (c) => {
+        c.vars.DISPOSABLE_TESTS_MODE = "hosted";
+      },
+      (c) => {
+        c.vars.DISPOSABLE_TESTS_HEAD = "b".repeat(40);
+      },
+    ]) {
+      const rejected = routingContext();
+      reject(rejected);
+      expect(jobCondition(body, rejected)).toBe(false);
+    }
   });
 
   it("watches scope and cap together and keeps other families hosted", () => {
@@ -254,6 +349,100 @@ describe("disposable family routing", () => {
   });
 });
 
+describe("remaining disposable PR jobs", () => {
+  it.each(ADDITIONAL_ROUTES)(
+    "routes %s under its cap and watches the same admitted scope",
+    (id, suffix, scope, requiresCode = true) => {
+      const body = job(id).body;
+      const routing = body.find((line) => /^ {4}runs-on:/.test(line));
+      const cap = `DISPOSABLE_TESTS_${suffix}_JOBS`;
+      const context = routingContext();
+      context.vars.DISPOSABLE_TESTS_SERVER_JOBS = "0";
+      context.needs.changes.outputs.server = "false";
+      for (const [, name, output] of ADDITIONAL_ROUTES) {
+        context.vars[`DISPOSABLE_TESTS_${name}_JOBS`] = "0";
+        if (output) context.needs.changes.outputs[output] = "false";
+      }
+      context.vars[cap] = "1";
+      if (scope) context.needs.changes.outputs[scope] = "true";
+      const shards = matrixShards(body);
+      if (!shards) delete context.matrix;
+      const watched = () => watchFamilies(context).filter((row) => row.enabled);
+      expect(expressionValue(routing, context)).toEqual(["self-hosted", `dt-42-1234-1-${id}-1`]);
+      expect(watched()).toEqual([
+        { id, count: shards?.length ?? 1, matrix: !!shards, enabled: true },
+      ]);
+      context.vars.DISPOSABLE_TESTS_HEAD = "a".repeat(40);
+      expect(expressionValue(routing, context)).toEqual(["self-hosted", `dt-42-1234-1-${id}-1`]);
+      context.vars.DISPOSABLE_TESTS_HEAD = "";
+      const baseline = structuredClone({
+        github: context.github,
+        vars: context.vars,
+        needs: context.needs,
+        matrix: context.matrix,
+      });
+      for (const reject of [
+        (c) => {
+          delete c.vars[cap];
+        },
+        (c) => {
+          c.vars[cap] = "";
+        },
+        (c) => {
+          c.vars[cap] = "0";
+        },
+        (c) => {
+          c.vars[cap] = "invalid";
+        },
+        (c) => {
+          c.github.run_attempt = 2;
+        },
+        (c) => {
+          c.github.event_name = "push";
+        },
+        (c) => {
+          c.github.event_name = "workflow_dispatch";
+        },
+        (c) => {
+          c.github.event.pull_request.head.repo.id = 9;
+        },
+        (c) => {
+          c.github.event.pull_request.head.repo.full_name = "other/repo";
+        },
+        (c) => {
+          c.vars.DISPOSABLE_TESTS_MODE = "hosted";
+        },
+        (c) => {
+          c.vars.DISPOSABLE_TESTS_HEAD = "b".repeat(40);
+        },
+      ]) {
+        Object.assign(context, structuredClone(baseline));
+        reject(context);
+        expect(expressionValue(routing, context)).toBe("ubuntu-latest");
+        const admission = job("server-queue-watchdog").body.find((line) =>
+          line.includes("SHOULD_WATCH:"),
+        );
+        expect(expressionValue(admission, context) && watched().length > 0).toBe(false);
+      }
+      Object.assign(context, structuredClone(baseline));
+      if (scope) {
+        context.needs.changes.outputs[scope] = "false";
+        expect(watched()).toEqual([]);
+      }
+      context.needs.changes.outputs.code = "false";
+      expect(watched().map((row) => row.id)).toEqual(requiresCode ? [] : [id]);
+      Object.assign(context, structuredClone(baseline));
+      if (shards) {
+        context.matrix.shard = 2;
+        expect(expressionValue(routing, context)).toBe("ubuntu-latest");
+      }
+      context.vars[cap] = "0";
+      context.vars.DISPOSABLE_TESTS_SERVER_JOBS = "24";
+      expect(expressionValue(routing, context)).toBe("ubuntu-latest");
+    },
+  );
+});
+
 describe("disposable server routing", () => {
   // GitHub supplies an unset vars key as ""; see the CI guide's contexts provenance.
   it.each([
@@ -276,7 +465,9 @@ describe("disposable server routing", () => {
       "    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_SERVER_JOBS || '0') && fromJSON(format('[\"self-hosted\",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-server-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}",
     );
     for (const entry of jobs.filter(
-      ({ id }) => !DISPOSABLE_FAMILIES.some((family) => id === `test-${family}`),
+      ({ id }) =>
+        !DISPOSABLE_FAMILIES.some((family) => id === `test-${family}`) &&
+        !ADDITIONAL_ROUTES.some(([routed]) => id === routed),
     )) {
       const runner = entry.body.find((line) => /^ {4}runs-on:/.test(line));
       if (runner !== undefined) expect(runner, entry.id).toBe("    runs-on: ubuntu-latest");
@@ -286,9 +477,8 @@ describe("disposable server routing", () => {
   it("keeps server admission, prefix and shard count in the shared watch", () => {
     const server = job("test-server").body;
     const watchdog = job("server-queue-watchdog").body;
-    expect(watchdog.find((line) => /^ {4}if:/.test(line))).toContain(
-      `(${server.find((line) => /^ {4}if:/.test(line)).slice(8)})`,
-    );
+    expect(jobCondition(server, routingContext())).toBe(true);
+    expect(jobCondition(watchdog, routingContext())).toBe(true);
     const routing = server.find((line) => /^ {4}runs-on:/.test(line));
     const condition = routing.slice(routing.indexOf("${{ ") + 4, routing.indexOf(" && fromJSON("));
     const watch = watchdog.find((line) => line.includes("SHOULD_WATCH:"));

@@ -295,7 +295,7 @@ jobs:
   lint:
     needs: changes
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_LINT_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-lint-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     timeout-minutes: 8
     steps:
       - id: checkout
@@ -356,7 +356,7 @@ jobs:
   root-guards:
     needs: changes
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_ROOT_GUARDS_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-root-guards-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     timeout-minutes: 8
     steps:
       - id: checkout
@@ -430,7 +430,7 @@ jobs:
   bundle-smoke:
     needs: changes
     if: (needs.changes.outputs.code == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_BUNDLE_SMOKE_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-bundle-smoke-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     # One of the steps below now starts a server that runs until it is killed. Its own `timeout`
     # bounds it, and this bounds the job if that ever stops working — without it a hung step waits
     # out GitHub's six-hour default.
@@ -736,7 +736,7 @@ jobs:
   typecheck:
     needs: changes
     if: (needs.changes.outputs.code == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_TYPECHECK_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-typecheck-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
       - id: checkout
@@ -3008,7 +3008,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.provisioning == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_PROVISIONING_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-provisioning-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -3185,7 +3185,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.identity == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_IDENTITY_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-identity-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
         name: Check out the code
@@ -3252,7 +3252,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.workforce == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_WORKFORCE_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-workforce-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
         name: Check out the code
@@ -3323,7 +3323,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.light_a == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_LIGHT_A_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-light-a-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
         name: Check out the code
@@ -3442,7 +3442,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.light_b == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && 1 <= (vars.DISPOSABLE_TESTS_LIGHT_B_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-test-light-b-1', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt)))) || 'ubuntu-latest' }}
     steps:
       - id: checkout
         name: Check out the code
@@ -3555,7 +3555,7 @@ jobs:
   mutation-shared:
     needs: changes
     if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true')
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) && matrix.shard <= (vars.DISPOSABLE_TESTS_MUTATION_SHARED_JOBS || '0') && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-mutation-shared-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, matrix.shard)))) || 'ubuntu-latest' }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -3723,7 +3723,7 @@ jobs:
   server-queue-watchdog:
     timeout-minutes: 22
     needs: changes
-    if: ((needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true')) || ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true'))
+    if: ${{ !cancelled() && github.run_attempt == 1 && github.event_name == 'pull_request' && github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository && vars.DISPOSABLE_TESTS_MODE == 'server' && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == github.event.pull_request.head.sha) }}
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -3747,7 +3747,17 @@ jobs:
             {"id":"test-bookings","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_BOOKINGS_JOBS || '0') }}},
             {"id":"test-media","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_MEDIA_JOBS || '0') }}},
             {"id":"test-payments-stripe","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_STRIPE_JOBS || '0') }}},
-            {"id":"test-payments-sumup","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_SUMUP_JOBS || '0') }}}
+            {"id":"test-payments-sumup","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_PAYMENTS_SUMUP_JOBS || '0') }}},
+            {"id":"test-provisioning","count":6,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.provisioning == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_PROVISIONING_JOBS || '0') }}},
+            {"id":"test-identity","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.identity == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_IDENTITY_JOBS || '0') }}},
+            {"id":"test-workforce","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.workforce == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_WORKFORCE_JOBS || '0') }}},
+            {"id":"test-light-a","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.light_a == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_LIGHT_A_JOBS || '0') }}},
+            {"id":"test-light-b","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.light_b == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_LIGHT_B_JOBS || '0') }}},
+            {"id":"mutation-shared","count":4,"matrix":true,"enabled":${{ ((needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_MUTATION_SHARED_JOBS || '0') }}},
+            {"id":"typecheck","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_TYPECHECK_JOBS || '0') }}},
+            {"id":"lint","count":1,"matrix":false,"enabled":${{ (true) && 1 <= (vars.DISPOSABLE_TESTS_LINT_JOBS || '0') }}},
+            {"id":"root-guards","count":1,"matrix":false,"enabled":${{ (true) && 1 <= (vars.DISPOSABLE_TESTS_ROOT_GUARDS_JOBS || '0') }}},
+            {"id":"bundle-smoke","count":1,"matrix":false,"enabled":${{ ((needs.changes.outputs.code == 'true')) && 1 <= (vars.DISPOSABLE_TESTS_BUNDLE_SMOKE_JOBS || '0') }}}
             ]
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
