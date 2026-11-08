@@ -80,7 +80,7 @@ it.each([
             "elena@example.test",
             "--yes",
           ];
-    const child = childProcess(
+    const child = await childProcess(
       kind === "restore" ? "src/bin-restore.ts" : "../../packages/provisioning/src/bin.ts",
       {
         ...f.env,
@@ -147,12 +147,12 @@ it.each([
     const agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
     const fetch: typeof globalThis.fetch = (url, init) =>
       globalThis.fetch(url, { ...init, dispatcher: agent } as RequestInit);
-    const child = childProcess(script, {
+    const child = await childProcess(script, {
       ...f.env,
-      WAITRON_HTTP_LANDING_PORT: String(f.landingPort),
+      WAITRON_HTTP_LANDING_PORT: "80",
     });
     try {
-      const base = `https://127.0.0.1:${f.port}`;
+      const base = `https://127.0.0.1:${child.port}`;
       expect(await ready(child, base, agent)).toEqual({ claimed: true, resolution: true });
       const inspection = await fetch(`${base}/setup-api/first-setup/resolution`);
       expect(inspection.status).toBe(200);
@@ -188,7 +188,7 @@ it.each([
         await response.body?.cancel();
       }
       const refused = await globalThis.fetch(
-        `http://127.0.0.1:${f.landingPort}/setup-api/first-setup/resolution/recover`,
+        `http://127.0.0.1:${child.landingPort}/setup-api/first-setup/resolution/recover`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

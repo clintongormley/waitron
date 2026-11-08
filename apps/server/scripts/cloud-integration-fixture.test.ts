@@ -51,7 +51,7 @@ async function launch(prepare: (root: string) => Promise<NodeJS.ProcessEnv>): Pr
         CLOUD_TEST_ORIGIN: "http://127.0.0.1:9",
         ...env,
       },
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
     },
   );
   const exited = new Promise<number | null>((r) => child.once("exit", (code) => r(code)));
@@ -89,51 +89,69 @@ function withDeadline<T>(promise: Promise<T>, ms: number, what: string): Promise
 }
 
 // Waitron Cloud's integration scripts launch this fixture from a Waitron checkout.
-it("the Cloud integration fixture provisions a preproduction venue and starts", async () => {
-  const fixture = await launch(async (root) => {
-    // Cloud's local-pairing guide has the dashboard built first; this checkout may not have.
-    const dashboard = join(root, "dashboard");
-    await mkdir(dashboard);
-    await writeFile(join(dashboard, "index.html"), "<!doctype html>");
-    return { WAITRON_DASHBOARD_APP_DIR: dashboard };
-  });
-  const text = await readyOrExit(fixture);
-  if (text === undefined) {
-    await withDeadline(fixture.closed, 2_000, "fixture output").catch(() => {});
-    throw new Error(`fixture exited before ready.json:\n${fixture.output()}`);
-  }
-  const ready = JSON.parse(text) as { origin: string; port: number; localVenueId: string };
-  expect(ready.origin).toBe(`http://127.0.0.1:${ready.port}`);
-  const health = await fetch(`${ready.origin}/health`, {
-    signal: AbortSignal.timeout(HEALTH_DEADLINE_MS),
-  });
-  expect(health.status).toBe(200);
-  fixture.child.kill("SIGTERM");
-  expect(await withDeadline(fixture.exited, SHUTDOWN_DEADLINE_MS, "fixture shutdown")).toBe(0);
+it.each([false, true])(
+  "the Cloud integration fixture provisions and starts with wildcard host %s",
+  async (external) => {
+    const fixture = await launch(async (root) => {
+      // Cloud's local-pairing guide has the dashboard built first; this checkout may not have.
+      const dashboard = join(root, "dashboard");
+      await mkdir(dashboard);
+      await writeFile(join(dashboard, "index.html"), "<!doctype html>");
+      return { WAITRON_DASHBOARD_APP_DIR: dashboard, CLOUD_TEST_EXTERNAL: external ? "1" : "0" };
+    });
+    const text = await readyOrExit(fixture);
+    if (text === undefined) {
+      await withDeadline(fixture.closed, 2_000, "fixture output").catch(() => {});
+      throw new Error(`fixture exited before ready.json:\n${fixture.output()}`);
+    }
+    const ready = JSON.parse(text) as { origin: string; port: number; localVenueId: string };
+    expect(ready.origin).toBe(`http://127.0.0.1:${ready.port}`);
+    const health = await fetch(`${ready.origin}/health`, {
+      signal: AbortSignal.timeout(HEALTH_DEADLINE_MS),
+    });
+    expect(health.status).toBe(200);
+    const saved = JSON.parse(await readFile(join(fixture.root, "fixture-env.json"), "utf8")) as {
+      WAITRON_HTTP_HOST: string;
+    };
+    expect(saved.WAITRON_HTTP_HOST).toBe(external ? "0.0.0.0" : "127.0.0.1");
+    const csrReply = new Promise<unknown>((resolve, reject) => {
+      fixture.child.once("message", resolve);
+      fixture.child.send({ csrHostname: "fixture.remote.example.test" }, (error: Error | null) => {
+        if (error) reject(error);
+      });
+    });
+    expect(await withDeadline(csrReply, 10_000, "fixture CSR reply")).toMatchObject({
+      csr: expect.stringContaining("BEGIN CERTIFICATE REQUEST"),
+    });
+    expect(fixture.child.connected).toBe(true);
+    fixture.child.kill("SIGTERM");
+    expect(await withDeadline(fixture.exited, SHUTDOWN_DEADLINE_MS, "fixture shutdown")).toBe(0);
 
-  const store = await openVenueDatabase(join(fixture.root, "venue"));
-  try {
-    expect(
-      store.venue.all(
-        sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`,
-      ),
-    ).toEqual([
-      {
-        taxpayer_nif: "73000001K",
-        environment: "preproduction",
-        allocation_key: expect.stringMatching(/^throwaway-/),
-      },
-    ]);
-    expect(
-      store.venue.all(sql`select operation_description, address_line1 from locations`),
-    ).toEqual([{ operation_description: "Test sale", address_line1: "1 Main Street" }]);
-    expect(store.venue.all(sql`select environment from deployment`)).toEqual([
-      { environment: "preproduction" },
-    ]);
-  } finally {
-    await store.close();
-  }
-}, 150_000);
+    const store = await openVenueDatabase(join(fixture.root, "venue"));
+    try {
+      expect(
+        store.venue.all(
+          sql`select taxpayer_nif, environment, allocation_key from fiscal_allocations`,
+        ),
+      ).toEqual([
+        {
+          taxpayer_nif: "73000001K",
+          environment: "preproduction",
+          allocation_key: expect.stringMatching(/^throwaway-/),
+        },
+      ]);
+      expect(
+        store.venue.all(sql`select operation_description, address_line1 from locations`),
+      ).toEqual([{ operation_description: "Test sale", address_line1: "1 Main Street" }]);
+      expect(store.venue.all(sql`select environment from deployment`)).toEqual([
+        { environment: "preproduction" },
+      ]);
+    } finally {
+      await store.close();
+    }
+  },
+  150_000,
+);
 
 it("the Cloud integration fixture treats an empty WAITRON_DASHBOARD_APP_DIR as unset", async () => {
   const fixture = await launch(() => Promise.resolve({ WAITRON_DASHBOARD_APP_DIR: "" }));

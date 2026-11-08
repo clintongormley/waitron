@@ -4,7 +4,11 @@ import { createCloudConnection } from "../src/cloud-client.js";
 import { cp, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
-import { createServer } from "node:net";
+import {
+  retainHttpListener,
+  type RetainedHttpListener,
+} from "../src/testing/retained-http-listener.js";
+import { adoptRetainedListeners } from "../src/testing/retained-http-adoption.mjs";
 import { randomBytes } from "node:crypto";
 import { ensureBoxSecrets } from "../src/box-secrets.js";
 import { isUnset } from "../src/env-value.js";
@@ -27,6 +31,7 @@ if (
 await mkdir(root, { recursive: true, mode: 0o700 });
 const envPath = join(root, "fixture-env.json");
 let env: NodeJS.ProcessEnv;
+let reservation: RetainedHttpListener | undefined;
 const savedEnv = await readFile(envPath, "utf8").catch((error: unknown) => {
   if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
   return undefined;
@@ -84,11 +89,9 @@ if (savedEnv !== undefined) {
   } finally {
     await store.close();
   }
-  const reserve = createServer();
-  await new Promise<void>((r) => reserve.listen(0, "127.0.0.1", r));
-  const address = reserve.address();
-  if (!address || typeof address === "string") throw new Error("No port");
-  await new Promise<void>((r) => reserve.close(() => r()));
+  const httpHost = process.env.CLOUD_TEST_EXTERNAL === "1" ? "0.0.0.0" : "127.0.0.1";
+  reservation = await retainHttpListener(httpHost);
+  const port = reservation.port;
   let boxSecrets: Record<string, string> = {
     WAITRON_CREDENTIALS_KEY: randomBytes(32).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -114,11 +117,11 @@ if (savedEnv !== undefined) {
     WAITRON_STATE_DIR: root,
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_HTTP_HOST: process.env.CLOUD_TEST_EXTERNAL === "1" ? "0.0.0.0" : "127.0.0.1",
-    WAITRON_HTTP_PORT: String(address.port),
+    WAITRON_HTTP_HOST: httpHost,
+    WAITRON_HTTP_PORT: String(port),
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_MANAGEMENT_RP_ID: "127.0.0.1",
-    WAITRON_MANAGEMENT_ORIGIN: `${process.env.CLOUD_TEST_BACKUP_STATE === "1" ? "https" : "http"}://127.0.0.1:${address.port}`,
+    WAITRON_MANAGEMENT_ORIGIN: `${process.env.CLOUD_TEST_BACKUP_STATE === "1" ? "https" : "http"}://127.0.0.1:${port}`,
     WAITRON_CREDENTIALS_KEY: boxSecrets.WAITRON_CREDENTIALS_KEY,
     WAITRON_CREDENTIALS_KEY_VERSION: boxSecrets.WAITRON_CREDENTIALS_KEY_VERSION,
     WAITRON_NODE_ID: result.nodeId,
@@ -140,7 +143,9 @@ try {
 } finally {
   await identityStore.close();
 }
+const adoption = reservation === undefined ? undefined : adoptRetainedListeners([reservation]);
 const server = await startServer(env);
+await adoption?.bound;
 // Renamed into place so a poller never reads a half-written ready.json.
 const readyPath = join(root, "ready.json");
 await writeFile(
@@ -213,7 +218,10 @@ for (const signal of ["SIGTERM", "SIGINT"] as const)
     if (!closing) {
       closing = true;
       void server.close().then(
-        () => process.exit(0),
+        async () => {
+          if (reservation?.server.listening) await reservation.close();
+          process.exit(0);
+        },
         () => process.exit(1),
       );
     }

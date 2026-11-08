@@ -17,6 +17,11 @@ import * as trading from "./trading-config.js";
 import { parseEnvFile } from "./env-file.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
+import {
+  retainHttpListener,
+  retainedHttpPreload,
+  transferRetainedListeners,
+} from "./testing/retained-http-listener.js";
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 import { DatabaseSync } from "node:sqlite";
@@ -83,7 +88,8 @@ it.each(["trading", "completion-state", "completion-marker"])(
       venueDir = join(root, "venue"),
       migrations = join(root, "migrations");
     await copyMigrationsRoot(migrations);
-    const [port] = await freePorts(1);
+    const [initialPort] = await freePorts(1);
+    let port = initialPort;
     const testClock = createHourTestClock(Date.now());
     time.clock = testClock;
     const env = {
@@ -299,7 +305,10 @@ it.each(["trading", "completion-state", "completion-marker"])(
         logLevel: "silent",
       });
       const secrets = parseEnvFile(await readFile(join(stateDir, "secrets.env"), "utf8"));
-      const child = spawn(process.execPath, [childFile], {
+      const held = await retainHttpListener();
+      port = held.port;
+      env.WAITRON_HTTP_PORT = String(port);
+      const child = spawn(process.execPath, ["--import", retainedHttpPreload, childFile], {
         env: {
           ...Object.fromEntries(
             Object.entries(process.env).filter(([key]) => !key.startsWith("WAITRON_")),
@@ -308,21 +317,21 @@ it.each(["trading", "completion-state", "completion-marker"])(
           ...secrets,
           ...tradingEnv,
         },
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
       });
-      const closed = once(child, "close");
+      const exited = once(child, "exit");
       let output = "";
-      child.stderr.on("data", (chunk) => {
+      child.stderr!.on("data", (chunk) => {
         output += String(chunk);
       });
       try {
-        await new Promise<void>((resolveReady, reject) => {
+        const readyChild = new Promise<void>((resolveReady, reject) => {
           const timeout = setTimeout(
             () => reject(new Error("restart child did not listen: " + output)),
             30000,
           );
           const finish = () => clearTimeout(timeout);
-          child.stdout.on("data", (chunk) => {
+          child.stdout!.on("data", (chunk) => {
             output += String(chunk);
             if (output.includes('"event":"recovery.listening"')) {
               finish();
@@ -338,14 +347,17 @@ it.each(["trading", "completion-state", "completion-marker"])(
             reject(new Error("restart child exited before listening: " + output));
           });
         });
+        await Promise.all([transferRetainedListeners(child, [held], 30_000), readyChild]);
         const childStatus = await fetch(`https://127.0.0.1:${port}/setup-api/first-setup/status`, {
           dispatcher: agent,
         } as RequestInit);
         expect(childStatus.status).toBe(200);
         expect(await childStatus.json()).toEqual({ claimed: true, resolution: true });
       } finally {
-        if (child.pid !== undefined && child.exitCode === null) child.kill("SIGTERM");
-        await closed;
+        if (child.pid !== undefined && child.exitCode === null && child.signalCode === null)
+          child.kill("SIGTERM");
+        await exited;
+        if (held.server.listening) await held.close();
       }
       server = await startServer({ ...env, ...tradingEnv }, {}, { testClock });
       const resumedStatus = await fetch(`https://127.0.0.1:${port}/setup-api/first-setup/status`, {

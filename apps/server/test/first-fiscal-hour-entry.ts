@@ -6,7 +6,11 @@ import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, expect } from "vitest";
 import type { Agent } from "undici";
 import { copyMigrationsRoot } from "../src/testing/boot-harness.js";
-import { freePorts } from "../src/testing/free-ports.js";
+import {
+  retainHttpListener,
+  retainedHttpPreload,
+  transferRetainedListeners,
+} from "../src/testing/retained-http-listener.js";
 
 /** Registers the file's clean-up and returns a builder for one throwaway entry workspace per case. */
 export function entryWorkspaces() {
@@ -21,7 +25,6 @@ export function entryWorkspaces() {
       venueDir = join(root, "venue");
     await mkdir(stateDir);
     await mkdir(venueDir);
-    const [port, landingPort] = await freePorts(2);
     const migrations = join(root, "migrations");
     await copyMigrationsRoot(migrations);
     const setupApp = join(root, "setup-app");
@@ -42,33 +45,52 @@ export function entryWorkspaces() {
       WAITRON_VENUE_DIR: venueDir,
       WAITRON_MIGRATIONS_DIR: migrations,
       WAITRON_HTTP_HOST: "127.0.0.1",
-      WAITRON_HTTP_PORT: String(port),
       WAITRON_HTTP_LANDING_PORT: "0",
       WAITRON_ENV: "dev",
       WAITRON_SETUP_APP_DIR: setupApp,
     });
-    return { root, stateDir, venueDir, port, landingPort, env };
+    return { root, stateDir, venueDir, env };
   };
 }
 
-export function childProcess(script: string, env: NodeJS.ProcessEnv, args: string[] = []) {
-  const child = spawn(process.execPath, ["--import", "tsx", resolve(script), ...args], {
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+export async function childProcess(script: string, env: NodeJS.ProcessEnv, args: string[] = []) {
+  const startupDeadline = Date.now() + 45_000;
+  const held = await retainHttpListener();
+  let landing: Awaited<ReturnType<typeof retainHttpListener>> | undefined;
+  try {
+    if (env.WAITRON_HTTP_LANDING_PORT !== "0") landing = await retainHttpListener();
+  } catch (error) {
+    await held.close();
+    throw error;
+  }
+  const child = spawn(
+    process.execPath,
+    ["--import", retainedHttpPreload, "--import", "tsx", resolve(script), ...args],
+    {
+      env: {
+        ...env,
+        WAITRON_HTTP_PORT: String(held.port),
+        WAITRON_HTTP_LANDING_PORT: String(landing?.port ?? 0),
+      },
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+    },
+  );
   let output = "";
-  child.stdout.on("data", (bytes: Buffer) => {
+  child.stdout!.on("data", (bytes: Buffer) => {
     output += bytes.toString();
   });
-  child.stderr.on("data", (bytes: Buffer) => {
+  child.stderr!.on("data", (bytes: Buffer) => {
     output += bytes.toString();
   });
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((res, rej) => {
     child.once("error", rej);
     child.once("exit", (code, signal) => res({ code, signal }));
   });
-  return {
+  const running = {
     child,
+    port: held.port,
+    landingPort: landing?.port ?? 0,
+    startupDeadline,
     output: () => output,
     exited,
     async stop() {
@@ -91,10 +113,20 @@ export function childProcess(script: string, env: NodeJS.ProcessEnv, args: strin
       }
     },
   };
+  const listeners = landing === undefined ? [held] : [held, landing];
+  try {
+    await transferRetainedListeners(child, listeners, Math.max(1, startupDeadline - Date.now()));
+    return running;
+  } catch (error) {
+    await running.stop();
+    throw error;
+  } finally {
+    for (const listener of listeners) if (listener.server.listening) await listener.close();
+  }
 }
 
-export async function expectRestartExit(process: ReturnType<typeof childProcess>) {
-  let result: Awaited<ReturnType<typeof childProcess>["exited"]> | undefined;
+export async function expectRestartExit(process: Awaited<ReturnType<typeof childProcess>>) {
+  let result: Awaited<Awaited<ReturnType<typeof childProcess>>["exited"]> | undefined;
   const observed = process.exited.then((value) => {
     result = value;
   });
@@ -102,8 +134,12 @@ export async function expectRestartExit(process: ReturnType<typeof childProcess>
   await observed;
 }
 
-export async function ready(process: ReturnType<typeof childProcess>, url: string, agent?: Agent) {
-  const deadline = Date.now() + 45_000;
+export async function ready(
+  process: Awaited<ReturnType<typeof childProcess>>,
+  url: string,
+  agent?: Agent,
+) {
+  const deadline = process.startupDeadline;
   while (Date.now() < deadline) {
     if (process.child.exitCode !== null || process.child.signalCode !== null)
       throw new Error(`Entry exited before listening: ${process.output()}`);

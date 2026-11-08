@@ -11,7 +11,11 @@ import { openVenueDatabase } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { KitchenAllergyBlock } from "@waitron/module";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
-import { freePorts } from "./testing/free-ports.js";
+import {
+  retainHttpListener,
+  retainedHttpPreload,
+  transferRetainedListeners,
+} from "./testing/retained-http-listener.js";
 import {
   kitchenCallers,
   kitchenCommand,
@@ -24,20 +28,27 @@ import {
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 async function boot(env: NodeJS.ProcessEnv) {
+  const startupDeadline = Date.now() + 30_000;
+  const held = await retainHttpListener();
   const child = spawn(
     process.execPath,
     [
       "--import",
+      retainedHttpPreload,
+      "--import",
       pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href,
       fileURLToPath(new URL("./bin.ts", import.meta.url)),
     ],
-    { env, stdio: ["ignore", "pipe", "pipe"] },
+    {
+      env: { ...env, WAITRON_HTTP_PORT: String(held.port) },
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+    },
   );
   let output = "";
-  child.stdout.on("data", (chunk: Buffer) => {
+  child.stdout!.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
-  child.stderr.on("data", (chunk: Buffer) => {
+  child.stderr!.on("data", (chunk: Buffer) => {
     output += chunk.toString();
   });
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
@@ -56,15 +67,17 @@ async function boot(env: NodeJS.ProcessEnv) {
     }
   };
   try {
+    await transferRetainedListeners(child, [held], Math.max(1, startupDeadline - Date.now()));
     await vi.waitFor(
       () => {
         expect(child.exitCode, output).toBeNull();
         expect(output, output).toContain('"event":"server.listening"');
       },
-      { timeout: 30_000 },
+      { timeout: Math.max(1, startupDeadline - Date.now()) },
     );
     return {
       pid: child.pid!,
+      port: held.port,
       close: async () => {
         expect(await stop(), output).toEqual({ code: 0, signal: null });
       },
@@ -72,6 +85,8 @@ async function boot(env: NodeJS.ProcessEnv) {
   } catch (error) {
     await stop();
     throw error;
+  } finally {
+    if (held.server.listening) await held.close();
   }
 }
 
@@ -103,14 +118,12 @@ describe("A669 atomic fresh server processes", () => {
           join(scratch, "modules.json"),
           JSON.stringify({ modules: { "fiscal-none": false } }),
         );
-        const ports = await freePorts(3);
         const env: NodeJS.ProcessEnv = {
           ...Object.fromEntries(
             Object.entries(process.env).filter(([key]) => !key.startsWith("WAITRON_")),
           ),
           WAITRON_HTTP_HOST: "127.0.0.1",
           WAITRON_HTTP_LANDING_PORT: "0",
-          WAITRON_HTTP_PORT: String(ports[0]),
           WAITRON_STATE_DIR: scratch,
           WAITRON_VENUE_DIR: venueDir,
           WAITRON_NODE_ID: f.v.cfg.nodeId,
@@ -121,7 +134,7 @@ describe("A669 atomic fresh server processes", () => {
           WAITRON_CREDENTIALS_KEY_VERSION: "1",
           WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
         };
-        let port = ports[0];
+        let port: number;
         const persisted = async () => {
           const db = await openVenueDatabase(venueDir);
           try {
@@ -153,6 +166,7 @@ describe("A669 atomic fresh server processes", () => {
           return (await response.json()) as Queue;
         };
         server = await boot(env);
+        port = server.port;
         const firstPid = server.pid;
         const result = await submit();
         const before = await queue();
@@ -171,8 +185,8 @@ describe("A669 atomic fresh server processes", () => {
           currentBlock: kitchenCurrent,
         });
         expect(firstState.jobs.length).toBeGreaterThan(0);
-        port = ports[1];
-        server = await boot({ ...env, WAITRON_HTTP_PORT: String(port) });
+        server = await boot(env);
+        port = server.port;
         expect(server.pid).not.toBe(firstPid);
         expect(await queue()).toEqual(before);
         expect(await submit()).toEqual(result);
@@ -202,8 +216,8 @@ describe("A669 atomic fresh server processes", () => {
               : notice,
           ),
         });
-        port = ports[2];
-        server = await boot({ ...env, WAITRON_HTTP_PORT: String(port) });
+        server = await boot(env);
+        port = server.port;
         expect(server.pid).not.toBe(secondPid);
         expect(server.pid).not.toBe(firstPid);
         expect(await queue()).toEqual(acknowledged);
