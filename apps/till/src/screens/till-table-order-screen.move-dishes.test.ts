@@ -47,7 +47,7 @@ function line(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine 
   };
 }
 
-const CANAS = [line("c1", 1), line("c2", 2), line("c3", 3), line("c4", 4)];
+const BEERS = [line("c1", 1), line("c2", 2), line("c3", 3), line("c4", 4)];
 const HAM = line("h1", 5, {
   name: "Ham",
   productId: "ham",
@@ -100,7 +100,7 @@ async function mountScreen(
   const shownParty = over.party === undefined ? party : over.party;
   const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
     products: [],
-    lines: over.lines ?? [...CANAS, HAM],
+    lines: over.lines ?? [...BEERS, HAM],
     ...(over.draftStore === undefined ? {} : { draftStore: over.draftStore }),
     ...(over.otherDrafts === undefined ? {} : { otherDrafts: over.otherDrafts }),
     ...(over.groups === undefined ? {} : { groups: over.groups }),
@@ -207,7 +207,7 @@ describe("A803 move dishes panel", () => {
       lines: [
         { ...HAM, groupId: "g-held" },
         {
-          ...CANAS[0]!,
+          ...BEERS[0]!,
           groupId: "g-new",
           courseId: mains.id,
           course: mains,
@@ -428,8 +428,8 @@ describe("A803 move dishes panel", () => {
       balance,
     });
     await openMoveDishes(el);
-    const [canas, ham] = picker(el).rows;
-    expect(canas!.blocked).toBeNull();
+    const [beerRow, ham] = picker(el).rows;
+    expect(beerRow!.blocked).toBeNull();
     expect(ham!.blocked).toEqual({ reason: "floor", kept: "21.00" });
     await tick(el, "c1");
     expect(picker(el).picks).toEqual(new Set(["c1", "c2"]));
@@ -617,12 +617,12 @@ describe("A803 move dishes refresh:", () => {
   it("a re-read in which identical dishes join a ticked row keeps its count from the row's first members, and Move sends exactly those", async () => {
     const noted = (dish: TabLine) => ({ ...dish, note: "no ice" });
     const el = await mountScreen({
-      lines: [CANAS[0]!, CANAS[1]!, noted(CANAS[2]!), noted(CANAS[3]!), HAM],
+      lines: [BEERS[0]!, BEERS[1]!, noted(BEERS[2]!), noted(BEERS[3]!), HAM],
     });
     await openMoveDishes(el);
     await tick(el, "c3");
     expect(picker(el).picks).toEqual(new Set(["c3", "c4"]));
-    el.lines = [...CANAS, HAM];
+    el.lines = [...BEERS, HAM];
     await el.updateComplete;
     await picker(el).updateComplete;
     expect(picker(el).rows[0]!.members.map((member) => member.id)).toEqual([
@@ -637,7 +637,7 @@ describe("A803 move dishes refresh:", () => {
 
   it("a dish recalled into this person's draft, and one recalled into another person's, are in no row, and 2 of 3 never takes them", async () => {
     const draft = new DraftStore();
-    draft.appendLines([recall(CANAS[0]!)]);
+    draft.appendLines([recall(BEERS[0]!)]);
     const el = await mountScreen({ draftStore: draft, otherDrafts: [otherDraft(HAM)] });
     await openMoveDishes(el);
     expect(picker(el).rows.map((row) => row.members.map((member) => member.id))).toEqual([
@@ -672,7 +672,7 @@ describe("A803 move dishes refresh:", () => {
         },
       }) as TabLine;
     };
-    const el = await mountScreen({ lines: [...CANAS, HAM].map(counted) });
+    const el = await mountScreen({ lines: [...BEERS, HAM].map(counted) });
     await openMoveDishes(el);
     await tick(el, "c1");
     expect(offerReads.count).toBeGreaterThan(0);
@@ -696,7 +696,7 @@ describe("A803 move dishes refresh:", () => {
     await tick(el, "c1");
     await tick(el, "h1");
     expect(picker(el).picks).toEqual(new Set(["c1", "c2", "c3", "c4", "h1"]));
-    const oneDrawing = [...CANAS, HAM].length + 1;
+    const oneDrawing = [...BEERS, HAM].length + 1;
     expect(await update()).toBeLessThan(nonePicked + oneDrawing);
   });
 
@@ -713,7 +713,7 @@ describe("A803 move dishes refresh:", () => {
     const nonePicked = await reread();
     await tick(el, "c1");
     await tick(el, "h1");
-    const oneDrawing = [...CANAS, HAM].length + 1;
+    const oneDrawing = [...BEERS, HAM].length + 1;
     expect(await reread()).toBeLessThanOrEqual(nonePicked + oneDrawing);
     expect(picker(el).picks).toEqual(new Set(["c1", "c2", "c3", "c4", "h1"]));
   });
@@ -753,7 +753,7 @@ describe("A803 move dishes refresh:", () => {
     await tick(el, "c1");
     await step(el, "dec", "c1");
     await step(el, "dec", "c1");
-    draft.appendLines([recall(CANAS[0]!)]);
+    draft.appendLines([recall(BEERS[0]!)]);
     await el.updateComplete;
     await picker(el).updateComplete;
     expect(picker(el).picks).toEqual(new Set(["c2", "c3"]));
@@ -811,7 +811,7 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
 
   it("offers dishes only, never a child extras row", async () => {
     const extra = line("x1", 6, { name: "Cheese", parentLineNo: 5, portion: false });
-    const el = await mountScreen({ lines: [...CANAS, HAM, extra] });
+    const el = await mountScreen({ lines: [...BEERS, HAM, extra] });
     await openMoveDishes(el);
     const ids = picker(el).rows.flatMap((row) => row.members.map((member) => member.id));
     expect(ids).toContain("h1");
@@ -882,11 +882,11 @@ describe("A803 move dishes, as Split by item and Transfer items did:", () => {
   });
 
   it("a picked dish that joins a group on a refresh keeps its count, taken from the group's first dishes", async () => {
-    const decaf = { ...CANAS[3]!, note: "Decaf" };
-    const el = await mountScreen({ lines: [CANAS[0]!, CANAS[1]!, CANAS[2]!, decaf, HAM] });
+    const decaf = { ...BEERS[3]!, note: "Decaf" };
+    const el = await mountScreen({ lines: [BEERS[0]!, BEERS[1]!, BEERS[2]!, decaf, HAM] });
     await openMoveDishes(el);
     await tick(el, "c4");
-    el.lines = [...CANAS, HAM];
+    el.lines = [...BEERS, HAM];
     await el.updateComplete;
     await picker(el).updateComplete;
     expect(picker(el).picks).toEqual(new Set(["c1"]));

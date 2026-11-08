@@ -54,7 +54,7 @@ function balance(total: string, received: string, paidLines: BillBalance["paidLi
   } satisfies BillBalance;
 }
 
-const CANAS = [line("c1", 1), line("c2", 2), line("c3", 3), line("c4", 4)];
+const BEERS = [line("c1", 1), line("c2", 2), line("c3", 3), line("c4", 4)];
 const WEIGHED = line("w1", 9, {
   name: "Pulpo",
   productId: "pulpo",
@@ -94,8 +94,8 @@ const STATES: [string, readonly TabLine[], BillBalance | null, Picks][] = [
     new Set(),
   ],
   ["an empty list", [], null, new Set()],
-  ["a grouped row, unticked", CANAS, null, new Set()],
-  ["a grouped row ticked at 2 of 4", CANAS, null, new Set(["c1", "c2"])],
+  ["a grouped row, unticked", BEERS, null, new Set()],
+  ["a grouped row ticked at 2 of 4", BEERS, null, new Set(["c1", "c2"])],
   ["a weighed row", [WEIGHED], null, new Set(["w1"])],
   [
     "a paid row",
@@ -103,7 +103,7 @@ const STATES: [string, readonly TabLine[], BillBalance | null, Picks][] = [
     balance("10.00", "5.00", [{ lineId: "k1", lineNo: 1, paidQuantity: "1.000" }]),
     new Set(),
   ],
-  ["a floor-blocked row", [...CANAS, STEAK], balance("52.00", "40.00"), new Set(["c1", "c2"])],
+  ["a floor-blocked row", [...BEERS, STEAK], balance("52.00", "40.00"), new Set(["c1", "c2"])],
 ];
 
 function rowsOf(lines: readonly TabLine[], paid: BillBalance | null, picks: Picks): PickRow[] {
@@ -178,7 +178,7 @@ describe.each(["light", "dark"] as const)("A803 picker a11y (%s theme)", (theme)
     const picks = new Set(["c1", "c2"]);
     const { el, host } = await mountWidget<TillPortionPicker>(
       "till-portion-picker",
-      { rows: rowsOf([...CANAS, STEAK], balance("52.00", "40.00"), picks), picks, nameOf, money },
+      { rows: rowsOf([...BEERS, STEAK], balance("52.00", "40.00"), picks), picks, nameOf, money },
       theme,
     );
     const tapMin = parseFloat(getComputedStyle(host).getPropertyValue("--wt-tap-min"));
@@ -202,7 +202,7 @@ describe.each(["light", "dark"] as const)("A803 picker a11y (%s theme)", (theme)
     const { el, host } = await mountWidget<TillPortionPicker>(
       "till-portion-picker",
       {
-        rows: rowsOf([...CANAS, STEAK], balance("52.00", "40.00"), new Set()),
+        rows: rowsOf([...BEERS, STEAK], balance("52.00", "40.00"), new Set()),
         picks: new Set(),
         nameOf,
         money,
@@ -220,7 +220,7 @@ describe.each(["light", "dark"] as const)("A803 picker a11y (%s theme)", (theme)
   it("a whole bill's working tick stands out from the page at 3:1", async () => {
     const { el, host } = await mountWidget<TillPortionPicker>(
       "till-portion-picker",
-      { rows: rowsOf(CANAS, null, new Set()), whole: true, nameOf, money },
+      { rows: rowsOf(BEERS, null, new Set()), whole: true, nameOf, money },
       theme,
     );
     const box = el.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="c1"]')!;

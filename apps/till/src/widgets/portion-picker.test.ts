@@ -71,7 +71,7 @@ function rowsOf(lines: readonly TabLine[], paid: BillBalance | null, picks: Pick
   return pickRows(pickGroups(lines, keyOf, paid, new Set()), picks);
 }
 
-const CANAS = [line("c1", 1), line("c2", 2), line("c3", 3), line("c4", 4)];
+const BEERS = [line("c1", 1), line("c2", 2), line("c3", 3), line("c4", 4)];
 const money = (amount: string) => formatMoney(decimal(amount), currentLocale());
 const nameOf = (dish: TabLine) => dish.name ?? "";
 
@@ -111,7 +111,7 @@ describe("till-portion-picker", () => {
   });
 
   it("a stepper button that reaches its limit hands focus to the other, keeping the keyboard in the picker", async () => {
-    const { el } = await picker(CANAS);
+    const { el } = await picker(BEERS);
     await userEvent.click(tick(el, "c1"));
     await el.updateComplete;
     const pressStepper = async (button: HTMLElement) => {
@@ -133,7 +133,7 @@ describe("till-portion-picker", () => {
   });
 
   it("A803 picker: ticking a grouped row of four emits all four, bubbling and composed", async () => {
-    const { el, emitted, last } = await picker(CANAS);
+    const { el, emitted, last } = await picker(BEERS);
     expect(el.shadowRoot!.querySelectorAll('input[type="checkbox"]')).toHaveLength(1);
     await userEvent.click(tick(el, "c1"));
     expect(last()).toEqual(["c1", "c2", "c3", "c4"]);
@@ -147,7 +147,7 @@ describe("till-portion-picker", () => {
   });
 
   it("A803 picker: − then emits the first three; + at the member count is disabled", async () => {
-    const { el, last } = await picker(CANAS, null, new Set(["c1", "c2", "c3", "c4"]));
+    const { el, last } = await picker(BEERS, null, new Set(["c1", "c2", "c3", "c4"]));
     expect(disabled(inc(el, "c1"))).toBe(true);
     await userEvent.click(dec(el, "c1")!);
     expect(last()).toEqual(["c1", "c2", "c3"]);
@@ -158,16 +158,16 @@ describe("till-portion-picker", () => {
   });
 
   it("A803 picker: from 2 of 4, − picks the first one and + the first three", async () => {
-    const down = await picker(CANAS, null, new Set(["c1", "c2"]));
+    const down = await picker(BEERS, null, new Set(["c1", "c2"]));
     await userEvent.click(dec(down.el, "c1")!);
     expect(down.last()).toEqual(["c1"]);
-    const up = await picker(CANAS, null, new Set(["c1", "c2"]));
+    const up = await picker(BEERS, null, new Set(["c1", "c2"]));
     await userEvent.click(inc(up.el, "c1")!);
     expect(up.last()).toEqual(["c1", "c2", "c3"]);
   });
 
   it("A803 picker: an unticked grouped row shows how many it holds; a ticked one shows the count control instead", async () => {
-    const lines = [...CANAS, dish("h1", 5, "Ham", "9.00")];
+    const lines = [...BEERS, dish("h1", 5, "Ham", "9.00")];
     const { el } = await picker(lines);
     expect(q(el, '[data-pick-qty="c1"]')!.textContent!.trim()).toBe("4");
     expect(q(el, '[data-pick-qty="h1"]')).toBeNull();
@@ -178,23 +178,23 @@ describe("till-portion-picker", () => {
   });
 
   it("A803 picker: − at 1 is disabled, and an unticked row shows no count control", async () => {
-    const { el } = await picker(CANAS, null, new Set(["c1"]));
+    const { el } = await picker(BEERS, null, new Set(["c1"]));
     expect(disabled(dec(el, "c1"))).toBe(true);
     expect(disabled(inc(el, "c1"))).toBe(false);
-    const unticked = await picker(CANAS);
+    const unticked = await picker(BEERS);
     expect(dec(unticked.el, "c1")).toBeNull();
     expect(inc(unticked.el, "c1")).toBeNull();
   });
 
   it("A803 picker: toggling a ticked row clears it", async () => {
-    const { el, last } = await picker(CANAS, null, new Set(["c1", "c2"]));
+    const { el, last } = await picker(BEERS, null, new Set(["c1", "c2"]));
     await userEvent.click(tick(el, "c1"));
     expect(last()).toEqual([]);
   });
 
   it("A803 picker: a tick the screen does not answer goes back to what the picks say", async () => {
     const { el } = await mountWidget<TillPortionPicker>("till-portion-picker", {
-      rows: rowsOf(CANAS, null, new Set()),
+      rows: rowsOf(BEERS, null, new Set()),
       picks: new Set(),
       nameOf,
       money,
@@ -209,14 +209,14 @@ describe("till-portion-picker", () => {
 
   it("A803 picker: a tick the screen answers with the same picks stays unticked", async () => {
     const { el } = await mountWidget<TillPortionPicker>("till-portion-picker", {
-      rows: rowsOf(CANAS, null, new Set()),
+      rows: rowsOf(BEERS, null, new Set()),
       picks: new Set(),
       nameOf,
       money,
     });
     el.addEventListener("portion-picks", () => {
       el.picks = new Set();
-      el.rows = rowsOf(CANAS, null, new Set());
+      el.rows = rowsOf(BEERS, null, new Set());
     });
     await userEvent.click(tick(el, "c1"));
     await el.updateComplete;
@@ -286,7 +286,7 @@ describe("till-portion-picker", () => {
   });
 
   it("A803 picker: a floor-blocked row says what is already paid, in English and Spanish", async () => {
-    const lines = [...CANAS, dish("s1", 5, "Steak", "32.00")];
+    const lines = [...BEERS, dish("s1", 5, "Steak", "32.00")];
     const paid = balance("52.00", "40.00");
     const previous = currentLocale();
     try {
@@ -311,7 +311,7 @@ describe("till-portion-picker", () => {
   });
 
   it("A803 picker: a ticked row whose next member would break the floor has + disabled", async () => {
-    const lines = [...CANAS, dish("s1", 5, "Steak", "32.00")];
+    const lines = [...BEERS, dish("s1", 5, "Steak", "32.00")];
     const { el, last } = await picker(lines, balance("52.00", "40.00"));
     await userEvent.click(tick(el, "c1"));
     expect(last()).toEqual(["c1", "c2"]);
@@ -330,14 +330,14 @@ describe("till-portion-picker", () => {
   });
 
   it("A803 picker: + that can still add a dish carries no reason", async () => {
-    const { el } = await picker(CANAS, null, new Set(["c1", "c2"]));
+    const { el } = await picker(BEERS, null, new Set(["c1", "c2"]));
     const plus = inc(el, "c1") as WtButton;
     await plus.updateComplete;
     expect(plus.shadowRoot!.querySelector("button")!.hasAttribute("aria-description")).toBe(false);
   });
 
   it("A803 picker: a row ticked at its floor limit can be stepped down or unticked", async () => {
-    const lines = [...CANAS, dish("s1", 5, "Steak", "32.00")];
+    const lines = [...BEERS, dish("s1", 5, "Steak", "32.00")];
     const paid = balance("52.00", "40.00");
     const down = await picker(lines, paid, new Set(["c1", "c2"]));
     await userEvent.click(dec(down.el, "c1")!);
@@ -350,7 +350,7 @@ describe("till-portion-picker", () => {
   });
 
   it("A803 picker: a row holding more picks than the floor allows can be unticked", async () => {
-    const lines = [...CANAS, dish("s1", 5, "Steak", "32.00")];
+    const lines = [...BEERS, dish("s1", 5, "Steak", "32.00")];
     const { el, last } = await picker(
       lines,
       balance("52.00", "40.00"),
@@ -364,7 +364,7 @@ describe("till-portion-picker", () => {
   });
 
   it("A803 picker: Space toggles a tick and Tab reaches − and +", async () => {
-    const { el, last } = await picker(CANAS, null, new Set(["c1", "c2"]));
+    const { el, last } = await picker(BEERS, null, new Set(["c1", "c2"]));
     tick(el, "c1").focus();
     expect(el.shadowRoot!.activeElement).toBe(tick(el, "c1"));
     await userEvent.tab();
@@ -384,7 +384,7 @@ describe("till-portion-picker", () => {
   });
 
   it("A803 picker: every tick is named by its visible text", async () => {
-    const lines = [...CANAS, dish("h1", 5, "Ham", "9.00")];
+    const lines = [...BEERS, dish("h1", 5, "Ham", "9.00")];
     const { el } = await picker(lines, null, new Set(["c1"]));
     for (const box of el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
       const label = box.closest("label")!;
@@ -399,7 +399,7 @@ describe("till-portion-picker", () => {
   });
 
   it("A803 picker: shows the row's amount and, with no dishes, says there are none", async () => {
-    const { el } = await picker([...CANAS, dish("h1", 5, "Ham", "9.00")]);
+    const { el } = await picker([...BEERS, dish("h1", 5, "Ham", "9.00")]);
     expect(q(el, '[data-pick-amount="c1"]')!.textContent!.trim()).toBe(money("20.00"));
     expect(q(el, '[data-pick-amount="h1"]')!.textContent!.trim()).toBe(money("9.00"));
     const empty = await picker([]);
@@ -408,7 +408,7 @@ describe("till-portion-picker", () => {
   });
 
   it("A803 picker: a ticked row shows the amount of the dishes moving, €10.00 at 2 of 4 Cañas", async () => {
-    const { el } = await picker(CANAS, null, new Set(["c1", "c2"]));
+    const { el } = await picker(BEERS, null, new Set(["c1", "c2"]));
     expect(q(el, '[data-pick-amount="c1"]')!.textContent!.trim()).toBe(money("10.00"));
     await userEvent.click(inc(el, "c1")!);
     await el.updateComplete;
@@ -526,7 +526,7 @@ describe("till-portion-picker's mark", () => {
     q(el, `[data-pick-mark="${id}"]`)?.textContent?.trim();
 
   it("draws what markOf says beside the dish's name, inside the tick's label", async () => {
-    const { el } = await picker(CANAS);
+    const { el } = await picker(BEERS);
     el.markOf = () => "Held · Mains";
     await el.updateComplete;
 
@@ -535,7 +535,7 @@ describe("till-portion-picker's mark", () => {
   });
 
   it("draws nothing for a dish markOf has no words for, and by default", async () => {
-    const { el } = await picker(CANAS);
+    const { el } = await picker(BEERS);
     expect(q(el, "[data-pick-mark]")).toBeNull();
     el.markOf = () => "";
     await el.updateComplete;
@@ -543,7 +543,7 @@ describe("till-portion-picker's mark", () => {
   });
 
   it("paints from the brand's text token on the lifted surface", async () => {
-    const { el } = await picker(CANAS);
+    const { el } = await picker(BEERS);
     el.markOf = () => "Held · Mains";
     await el.updateComplete;
 
@@ -558,7 +558,7 @@ describe("till-portion-picker's mark", () => {
   });
 
   it("marks a whole bill's row too", async () => {
-    const { el } = await picker(CANAS);
+    const { el } = await picker(BEERS);
     el.whole = true;
     el.markOf = () => "Held · Mains";
     await el.updateComplete;
@@ -567,7 +567,7 @@ describe("till-portion-picker's mark", () => {
 });
 
 describe("till-portion-picker whole", () => {
-  const WHOLE_LINES = [...CANAS, dish("h1", 5, "Ham", "9.00")];
+  const WHOLE_LINES = [...BEERS, dish("h1", 5, "Ham", "9.00")];
   const PAID = balance("14.00", "9.00", [{ lineId: "h1", lineNo: 5, paidQuantity: "1.000" }]);
   const LINES_PAID = [line("c1", 1), dish("h1", 5, "Ham", "9.00")];
 
@@ -607,7 +607,7 @@ describe("till-portion-picker whole", () => {
   it("unticking a row emits every other row's members, in line order", async () => {
     const { el, emitted } = await whole([
       dish("h1", 1, "Ham", "9.00"),
-      ...CANAS.map((c, i) => ({ ...c, lineNo: i + 2 })),
+      ...BEERS.map((c, i) => ({ ...c, lineNo: i + 2 })),
     ]);
     await userEvent.click(tick(el, "c1"));
     expect(emitted).toEqual([["h1"]]);
@@ -637,7 +637,7 @@ describe("till-portion-picker whole", () => {
   });
 
   it("a presented row is greyed: unticked and disabled outside a whole bill, ticked and disabled inside one", async () => {
-    const presented = rowsOf(CANAS, null, new Set()).map((row) => ({
+    const presented = rowsOf(BEERS, null, new Set()).map((row) => ({
       ...row,
       limit: 0,
       blocked: { reason: "presented" as const },
@@ -658,7 +658,7 @@ describe("till-portion-picker whole", () => {
   });
 
   it("outside a whole bill a row is not pale", async () => {
-    const { el } = await picker(CANAS);
+    const { el } = await picker(BEERS);
     const nameBox = q(el, '[data-pick-row="c1"] .name')!;
     expect(getComputedStyle(nameBox).opacity).toBe("1");
     const muted = document.createElement("span");
