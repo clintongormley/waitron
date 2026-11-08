@@ -12,6 +12,7 @@ import { setLocale } from "./i18n/t.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { DashboardApi } from "./api/client.js";
 import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
+import { lockupFileInks } from "@waitron/ui/src/test-helpers.js";
 import darkLockup from "../../../packages/ui/brand/waitron-lockup-dark.svg?raw";
 import lightLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
 
@@ -57,18 +58,6 @@ function stubApi(locale: Locale = "es-ES", onboardingIntent = "prepare"): Dashbo
   } as unknown as DashboardApi;
 }
 
-/** A lockup file's two inks, cloche then word, as computed styles spell them. */
-const drawing = (svg: string) =>
-  [...svg.matchAll(/<g fill="#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})"/g)]
-    .map(
-      (m) =>
-        `rgb(${m
-          .slice(1, 4)
-          .map((hex) => parseInt(hex, 16))
-          .join(", ")})`,
-    )
-    .join(" ");
-
 async function mountShell(): Promise<{ host: HTMLElement; shown: () => Promise<string> }> {
   const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
   // As main.ts does for the page: the theme choice paints the tokens the lockup reads.
@@ -87,17 +76,17 @@ async function mountShell(): Promise<{ host: HTMLElement; shown: () => Promise<s
 }
 
 it("tells the two lockups apart", () => {
-  expect(drawing(darkLockup)).not.toBe(drawing(lightLockup));
-  expect(drawing(lightLockup)).toMatch(/^rgb\(.*\) rgb\(.*\)$/);
+  expect(lockupFileInks(darkLockup).join(" ")).not.toBe(lockupFileInks(lightLockup).join(" "));
+  expect(lockupFileInks(lightLockup).join(" ")).toMatch(/^rgb\(.*\) rgb\(.*\)$/);
 });
 
 it("with Dark chosen the banner paints the lockup in the dark theme's inks, whatever the computer is set to", async () => {
   await commands.emulateColorScheme("light");
   const { shown } = await mountShell();
   chooseTheme("dark");
-  await expect.poll(shown).toBe(drawing(darkLockup));
+  await expect.poll(shown).toBe(lockupFileInks(darkLockup).join(" "));
   await commands.emulateColorScheme("dark");
-  await expect.poll(shown).toBe(drawing(darkLockup));
+  await expect.poll(shown).toBe(lockupFileInks(darkLockup).join(" "));
 });
 
 it("with Light chosen it paints the light theme's inks, whatever the computer is set to", async () => {
@@ -105,19 +94,19 @@ it("with Light chosen it paints the light theme's inks, whatever the computer is
   await commands.emulateColorScheme("dark");
   const { shown } = await mountShell();
   chooseTheme("light");
-  await expect.poll(shown).toBe(drawing(lightLockup));
+  await expect.poll(shown).toBe(lockupFileInks(lightLockup).join(" "));
   await commands.emulateColorScheme("light");
-  await expect.poll(shown).toBe(drawing(lightLockup));
+  await expect.poll(shown).toBe(lockupFileInks(lightLockup).join(" "));
 });
 
 it("on Follow device it follows the computer, and a change of choice applies at once", async () => {
   const { shown } = await mountShell();
   await commands.emulateColorScheme("dark");
-  await expect.poll(shown).toBe(drawing(darkLockup));
+  await expect.poll(shown).toBe(lockupFileInks(darkLockup).join(" "));
   chooseTheme("light");
-  await expect.poll(shown).toBe(drawing(lightLockup));
+  await expect.poll(shown).toBe(lockupFileInks(lightLockup).join(" "));
   chooseTheme("device");
-  await expect.poll(shown).toBe(drawing(darkLockup));
+  await expect.poll(shown).toBe(lockupFileInks(darkLockup).join(" "));
 });
 
 it("a choice saved before the page started is what the logo shows", async () => {
@@ -125,7 +114,7 @@ it("a choice saved before the page started is what the logo shows", async () => 
   const { host, shown } = await mountShell();
   localStorage.setItem(THEME_STORAGE_KEY, "dark");
   startThemeChoice(host);
-  await expect.poll(shown).toBe(drawing(darkLockup));
+  await expect.poll(shown).toBe(lockupFileInks(darkLockup).join(" "));
 });
 
 /** A signed-in member of staff, whose shell opens on their own schedule. */

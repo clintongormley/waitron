@@ -11,6 +11,7 @@ import {
 import { WAITRON_CHOICES, themeSheet, type TextScale } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
+import { lockupFileInks } from "@waitron/ui/src/test-helpers.js";
 import darkLockup from "../../../packages/ui/brand/waitron-lockup-dark.svg?raw";
 import lightLockup from "../../../packages/ui/brand/waitron-lockup.svg?raw";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
@@ -81,18 +82,6 @@ async function loadedLockup(line: WtPoweredBy): Promise<WtWaitronLockup> {
   await lockup.updateComplete;
   return lockup;
 }
-
-/** A lockup file's two inks, cloche then word, as computed styles spell them. */
-const fileInks = (svg: string) =>
-  [...svg.matchAll(/<g fill="#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})"/g)]
-    .map(
-      (m) =>
-        `rgb(${m
-          .slice(1, 4)
-          .map((hex) => parseInt(hex, 16))
-          .join(", ")})`,
-    )
-    .join(" ");
 
 /** The single banner line, with its lockup loaded and the frame laid out. */
 async function theLine(el: DashboardApp): Promise<WtPoweredBy> {
@@ -232,9 +221,9 @@ describe("Powered by in the signed-in banner", () => {
     });
     expect(inks).toBe(resolved.join(" "));
     // The word takes the dark theme's ink; the cloche, the venue's own colour.
-    expect(inks.split(") ")[1]).toBe(fileInks(darkLockup).split(") ")[1]);
-    expect(inks).not.toBe(fileInks(darkLockup));
-    expect(inks).not.toBe(fileInks(lightLockup));
+    expect(inks.split(") ")[1]).toBe(lockupFileInks(darkLockup)[1]);
+    expect(inks).not.toBe(lockupFileInks(darkLockup).join(" "));
+    expect(inks).not.toBe(lockupFileInks(lightLockup).join(" "));
   });
 
   describe.each(["en-GB", "es-ES"] as const)("at desktop width (%s)", (locale) => {

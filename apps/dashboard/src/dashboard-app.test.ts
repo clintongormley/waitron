@@ -11,7 +11,12 @@ import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { cleanupWidgets, menuDocument, mountWidget } from "./widgets/test-helpers.js";
-import { formMessageOf, lockupWordBaseline, textBaseline } from "@waitron/ui/src/test-helpers.js";
+import {
+  formMessageOf,
+  lockupFileInks,
+  lockupWordBaseline,
+  textBaseline,
+} from "@waitron/ui/src/test-helpers.js";
 import { MenuPreviewPanel } from "./widgets/menu-preview.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
@@ -825,18 +830,7 @@ describe("dashboard-app", () => {
     startThemeChoice(host);
     await flush(el);
 
-    /** A lockup file's two inks, cloche then word, as computed styles spell them. */
-    const drawing = (svg: string) =>
-      [...svg.matchAll(/<g fill="#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})"/g)]
-        .map(
-          (m) =>
-            `rgb(${m
-              .slice(1, 4)
-              .map((hex) => parseInt(hex, 16))
-              .join(", ")})`,
-        )
-        .join(" ");
-    expect(drawing(darkLockup)).not.toBe(drawing(lightLockup));
+    expect(lockupFileInks(darkLockup).join(" ")).not.toBe(lockupFileInks(lightLockup).join(" "));
     const lockup = brandBanner(el)!.querySelector<WtWaitronLockup>("wt-waitron-lockup")!;
     await lockup.updateComplete;
     const shown = async () =>
@@ -845,9 +839,9 @@ describe("dashboard-app", () => {
         .join(" ");
     try {
       await commands.emulateColorScheme("dark");
-      await expect.poll(shown).toBe(drawing(darkLockup));
+      await expect.poll(shown).toBe(lockupFileInks(darkLockup).join(" "));
       await commands.emulateColorScheme("light");
-      await expect.poll(shown).toBe(drawing(lightLockup));
+      await expect.poll(shown).toBe(lockupFileInks(lightLockup).join(" "));
     } finally {
       await commands.emulateColorScheme(null);
     }

@@ -275,3 +275,17 @@ export function lockupWordBaseline(lockup: Element): number {
   const point = new DOMPoint(0, Math.max(...ys)).matrixTransform(path.getScreenCTM()!);
   return point.y;
 }
+
+/**
+ * A lockup file's inks, cloche then word, spelled as computed styles spell them, so a test can
+ * compare them with what the drawn lockup's groups compute to.
+ */
+export function lockupFileInks(svg: string): string[] {
+  return [...svg.matchAll(/<g fill="#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})"/g)].map(
+    (m) =>
+      `rgb(${m
+        .slice(1, 4)
+        .map((hex) => parseInt(hex, 16))
+        .join(", ")})`,
+  );
+}

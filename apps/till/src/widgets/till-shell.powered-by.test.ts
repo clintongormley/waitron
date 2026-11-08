@@ -16,6 +16,7 @@ import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { BUSY_COUNTER as BUSY, cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { lockupFileInks } from "@waitron/ui/src/test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 
@@ -112,15 +113,6 @@ function inks(lockup: WtWaitronLockup): { drawn: string[]; tokens: string[] } {
   return { drawn, tokens };
 }
 
-/** A lockup file's word ink, as computed styles spell it. */
-const wordInk = (svg: string) => {
-  const m = [...svg.matchAll(/<g fill="#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})"/g)][1]!;
-  return `rgb(${m
-    .slice(1, 4)
-    .map((hex) => parseInt(hex, 16))
-    .join(", ")})`;
-};
-
 /** Mounts a handheld, or the shell `props` describe, with the stored logo, and lets it settle. */
 async function mountWithLogo(theme?: "light" | "dark", props: Partial<TillShell> = {}) {
   startFrom(withLogo(LIGHT));
@@ -154,7 +146,7 @@ describe("Powered by Waitron at the foot of a handheld's More", () => {
       expect(line.shadowRoot!.querySelector('[part="label"]')!.textContent).toBe("Powered by");
       const { drawn, tokens } = inks(await lockupLoaded(line));
       expect(drawn).toEqual(tokens);
-      expect(drawn[1]).toBe(wordInk(lightLockup));
+      expect(drawn[1]).toBe(lockupFileInks(lightLockup)[1]);
       const logout = moreMenu(el).querySelector(".logout")!.getBoundingClientRect();
       expect(line.getBoundingClientRect().top).toBeGreaterThanOrEqual(logout.bottom);
     });
@@ -273,7 +265,7 @@ describe("Powered by Waitron at the foot of a handheld's More", () => {
       await openMenu(el);
       const { drawn, tokens } = inks(await lockupLoaded(lineOf(el)!));
       expect(drawn).toEqual(tokens);
-      expect(drawn[1]).toBe(wordInk(darkLockup));
+      expect(drawn[1]).toBe(lockupFileInks(darkLockup)[1]);
     });
   });
 });
@@ -296,7 +288,7 @@ describe("Powered by Waitron at the foot of a cash register's More", () => {
       expect(line.shadowRoot!.querySelector('[part="label"]')!.textContent).toBe("Powered by");
       const { drawn, tokens } = inks(await lockupLoaded(line));
       expect(drawn).toEqual(tokens);
-      expect(drawn[1]).toBe(wordInk(lightLockup));
+      expect(drawn[1]).toBe(lockupFileInks(lightLockup)[1]);
       const logout = moreMenu(el).querySelector(".logout")!.getBoundingClientRect();
       expect(line.getBoundingClientRect().top).toBeGreaterThanOrEqual(logout.bottom);
     });
@@ -450,7 +442,7 @@ describe("Powered by Waitron at the foot of a cash register's More", () => {
       await openMenu(el);
       const { drawn, tokens } = inks(await lockupLoaded(lineOf(el)!));
       expect(drawn).toEqual(tokens);
-      expect(drawn[1]).toBe(wordInk(darkLockup));
+      expect(drawn[1]).toBe(lockupFileInks(darkLockup)[1]);
     });
   });
 });
