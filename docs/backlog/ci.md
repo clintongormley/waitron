@@ -521,14 +521,10 @@ except the last, added on 2026-11-07.
   or a child that exits once its result is flushed), to be proved by a reproduction that delays the
   child's exit.
 
-## Bundle: Replace 15 "if it happens again" entries with one table in `docs/backlog/ci
+## Bundle: Replace 14 "if it happens again" entries with one table in `docs/backlog/ci
 
-15 entries, size M.
+14 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **Store commit notification misses a same-size write-ahead-file rewrite on Linux.** The
-  unchanged case failed in A1431's baseline and fixed-fixture measurements. Trace the file marks
-  before changing the test or its assertions.
-  [Detail](ci.md#store-commit-notification-misses-a-same-size-rewrite).
 - **Find why GitHub created no workflows for A987's main merge (A1022).** The runs API
   returned no runs for `e7ce92a7c`; the cause remains unverified. Recovery and the successful-CI
   baseline do not explain the missing trigger. Retain the after-merge run check.
@@ -1538,7 +1534,7 @@ existing one in #2395, and two of its new cases sit apart from the cases they ex
 new setup into the existing helper and move the two cases beside their neighbours; no assertion
 changes.
 
-## Store commit notification misses a same-size rewrite
+## A1432. Store commit notifications on the Debian test box
 
 `packages/store/src/index.test.ts`, "tells listeners about a commit that rewrites the side file
 from its beginning at the same size", received zero notifications where it expected one on the
@@ -1549,9 +1545,11 @@ The focused 54-case file passed on macOS. No notification assertion or store imp
 The Linux runs restricted the process to two CPUs with `taskset -c 0,1` and enabled coverage.
 The last two ran store and shared concurrently with
 `pnpm --filter @waitron/store --filter @waitron/shared -r --parallel test:coverage`.
-`connectionPair` compares the write-ahead file's size and modification time before notifying.
-Capture those marks around the failed write to establish why it was missed; the cause is unverified.
-A1431's PR retains the logs. Keep the existing notification and same-size assertions.
+`packages/store/src/connections.ts:152–155` documents that a same-size commit in the same
+modification-time tick can go unreported, measured on APFS only. Capture those marks around the
+failed write and check that limit on the box's filesystem; the cause here remains unverified.
+A1432 determines whether the store or the test's timing needs correction, preserving the
+notification and same-size assertions. A1431's PR retains the logs.
 
 ## Shared logo retry checks use the retained timing list
 
