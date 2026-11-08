@@ -33,7 +33,9 @@ export function recoveryRefusalText(refusal: RecoveryRefusal): string | null {
         ? "sale.charged_disk_full"
         : refusal.reason === "clock_behind_chain"
           ? "bill_pay.charged_clock_behind"
-          : "recovery.charged",
+          : refusal.reason === "clock_unusable"
+            ? "bill_pay.charged_clock_unusable"
+            : "recovery.charged",
     );
     return `${charged} ${t("bill_pay.card_recovery")}`;
   }

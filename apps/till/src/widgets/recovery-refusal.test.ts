@@ -36,6 +36,7 @@ for (const locale of ["en", "es"] as const) {
   it.each([
     ["disk_full", "sale.charged_disk_full"],
     ["clock_behind_chain", "bill_pay.charged_clock_behind"],
+    ["clock_unusable", "bill_pay.charged_clock_unusable"],
     ["other", "recovery.charged"],
   ] as const)(`offers signed-in card-payment recovery in ${locale} for %s`, async (reason, key) => {
     setLocale(locale);

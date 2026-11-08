@@ -5547,6 +5547,27 @@ describe("till-app: a bill payment on the card reader", () => {
     );
   });
 
+  it.each([
+    ["clock_behind_chain", "bill_pay.charged_clock_behind"],
+    ["clock_unusable", "bill_pay.charged_clock_unusable"],
+  ] as const)(
+    "A1399: a charged clock stop retains its cause through a recheck: %s",
+    async (reason, key) => {
+      const takeBillPayment = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "sale.charged_not_recorded", reason, status: 409 })
+        .mockRejectedValueOnce({ code: "server.internal", status: 500 });
+      const el = await takeOnReader(takeBillPayment);
+      const expected = `${t(key)} ${t("bill_pay.card_recovery")}`;
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(expected);
+      await press(el, "[data-pay-confirm]");
+      expect(sent()[1]).toEqual(sent()[0]);
+      expect(dialog(el)!.confirmationLocked).toBe(true);
+      expect(inDialog(el, "wt-form-actions")!.error).toBe(expected);
+      expect(inDialog(el, "a[data-recovery]")?.getAttribute("href")).toBe("/manage/payments");
+    },
+  );
+
   it.each(["reader.not_held", "reader.payment_in_progress", "device.profile_changed"])(
     "A1399: a known charge keeps its pending hold after a recheck refused %s",
     async (code) => {
