@@ -6010,6 +6010,29 @@ reject `EBADF`, and a stream made with `autoClose: false` stays tied to the hand
 it receives that as an `error` event, and with no listener that exited 1 even though the rejection
 was caught. `openIfMatching` keeps a listener on its digest stream for this.
 
+## A till request's person is checked where the sign-in is read
+
+Every till request but the sign-in names the tab's signed-in person in the `x-waitron-person`
+header (`PERSON_HEADER`, `packages/shared/src/person-header.ts`). The server compares it with the
+person of the device's open session in one function, `personRefusal` in
+`apps/server/src/till-session.ts`, called from `requireSession`, from `signedInPersonOn` and from
+the sign-out handler (`DELETE /api/session` in `apps/server/src/till-api.ts`). A request naming
+nobody or anyone else is refused `session.person_not_signed_in`, except where `signedInPersonOn`'s
+caller answers it as for nobody signed in (`GET /api/device/me`, and kitchen-screen requests from a
+kitchen display, `apps/server/src/device-api.ts`). A route that read the session's person any other
+way would act as that person whatever the header says. What the till does
+with the refusal: `docs/backlog/till.md`, "One editor per bill".
+
+The guard, `apps/server/src/till-api.session-person.test.ts`, is weaker than its name. Its walk
+sends every route the till, device and schedule mount functions add with Ben's session naming Ana,
+naming nobody and naming Ben, and with the device's cookie alone. An answer naming Ana or nobody
+must be the refusal or the device-cookie-alone answer, compared by status and error code, never
+body, so
+`GET /api/device/me`'s narrowing has its own cases in `device-api.test.ts`. A route not in its
+`BODIES` gets `"{}"`, so the walk sees nothing past that route's refusal of that body. Its second
+case reads the server's source as text and holds that only `till-session.ts` and the sign-out
+handler name `readSessionToken` or `SESSION_COOKIE`; a cookie name spelt out as a string is missed.
+
 ## Root receipts moved on 2026-11-06
 
 These excerpts retain the root instruction receipts from `CLAUDE.md` at

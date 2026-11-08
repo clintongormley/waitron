@@ -584,6 +584,11 @@ called weaker than its name, the topic file lists what it does not see.
   sweeps in `apps/server/src/boot.management-origin.test.ts` and `apps/server/src/waiting-start.test.ts`,
   weaker than their names: one attack, own app's routes as mounted; recovery, first-setup, landing,
   node-entry apps unseen. [Receipt](docs/developers/conventions-data.md#a-change-carrying-the-dashboards-sign-in-cookie-is-checked-for-the-page-that-sent-it).
+- **A till request that needs a signed-in person is checked against the `x-waitron-person` header
+  inside `requireSession`, `signedInPersonOn` and sign-out; read the session's person only through
+  them.** Guard: `apps/server/src/till-api.session-person.test.ts`, weaker than its name: only the
+  till, device and schedule mounts' routes, statuses rather than bodies, and a text check for the
+  cookie. [Receipt](docs/developers/conventions-data.md#a-till-requests-person-is-checked-where-the-sign-in-is-read).
 - **A module with a migration set names in `requires` every other set its SQL references, puts a
   trigger on, names in a trigger body or writes at top level.** Guard: `scripts/module-graph-honesty.test.ts`,
   weaker than its name: text scan recognising fixed SQL shapes.
@@ -658,6 +663,9 @@ passed while proving nothing.
 - **Don't own a database in a suite — let `useVenueDb` own it.** Raw `beforeAll`/`afterAll` only
   when the suite legitimately builds its own resource, and then guarded. Guard:
   `scripts/guarded-teardowns.test.ts`.
+- **Server tests send the till's person header through `src/testing/tab-person-setup.ts`; a test of
+  the person check itself leaves its session alone.**
+  [Detail](docs/developers/testing-guide.md#server-tests-send-the-tills-person-header-through-one-setup-file).
 - **An insert whose rows grow with an order must go through `insertInChunks` or `statementChunks`**;
   the table round's `insertTabRound` does not yet, and no sweep has read every insert (see the backlog). Cost: a 2,001-dish order passed locally and
   failed CI. Guard: the bound-value case in `packages/store/src/index.test.ts`, weaker than the

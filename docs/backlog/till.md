@@ -2098,10 +2098,26 @@ the answer is unknown, so no change can be made, and add no sentence.
 
 ## A till request refused for naming someone not signed in locks the screen with no sentence
 
-Left open by A1382. On main an order save does this; #2534's rework puts one check on every request
-that needs a signed-in person, so any of them can. The owner chose the words on 2026-11-07: "You have
-been logged out because somebody else has logged in on this device." They go in after #2534's
-rework, which shares the path; the Spanish is not yet written.
+Left open by A1382. #2534 built one check on every request that needs a signed-in person, so a
+refusal from any of them locks the till, and the sign-in screen says nothing about why
+([One editor per bill](#one-editor-per-bill-owner-2026-10-17-a773)). The owner chose the words on
+2026-11-07: "You have been logged out because somebody else has logged in on this device." They are
+not in yet, and the Spanish is not written.
+
+## A1435. A sign-in keyed while the last person's sign-out waits on a slow save can need keying twice
+
+Left open by A1380 (#2534). The till's sign-in screen is drawn afresh whenever the screen language
+changes: it is keyed by `${currentLocale()}:${this.#operatorSession}` in
+`apps/till/src/till-app.ts`, and a screen drawn afresh drops a sign-in answer the old one was
+waiting for (`#submit` in `apps/till/src/screens/till-lock-screen.ts`). Each person has their own
+language (`PUT /api/session/locale` and the sign-in answer's `locale`, `apps/server/src/till-api.ts`).
+`#onLogout` puts the sign-in screen's language back only after the person's saves and the sign-out
+request have finished. So when the person leaving uses another language than the sign-in screen's,
+their sign-out waits on a slow save, and the next person's sign-in is still waiting for its answer
+when the sign-out's answer comes back, the server signs the next person in but the till shows the
+PIN pad again, and they must key their PIN again. The cheapest fix, putting the
+language back as soon as the till locks, changes what `apps/till/src/till-app.test.ts` "does not
+revert the locale if the app disconnects mid-logout" asserts, so it needs a decision on that test.
 
 ## Other till sentences still send the person to somebody else, against the refusal rule
 
@@ -3112,28 +3128,41 @@ only the bill to the survivor refuses `draft.out_of_date`. Both the direct comma
 survivor's current edit state succeeds and retains the separately marked lines. These cases
 replace Task 7's unrun consumed-draft observation; they do not establish the till's recovery UI.
 
-Each order save names the person whose order it is, and the server refuses
-`session.person_not_signed_in` (409) unless that is the person signed in on the device (owner, Q35,
-A791). A take-over (`POST /api/parties/:id/drafts/:did/take-over`), a recall
-(`POST /api/parties/:id/lines/:lineId/recall`) and a line split
-(`POST /api/parties/:id/groups/split-line`) also name their person and are refused the same way.
-When the till meets that refusal it locks to the sign-in screen and keeps that person's unsaved
-lines for their next sign-in, without signing out the device's session, which belongs to someone
-else. A refusal arriving after another person's sign-in leaves that sign-in alone. One case does
-not: after a re-boot with no sign-out (`device-unauthorized`), a save still out when the same person
-signs back in can lock them when it is refused. A split checks for this and does not. The server cases are in
-`apps/server/src/till-api.drafts.test.ts`, `draft-recall.test.ts` and `till-api.groups.test.ts`; the app
-cases are in `apps/till/src/till-app-drafts.test.ts`, `till-app-parties.test.ts` and
-`till-app-split-table.test.ts`.
+Every request the till sends, except the sign-in itself (`POST /api/session`), names the person
+signed in on that tab in an `x-waitron-person` header (`PERSON_HEADER`,
+`packages/shared/src/person-header.ts`), added by `TillApi`'s fetch wrapper in
+`apps/till/src/api/client.ts`. A tab nobody has signed in on names nobody. The server checks the
+header where it reads the device's sign-in: `requireSession` and `signedInPersonOn` in
+`apps/server/src/till-session.ts`, and the sign-out. While a session is open, a request with no
+header, an empty one, one that is not an id, or one naming anyone but that session's person is
+refused `session.person_not_signed_in` (409), before `requireSession` stamps, checks a permission
+or a profile action (owner, Q35, A791). A request whose cookie names no open session still gets
+`session.required`. `GET /api/device/me`, and kitchen-screen requests from a kitchen display, answer
+such a request as if nobody were signed in, so a new tab beside a signed-in one still starts; a
+kitchen-screen request from any other device is refused.
 
-A sign-out (`DELETE /api/session`) from the till names its person too, the one signed in on that tab
-when the sign-out began. When the session behind the device's cookie is someone else's, the server
-ends nothing, keeps the cookie and answers `{ ok: true }`, not a refusal; a malformed name answers
-`management.request_invalid` on `personId`. A sign-out naming its person ends the session and leaves
-the now dead cookie in place, because the answer can reach the browser after the next person's
-sign-in. A sign-out naming nobody ends whichever session the cookie holds and clears the cookie. The
-server cases are in `apps/server/src/till-api.test.ts`; the app cases, which use a controlled API,
-are in `till-app-drafts.test.ts`.
+When a request named a person and comes back with that refusal, whatever its status, the till locks
+to the sign-in screen once and keeps that person's unsaved lines for their next sign-in, without
+signing out the device's session, which belongs to someone else. While the till is locked this way
+it shows no error from the refused sign-in's requests. A refusal for a request sent under an earlier
+sign-in, the same person's included, or through a client the till no longer holds, does not lock
+it: that request fails with its usual error.
+
+A sign-out (`DELETE /api/session`) is sent once the person's saves have finished, and names, in the
+same header, the person signed in on that tab when the sign-out began. With a session open, a
+sign-out naming its person ends it; one naming nobody or anyone else is refused the same way and
+ends nothing. A sign-out carrying the header never clears the cookie, because its answer can reach
+the browser after the next person's sign-in. With no session open it answers `{ ok: true }`, and
+clears the cookie only when it names nobody.
+
+The server cases are in `apps/server/src/till-session.person.test.ts`, the walk of every till,
+device and schedule route in `till-api.session-person.test.ts`, `GET /api/device/me`'s in
+`device-api.test.ts` and more sign-out cases in `till-api.test.ts`. The till's are in
+`apps/till/src/api/client.test.ts` ("TillApi: the tab's person on every request") and
+`apps/till/src/till-app-person-refusal.test.ts`, which drives the app through its real client. The
+other server tests send the signed-in person's header through
+`apps/server/src/testing/tab-person-setup.ts`, as a correct till does
+([testing guide](../developers/testing-guide.md#server-tests-send-the-tills-person-header-through-one-setup-file)).
 
 ### Permanent group numbers (A773)
 

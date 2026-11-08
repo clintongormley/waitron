@@ -878,8 +878,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Detail](backlog/till.md#a1417-after-a-lost-counter-send-reply-a-basket-changed-since-cannot-be-sent-and-the-till-says-only-try-again)
 
 - **A till request refused for naming someone not signed in locks the screen with no sentence (left
-  open by A1382).** The owner has chosen the words; they go in after #2534's rework.
+  open by A1382).** #2534 built the check on every such request; the owner's words are not in yet.
   [Detail](backlog/till.md#a-till-request-refused-for-naming-someone-not-signed-in-locks-the-screen-with-no-sentence)
+
+- **A1435. A sign-in keyed while the last person's sign-out waits on a slow save can need keying
+  twice (left open by A1380, #2534).** Only when the person leaving uses another language than the
+  sign-in screen's; the fix needs a decision on one till test.
+  [Detail](backlog/till.md#a1435-a-sign-in-keyed-while-the-last-persons-sign-out-waits-on-a-slow-save-can-need-keying-twice)
 
 - **Other till sentences still send the person to somebody else, against the refusal rule (left open
   by A1382).** Listed by code in the detail.
