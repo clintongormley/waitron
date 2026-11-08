@@ -13,6 +13,7 @@ import {
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { setup } from "./testing/setup.js";
+import { SumUpCloudProvider } from "./provider.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 const now = new Date("2026-11-07T03:00:00.000Z");
@@ -98,7 +99,7 @@ describe("SumUp capture amount evidence", () => {
     },
   );
 
-  it.each(["SUCCESSFUL", "FAILED", "REFUNDED", "missing"])(
+  it.each(["SUCCESSFUL", "FAILED", "REFUNDED", "PENDING", "missing", "throws"])(
     "rechecks evidence before a %s answer already in flight changes the row",
     async (status) => {
       const { provider, fake, params, row } = await setup(suite, (fake) => fake.stallNext());
@@ -119,6 +120,7 @@ describe("SumUp capture amount evidence", () => {
             now,
           ),
         );
+        if (status === "throws") throw new Error("lookup failed after mismatch evidence arrived");
         return status === "missing"
           ? null
           : { id: "txn_mismatch", status, amount: decimal("12.50") };
@@ -202,9 +204,16 @@ it("does not let a create refusal erase mismatch evidence recorded while that cr
 });
 
 it.each(["captured", "failed"])(
-  "does not alert on a stale sweep after another caller resolved the row as %s",
+  "keeps a stale sweep's %s outcome and warns only about a contradictory capture",
   async (state) => {
-    const { provider, fake, params, row } = await setup(suite, (f) => f.stallNext());
+    const { fake, params, row } = await setup(suite, (f) => f.stallNext());
+    const provider = new SumUpCloudProvider({
+      client: fake,
+      db: suite.db,
+      captureAlerts,
+      incidents: captureAlerts.raise,
+      poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },
+    });
     const result = await provider.collect(params);
     vi.spyOn(fake, "findTransaction").mockImplementationOnce(async () => {
       await withTransaction(suite.db, (tx) =>
@@ -223,10 +232,17 @@ it.each(["captured", "failed"])(
       nextDueAt: null,
       forwarded: 0,
       declined: 0,
-      incidentsRaised: 0,
+      incidentsRaised: state === "failed" ? 1 : 0,
     });
     expect((await row(result.paymentRef)).state).toBe(state);
-    expect(await suite.db.select().from(incidents)).toEqual([]);
+    const alerts = await suite.db.select().from(incidents);
+    if (state === "failed") {
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]).toMatchObject({
+        code: "payment.pending_outcome_unactionable",
+        params: { paymentRef: result.paymentRef, status: "SUCCESSFUL" },
+      });
+    } else expect(alerts).toEqual([]);
   },
 );
 

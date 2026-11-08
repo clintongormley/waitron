@@ -144,6 +144,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
       const { fake, attempting, state } = await setup();
       await attempting("unrelated", { status: "REFUNDED" });
       const provider = new SumUpCloudProvider({
+        captureAlerts,
         client: fake,
         db: suite.db,
         incidents: () => Promise.reject(failure),

@@ -330,6 +330,21 @@ export class SumUpCloudProvider implements PaymentProvider {
     let declined = 0;
     let incidentsRaised = 0;
     let deferred = false;
+    const resolve = async <T>(action: () => Promise<T>): Promise<T | undefined> => {
+      try {
+        return await action();
+      } catch (error) {
+        if (error instanceof AppError && error.code === "payment.not_found") return undefined;
+        throw error;
+      }
+    };
+    const unresolved = (tx: Transaction, paymentRef: string, status: string) =>
+      this.opts.incidents(tx, {
+        origin: jobOrigin("payment_check"),
+        error: new AppError("payment.pending_outcome_unactionable", { paymentRef, status }),
+        severity: "error",
+        detectedAt: now,
+      });
     // Recheck evidence in the same transaction as the outcome; the lookup ran without the lock.
     const failWith = (
       key: { provider: string; paymentRef: string },
@@ -337,17 +352,10 @@ export class SumUpCloudProvider implements PaymentProvider {
     ): Promise<{ resolved: boolean; raised: boolean }> =>
       this.inTransaction(async (tx) => {
         if (await hasCaptureMismatch(tx, key)) return { resolved: false, raised: false };
-        await failAttempting(tx, key);
+        if ((await resolve(() => failAttempting(tx, key))) === undefined)
+          return { resolved: false, raised: false };
         if (status === null) return { resolved: true, raised: false };
-        const raised = await this.opts.incidents(tx, {
-          origin: jobOrigin("payment_check"),
-          error: new AppError("payment.pending_outcome_unactionable", {
-            paymentRef: key.paymentRef,
-            status,
-          }),
-          severity: "error",
-          detectedAt: now,
-        });
+        const raised = await unresolved(tx, key.paymentRef, status);
         return { resolved: true, raised };
       });
     for (const row of rows) {
@@ -365,9 +373,10 @@ export class SumUpCloudProvider implements PaymentProvider {
             : { clientTransactionId: row.externalRef },
         );
       } catch {
-        deferred = true;
+        if (!(await this.inTransaction((tx) => hasCaptureMismatch(tx, key)))) deferred = true;
         continue;
       }
+      if (await this.inTransaction((tx) => hasCaptureMismatch(tx, key))) continue;
       if (t === null) {
         if (now.getTime() - new Date(row.createdAt).getTime() < NOT_FOUND_GRACE_MS) {
           deferred = true;
@@ -386,7 +395,12 @@ export class SumUpCloudProvider implements PaymentProvider {
       }
       if (outcome.kind === "captured") {
         const captured = await this.inTransaction(async (tx) => {
-          if ((await getPaymentByRef(tx, key))?.state !== "attempting") return false;
+          const current = await getPaymentByRef(tx, key);
+          if (current?.state !== "attempting") {
+            if (current?.state === "failed" && (await unresolved(tx, key.paymentRef, t.status)))
+              incidentsRaised++;
+            return false;
+          }
           if (await hasCaptureMismatch(tx, key)) return false;
           if (compareDecimal(outcome.amount, decimal(row.amount)) !== 0) {
             if (
