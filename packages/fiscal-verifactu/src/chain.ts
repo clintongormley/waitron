@@ -362,6 +362,13 @@ export async function appendToChain(
   registro: PendingRegistro,
   reads: AppendReads = {},
 ): Promise<{ id: string; secuencia: number; huella: string }> {
+  // `readHistoryNodes` lists the box itself first. A history for another box would let a
+  // correction name a record outside this box's takeover history: a programming error.
+  if (reads.history !== undefined && reads.history[0] !== nodeId) {
+    throw new Error(
+      `appendToChain: supplied history is for node ${reads.history[0]}, not ${nodeId}`,
+    );
+  }
   if (reads.chart === undefined) await refuseUnlessServingPrimary(tx, nodeId);
   else refuseUnlessPrimaryIn(reads.chart, nodeId);
   const history =

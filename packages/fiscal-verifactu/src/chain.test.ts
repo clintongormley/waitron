@@ -405,6 +405,40 @@ describe("appendToChain — pre-fetched SIF", () => {
       }),
     ).rejects.toThrow(/SIF/i);
   });
+
+  it("rejects a takeover history that belongs to a different box, writing nothing", async () => {
+    const other = await seedNode(suite.db, "B");
+    const saleId = await seedSale(suite.db, node, 1);
+    const error = await captureError(() =>
+      suite.db.transaction((tx) =>
+        appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1), {
+          history: [other.nodeId, node.nodeId],
+        }),
+      ),
+    );
+
+    expect((error as Error).message).toBe(
+      `appendToChain: supplied history is for node ${other.nodeId}, not ${node.nodeId}`,
+    );
+    expect(
+      await suite.db
+        .select({ id: registrosFacturacion.id })
+        .from(registrosFacturacion)
+        .where(eq(registrosFacturacion.nodeId, node.nodeId)),
+    ).toEqual([]);
+  });
+
+  it("accepts a takeover history that starts with this box", async () => {
+    const other = await seedNode(suite.db, "B");
+    const saleId = await seedSale(suite.db, node, 1);
+    const appended = await suite.db.transaction((tx) =>
+      appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1), {
+        history: [node.nodeId, other.nodeId],
+      }),
+    );
+
+    expect(appended.secuencia).toBe(1);
+  });
 });
 
 describe("readChainHead", () => {

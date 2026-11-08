@@ -870,6 +870,55 @@ describe("the membership chart on each record", () => {
     );
     expect(reads).toBe(1);
   });
+
+  it("reads the chart once to record a full invoice for tickets", async () => {
+    const { saleId: ticket } = await sell();
+    const reads = await chartReads(() =>
+      withTransaction(suite.db, async (tx) => {
+        const issuedAt = steadyClock.now().instant;
+        const [full] = await tx
+          .insert(sales)
+          .values({
+            source: "device",
+            deviceId,
+            nodeId,
+            seriesId,
+            invoiceNumber: 500,
+            issuedAt: issuedAt.toISOString(),
+            issuedOffsetMinutes: 60,
+            total: 1441,
+            vatBreakdown: [],
+            locale: "es",
+            invoiceLocales: ["es"],
+            fiscalBackend: "verifactu",
+            fiscalState: "recorded",
+          })
+          .returning({ id: sales.id });
+        await backend.recordSubstitution(
+          tx,
+          {
+            origin: deviceOrigin(deviceId),
+            nodeId,
+            saleId: brandSaleId(full!.id),
+            seriesId,
+            seriesCode: "A",
+            invoiceNumber: 500,
+            issuedAt,
+            offsetMinutes: 60,
+            descriptionOfOperation: "Canje de tiques simplificados",
+            total: decimal("14.41"),
+            vatBreakdown: [
+              { rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") },
+              { rate: decimal("10.00"), base: decimal("2.10"), tax: decimal("0.21") },
+            ],
+            counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
+          },
+          { substitutedSaleIds: [ticket] },
+        );
+      }),
+    );
+    expect(reads).toBe(1);
+  });
 });
 
 describe("checkIntegrity", () => {
