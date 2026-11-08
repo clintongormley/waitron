@@ -517,9 +517,15 @@ describe("unpaid departure stops kitchen work", () => {
     expect(await jobs()).toEqual(before);
   });
 
-  it.each([false, true])(
-    "keeps made-here work outside station selection, remote extra %s",
-    async (remoteExtra) => {
+  it.each([
+    [false, false],
+    [true, false],
+    [true, true],
+  ])(
+    "keeps made-here work outside station selection, remote extra %s, waiting %s",
+    async (remoteExtra, waitingExtra) => {
+      const stops = remoteExtra && !waitingExtra;
+      if (waitingExtra) await inTx(venue, (tx) => setStationsWaitForPass(tx, true, [extraStation]));
       await venue.db
         .insert(deviceMadeHereStations)
         .values({ deviceId: venue.deviceId, stationId: venue.stationId });
@@ -531,6 +537,8 @@ describe("unpaid departure stops kitchen work", () => {
           { shape: "grouped" },
         );
       } finally {
+        if (waitingExtra)
+          await inTx(venue, (tx) => setStationsWaitForPass(tx, false, [extraStation]));
         await venue.db
           .delete(deviceMadeHereStations)
           .where(
@@ -553,7 +561,8 @@ describe("unpaid departure stops kitchen work", () => {
       if (remoteExtra)
         expect(tickets.find((row) => row.workingOrderLineId === lines[1]!.id)).toMatchObject({
           madeHere: false,
-          firedAt: expect.any(String),
+          firedAt: waitingExtra ? null : expect.any(String),
+          requestedAt: expect.any(String),
           state: "queued",
         });
       const before = new Set((await jobs()).map((job) => job.id));
@@ -561,7 +570,7 @@ describe("unpaid departure stops kitchen work", () => {
       expect(await depart(order.partyId)).toMatchObject({ status: 200 });
 
       expect(await cancellations(lines[0]!.id)).toEqual(
-        remoteExtra
+        stops
           ? [
               {
                 lineId: lines[0]!.id,
@@ -577,12 +586,12 @@ describe("unpaid departure stops kitchen work", () => {
         .select()
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderId, order.billId));
-      expect(after).toEqual(remoteExtra ? [] : tickets);
+      expect(after).toEqual(stops ? [] : tickets);
       const slips = (await jobs())
         .filter((job) => !before.has(job.id))
         .map((job) => decodeTicket(job.payload));
-      expect(slips).toHaveLength(remoteExtra ? 1 : 0);
-      if (remoteExtra) {
+      expect(slips).toHaveLength(stops ? 1 : 0);
+      if (stops) {
         expect(slips[0]).toContain("OLIV");
         expect(slips[0]).not.toContain("1 x PIZZA");
       }
