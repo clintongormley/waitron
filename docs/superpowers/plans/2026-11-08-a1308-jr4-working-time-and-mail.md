@@ -28,9 +28,9 @@ Slice rules apply. **Timings:** `timings.x` is env1's `DutyTimings`, or `config.
 1. `attendance.end_of_day`: an idle pass is one plain read that takes no write lock; the job wakes
    at once on the work table and the clocking tables; role read on every pass; discovery begun on
    the first pass as primary, even on a box promoted after start. Two shapes, by what is on `main`
-   (Task 1): **while the discovery scan exists** (before pp11), "pending" also covers the scan's
+   (Task 1): **while the discovery scan exists** (before pp12), "pending" also covers the scan's
    live end points, its due watches and the venue clock's fingerprint, and the ceiling stays 30 s;
-   **once pp11 has deleted discovery** (every change marks its day, pp9), "pending" is due work rows
+   **once pp12 has deleted discovery** (every change marks its day, pp9), "pending" is due work rows
    alone and the next due time is the earliest due work row or the next end of a working day.
 2. `mail.send`: 3a-ii's sender on the runner, woken by `outgoing_mail` changes; the time-zone repair
    start runs its account-only sender (3a-iii) on a runner of its own.
@@ -82,7 +82,7 @@ Mail kinds and owners (3a, 3b, A1002, the fiscal slice); `email_inbox` publishin
 ## Needs
 
 jr1, jr2, jr3; 3a-ii and 3a-iii (the sender, its repair-start use); 3b-ii (the box alert decision);
-the people slice (its work-table name). Works with pp9–pp11 landed or not (Task 1's two shapes).
+the people slice (its work-table name). Works with pp9–pp12 landed or not (Task 1's two shapes).
 
 ## Global Constraints
 
@@ -110,8 +110,8 @@ the people slice (its work-table name). Works with pp9–pp11 landed or not (Tas
 
 ### Task 1: `attendance.end_of_day`
 
-**Read `main` first.** If `apps/server/src/attendance-discovery.ts` still exists (pp11 not landed),
-build **shape A**. If pp11 has deleted it, build **shape B**. pp9 alone does not change the shape:
+**Read `main` first.** If `apps/server/src/attendance-discovery.ts` still exists (pp12 not landed),
+build **shape A**. If pp12 has deleted it, build **shape B**. pp9 alone does not change the shape:
 discovery still runs after pp9.
 
 **Interfaces (both shapes):**
@@ -148,7 +148,7 @@ discovery still runs after pp9.
   growth is seen by the idle read within 30 seconds, as today's poll sees it, but that read now
   takes no write lock.
 
-**Shape B — discovery deleted (pp11):** no `beginDiscovery`; `attendanceWorkPending` is condition 5
+**Shape B — discovery deleted (pp12):** no `beginDiscovery`; `attendanceWorkPending` is condition 5
 alone; `nextAttendanceDueAt` drops the watches; `maxSleepMs: timings.maxTickMs` (jobs.md R4: next
 due is the earliest due work row or the next end of day; every change marks its day in its own
 transaction, pp9).

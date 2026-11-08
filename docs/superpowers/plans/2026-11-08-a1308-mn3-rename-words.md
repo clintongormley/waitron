@@ -43,8 +43,8 @@ cannot be restored or imported." (rules §2)
 1. `scripts/a1308/rename-catalogue-words.mjs` and `scripts/a1308/rename-catalogue-words.test.mjs`.
 2. The script's output, committed in the same pull request.
 3. Core's starting migration rebuilt (the table `catalogues` becomes `menus`; `products.catalogue_id`
-   becomes `products.menu_id`; three index names change, among them slice 5c's
-   `catalogues_one_default_uq`, which becomes `menus_one_default_uq`; 5c's reader
+   becomes `products.menu_id`; three index names change, among them slice 5e's
+   `catalogues_one_default_uq`, which becomes `menus_one_default_uq`; 5e's reader
    `readDefaultCatalogueId` becomes `readDefaultMenuId`).
 4. The hand edits the script cannot make, listed in the pull request description (rules §1): the
    Spanish wording, any name clash the type check finds, doubled words in prose, the bundle format,
@@ -227,8 +227,8 @@ for `menu_details` (`menu_id`), `menu_items` (`menu_id`), `sections` (`owner_men
 `packages/db/drizzle/0000_baseline.sql` (`REFERENCES \`catalogues\``) at `a086eedfb7`, less
 `locations` and `location_catalogues`, which batch 1 removed.
 
-Slice 5c adds `catalogues.is_default` and `catalogues_one_default_uq`
-(`2026-11-08-a1308-5c-holiday-area-and-default-menu.md:52-53`); the column moves with its table, and
+Slice 5e adds `catalogues.is_default` and `catalogues_one_default_uq`
+(`2026-11-08-a1308-5e-floor-and-device-location-columns.md`, What it builds item 10); the column moves with its table, and
 the index prints:
 
 ```text

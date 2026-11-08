@@ -101,7 +101,7 @@ before this cannot be restored or imported."
 | Left out | Who takes it |
 | --- | --- |
 | Activity-log kinds `card_reader.*` and `device_profile.card_readers_changed` (`tables-fiscal.md` §3) | follow-ups, not built in A1308 (README §5 U11) |
-| The other JSON lists on `device_profiles` and `devices` (`printer_lists`, `order_zone_ids`, `kitchen_views`, `admitted_roles`, `made_here_station_ids`) | the devices area (`dv5`–`dv7`) and A1002 |
+| The other JSON lists on `device_profiles` and `devices` (`printer_lists`, `order_zone_ids`, `kitchen_views`, `admitted_roles`, `made_here_station_ids`) | the devices area (`dv5`–`dv9`) and A1002 |
 | A unique index on `held_by_device_id` | not built (owner decision above) |
 | Exporting card readers in a configuration | not built: readers are not exported today (`packages/payments/src/configuration-transfer.ts`) |
 
