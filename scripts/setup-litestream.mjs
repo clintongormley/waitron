@@ -3,13 +3,13 @@
  * at the repository root (gitignored). Start a server that streams with
  * `WAITRON_LITESTREAM_BIN=<that path>`. The box image fetches its own copy (`deploy/Dockerfile`).
  */
-import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { downloadRelease } from "./download-release.mjs";
 
 export const VERSION = "0.5.18";
 
@@ -53,7 +53,9 @@ export function assetFor(platform, arch, { version = VERSION, sums = SHA256 } = 
  * @param {string} options.root the repository root
  * @param {string} options.platform
  * @param {string} options.arch
- * @param {(url: string) => Promise<{ ok: boolean, status: number, statusText: string, arrayBuffer(): Promise<ArrayBuffer> }>} [options.fetch]
+ * @param {typeof globalThis.fetch} [options.fetch]
+ * @param {(ms: number) => Promise<unknown>} [options.sleep] the wait between download attempts
+ * @param {(line: string) => void} [options.log] told of each failed download attempt that will be retried
  * @param {(file: string, args: string[]) => string} [options.run] runs a program and returns its stdout
  * @param {string} [options.tmp] where the download is unpacked
  * @param {{ version?: string, sums?: Record<string, string> }} [options.pin]
@@ -64,6 +66,8 @@ export async function install({
   platform,
   arch,
   fetch = globalThis.fetch,
+  sleep,
+  log,
   run = (file, args) => execFileSync(file, args, { encoding: "utf8" }),
   tmp = tmpdir(),
   pin = {},
@@ -80,9 +84,7 @@ export async function install({
   }
   if (present === version) return { target, version, downloaded: false };
 
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${url} answered ${response.status} ${response.statusText}`);
-  const bytes = Buffer.from(await response.arrayBuffer());
+  const bytes = await downloadRelease(url, { fetch, sleep, log });
   const actual = createHash("sha256").update(bytes).digest("hex");
   if (actual !== sha256) {
     throw new Error(`${asset} has SHA-256 ${actual}, not the pinned ${sha256}`);

@@ -151,7 +151,7 @@ RUN set -eux; \
     arm64) asset="litestream-${version}-linux-arm64.tar.gz"; sum="922a09e6a7ac67f2095571894dc6382e94e1dd4cdd9674883ddf1a8e74ab982d" ;; \
     *) echo "no pinned litestream ${version} for '${TARGETARCH}'" >&2; exit 1 ;; \
   esac; \
-  curl -fsSL -o /tmp/litestream.tar.gz \
+  curl -fsSL --retry 2 --connect-timeout 15 --max-time 60 -o /tmp/litestream.tar.gz \
     "https://github.com/benbjohnson/litestream/releases/download/v${version}/${asset}"; \
   echo "${sum}  /tmp/litestream.tar.gz" | sha256sum -c -; \
   tar --no-same-owner -xzf /tmp/litestream.tar.gz -C /usr/local/bin litestream; \

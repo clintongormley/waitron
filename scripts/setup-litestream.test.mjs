@@ -165,6 +165,40 @@ describe("install", () => {
     );
   });
 
+  it("retries a 503 from the release download and installs from the answer that follows", async () => {
+    const root = tempDir();
+    const bytes = releaseArchive(VERSION);
+    const statuses = [503, 200];
+    const urls = [];
+    const fetch = async (url) => {
+      urls.push(url);
+      const status = statuses[urls.length - 1];
+      return {
+        ok: status === 200,
+        status,
+        statusText: status === 200 ? "OK" : "Service Unavailable",
+        arrayBuffer: async () => new Uint8Array(bytes).buffer,
+      };
+    };
+    const waits = [];
+    const lines = [];
+    const result = await install({
+      root,
+      ...PLATFORM,
+      fetch,
+      sleep: async (ms) => void waits.push(ms),
+      log: (line) => void lines.push(line),
+      tmp: tempDir(),
+      pin: { sums: { "linux-x86_64": sha256(bytes) } },
+    });
+    expect(result.downloaded).toBe(true);
+    expect(urls).toHaveLength(2);
+    expect(waits).toHaveLength(1);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(`${urls[0]} answered 503`);
+    expect(lines[0]).toMatch(/; trying again$/);
+  });
+
   it("refuses a binary that reports a version other than the pin after unpacking", async () => {
     const root = tempDir();
     const tmp = tempDir();
