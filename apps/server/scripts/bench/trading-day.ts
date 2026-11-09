@@ -5,7 +5,7 @@ import { ticketItems, withTransaction, workingOrders } from "@waitron/db";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "@waitron/fiscal-verifactu";
 import { quoteIdent } from "@waitron/provisioning";
 import { computeDailyClose, recordDailyClose, resolveVenueClock } from "@waitron/reporting";
-import { addDecimal, businessDayBounds, decimal } from "@waitron/shared";
+import { addDecimal, businessDayBounds, decimal, PERSON_HEADER } from "@waitron/shared";
 import { createFakeAeat, type FakeAeat } from "@waitron/verifactu/testing";
 import { runAttendancePass } from "../../src/attendance-loop.js";
 import { readBillEditState, readPartyBillIds } from "../../src/bill-editing.js";
@@ -132,11 +132,18 @@ export async function tradeDay(
     collect: 0,
   };
   let requests = 0;
+  // Keyed by the session's cookie; a till's own cookie, which signs in, names nobody.
+  const waiterOf = new Map<string, string>();
   const call = async (cookie: string, method: string, path: string, body?: unknown) => {
     requests += 1;
+    const person = waiterOf.get(cookie);
     const response = await venue.app.request(path, {
       method,
-      headers: { cookie, "content-type": "application/json" },
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        ...(person === undefined ? {} : { [PERSON_HEADER]: person }),
+      },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const text = await response.text();
@@ -187,7 +194,6 @@ export async function tradeDay(
     );
   clock.set(new Date(opening));
   const sessions = new Map<string, string>();
-  const waiterOf = new Map<string, string>();
   const onShift = shiftOf(venue, day);
   for (const [index, till] of venue.tills.entries()) {
     const waiter = onShift[index % onShift.length]!;
@@ -197,8 +203,9 @@ export async function tradeDay(
     });
     const token = /waitron_till_session=([^;]+)/.exec(response.headers.get("set-cookie") ?? "");
     if (token === null) throw new Error("bench: signing in set no session cookie");
-    sessions.set(till.id, `${SESSION_COOKIE}=${token[1]}; ${till.cookie}`);
-    waiterOf.set(till.id, waiter.id);
+    const session = `${SESSION_COOKIE}=${token[1]}; ${till.cookie}`;
+    sessions.set(till.id, session);
+    waiterOf.set(session, waiter.id);
   }
 
   const live = plans.map((plan): LiveBill => ({ plan, groupIds: [], tickets: [] }));
@@ -239,7 +246,7 @@ export async function tradeDay(
         draftId: edit.draftId,
         revision: edit.draftRevision ?? 0,
         expectedEdit: edit,
-        personId: waiterOf.get(plan.till.id),
+        personId: waiterOf.get(cookie),
         lines: plan.rounds[step.round]!.map((menuItemId) => ({ menuItemId, quantity: "1" })),
       });
       const draft = saved.draft as { id: string; revision: number; lines: { id: string }[] };
@@ -430,7 +437,7 @@ async function closeDay(venue: BenchVenue, day: string, at: Date) {
   }
   await withTransaction(venue.db, async (tx) => {
     const close = await computeDailyClose(tx, {
-      nodeId: venue.nodeId,
+      nodeIds: [venue.nodeId],
       businessDay: day,
       ...(await resolveVenueClock(tx, venue.nodeId)),
     });

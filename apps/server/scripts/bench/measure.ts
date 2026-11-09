@@ -6,6 +6,7 @@ import { setImmediate as nextTurn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
 import { devices, orderGroups, ticketItems, withTransaction, workingOrders } from "@waitron/db";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "@waitron/fiscal-verifactu";
+import { PERSON_HEADER } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { readBillEditState, readPartyBillIds } from "../../src/bill-editing.js";
 import { deploymentEnvironment } from "../../src/config.js";
@@ -264,10 +265,14 @@ interface Answer {
 }
 
 async function caseGroups(venue: BenchVenue, clock: BenchClock): Promise<BenchGroup[]> {
-  const send = async (cookie: string, method: string, path: string, body?: unknown) => {
+  const send = async (as: string, method: string, path: string, body?: unknown) => {
     const response = await venue.app.request(path, {
       method,
-      headers: { cookie, "content-type": "application/json" },
+      headers: {
+        cookie: as,
+        "content-type": "application/json",
+        ...(as === cookie ? { [PERSON_HEADER]: waiter.id } : {}),
+      },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const text = await response.text();
