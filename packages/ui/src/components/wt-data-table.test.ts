@@ -7584,7 +7584,9 @@ test("a sticky table's headings are opaque and draw their own lower line from to
   await settle();
   for (const heading of stickyHeadings(el)) {
     expect(getComputedStyle(heading).backgroundColor, heading.textContent!).toBe("rgb(7, 8, 9)");
+    expect(getComputedStyle(heading).borderBottomWidth).toBe("0px");
     const line = getComputedStyle(heading, "::after");
+    expect(line.borderBottomWidth).toBe("1px");
     expect(line.borderBottomStyle, heading.textContent!).toBe("solid");
     expect(line.borderBottomColor, heading.textContent!).toBe("rgb(1, 2, 3)");
   }

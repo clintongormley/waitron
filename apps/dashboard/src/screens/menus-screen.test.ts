@@ -13092,7 +13092,7 @@ it("drags a Structure row under held headings with its preview at the pointer", 
   await table.updateComplete;
   const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
   expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
-  const from = inStructure<HTMLButtonElement>(el, '[data-test="drag-m-burger"]');
+  const from = inStructure<HTMLButtonElement>(el, '[data-test="drag-m-burger"]')!;
   from.scrollIntoView({ block: "nearest" });
   const start = from.getBoundingClientRect();
   const send = (type: string, x: number, y: number) =>

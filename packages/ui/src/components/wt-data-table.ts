@@ -225,12 +225,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
 
       thead th {
+        border-block-end: 0;
         position: relative;
         background: var(--wt-color-surface);
       }
 
-      /* The collapsed border stays where the heading sits unscrolled, so the line under a held
-         heading is drawn by the heading itself. */
       thead th::after {
         content: "";
         position: absolute;

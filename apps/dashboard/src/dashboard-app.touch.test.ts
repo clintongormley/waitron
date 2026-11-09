@@ -191,22 +191,18 @@ it.each([
     const scroll = table.querySelector<HTMLElement>(".scroll")!;
     const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
     await expect.poll(() => table.querySelectorAll("tbody tr").length).toBe(41);
-    const positions = () => ({ main: main.scrollTop, rows: scroll.scrollTop });
-    const beforeRows = positions();
+    const beforeRows = main.scrollTop;
     const row = table.querySelectorAll("tbody tr")[1]!.getBoundingClientRect();
     await dragUp(row.left + 100, Math.min(row.bottom - 4, height - 12), 100);
     await expect.poll(() => scroll.scrollTop).toBeGreaterThan(0);
-    console.log("A653 row gesture", { before: beforeRows, after: positions() });
-    expect(main.scrollTop).toBe(beforeRows.main);
+    expect(main.scrollTop).toBe(beforeRows);
     scroll.scrollTop = 0;
     const heading = el
       .shadowRoot!.querySelector("dashboard-menus-screen")!
       .shadowRoot!.querySelector("h1")!
       .getBoundingClientRect();
-    const beforePage = positions();
     await dragUp(heading.left + heading.width / 2, heading.bottom - 2, 200);
     await expect.poll(() => main.scrollTop).toBeGreaterThan(0);
-    console.log("A653 page gesture", { before: beforePage, after: positions() });
     expect(scroll.scrollTop).toBe(0);
     const head = table.querySelector("thead")!.getBoundingClientRect();
     const foot = Math.min(
@@ -217,7 +213,6 @@ it.each([
       const rect = row.getBoundingClientRect();
       return rect.top >= head.bottom - 1 && rect.bottom <= foot + 1;
     });
-    console.log("A653 whole data rows", visible.length);
     expect(visible.length).toBeGreaterThanOrEqual(wholeRows);
   },
 );

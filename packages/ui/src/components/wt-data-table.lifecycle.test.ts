@@ -198,6 +198,20 @@ test("a sticky table moved in the page still follows its headings as they grow",
   expect(scroll.style.scrollPaddingBlockStart).toBe(headHeight(el));
 });
 
+test("a loading replacement keeps following its new headings without revealing a row", async () => {
+  const { el } = await stickyTable();
+  const before = part(el, "thead");
+  el.loading = true;
+  await el.updateComplete;
+  el.loading = false;
+  await el.updateComplete;
+  expect(part(el, "thead")).not.toBe(before);
+  await frames();
+  el.style.setProperty("--wt-space-3", "40px");
+  await frames();
+  expect(part(el, ".scroll").style.scrollPaddingBlockStart).toBe(headHeight(el));
+});
+
 class ForwardingSearch extends HTMLElement {
   constructor() {
     super();
