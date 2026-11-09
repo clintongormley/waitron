@@ -425,12 +425,14 @@ names; folding them into the one helper was not part of W77a.
 ## A353 — Preview's changes: an "Undo" link that puts one change back to the live version
 
 - **A353 — Preview's changes: an "Undo" link that puts one change back to the live version (owner,
-  2026-10-07: "would it be possible to have an 'Undo' link as well?").** In progress in five pull
-  requests ([plan](../superpowers/plans/2026-11-06-a353-preview-undo.md)). PR 1 (landed #2510, 2026-11-06) credits each price
+  2026-10-07: "would it be possible to have an 'Undo' link as well?").** Planned in five pull
+  requests ([plan](../superpowers/plans/2026-11-06-a353-preview-undo.md)); PR 1 landed and PRs 2–5
+  are not started: the owner put them back on the backlog on 2026-11-09 ("it can go on the
+  backlog"). A start on PR 2 sits on the local branch `feat/menu-preview-undo` at `e04b3abe7`. PR 1 (landed #2510, 2026-11-06) credits each price
   change to the menu whose price setting moved; gives Undo to a menu's name, its Home display
   settings, an own section's name, photo or colour, a dish's price on the menu, and one variant's
   price on the menu; and links each shared-product change, except a deleted product's, to Edit
-  product (or Edit extras list) and each included-menu change to that menu. Still to come: PR 2, Undo for what this menu's include of
+  product (or Edit extras list) and each included-menu change to that menu. Left for later: PR 2, Undo for what this menu's include of
   another menu fixes, and whether it shows as a folder; PR 3, products added, moved and removed in
   this menu's own lists; PR 4, includes added and removed, own sections moved, and a new own section
   that is empty; PR 5, one-move order changes and one-write shortcut changes, after which this

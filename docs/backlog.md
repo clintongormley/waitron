@@ -562,9 +562,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/catalogue.md#loose-ends-left-by-a343-a-menus-price-overrides-tab-tidied-1368)
 
 - **A353 — Preview's changes: an "Undo" link that puts one change back to the live version** —
-  owner, 2026-10-07; in progress in five pull requests. PR 1 (landed #2510): Undo for a menu's name, Home display,
+  owner, 2026-10-07; PR 1 landed (#2510), PRs 2–5 not started: the owner put them back on the
+  backlog on 2026-11-09 ("it can go on the backlog"). PR 1 gave Undo for a menu's name, Home display,
   own section's name, photo or colour, and a dish's or one variant's price here, plus edit links
-  on shared and included changes. PRs 2–5: includes, products, sections, order and shortcuts.
+  on shared and included changes. Left for later (PRs 2–5): includes, products, sections, order and shortcuts.
   [Detail](backlog/catalogue.md#a353--previews-changes-an-undo-link-that-puts-one-change-back-to-the-live-version)
 
 - **A1375 — A353's Undo: two rare ways a refusal is never shown** — a preview arriving between
