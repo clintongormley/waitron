@@ -591,6 +591,25 @@ describe("opens-below", () => {
     },
   );
 
+  it("positions the drawn height when a host caps its scrolling menu below the trigger", async () => {
+    await page.viewport(390, 400);
+    try {
+      const { el, trigger, popup } = await longMenu(15);
+      const style = document.createElement("style");
+      style.textContent = `wt-row-actions::part(popup) { max-height: calc(100vh - ${trigger.getBoundingClientRect().bottom + 8}px); overflow-y: auto; }`;
+      host.append(style);
+      el.show();
+      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+      expect(popup.getBoundingClientRect().top).toBeCloseTo(
+        trigger.getBoundingClientRect().bottom,
+        0,
+      );
+      expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
   it("does not open over its own trigger, so a second tap there reaches the trigger, not an action", async () => {
     await page.viewport(600, 400);
     try {

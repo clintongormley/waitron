@@ -181,7 +181,7 @@ export class WtRowActions extends LitElement {
     const popup = this.popup.getBoundingClientRect();
     const desiredLeft = this.align === "end" ? anchor.right - popup.width : anchor.left;
     this.popup.style.left = `${Math.max(8, Math.min(desiredLeft, innerWidth - popup.width - 8))}px`;
-    this.popup.style.top = `${placement.top}px`;
+    this.popup.style.top = `${popupPlacement(anchor, popup.height, innerHeight, below ? "below" : "fit").top}px`;
     this.popup.scrollTop = scrollTop;
     this.rows()
       .find((row) => row.matches(":focus-within"))
