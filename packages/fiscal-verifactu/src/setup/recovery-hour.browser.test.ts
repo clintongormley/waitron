@@ -3,7 +3,10 @@ import { userEvent } from "vitest/browser";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { LitElement, html } from "lit";
 import type { Mock } from "vitest";
-import type { ModuleRecoveryEntry } from "@waitron/module/src/setup-contract.js";
+import type {
+  ModuleRecoveryEntry,
+  ModulePromotionEntry,
+} from "@waitron/module/src/setup-contract.js";
 import { FISCAL_SETUP } from "./first-fiscal-screen.js";
 
 const binding = {
@@ -99,7 +102,7 @@ async function ready(el: Entry) {
   check(el, "recovery-sole-operation");
   await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
 }
-function button(el: Entry, name: string) {
+function button(el: LitElement, name: string) {
   const value = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
     `[data-test="${name}"]`,
   );
@@ -1623,7 +1626,7 @@ it.each([
     prepare: async () => {
       throw refusal;
     },
-  }) as Entry;
+  }) as LitElement & ModulePromotionEntry;
   host.append(el);
   await el.updateComplete;
   button(el, "compare").click();
