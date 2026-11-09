@@ -1317,3 +1317,54 @@ describe("a help badge inside a menu row, and a menu that changes size", () => {
     }
   });
 });
+
+describe("role-menu navigation", () => {
+  async function menu() {
+    const el = (await mount(`<wt-row-actions label="Bills"><div role="menu">
+      <button role="menuitemradio" aria-checked="false" id="first">First</button>
+      <button role="menuitem" disabled>Unavailable</button>
+      <button role="menuitemradio" aria-checked="true" id="checked">Current</button>
+      <button role="menuitem" hidden>Hidden</button>
+      <button role="menuitem" id="last">New bill</button>
+    </div></wt-row-actions>`)) as WtRowActions;
+    const trigger = el.shadowRoot!.querySelector("button")!;
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    return {
+      el,
+      trigger,
+      popup,
+      first: el.querySelector<HTMLButtonElement>("#first")!,
+      checked: el.querySelector<HTMLButtonElement>("#checked")!,
+      last: el.querySelector<HTMLButtonElement>("#last")!,
+    };
+  }
+
+  it("names a menu, focuses its checked choice and wraps arrows past disabled and hidden rows", async () => {
+    const { trigger, first, checked, last } = await menu();
+    await userEvent.click(trigger);
+    expect(trigger.getAttribute("aria-haspopup")).toBe("menu");
+    expect(document.activeElement).toBe(checked);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(last);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(first);
+    await userEvent.keyboard("{ArrowUp}");
+    expect(document.activeElement).toBe(last);
+    await userEvent.keyboard("{Home}");
+    expect(document.activeElement).toBe(first);
+    await userEvent.keyboard("{End}");
+    expect(document.activeElement).toBe(last);
+  });
+
+  it("closes on Tab and continues after the trigger", async () => {
+    const { trigger, last, popup } = await menu();
+    const outside = document.createElement("button");
+    outside.textContent = "After the menu";
+    host.append(outside);
+    await userEvent.click(trigger);
+    last.focus();
+    await userEvent.keyboard("{Tab}");
+    expect(popup.matches(":popover-open")).toBe(false);
+    expect(document.activeElement).toBe(outside);
+  });
+});

@@ -1,6 +1,7 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
+import { popupIndex } from "../popup-helpers.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import "./wt-icon.js";
 import type { WtIconSize } from "./wt-icon.js";
@@ -95,6 +96,7 @@ export class WtRowActions extends LitElement {
    * the trigger, where a second tap would land on an action. */
   @property({ type: Boolean, attribute: "opens-below" }) opensBelow = false;
   @state() private expanded = false;
+  @state() private isMenu = false;
   @query("button") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
 
@@ -126,6 +128,8 @@ export class WtRowActions extends LitElement {
     popup.showPopover();
     this.positionPopup();
     this.#resize.observe(popup);
+    const options = this.menuRows();
+    (options.find((row) => row.getAttribute("aria-checked") === "true") ?? options[0])?.focus();
   }
 
   hide(): void {
@@ -235,13 +239,55 @@ export class WtRowActions extends LitElement {
       this.popup.hidePopover();
   }
 
+  private menuContent(): Element | undefined {
+    return this.popup
+      .querySelector("slot")!
+      .assignedElements({ flatten: true })
+      .flatMap((element) =>
+        element.matches('[role="menu"]')
+          ? [element]
+          : [...element.querySelectorAll('[role="menu"]')],
+      )[0];
+  }
+
+  private menuRows(): HTMLElement[] {
+    return [
+      ...(this.menuContent()?.querySelectorAll<HTMLElement>(
+        '[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]',
+      ) ?? []),
+    ].filter(
+      (row) =>
+        !row.matches(':disabled, [disabled], [aria-disabled="true"]') &&
+        row.getClientRects().length > 0,
+    );
+  }
+
+  private onSlotChange(): void {
+    this.isMenu = this.menuContent() !== undefined;
+  }
+
   private onKeydown(event: KeyboardEvent): void {
-    if (event.key !== "Escape" || event.defaultPrevented || !this.popup.matches(":popover-open"))
+    if (event.defaultPrevented || !this.popup.matches(":popover-open")) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      this.hide();
+      this.trigger.focus();
       return;
+    }
+    if (this.menuContent() === undefined) return;
+    if (event.key === "Tab") {
+      this.hide();
+      this.trigger.focus();
+      return;
+    }
+    const rows = this.menuRows();
+    const at = rows.findIndex((row) => event.composedPath().includes(row));
+    const next = popupIndex(event.key, at, rows.length);
+    if (next === undefined) return;
     event.preventDefault();
     event.stopPropagation();
-    this.popup.hidePopover();
-    this.trigger.focus();
+    rows[next]?.focus();
   }
 
   override render() {
@@ -251,6 +297,7 @@ export class WtRowActions extends LitElement {
         part="trigger"
         aria-label=${this.label}
         aria-expanded=${this.expanded}
+        aria-haspopup=${this.isMenu ? "menu" : nothing}
         popovertarget="actions"
         @click=${this.onTriggerClick}
         @keydown=${this.onKeydown}
@@ -260,7 +307,7 @@ export class WtRowActions extends LitElement {
       </button>
       <div id="actions" part="popup" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>
         <div class="actions" @click=${this.judgeAction} @auxclick=${this.judgeAuxclick}>
-          <slot @click=${this.onAction}></slot>
+          <slot @slotchange=${this.onSlotChange} @click=${this.onAction}></slot>
         </div>
       </div>
     `;
