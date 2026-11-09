@@ -2,9 +2,14 @@ import { requireEconomicWrite, type TradingAdmission } from "./trading-admission
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
+import {
+  workingOrderLines,
+  workingOrders,
+  type Transaction,
+  type TransferClosurePartyBlocker,
+} from "@waitron/db";
 import { staffPresentationName } from "@waitron/catalogue";
-import { AppError, thousandthsToDecimal } from "@waitron/shared";
+import { AppError, thousandthsToDecimal, type ErrorCode } from "@waitron/shared";
 import {
   orderedCancellationContext,
   readCancellationContext,
@@ -289,10 +294,9 @@ async function readFinishState(tx: Transaction, args: FinishStateArgs) {
   return { bills, remaining };
 }
 
-export type PartyFinishBlocker =
-  "other_bills" | "service" | "revision" | "editor" | "scope" | "authority";
+export type PartyFinishBlocker = TransferClosurePartyBlocker;
 
-const BLOCKERS: Partial<Record<string, PartyFinishBlocker>> = {
+const BLOCKERS: Partial<Record<ErrorCode, PartyFinishBlocker>> = {
   "party.out_of_date": "revision",
   "party.bill_outstanding": "other_bills",
   "draft.taken_over": "editor",
@@ -319,7 +323,8 @@ export async function readPartyFinishReadiness(
     );
     return { ready: true };
   } catch (error) {
-    const blocker = error instanceof AppError ? BLOCKERS[error.code] : undefined;
+    const code: ErrorCode | undefined = error instanceof AppError ? error.code : undefined;
+    const blocker = code === undefined ? undefined : BLOCKERS[code];
     if (blocker === undefined) throw error;
     return { ready: false, blockers: [blocker] };
   }

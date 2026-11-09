@@ -6,7 +6,13 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { invoiceDeliveries, sales, transferClosures, workingOrders } from "@waitron/db";
 import { markServed, readOrderRevision } from "./working-order.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
-import { fiscalRecordCount, inTx, seatedWith, tendersOfBill } from "./testing/bill-venue.js";
+import {
+  fiscalRecordCount,
+  inTx,
+  placedCounterBillMovedTo,
+  seatedWith,
+  tendersOfBill,
+} from "./testing/bill-venue.js";
 import {
   RECIPIENT,
   refusal,
@@ -14,6 +20,7 @@ import {
   type TransferCloseKit,
 } from "./testing/transfer-close-fixture.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
+import { readReceiptOrder } from "./receipt-order.js";
 import { readTransferClosure } from "./transfer-close.js";
 import "./errors.js";
 
@@ -180,6 +187,19 @@ describe("closeBillByTransferTx, new work", () => {
     expect(await tendersOfBill(t.venue, billId)).toMatchObject([
       { method: "transfer", amount: 1800, tip: 0 },
     ]);
+  });
+
+  it("freezes the receipt grouping of a presented party bill it issues", async () => {
+    const party = await seatedWith(t.venue, "Ensalada");
+    const billId = await placedCounterBillMovedTo(t.venue, t.counterZone, party);
+    const atIssuance = await inTx(t.venue, (tx) =>
+      readReceiptOrder(tx, billId, { atIssuance: true }),
+    );
+
+    await t.close(await t.requestFor(billId, "18.00", party.partyId));
+
+    expect(atIssuance.orderLabel).toEqual(expect.stringContaining("Mesa"));
+    expect(await inTx(t.venue, (tx) => readReceiptOrder(tx, billId))).toEqual(atIssuance);
   });
 
   it("refuses a Counter bill's new F1 through the full-invoice gate, writing nothing", async () => {

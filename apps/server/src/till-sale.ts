@@ -63,6 +63,7 @@ import {
   settleSale,
   withIssuanceTransaction,
 } from "@waitron/core";
+import type { SettleSaleTender } from "@waitron/core";
 import type { FiscalBackend, ReceiptQrText } from "@waitron/fiscal";
 import {
   createOpenOrder,
@@ -2357,14 +2358,31 @@ export async function settleIssuedOwingNothing(
   workingOrderId: string,
   saleId: SaleId,
 ): Promise<void> {
-  const settledAt = deps.clock.now().instant.toISOString();
-  await settleSale(tx, { saleId, tenders: [] });
+  await settleIssuedOrder(tx, { workingOrderId, saleId }, [], deps.clock.now().instant, deps.log);
+}
+
+/**
+ * Settle an order's issued sale with these tenders and mark the order settled. `label` is for a
+ * sale issued in this transaction: a presented order's label changes only as it settles.
+ */
+export async function settleIssuedOrder(
+  tx: Transaction,
+  order: { workingOrderId: string; saleId: SaleId; label?: string | null },
+  tenders: SettleSaleTender[],
+  settledAt: Date,
+  log: TillSaleDeps["log"],
+): Promise<void> {
+  await settleSale(tx, { saleId: order.saleId, tenders });
   await tx
     .update(workingOrders)
-    .set({ status: "settled", settledAt })
-    .where(eq(workingOrders.id, workingOrderId));
-  await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [workingOrderId]);
-  await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
+    .set({
+      ...(order.label === undefined ? {} : { label: order.label }),
+      status: "settled",
+      settledAt: settledAt.toISOString(),
+    })
+    .where(eq(workingOrders.id, order.workingOrderId));
+  await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [order.workingOrderId]);
+  await clearBillRequestIfPaid(tx, order.workingOrderId, log);
 }
 
 /**

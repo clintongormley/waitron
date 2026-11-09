@@ -1,4 +1,5 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, exists, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { createHash } from "node:crypto";
 import {
   billPayments,
@@ -11,8 +12,7 @@ import {
   transferClosures,
   workingOrders,
 } from "@waitron/db";
-import type { Database, StagedInvoiceDelivery, Transaction } from "@waitron/db";
-import { settleSale } from "@waitron/core";
+import type { Database, Transaction } from "@waitron/db";
 import { prepareIssueClock } from "@waitron/fiscal";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { resolveVenueClock } from "@waitron/reporting";
@@ -22,22 +22,23 @@ import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-ca
 import { invalid } from "./bill-allocation.js";
 import { checkedInvoiceRecipient, storedRecipientIdentifier } from "./invoice-selection.js";
 import { requireOrderBillEditor } from "./bill-editing.js";
-import { clearBillRequestIfPaid } from "./bill-request.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { refuseForDiskStop, type DiskFullState } from "./disk-full-state.js";
 import { finishPartyService, readPartyFinishReadiness } from "./finish-party-service.js";
 import { pinnedAt } from "./issue-moment.js";
 import type { Logger } from "./logger.js";
-import { VENUE_SERVICE } from "./modules.js";
-import { canonicalJson, partyFamily, readFamilyBills } from "./parties.js";
-import { refusePlacedPaymentInFlight } from "./till-sale.js";
+import {
+  billInvoiceDelivery,
+  canonicalJson,
+  partyFamily,
+  readFamilyBills,
+  type BillInvoiceDelivery,
+} from "./parties.js";
+import { readReceiptOrder } from "./receipt-order.js";
+import { refusePlacedPaymentInFlight, settleIssuedOrder } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type {
-  CloseByTransferRequest,
-  CloseByTransferResult,
-  TransferDeliveryIntent,
-} from "./transfer-close-types.js";
+import type { CloseByTransferRequest, CloseByTransferResult } from "./transfer-close-types.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { saleLanguageFor } from "./venue-locale.js";
 import {
@@ -66,8 +67,6 @@ export interface TransferCloseDeps {
     orderIds: readonly string[],
   ) => Promise<"allowed" | "scope" | "authority">;
 }
-
-type Party = CloseByTransferResult["party"];
 
 /**
  * Close one bill, final in Waitron, as to be paid by transfer: issue its invoice unless it has
@@ -112,10 +111,9 @@ export async function closeBillByTransferTx(
     new AppError("transfer_close.ineligible", { workingOrderId: billId, reason });
   if (order.nodeId !== cfg.nodeId) throw ineligible("other_node");
   const finishing = request.partyFinish;
-  if (
-    finishing !== null &&
-    (order.partyId === null || !(await partyFamily(tx, finishing.partyId)).includes(order.partyId))
-  )
+  const family =
+    finishing === null || order.partyId === null ? null : await partyFamily(tx, finishing.partyId);
+  if (finishing !== null && (order.partyId === null || !family!.includes(order.partyId)))
     throw invalid("partyFinish");
   if (order.status === "settled") throw ineligible("final_without_transfer");
   if (order.status === "abandoned") throw ineligible("void");
@@ -155,8 +153,9 @@ export async function closeBillByTransferTx(
     invoice = await priceForIssuance(tx, clock, deps.backend, cfg, billId);
     total = invoice.priced.total;
   }
-  if (decimalToCents(total) <= 0) throw ineligible("non_positive");
-  if (decimalToCents(total) !== decimalToCents(decimal(request.expectedTotal)))
+  const cents = decimalToCents(total);
+  if (cents <= 0) throw ineligible("non_positive");
+  if (centsToDecimal(cents) !== request.expectedTotal)
     throw new AppError("transfer_close.conflict", { workingOrderId: billId });
   const saleId =
     invoice === undefined
@@ -175,9 +174,14 @@ export async function closeBillByTransferTx(
 
   const placedHere = order.status === "open";
   if (placedHere) await markOrderPlaced(tx, clock, cfg, billId, actorId, deps.attendance);
-  await settleSale(tx, {
-    saleId,
-    tenders: [
+  const label =
+    invoice === undefined
+      ? undefined
+      : (await readReceiptOrder(tx, billId, { atIssuance: true })).orderLabel;
+  await settleIssuedOrder(
+    tx,
+    { workingOrderId: billId, saleId, label },
+    [
       {
         method: "transfer",
         amount: total,
@@ -186,17 +190,22 @@ export async function closeBillByTransferTx(
         settledAt: closedAt,
       },
     ],
-  });
-  await tx
-    .update(workingOrders)
-    .set({ status: "settled", settledAt: closedAt.toISOString() })
-    .where(eq(workingOrders.id, billId));
-  await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
-  await clearBillRequestIfPaid(tx, billId, deps.log);
+    closedAt,
+    deps.log,
+  );
 
   const attendance =
     deps.attendance === undefined ? undefined : { recorder: deps.attendance, clock };
-  const party = await finishParty(tx, deps, cfg, order.partyId, request, actorId, attendance);
+  const party = await finishParty(
+    tx,
+    deps,
+    cfg,
+    order.partyId,
+    family,
+    request,
+    actorId,
+    attendance,
+  );
   if (!placedHere)
     await captureKitchenActivity(tx, attendance, actorId, [billId], request.operationId);
 
@@ -241,45 +250,60 @@ export async function readTransferClosure(
 
 type IneligibleReason = ErrorParams["transfer_close.ineligible"]["reason"];
 
+const corrections = alias(sales, "corrections");
+
 /** An issued invoice is reused only while nothing has corrected, paid, voided or replaced it. */
 async function refuseTouchedSale(
   tx: Transaction,
   saleId: string,
   ineligible: (reason: IneligibleReason) => AppError,
 ): Promise<void> {
-  const [correction] = await tx
-    .select({ id: sales.id })
-    .from(sales)
-    .where(eq(sales.correctsSaleId, saleId))
-    .limit(1);
-  if (correction !== undefined) throw ineligible("correction");
-  const [tender] = await tx
-    .select({ id: tenders.id })
-    .from(tenders)
-    .where(eq(tenders.saleId, saleId))
-    .limit(1);
-  if (tender !== undefined) throw ineligible("prior_tender");
-  const [settled] = await tx
-    .select({ saleId: saleSettlements.saleId })
-    .from(saleSettlements)
-    .where(eq(saleSettlements.saleId, saleId));
-  if (settled !== undefined) throw ineligible("final_without_transfer");
-  const [voided] = await tx
-    .select({ saleId: saleVoids.saleId })
-    .from(saleVoids)
-    .where(eq(saleVoids.saleId, saleId));
-  if (voided !== undefined) throw ineligible("void");
-  const [substituted] = await tx
-    .select({ id: saleSubstitutions.substitutedSaleId })
-    .from(saleSubstitutions)
-    .where(
-      or(
-        eq(saleSubstitutions.substitutionSaleId, saleId),
-        eq(saleSubstitutions.substitutedSaleId, saleId),
+  const [touched] = await touchedSaleQuery(tx, saleId);
+  const reasons: [boolean, IneligibleReason][] = [
+    [touched!.corrected, "correction"],
+    [touched!.tendered, "prior_tender"],
+    [touched!.settled, "final_without_transfer"],
+    [touched!.voided, "void"],
+    [touched!.substituted, "substitution"],
+  ];
+  const reason = reasons.find(([hit]) => hit)?.[1];
+  if (reason !== undefined) throw ineligible(reason);
+}
+
+function touchedSaleQuery(tx: Transaction, saleId: string) {
+  const any = (query: Parameters<typeof exists>[0]) => exists(query).mapWith(Boolean);
+  return tx
+    .select({
+      corrected: any(
+        tx
+          .select({ id: corrections.id })
+          .from(corrections)
+          .where(eq(corrections.correctsSaleId, saleId)),
       ),
-    )
-    .limit(1);
-  if (substituted !== undefined) throw ineligible("substitution");
+      tendered: any(tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, saleId))),
+      settled: any(
+        tx
+          .select({ saleId: saleSettlements.saleId })
+          .from(saleSettlements)
+          .where(eq(saleSettlements.saleId, saleId)),
+      ),
+      voided: any(
+        tx.select({ saleId: saleVoids.saleId }).from(saleVoids).where(eq(saleVoids.saleId, saleId)),
+      ),
+      substituted: any(
+        tx
+          .select({ id: saleSubstitutions.substitutedSaleId })
+          .from(saleSubstitutions)
+          .where(
+            or(
+              eq(saleSubstitutions.substitutionSaleId, saleId),
+              eq(saleSubstitutions.substitutedSaleId, saleId),
+            ),
+          ),
+      ),
+    })
+    .from(sales)
+    .where(eq(sales.id, saleId));
 }
 
 async function finishParty(
@@ -287,12 +311,14 @@ async function finishParty(
   deps: TransferCloseDeps,
   cfg: DeviceRequestConfig,
   partyId: string | null,
+  /** The named party's family, when the request names one. */
+  family: string[] | null,
   request: CloseByTransferRequest,
   actorId: string,
   attendance: { recorder: AttendanceRecorder; clock: TrustedClock } | undefined,
-): Promise<Party> {
+): Promise<CloseByTransferResult["party"]> {
   if (partyId === null) return { state: "not_applicable", blockers: [] };
-  const bills = await readFamilyBills(tx, await partyFamily(tx, partyId));
+  const bills = await readFamilyBills(tx, family ?? (await partyFamily(tx, partyId)));
   const admitted = await deps.admitPartyRelease(
     tx,
     bills.map((bill) => bill.id),
@@ -369,7 +395,7 @@ function normalised(
     recipient:
       request.recipient === null ? null : checkedInvoiceRecipient(backend, request.recipient),
     receiptLanguage: request.receiptLanguage,
-    delivery: deliveryOf(request.delivery),
+    delivery: normalisedDelivery(request.delivery),
     partyFinish:
       finishing === null
         ? null
@@ -383,10 +409,8 @@ function normalised(
   };
 }
 
-/** Where the invoice goes, without who staged it. */
-function deliveryOf(
-  delivery: TransferDeliveryIntent | StagedInvoiceDelivery | null,
-): TransferDeliveryIntent | null {
+/** Spelled as staging stores it: a printer id in lower case, an address trimmed. */
+function normalisedDelivery(delivery: BillInvoiceDelivery | null): BillInvoiceDelivery | null {
   if (delivery === null) return null;
   if (delivery.medium === "receipt") return { medium: "receipt" };
   if (delivery.medium === "a4")
@@ -447,7 +471,7 @@ async function stagedChoice(
     invoiceType: order.invoiceType,
     recipient,
     language,
-    delivery: deliveryOf(order.invoiceDelivery),
+    delivery: order.invoiceDelivery === null ? null : billInvoiceDelivery(order.invoiceDelivery),
   });
 }
 
