@@ -481,7 +481,7 @@ skipped and makes no network call.
 
 ### Account email
 
-Demo captures invitation and password-reset email in Mailpit when no SMTP relay is saved. Sign in as an admin and open the
+Outside development, Demo captures account email, reminders and alerts in Mailpit even when an SMTP relay is saved. Sign in as an admin and open the
 **Email inbox** link in the dashboard's top bar to read a message and follow its account link.
 Prepare and Live use the saved SMTP relay; without one, account email is unavailable. Development
 boxes use the saved relay for account email when present and capture it otherwise. The inbox is served through Waitron's authenticated API;

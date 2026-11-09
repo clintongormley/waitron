@@ -374,9 +374,8 @@ tests SMTP outside development; ordinary Prepare uses the relay or reports unava
 inbox link is offered publicly and to signed-in admins. Users and Account settings show actual
 account-mail results, including uncertain sends; throttled invitation actions say nothing changed.
 Ordinary SMTP and the Settings test use the venue name with the configured mailbox; setup tests
-retain their own sender. Left: making non-development Demo capture account mail even when a stored
-relay exists (the current resolver still prefers that relay; `apps/server/src/email-delivery.ts`
-and its stored-relay tests).
+retain their own sender. Outside development, Demo captures account mail, reminders and alerts
+even with a saved relay; development keeps its saved-relay preference.
 Cloud delivery, including Demo with a Cloud account, waits for D102's released interface and
 joint tests. An unavailable Cloud route cannot satisfy setup or silently fall back to capture.
 The setup-test network-target issue below remains separate open work.

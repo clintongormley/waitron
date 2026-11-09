@@ -58,7 +58,8 @@ decisions N1 and N2 of 2026-11-08 (what 3b needs). [Slice rules](2026-11-08-a130
    `smtp-test-message.ts:20` reads only `sent` and needs no change.
 4. `resolveMailDeliveryIn(tx, ring, config, rule)`: the one place that chooses the saved server or
    the practice inbox, keeping both of today's rules (`email-delivery.ts:18-53`, `:68-77`).
-   `resolveEmailDelivery` and `resolveInvoiceEmailDelivery` keep their signatures and call it.
+   `resolveEmailDelivery` keeps its optional fourth `captureOnly` argument;
+   `resolveInvoiceEmailDelivery` keeps its signature. Both call the router.
 5. A message-level test hook stays: `options.transport` (`smtp-send.ts:16`), a fake that is handed
    the whole message, as today. Account mail's tests (`account-email.test.ts`,
    `i18n/account-email-output.test.ts`) keep using it, with their message-object assertions, until
@@ -139,7 +140,7 @@ when the old code did and `unknown` otherwise.
 - No provider text is returned or logged: only `SmtpTestCode` (`smtp-failure.ts:1-10`).
 - Certificate checks are never weakened by a URL option (`smtp-send.ts:40, :80`).
 - Deadline default 30 seconds (`smtp-send.ts:85`).
-- The "notice" rule's practice mode is `devMode || onboardingIntent === "demo"`, the value boot passes today (`boot.ts:2092-2093`).
+- The "notice" rule captures non-development Demo even with saved SMTP; development prefers saved SMTP and otherwise captures. Outside both, missing SMTP is unconfigured (keeps A987's single Demo capture rule; watcher, 2026-11-09 11:44).
 
 ## Review Focus
 
@@ -217,8 +218,8 @@ only once `DATA` was accepted (`index.js:683-713`: `_setEnvelope`'s callback, th
 
 ```ts
 export type MailDeliveryRule = "notice" | "invoice";
-/** "notice": the saved server; else the practice inbox on a development or Demo box; else
- * unconfigured. "invoice": the practice inbox on a development or Demo box even when a server is
+/** "notice": on non-development Demo, the practice inbox; else the saved server; else the
+ * practice inbox in development; else unconfigured. "invoice": the practice inbox on a development or Demo box even when a server is
  * saved; else the saved server; else unconfigured. */
 export function resolveMailDeliveryIn(
   tx: Transaction, ring: KeyRing,
@@ -227,13 +228,14 @@ export function resolveMailDeliveryIn(
 ): Promise<EmailDelivery>;
 ```
 
-The two rules can disagree on "unconfigured" in one case: on a development or Demo box whose saved
+The two rules can disagree on "unconfigured" in one case: on a development box whose saved
 server has an unusable `from`, the notice rule answers `unconfigured` (`email-delivery.ts:39-46`,
-before its practice-inbox fallback) while the invoice rule answers `local_capture` (`:73-74`). That
-is today's behaviour, kept. It does not matter to the queue while no invoice is queued (3a-ii's
+before its practice-inbox fallback) while the invoice rule answers `local_capture` (`:73-74`). This
+retains development’s existing behavior. Non-development Demo captures under both rules, including
+an unusable From; this keeps A987's single Demo capture rule (watcher, 2026-11-09 11:44). It does not matter to the queue while no invoice is queued (3a-ii's
 sender resolves each rule separately anyway).
 
-- [ ] **Step 1: Failing test** `"chooses the server or the practice inbox as each rule says"` — (devMode, intent, saved server?) × rule: dev + saved: notice `smtp`, invoice `local_capture`; Demo + none: both `local_capture`; Live + saved: both `smtp`; Live + none: both `unconfigured`; dev + saved server with an unusable `from`: notice `unconfigured`, invoice `local_capture`.
+- [ ] **Step 1: Failing test** `"chooses the server or the practice inbox as each rule says"` — (devMode, intent, saved server?) × rule: dev + saved: notice `smtp`, invoice `local_capture`; non-development Demo + none, saved or unusable From: both `local_capture`; Live + saved: both `smtp`; Live + none: both `unconfigured`; dev + saved server with an unusable `from`: notice `unconfigured`, invoice `local_capture`.
 - [ ] **Step 2:** FAIL. **Step 3:** implement; the two existing functions call it. **Step 4:** Finish lines 1–2 PASS. **Step 5:** commit, then `/finish-branch`.
 
 ## Backlog

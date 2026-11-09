@@ -78,8 +78,8 @@ services:
         max-size: 10m
         max-file: "5"
 
-  # Demo and development capture invoice email locally; development account email uses
-  # this inbox when no SMTP credential exists. Keep both ports on the box loopback:
+  # Demo captures account mail, reminders and alerts even with saved SMTP. Development
+  # captures these only without SMTP; Demo and development capture invoice email. Keep both ports on the box loopback:
   # browsers read captured messages through Waitron's authenticated management API.
   mailpit:
     image: axllent/mailpit:v1.33.0

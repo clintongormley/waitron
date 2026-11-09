@@ -181,7 +181,7 @@ describe("invoice email routing", () => {
     },
   );
 
-  it("captures demo invoice mail without changing the account-mail gateway", async () => {
+  it("captures demo invoice mail while the low-level resolver keeps SMTP precedence", async () => {
     await seedVenue(suite.db, { name: "Bar & Kitchen" });
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {

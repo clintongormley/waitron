@@ -19,15 +19,18 @@ export async function resolveEmailDelivery(
   db: Database,
   ring: KeyRing,
   practiceMode: boolean,
+  captureOnly = false,
 ): Promise<EmailDelivery> {
-  return withTransaction(db, (tx) => resolveEmailDeliveryIn(tx, ring, practiceMode));
+  return withTransaction(db, (tx) => resolveEmailDeliveryIn(tx, ring, practiceMode, captureOnly));
 }
 
 export async function resolveEmailDeliveryIn(
   tx: Transaction,
   ring: KeyRing,
   practiceMode: boolean,
+  captureOnly = false,
 ): Promise<EmailDelivery> {
+  if (captureOnly) return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
   const configured = await readSavedSmtp(tx, ring);
   if (configured !== null) {
     const name = (await readVenue(tx)).name;
