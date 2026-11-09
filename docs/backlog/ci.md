@@ -250,6 +250,18 @@ the service-status browser suite failed with Playwright's "Frame was detached" d
 whole-workspace run, and then passed on its own with no code change. The original log and screenshot were kept; the cause is unexplained, so retain them
 again on the next sighting rather than re-running to green.
 
+## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
+
+Run [42690313010](https://github.com/clintongormley/waitron/actions/runs/42690313010), job
+`test-server` shard 2, on a GitHub-hosted ubuntu-26.04 runner: two database-open hooks
+(`boot.place-copy.test.ts`, `till-api.table-actions.test.ts`) hit "Hook timed out in 60000ms", and
+`first-fiscal-boot.test.ts`'s "real HTTPS claim readiness … trading interruption restarts a separate
+process" timed out at 120 s, with two sibling cases failing after it. The same server code had
+passed that shard on the run before; the re-run of the failed job passed. No earlier sighting was
+searched for beyond this file. The full log is kept at
+`~/waitron-campaign-l/ci-logs/pr2664-run42690313010-test-server-2.log`. On the next sighting keep
+that log too and locate what the hooks were waiting on before changing a deadline.
+
 ## A sixth: a CI shard exited 1 with every test passing (PR #414)
 
 - **The exit-1 path closed by the
