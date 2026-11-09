@@ -489,6 +489,8 @@ skipped and makes no network call.
 
 ### Account email
 
+Password-reset, invitation and email-change messages are queued and sent by the box’s mail sender; each link or code is made when it is sent.
+
 Outside development, Demo captures account email, reminders and alerts in Mailpit even when an SMTP relay is saved. Sign in as an admin and open the
 **Email inbox** link in the dashboard's top bar to read a message and follow its account link.
 Prepare and Live use the saved SMTP relay; without one, account email is unavailable. Development

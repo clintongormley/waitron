@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { createAccountEmailSender } from "../account-email.js";
 import { ACCOUNT_EMAIL_OUTPUTS } from "../../test/account-email-output.js";
+
+import { messageSender } from "../testing/account-mail.js";
 
 describe("account email output", () => {
   it.each(ACCOUNT_EMAIL_OUTPUTS)(
     "keeps the complete $locale $purpose message",
     async ({ purpose, locale, message }) => {
       const sent: unknown[] = [];
-      const sender = createAccountEmailSender(
+      const sender = messageSender(
         {
           url: "smtp://mail.example.test:587",
           from: "Waitron <hello@example.test>",

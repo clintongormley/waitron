@@ -9,7 +9,11 @@ import { generateSync } from "otplib";
 import { codeOf, seedManager, seedSessionDevice, TOTP_KEY_RING } from "../test/fixtures.js";
 import { startManagementSession } from "./management-session.js";
 import { hashSessionToken } from "./session-token.js";
-import { issueAccountAction, completeAccountAction } from "./account-action.js";
+import {
+  issueAccountAction,
+  issueQueuedAccountAction,
+  completeAccountAction,
+} from "./account-action.js";
 import { loginManager } from "./manager-login.js";
 import { encryptTotpSecret, replaceRecoveryCodes } from "./mfa.js";
 import { issueCheck } from "./secret-check.js";
@@ -35,7 +39,7 @@ async function fixture() {
   const email = `${randomUUID()}@example.com`;
   const personId = await seedManager(suite.db, { email });
   const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
-  return { personId, email, managementSessionId: session.token };
+  return { personId, email, managementSessionId: session.token, queueEmailChange: true };
 }
 
 describe("your profile", () => {
@@ -85,15 +89,30 @@ describe("your profile", () => {
       ),
     ).rejects.toMatchObject({ code: "password.invalid" });
     const codeKey = Buffer.alloc(32, 19);
-    const emailChange = await withTransaction(suite.db, (tx) =>
+    const queued = await withTransaction(suite.db, (tx) =>
       saveOwnProfile(tx, {
         ...f,
         ...details,
         email: " CHANGED@example.com ",
         currentPassword: "correct horse",
-        emailCodeKey: codeKey,
         keyRing: TOTP_KEY_RING,
       }),
+    );
+    expect(queued).toEqual({ queued: true });
+    expect(
+      suite.db.all(
+        sql`select id from management_account_actions where person_id=${f.personId} and purpose='email_change'`,
+      ),
+    ).toEqual([]);
+    expect(
+      suite.db.all(sql`select params from outgoing_mail where person_id=${f.personId}`),
+    ).toEqual([{ params: JSON.stringify({ purpose: "email_change" }) }]);
+    const emailChange = await withTransaction(suite.db, (tx) =>
+      issueQueuedAccountAction(
+        tx,
+        { personId: f.personId, params: { purpose: "email_change" } },
+        { codeKey, now: new Date() },
+      ),
     );
     expect(emailChange).toMatchObject({ email: "changed@example.com", code: expect.any(String) });
     expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toMatchObject({
@@ -134,6 +153,32 @@ describe("your profile", () => {
       ),
     ).rejects.toMatchObject({ code: "account_action.invalid" });
   });
+
+  it.each([true, false])(
+    "saves a pending address with queueEmailChange=%s without issuing a code",
+    async (queueEmailChange) => {
+      const f = await fixture();
+      const result = await withTransaction(suite.db, (tx) =>
+        saveOwnProfile(tx, {
+          ...f,
+          displayName: "Queued profile",
+          email: "new@example.com",
+          locale: "en-GB",
+          currentPassword: "correct horse",
+          keyRing: TOTP_KEY_RING,
+          queueEmailChange,
+        }),
+      );
+      expect(result).toEqual({ queued: queueEmailChange });
+      expect(suite.db.all(sql`select pending_email from persons where id=${f.personId}`)).toEqual([
+        { pending_email: "new@example.com" },
+      ]);
+      expect(suite.db.all(sql`select id from outgoing_mail`)).toHaveLength(
+        queueEmailChange ? 1 : 0,
+      );
+      expect(suite.db.all(sql`select id from management_account_actions`)).toEqual([]);
+    },
+  );
 
   it("validates details and maps duplicate emails without changing the profile", async () => {
     const f = await fixture();
@@ -620,12 +665,19 @@ describe("your profile", () => {
       locale: "en-GB",
       currentPassword: "correct horse",
     };
-    const issued = await withTransaction(suite.db, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       saveOwnProfile(tx, {
         ...details,
         email: `${randomUUID()}@example.com`,
         keyRing: TOTP_KEY_RING,
       }),
+    );
+    const issued = await withTransaction(suite.db, (tx) =>
+      issueQueuedAccountAction(
+        tx,
+        { personId: f.personId, params: { purpose: "email_change" } },
+        { now: new Date() },
+      ),
     );
     await expect(
       withTransaction(suite.db, (tx) =>

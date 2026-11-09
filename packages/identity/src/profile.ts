@@ -13,11 +13,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { and, eq, gt, isNull, lte, ne } from "drizzle-orm";
 import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shared";
 import { foldForUniqueness } from "./fold.js";
-import {
-  confirmEmailChangeByCode,
-  issueAccountAction,
-  type IssuedAccountAction,
-} from "./account-action.js";
+import { confirmEmailChangeByCode, queueAccountMail } from "./account-action.js";
 import { passkeyProviderName } from "./passkey-providers.js";
 import { resolveManagementSession } from "./management-session.js";
 import {
@@ -292,9 +288,9 @@ export async function saveOwnProfile(
       telephone?: string | null;
       email: string;
       locale: string;
-      emailCodeKey?: Buffer;
+      queueEmailChange: boolean;
     },
-): Promise<IssuedAccountAction | null> {
+): Promise<{ queued: boolean } | null> {
   const person = await ownPerson(tx, input);
   const displayName = input.displayName.trim();
   if (displayName === "") throw new AppError("profile.invalid", { field: "displayName" });
@@ -338,12 +334,9 @@ export async function saveOwnProfile(
     return null;
   }
   await invalidateLinks(tx, person.id);
-  return issueAccountAction(tx, {
-    personId: person.id,
-    purpose: "email_change",
-    targetEmail: email,
-    codeKey: input.emailCodeKey,
-  });
+  if (input.queueEmailChange)
+    await queueAccountMail(tx, { personId: person.id, purpose: "email_change" });
+  return { queued: input.queueEmailChange };
 }
 
 export async function confirmOwnEmailChange(

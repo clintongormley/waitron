@@ -242,8 +242,7 @@ export class ProfileScreen extends LitElement {
   #readErrorShown = false;
   #fieldErrors: Partial<Record<Field, string>> = {};
   @property({ type: Boolean }) canAdminister = false;
-  @state() private emailStatus:
-    "sent" | "captured" | "unconfigured" | "not_sent" | "uncertain" | null = null;
+  @state() private emailStatus: "sent" | "captured" | "unconfigured" | null = null;
   @state() private saved = false;
   @state() private busy = false;
   @state() private visible = new Set<Field>();
@@ -690,17 +689,13 @@ export class ProfileScreen extends LitElement {
       if (this.mode === "email") this.emailStatus = null;
       if (emailResult !== undefined) {
         this.emailStatus =
-          emailResult.uncertain === true
-            ? "uncertain"
-            : emailResult.problem === "email.unconfigured"
-              ? "unconfigured"
-              : emailResult.problem !== undefined
-                ? "not_sent"
-                : emailResult.delivery === "captured"
-                  ? "captured"
-                  : emailResult.emailVerificationSent
-                    ? "sent"
-                    : null;
+          emailResult.problem === "email.unconfigured"
+            ? "unconfigured"
+            : emailResult.delivery === "captured"
+              ? "captured"
+              : emailResult.emailVerificationSent
+                ? "sent"
+                : null;
       }
       if (this.mode === "passkey" || this.mode === "remove") void signalAcceptedPasskeys(this.api);
       scope?.commit(submitted);

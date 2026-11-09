@@ -99,8 +99,8 @@ export class StaffScreen extends LitElement {
   @state() private errorField: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
-  @state() private invitationStatus:
-    "sent" | "captured" | "not_sent" | "unconfigured" | "uncertain" | "throttled" | null = null;
+  @state() private invitationStatus: "sent" | "captured" | "unconfigured" | "throttled" | null =
+    null;
   @state() private search = "";
   @state() private roleFilter: PersonRole | "all" = "all";
   @state() private statusFilter: "current" | "pending" | "active" | "suspended" | "all" = "current";
@@ -183,17 +183,13 @@ export class StaffScreen extends LitElement {
 
   #showInvitation(result: Awaited<ReturnType<DashboardApi["resendInvitation"]>>): void {
     this.invitationStatus =
-      result.uncertain === true
-        ? "uncertain"
-        : result.problem === "email.unconfigured"
-          ? "unconfigured"
-          : result.problem !== undefined
-            ? "not_sent"
-            : result.delivery === "captured"
-              ? "captured"
-              : result.invitationSent
-                ? "sent"
-                : "throttled";
+      result.problem === "email.unconfigured"
+        ? "unconfigured"
+        : result.delivery === "captured"
+          ? "captured"
+          : result.invitationSent
+            ? "sent"
+            : "throttled";
   }
 
   #onRowAction(event: CustomEvent<{ personId: string; action: string }>): void {

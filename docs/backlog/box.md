@@ -372,8 +372,8 @@ the relevant field or at the bottom of both SMTP forms, with the matching Englis
 guide. Cut C opens Prepare settings, adds admin removal and Settings navigation, and shows stored
 settings separately from invoice capture on development boxes. The Prepare wizard now collects and
 tests SMTP outside development; ordinary Prepare uses the relay or reports unavailable mail. Demo's
-inbox link is offered publicly and to signed-in admins. Users and Account settings show actual
-account-mail results, including uncertain sends; throttled invitation actions say nothing changed.
+inbox link is offered publicly and to signed-in admins. Users and Account settings distinguish queued, captured and unconfigured
+account mail; throttled invitation actions say nothing changed.
 Ordinary SMTP and the Settings test use the venue name with the configured mailbox; setup tests
 retain their own sender. Outside development, Demo captures account mail, reminders and alerts
 even with a saved relay; development keeps its saved-relay preference.

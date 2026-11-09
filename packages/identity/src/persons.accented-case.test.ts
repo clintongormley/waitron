@@ -138,6 +138,7 @@ describe("an unproven replacement address is taken whichever way its accent is e
         locale: "en-GB",
         currentPassword: "correct horse",
         keyRing: TOTP_KEY_RING,
+        queueEmailChange: true,
       }),
     );
   }

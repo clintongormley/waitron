@@ -21,7 +21,7 @@ import {
   writeNodeMembership,
   incidents,
 } from "@waitron/db";
-import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
+import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   hashPassword,
@@ -246,8 +246,13 @@ async function refusal(response: Response, status: number, code: string) {
   expect(response.status).toBe(status);
   expect(await response.json()).toMatchObject({ error: { code } });
 }
-function noDuties() {
-  for (const duty of duties) expect(duty).not.toHaveBeenCalled();
+function noDuties(accountMail = 1) {
+  for (const duty of duties) if (duty !== startMailSender) expect(duty).not.toHaveBeenCalled();
+  expect(startMailSender).toHaveBeenCalledTimes(accountMail);
+  if (accountMail)
+    expect(vi.mocked(startMailSender).mock.calls[0]![0].owners.map((owner) => owner.kind)).toEqual([
+      "account_action",
+    ]);
 }
 
 describe("startup zone admission", () => {
@@ -269,6 +274,7 @@ describe("startup zone admission", () => {
       expect(await (await request("/api/node")).json()).toEqual({ acceptingSales: false });
       noDuties();
       await server!.close();
+      expect(vi.mocked(startMailSender).mock.calls[0]![0].signal.aborted).toBe(true);
       server = undefined;
     });
     const repaired = await suite.db
@@ -298,7 +304,7 @@ describe("startup zone admission", () => {
   ])("keeps a startup classification failure fatal without granting repair (%j)", async (fault) => {
     vi.mocked(readZoneContext).mockRejectedValueOnce(fault);
     await expect(boot()).rejects.toBe(fault);
-    noDuties();
+    noDuties(0);
     expect(listener.current).toBeUndefined();
     expect((await suite.db.select().from(locations))[0]!.timeZone).toBe("Europe/Madrid");
     expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([]);
@@ -323,7 +329,7 @@ describe("startup zone admission", () => {
         ]),
       ).toBe("validating");
       await nextTurn();
-      noDuties();
+      noDuties(0);
       expect(listener.current).toBeUndefined();
     } finally {
       release.resolve();
@@ -494,7 +500,7 @@ describe("startup zone admission", () => {
     );
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toContain("HttpOnly");
-    noDuties();
+    noDuties(2);
   });
   it("starts a restored database snapshot in repair-only mode", async () => {
     await rawZone("Invalid/Zone");
@@ -543,7 +549,7 @@ describe("startup zone admission", () => {
         403,
         "node.read_only",
       );
-      noDuties();
+      noDuties(0);
     },
   );
   it("does not reinterpret a valid-zone conversion failure as repair authority", async () => {
@@ -552,8 +558,25 @@ describe("startup zone admission", () => {
     });
     vi.mocked(validateRetainedZoneClock).mockRejectedValueOnce(fault);
     await expect(boot()).rejects.toBe(fault);
-    noDuties();
+    noDuties(0);
     expect(listener.current).toBeUndefined();
+  });
+  it("starts no sender and refuses account mail on a local secondary in repair", async () => {
+    await rawZone("Invalid/Zone");
+    await setSingletonRole({ venue: suite.db, node: suite.node }, NODE, "secondary");
+    await boot();
+    await refusal(
+      await request(
+        "/management-api/password-reset",
+        "POST",
+        { email: "manager@example.test" },
+        "",
+      ),
+      403,
+      "node.read_only",
+    );
+    expect(suite.db.all(sql`select id from outgoing_mail`)).toEqual([]);
+    noDuties(0);
   });
   it("delivers account recovery mail through the existing UTC display fallback", async () => {
     await rawZone("Invalid/Zone");

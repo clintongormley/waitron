@@ -22,7 +22,8 @@ import "@waitron/payments-sumup";
 import { AppError, nodeId as brandNodeId } from "@waitron/shared";
 import { createErrorBoundary, MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
-import { createAccountEmailSender, type AccountEmailSender } from "./account-email.js";
+import { flushAccountMail } from "./testing/account-mail.js";
+import { sql } from "drizzle-orm";
 import { createAttendanceEmailSender } from "./attendance-email.js";
 import { PERSONAL_LOG_KEYS } from "./log-personal-data.js";
 import { createLogger, type Logger, type LogLevel } from "./logger.js";
@@ -201,7 +202,7 @@ async function cookieFor(personId: string): Promise<string> {
   return `${MANAGEMENT_COOKIE}=${session.token}`;
 }
 
-function management(log: Logger, sendAccountEmail?: AccountEmailSender): Hono {
+function management(log: Logger, configured = false): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
@@ -212,7 +213,7 @@ function management(log: Logger, sendAccountEmail?: AccountEmailSender): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
-      sendAccountEmail,
+      accountMailMode: async () => (configured ? "smtp" : "unconfigured"),
       credentialKeyRing: { current: { version: 1, key: Buffer.alloc(32, 21) } },
     },
     log,
@@ -220,7 +221,7 @@ function management(log: Logger, sendAccountEmail?: AccountEmailSender): Hono {
   return app;
 }
 
-function me(log: Logger, sendAccountEmail?: AccountEmailSender): Hono {
+function me(log: Logger, configured = false): Hono {
   const app = new Hono();
   mountMeApi(
     app,
@@ -229,7 +230,7 @@ function me(log: Logger, sendAccountEmail?: AccountEmailSender): Hono {
       venueLocale: "en-GB",
       modules: ["core"],
       credentialKeyRing: { current: { version: 1, key: Buffer.alloc(32, 6) } },
-      sendAccountEmail,
+      accountMailMode: async () => (configured ? "smtp" : "unconfigured"),
     },
     log,
   );
@@ -741,14 +742,8 @@ describe("the recovery page, the log file and stdout carry no person's details",
       const r = await rig();
       const relay = await refusingRelay(at);
       try {
-        const sender = createAccountEmailSender({
-          url: relay.url,
-          from: "venue@example.test",
-          timeZone: "Europe/Madrid",
-        });
-
         const answer = await send(
-          management(r.log, sender),
+          management(r.log, true),
           "POST",
           "/management-api/staff",
           await cookieFor(adminId),
@@ -766,22 +761,28 @@ describe("the recovery page, the log file and stdout carry no person's details",
           status: 201,
           body: {
             id: expect.any(String),
-            invitationSent: false,
-            problem: "email.send_refused",
-            uncertain: false,
+            invitationSent: true,
+            delivery: "queued",
           },
         });
         const personId = (answer.body as { id: string }).id;
+        await flushAccountMail(suite.db, {
+          log: r.log,
+          codeKey: Buffer.alloc(32, 21),
+          timeZone: "Europe/Madrid",
+          smtp: { url: relay.url, from: "venue@example.test" },
+        });
         expect(relay.recipients).toEqual([JORDI_EMAIL]);
         expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
         await expectLogged(
           r,
-          "account_email.send_failed",
+          "mail.send_failed",
           {
-            purpose: "invitation",
-            personId,
-            errorCode: "email.send_refused",
-            reason: "email.test_refused",
+            kind: "account_action",
+            mailId: suite.db.get<{ id: string }>(
+              sql`select id from outgoing_mail where person_id=${personId}`,
+            )!.id,
+            errorCode: "email.test_refused",
           },
           [JORDI_EMAIL, JORDI_NAME],
           "error",
@@ -797,14 +798,8 @@ describe("the recovery page, the log file and stdout carry no person's details",
     const r = await rig();
     const relay = await refusingRelay("rcpt");
     try {
-      const sender = createAccountEmailSender({
-        url: relay.url,
-        from: "venue@example.test",
-        timeZone: "Europe/Madrid",
-      });
-
       const answer = await send(
-        me(r.log, sender),
+        me(r.log, true),
         "PUT",
         "/management-api/session/me/profile",
         await cookieFor(clerkId),
@@ -821,18 +816,30 @@ describe("the recovery page, the log file and stdout carry no person's details",
 
       expect(answer).toEqual({
         status: 200,
-        body: { emailVerificationSent: false, problem: "email.send_refused", uncertain: false },
+        body: { emailVerificationSent: true, delivery: "queued" },
+      });
+      await flushAccountMail(suite.db, {
+        log: r.log,
+        codeKey: Buffer.alloc(32, 21),
+        timeZone: "Europe/Madrid",
+        smtp: { url: relay.url, from: "venue@example.test" },
       });
       expect(relay.recipients).toEqual([JORDI_EMAIL]);
       expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
       await expectLogged(
         r,
-        "account_email.send_failed",
-        { purpose: "email_change", errorCode: "email.send_refused", reason: "email.test_refused" },
+        "mail.send_failed",
+        {
+          kind: "account_action",
+          mailId: suite.db.get<{ id: string }>(
+            sql`select id from outgoing_mail where person_id=${clerkId}`,
+          )!.id,
+          errorCode: "email.test_refused",
+        },
         [JORDI_EMAIL],
         "error",
       );
-      expect(await r.page()).toContain("&quot;errorCode&quot;:&quot;email.send_refused&quot;");
+      expect(await r.page()).toContain("&quot;errorCode&quot;:&quot;email.test_refused&quot;");
     } finally {
       await relay.close();
     }

@@ -1,11 +1,4 @@
 import { ACCOUNT_EMAIL_WORDS } from "./i18n/account-email.js";
-import {
-  sendSmtpMessage,
-  statusAsBefore,
-  type SmtpConnection,
-  type SmtpTransport,
-} from "./smtp-send.js";
-import type { SmtpTestCode } from "./smtp-failure.js";
 import type { MailMessage } from "./mail-sender.js";
 import type { AccountActionPurpose } from "@waitron/identity";
 
@@ -20,33 +13,6 @@ export interface AccountEmail {
   locale: string;
 }
 
-export type AccountEmailSender = (message: AccountEmail) => Promise<"sent" | "captured">;
-
-export class AccountEmailFailure extends Error {
-  constructor(
-    readonly problem: "email.unconfigured" | "email.send_refused" | "email.send_timeout",
-    readonly reason: SmtpTestCode | undefined,
-    readonly uncertain: boolean,
-  ) {
-    super(problem);
-  }
-}
-
-// Provider error text can contain credentials in connection addresses; log only these codes.
-export function accountEmailFailure(error: unknown): {
-  problem: AccountEmailFailure["problem"];
-  uncertain: boolean;
-  reason?: SmtpTestCode;
-} {
-  return error instanceof AccountEmailFailure
-    ? {
-        problem: error.problem,
-        uncertain: error.uncertain,
-        ...(error.reason === undefined ? {} : { reason: error.reason }),
-      }
-    : { problem: "email.send_refused", uncertain: true };
-}
-
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -54,37 +20,6 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-}
-
-export function createAccountEmailSender(
-  config: {
-    url: string;
-    from: SmtpConnection["from"];
-    timeZone: string;
-    privacyNoticeUrl?: string;
-  },
-  transport?: SmtpTransport,
-  options: { timeoutMs?: number; ca?: string } = {},
-): AccountEmailSender {
-  return async (message) => {
-    const messageBody = composeAccountEmail(message, config);
-    const outcome = await sendSmtpMessage(
-      config,
-      {
-        to: message.email,
-        ...messageBody,
-      },
-      { ...options, transport },
-    );
-    if (outcome.status !== "sent") {
-      throw new AccountEmailFailure(
-        outcome.reason === "email.test_timeout" ? "email.send_timeout" : "email.send_refused",
-        outcome.reason,
-        statusAsBefore(outcome) === "unknown",
-      );
-    }
-    return "sent";
-  };
 }
 
 export function composeAccountEmail(

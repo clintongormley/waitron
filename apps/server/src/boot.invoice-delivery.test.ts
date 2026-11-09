@@ -29,7 +29,15 @@ import {
 } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import {
+  hashPin,
+  hashPassword,
+  startManagementSession,
+  loginWithPin,
+  queueAccountMail,
+  completeAccountAction,
+  persons,
+} from "@waitron/identity";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { recordSale } from "@waitron/core";
@@ -791,4 +799,186 @@ describe("invoice-choice email context at trading boot", () => {
       }
     },
   );
+});
+
+describe("queued account mail primary admission at real boot", () => {
+  it.each(["primary", "secondary"] as const)(
+    "handles account requests on a local %s",
+    async (role) => {
+      const ctx = await fixture();
+      const smtp = await smtpFixture();
+      ctx.env.WAITRON_ONBOARDING_INTENT = "prepare";
+      const personId = randomUUID();
+      await suite.db.insert(persons).values({
+        id: personId,
+        displayName: "Mail administrator",
+        email: "reset-boot@example.test",
+        passwordHash: hashPassword("current password"),
+        status: "active",
+        role: "admin",
+      });
+      const session = await withTransaction(suite.db, (tx) =>
+        startManagementSession(tx, { personId }),
+      );
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, loadKeyRing(ctx.env), { purpose: "email.smtp", value: smtp.smtp }),
+      );
+      await setSingletonRole({ venue: suite.db, node: suite.node }, ctx.node, role);
+      let server: StartedServer | undefined;
+      try {
+        server = await startServer(ctx.env);
+        const origin = `http://127.0.0.1:${httpPort()}`;
+        const request = (path: string, body: object, method = "POST") =>
+          fetch(origin + path, {
+            method,
+            headers: {
+              origin,
+              "content-type": "application/json",
+              cookie: `waitron_management_session=${session.token}`,
+            },
+            body: JSON.stringify(body),
+          });
+        for (const email of ["reset-boot@example.test", "unknown-boot@example.test"]) {
+          const reset = await request("/management-api/password-reset", { email });
+          expect(reset.status).toBe(role === "primary" ? 202 : 403);
+          if (role === "secondary")
+            expect(await reset.json()).toEqual({
+              error: {
+                code: "node.read_only",
+                params: {},
+              },
+            });
+          else await reset.body?.cancel();
+        }
+        const invitation = await request("/management-api/staff", {
+          displayName: "Queued new member",
+          firstNames: "New",
+          lastNames: "Member",
+          telephone: null,
+          role: "staff",
+          email: "invite-boot@example.test",
+        });
+        expect(invitation.status).toBe(role === "primary" ? 201 : 403);
+        await invitation.body?.cancel();
+        const profile = await request(
+          "/management-api/session/me/profile",
+          {
+            displayName: "Mail administrator",
+            firstNames: "Mail",
+            lastNames: "Admin",
+            telephone: null,
+            email: "changed-boot@example.test",
+            locale: "en-GB",
+            currentPassword: "current password",
+          },
+          "PUT",
+        );
+        expect(profile.status).toBe(role === "primary" ? 200 : 403);
+        await profile.body?.cancel();
+        if (role === "primary") {
+          await expect.poll(() => smtp.messages.length, { timeout: 5000 }).toBe(3);
+          expect(suite.db.all(sql`select status from outgoing_mail order by seq`)).toEqual([
+            { status: "sent" },
+            { status: "sent" },
+            { status: "sent" },
+          ]);
+        } else {
+          expect(suite.db.all(sql`select id from outgoing_mail`)).toEqual([]);
+          expect(suite.db.all(sql`select id from management_account_actions`)).toEqual([]);
+          expect(
+            suite.db.all(sql`select id from persons where email='invite-boot@example.test'`),
+          ).toEqual([]);
+          expect(suite.db.get(sql`select pending_email from persons where id=${personId}`)).toEqual(
+            { pending_email: null },
+          );
+        }
+      } finally {
+        await server?.close();
+        await smtp.close();
+      }
+    },
+  );
+});
+
+describe("queued account mail at a fresh server start", () => {
+  it("sends saved reset and invitation rows and expires the old request", async () => {
+    const ctx = await fixture();
+    const smtp = await smtpFixture();
+    ctx.env.WAITRON_ONBOARDING_INTENT = "prepare";
+    const [admin, invited] = await suite.db
+      .insert(persons)
+      .values([
+        {
+          displayName: "Restart inviter",
+          email: "reset-restart@example.test",
+          role: "admin",
+          status: "active",
+        },
+        { displayName: "Restart invited", email: "invite-restart@example.test", status: "pending" },
+      ])
+      .returning({ id: persons.id });
+    const now = new Date();
+    await withTransaction(suite.db, async (tx) => {
+      await putCredential(tx, loadKeyRing(ctx.env), { purpose: "email.smtp", value: smtp.smtp });
+      await queueAccountMail(tx, {
+        personId: admin!.id,
+        purpose: "password_reset",
+        origin: "https://entry.test",
+        now,
+      });
+      await queueAccountMail(tx, {
+        personId: invited!.id,
+        purpose: "invitation",
+        origin: "https://entry.test",
+        requestedBy: admin!.id,
+        now,
+      });
+      await queueAccountMail(tx, {
+        personId: admin!.id,
+        purpose: "password_reset",
+        origin: "https://expired.test",
+        now: new Date(now.getTime() - 3600000),
+      });
+    });
+    let server: StartedServer | undefined;
+    try {
+      server = await startServer(ctx.env);
+      await expect
+        .poll(
+          () => suite.db.all(sql`select status, requested_by from outgoing_mail order by seq`),
+          { timeout: 5000 },
+        )
+        .toEqual([
+          { status: "sent", requested_by: null },
+          { status: "sent", requested_by: admin!.id },
+          { status: "expired", requested_by: null },
+        ]);
+      expect(smtp.messages).toHaveLength(2);
+      expect(
+        smtp.messages.map((message) => message.match(/^To: (.+)$/m)![1]!.trim()).sort(),
+      ).toEqual(["invite-restart@example.test", "reset-restart@example.test"]);
+      await server.close();
+      server = undefined;
+      for (const message of smtp.messages) {
+        const text = message.replace(/=\r?\n/g, "").replace(/=3D/g, "=");
+        const link = new URL(
+          text.split(/\r?\n/).find((line) => line.startsWith("https://entry.test/manage/account"))!,
+        );
+        const purpose = link.searchParams.get("purpose") as "invitation" | "password_reset";
+        expect(
+          await withTransaction(suite.db, (tx) =>
+            completeAccountAction(tx, {
+              token: link.searchParams.get("token")!,
+              purpose,
+              password: "a replacement password",
+              pin: "1357",
+            }),
+          ),
+        ).toMatchObject({ personId: purpose === "invitation" ? invited!.id : admin!.id });
+      }
+    } finally {
+      await server?.close();
+      await smtp.close();
+    }
+  });
 });

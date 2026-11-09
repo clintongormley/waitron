@@ -1860,7 +1860,7 @@ describe("A403 passkey controls", () => {
 describe("profile confirmation delivery messages", () => {
   for (const locale of ["en-GB", "es-ES"]) {
     it.each([
-      { result: { emailVerificationSent: true, delivery: "sent" }, key: "profile.email_sent" },
+      { result: { emailVerificationSent: true, delivery: "queued" }, key: "profile.email_sent" },
       {
         result: { emailVerificationSent: true, delivery: "captured" },
         key: "profile.email_captured",
@@ -1868,18 +1868,6 @@ describe("profile confirmation delivery messages", () => {
       {
         result: { emailVerificationSent: false, problem: "email.unconfigured", uncertain: false },
         key: "profile.email_unconfigured",
-      },
-      {
-        result: { emailVerificationSent: false, problem: "email.send_refused", uncertain: false },
-        key: "profile.email_not_sent",
-      },
-      {
-        result: { emailVerificationSent: false, problem: "email.send_refused", uncertain: true },
-        key: "profile.email_uncertain",
-      },
-      {
-        result: { emailVerificationSent: false, problem: "email.send_timeout", uncertain: true },
-        key: "profile.email_uncertain",
       },
     ] as const)(
       `keeps the profile saved and reports ${locale} confirmation: $key`,
@@ -1963,8 +1951,8 @@ describe("profile confirmation delivery messages", () => {
         .mockRejectedValue({ error: { code: "connection.failed" } }),
       saveProfile: vi.fn().mockResolvedValue({
         emailVerificationSent: false,
-        problem: "email.send_refused",
-        uncertain: true,
+        problem: "email.unconfigured",
+        uncertain: false,
       }),
     });
     await editDetails(el);
@@ -1973,7 +1961,7 @@ describe("profile confirmation delivery messages", () => {
     input(el, "currentPassword", "current");
     await click(el, "save");
     expect(el.shadowRoot!.querySelector("[data-test=email-status-text]")?.textContent?.trim()).toBe(
-      t("profile.email_uncertain"),
+      t("profile.email_unconfigured"),
     );
     expect(el.shadowRoot!.textContent).toContain(t("profile.saved"));
     expect(el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!.open).toBe(
@@ -2013,7 +2001,7 @@ describe("profile confirmation delivery messages", () => {
         .mockResolvedValueOnce(view)
         .mockResolvedValueOnce({ ...view, pendingEmail: "new@example.com" })
         .mockResolvedValue({ ...view, email: "new@example.com", pendingEmail: null }),
-      saveProfile: vi.fn().mockResolvedValue({ emailVerificationSent: true, delivery: "sent" }),
+      saveProfile: vi.fn().mockResolvedValue({ emailVerificationSent: true, delivery: "queued" }),
     });
     await editDetails(el);
     input(el, "email", "new@example.com");

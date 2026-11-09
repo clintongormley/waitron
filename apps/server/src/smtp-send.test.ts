@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import dns from "node:dns";
-import { createAccountEmailSender, accountEmailFailure } from "./account-email.js";
+import { composeAccountEmail } from "./account-email.js";
 import { createAttendanceEmailSender } from "./attendance-email.js";
 import { createTextEmailSender } from "./text-email.js";
 import type { Socket } from "node:net";
@@ -530,22 +530,28 @@ it("reports a relay ending without a reply before the deadline", async () => {
   }
 });
 
-it("keeps a closed-port account send uncertain for the legacy caller", async () => {
+it("rejects a closed-port account send so the queue can retry", async () => {
   const rig = await smtpRig("accepted");
   await rig.close();
-  const send = createAccountEmailSender({ ...rig.config, timeZone: "Europe/Madrid" });
-  const failure = await send({
-    purpose: "password_reset",
-    email: "admin@example.test",
-    displayName: "Alex",
-    actionUrl: "https://example.test/reset",
-    expiresAt: "2026-11-10T12:00:00Z",
-    locale: "en",
-  }).catch(accountEmailFailure);
-  expect(failure).toEqual({
-    problem: "email.send_refused",
+  expect(
+    await sendSmtpMessage(rig.config, {
+      to: "admin@example.test",
+      ...composeAccountEmail(
+        {
+          purpose: "password_reset",
+          email: "admin@example.test",
+          displayName: "Alex",
+          actionUrl: "https://example.test/reset",
+          expiresAt: "2026-11-10T12:00:00Z",
+          locale: "en",
+        },
+        { timeZone: "Europe/Madrid" },
+      ),
+    }),
+  ).toEqual({
+    status: "rejected",
     reason: "email.test_connection_refused",
-    uncertain: true,
+    serverRefused: false,
   });
 });
 
