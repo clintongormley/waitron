@@ -67,8 +67,8 @@ wait"). What the page shows when it cannot go ahead, and what it asks for:
   refused when a record naming its own minute appears after it"). The page, and the setup app if
   it happens when the series are made, say this is a fault in Waitron
   (`packages/fiscal-verifactu/src/setup/clock-wait.browser.test.ts`, "a minute in use with %j names
-  no time and does not count down"; `apps/setup/src/setup-app-finish.test.ts`, "an activation
-  refused for a stored pick found taken says it is a fault in Waitron").
+  no time and does not count down"; `apps/setup/src/setup-app.test.ts`, "shows a stored series
+  pick found taken at activation as a fault in Waitron, without a retry, in both languages").
 - **A later minute is already in use** (no time given): the box's clock has gone back behind the
   name this attempt already chose; it can finish once the box's clock reaches the moment this attempt chose
   its name
