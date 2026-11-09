@@ -17,7 +17,7 @@ order to read its recorded dishes, extras and note before choosing an action.
 
 Filter beside search combines dietary choices and declared-allergen exclusions. The line's
 information action, a held press or a mouse double click opens the existing line window. Unsent
-quantity, extras and note are staged together; sent facts stay read-only. Both order screens give
+quantity, extras and note are staged together; sent facts stay read-only on the Counter; on a table, a dish's Sent window can change it. Both order screens give
 the last-added strip its own space and reveal a dish when an addition creates or grows its line.
 Park opens an optional-name dialog and preserves the order's existing name/number rules.
 

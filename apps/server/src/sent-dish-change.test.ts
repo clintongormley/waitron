@@ -37,7 +37,7 @@ async function billWithSentDish() {
   const dish = await kitchenItemOf(billId, 1);
   const printerId = await inTx(venue, async (tx) => {
     const { id } = await createPrinter(tx, {
-      name: `Cocina ${randomUUID().slice(0, 8)}`,
+      name: `Kitchen ${randomUUID().slice(0, 8)}`,
       transport: "cloud_poll",
       pollId: randomUUID(),
     });
@@ -85,7 +85,7 @@ const changeNote = async (bill: Bill) =>
   send(venue.app, venue.cookie, "PUT", `/api/working-orders/${bill.billId}/lines/1`, {
     revision: await revisionOf(bill.billId),
     expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)),
-    note: "sin cebolla",
+    note: "no onions",
     portionLineNos: [],
   });
 
@@ -133,7 +133,7 @@ describe("changing a sent dish while a New order waits on the bill", () => {
     expect(recalledSlips).toHaveLength(1);
     expect(recalledSlips[0]).toContain("CHULETA");
     const fresh = await kitchenItemOf(bill.billId, 1);
-    expect(fresh).toMatchObject({ note: "sin cebolla" });
+    expect(fresh).toMatchObject({ note: "no onions" });
     expect(fresh!.id).not.toBe(bill.dish.id);
     expect(fresh!.firedAt).not.toBeNull();
 

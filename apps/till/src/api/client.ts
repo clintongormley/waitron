@@ -3325,10 +3325,8 @@ export class TillApi {
   /**
    * Edit ONE dish line of an open order → `PUT /api/working-orders/:orderId/lines/:lineNo`, from the
    * copy read at `revision`. An absent field keeps the line's own; with `portionLineNos` the change
-   * goes to every dish of the line's Sent row. Rejects `working_order.out_of_date`,
-   * `draft.taken_over`, `draft.out_of_date`, `order.payment_in_flight`, `bill.line_paid`,
-   * `ticket.already_started`, `ticket.already_fired` or `tab.line_not_found`. Resolves the revision
-   * the order is at after the edit, and its party's.
+   * goes to every dish of the line's Sent row. Resolves the revision the order is at after the edit,
+   * and its party's.
    */
   updateOrderLine(
     orderId: string,

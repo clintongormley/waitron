@@ -4202,9 +4202,7 @@ drives the table's comps through that separate mode (`requestAdjustment` emits n
 modes, make `kind: "comp"` mean the Comp window, and move those app tests onto it. The
 one-or-all choice (`#quantityChoice`, `apps/till/src/widgets/adjustment-dialog.ts:894`) and
 `adjust.quantity_one`, `adjust.quantity_all` and `adjust.quantity_shown` are not theirs alone:
-the cancel mode, which stays, uses them (a cancel offer of several whole units draws the choice,
-`apps/till/src/screens/till-table-order-screen.a11y.test.ts:375-389`), so they stay unless the
-cancel moves too.
+the cancel mode, which stays, uses them, so they stay unless the cancel moves too.
 
 ## A1020. The owner looks at A758-6's words and choices
 

@@ -5899,7 +5899,7 @@ always stand alone.
 
 On the till, Mark served and Undo served on a grouped row ask how many and act on its first that
 many members; Recall asks how many and recalls its first that many members, in line order; Move
-station takes every member; Move dishes… picks the row's first members whole
+station takes every member; Change dish changes every member; Move dishes… picks the row's first members whole
 ([The dish picker](#the-dish-picker)); Comp, discounts and Void act on the row, all of it
 or a count of it; Fire now fires the first member only, because its request names one line. On the
 kitchen screen a tap or a move takes every member, and the pass only draws the rows. These lists keep
