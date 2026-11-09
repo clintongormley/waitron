@@ -2366,7 +2366,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Tighten the checks the A974 review probed** (bundle of 4, size S). [Detail](backlog/architecture.md#bundle-tighten-the-checks-the-a974-review-probed)
 
 - **A976. Finish the server's English test-venue defaults.**
-  Shared venue and boot-setup name samples use English, as do eight local route/command suites.
+  `setupVenue`, `provisionVenueBody` and eight local route/command seeds use `Main room`;
+  other venue seeds and the boot helper's raw location names remain.
   Local party-suite table, party, course and printer samples use English. Shared dish samples
   remain in their helpers and consumers, including party bill-action, bill-move, arriving-dish
   and receipt-guest suites. Till-API bill-move/groups/fiscal-sale and order-portion filing
