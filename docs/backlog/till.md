@@ -2027,7 +2027,7 @@ both saved. A counter order sent with Send did not reach it: once placed, a save
   the order, try again" or "Could not complete the sale, try again" from Send or Pay. The basket
   keeps its unsaved changes, the added dish among them, and hides Cancel. Each later save gets the
   same answer. The owner chose (2026-11-07) to replace this path with a separate action for changing
-  a sent dish (A1426); it is not built.
+  a sent dish (A1426); A1426 built it, but the whole-order save is unchanged, so this stays open.
 - A staff name changed: "An item's choices have changed — open the line and choose again". The line's
   window is read-only on a dish already sent (run on a started dish; the check reads only whether it
   was sent), so nobody can. The box refuses each save `options.label_required`, started or not, and

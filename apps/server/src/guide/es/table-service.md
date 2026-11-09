@@ -218,7 +218,8 @@ Mientras los platos son iguales sigues viendo una sola fila, **2 × Hamburguesa*
 o se le aplica un descuento. Al tocar una fila en **Enviado** se marca entera como servida; **Marcar
 servido** en los detalles de la fila pregunta cuántos. [**Mover platos…**](table-service.md#move-dishes) te deja
 elegir cuántos platos de una fila pasan a otra cuenta, cada uno con sus extras. **Descuento** y
-**Cancelar** actúan sobre la fila y te dejan elegir cuántos de sus platos.
+**Cancelar** actúan sobre la fila y te dejan elegir cuántos de sus platos. **Cambiar plato**, en los
+detalles de la fila, cambia todos los platos de la fila.
 
 Un plato al peso es distinto, porque cada uno se pesa por separado: si añades dos veces el mismo
 plato al peso tienes dos líneas, no una del doble de peso, y un plato al peso pasa entero a otra

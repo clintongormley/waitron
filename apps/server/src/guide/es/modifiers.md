@@ -116,12 +116,15 @@ publicar tus cartas justo después de eliminar una lista de opciones. A partir d
 siguiente cambio que se guarde en un pedido aparcado de caja quita cualquier extra elegido de una
 lista eliminada, junto con su cargo, y descarta cualquier respuesta a una lista de opciones eliminada.
 
-Un plato ya enviado en una mesa conserva sus extras y respuestas de opciones registrados. Para
-cambiarlos, usa **Retirar** en la ventana del plato y edítalo en **Nuevo pedido**. Puedes retirarlo
-solo en una cuenta sin pagar, mientras las estaciones del plato y de sus extras permitan cambios
-tras el envío y la cocina no lo haya empezado. El plato retirado conserva sus precios y descuentos registrados. Puedes mantener
-una respuesta o un extra sin cambios aunque ya no se ofrezca; un extra nuevo usa su precio actual
-en la carta. Vuelve a enviar el plato cuando sus cambios estén listos.
+Para cambiar un plato ya enviado en una mesa, abre sus detalles en **Enviado**, cámbialo y pulsa
+**Cambiar plato**. Solo se guarda ese plato, y la cocina recibe el cambio. Puedes hacerlo en una
+cuenta sin pagar, mientras las estaciones del plato y de sus extras permitan cambios tras el envío.
+Una fila de platos iguales cambia entera. Cuando la cocina ya ha empezado un plato no puedes
+cambiarlo, pero sí añadir más; para quitar uno, usa **Cancelar…**.
+**Retirar**, en **Más** dentro de la ventana, sigue devolviendo el plato a **Nuevo pedido**, para
+enviarlo de nuevo con platos aún sin enviar.
+El plato conserva sus precios y descuentos registrados. Puedes mantener una respuesta o un extra sin
+cambios aunque ya no se ofrezca; un extra nuevo usa su precio actual en la carta.
 
 Para que la caja deje de pedir una lista sin eliminarla, desactiva su interruptor **Activa**, o
 quítala de la sección Modificadores de ese producto concreto.

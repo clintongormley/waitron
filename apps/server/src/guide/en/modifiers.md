@@ -104,13 +104,15 @@ holds such a dish is refused. Publish your menus again straight after deleting a
 After that, the next change saved to a parked counter order takes off any extra picked from a deleted
 list, and its charge with it, and drops any answer to a deleted options list.
 
-A dish already sent at a table keeps its recorded extras and options answers. To change them, use
-**Recall** in the dish's line window, then edit it in **New order**. Recall is available only on an
-unpaid bill, while the stations of the dish and its extras allow changes after sending and the
-kitchen has not started the dish.
-The recalled dish keeps its recorded prices and discounts. You can leave an old answer or extra
-unchanged even when it is no longer offered; a newly selected extra uses its current offered price.
-Send the dish again when its changes are ready.
+To change a dish already sent at a table, open its details in **Sent**, change it and press
+**Change dish**. Only that dish is saved, and the kitchen gets the change. You can do this on an
+unpaid bill, while the stations of the dish and its extras allow changes after sending. A row of
+identical dishes changes together. Once the kitchen has started a dish you cannot change it, but you
+can add more of it; to take one off, use **Void…**.
+**Recall**, under the window's **More**, still takes the dish back to **New order**, to send again
+with dishes not yet sent.
+The dish keeps its recorded prices and discounts. You can leave an old answer or extra unchanged
+even when it is no longer offered; a newly selected extra uses its current offered price.
 
 To stop a list being asked without deleting it, turn its **Active** switch off, or remove it from
 that one product's Modifiers section.
