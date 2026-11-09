@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "37d7cf7d-337f-4dea-a5f0-7a497e91a7e3",
+  "id": "d9f3cc0a-4882-4c48-b3ca-85cccb52238f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "card_reader_holders": {
@@ -822,6 +822,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "requested_amount": {
+          "name": "requested_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "state": {

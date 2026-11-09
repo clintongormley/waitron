@@ -445,8 +445,8 @@ outside the table holds a key into it, so the rows may lose their identity — a
 `extra_list_items` that is being rewritten, so what matters is who references THAT table. The grep
 had to be respelled for the storage switch: the generated SQLite baselines quote with backticks and
 name no schema, so the old `REFERENCES "public"."extra_l` pattern matches nothing at all now. Run
-``grep -rn 'REFERENCES `extra_l' --include='*.sql' packages`` — two lines on 2026-11-07,
-`packages/db/drizzle/0000_baseline.sql:2004` and `:2034`, both naming `extra_lists`, the PARENT (three
+``grep -rn 'REFERENCES `extra_l' --include='*.sql' packages`` — two lines on 2026-11-09,
+`packages/db/drizzle/0000_baseline.sql:1966` and `:1994`, both naming `extra_lists`, the PARENT (three
 on 2026-09-22, then in catalogue's own baseline). None names `extra_list_items`, so the condition
 still holds; the count does not stand on its own, because the
 pattern matches the parent's name as well. Scope it to `packages` rather than `packages apps`:
@@ -1505,11 +1505,12 @@ Cost of the shape it replaced: six such keys existed and nothing would have fail
 **What it reads, and the two things it therefore cannot see.** It reads drizzle's own generated head
 snapshot for each migration set — `meta/_journal.json` names the head and `tables[*].foreignKeys[*]`
 holds the graph — so a key declared in TypeScript but not yet generated is invisible to it, and so is
-one added by hand-written migration SQL, because a custom migration leaves the snapshot alone. Both
-gaps are stated in the guard's own header. The first is caught elsewhere:
-`scripts/migrations-match-schema.test.ts` runs `drizzle-kit generate` for every set into a copy and
-fails when anything changes. The second is not, because `generate` compares the TypeScript with the
-snapshot and never reads the SQL. The reading was chosen over the TypeScript deliberately: a reading
+one added by hand-written migration SQL, because a custom migration leaves the snapshot alone.
+The first gap is caught by `rebuild-check` in
+`scripts/starting-migrations.test.ts`, which compares the regenerated snapshot and SQL with the
+committed files. The second cannot arise while `readTriggers` admits only `CREATE TRIGGER`
+statements and no set holds a second migration. The reading was chosen over the TypeScript
+deliberately: a reading
 taken from the TypeScript passes the moment somebody edits a table file, while the constraint is still
 live in every migrated database, and it would have gone silently vacuous at the flip, when `PgTable`
 stops matching anything.
@@ -1657,7 +1658,8 @@ serves would also look covered.
 
 FK `REFERENCES`, and a `CREATE TRIGGER … ON <table>` where the TABLE is owned by a different
 migration set. Since A760 (November 2026) only the first exists in the tree: every trigger a
-migration creates is in core's set (`packages/db/drizzle/0000_baseline.sql`) and names only tables core's set creates.
+migration creates is in core's set (`packages/db/drizzle/0000_baseline.sql`) and names only tables
+core's set creates. Write its source in `packages/db/triggers/core.sql`.
 
 Until A760 the live instance of the trigger edge was `packages/media`; the account below describes
 that old set in the present tense of its day. Its old migration files were deleted with the frozen
@@ -3678,17 +3680,22 @@ An env or prompt value set to `""` falls back to its default exactly as an unset
 
 **Migrations**
 
-## A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the snapshots or `_journal.json`
+## A schema change rebuilds the set's one starting migration
 
-At the paused rebase, reset the migrations dir to main's exact state
-(`git checkout origin/main -- packages/db/drizzle/`; keep the branch's `src/schema/*.ts`), then
-`pnpm --filter @waitron/db db:generate --name <foo>` (and `db:generate:custom --name <foo>_sql`,
-pasting back any hand-written SQL you saved first — a regeneration DROPS it, which is exactly how
-core's nine behavioural triggers and media's two image foreign keys were lost at the flip; both
-replacement files record it in their own headers). Stage only your migrations, `rebase --continue`,
-and verify by RUNNING `scripts/schema-constraints.test.ts`, `scripts/append-only-triggers.test.ts`,
-`scripts/behavioural-triggers.test.ts` (it pins every hand-written trigger by name, so it is what
-notices one dropped), `scripts/migrations-match-schema.test.ts` and
+Change the TypeScript schema and write hand-written SQL only in `<package>/triggers/<set>.sql`.
+Run `pnpm --filter @waitron/server migration-baseline rebuild --set <name>`. This replaces the
+starting migration and resets every venue; backups and exports from before it cannot be restored
+or imported. Work beside A1308 changes a schema the same way (the slice rules' §8).
+
+On a rebase conflict in a set's `drizzle/` files or `scripts/migration-baseline-epoch.json`, take
+main's side with `git checkout --ours -- <those paths>` during the rebase, keep your schema and
+trigger source, and rerun the rebuild command. Stage the generated paths with `git add -A` and
+continue the rebase. Never merge generated text by hand.
+
+`scripts/starting-migrations.test.ts` runs `rebuild-check` for every set. A hand edit or a
+drizzle-kit upgrade that changes generated text fails that check and needs a rebuild and reset.
+Verify by RUNNING `scripts/schema-constraints.test.ts`, `scripts/append-only-triggers.test.ts`,
+`scripts/behavioural-triggers.test.ts`, `scripts/starting-migrations.test.ts` and
 `packages/fiscal-verifactu/src/inmutabilidad.test.ts`.
 Paid for on #165.
 
@@ -3832,6 +3839,9 @@ entry only.
 
 ## Editing a shipped migration file, even a comment, needs a venue reset
 
+2026-11-09: `scripts/starting-migrations.test.ts` replaces migrations-match-schema. The historical
+receipts below refer to the guard available when those experiments ran.
+
 Drizzle records a hash of each migration file's whole text in the database's journal table, and
 `assertNotAhead` (`packages/provisioning/src/schema-ahead.ts`) refuses the start with
 `provisioning.database_ahead` when the journal records a hash the image does not ship.
@@ -3853,7 +3863,8 @@ one migrated with the edited files was accepted. A rebuild from the bucket runs 
 (`apps/server/src/restore-stream.ts` calls `assertNotAhead`), so a copy streamed before the edit
 carries the old hashes too, and so does an archive taken before it: a cold restore runs no ahead
 check of its own, and the start after it does (`apps/server/src/node-entry.ts`). Nothing guards
-against such an edit: the 2026-10-02 one passed `scripts/migrations-match-schema.test.ts`,
+against such an edit: the 2026-10-02 one passed the old guard
+(`git show dd329e28eb:scripts/migrations-match-schema.test.ts`),
 `scripts/migration-upgrade.test.ts`, `scripts/schema-constraints.test.ts`,
 `scripts/behavioural-triggers.test.ts`, `scripts/append-only-triggers.test.ts` and
 `packages/migrations`'s suite.

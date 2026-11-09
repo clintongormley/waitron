@@ -30,8 +30,7 @@ CREATE TABLE `clock_checks` (
 	CONSTRAINT "clock_checks_reason_ck" CHECK("clock_checks"."reason" in ('start', 'change', 'behind_chain', 'disagrees'))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `clock_checks_seq_uq` ON `clock_checks` (`seq`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `clock_checks_seq_uq` ON `clock_checks` (`seq`);--> statement-breakpoint
 CREATE TABLE `clock_confirmations` (
 	`id` text PRIMARY KEY NOT NULL,
 	`seq` integer NOT NULL,
@@ -55,12 +54,9 @@ CREATE TABLE `clock_confirmations` (
 	CONSTRAINT "clock_confirmations_record_ck" CHECK(("clock_confirmations"."registro_id" is null) = ("clock_confirmations"."record_at" is null))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `clock_confirmations_seq_uq` ON `clock_confirmations` (`seq`);
---> statement-breakpoint
-CREATE UNIQUE INDEX `clock_confirmations_check_uq` ON `clock_confirmations` (`check_id`);
---> statement-breakpoint
-CREATE INDEX `clock_confirmations_registro_idx` ON `clock_confirmations` (`registro_id`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `clock_confirmations_seq_uq` ON `clock_confirmations` (`seq`);--> statement-breakpoint
+CREATE UNIQUE INDEX `clock_confirmations_check_uq` ON `clock_confirmations` (`check_id`);--> statement-breakpoint
+CREATE INDEX `clock_confirmations_registro_idx` ON `clock_confirmations` (`registro_id`);--> statement-breakpoint
 CREATE TABLE `clock_stop_restarts` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,
@@ -74,12 +70,12 @@ CREATE TABLE `clock_stop_restarts` (
 	FOREIGN KEY (`registro_id`) REFERENCES `registros_facturacion`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `clock_stop_restarts_registro_uq` ON `clock_stop_restarts` (`registro_id`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `clock_stop_restarts_registro_uq` ON `clock_stop_restarts` (`registro_id`);--> statement-breakpoint
 CREATE TABLE `envio_flujo` (
 	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
 	`proximo_envio_en` text NOT NULL,
-	`tiempo_espera_seg` integer NOT NULL, `technical_incident_token` text,
+	`tiempo_espera_seg` integer NOT NULL,
+	`technical_incident_token` text,
 	CONSTRAINT "envio_flujo_singleton_ck" CHECK("envio_flujo"."id" = 1)
 );
 --> statement-breakpoint
@@ -89,20 +85,19 @@ CREATE TABLE `envios` (
 	`intentos` integer DEFAULT 0 NOT NULL,
 	`proximo_intento_en` text NOT NULL,
 	`incidencia` integer DEFAULT false NOT NULL,
+	`technical_incidence` integer DEFAULT false NOT NULL,
 	`csv` text,
 	`codigo_error` text,
 	`mensaje_error` text,
 	`enviado_en` text,
 	`confirmado_en` text,
-	`reconciled_resubmit_at` text, `technical_incidence` integer DEFAULT false NOT NULL,
+	`reconciled_resubmit_at` text,
 	FOREIGN KEY (`registro_id`) REFERENCES `registros_facturacion`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "envios_estado_ck" CHECK("envios"."estado" in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido', 'retenido'))
 );
 --> statement-breakpoint
-CREATE INDEX `envios_drenaje_idx` ON `envios` (`estado`,`proximo_intento_en`);
---> statement-breakpoint
-CREATE INDEX `envios_confirmado_idx` ON `envios` (`confirmado_en`);
---> statement-breakpoint
+CREATE INDEX `envios_drenaje_idx` ON `envios` (`estado`,`proximo_intento_en`);--> statement-breakpoint
+CREATE INDEX `envios_confirmado_idx` ON `envios` (`confirmado_en`);--> statement-breakpoint
 CREATE TABLE `filing_case_events` (
 	`id` text PRIMARY KEY NOT NULL,
 	`case_id` text NOT NULL,
@@ -117,12 +112,9 @@ CREATE TABLE `filing_case_events` (
 	CONSTRAINT "filing_case_events_kind_ck" CHECK("filing_case_events"."kind" in ('note', 'resolved'))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `filing_case_events_action_key_uq` ON `filing_case_events` (`action_key`);
---> statement-breakpoint
-CREATE UNIQUE INDEX `filing_case_events_one_resolution_uq` ON `filing_case_events` (`case_id`) WHERE "filing_case_events"."kind" = 'resolved';
---> statement-breakpoint
-CREATE INDEX `filing_case_events_case_idx` ON `filing_case_events` (`case_id`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `filing_case_events_action_key_uq` ON `filing_case_events` (`action_key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `filing_case_events_one_resolution_uq` ON `filing_case_events` (`case_id`) WHERE "filing_case_events"."kind" = 'resolved';--> statement-breakpoint
+CREATE INDEX `filing_case_events_case_idx` ON `filing_case_events` (`case_id`);--> statement-breakpoint
 CREATE TABLE `filing_cases` (
 	`id` text PRIMARY KEY NOT NULL,
 	`registro_id` text NOT NULL,
@@ -133,8 +125,7 @@ CREATE TABLE `filing_cases` (
 	CONSTRAINT "filing_cases_cause_ck" CHECK("filing_cases"."cause" <> '')
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `filing_cases_registro_uq` ON `filing_cases` (`registro_id`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `filing_cases_registro_uq` ON `filing_cases` (`registro_id`);--> statement-breakpoint
 CREATE TABLE `fiscal_allocations` (
 	`event_key` text PRIMARY KEY NOT NULL,
 	`allocation_key` text NOT NULL,
@@ -153,10 +144,8 @@ CREATE TABLE `fiscal_allocations` (
 	FOREIGN KEY (`sif_id`) REFERENCES `registro_sif`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `fiscal_allocations_allocation_uq` ON `fiscal_allocations` (`allocation_key`);
---> statement-breakpoint
-CREATE UNIQUE INDEX `fiscal_allocations_identity_uq` ON `fiscal_allocations` (`taxpayer_nif`,`software_id`,`environment`,`installation_identity`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `fiscal_allocations_allocation_uq` ON `fiscal_allocations` (`allocation_key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `fiscal_allocations_identity_uq` ON `fiscal_allocations` (`taxpayer_nif`,`software_id`,`environment`,`installation_identity`);--> statement-breakpoint
 CREATE TABLE `fiscal_certificate_installs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,
@@ -177,8 +166,7 @@ CREATE TABLE `fiscal_certificate_installs` (
 	CONSTRAINT "fiscal_certificate_installs_dashboard_ck" CHECK("fiscal_certificate_installs"."source" = 'setup' or ("fiscal_certificate_installs"."person_id" is not null and "fiscal_certificate_installs"."checked_at" is not null and "fiscal_certificate_installs"."checked_endpoint" is not null))
 );
 --> statement-breakpoint
-CREATE INDEX `fiscal_certificate_installs_node_idx` ON `fiscal_certificate_installs` (`node_id`,`installed_at`);
---> statement-breakpoint
+CREATE INDEX `fiscal_certificate_installs_node_idx` ON `fiscal_certificate_installs` (`node_id`,`installed_at`);--> statement-breakpoint
 CREATE TABLE `fiscal_certificate_reminders` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,
@@ -193,8 +181,7 @@ CREATE TABLE `fiscal_certificate_reminders` (
 	CONSTRAINT "fiscal_certificate_reminders_status_ck" CHECK("fiscal_certificate_reminders"."status" in ('claimed', 'sent', 'failed', 'unknown'))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `fiscal_certificate_reminders_uq` ON `fiscal_certificate_reminders` (`install_id`,`stage`,`person_id`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `fiscal_certificate_reminders_uq` ON `fiscal_certificate_reminders` (`install_id`,`stage`,`person_id`);--> statement-breakpoint
 CREATE TABLE `fiscal_conflict_evidence` (
 	`id` text PRIMARY KEY NOT NULL,
 	`registro_id` text NOT NULL,
@@ -209,8 +196,7 @@ CREATE TABLE `fiscal_conflict_evidence` (
 	CONSTRAINT "fiscal_conflict_evidence_cause_ck" CHECK("fiscal_conflict_evidence"."cause" in ('fiscal.huella_divergente', 'fiscal.duplicado_anulado'))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `fiscal_conflict_evidence_attempt_uq` ON `fiscal_conflict_evidence` (`registro_id`,`attempt`,`cause`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `fiscal_conflict_evidence_attempt_uq` ON `fiscal_conflict_evidence` (`registro_id`,`attempt`,`cause`);--> statement-breakpoint
 CREATE TABLE `fiscal_lookup_conflicts` (
 	`id` text PRIMARY KEY NOT NULL,
 	`registro_id` text NOT NULL,
@@ -221,8 +207,7 @@ CREATE TABLE `fiscal_lookup_conflicts` (
 	FOREIGN KEY (`case_id`) REFERENCES `filing_cases`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `fiscal_lookup_conflicts_registro_uq` ON `fiscal_lookup_conflicts` (`registro_id`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `fiscal_lookup_conflicts_registro_uq` ON `fiscal_lookup_conflicts` (`registro_id`);--> statement-breakpoint
 CREATE TABLE `fiscal_reservations` (
 	`event_key` text PRIMARY KEY NOT NULL,
 	`allocation_key` text NOT NULL,
@@ -239,10 +224,8 @@ CREATE TABLE `fiscal_reservations` (
 	FOREIGN KEY (`source_node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `fiscal_reservations_allocation_uq` ON `fiscal_reservations` (`allocation_key`);
---> statement-breakpoint
-CREATE UNIQUE INDEX `fiscal_reservations_identity_uq` ON `fiscal_reservations` (`taxpayer_nif`,`software_id`,`environment`,`installation_identity`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `fiscal_reservations_allocation_uq` ON `fiscal_reservations` (`allocation_key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `fiscal_reservations_identity_uq` ON `fiscal_reservations` (`taxpayer_nif`,`software_id`,`environment`,`installation_identity`);--> statement-breakpoint
 CREATE TABLE `fiscal_series_conflicts` (
 	`id` text PRIMARY KEY NOT NULL,
 	`sif_id` text NOT NULL,
@@ -254,8 +237,7 @@ CREATE TABLE `fiscal_series_conflicts` (
 	FOREIGN KEY (`series_id`) REFERENCES `invoice_series`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `fiscal_series_conflicts_invoice_uq` ON `fiscal_series_conflicts` (`sif_id`,`invoice_identity`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `fiscal_series_conflicts_invoice_uq` ON `fiscal_series_conflicts` (`sif_id`,`invoice_identity`);--> statement-breakpoint
 CREATE TABLE `registro_sif` (
 	`id` text PRIMARY KEY NOT NULL,
 	`node_id` text NOT NULL,
@@ -268,12 +250,11 @@ CREATE TABLE `registro_sif` (
 	CONSTRAINT "registro_sif_numero_ck" CHECK(length("registro_sif"."numero_instalacion") between 1 and 30)
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `registro_sif_instalacion_uq` ON `registro_sif` (`nif`,`id_sistema_informatico`,`numero_instalacion`);
---> statement-breakpoint
-CREATE UNIQUE INDEX `registro_sif_activo_uq` ON `registro_sif` (`node_id`) WHERE "registro_sif"."revocado_en" is null;
---> statement-breakpoint
+CREATE UNIQUE INDEX `registro_sif_instalacion_uq` ON `registro_sif` (`nif`,`id_sistema_informatico`,`numero_instalacion`);--> statement-breakpoint
+CREATE UNIQUE INDEX `registro_sif_activo_uq` ON `registro_sif` (`node_id`) WHERE "registro_sif"."revocado_en" is null;--> statement-breakpoint
 CREATE TABLE `registros_facturacion` (
 	`id` text PRIMARY KEY NOT NULL,
+	`corrects_registro_id` text,
 	`source` text NOT NULL,
 	`device_id` text,
 	`node_id` text NOT NULL,
@@ -286,6 +267,9 @@ CREATE TABLE `registros_facturacion` (
 	`fecha_expedicion_factura` text NOT NULL,
 	`nombre_razon_emisor` text NOT NULL,
 	`tipo_factura` text,
+	`subsanacion` text,
+	`rechazo_previo` text,
+	`sin_registro_previo` text,
 	`tipo_rectificativa` text,
 	`facturas_rectificadas` text,
 	`facturas_sustituidas` text,
@@ -306,7 +290,8 @@ CREATE TABLE `registros_facturacion` (
 	`tipo_huella` text NOT NULL,
 	`huella` text NOT NULL,
 	`entorno` text,
-	`creado_en` text NOT NULL, `corrects_registro_id` text REFERENCES registros_facturacion(id), `subsanacion` text, `rechazo_previo` text, `sin_registro_previo` text,
+	`creado_en` text NOT NULL,
+	FOREIGN KEY (`corrects_registro_id`) REFERENCES `registros_facturacion`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`sif_id`) REFERENCES `registro_sif`(`id`) ON UPDATE no action ON DELETE no action,
@@ -333,14 +318,9 @@ CREATE TABLE `registros_facturacion` (
              and "registros_facturacion"."anterior_huella" is not null))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `registros_tenant_node_secuencia_uq` ON `registros_facturacion` (`node_id`,`secuencia`);
---> statement-breakpoint
-CREATE UNIQUE INDEX `registros_corrects_registro_uq` ON `registros_facturacion` (`corrects_registro_id`);
---> statement-breakpoint
-CREATE UNIQUE INDEX `registros_identidad_uq` ON `registros_facturacion` (`id_emisor_factura`,`num_serie_factura`,`fecha_expedicion_factura`,`tipo_registro`) WHERE "registros_facturacion"."corrects_registro_id" is null;
---> statement-breakpoint
-CREATE INDEX `registros_sale_idx` ON `registros_facturacion` (`sale_id`);
---> statement-breakpoint
-CREATE INDEX `registros_node_secuencia_idx` ON `registros_facturacion` (`node_id`,`secuencia`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `registros_tenant_node_secuencia_uq` ON `registros_facturacion` (`node_id`,`secuencia`);--> statement-breakpoint
+CREATE UNIQUE INDEX `registros_corrects_registro_uq` ON `registros_facturacion` (`corrects_registro_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `registros_identidad_uq` ON `registros_facturacion` (`id_emisor_factura`,`num_serie_factura`,`fecha_expedicion_factura`,`tipo_registro`) WHERE "registros_facturacion"."corrects_registro_id" is null;--> statement-breakpoint
+CREATE INDEX `registros_sale_idx` ON `registros_facturacion` (`sale_id`);--> statement-breakpoint
+CREATE INDEX `registros_node_secuencia_idx` ON `registros_facturacion` (`node_id`,`secuencia`);--> statement-breakpoint
 CREATE INDEX `registros_generado_idx` ON `registros_facturacion` (`fecha_hora_huso_gen_registro`);

@@ -29,7 +29,7 @@ import {
 } from "../packages/db/src/trigger-refusals.js";
 
 /**
- * The BEHAVIOURAL triggers of core's set (`packages/db/drizzle/0000_baseline.sql`) still refuse
+ * The BEHAVIOURAL triggers of core's set (`packages/db/triggers/core.sql`) still refuse
  * against a database the PRODUCT migrated: a settlement's tender coverage, a tender
  * after settlement, a working order's status transitions, lines written against an order that is
  * not open, a line's description maps matching the venue's invoice locales, and a device profile's

@@ -4,29 +4,34 @@
 // Usage: pnpm --filter @waitron/server migration-baseline preserve --reference <absolute dir> --set <name> --from <old-set,...>
 //        pnpm --filter @waitron/server migration-baseline controls --reference <absolute dir> --out <absolute dir>
 //        pnpm --filter @waitron/server migration-baseline copies --dist <absolute dir> --image-root <absolute dir> --report <absolute file>
+//        pnpm --filter @waitron/server migration-baseline rebuild --set <name>
+//        pnpm --filter @waitron/server migration-baseline rebuild-check --set <name>
 import { existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatOutcomes, runControls } from "./controls.js";
 import { checkCopies, formatCopies, manifestCopySets } from "./copies.js";
 import { preserveBaseline } from "./preserve.js";
+import { rebuildBaseline, rebuildSets } from "./rebuild.js";
 
 const USAGE =
   "Usage: preserve --reference <absolute dir> --set <name> --from <old-set,...>\n" +
   "       controls --reference <absolute dir> --out <absolute dir>\n" +
-  "       copies --dist <absolute dir> --image-root <absolute dir> --report <absolute file>";
+  "       copies --dist <absolute dir> --image-root <absolute dir> --report <absolute file>\n" +
+  "       rebuild --set <name>\n" +
+  "       rebuild-check --set <name>";
 
-function flags(args: readonly string[], allowed: readonly string[]): Map<string, string> {
+function flags(args: readonly string[], required: readonly string[]): Map<string, string> {
   const found = new Map<string, string>();
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index] ?? "";
     const value = args[index + 1];
-    if (!allowed.includes(name) || value === undefined || found.has(name)) {
+    if (!required.includes(name) || value === undefined || found.has(name)) {
       throw new Error(USAGE);
     }
     found.set(name, value);
   }
-  for (const name of allowed) if (!found.has(name)) throw new Error(USAGE);
+  for (const name of required) if (!found.has(name)) throw new Error(USAGE);
   return found;
 }
 
@@ -85,6 +90,25 @@ export async function runCli(
   if (command === "preserve") return preserve(rest, print);
   if (command === "controls") return controls(rest, print);
   if (command === "copies") return copies(rest, print);
+  if (command === "rebuild" || command === "rebuild-check") {
+    const found = flags(rest, ["--set"]);
+    const name = found.get("--set") as string;
+    const set = rebuildSets().find((candidate) => candidate.name === name);
+    if (set === undefined) throw new Error(`The manifest has no set named ${name}`);
+    const result = await rebuildBaseline({
+      set,
+      mode: command === "rebuild" ? "write" : "check",
+    });
+    if (command === "rebuild-check" && result.outcome !== "unchanged") {
+      print([`would change ${name}`, ...result.differences].join("\n"));
+      return 1;
+    }
+    print(
+      `${result.outcome} ${name}` +
+        (result.when === null ? "" : `\nwhen ${result.when}\nsha256 ${result.sha256}`),
+    );
+    return 0;
+  }
   throw new Error(USAGE);
 }
 

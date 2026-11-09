@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync } from "node:fs";
+import {
+  cpSync,
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  readFileSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +21,7 @@ import {
 import { buildBackupVerificationTarget } from "./backup-verification-target.js";
 import { readBackupVerificationRequest } from "./backup-verification-protocol.js";
 import * as targetExports from "./backup-verification-target.js";
+import { manifestCopySets } from "../scripts/migration-baseline/copies.js";
 
 const shippedSetNames = new Set(manifestSets().map((set) => set.name));
 const setOwners = ALL_MODULES.filter((m) => shippedSetNames.has(m.name));
@@ -411,7 +420,27 @@ describe("current binary backup target", () => {
   });
 });
 
-it("gives today's real modules, set-less ones hosted in core's and workforce's sets, the target of the squash into eight sets", () => {
+function steadyTarget(target: ReturnType<typeof buildBackupVerificationTarget>) {
+  const rest: Record<string, unknown> = { ...target };
+  delete rest.migrationDigest;
+  delete rest.digest;
+  return {
+    ...rest,
+    modules: target.modules.map((module) => {
+      const steady: Record<string, unknown> = { ...module };
+      delete steady.migrationDigest;
+      delete steady.schema;
+      return steady;
+    }),
+  };
+}
+const steadyHash = (target: ReturnType<typeof buildBackupVerificationTarget>) =>
+  createHash("sha256")
+    .update(JSON.stringify(steadyTarget(target)))
+    .digest("hex");
+const steadyPin = "7580bd887fa98bca71a5c97cc7f6cfe2a52d52b7f661bcfadd897849eb253155";
+
+it("pins today's composition, policy and hosting of the real modules", () => {
   expect([...new Set(ALL_MODULES.flatMap((m) => m.tablesIn ?? []))].sort()).toEqual([
     "core",
     "workforce",
@@ -421,9 +450,51 @@ it("gives today's real modules, set-less ones hosted in core's and workforce's s
     migrationsRoot: null,
     runtime,
   });
-  expect(createHash("sha256").update(JSON.stringify(actual)).digest("hex")).toBe(
-    "2751b98488a2d5decffb7b01290d8adee07aaf600c6f54fdec97f39a0810f2a7",
+  expect(steadyHash(actual)).toBe(steadyPin);
+});
+
+it("the pin does not move when migrations are rebuilt", () => {
+  const copy = join(root!, "real");
+  for (const set of manifestCopySets())
+    cpSync(set.folder, join(copy, set.name), { recursive: true });
+  const journalFile = join(copy, "core/meta/_journal.json");
+  const journal = JSON.parse(readFileSync(journalFile, "utf8"));
+  journal.entries[0].when += 12_345;
+  writeFileSync(journalFile, JSON.stringify(journal));
+  const sqlFile = join(copy, "core/0000_baseline.sql");
+  writeFileSync(sqlFile, readFileSync(sqlFile, "utf8") + "\n");
+  const workforceFile = join(copy, "workforce-es/meta/_journal.json");
+  const workforce = JSON.parse(readFileSync(workforceFile, "utf8"));
+  workforce.entries = workforce.entries.slice(0, 1);
+  writeFileSync(workforceFile, JSON.stringify(workforce));
+  const actual = buildBackupVerificationTarget({
+    modules: ALL_MODULES,
+    migrationsRoot: copy,
+    runtime,
+  });
+  expect(actual.digest).not.toBe(
+    buildBackupVerificationTarget({ modules: ALL_MODULES, migrationsRoot: null, runtime }).digest,
   );
+  expect(steadyHash(actual)).toBe(steadyPin);
+});
+
+it("the pin moves when composition or policy changes", () => {
+  const version = ALL_MODULES.map((m) => (m.name === "payments" ? { ...m, version: "9.9.9" } : m));
+  const policy = ALL_MODULES.map((m) =>
+    m.name === "payments"
+      ? {
+          ...m,
+          backup: {
+            ...m.backup,
+            verification: { ...m.backup!.verification!, publicEvidenceDigest: "0".repeat(64) },
+          },
+        }
+      : m,
+  );
+  for (const modules of [version, policy])
+    expect(
+      steadyHash(buildBackupVerificationTarget({ modules, migrationsRoot: null, runtime })),
+    ).not.toBe(steadyPin);
 });
 
 describe("a set holding another module's tables", () => {

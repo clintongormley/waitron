@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ed780c23-80a6-4869-8da8-e608cc3738ea",
+  "id": "2d94a206-98ec-4dc4-8b11-a6776af55fdb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "node_handover_events": {

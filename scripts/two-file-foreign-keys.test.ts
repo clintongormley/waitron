@@ -22,11 +22,10 @@ import {
  * `tables[*].foreignKeys[*]`. Three gaps:
  *
  * 1. **A key declared in TypeScript but not yet generated is invisible to it.** That state fails
- *    `migrations-match-schema.test.ts` instead. An ungenerated key reaches no database, while a
+ *    `starting-migrations.test.ts` instead. An ungenerated key reaches no database, while a
  *    reading taken from the TypeScript would pass the moment someone deleted a key there.
- * 2. **A key added by hand-written SQL is invisible too**, because a custom migration does not
- *    change the snapshot, and `migrations-match-schema.test.ts` compares the TypeScript with the
- *    snapshot, never with the SQL.
+ * 2. **Hand-written SQL cannot add a key** while `readTriggers` admits only CREATE TRIGGER
+ *    statements and `starting-migrations.test.ts` refuses a second migration in any set.
  * 3. **It judges by the table NAME.** Two tables with the same physical name in different modules
  *    would be one node in this graph; `classification-complete.test.ts` is what forbids that.
  */

@@ -12,8 +12,7 @@
     "test:merge": "vitest --merge-reports .vitest-reports --coverage --coverage.provider=custom --coverage.customProviderModule=../../scripts/vitest-shard-coverage-merge.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "db:generate": "drizzle-kit generate",
-    "db:generate:custom": "drizzle-kit generate --custom",
+    "db:generate": "pnpm --filter @waitron/server migration-baseline rebuild --set fiscal-verifactu",
     "test:build-custodian": "node scripts/build-custodian.mjs"
   },
   "dependencies": {

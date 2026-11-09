@@ -1052,7 +1052,7 @@ product failures.
   reviewed every file and answered every question (2026-11-04), and approved it the same day.
   [Slice 0](../superpowers/plans/2026-11-04-a1308-slice-0-bench.md)'s protection list is built; [the testing guide](../developers/testing-guide.md#the-protection-list)
   says how each slice uses it. Its bench is still to land, in slice 0's second pull request. Next is
-  [A760](../superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md).
+  [the build order](../superpowers/plans/2026-11-08-a1308-build-order.md).
   **Open:** the design does not cover A790's six tables, A802's eleven or A739's; each later slice
   must fold in the ones it touches. 246 tables become 145, or 144 once A1323 removes
   `recovery_packs`, in eight migration sets instead of sixteen. There is one job runner. 111 product

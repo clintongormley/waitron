@@ -615,11 +615,14 @@ called weaker than its name, the topic file lists what it does not see.
 - **Declare every foreign key and unique index in the TypeScript schema.** If impossible, say at
   the column what it cost and where the refusal moved. Guard: `scripts/schema-constraints.test.ts`,
   weaker than its name: reads built schema, never offending writes; matches unique indexes by name.
-- **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the
-  snapshots or `_journal.json`.** Reset the migrations dir to main's state, regenerate, and verify by
-  RUNNING `scripts/schema-constraints.test.ts`, `scripts/append-only-triggers.test.ts`,
-  `scripts/behavioural-triggers.test.ts`, `scripts/migrations-match-schema.test.ts` and
-  `packages/fiscal-verifactu/src/inmutabilidad.test.ts`.
+- **A schema change rebuilds the set's one starting migration, never a new migration or a hand edit:**
+  change the TypeScript schema (hand-written SQL only in `<package>/triggers/<set>.sql`) and run
+  `migration-baseline rebuild --set <name>`; on a rebase conflict take main's copy
+  (`git checkout --ours` during the rebase) and rerun it. Until go-live; from go-live, incremental
+  migrations and the rebuild hazards below apply again. Guard: `scripts/starting-migrations.test.ts`,
+  weaker than its name: trusts drizzle-kit. Verify by RUNNING `scripts/schema-constraints.test.ts`,
+  `scripts/append-only-triggers.test.ts`, `scripts/behavioural-triggers.test.ts`,
+  `scripts/starting-migrations.test.ts` and `packages/fiscal-verifactu/src/inmutabilidad.test.ts`.
 - **A drizzle table rebuild on this engine runs with foreign keys ON, so its `DROP TABLE` silently
   deletes every cascading child's rows, and fails on a `no action` or `restrict` child holding
   rows.** Before shipping a rebuild, list the foreign keys that point at the table.

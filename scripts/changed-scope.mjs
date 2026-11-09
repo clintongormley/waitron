@@ -89,6 +89,7 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
       "packages/venue-service",
     ],
   ],
+  ["scripts/migration-baseline-epoch.json", ["apps/server"]],
   ["scripts/setup-litestream.mjs", ["apps/server"]],
   ["scripts/mutation-shard.mjs", ["packages/shared"]],
   ["scripts/mutation-aggregate.mjs", ["packages/shared"]],

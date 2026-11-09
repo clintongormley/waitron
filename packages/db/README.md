@@ -16,14 +16,13 @@ and once the commit has returned it hands those rows to this process's change li
 
 ## Commands
 
-| Command                   | Does                                         |
-| ------------------------- | -------------------------------------------- |
-| `pnpm test`               | Runs Vitest. No Docker, no global setup.     |
-| `pnpm test:coverage`      | Runs the suite with coverage thresholds.     |
-| `pnpm typecheck`          | Runs `tsc --noEmit`.                         |
-| `pnpm mutation`           | Runs Stryker.                                |
-| `pnpm db:generate`        | Generates migrations from the schema barrel. |
-| `pnpm db:generate:custom` | Creates a migration for hand-written SQL.    |
+| Command              | Does                                                                     |
+| -------------------- | ------------------------------------------------------------------------ |
+| `pnpm test`          | Runs Vitest. No Docker, no global setup.                                 |
+| `pnpm test:coverage` | Runs the suite with coverage thresholds.                                 |
+| `pnpm typecheck`     | Runs `tsc --noEmit`.                                                     |
+| `pnpm mutation`      | Runs Stryker.                                                            |
+| `pnpm db:generate`   | Rebuilds the starting migration from the schema and `triggers/core.sql`. |
 
 ## Test setup
 
@@ -66,8 +65,7 @@ which includes this helper's reset and its close.
   merges the thirteen shard reports and fails below 90. A local `pnpm mutation` prints a score and
   fails at nothing — the bar is deliberately not in this package's stryker config, because CI
   passes each shard its own `--mutate` list and a bar there would gate one slice.
-- `db:generate` and `db:generate:custom` create migration artifacts; they are authoring commands,
-  not CI test commands.
+- `db:generate` rebuilds the starting migration; write hand-written SQL in `triggers/core.sql`.
 
 ## Migrations
 
@@ -91,9 +89,9 @@ every non-test caller to `migrationOptionsFor`).
 Keep `out: "./drizzle"` in `drizzle.config.ts` as a **single string**, not an array. One config
 produces one folder and one journal; each package that owns a migration set has its own config and journal.
 
-The generated snapshot covers the schema barrel. Triggers are hand-written into a `--custom`
-migration; they survive later `generate` runs because drizzle-kit diffs against its own snapshot,
-which has no concept of them, so you maintain them by hand when changing a constraint, trigger or
-table Drizzle does not generate.
+The generated snapshot covers the schema barrel. Write hand-written triggers in `triggers/core.sql`
+and run `pnpm db:generate` after changing the schema or those triggers. This rebuilds the starting
+migration and resets every venue. On a rebase conflict, take main's generated files and rebuild
+from your schema and trigger source. `scripts/starting-migrations.test.ts` checks every set.
 `runMigrations` requires the module's journal table name; core uses `__drizzle_migrations_db`.
 The caller orders migration sets from different modules.
