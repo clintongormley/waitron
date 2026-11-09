@@ -52,8 +52,6 @@ export * from "./incidents.js";
 export * from "./change-log.js";
 export * from "./deployment.js";
 export * from "./node-membership.js";
-export * from "./membership-removals.js";
-export * from "./membership-clearances.js";
 export * from "./node-sealed-state.js";
 export * from "./recovery-packs.js";
 export * from "./invoice-deliveries.js";
@@ -85,3 +83,5 @@ export * from "./document-page-jobs.js";
 export { settings } from "./settings.js";
 
 export * from "./outgoing-mail.js";
+
+export { activityLog } from "./activity-log.js";

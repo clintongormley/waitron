@@ -918,7 +918,7 @@ calendar.
 
 ## A write of a table `scripts/write-path-tables.json` lists lives only in the files it names
 
-`venue.db`'s `tenants`, `nodes`, `deployment` and `settings`, and `node.db`'s `node_mode`, `node_mirror_link`,
+`venue.db`'s `tenants`, `nodes`, `deployment`, `settings` and `activity_log`, and `node.db`'s `node_mode`, `node_mirror_link`,
 `node_primary_key`, `node_recovery_key`, `node_signing_key`, `node_handover_operations`,
 `node_handover_events` and `node_handover_restriction`. NOTHING BUT
 `scripts/write-path-tables.test.ts` REFUSES THEM.
@@ -928,7 +928,8 @@ So the rule is a convention over source text, and that guard is not a second opi
 that would refuse the write anyway.
 
 `settings` is written on request paths through its one writer,
-`packages/db/src/settings.ts` (`saveSettings`).
+`packages/db/src/settings.ts` (`saveSettings`). `activity_log` is written on request paths through
+`packages/db/src/activity-log.ts` (`recordActivity`).
 
 The guard reads `scripts/write-path-tables.json` and pins its table set independently. It reads
 TEXT, judges a FILE rather than a call chain, and walks `<member>/src` under `apps` and `packages`
@@ -6153,8 +6154,9 @@ after go-live adds one tested upgrade per version, applied on read and saved on 
 never in a migration, plus the backup measurement in tables-venuebox §8.3
 ([design U2](../superpowers/specs/2026-11-02-rationalisation/README.md)).
 The live type is `settings.<module>`: declare the document in the module's `settings` seat and make
-the dashboard query depend on that string. Saves currently keep only the latest saver and time;
-[activity-log slice 2](../superpowers/plans/2026-11-08-a1308-2-activity-log.md) adds the save history.
+the dashboard query depend on that string. Every settings save records `settings.saved` with the document key, saver and new revision, never
+a document value. Configuration import uses the same writer with no saver and revision 1; clearing
+an omitted document creates no save entry.
 
 Configuration copies carry each saved document whose definition has `transfers: true` as
 `settings.<module>: { version, doc }`. Import checks every document before writing, then replaces
@@ -6193,3 +6195,38 @@ These supporting fragments are from `CLAUDE.md` at
 ### Schema constraint guard
 
 > , never offending writes; matches unique indexes by name.
+
+
+## `activity_log` is for people to read, and one function writes it
+
+The owner's 4 November 2026 decision ([design R2](../superpowers/specs/2026-11-02-rationalisation/README.md))
+keeps product decisions out of the activity log. A screen may join other tables to entries for
+display. It must not use history to allow or refuse an action, count towards a limit or choose the
+next action. Nothing guards the readers' callers; review holds this rule.
+
+Write through `recordActivity(tx, entry)` in the caller's transaction. Declare the kind, its data
+shape and its subject kind in `packages/db/src/activity-kinds.ts`. `person_id` means the person
+who acted; a person acted upon is the subject. The readers resolve actor and subject names from
+`persons` when they read, so anonymising the person changes the displayed name.
+
+The registry's rules apply to every kind:
+
+- Data contains no person's name, email, telephone or tax number, and no guest health details.
+  People appear as ids in the actor or subject, or in declared `personFields` (built with dv17).
+  A980 cannot erase a name copied into an append-only row. The taxpayer's legal name is the sole
+  exception, reserved for vb2: the taxpayer is not a `persons` row and fiscal records already keep
+  that name.
+- Older rows must still satisfy a kind's data shape. Add an optional field or a new kind.
+- Ids inside data have no database key and may name a row that has gone. Nothing decides from them.
+- State any additional privacy rule beside the kind, such as keeping an allergy answer's count only.
+
+Data keys use camelCase. These rules override the appendices' `authorized_by` / `print_job_id`
+spellings and tables-devices' suggestion to copy people's names: A980 anonymises `persons`, while
+activity rows cannot change. Labels of things, such as menus and roles, may still be copied.
+
+The typed writer fixes the subject kind and checks data at compile time; there is no CHECK listing
+kinds, subjects or data shapes. Actor and device keys refuse deletion of their referenced rows.
+The source guard `scripts/write-path-tables.test.ts` restricts writes to the writer's file; it reads
+text, judges files rather than call chains, and misses the spellings and paths its header lists.
+It does not validate runtime data or guard reads. See
+[the approved interfaces and decisions](../superpowers/plans/2026-11-08-a1308-2-activity-log.md#interfaces-fixed-by-this-slice).

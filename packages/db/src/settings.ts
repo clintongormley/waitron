@@ -1,4 +1,5 @@
 import "./errors.js";
+import { recordActivity } from "./activity-log.js";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import type { Database, Transaction } from "./client.js";
@@ -96,6 +97,12 @@ export async function saveSettings<T extends object>(
       revision: row?.revision ?? 0,
     });
   }
+  await recordActivity(tx, {
+    kind: "settings.saved",
+    subjectId: definition.module,
+    personId: change.personId,
+    data: { revision: saved.revision },
+  });
   return { doc: parsed.doc, revision: saved.revision };
 }
 
@@ -113,13 +120,6 @@ export async function replaceTransferredSettings(
     await tx.delete(settings).where(eq(settings.module, definition.module));
     const doc = docs.get(definition.module);
     if (doc !== undefined)
-      await tx.insert(settings).values({
-        module: definition.module,
-        version: definition.version,
-        revision: 1,
-        doc: doc as Record<string, unknown>,
-        updatedBy: null,
-        updatedAt: nowIso(),
-      });
+      await saveSettings(tx, definition, { doc, expectedRevision: 0, personId: null });
   }
 }

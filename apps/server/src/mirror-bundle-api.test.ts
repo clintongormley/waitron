@@ -242,7 +242,7 @@ async function allocationSnapshot() {
 
 async function removalRows(): Promise<Record<string, unknown>[]> {
   const { rows } = await db.execute<Record<string, unknown>>(
-    sql`select removed_node_id, term from membership_removals`,
+    sql`select subject_id as removed_node_id, json_extract(data, '$.term') as term from activity_log where kind = 'membership.node_removed' order by at, rowid`,
   );
   return rows;
 }

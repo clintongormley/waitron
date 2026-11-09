@@ -18,5 +18,6 @@
     "packages/provisioning/src/privacy-contact.ts",
     "packages/provisioning/src/taxpayer-name.ts",
     "packages/provisioning/src/venue-apply.ts"
-  ]
+  ],
+  "activity_log": ["packages/db/src/activity-log.ts"]
 }

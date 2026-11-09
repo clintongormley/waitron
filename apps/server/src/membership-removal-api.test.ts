@@ -137,14 +137,14 @@ function errorEvents(p: Primary): string[] {
 
 async function removals(db: Database): Promise<Record<string, unknown>[]> {
   const { rows } = await db.execute<Record<string, unknown>>(
-    sql`select removed_node_id, contact_url, person_id, term from membership_removals`,
+    sql`select subject_id as removed_node_id, json_extract(data, '$.contactUrl') as contact_url, person_id, json_extract(data, '$.term') as term from activity_log where kind = 'membership.node_removed' order by at, rowid`,
   );
   return rows;
 }
 
 async function clearances(db: Database): Promise<Record<string, unknown>[]> {
   const { rows } = await db.execute<Record<string, unknown>>(
-    sql`select cleared_node_id, person_id, term from membership_clearances`,
+    sql`select subject_id as cleared_node_id, person_id, json_extract(data, '$.term') as term from activity_log where kind = 'membership.node_cleared' order by at, rowid`,
   );
   return rows;
 }
@@ -423,7 +423,7 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
       const before = await readNodeMembership(p.db);
       await p.db.execute(
         sql.raw(
-          `create trigger test_removal_refused before insert on membership_removals
+          `create trigger test_removal_refused before insert on activity_log when new.kind = 'membership.node_removed'
            begin select raise(abort, 'test: removal record refused'); end`,
         ),
       );
@@ -706,7 +706,7 @@ describe("POST /management-api/servers/:nodeId/clear", () => {
       const before = await readNodeMembership(p.db);
       await p.db.execute(
         sql.raw(
-          `create trigger test_clearance_refused before insert on membership_clearances
+          `create trigger test_clearance_refused before insert on activity_log when new.kind = 'membership.node_cleared'
            begin select raise(abort, 'test: clearance record refused'); end`,
         ),
       );
