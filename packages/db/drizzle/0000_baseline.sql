@@ -2230,16 +2230,6 @@ CREATE TABLE `adjustments` (
 CREATE INDEX `adjustments_order_reason_idx` ON `adjustments` (`working_order_id`,`reason_id`);--> statement-breakpoint
 CREATE INDEX `adjustments_requested_by_idx` ON `adjustments` (`requested_by`);--> statement-breakpoint
 CREATE INDEX `adjustments_approved_by_idx` ON `adjustments` (`approved_by`);--> statement-breakpoint
-CREATE TABLE `adjustment_settings` (
-	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
-	`max_bill_comp` integer,
-	`bill_approver_roles` text DEFAULT '["manager","admin"]' NOT NULL,
-	`updated_at` text NOT NULL,
-	CONSTRAINT "adjustment_settings_singleton_ck" CHECK("adjustment_settings"."id" = 1),
-	CONSTRAINT "adjustment_settings_max_bill_comp_ck" CHECK("adjustment_settings"."max_bill_comp" is null or "adjustment_settings"."max_bill_comp" > 0),
-	CONSTRAINT "adjustment_settings_bill_approver_roles_ck" CHECK(json_array_length("adjustment_settings"."bill_approver_roles") > 0)
-);
---> statement-breakpoint
 CREATE TABLE `adjustment_refunds` (
 	`id` text PRIMARY KEY NOT NULL,
 	`adjustment_id` text NOT NULL,

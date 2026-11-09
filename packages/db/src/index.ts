@@ -431,10 +431,8 @@ export {
   adjustmentReasons,
   adjustmentRefunds,
   adjustments,
-  adjustmentSettings,
   adjustmentStage,
 } from "./schema/index.js";
-export { DEFAULT_BILL_APPROVER_ROLES } from "./schema/adjustments/settings.js";
 export type { AdjustmentSplit, AdjustmentStage } from "./schema/adjustments/adjustments.js";
 export {
   allergyLineTicks,
@@ -503,5 +501,10 @@ export * from "./schema/document-page-jobs.js";
 
 export { settings } from "./schema/settings.js";
 
-export { defineSettingsDocument, readSettings, saveSettings } from "./settings.js";
+export {
+  defineSettingsDocument,
+  readSettings,
+  saveSettings,
+  replaceTransferredSettings,
+} from "./settings.js";
 export type { SettingsParse, SettingsDocument, SettingsRead, SettingsChange } from "./settings.js";

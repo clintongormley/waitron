@@ -30,7 +30,6 @@
   "src/schema/adjustments/index.ts": 0.1,
   "src/schema/adjustments/reasons.ts": 66.9,
   "src/schema/adjustments/refund-links.ts": 55.6,
-  "src/schema/adjustments/settings.ts": 39.7,
   "src/schema/bill-edit-states.ts": 22.3,
   "src/schema/bill-payments.ts": 208.3,
   "src/schema/business-day-clock.ts": 38.5,

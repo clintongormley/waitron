@@ -17,6 +17,7 @@ import {
   adjustments,
   createAdjustmentReason,
   deleteAdjustmentReason,
+  readAdjustmentSettings,
   saveAdjustmentSettings,
 } from "@waitron/adjustments";
 import { createPinThrottle, loginWithPin, persons, type PersonRoleValue } from "@waitron/identity";
@@ -403,13 +404,42 @@ describe("approval through the route (plan D6)", () => {
     });
   });
 
+  it("answers a damaged comp settings document as a server failure", async () => {
+    const { billId } = await billWith(venue, [{ name: "Burger" }]);
+    const previous = venue.db.execute<{ doc: string }>(
+      sql`select doc from settings where module = 'adjustments'`,
+    ).rows[0];
+    venue.db.execute(
+      sql`insert into settings (module, version, revision, doc, updated_at) values ('adjustments', 1, 1, '{"maxBillComp":0,"billApproverRoles":["admin"]}', '2026-11-09T12:00:00.000Z') on conflict(module) do update set doc = excluded.doc`,
+    );
+    try {
+      const response = await post(billId, await comp(billId), { path: "/preview" });
+      expect(response.status).toBe(500);
+      expect(response.json).toEqual({
+        code: "settings.invalid",
+        params: { module: "adjustments", field: "maxBillComp" },
+      });
+      expect(await recordedOn(billId)).toEqual([]);
+    } finally {
+      if (previous)
+        venue.db.execute(
+          sql`update settings set doc = ${previous.doc} where module = 'adjustments'`,
+        );
+      else venue.db.execute(sql`delete from settings where module = 'adjustments'`);
+    }
+  });
+
   it("past the bill's limit, refuses a PIN from the reason's list that is not on the bill's, and applies one from the bill's", async () => {
     const save = (maxBillComp: string | null, billApproverRoles: PersonRoleValue[]) =>
-      inTx(venue, (tx) =>
-        saveAdjustmentSettings(tx, {
-          maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
-          billApproverRoles,
-        }),
+      inTx(venue, async (tx) =>
+        saveAdjustmentSettings(
+          tx,
+          {
+            maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
+            billApproverRoles,
+          },
+          { expectedRevision: (await readAdjustmentSettings(tx)).revision, personId: null },
+        ),
       );
     await save("10.00", ["supervisor"]);
     try {
@@ -448,11 +478,15 @@ describe("approval through the route (plan D6)", () => {
 
   it("past the bill's limit, answers a request nobody on both lists may approve as 409 no_common_approver", async () => {
     const save = (maxBillComp: string | null, billApproverRoles: PersonRoleValue[]) =>
-      inTx(venue, (tx) =>
-        saveAdjustmentSettings(tx, {
-          maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
-          billApproverRoles,
-        }),
+      inTx(venue, async (tx) =>
+        saveAdjustmentSettings(
+          tx,
+          {
+            maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
+            billApproverRoles,
+          },
+          { expectedRevision: (await readAdjustmentSettings(tx)).revision, personId: null },
+        ),
       );
     // Past Guest complaint's €30.00 only managers and admins approve it; only supervisors may
     // pass this bill.

@@ -1830,6 +1830,8 @@ reason. A1301 S17 (format 10) made the venue's setup fields `venue`'s own keys, 
 the default menu to the top-level `defaultCatalogueId` and dropped the location's `id` and
 `fireControl`; a format-9 export is refused as outdated. `configuration-transfer.test.ts` now pins
 format 10, and older files are refused as `setup.configuration_outdated`.
+A1308 slice 1b-ii (format 11) moves the comp limit from `adjustment_settings` to the
+`settings.adjustments` document; a format-10 export is refused as outdated.
 
 From go-live, retiring a module also ships a way for an older export that names it to load (owner,
 2026-11-07), because setup answers an export refused as `setup.configuration_parts_differ` by
@@ -6158,6 +6160,13 @@ never in a migration, plus the backup measurement in tables-venuebox §8.3
 The live type is `settings.<module>`: declare the document in the module's `settings` seat and make
 the dashboard query depend on that string. Saves currently keep only the latest saver and time;
 [activity-log slice 2](../superpowers/plans/2026-11-08-a1308-2-activity-log.md) adds the save history.
+
+Configuration copies carry each saved document whose definition has `transfers: true` as
+`settings.<module>: { version, doc }`. Import checks every document before writing, then replaces
+only the transferring modules' rows, at revision 1 with no saver. An omitted document clears its
+row and reads as defaults; other modules' rows stay. Before go-live another document version is
+refused, never converted. Keep row ids out of copied documents: this path does not rewrite JSON
+references (design R4).
 
 Keep row ids out of documents, except the short lists owned by one row allowed by design R4.
 A per-module database rule is a pair of triggers in `packages/db/triggers/core.sql`, named

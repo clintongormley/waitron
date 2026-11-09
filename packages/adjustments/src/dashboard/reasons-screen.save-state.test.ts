@@ -36,9 +36,11 @@ afterEach(() => {
 async function mount() {
   const api = {
     listReasons: vi.fn().mockResolvedValue([reason]),
-    getSettings: vi
-      .fn()
-      .mockResolvedValue({ maxBillComp: "15.00", billApproverRoles: ["manager", "admin"] }),
+    getSettings: vi.fn().mockResolvedValue({
+      maxBillComp: "15.00",
+      billApproverRoles: ["manager", "admin"],
+      revision: 4,
+    }),
     saveSettings: vi.fn(async (value: unknown) => value),
     updateReason: vi.fn().mockResolvedValue(reason),
     createReason: vi.fn().mockResolvedValue(reason),
@@ -126,6 +128,7 @@ it("limit opens quiet, compares numeric values and quiets after a successful sav
   api.getSettings.mockResolvedValue({
     maxBillComp: "20.00",
     billApproverRoles: ["manager", "admin"],
+    revision: 4,
   });
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-limit]")!.click();
   await vi.waitFor(() =>
@@ -135,6 +138,7 @@ it("limit opens quiet, compares numeric values and quiets after a successful sav
   expect(api.saveSettings).toHaveBeenCalledWith({
     maxBillComp: "20.00",
     billApproverRoles: ["manager", "admin"],
+    revision: 4,
   });
 });
 
@@ -156,6 +160,7 @@ it("limit's approvers enable Save when changed and quiet it when chosen back", a
   expect(api.saveSettings).toHaveBeenCalledWith({
     maxBillComp: "15.00",
     billApproverRoles: ["admin"],
+    revision: 4,
   });
 });
 
@@ -171,6 +176,7 @@ it("a refused changed limit remains primary and retryable", async () => {
   api.getSettings.mockResolvedValue({
     maxBillComp: "20.00",
     billApproverRoles: ["manager", "admin"],
+    revision: 4,
   });
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-limit]")!.click();
   await vi.waitFor(() => expect(api.saveSettings).toHaveBeenCalledTimes(2));

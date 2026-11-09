@@ -1,7 +1,7 @@
 export const QUERY_DEPENDENCIES = {
   reasons: ["adjustment_reasons"],
   "reason-delete-impact": ["adjustment_reasons"],
-  settings: ["adjustment_settings"],
+  settings: ["settings.adjustments"],
   report: [
     "adjustments",
     "working_orders",

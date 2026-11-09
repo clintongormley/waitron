@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
-import { adjustmentSettings, CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
+import { settings, CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
@@ -103,7 +103,9 @@ describe("ADJUSTMENTS_PROVISIONING", () => {
       all,
     ]);
     expect(seeded.every((reason) => reason.maxAmount === null)).toBe(true);
-    expect(await db.select().from(adjustmentSettings)).toEqual([]);
+    expect(
+      (await db.select().from(settings)).filter((row) => row.module === "adjustments"),
+    ).toEqual([]);
   });
 
   it("gives it an English plain name, with a name in each content language, where the venue's first invoice language is English", async () => {

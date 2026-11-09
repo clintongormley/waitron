@@ -1,7 +1,12 @@
 import { currentLocale, pickLocale } from "./i18n.js";
 import { GENERIC_ERROR } from "./strings.js";
 
-const messages: Record<string, { en: string; es: string }> = {};
+const messages: Record<string, { en: string; es: string }> = {
+  "settings.out_of_date": {
+    en: "Someone else saved these settings while you were editing. Save again to replace their change with yours.",
+    es: "Otra persona guardó estos ajustes mientras editabas. Vuelve a guardar para sustituir su cambio por el tuyo.",
+  },
+};
 
 /** Merge a module's code → copy table into the registry. Called at module load. */
 export function registerCodeMessages(table: Record<string, { en: string; es: string }>): void {

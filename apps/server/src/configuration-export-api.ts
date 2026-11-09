@@ -10,6 +10,7 @@ import { buildConfigurationBundle, encodeConfigurationBundle } from "./configura
 import "./errors.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
+  "settings.invalid": 500,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,

@@ -11,6 +11,7 @@ import {
   ADJUSTMENTS_PERSONAL_DATA,
   ADJUSTMENTS_PROVISIONING,
   ADJUSTMENTS_ROUTES,
+  ADJUSTMENTS_SETTINGS,
 } from "@waitron/adjustments";
 import { NODE_CLASSIFICATION } from "@waitron/node-db";
 import {
@@ -350,6 +351,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
   },
   {
     name: "adjustments",
+    settings: [ADJUSTMENTS_SETTINGS],
     version: "0.0.0",
     tier: "mandatory",
     requires: { core: "*" },

@@ -58,10 +58,10 @@ function withExtra(extra: Record<string, unknown>) {
 }
 
 describe("ADJUSTMENTS_CONFIGURATION_TRANSFER", () => {
-  it("transfers the reasons and the venue's discount limit, which are venue policy rather than trading history", () => {
+  it("transfers adjustment reasons", () => {
     expect(ADJUSTMENTS_CONFIGURATION_TRANSFER).toEqual({
       kind: "tables",
-      tables: [{ name: "adjustment_reasons" }, { name: "adjustment_settings" }],
+      tables: [{ name: "adjustment_reasons" }],
       validate: expect.any(Function),
     });
   });
@@ -71,7 +71,7 @@ describe("ADJUSTMENTS_CONFIGURATION_TRANSFER", () => {
   });
 
   it("refuses a bundle with no adjustment reasons table", () => {
-    expect(refusal({ adjustment_settings: [] })).toEqual(REFUSED);
+    expect(refusal({})).toEqual(REFUSED);
   });
 
   it("refuses a bundle with no Void reason", () => {
@@ -157,31 +157,5 @@ describe("ADJUSTMENTS_CONFIGURATION_TRANSFER", () => {
     expect(refusal(withExtra(row("void", 0, { [column]: value })))).toEqual(
       refusedAt(`adjustment_reasons.${column}`),
     );
-  });
-
-  it("passes the venue's settings with a list of distinct roles", () => {
-    expect(
-      refusal({
-        adjustment_reasons: STARTER,
-        adjustment_settings: [
-          { id: 1, max_bill_comp: 5000, bill_approver_roles: '["manager","admin"]' },
-        ],
-      }),
-    ).toBeUndefined();
-  });
-
-  it.each([
-    ["a role that is not one", '["owner"]'],
-    ["a role twice", '["manager","manager"]'],
-    ["an empty list", "[]"],
-    ["text that is not JSON", "manager"],
-    ["no list", undefined],
-  ])("refuses settings whose bill approvers are %s", (_, value) => {
-    expect(
-      refusal({
-        adjustment_reasons: STARTER,
-        adjustment_settings: [{ id: 1, max_bill_comp: null, bill_approver_roles: value }],
-      }),
-    ).toEqual(refusedAt("adjustment_settings.bill_approver_roles"));
   });
 });

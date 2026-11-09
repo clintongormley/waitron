@@ -65,3 +65,12 @@ describe("codeOf", () => {
     expect(codeOf(null)).toBe("server.internal");
   });
 });
+
+it("explains a settings clash in English and Spanish", () => {
+  expect(codeMessage("settings.out_of_date", "en")).toBe(
+    "Someone else saved these settings while you were editing. Save again to replace their change with yours.",
+  );
+  expect(codeMessage("settings.out_of_date", "es")).toBe(
+    "Otra persona guardó estos ajustes mientras editabas. Vuelve a guardar para sustituir su cambio por el tuyo.",
+  );
+});

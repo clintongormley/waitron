@@ -45,7 +45,8 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 10,
+  version: 11,
+  settings: {},
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -200,7 +201,7 @@ describe("staged configuration import", () => {
     ["A980 pre-privacy-contact export with the key", { version: 8 }],
     ["A980 pre-privacy-contact export without it", { version: 8, privacyContact: undefined }],
     ["old version", { version: 1 }],
-    ["future version", { version: 11 }],
+    ["future version", { version: 12 }],
     ["pre-venue-fields export", { version: 9, venue: formatNineVenue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));

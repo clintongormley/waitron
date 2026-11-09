@@ -389,7 +389,8 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 10,
+  version: 11,
+  settings: {},
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -2189,7 +2190,12 @@ it("transfers the venue's limit on a bill's comps and who approves past it", asy
     maxBillComp: decimal("40.00"),
     billApproverRoles: ["supervisor" as const, "manager" as const, "admin" as const],
   };
-  await withTransaction(suite.db, (tx) => saveAdjustmentSettings(tx, settings));
+  await withTransaction(suite.db, async (tx) =>
+    saveAdjustmentSettings(tx, settings, {
+      expectedRevision: (await readAdjustmentSettings(tx)).revision,
+      personId: null,
+    }),
+  );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -2203,7 +2209,10 @@ it("transfers the venue's limit on a bill's comps and who approves past it", asy
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
-  expect(await withTransaction(targetSuite.db, readAdjustmentSettings)).toEqual(settings);
+  expect(await withTransaction(targetSuite.db, readAdjustmentSettings)).toEqual({
+    ...settings,
+    revision: 1,
+  });
 });
 
 it("transfers a department's receipt logo with its image and pictures, and the imported receipt prints it", async () => {
@@ -5481,7 +5490,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(10);
+  expect(exported.version).toBe(11);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

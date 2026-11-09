@@ -25,6 +25,7 @@ export interface AdjustmentReasonInput {
 
 /** `maxBillComp` is the money every comp on one bill may take off together; null is no limit. */
 export interface AdjustmentSettings {
+  revision: number;
   maxBillComp: string | null;
   billApproverRoles: PersonRole[];
 }

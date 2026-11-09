@@ -450,9 +450,9 @@ save returned. A live update never moves it.
     `this.settings!.revision` in `#limitEdit` when `limitDraft` was undefined. Save sends
     `revision: this.#limitRevision ?? this.settings!.revision`. On success: if the draft is now
     unchanged (`:1033-1035`), clear `#limitRevision`; otherwise set it to the revision the save
-    returned. On `settings.out_of_date`: set `limitError` to `codeMessage(code)`, clear
-    `#limitRevision`, keep the draft and call `#loadSettings()` (the observer at `:540-560` already
-    keeps a dirty draft), so the next save names the reloaded revision.
+    returned. On `settings.out_of_date`: set `limitError` to `codeMessage(code)`, set
+    `#limitRevision` from the refusal’s `params.revision`, keep the draft and call `#loadSettings()` (the observer at `:540-560` already
+    keeps a dirty draft), so the next save names the revision in the refusal.
   - `packages/dashboard-kit/src/codes.ts`: the `messages` table starts with
     `"settings.out_of_date": { en: "Someone else saved these settings while you were editing. Save again to replace their change with yours.", es: "Otra persona guardó estos ajustes mientras editabas. Vuelve a guardar para sustituir su cambio por el tuyo." }`,
     shared by every module's settings screen.

@@ -58,6 +58,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.suspended": 403,
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
+  "settings.out_of_date": 409,
+  "settings.invalid": 500,
   "shared.invalid_id": 400,
   "adjustment_reason.invalid": 400,
   "adjustment_reason.not_found": 404,
@@ -75,6 +77,12 @@ const AMOUNT = /^(?:0|[1-9]\d{0,8})(?:\.\d{1,2})?$/;
 
 function invalid(field: string): AppError {
   return new AppError("management.request_invalid", { field });
+}
+
+function requireRevision(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
+    throw invalid("revision");
+  return value;
 }
 
 function requireNames(value: unknown): Record<string, string> {
@@ -213,14 +221,19 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
     const gatedBy = <T>(
       permission: string,
       sessionId: string,
-      fn: (tx: Transaction) => Promise<T>,
+      fn: (tx: Transaction, authorizedBy: string) => Promise<T>,
     ): Promise<T> =>
       withTransaction(ctx.db, async (tx) => {
-        await authorizeManager(tx, { managementSessionId: sessionId, permission });
-        return fn(tx);
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission,
+        });
+        return fn(tx, authorizedBy);
       });
-    const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-      gatedBy(MANAGE_ADJUSTMENTS, sessionId, fn);
+    const gated = <T>(
+      sessionId: string,
+      fn: (tx: Transaction, authorizedBy: string) => Promise<T>,
+    ): Promise<T> => gatedBy(MANAGE_ADJUSTMENTS, sessionId, fn);
 
     app.get("/management-api/adjustments/report", (c) =>
       run(c, log, async () => {
@@ -315,11 +328,15 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<Record<string, unknown>>(c);
-        const settings = await gated(sessionId, (tx) =>
-          saveAdjustmentSettings(tx, {
-            maxBillComp: requireMaxBillComp(body.maxBillComp),
-            billApproverRoles: requireRoles(body.billApproverRoles, "billApproverRoles", false),
-          }),
+        const settings = await gated(sessionId, (tx, authorizedBy) =>
+          saveAdjustmentSettings(
+            tx,
+            {
+              maxBillComp: requireMaxBillComp(body.maxBillComp),
+              billApproverRoles: requireRoles(body.billApproverRoles, "billApproverRoles", false),
+            },
+            { expectedRevision: requireRevision(body.revision), personId: authorizedBy },
+          ),
         );
         return c.json(settings);
       }),

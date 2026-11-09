@@ -237,7 +237,7 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
     if (options.pendingWal === true) {
       held.venue.all(sql`pragma wal_checkpoint(truncate)`);
       held.venue.run(
-        sql`insert into adjustment_settings (id, updated_at) values (1, ${new Date().toISOString()})`,
+        sql`insert into settings (module, version, revision, doc, updated_at) values ('adjustments', 1, 1, '{}', ${new Date().toISOString()})`,
       );
       // A clean close checkpoints the row into venue.db and deletes the -wal; the copies taken
       // while open are put back so the row stays committed only in the -wal.
