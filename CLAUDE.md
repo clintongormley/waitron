@@ -722,9 +722,12 @@ passed while proving nothing.
 - **A test child process that freezes `Date` freezes `performance.now` with it**. Guard: the
   one-time 1.1-second holds in the hour test children, weaker than the rule: those children only.
   [Receipt and paths](docs/developers/testing-guide.md#root-receipts-moved-on-2026-10-31).
-- **Draw every port a test needs in one `freePorts(n)` call, before binding any of them**
-  (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound. Nothing
-  guards it.
+- **A process-started HTTP or landing fixture, and its matching in-process fixture, keeps a
+  retained socket (`retainHttpListener`); `freePorts(n)` is only for a test that needs released
+  configured ports, keeping its origin, refusal and listener-release checks, and draws every such
+  port in one call before binding any of them.** Guard: `apps/server/src/testing/retained-http-listener.test.ts`,
+  weaker than the rule: the helper only, not which fixture uses which.
+  [Detail](docs/developers/testing-guide.md#keep-a-process-fixtures-socket-bound-through-handoff).
 - **With `useVenueDb({ resetPerTest: false })`, a row found by a drawn port must be checked as
   this test's own row.** Guard: `apps/server/src/print-agent-e2e.test.ts`'s `portsNoPrinterNames` and
   pre-discovery check, weaker than the rule: this file only.
