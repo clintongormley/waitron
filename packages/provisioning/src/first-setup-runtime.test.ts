@@ -380,7 +380,6 @@ it.each(["en", "es"] as const)(
       { ...state.frozen, request: { ...state.frozen.request, staffLanguage } },
       state.ownerVerifier,
       state.capabilityHash,
-      state.claimNonceHash,
     );
     const after = await host.coordinator.run(() =>
       bound.withPreparationState!(f.context.binding, () =>
