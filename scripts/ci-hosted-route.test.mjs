@@ -1,6 +1,8 @@
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { URL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { healthCommand, serverRoute } from "./ci-server-health.mjs";
+import { healthCommand, main, serverRoute } from "./ci-server-health.mjs";
 
 function fixture(running = 0, queued = 0) {
   const run = {
@@ -62,6 +64,54 @@ describe("GitHub-first routing", () => {
     expect(answer.reason).toContain(`${queued} queued`);
     expect(f.calls.every(([, options]) => !options?.method)).toBe(true);
   });
+
+  it.each([
+    [19, 1, "hosted"],
+    [19, 2, "server"],
+    [2, 18, "hosted"],
+    [3, 18, "server"],
+    [0, 21, "server"],
+  ])("fits %i running plus %i selected jobs on %s", async (running, selectedJobs, route) => {
+    const f = fixture(running);
+    f.options.selectedJobs = selectedJobs;
+    expect((await serverRoute(f.options)).route).toBe(route);
+  });
+
+  it.each([
+    [{ code: "false" }, {}, 17, "hosted", 2],
+    [{ code: "false" }, {}, 19, "server", 2],
+    [{ code: "true" }, {}, 16, "hosted", 4],
+    [{ code: "true" }, { server: "true" }, 1, "server", 29],
+    [{ code: "false", deploy: "true" }, {}, 18, "server", 3],
+  ])(
+    "routes the actual initial workflow wave for %j / %j",
+    async (classified, gates, running, route, count) => {
+      const f = fixture(running),
+        directory = mkdtempSync(tmpdir() + "/route-wave-");
+      try {
+        await main(
+          "route",
+          {
+            GITHUB_REPOSITORY: "fixture/waitron",
+            GITHUB_REPOSITORY_ID: "42",
+            GITHUB_RUN_ID: "51",
+            GITHUB_RUN_ATTEMPT: "1",
+            GITHUB_OUTPUT: directory + "/output",
+            GITHUB_STEP_SUMMARY: directory + "/summary",
+            CLASSIFIED: JSON.stringify(classified),
+            GATES: JSON.stringify(gates),
+          },
+          f.options.request,
+        );
+        expect(readFileSync(directory + "/output", "utf8")).toBe(`server_route=${route}\n`);
+        expect(readFileSync(directory + "/summary", "utf8")).toContain(
+          `${count} selected initial jobs`,
+        );
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("counts all hosted jobs when GitHub refuses job pages over 30 records", async () => {
     const f = fixture(61),

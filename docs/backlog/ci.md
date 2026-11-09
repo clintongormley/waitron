@@ -567,7 +567,8 @@ The original entries retain their text from the index (backlog review, 2026-11-0
 A1424's live qualification was added on 7 November 2026.
 
 - **A1424 / A1440: finish qualifying server routing and recovery on real workloads.**
-  CI prefers GitHub when Waitron has no hosted queue and fewer than 20 hosted jobs running;
+  CI prefers GitHub when Waitron has no hosted queue and the selected initial jobs fit
+  within 20 minus its running hosted count;
   otherwise ordinary same-repository jobs are eligible for the measured global pool. Family caps
   have been removed, and routing, recovery, image smoke, the final aggregate and publication stay hosted.
   Image smoke remains hosted until a disposable guest is qualified (watcher, 2026-11-09 08:20);
@@ -743,7 +744,9 @@ A1424's live qualification was added on 7 November 2026.
   collector, workflow, reservation service or credential carrier is approved. **2026-11-09 10:01:**
   the owner approved the repository-only GitHub-first approximation in the existing router: no
   hosted queue and fewer than 20 running hosted jobs chooses GitHub; otherwise the server-health
-  check applies. This supersedes parking that routing rule; v40 and six guest slots stay unchanged.
+  check applies. This supersedes parking that routing rule; v40 and six guest slots stay unchanged. **2026-11-09 12:05:**
+  hosted routing additionally requires the selected initial job wave to fit the remaining room.
+  Cloud PR #1115 publishes the matching 30-record reader in v41; six slots remain.
 
 - **A1459: measured shared startup, with child internals still unknown (2026-11-08).**
 

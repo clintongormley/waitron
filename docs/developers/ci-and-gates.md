@@ -174,13 +174,19 @@ The routing job uses its existing read-only Actions token. With no stuck server 
 it reads this repository's queued and running workflows, including fork pull requests,
 and their current-attempt jobs. Jobs with nonempty labels that do not include
 `self-hosted` count as hosted. Only jobs with status `queued` or `in_progress` count; completed, pending, waiting and unlabelled jobs do not.
-With no queued hosted job and fewer than 20 running hosted jobs, the run uses GitHub;
-otherwise it is eligible for the server. The summary records the running and queued
-counts. This repository-only snapshot neither measures account-wide capacity nor reserves
-slots; simultaneous routing decisions can observe the same room. It chooses a whole
-run, so one decision can add dozens of jobs to GitHub's queue. The routing run's own
-hosted `changes` job counts while running. The cutoff of 20 is the
-owner's approximation (watcher, 2026-11-09 10:01), not a measured account limit.
+With no queued hosted job, the run uses GitHub only when its selected initial jobs fit
+within 20 minus the running hosted count; otherwise it is eligible for the server.
+Routing runs after classification and scope gates. It reads the workflow's jobs that
+need only `changes`, evaluates their existing conditions against those outputs, and
+counts every selected matrix shard. This includes the hosted image job when selected;
+it excludes the server watchdog and later merge, summary and publication jobs.
+The summary records the running, queued and selected counts. An unreadable selection
+uses the server. This repository-only snapshot neither measures account-wide capacity
+nor reserves slots; simultaneous routing decisions can observe the same room. The routing
+run's own hosted `changes` job counts while running. The cutoff of 20 remains the owner's
+approximation (watcher, 2026-11-09 10:01; initial-wave fit correction 12:05), not a measured
+account limit. A run with 29 initial jobs uses the server even with an empty hosted pool;
+this decision does not split a run between the pools.
 `scripts/ci-hosted-route.test.mjs` exercises these decisions with controlled API replies,
 including pagination and incomplete inventories; it does not measure live capacity.
 
