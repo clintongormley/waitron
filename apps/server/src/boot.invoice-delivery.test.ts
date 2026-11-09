@@ -34,6 +34,8 @@ import {
   hashPassword,
   startManagementSession,
   loginWithPin,
+  queueAccountMail,
+  completeAccountAction,
   persons,
 } from "@waitron/identity";
 import { sessionCookieForTest } from "./testing/session-device.js";
@@ -896,4 +898,87 @@ describe("queued account mail primary admission at real boot", () => {
       }
     },
   );
+});
+
+describe("queued account mail at a fresh server start", () => {
+  it("sends saved reset and invitation rows and expires the old request", async () => {
+    const ctx = await fixture();
+    const smtp = await smtpFixture();
+    ctx.env.WAITRON_ONBOARDING_INTENT = "prepare";
+    const [admin, invited] = await suite.db
+      .insert(persons)
+      .values([
+        {
+          displayName: "Restart inviter",
+          email: "reset-restart@example.test",
+          role: "admin",
+          status: "active",
+        },
+        { displayName: "Restart invited", email: "invite-restart@example.test", status: "pending" },
+      ])
+      .returning({ id: persons.id });
+    const now = new Date();
+    await withTransaction(suite.db, async (tx) => {
+      await putCredential(tx, loadKeyRing(ctx.env), { purpose: "email.smtp", value: smtp.smtp });
+      await queueAccountMail(tx, {
+        personId: admin!.id,
+        purpose: "password_reset",
+        origin: "https://entry.test",
+        now,
+      });
+      await queueAccountMail(tx, {
+        personId: invited!.id,
+        purpose: "invitation",
+        origin: "https://entry.test",
+        requestedBy: admin!.id,
+        now,
+      });
+      await queueAccountMail(tx, {
+        personId: admin!.id,
+        purpose: "password_reset",
+        origin: "https://expired.test",
+        now: new Date(now.getTime() - 3600000),
+      });
+    });
+    let server: StartedServer | undefined;
+    try {
+      server = await startServer(ctx.env);
+      await expect
+        .poll(
+          () => suite.db.all(sql`select status, requested_by from outgoing_mail order by seq`),
+          { timeout: 5000 },
+        )
+        .toEqual([
+          { status: "sent", requested_by: null },
+          { status: "sent", requested_by: admin!.id },
+          { status: "expired", requested_by: null },
+        ]);
+      expect(smtp.messages).toHaveLength(2);
+      expect(
+        smtp.messages.map((message) => message.match(/^To: (.+)$/m)![1]!.trim()).sort(),
+      ).toEqual(["invite-restart@example.test", "reset-restart@example.test"]);
+      await server.close();
+      server = undefined;
+      for (const message of smtp.messages) {
+        const text = message.replace(/=\r?\n/g, "").replace(/=3D/g, "=");
+        const link = new URL(
+          text.split(/\r?\n/).find((line) => line.startsWith("https://entry.test/manage/account"))!,
+        );
+        const purpose = link.searchParams.get("purpose") as "invitation" | "password_reset";
+        expect(
+          await withTransaction(suite.db, (tx) =>
+            completeAccountAction(tx, {
+              token: link.searchParams.get("token")!,
+              purpose,
+              password: "a replacement password",
+              pin: "1357",
+            }),
+          ),
+        ).toMatchObject({ personId: purpose === "invitation" ? invited!.id : admin!.id });
+      }
+    } finally {
+      await server?.close();
+      await smtp.close();
+    }
+  });
 });

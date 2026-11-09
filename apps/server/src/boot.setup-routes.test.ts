@@ -266,7 +266,7 @@ describe("startServer — background listeners and sinks that fail or close", ()
     });
   }, 60_000);
 
-  it("writes an answered password reset's token and reads the mail settings before close() closes the venue store, then sends its email", async () => {
+  it("queues an answered reset before close and sends it after the next start", async () => {
     const smtp = await startFakeSmtp();
     beforeServerStarts();
     const venue = await freshVenue();
@@ -290,13 +290,14 @@ describe("startServer — background listeners and sinks that fail or close", ()
         }),
       );
       const port = await freePort();
-      const server = await startServer({
+      const serverEnv = {
         ...KEY_ENV,
         WAITRON_VENUE_DIR: venue.directory,
         WAITRON_HTTP_PORT: String(port),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_ENV: "preproduction",
-      });
+      };
+      let server = await startServer(serverEnv);
       try {
         await awaitListening(httpPort());
         mailSettingsRead.delayMs = 50;
@@ -308,6 +309,10 @@ describe("startServer — background listeners and sinks that fail or close", ()
         });
         expect(response.status).toBe(202);
         await server.close();
+        expect(db.all(sql`select status from outgoing_mail`)).toEqual([{ status: "pending" }]);
+        expect(smtp.messages).toEqual([]);
+        mailSettingsRead.delayMs = undefined;
+        server = await startServer(serverEnv);
         await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), {
           timeout: POLL_TRIES * POLL_INTERVAL_MS,
         });
