@@ -1,5 +1,7 @@
 # A653-l: keep a whole row on short landscape phones
 
+**2026-11-10 00:32:** Lane D’s watcher approved the cutoff and scrolling-controls tradeoff in `~/waitron-campaign-d/questions.md`, with the plan and code in one PR and screenshots at both target heights in both themes.
+
 **Proposal; no build approval yet.** A653 landed in PR #2674 (`8d7ee8c42c`). Its real-page
 Structure selection probe left 4px of row space at 667×375 and none at 844×390. The watcher's
 2026-11-09 23:32 instruction, in Lane D `archive/questions-resolved-2026-11-09.md`, was:
