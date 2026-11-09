@@ -27,6 +27,7 @@ import {
   transferCloseVenue,
   type TransferCloseKit,
 } from "./testing/transfer-close-fixture.js";
+import type { AppError } from "@waitron/shared";
 import "./errors.js";
 
 // Strict replay of a close by transfer (A275 Task 2): the same operation answers with what it
@@ -220,6 +221,45 @@ describe("closeBillByTransferTx, replay", () => {
 
     expect(again).toEqual(result);
     expect(closures(billId)).toEqual([{ id: request.operationId }]);
+  });
+
+  // Each close is its own withTransaction, as a route makes it; the store runs them in turn.
+  it("closes once when the same request arrives twice at once, answering both alike", async () => {
+    const billId = await t.counterOrder("placed");
+    const request = await t.requestFor(billId, "18.00", null);
+
+    const [first, second] = await Promise.all([t.close(request), t.close(request)]);
+
+    expect(second).toEqual(first);
+    expect(fiscalRecordCount(t.venue, billId)).toBe(1);
+    expect(await tendersOfBill(t.venue, billId)).toHaveLength(1);
+    expect(
+      t.venue.db.all(
+        sql`select s.id from sale_settlements s join sales on sales.id = s.sale_id where sales.working_order_id = ${billId}`,
+      ),
+    ).toHaveLength(1);
+    expect(closures(billId)).toEqual([{ id: request.operationId }]);
+  });
+
+  it("closes once when two different requests for one bill arrive at once, refusing the other", async () => {
+    const party = await seatedWith(t.venue, "Ensalada");
+    const billId = party.tabId;
+    const request = await t.requestFor(billId, "12.00", party.partyId);
+    // Either request alone would close the bill; only the replay can refuse the later one.
+    const changed = { ...request, operationId: randomUUID(), partyFinish: null };
+
+    const outcomes = await Promise.allSettled([t.close(request), t.close(changed)]);
+
+    const served = outcomes.filter((outcome) => outcome.status === "fulfilled");
+    const refused = outcomes.flatMap((outcome) =>
+      outcome.status === "rejected" ? [outcome.reason as AppError] : [],
+    );
+    expect(served).toHaveLength(1);
+    expect(refused.map((error) => [error.code, error.params])).toEqual([
+      ["transfer_close.conflict", { workingOrderId: billId }],
+    ]);
+    expect(fiscalRecordCount(t.venue, billId)).toBe(1);
+    expect(closures(billId)).toHaveLength(1);
   });
 
   it("refuses the same request from another person or another device", async () => {
