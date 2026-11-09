@@ -112,7 +112,7 @@ cannot change it, but you can add more of it. You cannot lower the count here: t
 **Void…**.
 **Recall**, under the window's **More**, takes the dish back to **New order**, to send again with
 dishes not yet sent.
-The dish keeps the price it was sold at; anything you add, more of the dish or an extra, is charged at today's price.
+The dish keeps the price it was sold at.
 
 To stop a list being asked without deleting it, turn its **Active** switch off, or remove it from
 that one product's Modifiers section.
