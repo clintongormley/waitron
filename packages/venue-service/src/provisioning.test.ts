@@ -26,6 +26,7 @@ import { readProfileServiceAccess, setProfileServiceAccess } from "./profile-acc
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
 import { STARTER_STEPS } from "./service-steps.js";
 import {
+  STARTER_COURSE_NAMES,
   STARTER_PERIOD_NAMES,
   STARTER_SEASON_NAMES,
   STARTER_STEP_NAMES,
@@ -41,6 +42,78 @@ beforeAll(() => {
 });
 
 describe("VENUE_SERVICE_PROVISIONING", () => {
+  describe("country starter courses", () => {
+    it.each([
+      [
+        "ES",
+        "en-GB",
+        ["Sharing plates", "Starters", "Mains", "Desserts"],
+        [false, false, true, true],
+      ],
+      ["ES", "es-ES", null, [false, false, true, true]],
+      ["GB", "en-GB", ["Starters", "Mains", "Desserts"], [false, true, true]],
+      ["ZZ", "en-GB", [], []],
+    ] as const)(
+      "seeds %s courses in %s with their firing defaults",
+      async (country, locale, english, held) => {
+        await seedVenue(db, { invoiceLocales: [locale] });
+        await db.execute(sql`update tenants set country = ${country}`);
+        const node = { nodeId: await seedNode(db) };
+        await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+        const rows = await db.execute(sql`
+        select name, display_order, held_until_fired, active from kitchen_courses order by display_order`);
+        const names = english ?? [
+          STARTER_COURSE_NAMES["Sharing plates"].es,
+          STARTER_COURSE_NAMES.Starters.es,
+          STARTER_COURSE_NAMES.Mains.es,
+          STARTER_COURSE_NAMES.Desserts.es,
+        ];
+        expect(rows.rows).toEqual(
+          names.map((name, display_order) => ({
+            name,
+            display_order,
+            held_until_fired: Number(held[display_order]),
+            active: 1,
+          })),
+        );
+      },
+    );
+
+    it("keeps authored courses and does not put deleted starters back on a retry", async () => {
+      await seedVenue(db, { invoiceLocales: ["en-GB"] });
+      const node = { nodeId: await seedNode(db) };
+      const seed = () =>
+        withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+      const rows = async () =>
+        (
+          await db.execute(sql`
+        select id, name, display_order, held_until_fired, active from kitchen_courses order by display_order`)
+        ).rows;
+      await seed();
+      expect(await rows()).toHaveLength(4);
+      await db.execute(
+        sql`update kitchen_courses set name = 'House mains', held_until_fired = 0 where display_order = 2`,
+      );
+      await db.execute(sql`delete from kitchen_courses where display_order = 0`);
+      await db.execute(sql`update kitchen_courses set active = 0 where display_order = 3`);
+      const authored = await rows();
+      await seed();
+      expect(await rows()).toEqual(authored);
+      await db.execute(sql`delete from kitchen_courses`);
+      await seed();
+      expect(await rows()).toEqual([]);
+    });
+
+    it("adds no courses when promoting a department already authored by the venue", async () => {
+      await seedVenue(db, { invoiceLocales: ["en-GB"] });
+      const locationId = await venueLocationId(db);
+      await db.insert(departments).values({ locationId, name: "Dining", tradingName: "Dining" });
+      const node = { nodeId: await seedNode(db) };
+      await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+      expect((await db.execute(sql`select name from kitchen_courses`)).rows).toEqual([]);
+    });
+  });
+
   it("places Open once and preserves its authored ranges on a second seed", async () => {
     const [menu] = await db
       .insert(catalogues)

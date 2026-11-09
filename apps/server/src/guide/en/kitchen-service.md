@@ -332,6 +332,10 @@ person sending is not a manager, the till asks for a manager's PIN after **Kitch
 
 ## Request cooking from the till {#request-cooking}
 
+For a new venue in Spain, Sharing plates and Starters start without a hold; Mains and Desserts
+start held for later. Choose the course on each product, then arrange the table’s dishes in **New order** before
+sending them. At the counter, sending fires all the dishes together.
+
 Request held food from the table's order screen. Station queues and the pass show held courses and groups
 without a Fire button. On a station queue, held dishes stay dimmed and cannot be advanced by
 tapping them; on the pass, a card whose dishes are all held sits under **Held** at the bottom of

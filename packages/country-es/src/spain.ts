@@ -324,6 +324,12 @@ export const SPAIN: CountryPack = {
   officialLocales: ["es-ES", "ca-ES", "ca-ES-valencia", "gl-ES", "eu-ES"],
   requiredContentLocales: ["es-ES"],
   moduleIds: ["workforce-es"],
+  starterCourses: [
+    { name: "Sharing plates", heldUntilFired: false },
+    { name: "Starters", heldUntilFired: false },
+    { name: "Mains", heldUntilFired: true },
+    { name: "Desserts", heldUntilFired: true },
+  ],
   availableForVenueSetup: true,
   administrativeAreas,
   fiscalJurisdictions: [

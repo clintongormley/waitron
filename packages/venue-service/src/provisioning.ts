@@ -1,11 +1,13 @@
 import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
-import { starterName } from "@waitron/country-packs";
+import { getCountryPack, starterName } from "@waitron/country-packs";
 import {
   departments,
   departmentSalePolicies,
   deviceProfiles,
   deviceProfileServiceAccess,
   floorZones,
+  kitchenCourses,
+  readTenant,
   readVenue,
   venueLocationId,
   zoneSalePolicies,
@@ -16,7 +18,7 @@ import { setProfileServiceScope } from "./profile-access.js";
 import { placeOpenPeriod } from "./menu-timetable.js";
 import { ensureDefaultSeasons } from "./seasons.js";
 import { addStarterServiceSteps } from "./service-steps.js";
-import { STARTER_ZONE_NAMES } from "./starter-content.js";
+import { STARTER_COURSE_NAMES, STARTER_ZONE_NAMES } from "./starter-content.js";
 import { readStarterStaffLanguage } from "./starter-language.js";
 
 export const COUNTER_ZONE_NAME = "Counter";
@@ -24,7 +26,7 @@ export const COUNTER_ZONE_NAME = "Counter";
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary:
-      "Create the default department with its starter service steps, counter zone and four seasons, and give each profile that takes orders that department",
+      "Create the default department with its starter service steps, country courses, counter zone and four seasons, and give each profile that takes orders that department",
     async run(tx) {
       const staffLanguage = await readStarterStaffLanguage(tx);
       const venue = await readVenue(tx);
@@ -63,6 +65,20 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
             .returning({ id: departments.id });
           departmentId = inserted!.id;
           await addStarterServiceSteps(tx, departmentId, staffLanguage);
+          const tenant = await readTenant(tx);
+          const courses =
+            tenant === null ? [] : (getCountryPack(tenant.country)?.starterCourses ?? []);
+          if (courses.length > 0) {
+            const locationId = await venueRowId();
+            await tx.insert(kitchenCourses).values(
+              courses.map(({ name, heldUntilFired }, displayOrder) => ({
+                locationId,
+                name: starterName(STARTER_COURSE_NAMES, name, staffLanguage),
+                displayOrder,
+                heldUntilFired,
+              })),
+            );
+          }
         }
         await tx
           .update(departments)

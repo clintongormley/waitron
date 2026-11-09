@@ -458,7 +458,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A237. Nothing guards the hint-or-"?" rule across screens (owner 2026-10-03)** — OPEN.
 
 - **A1458. Setup asks which language the venue works in, and starts each country with its own
-  courses (owner, 2026-11-08)** (bundle of 5, size L). Every one-name starter (courses, table
+  courses (owner, 2026-11-08)** (bundle of 5, size L). English/Spanish country courses now seed at
+  first setup; the explicit choice and consistent regional demos remain. Every one-name starter (courses, table
   states, the first menu and the rest) and the demo's staff and kitchen names follow the choice.
   Languages beyond Spanish and English wait for C125. [Detail](backlog/setup.md#bundle-a1458-setup-asks-which-language-the-venue-works-in-and-starts-each-country-with-its-own-courses-owner-2026-11-08)
 

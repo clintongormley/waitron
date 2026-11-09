@@ -114,6 +114,10 @@ Los campos del producto sin guardar siguen ahí si el guardado anidado falla o l
 
 ## Elige el curso {#course}
 
+Los locales nuevos en España empiezan con **Pica pica**, **Entradas**, **Platos principales** y
+**Postres**. Los nombres siguen el idioma
+del contenido inicial. Asigna estos cursos a tus productos o adapta la lista a tu servicio.
+
 Usa el campo **Curso**, en **Cocina**, para elegir el curso de los platos nuevos. Se
 guarda con el producto. En una mesa, organiza los platos en **Nuevo pedido**: pueden ir en
 **Marchar ya**, en un grupo nuevo en espera o en un grupo que ya está en espera. Puedes cambiar el
