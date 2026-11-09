@@ -25,6 +25,13 @@ On the password screen, **I’ve forgotten my password** requests an email with 
 a new password. The acknowledgement is the same for every address; it does not confirm that an
 account exists or can sign in. Resetting a password does not enable a disabled account.
 
+Waitron asks you to sign in again before you change backups, download recovery files, show the
+backup recovery key, or export configuration or another staff member's data. Use your
+password or passkey, plus an authenticator or recovery code if your account uses one. The
+confirmation covers these actions in this browser for 15 minutes, or until your session ends.
+Choose **Cancel** to leave the action undone. If the disk is full, open **Box status** and use
+**Free** to make room before confirming. See [Free space on the box](box-status.md#free-space).
+
 ## Your own account {#own-account}
 
 Open **Account settings** from the account menu to change your own sign-in details. Your own

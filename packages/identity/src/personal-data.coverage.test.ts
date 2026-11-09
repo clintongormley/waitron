@@ -46,7 +46,7 @@ const CLASSIFIED: Record<string, { readonly in: string[]; readonly out: string[]
     out: ["id", "person_id", "token_hash"],
   },
   management_sessions: {
-    in: ["created_at", "last_seen_at", "ended_at"],
+    in: ["created_at", "last_seen_at", "ended_at", "proved_at"],
     out: ["id", "person_id", "token_hash"],
   },
   management_account_actions: {

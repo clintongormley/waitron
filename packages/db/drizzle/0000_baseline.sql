@@ -1758,6 +1758,7 @@ CREATE TABLE `management_sessions` (
 	`created_at` text NOT NULL,
 	`last_seen_at` text NOT NULL,
 	`ended_at` text,
+	`proved_at` text,
 	CONSTRAINT "management_sessions_token_hash_ck" CHECK(length("management_sessions"."token_hash") = 64)
 );
 --> statement-breakpoint

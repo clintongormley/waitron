@@ -381,10 +381,7 @@ import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.j
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
-import {
-  mountBackupRecoveryPackApi,
-  mountBackupRecoveryPackMakeApi,
-} from "./backup-recovery-pack-api.js";
+import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
 import {
   readRecoveryDocumentEvidence,
   type RecoveryDocumentEvidence,
@@ -2167,6 +2164,8 @@ async function bootServer(
         onboardingIntent: config.onboardingIntent,
         modules: setsToMigrate.map((module) => module.name),
         credentialKeyRing: totpKeyRing,
+        rpId: config.managementRpId,
+        origin: config.managementOrigin,
         accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
         accountMailMode,
         assertAccountMailPrimary,
@@ -2863,6 +2862,8 @@ async function bootServer(
       onboardingIntent: config.onboardingIntent,
       modules: setsToMigrate.map((m) => m.name),
       credentialKeyRing: totpKeyRing,
+      rpId: config.managementRpId,
+      origin: config.managementOrigin,
       accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
       accountMailMode,
       assertAccountMailPrimary,
@@ -3278,7 +3279,6 @@ async function bootServer(
   mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
   const documentEvidence: RecoveryDocumentEvidence = (module) =>
     readRecoveryDocumentEvidence({ stateDir: config.stateDir, venueDir: config.venueDir }, module);
-  mountBackupRecoveryPackApi(app, { db, rpId: config.managementRpId }, log);
   mountRecoveryPackApi(
     app,
     {
@@ -3376,9 +3376,6 @@ async function bootServer(
     {
       db,
       nodeDb: store.node,
-      rpId: config.managementRpId,
-      origin: config.managementOrigin,
-      keyRing: totpKeyRing,
       ring,
       node: tradingContext,
       venueId,

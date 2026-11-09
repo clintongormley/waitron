@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
-import { authorizeManager } from "@waitron/identity";
+import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import { retireSelf } from "./retire.js";
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
@@ -54,6 +54,7 @@ export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): 
           permission: "system.manage",
         });
       });
+      await requireFreshManagementSignIn(deps.appDb, sessionId);
       const result = await retireSelf({
         appDb: deps.appDb,
         node: deps.node,

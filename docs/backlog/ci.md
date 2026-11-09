@@ -154,6 +154,8 @@ checks. Explicit configured-port, tunnel-target, advertised-origin and paired la
 cases retain the configured binding, including an unused peer drawn alongside the HTTP port. A907's
 existing clock-listener fixture already selects at bind time. None changes production validation.
 
+9 November 2026: [PR #2666, CI 42692866626](https://github.com/clintongormley/waitron/actions/runs/42692866626/job/129417436629), server shard 11, hit `EADDRINUSE` at `127.0.0.1:40845` in `boot.failed-start.test.ts`'s “handles the staff entrance while waiting”; its later local pass is not a repair.
+
 7 November 2026: A951-S removes the retired TCP relay's tunnel-target case. The remaining
 configured-binding checks above still apply.
 

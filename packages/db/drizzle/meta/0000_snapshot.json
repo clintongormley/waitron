@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ed808f5c-b51f-4cd0-84d5-fb4d65dd00ae",
+  "id": "ffb45c5d-ec22-406e-b1c4-0a39ec3f5e14",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -11972,6 +11972,13 @@
         },
         "ended_at": {
           "name": "ended_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "proved_at": {
+          "name": "proved_at",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

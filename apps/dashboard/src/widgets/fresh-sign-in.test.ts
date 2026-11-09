@@ -48,7 +48,7 @@ function profile(overrides: Partial<OwnProfile> = {}): OwnProfile {
 function stubApi(own: OwnProfile) {
   return {
     getProfile: vi.fn().mockResolvedValue(own),
-    recoveryPackPasskeyOptions: vi
+    freshSignInPasskeyOptions: vi
       .fn()
       .mockResolvedValue({ challengeHandle: "h1", options: { challenge: "AQID" } }),
   };
@@ -252,7 +252,7 @@ describe("the ways in", () => {
     expect(el.ways).toEqual({ password: false, passkey: false });
     expect(await el.signIn()).toBeNull();
     expect(await el.signIn("passkey")).toBeNull();
-    expect(api.recoveryPackPasskeyOptions).not.toHaveBeenCalled();
+    expect(api.freshSignInPasskeyOptions).not.toHaveBeenCalled();
   });
 
   it("announces its ways in once the profile is read", async () => {
@@ -298,7 +298,7 @@ describe("a passkey run", () => {
   it("sends the challenge handle and the signed response, without asking for the password", async () => {
     const { el, api } = await mount(profile({ passkeys: [PASSKEY] }));
     const body = await el.signIn("passkey");
-    expect(api.recoveryPackPasskeyOptions).toHaveBeenCalledOnce();
+    expect(api.freshSignInPasskeyOptions).toHaveBeenCalledOnce();
     expect(body).toEqual({
       method: "passkey",
       challengeHandle: "h1",
@@ -437,7 +437,7 @@ describe("refusals", () => {
   it("tells a person with no passkey how to add one on their profile", async () => {
     const own = profile();
     const api = stubApi(own);
-    api.recoveryPackPasskeyOptions.mockRejectedValueOnce({
+    api.freshSignInPasskeyOptions.mockRejectedValueOnce({
       code: "passkey.not_registered",
       status: 409,
     });
@@ -492,7 +492,7 @@ describe("refusals", () => {
     const { el, root, api } = await mount(profile({ hasPassword: false, passkeys: [PASSKEY] }));
     expect(field(root, "current-password")).toBeNull();
     expect(await el.signIn("password")).toBeNull();
-    expect(api.recoveryPackPasskeyOptions).not.toHaveBeenCalled();
+    expect(api.freshSignInPasskeyOptions).not.toHaveBeenCalled();
   });
 
   it("clears a field's refusal when that field is edited", async () => {

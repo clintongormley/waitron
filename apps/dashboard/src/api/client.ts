@@ -12,6 +12,8 @@ import type { Setting, CombinedOffer, ValueSource, Place } from "@waitron/shared
 export type { Setting, CombinedOffer, ValueSource, Place };
 import type { ContentLanguageRules, ContentLanguages, DeleteImpact } from "@waitron/shared";
 
+import type { FreshSignInGate } from "./fresh-sign-in.js";
+
 export interface NodeRecoveryPack {
   readonly version: 1;
   readonly kind: "node-recovery-pack";
@@ -2084,7 +2086,7 @@ export interface BackupSettingsEvidence {
   recoveryKey: { held: boolean; tooShort: boolean; fingerprint?: string };
 }
 
-/** The `signIn` field of `POST /api/backup/recovery-pack` — LOCAL copy of what
+/** The shared confirmation body — LOCAL copy of what
  * `apps/server/src/fresh-sign-in.ts` reads. */
 export type FreshSignInBody = (
   | { method: "password"; password: string }
@@ -2527,7 +2529,10 @@ export class DashboardApi {
     onError?: (code: string, status?: number, generation?: number) => void,
     onSuccess?: (path: string, generation?: number) => void,
     passive = false,
-    private readonly options: { sessionGeneration?: () => number } = {},
+    private readonly options: {
+      sessionGeneration?: () => number;
+      freshSignIn?: FreshSignInGate;
+    } = {},
   ) {
     this.#baseUrl = baseUrl;
     this.#fetch = fetchImpl;
@@ -2558,7 +2563,7 @@ export class DashboardApi {
       }
       return response;
     };
-    this.#request = createRequest({
+    const request = createRequest({
       baseUrl,
       fetchImpl: observedFetch,
       onError,
@@ -2566,6 +2571,7 @@ export class DashboardApi {
       passive,
       sessionGeneration: options.sessionGeneration,
     });
+    this.#request = options.freshSignIn?.wrap(request, passive) ?? request;
   }
 
   getStaffRoster(): Promise<RosterEntry[]> {
@@ -4678,7 +4684,6 @@ export class DashboardApi {
   async makeRecoveryPack(body: {
     locale: "en" | "es";
     newServerKey: boolean;
-    signIn: FreshSignInBody;
   }): Promise<MadeRecoveryPack> {
     const file = await this.#request<DownloadedFile>("/api/backup/recovery-pack", "POST", body, {
       as: "file",
@@ -4707,8 +4712,15 @@ export class DashboardApi {
     });
   }
 
-  recoveryPackPasskeyOptions(): Promise<PasskeyChallenge> {
-    return this.#request<PasskeyChallenge>("/api/backup/recovery-pack/passkey-options", "POST");
+  confirmFreshSignIn(body: FreshSignInBody): Promise<void> {
+    return this.#request("/management-api/session/me/fresh-sign-in", "POST", body);
+  }
+
+  freshSignInPasskeyOptions(): Promise<PasskeyChallenge> {
+    return this.#request<PasskeyChallenge>(
+      "/management-api/session/me/fresh-sign-in/passkey-options",
+      "POST",
+    );
   }
 
   markRecoveryPackReceived(packNumber: number): Promise<void> {

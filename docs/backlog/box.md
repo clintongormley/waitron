@@ -2376,9 +2376,7 @@ pull request that left it:
   box's fall on different days in the venue's zone. The card and the fresh sign-in widget read the
   pack status and the person's profile with their own read counters, and the Backups screen pokes
   the card after each write, where the dashboard's live queries (`DashboardQueries`,
-  `apps/dashboard/src/api/live-queries.ts`) could keep both current. The fresh sign-in widget asks
-  only the recovery pack's passkey route, so the next action that needs a fresh sign-in has to
-  widen it. A pack whose receipt the box confirmed after the card left the page, or after the
+  `apps/dashboard/src/api/live-queries.ts`) could keep both current. A pack whose receipt the box confirmed after the card left the page, or after the
   person lost `system.manage`, is counted received though no link to it was offered. So is an older
   pack whose receipt lands while a newer pack's link is on offer, unless it holds the newest server
   key the card was handed.

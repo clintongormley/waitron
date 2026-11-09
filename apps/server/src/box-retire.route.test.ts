@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { readNodeMembership, withTransaction, writeNodeMembership } from "@waitron/db";
@@ -128,7 +129,9 @@ async function login(app: Hono, email: string): Promise<string> {
     body: JSON.stringify({ email, password: PASSWORD }),
   });
   expect(res.status).toBe(200);
-  return res.headers.get("set-cookie")!.split(";")[0];
+  const cookie = res.headers.get("set-cookie")!.split(";")[0];
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie));
+  return cookie;
 }
 
 // This box's own signing key, read once its identity is established.
@@ -157,6 +160,18 @@ describe("POST /api/box/retire", () => {
     managerCookie = await login(buildApp(nodeId), MANAGER_EMAIL);
   });
 
+  it("requires proof before changing membership", async () => {
+    const app = buildApp(nodeId);
+    const cookie = await login(app, MANAGER_EMAIL);
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie, false));
+    const before = await readNodeMembership(suite.db);
+    const response = await app.request("/api/box/retire", { method: "POST", headers: { cookie } });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management_session.proof_required" },
+    });
+    expect(await readNodeMembership(suite.db)).toEqual(before);
+  });
   it("401s without a management session", async () => {
     // A serving-primary self-doc so nothing about the state matters — the gate 401s before any DB work.
     await writeNodeMembership(

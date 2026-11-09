@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { once } from "node:events";
@@ -409,9 +410,11 @@ describe("the start check on a real start", () => {
             });
             const [admin] = await suite.db.select().from(persons).where(eq(persons.role, "admin"));
             await spareSuite.db.insert(persons).values(admin!);
-            const session = await withTransaction(spareSuite.db, (tx) =>
-              startManagementSession(tx, { personId: admin!.id }),
-            );
+            const session = await withTransaction(spareSuite.db, async (tx) => {
+              const session = await startManagementSession(tx, { personId: admin!.id });
+              await setFreshManagementSignIn(tx, session.token);
+              return session;
+            });
             const streamApp = new Hono();
             mountStreamApi(
               streamApp,

@@ -1608,3 +1608,46 @@ describe("mountMeApi — the current password is checked before the write lock i
     expect({ order, outside }).toEqual({ order: [], outside: 0 });
   });
 });
+
+describe("session proof routes", () => {
+  it("checks the current password and records only this browser's proof", async () => {
+    const cookie = await cookieFor(manager);
+    await suite.db
+      .update(persons)
+      .set({ passwordHash: hashPassword("fresh password") })
+      .where(eq(persons.id, manager));
+    const app = mountApp();
+    const path = "/management-api/session/me/fresh-sign-in";
+    const invalid = await send(app, "POST", path, {
+      cookie,
+      body: { method: "password", password: "wrong" },
+    });
+    expect(invalid.status).toBe(401);
+    expect(await invalid.json()).toMatchObject({ error: { code: "password.invalid" } });
+    const response = await send(app, "POST", path, {
+      cookie,
+      body: { method: "password", password: "fresh password" },
+    });
+    expect(response.status).toBe(204);
+    const [row] = (
+      await suite.db.execute<{ proved_at: string | null }>(
+        sql`select proved_at from management_sessions where token_hash = ${hashSessionToken(cookie.split("=")[1]!)}`,
+      )
+    ).rows;
+    expect(row!.proved_at).toEqual(expect.any(String));
+  });
+  it("requires a live session for password and passkey confirmation", async () => {
+    for (const suffix of ["", "/passkey-options"]) {
+      const response = await send(
+        mountApp(),
+        "POST",
+        `/management-api/session/me/fresh-sign-in${suffix}`,
+        { body: {} },
+      );
+      expect(response.status).toBe(401);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management_session.required" },
+      });
+    }
+  });
+});

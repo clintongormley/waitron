@@ -1,3 +1,5 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
+import { mountMeApi } from "./me-api.js";
 import { randomInt } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
@@ -124,6 +126,7 @@ beforeEach(async () => {
     await writeArchiveSettings(tx, RING, ARCHIVES);
   });
   admin = await openManagementSession(suite.db, "admin");
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, admin.token));
 });
 
 type Seat = NonNullable<NonNullable<WaitronModule["backup"]>["recoveryPackPage"]>;
@@ -156,14 +159,23 @@ function fixture(
           ...fakeModule(`test-regime-${n}`),
           backup: { recoveryPackPage: seat },
         }));
+  mountMeApi(
+    local,
+    {
+      db: suite.db,
+      venueLocale: "en-GB",
+      modules: [],
+      credentialKeyRing: TOTP_KEY_RING,
+      rpId: "box.test",
+      origin: "https://box.test",
+    },
+    () => {},
+  );
   mountBackupRecoveryPackMakeApi(
     local,
     {
       db: suite.db,
       nodeDb: suite.node,
-      rpId: "box.test",
-      origin: "https://box.test",
-      keyRing: TOTP_KEY_RING,
       ring: RING,
       node,
       venueId: VENUE,
@@ -216,13 +228,12 @@ function fixture(
       socket ? { incoming: { socket } } : undefined,
     );
   }
-  const signIn = { method: "password", password: "correct horse" };
   return {
     post,
     make: (
       newServerKey = false,
       extra: Parameters<typeof post>[2] = {},
-      body: unknown = { locale: "en", newServerKey, signIn },
+      body: unknown = { locale: "en", newServerKey },
     ) => post("/api/backup/recovery-pack", body, extra),
     received: (number: number, extra: Parameters<typeof post>[2] = {}) =>
       post(`/api/backup/recovery-pack/${number}/received`, {}, extra),
@@ -266,15 +277,14 @@ it("verifies remote recovery-pack passkeys against the staff origin and hostname
   onTestFinished(() => {
     verify.mockReset();
   });
-  const response = await fixture({ remote: true }).make(
-    false,
-    {},
-    {
-      locale: "en",
-      newServerKey: false,
-      signIn: { method: "passkey", challengeHandle, response: { id: "cred-remote" } },
-    },
-  );
+  const remote = fixture({ remote: true });
+  const confirmation = await remote.post("/management-api/session/me/fresh-sign-in", {
+    method: "passkey",
+    challengeHandle,
+    response: { id: "cred-remote" },
+  });
+  expect(confirmation.status).toBe(204);
+  const response = await remote.make();
   expect(response.status).toBe(200);
   expect(response.headers.get("content-type")).toBe("application/pdf");
   await response.arrayBuffer();
@@ -337,10 +347,10 @@ describe("the make route's refusals", () => {
   });
 
   it.each([
-    ["an extra field", { locale: "en", newServerKey: false, signIn: {}, more: 1 }],
-    ["an unknown language", { locale: "fr", newServerKey: false, signIn: {} }],
-    ["a tick that is not a boolean", { locale: "en", newServerKey: "yes", signIn: {} }],
-    ["no sign-in", { locale: "en", newServerKey: false }],
+    ["an extra field", { locale: "en", newServerKey: false, more: 1 }],
+    ["an unknown language", { locale: "fr", newServerKey: false }],
+    ["a tick that is not a boolean", { locale: "en", newServerKey: "yes" }],
+    ["no language", { newServerKey: false }],
   ])("refuses %s as the request's shape", async (_name, body) => {
     const response = await fixture().make(false, {}, body);
     expect(response.status).toBe(400);
@@ -350,18 +360,11 @@ describe("the make route's refusals", () => {
     });
   });
 
-  it("refuses a wrong password, writing no record and keeping the key", async () => {
-    const response = await fixture().make(
-      true,
-      {},
-      {
-        locale: "en",
-        newServerKey: true,
-        signIn: { method: "password", password: "wrong horse" },
-      },
-    );
-    expect(response.status).toBe(401);
-    expect((await codeOf(response)).code).toBe("password.invalid");
+  it("requires fresh proof, writing no record and keeping the key", async () => {
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, admin.token, false));
+    const response = await fixture().make(true);
+    expect(response.status).toBe(400);
+    expect((await codeOf(response)).code).toBe("management_session.proof_required");
     expect(await packs()).toEqual([]);
     expect(await readRecoveryKeyName(suite.node, node.nodeId)).toBe(keyInForce.name);
   });

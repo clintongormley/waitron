@@ -8,13 +8,15 @@ and a secure (HTTPS) connection to that server.
 
 1. Open **Backups**. The **Recovery pack** card at the top says which pack is the latest and
    whether it is up to date. Choose **Make recovery pack**.
-2. Sign in again in the dialog: your password, or **Use your passkey**. If your account uses an
-   authenticator app, also enter a code from it or one of your recovery codes.
-3. Tick **Also make a new server key** only if the pack or sheet holding the current server key is
+2. Tick **Also make a new server key** only if the pack or sheet holding the current server key is
    lost. Without the tick the pack does not change the key: its server key page names the pack or
    sheet that holds it.
-4. Choose **Make pack**, then **Download PDF**, **Open to print**, or both. The box keeps no copy,
-   so save or print the pack before you leave the page. Keep it locked away, off the box.
+3. Choose **Make pack**. When Waitron asks you to confirm it is you, use your password or
+   **Use your passkey**. If your account uses an authenticator app, also enter a code from it or one
+   of your recovery codes. This confirmation covers protected actions in this browser for 15 minutes
+   or until your session ends.
+4. Choose **Download PDF**, **Open to print**, or both. The box keeps no copy, so save or print the
+   pack before you leave the page. Keep it locked away, off the box.
 5. Keep older packs and sheets for older backups. With the tick, new backups use the new server
    key, and an older backup still needs the key it was made with. A new key cannot unlock an older
    backup whose matching key you have lost.

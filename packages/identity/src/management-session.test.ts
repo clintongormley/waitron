@@ -29,6 +29,17 @@ const agedTo = (at: string, token: string) =>
   sql`update management_sessions set last_seen_at = ${at} where token_hash = ${hashSessionToken(token)}`;
 
 describe("management session lifecycle", () => {
+  it("a new login has no fresh proof", async () => {
+    const personId = await seedPerson(suite.db, "manager");
+    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const [row] = (
+      await suite.db.execute<Record<string, unknown>>(
+        sql`select * from management_sessions where token_hash = ${hashSessionToken(session.token)}`,
+      )
+    ).rows;
+    expect(row!.proved_at).toBeNull();
+  });
+
   it("does not extend a passive refresh's session, while an ordinary read still extends it", async () => {
     const personId = await seedPerson(suite.db, "manager");
     const session = await run((tx) => startManagementSession(tx, { personId }));

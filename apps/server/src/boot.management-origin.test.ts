@@ -158,6 +158,8 @@ describe("a management change in the running server", () => {
       const sends: [string, string | undefined][] = [
         ["/api/box/free-space", undefined],
         ["/api/box/retire", undefined],
+        ["/management-api/session/me/fresh-sign-in", "{}"],
+        ["/management-api/session/me/fresh-sign-in/passkey-options", "{}"],
         ["/api/box/clock-challenge", undefined],
         ["/api/box/clock-confirm", "{}"],
         ["/api/box/clock-set", "{}"],

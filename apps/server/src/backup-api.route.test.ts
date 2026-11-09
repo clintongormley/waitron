@@ -1,3 +1,6 @@
+import { openManagementSession } from "@waitron/identity/test/fixtures.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 // The backup admin routes under the manager-login gate, plus the supervisor's real enable/rotate
 // lifecycle. The supervisor is pointed at a throwaway venue directory because these tests exercise
 // the ROUTES, not what a backup contains; the supervisor's own lifecycle is covered in
@@ -309,7 +312,9 @@ async function login(app: Hono): Promise<string> {
     body: JSON.stringify({ email: MANAGER_EMAIL, password: PASSWORD }),
   });
   expect(res.status).toBe(200);
-  return res.headers.get("set-cookie")!.split(";")[0];
+  const cookie = res.headers.get("set-cookie")!.split(";")[0];
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie));
+  return cookie;
 }
 
 const DAILY_AT_0330 = { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } } as const;
@@ -336,9 +341,45 @@ afterEach(async () => {
 });
 
 describe("backup admin routes", () => {
+  it.each([
+    ["POST", "/api/backup/apply"],
+    ["POST", "/api/backup/disable"],
+    ["POST", "/api/backup/rotate"],
+    ["GET", "/api/backup/recovery-key"],
+  ])("%s %s requires proof before backup effects", async (method, path) => {
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const app = buildApp(makeSupervisor(sc), sc.stateDir);
+    const cookie = await login(app);
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie!, false));
+    const response = await app.request(path!, {
+      method,
+      headers: { cookie: cookie!, "content-type": "application/json" },
+      body: method === "GET" ? undefined : "{}",
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management_session.proof_required" },
+    });
+    expect(await readArchiveSettings(suite.db, RING)).toBeNull();
+    expect(await readdir(sc.stateDir)).not.toContain("backup.env");
+  });
+
   beforeAll(async () => {
     await setupTenant();
   }, 180_000);
+
+  it("refuses an unproved staff session by permission before asking for proof", async () => {
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const { token } = await openManagementSession(suite.db, "staff");
+    const response = await buildApp(makeSupervisor(sc), sc.stateDir).request(
+      "/api/backup/recovery-key",
+      {
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
+      },
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  });
 
   it("unauthenticated requests 401", async () => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };

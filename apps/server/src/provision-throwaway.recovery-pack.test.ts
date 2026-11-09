@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -7,7 +8,7 @@ import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { loadKeyRing } from "@waitron/credentials";
-import { readRecoveryPacks } from "@waitron/db";
+import { withTransaction, readRecoveryPacks } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -22,7 +23,6 @@ import { invoiceFontBytes } from "./invoice-font.js";
 import { ALL_MODULES } from "./modules.js";
 import { provisionVenue, venueModuleConfig } from "./provision.js";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
-import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
@@ -88,6 +88,7 @@ async function makePack(options: { beforeMaking?: () => Promise<void> } = {}) {
   );
   await mintBreakGlassKey({ venue: suite.db, node: suite.node }, nodeId);
   const admin = await openManagementSession(suite.db, "admin");
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, admin.token));
   await options.beforeMaking?.();
   const app = new Hono();
   mountBackupRecoveryPackMakeApi(
@@ -95,9 +96,6 @@ async function makePack(options: { beforeMaking?: () => Promise<void> } = {}) {
     {
       db: suite.db,
       nodeDb: suite.node,
-      rpId: "box.test",
-      origin: "https://box.test",
-      keyRing: TOTP_KEY_RING,
       ring: RING,
       node: { nodeId: nodeId as NodeId },
       venueId: VENUE,
@@ -132,7 +130,6 @@ async function makePack(options: { beforeMaking?: () => Promise<void> } = {}) {
       body: JSON.stringify({
         locale: "en",
         newServerKey: true,
-        signIn: { method: "password", password: "correct horse" },
       }),
     },
     { incoming: { socket } },

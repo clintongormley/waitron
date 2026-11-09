@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -343,4 +344,35 @@ describe("sendPersonalData", () => {
     expect(response.headers.get("content-disposition")).toBeNull();
     expect(await response.json()).toEqual({ error: { code: "server.internal" } });
   });
+});
+
+it("requires proof to export another person's data, while own export stays available", async () => {
+  await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, martaId));
+  const response = await mounted().request(
+    `/management-api/staff/${colleagueId}/personal-data/export`,
+    { headers: { cookie: `${MANAGEMENT_COOKIE}=${martaToken}` } },
+  );
+  await refused(response, 400, "management_session.proof_required");
+  expect(order).toEqual([]);
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, martaToken));
+  const permitted = await mounted().request(
+    `/management-api/staff/${colleagueId}/personal-data/export`,
+    { headers: { cookie: `${MANAGEMENT_COOKIE}=${martaToken}` } },
+  );
+  expect(permitted.status).toBe(200);
+  await permitted.arrayBuffer();
+  const own = await ask(mounted());
+  expect(own.status).toBe(200);
+  await own.arrayBuffer();
+});
+
+it("refuses an unproved staff session by permission before asking for proof", async () => {
+  const response = await mounted().request(
+    `/management-api/staff/${colleagueId}/personal-data/export`,
+    {
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${martaToken}` },
+    },
+  );
+  await refused(response, 403, "authorization.not_permitted");
+  expect(order).toEqual([]);
 });

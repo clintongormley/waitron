@@ -20,6 +20,7 @@ export const managementSessions = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     lastSeenAt: tsString("last_seen_at").notNull().$defaultFn(nowIso),
     endedAt: tsString("ended_at"),
+    provedAt: tsString("proved_at"),
   },
   (t) => [
     // For the writes that end a person's open sessions.

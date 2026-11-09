@@ -27,6 +27,20 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
   },
   {
     method: "POST",
+    path: "/management-api/session/me/fresh-sign-in",
+    boxes: ["fenced"],
+    authenticates:
+      "the existing management session, its password or passkey, and authenticator or recovery code when enrolled; the own-page check still applies",
+  },
+  {
+    method: "POST",
+    path: "/management-api/session/me/fresh-sign-in/passkey-options",
+    boxes: ["fenced"],
+    authenticates:
+      "the existing management session and own-page check; issues a challenge for that person only",
+  },
+  {
+    method: "POST",
     path: "/management-api/promote",
     boxes: ["mirror", "fenced"],
     authenticates:

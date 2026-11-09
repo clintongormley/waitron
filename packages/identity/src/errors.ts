@@ -17,6 +17,7 @@ declare module "@waitron/shared" {
     "management_session.required": Record<string, never>;
     /** The management session idled past the timeout. */
     "management_session.expired": Record<string, never>;
+    "management_session.proof_required": Record<string, never>;
     /** Every PIN login refusal, whatever the cause. This package's refusals carry the cause in the
      * log-only `reason`. */
     "pin.invalid": Record<string, never>;

@@ -15,6 +15,8 @@ import {
 import { createRequest, LiveConnection } from "@waitron/dashboard-kit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { mountPublicModulePage } from "./public-module-page.js";
+import { createFreshSignInGate } from "./api/fresh-sign-in.js";
+import type { FreshSignInDialog } from "./widgets/fresh-sign-in-dialog.js";
 import { DashboardApi } from "./api/client.js";
 import { diag } from "./diagnostics.js";
 import { createSessionEpoch, createSessionSignals } from "./session-signals.js";
@@ -50,16 +52,33 @@ function startSessionDashboard(): void {
 
   installErrorCapture(window, diag);
 
-  const epoch = createSessionEpoch();
+  const underlyingEpoch = createSessionEpoch();
+  const epoch = {
+    current: underlyingEpoch.current,
+    advance: () => {
+      freshSignIn.cancel();
+      return underlyingEpoch.advance();
+    },
+  };
   const sessionGeneration = epoch.current;
   const signals = createSessionSignals({ sessionGeneration });
+  const freshSignIn = createFreshSignInGate({
+    sessionGeneration,
+    prompt: async (signal) => {
+      const shell = app.querySelector("dashboard-app")!;
+      await shell.updateComplete;
+      return shell
+        .shadowRoot!.querySelector<FreshSignInDialog>("dashboard-fresh-sign-in-dialog")!
+        .show(signal);
+    },
+  });
   const api = new DashboardApi(
     "",
     instrumentedFetch,
     signals.reportError,
     signals.reportActivity,
     false,
-    { sessionGeneration },
+    { sessionGeneration, freshSignIn },
   );
   const liveUpdates = new LiveConnection(api.liveData, {
     sessionGeneration,
@@ -70,12 +89,14 @@ function startSessionDashboard(): void {
       .api=${api}
       .sessionEpoch=${epoch}
       .liveUpdates=${liveUpdates}
-      .request=${createRequest({
-        fetchImpl: instrumentedFetch,
-        onError: signals.reportError,
-        onSuccess: signals.reportActivity,
-        sessionGeneration,
-      })}
+      .request=${freshSignIn.wrap(
+        createRequest({
+          fetchImpl: instrumentedFetch,
+          onError: signals.reportError,
+          onSuccess: signals.reportActivity,
+          sessionGeneration,
+        }),
+      )}
     ></dashboard-app>`,
     app,
   );

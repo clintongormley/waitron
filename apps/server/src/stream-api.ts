@@ -7,7 +7,7 @@ import {
   putCredential,
   type KeyRing,
 } from "@waitron/credentials";
-import { authorizeManager } from "@waitron/identity";
+import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import {
@@ -228,6 +228,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     run(c, log, async () => {
       await authorize(c);
       guardPrimary();
+      await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       await heldKeyOrRefuse();
       const bucket = await readBucketBody(c);
       await refuseArchiveOverlap(bucket);
@@ -260,6 +261,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     run(c, log, async () => {
       await authorize(c);
       guardPrimary();
+      await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       return deps.turns(async () => {
         guardPrimary();
         await withTransaction(deps.db, (tx) => deleteCredential(tx, { purpose: STREAM_PURPOSE }));

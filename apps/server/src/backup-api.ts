@@ -4,7 +4,7 @@ import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { KeyRing } from "@waitron/credentials";
 import { withTransaction, type Database } from "@waitron/db";
-import { authorizeManager } from "@waitron/identity";
+import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import type { StreamView } from "@waitron/stream";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import {
@@ -403,6 +403,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     run(c, log, async () => {
       await authorize(c);
       guardWritable();
+      await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       const body = await readApplyBody(c);
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
@@ -492,6 +493,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     run(c, log, async () => {
       await authorize(c);
       guardWritable();
+      await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       return deps.turns(async () => {
         guardWritable();
         const read = await readHeldSettings();
@@ -512,6 +514,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   app.get("/api/backup/recovery-key", (c) =>
     run(c, log, async () => {
       await authorize(c);
+      await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       const key = (await heldKey()) ?? null;
       return c.json({ key });
     }),
@@ -523,6 +526,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     run(c, log, async () => {
       await authorize(c);
       guardWritable();
+      await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       const { recoveryKey } = await readRotateBody(c);
       assertStorableKey(recoveryKey);
       return deps.turns(async () => {

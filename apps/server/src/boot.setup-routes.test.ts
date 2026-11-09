@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { spawn } from "node:child_process";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
@@ -1661,9 +1662,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           .select({ id: persons.id })
           .from(persons)
           .where(eq(persons.role, "admin"));
-        const session = await withTransaction(source.store.venue, (tx) =>
-          startManagementSession(tx, { personId: admin!.id }),
-        );
+        const session = await withTransaction(source.store.venue, async (tx) => {
+          const session = await startManagementSession(tx, { personId: admin!.id });
+          await setFreshManagementSignIn(tx, session.token);
+          return session;
+        });
         await source.store.close();
         beforeServerStarts();
         const port = await freePort();

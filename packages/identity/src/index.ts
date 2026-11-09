@@ -163,3 +163,5 @@ import "./errors.js";
 export { withPassiveManagementRead } from "./management-session.js";
 export { IDENTITY_CHANGE_SOURCES } from "./classification.js";
 export { IDENTITY_BACKUP_VERIFICATION } from "./backup-verification.js";
+
+export { requireFreshManagementSignIn } from "./fresh-sign-in.js";

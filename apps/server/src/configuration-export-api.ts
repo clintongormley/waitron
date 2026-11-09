@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database } from "@waitron/db";
-import { authorizeManager } from "@waitron/identity";
+import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
@@ -48,6 +48,7 @@ export function mountConfigurationExportApi(
           managementSessionId: sessionId,
           permission: "system.manage",
         });
+        await requireFreshManagementSignIn(tx, sessionId);
         return buildConfigurationBundle(
           tx,
           { ...deps.cfg, sourceOperatorId: authorization.authorizedBy },

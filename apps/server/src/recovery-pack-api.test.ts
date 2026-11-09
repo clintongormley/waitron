@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as identity from "@waitron/identity";
@@ -33,6 +34,7 @@ beforeEach(async () => {
         .values({ displayName: role, role, pinHash: "unused", passwordHash: "unused" })
         .returning();
       const session = await startManagementSession(tx, { personId: person!.id });
+      await setFreshManagementSignIn(tx, session.token);
       if (role === "manager") managerToken = session.token;
       else staffToken = session.token;
     }
@@ -179,4 +181,14 @@ it("does not expose a secret-bearing pack through GET", async () => {
   expect(response.status).toBe(404);
   expect(await response.text()).not.toContain(secret);
   expect(logs).toEqual([]);
+});
+
+it("requires proof before checking the server key or building recovery files", async () => {
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, managerToken, false));
+  const response = await download();
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: { code: "management_session.proof_required" },
+  });
+  expect(logs).not.toContainEqual(expect.arrayContaining(["recovery.pack_downloaded"]));
 });

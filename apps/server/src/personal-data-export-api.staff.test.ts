@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -145,7 +146,11 @@ beforeEach(async () => {
     marta: marta!,
   };
   const start = (personId: string) =>
-    withTransaction(suite.db, async (tx) => (await startManagementSession(tx, { personId })).token);
+    withTransaction(suite.db, async (tx) => {
+      const session = await startManagementSession(tx, { personId });
+      await setFreshManagementSignIn(tx, session.token);
+      return session.token;
+    });
   martaToken = await start(ids.marta);
   suite.db.run(
     sql`update persons set status = 'suspended', locale = 'es-ES' where id = ${ids.marta}`,

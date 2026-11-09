@@ -1,3 +1,4 @@
+import { createFreshSignInGate } from "./fresh-sign-in.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FetchLike } from "@waitron/dashboard-kit";
 import {
@@ -3483,4 +3484,30 @@ it("keeps a malformed issuer in one query value for server validation", async ()
   expect(url.searchParams.getAll("taxId")).toEqual(["P123"]);
   expect(url.searchParams.getAll("identifierCountryCode")).toEqual([issuer]);
   expect(url.searchParams.getAll("identifierType")).toEqual(["passport"]);
+});
+
+it("a DashboardApi action uses the shared gate but its background read never prompts", async () => {
+  let proved = false;
+  const prompt = vi.fn(async () => {
+    proved = true;
+    return true;
+  });
+  const freshSignIn = createFreshSignInGate({ sessionGeneration: () => 0, prompt });
+  const fetchImpl = vi.fn(async () =>
+    proved
+      ? new Response(JSON.stringify({ key: "secret" }))
+      : new Response(JSON.stringify({ error: { code: "management_session.proof_required" } }), {
+          status: 400,
+        }),
+  );
+  const api = new DashboardApi("", fetchImpl, undefined, undefined, false, {
+    sessionGeneration: () => 0,
+    freshSignIn,
+  });
+  await expect(api.background.getBackupRecoveryKey()).rejects.toMatchObject({
+    code: "management_session.proof_required",
+  });
+  expect(prompt).not.toHaveBeenCalled();
+  expect(await api.getBackupRecoveryKey()).toEqual({ key: "secret" });
+  expect(prompt).toHaveBeenCalledTimes(1);
 });

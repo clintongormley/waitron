@@ -175,6 +175,7 @@ async function seedFull(
       tokenHash: secrets.dashboardTokens[0]!,
       createdAt: t(17),
       lastSeenAt: t(18),
+      provedAt: t(18),
       endedAt: null,
     },
     {
@@ -380,8 +381,8 @@ describe("IDENTITY_PERSONAL_DATA", () => {
       ],
       recoveryCodes: { unused: 3, used: 2 },
       dashboardSessions: [
-        { openedAt: t(15), lastSeenAt: t(16), endedAt: t(19) },
-        { openedAt: t(17), lastSeenAt: t(18), endedAt: null },
+        { openedAt: t(15), lastSeenAt: t(16), endedAt: t(19), provedAt: null },
+        { openedAt: t(17), lastSeenAt: t(18), endedAt: null, provedAt: t(18) },
       ],
       deviceSessions: [
         { device: "marta-Bar tablet", openedAt: t(13), endedAt: t(14) },

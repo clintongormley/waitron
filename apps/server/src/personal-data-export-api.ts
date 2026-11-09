@@ -2,7 +2,12 @@ import "./errors.js";
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { readTenant, readVenue, type Database, type Transaction } from "@waitron/db";
-import { authorizeManager, persons, resolveManagementSession } from "@waitron/identity";
+import {
+  authorizeManager,
+  requireFreshManagementSignIn,
+  persons,
+  resolveManagementSession,
+} from "@waitron/identity";
 import {
   personalDataParts,
   preparePersonalData,
@@ -138,6 +143,7 @@ export function mountPersonalDataExportApi(
           permission: "personal_data.export",
           touch: false,
         });
+        await requireFreshManagementSignIn(tx, token);
         if (hasQuery) throw new AppError("management.request_invalid", { field: "query" });
         if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
         const [target] = await tx

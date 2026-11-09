@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -261,9 +262,11 @@ function beforeServerStarts(): void {
 
 async function managerCookie(): Promise<string> {
   beforeServerStarts();
-  const session = await withTransaction(venue.db, (tx) =>
-    startManagementSession(tx, { personId: venue.adminId }),
-  );
+  const session = await withTransaction(venue.db, async (tx) => {
+    const session = await startManagementSession(tx, { personId: venue.adminId });
+    await setFreshManagementSignIn(tx, session.token);
+    return session;
+  });
   return `${MANAGEMENT_COOKIE}=${session.token}`;
 }
 

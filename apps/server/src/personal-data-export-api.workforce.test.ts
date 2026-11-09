@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { unzipSync } from "fflate";
@@ -542,11 +543,11 @@ beforeEach(async () => {
   await seedActions(colleagueId);
 
   const sessionCookie = (personId: string) =>
-    withTransaction(
-      suite.db,
-      async (tx) =>
-        `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId })).token}`,
-    );
+    withTransaction(suite.db, async (tx) => {
+      const session = await startManagementSession(tx, { personId });
+      await setFreshManagementSignIn(tx, session.token);
+      return `${MANAGEMENT_COOKIE}=${session.token}`;
+    });
   cookie = await sessionCookie(martaId);
   adminCookie = await sessionCookie(admin!.id);
   await suite.db

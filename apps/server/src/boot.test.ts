@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { locations } from "@waitron/db";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
@@ -666,15 +667,21 @@ describe("startServer, against a migrated venue directory", () => {
         error: { code: "management_session.required" },
       });
 
-      // A 404 would mean `mountBackupRecoveryPackApi` never ran.
       const packPasskey = await fetch(
-        `http://127.0.0.1:${port}/api/backup/recovery-pack/passkey-options`,
+        `http://127.0.0.1:${port}/management-api/session/me/fresh-sign-in/passkey-options`,
         { method: "POST" },
       );
       expect(packPasskey.status).toBe(401);
       expect((await packPasskey.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "management_session.required" },
       });
+
+      const oldPackPasskey = await fetch(
+        `http://127.0.0.1:${port}/api/backup/recovery-pack/passkey-options`,
+        { method: "POST" },
+      );
+      expect(oldPackPasskey.status).toBe(404);
+      await oldPackPasskey.text();
 
       // `server.listening` is an `info` event, so the file half of the tee'd logger appended it.
       expect(existsSync(join(logDir, "waitron.log"))).toBe(true);
@@ -3360,9 +3367,11 @@ describe("startServer — what a trading boot wires behind its management routes
         role: "admin",
       })
       .returning({ id: persons.id });
-    const session = await withTransaction(db, (tx) =>
-      startManagementSession(tx, { personId: admin!.id }),
-    );
+    const session = await withTransaction(db, async (tx) => {
+      const session = await startManagementSession(tx, { personId: admin!.id });
+      await setFreshManagementSignIn(tx, session.token);
+      return session;
+    });
     cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
     port = await freePort();
     server = await startServer({

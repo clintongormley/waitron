@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mkdtempSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -119,7 +120,9 @@ async function login(app: Hono, email: string): Promise<string> {
     body: JSON.stringify({ email, password: PASSWORD }),
   });
   expect(res.status).toBe(200);
-  return res.headers.get("set-cookie")!.split(";")[0];
+  const cookie = res.headers.get("set-cookie")!.split(";")[0];
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie));
+  return cookie;
 }
 
 describe("POST /api/box/recovery-bundle", () => {
@@ -136,6 +139,19 @@ describe("POST /api/box/recovery-bundle", () => {
     cookie = await login(app, MANAGER_EMAIL);
   });
 
+  it("requires proof before reading secret files", async () => {
+    const ownCookie = await login(app, MANAGER_EMAIL);
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, ownCookie, false));
+    const response = await buildApp("/no-such-state-folder").request("/api/box/recovery-bundle", {
+      method: "POST",
+      headers: { cookie: ownCookie, "content-type": "application/json" },
+      body: JSON.stringify({ passphrase: BUNDLE_PASS }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management_session.proof_required" },
+    });
+  });
   it("401s without a management session", async () => {
     const res = await app.request("/api/box/recovery-bundle", { method: "POST" });
     expect(res.status).toBe(401);

@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -51,10 +52,11 @@ describe("the personal-data downloads in a real start", () => {
         { displayName: "Mia Manager", email: "mia@example.test", role: "manager" },
       ])
       .returning({ id: persons.id });
-    const [adminSession, managerSession] = await withTransaction(suite.db, async (tx) => [
-      await startManagementSession(tx, { personId: admin!.id }),
-      await startManagementSession(tx, { personId: manager!.id }),
-    ]);
+    const [adminSession, managerSession] = await withTransaction(suite.db, async (tx) => {
+      const adminSession = await startManagementSession(tx, { personId: admin!.id });
+      await setFreshManagementSignIn(tx, adminSession.token);
+      return [adminSession, await startManagementSession(tx, { personId: manager!.id })];
+    });
     await stampDeployment(suite.db, "preproduction");
     const scratch = await mkdtemp(join(tmpdir(), "waitron-personal-data-boot-"));
     let server: StartedServer | undefined;

@@ -143,11 +143,7 @@ export class RecoveryPackCard extends LitElement {
 
   @property({ attribute: false }) api!: Pick<
     DashboardApi,
-    | "getProfile"
-    | "recoveryPackPasskeyOptions"
-    | "makeRecoveryPack"
-    | "markRecoveryPackReceived"
-    | "getRecoveryPackStatus"
+    "makeRecoveryPack" | "markRecoveryPackReceived" | "getRecoveryPackStatus"
   >;
   @property({ type: Boolean }) canManage = false;
 

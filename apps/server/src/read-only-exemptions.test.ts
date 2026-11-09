@@ -1,3 +1,4 @@
+import { persons, hashPassword, startManagementSession } from "@waitron/identity";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,6 +7,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   openVenueDatabase,
+  withTransaction,
+  readNodeMembership,
   readTenant,
   stampDeployment,
   writeNodeMembership,
@@ -66,6 +69,8 @@ describe("the read-only exemption list", () => {
   it("the exempt set is exactly this list", () => {
     expect(READ_ONLY_EXEMPTIONS.map(({ method, path, boxes }) => [method, path, boxes])).toEqual([
       ["POST", "/api/box/retire", ["fenced"]],
+      ["POST", "/management-api/session/me/fresh-sign-in", ["fenced"]],
+      ["POST", "/management-api/session/me/fresh-sign-in/passkey-options", ["fenced"]],
       ["POST", "/management-api/promote", ["mirror", "fenced"]],
       ["POST", "/management-api/promote/preparation", ["mirror", "fenced"]],
       ["POST", "/api/node/peer-status", ["mirror", "fenced"]],
@@ -189,6 +194,7 @@ const openStores: VenueDatabase[] = [];
 const venueDirs: string[] = [];
 let mirror: { dir: string; nodeId: string };
 let fenced: { dir: string; nodeId: string };
+let fencedProof: { dir: string; nodeId: string; token: string; db: Database };
 let midHandover: { dir: string; nodeId: string; node: NodeDatabase; breakGlass: string };
 let spare: { dir: string; nodeId: string; node: NodeDatabase; offer: unknown };
 
@@ -346,6 +352,35 @@ beforeAll(async () => {
   fenced = { dir: fDir, nodeId: fId };
   await setSingletonRole({ venue: fDb, node: fNode }, fId, "primary");
   await writeNodeMembership(fDb, sellOnlyChart(fId));
+  const [proofDir, proofId, proofDb, proofNode] = await seededVenue();
+  await setSingletonRole({ venue: proofDb, node: proofNode }, proofId, "primary");
+  const key = await readNodeIdentityKey(proofNode, RING, proofId);
+  const proofBody: MembershipDocumentBody = {
+    term: 5,
+    nodes: [
+      { nodeId: proofId, contactUrl: "", standing: "sell-only" },
+      { nodeId: MAIN_BOX.nodeId, contactUrl: "https://carrier.test", standing: "serving-primary" },
+    ],
+  };
+  await writeNodeMembership(proofDb, {
+    body: proofBody,
+    signerNodeId: proofId,
+    signature: signDocumentBody(proofBody, key),
+    endorsements: [],
+  });
+  const token = await withTransaction(proofDb, async (tx) => {
+    const [person] = await tx
+      .insert(persons)
+      .values({
+        displayName: "Proof Manager",
+        role: "manager",
+        passwordHash: hashPassword("correct password"),
+        pinHash: "unused",
+      })
+      .returning();
+    return (await startManagementSession(tx, { personId: person!.id })).token;
+  });
+  fencedProof = { dir: proofDir, nodeId: proofId, token, db: proofDb };
 }, 180_000);
 
 afterAll(async () => {
@@ -616,3 +651,50 @@ describe("each listed route is reached on a real read-only start, and nothing el
     }
   }, 60_000);
 });
+
+it("a real fenced start can prove its existing session and retire, while wrong proof changes nothing", async () => {
+  const port = await freePort();
+  const base = `http://127.0.0.1:${port}`;
+  const server = await startServer({
+    ...KEY_ENV,
+    WAITRON_VENUE_DIR: fencedProof.dir,
+    WAITRON_NODE_ID: fencedProof.nodeId,
+    WAITRON_HTTP_PORT: String(port),
+    WAITRON_MANAGEMENT_ORIGIN: base,
+    WAITRON_MIGRATIONS_DIR: migrationsRoot,
+  });
+  const send = (path: string, body: unknown) =>
+    fetch(`http://127.0.0.1:${httpPort()}${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: base,
+        cookie: `waitron_management_session=${fencedProof.token}`,
+      },
+      body: JSON.stringify(body),
+    });
+  try {
+    const refused = await send("/api/box/retire", {});
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "management_session.proof_required" },
+    });
+    const wrong = await send("/management-api/session/me/fresh-sign-in", {
+      method: "password",
+      password: "wrong",
+    });
+    expect(wrong.status).toBe(401);
+    expect(await wrong.json()).toMatchObject({ error: { code: "password.invalid" } });
+    expect((await readNodeMembership(fencedProof.db))!.body.term).toBe(5);
+    const good = await send("/management-api/session/me/fresh-sign-in", {
+      method: "password",
+      password: "correct password",
+    });
+    expect(good.status).toBe(204);
+    const retired = await send("/api/box/retire", {});
+    expect(retired.status).toBe(200);
+    expect(await retired.json()).toEqual({ evicted: true, term: 6 });
+  } finally {
+    await server.close();
+  }
+}, 60_000);

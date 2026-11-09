@@ -1,10 +1,17 @@
-import { withTransaction, type Database } from "@waitron/db";
+import {
+  withTransaction,
+  type Database,
+  type Transaction,
+  managementSessions,
+  nowIso,
+} from "@waitron/db";
 import {
   resolveManagementSession,
   verifyOwnFreshSignIn,
   verifyOwnPasskey,
   type TotpKeyRing,
 } from "@waitron/identity";
+import { eq } from "drizzle-orm";
 import { AppError, isAppError } from "@waitron/shared";
 import "./errors.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
@@ -61,7 +68,11 @@ export async function confirmFreshSignIn(
         ...codes,
         keyRing: deps.keyRing,
       }),
-      async (tx, input) => (await verifyOwnFreshSignIn(tx, input)).id,
+      async (tx, input) => {
+        const person = await verifyOwnFreshSignIn(tx, input);
+        await recordProof(tx, managementSessionId);
+        return person.id;
+      },
     );
   }
   if (fields.method === "passkey") {
@@ -89,6 +100,7 @@ export async function confirmFreshSignIn(
           ...codes,
           keyRing: deps.keyRing,
         });
+        await recordProof(tx, managementSessionId);
         finish("success");
         return personId;
       } catch (error) {
@@ -98,4 +110,12 @@ export async function confirmFreshSignIn(
     });
   }
   throw new AppError("management.request_invalid", { field: "method" });
+}
+
+async function recordProof(tx: Transaction, token: string): Promise<void> {
+  const { sessionRowId } = await resolveManagementSession(tx, token);
+  await tx
+    .update(managementSessions)
+    .set({ provedAt: nowIso() })
+    .where(eq(managementSessions.id, sessionRowId));
 }

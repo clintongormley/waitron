@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database } from "@waitron/db";
-import { authorizeManager } from "@waitron/identity";
+import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { collectStateSecrets } from "./state-secrets.js";
 import { encryptBundle } from "./recovery-bundle.js";
@@ -43,6 +43,7 @@ export function mountRecoveryBundleApi(app: Hono, deps: RecoveryBundleDeps, log:
       const { authorizedBy: personId } = await withTransaction(deps.db, (tx) =>
         authorizeManager(tx, { managementSessionId: token, permission: "system.manage" }),
       );
+      await requireFreshManagementSignIn(deps.db, token);
       const body = await readJsonBody<{ passphrase?: unknown }>(c);
       if (typeof body.passphrase !== "string" || body.passphrase === "") {
         throw new AppError("recovery.passphrase_required", {});

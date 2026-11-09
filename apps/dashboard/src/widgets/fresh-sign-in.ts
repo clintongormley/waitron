@@ -53,7 +53,7 @@ export class FreshSignIn extends LitElement {
 
   @property({ attribute: false }) api!: Pick<
     DashboardApi,
-    "getProfile" | "recoveryPackPasskeyOptions"
+    "getProfile" | "freshSignInPasskeyOptions"
   >;
   @property({ type: Boolean }) disabled = false;
 
@@ -176,7 +176,7 @@ export class FreshSignIn extends LitElement {
     if (way === "password") return { method: "password", password: this.password, ...codes };
     const attempt = ++this.#attempt;
     try {
-      const { challengeHandle, options } = await this.api.recoveryPackPasskeyOptions();
+      const { challengeHandle, options } = await this.api.freshSignInPasskeyOptions();
       if (attempt !== this.#attempt) return null;
       this.#prompting = true;
       const response = await startAuthentication({
