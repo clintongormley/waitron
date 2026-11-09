@@ -6,6 +6,7 @@ import { migrationOptionsFor, manifestSets } from "@waitron/migrations";
 import { DEMO_BASELINE_FIXTURE_ROOTS } from "@waitron/country-packs/demo/testing";
 import { getCountryPack } from "@waitron/country-packs";
 import { seedDemoRestaurant } from "./seed.js";
+import { readDemoSeedSelection } from "./data-set.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 
@@ -48,6 +49,18 @@ for (const locale of ["en", "es"] as const) {
       departmentTradingNames: getCountryPack("ES")!.demo!.departmentTradingNames,
       dataSet: CASA_DELGADO_ES,
     });
+    expect(
+      suite.db.all(sql`
+        select s.name from service_steps s join departments d on d.id = s.department_id
+        where d.name = ${CASA_DELGADO_ES.floor.departmentNames.deli[locale]}
+        order by s.position
+      `),
+    ).toEqual(
+      (locale === "en"
+        ? ["Set up", "Take order", "Anything else?"]
+        : ["Montar mesa", "Tomar nota", "¿Algo más?"]
+      ).map((name) => ({ name })),
+    );
     const rows = suite.db.all<{ name: string; kitchen_name: string | null; customer_name: string }>(
       sql`select name, kitchen_name, customer_name from products`,
     );
@@ -94,3 +107,89 @@ for (const locale of ["en", "es"] as const) {
     ]);
   });
 }
+
+for (const [province, postalCode, image, staffNames] of [
+  [
+    "Barcelona",
+    "08001",
+    "catalonia-botifarra.png",
+    { en: "Catalan sausage", es: "Butifarra con judías" },
+  ],
+  [
+    "Valencia/València",
+    "46001",
+    "valencia-all-pebre.png",
+    { en: "Eel and potato stew", es: "All i pebre" },
+  ],
+  [
+    "Coruña, A",
+    "15001",
+    "galicia-empanada.png",
+    { en: "Galician savoury pie", es: "Empanada gallega" },
+  ],
+] as const)
+  for (const locale of ["en", "es"] as const)
+    it(`writes ${province} departments, groups and stations in ${locale} and keeps image customer names`, async () => {
+      const venue = await createDemoVenueProvisioner(() => suite.db, {
+        nifBase: 93_000_000,
+        nifFormat: "calculated",
+        invoiceLocale: "es-ES",
+        province,
+        postalCode,
+      })();
+      const { dataSet, identity } = await readDemoSeedSelection(suite.db);
+      await seedDemoRestaurant(suite.db, {
+        venue,
+        locale,
+        salesDays: 0,
+        dataSet,
+        departmentTradingNames: identity.departmentTradingNames,
+      });
+      expect(
+        suite.db
+          .all<{ name: string }>(sql`select name from departments`)
+          .map((r) => r.name)
+          .sort(),
+      ).toEqual(
+        Object.values(dataSet.floor.departmentNames)
+          .map((name) => name[locale])
+          .sort(),
+      );
+      expect(
+        suite.db
+          .all<{ name: string }>(sql`select name from kitchen_stations`)
+          .map((r) => r.name)
+          .sort(),
+      ).toEqual(
+        Object.values(dataSet.stations)
+          .map((name) => name[locale])
+          .sort(),
+      );
+      const menus = [dataSet.menus.restaurant, dataSet.menus.lunch, dataSet.menus.deli];
+      expect(
+        suite.db
+          .all<{ name: string }>(sql`select name from categories`)
+          .map((r) => r.name)
+          .sort(),
+      ).toEqual(
+        menus
+          .flatMap((menu) =>
+            menu.categories.map((category) => (category.categoryName ?? category.name)[locale]),
+          )
+          .sort(),
+      );
+      const dish = menus
+        .flatMap((menu) => menu.categories.flatMap((category) => category.products))
+        .find((p) => p.image === image)!;
+      expect(dish, image).toBeDefined();
+      expect(
+        suite.db.all(sql`select name from products
+          where json_extract(customer_name, '$.en') = ${dish.customerName!.en}`),
+      ).toEqual([{ name: staffNames[locale] }]);
+      const names = suite.db.all<{ names: string }>(sql`
+        select m.names from media_images m join products p on p.image = m.filename
+        where p.name = ${dish.staffName![locale]}
+      `);
+      expect(names).toHaveLength(1);
+      expect(JSON.parse(names[0]!.names)).toEqual(dish.customerName);
+    });

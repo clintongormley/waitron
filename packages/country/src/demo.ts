@@ -100,7 +100,6 @@ interface CountryDemoDataFields<L extends string = string> {
     grossPrice: string;
   }[];
 
-  readonly plainNameLanguage?: L;
   readonly contentLanguages: readonly L[];
   readonly menus: {
     readonly restaurant: CountryDemoCatalogue<L>;

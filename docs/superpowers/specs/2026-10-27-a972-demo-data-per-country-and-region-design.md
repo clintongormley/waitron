@@ -1,5 +1,9 @@
 # A972 — demo data per country pack and region (design)
 
+> **2026-11-09 (A1458 slice 1b):** Regional demo single names now follow the English/Spanish seed
+> language; regional translations and customer maps remain. The regional-name overrides below
+> describe the earlier behavior. See [A1458's approved plan](../plans/2026-11-09-a1458-venue-language.md).
+
 > **2026-11-04 (A1009):** The five standalone demo scripts and commands are retired.
 > Their checks now live in `catalogue-allergen-workflow.test.ts` and `reporting-write-workflows.test.ts`
 > in the server. See the [worked Spain VAT return](../../../packages/reporting/examples/modelo-303.md).

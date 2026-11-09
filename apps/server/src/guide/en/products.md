@@ -352,21 +352,16 @@ When you set up a Madrid demo in English, its staff and kitchen names are in Eng
 variants and the kitchen name **COFFEE · DOWNSTAIRS BAR**. Customer names keep the venue's
 content languages, so changing staff wording does not replace the words on a receipt.
 
-A demo in Catalonia or the Balearic Islands starts as **Can Delgado**. Its extra
-**Especialitats de la casa** section includes **Botifarra amb mongetes**, and its Drinks
-menu includes **Copa de cava**. Staff and kitchen names are Catalan even when the screens
-are in English or Spanish. Customer wording keeps Catalan, Spanish and English.
-In the Valencian Community, your demo starts as **Casa Delgado de l'Horta**. Its
-**Especialitats de l'Horta** section includes **All i pebre** and **Paella valenciana**,
-and Drinks includes **Copa de vi de Requena**. Staff and kitchen names use Valencian
-while the screens remain English or Spanish. Customer text starts in Valencian,
-Spanish and English; receipts default to Spanish.
+A demo in Catalonia or the Balearic Islands starts as **Can Delgado**, with regional
+dishes and cava. In the Valencian Community, it starts as **Casa Delgado de l'Horta**,
+with all i pebre, paella and Requena wine. In Galicia, it starts as **A Casa Delgado**,
+with empanada, lacón con grelos, filloas and Albariño.
 
-In Galicia, your demo starts as **A Casa Delgado**. Its **Especialidades da casa**
-section includes **Empanada galega**, **Lacón con grelos** and **Filloas**, and Drinks
-includes **Copa de Albariño**. Staff and kitchen names use Galician in English and
-Spanish screens. Customer text starts in Galician, Spanish and English; receipts
-default to Spanish.
+Staff and kitchen names, menus, departments and stations follow the
+English or Spanish language used to prepare the demo. Changing your screen language
+later does not rename them. Customer wording keeps the region's Catalan, Valencian
+or Galician text alongside Spanish and English. Catalonia uses Catalan receipts;
+the Balearic, Valencian and Galician demos default to Spanish receipts.
 
 During setup, the suggested restaurant name follows the postcode or province until you edit it.
 Once you type a name, Waitron keeps it when you change the region, including after Review and Back.

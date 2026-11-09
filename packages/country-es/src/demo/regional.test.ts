@@ -22,7 +22,6 @@ describe("Catalan practice restaurant", () => {
     expect(set.id).toBe("casa-delgado-ca");
     expect(set.mediaDataSet).toBe(set.id);
     expect(set.contentLanguages).toEqual(["ca", "es", "en"]);
-    expect(set.plainNameLanguage).toBe("ca");
     const products = [set.menus.restaurant, set.menus.deli, set.menus.lunch].flatMap((m) =>
       m.categories.flatMap((c) => c.products),
     );
@@ -150,7 +149,6 @@ describe("Valencian practice restaurant", () => {
     const set = valencian();
     expect(set.id).toBe("casa-delgado-valencia");
     expect(set.mediaDataSet).toBe("casa-delgado-valencia");
-    expect(set.plainNameLanguage).toBe("ca-ES-valencia");
     expect(set.contentLanguages).toEqual(["ca-ES-valencia", "es", "en"]);
     const all = (data: CountryDemoData) =>
       [data.menus.restaurant, data.menus.deli, data.menus.lunch].flatMap((m) =>
@@ -284,7 +282,6 @@ describe("Galician practice restaurant", () => {
     const set = galician();
     expect(set.id).toBe("casa-delgado-gl");
     expect(set.mediaDataSet).toBe("casa-delgado-gl");
-    expect(set.plainNameLanguage).toBe("gl");
     expect(set.contentLanguages).toEqual(["gl", "es", "en"]);
     const all = (data: CountryDemoData) =>
       [data.menus.restaurant, data.menus.deli, data.menus.lunch].flatMap((m) =>

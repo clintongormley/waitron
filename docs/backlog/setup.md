@@ -656,8 +656,7 @@ that operation's reader. Do not remove exact-content checks to make a large file
 
 ## Bundle A1458: Setup asks which language the venue works in, and starts each country with its own courses (owner, 2026-11-08)
 
-5 entries, size L. The first three are the owner's of 2026-11-08; the last two were the Demo seed
-language bundle. Spanish and English can be built now; every other language waits for C125
+3 entries, size L. Spanish and English can be built now; every other language waits for C125
 ([languages.md](languages.md#bundle-regional-languages)).
 
 - **Setup asks which language the venue works in.** Today `resolveInstalledStarterLanguages`
@@ -670,21 +669,16 @@ language bundle. Spanish and English can be built now; every other language wait
   first menu, the kitchen station and the device profiles, plus the courses below. Their
   `StaffNames` files carry Spanish only, so each needs words for every language C125 adds, Valencian
   as a variant of Catalan. Until C125 lands, setup offers Spanish and English.
-- **The demo follows that choice** (owner, 2026-11-08), replacing A972's rule that a regional
-  demo's staff and kitchen names use the region's language whatever the staff screens: a Catalan
-  demo set up in Spanish shows «Butifarra con judías» on the till, not «Botifarra amb mongetes».
-  Each regional demo then needs staff and kitchen names in every language setup offers. Update
-  A972's decision in [architecture.md](architecture.md) and "Regional practice names" in
-  `docs/developers/products.md` when this is built.
+- **Pass the setup choice to the demo** (owner, 2026-11-08). Regional demos now write their
+  single staff/kitchen, menu, department, group and station names in the seed's English/Spanish
+  language. Their customer maps and regional translations remain. The setup request still needs
+  to supply the explicit choice instead of the demo seed's current language. It must also
+  align the first department's service steps, which provisioning creates before the demo seed.
 - **Remaining course words.** Initial setup now creates Spain’s four courses and Great Britain’s
   three in the existing English/Spanish starter language. Catalan, Valencian, Galician and Basque
   course words still wait for C125; include them in the Native speaker review.
   - Italy, when its pack is built: Antipasti, Primi piatti, Secondi piatti, Dolci. Which fire now
     was not decided; ask the owner then.
-- **The demo venue's departments' internal names still follow the seed language.** Left open by
-  W108 (#1276, the demo venue's names and tax ID come from the country pack).
-- **Still open from W109-5's Barcelona look (2026-10-07):** product groups and prep stations
-  stay English under Spanish staff-facing dish names (the plan's known limit).
 
 ## Decisions and deliberate limits
 

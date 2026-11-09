@@ -1597,10 +1597,11 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 with one menu section, a regional wine and its own staff. Build Catalonia first,
 shared with the Balearic Islands, then Valencia, then Galicia. Give each region a
 restaurant name; update an untouched default when the postcode or province changes
-and preserve a name someone has typed. Staff and kitchen names use the region's
-language even when the staff screens are in English or Spanish (owner, 2026-11-08: to be
-replaced by A1458, where they follow the language chosen at setup). This applies to
-demo data only; the A918 starter-content policy below stays separate. The
+and preserve a name someone has typed. **A1458, owner 2026-11-08:** staff and kitchen
+names now follow the seed's English/Spanish language, keeping regional translation data and
+customer maps. A1458's later setup slices add the explicit working-language choice; until then
+the existing resolver supplies it. This replaces A972's demo-only regional-name override;
+the A918 starter-content policy below stays separate. The
 [design update](../superpowers/specs/2026-10-27-a972-demo-data-per-country-and-region-design.md)
 records the four answers. Spain owns its demo records and pictures behind secondary
 exports; ordinary browser entries stay separate. Madrid keeps its frozen database

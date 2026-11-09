@@ -185,7 +185,6 @@ export const CASA_DELGADO_VALENCIA = {
   ...CASA_DELGADO_ES,
   id: "casa-delgado-valencia",
   mediaDataSet: "casa-delgado-valencia",
-  plainNameLanguage: "ca-ES-valencia",
   contentLanguages: ["ca-ES-valencia", "es", "en"],
   menus: {
     ...CASA_DELGADO_ES.menus,

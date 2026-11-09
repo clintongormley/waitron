@@ -695,7 +695,11 @@ describe("developer demo regions", () => {
               },
             ]);
             const rows = store.venue.all<{ name: string }>(sql`select name from products`);
-            expect(rows.some((p) => p.name === "Botifarra amb mongetes")).toBe(region !== "madrid");
+            expect(
+              rows.some(
+                (p) => p.name === (staff === "en" ? "Catalan sausage" : "Butifarra con judías"),
+              ),
+            ).toBe(region !== "madrid");
             expect(store.venue.all(sql`select country from tenants`)).toEqual([{ country: "ES" }]);
           } finally {
             await store.close();
@@ -725,7 +729,7 @@ describe("Valencian developer demo", () => {
     });
   });
   it.each(["en-GB", "es-ES"])(
-    "seeds Valencian names with %s staff and preserves reuse",
+    "seeds Valencian dishes in the %s staff language and preserves reuse",
     async (locale) => {
       const root = await mkdtemp(join(tmpdir(), "a972-valencia-dev-"));
       try {
@@ -748,12 +752,15 @@ describe("Valencian developer demo", () => {
               invoice_locales: '["es-ES"]',
             },
           ]);
+          const staffName = locale === "en-GB" ? "Eel and potato stew" : "All i pebre";
           expect(
-            store.venue.all(
-              sql`select name,kitchen_name from products where name=${VALENCIA_DEMO_TEXT.dish}`,
-            ),
+            store.venue.all(sql`select name,kitchen_name from products where name=${staffName}`),
           ).toEqual([
-            { name: VALENCIA_DEMO_TEXT.dish, kitchen_name: VALENCIA_DEMO_TEXT.dishKitchen },
+            {
+              name: staffName,
+              kitchen_name:
+                locale === "en-GB" ? "Eel and potato stew · kitchen" : "All i pebre · cocina",
+            },
           ]);
         } finally {
           await store.close();
@@ -785,7 +792,7 @@ describe("Galician developer demo", () => {
     });
   });
   it.each(["en-GB", "es-ES"])(
-    "seeds Galician names with %s staff and preserves reuse",
+    "seeds Galician dishes in the %s staff language and preserves reuse",
     async (locale) => {
       const root = await mkdtemp(join(tmpdir(), "a972-galicia-dev-"));
       try {
@@ -808,12 +815,15 @@ describe("Galician developer demo", () => {
               invoice_locales: '["es-ES"]',
             },
           ]);
+          const staffName = locale === "en-GB" ? "Galician savoury pie" : "Empanada gallega";
           expect(
-            store.venue.all(
-              sql`select name,kitchen_name from products where name=${GALICIA_DEMO_TEXT.dish}`,
-            ),
+            store.venue.all(sql`select name,kitchen_name from products where name=${staffName}`),
           ).toEqual([
-            { name: GALICIA_DEMO_TEXT.dish, kitchen_name: GALICIA_DEMO_TEXT.dishKitchen },
+            {
+              name: staffName,
+              kitchen_name:
+                locale === "en-GB" ? "Galician savoury pie · kitchen" : "Empanada gallega · cocina",
+            },
           ]);
         } finally {
           await store.close();

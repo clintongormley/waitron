@@ -7,16 +7,11 @@ Your products, sections, [modifiers](modifiers.md) and units share these languag
 The image library uses them too, but a photo still needs a name in your default language when
 you upload or edit it.
 
-In Catalonia and the Balearic Islands, the demo's library uses Catalan staff names,
-including **Botifarra amb mongetes**, in both English and Spanish screens. Its regional
-pictures belong to that practice restaurant; you still choose and replace pictures in the same way.
-
-In the Valencian Community, the demo's photograph library uses Valencian staff names,
-such as **All i pebre** and **Orxata amb fartons**, with its regional pictures.
-
-In Galicia, the demo's photograph library uses Galician staff names such as
-**Empanada galega** and **Filloas**, with the regional pictures. You choose and
-replace these pictures in the same way.
+The regional demo's photograph library keeps customer-language labels. In Catalonia
+and the Balearic Islands, these include **Botifarra amb mongetes de la casa**; in the Valencian
+Community, **All i pebre de la casa** and **Orxata amb fartons de la casa**; in Galicia, **Empanada galega da casa**
+and **Filloas da casa**. These labels keep their regional wording when the demo's staff names
+are English or Spanish. You choose and replace the pictures in the same way.
 
 ## Choose your content languages {#languages}
 

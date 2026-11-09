@@ -13,7 +13,7 @@ const catalan = (
 ).plain;
 import { describe, expect, it } from "vitest";
 import { resolveFiscalJurisdiction } from "@waitron/country";
-import type { CountryDemoIdentity, CountryPack } from "@waitron/country";
+import type { CountryDemoIdentity, CountryPack, DemoPlainText } from "@waitron/country";
 import { COUNTRY_PACKS, VENUE_SETUP_COUNTRY_PACKS, getCountryPack } from "@waitron/country-packs";
 import { ALL_MODULES } from "../../src/modules.js";
 import { CASA_DELGADO, DELI_TAKEAWAY, MENU_DEL_DIA, PRODUCT_OPTION_LISTS } from "./testing/data.js";
@@ -72,6 +72,18 @@ function customerTexts(set: DemoDataSet): [string, Text][] {
 }
 
 describe("demo data sets", () => {
+  it.each([
+    ["casa-delgado-ca", "en"],
+    ["casa-delgado-ca", "es"],
+    ["casa-delgado-valencia", "en"],
+    ["casa-delgado-valencia", "es"],
+    ["casa-delgado-gl", "en"],
+    ["casa-delgado-gl", "es"],
+  ] as const)("selects %s station text in the %s seed language", (id, locale) => {
+    const set = demoDataSet(id);
+    expect(demoPlainText(set.stations.kitchen, set, locale)).toBe(set.stations.kitchen[locale]);
+  });
+
   it("gives every country pack distinct lowercase hex colours for its top-level categories", () => {
     for (const pack of COUNTRY_PACKS.filter((pack) => pack.demo !== undefined)) {
       const set = demoDataSetFor(pack.demo!);
@@ -330,18 +342,11 @@ describe("a country with no demo data", () => {
   });
 });
 
-it("requires the regional override instead of silently using the staff language", () => {
+it("uses the seed language even with regional text and refuses a missing selected language", () => {
   const regional = DEMO_DATA_SETS["casa-delgado-ca"]!;
-  expect(() => demoPlainText({ en: "English label", es: "Spanish label" }, regional, "en")).toThrow(
-    "missing ca text",
-  );
-  expect(
-    demoPlainText(
-      { en: "English label", es: "Spanish label", ca: "Regional label" },
-      regional,
-      "es",
-    ),
-  ).toBe("Regional label");
+  const text = { en: "English label", es: "Spanish label", ca: "Regional label" };
+  expect(demoPlainText(text, regional, "en")).toBe("English label");
+  expect(demoPlainText(text, regional, "es")).toBe("Spanish label");
   expect(
     demoPlainText(
       { en: "English label", es: "Spanish label" },
@@ -349,4 +354,11 @@ it("requires the regional override instead of silently using the staff language"
       "es",
     ),
   ).toBe("Spanish label");
+  expect(() =>
+    demoPlainText(
+      { es: "Spanish label", ca: "Regional label" } as unknown as DemoPlainText,
+      regional,
+      "en",
+    ),
+  ).toThrow("missing en text (casa-delgado-ca)");
 });

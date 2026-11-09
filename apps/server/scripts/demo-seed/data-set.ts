@@ -151,9 +151,8 @@ export function demoPlainText(
   set: DemoDataSet,
   locale: StaffLanguage,
 ): string {
-  const language = set.plainNameLanguage ?? locale;
-  const value = text[language];
-  if (value === undefined) throw new Error(`demoPlainText: missing ${language} text`);
+  const value = text[locale];
+  if (value === undefined) throw new Error(`demoPlainText: missing ${locale} text (${set.id})`);
   return value;
 }
 
