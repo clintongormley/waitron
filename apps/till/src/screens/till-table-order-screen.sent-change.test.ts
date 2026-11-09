@@ -1183,6 +1183,30 @@ it("keeps a staged change through an update that leaves its dish as it was", asy
   expect(seen).toMatchObject([{ revision: 10, patch: { note: "warm", quantity: "3" } }]);
 });
 
+it("keeps a staged change, saying nothing, when an update lists the dish's answers in another order", async () => {
+  const pepper = {
+    listName: { en: "Sauce" },
+    listCustomerName: { es: "Salsa carta" },
+    listKitchenName: "Salsa KDS",
+    labelName: { en: "Pepper" },
+    labelCustomerName: { es: "Pimienta carta" },
+    labelKitchenName: "Pimienta KDS",
+  };
+  const el = await openRow({
+    lines: [burgerLine({ optionSnapshots: [rare, pepper] })],
+    products: [flan, steakish],
+    revision: 9,
+    billEdit,
+  });
+  const seen = changes(el);
+  await editNote(el, "warm, no cream");
+  await changedElsewhere(el, [burgerLine({ optionSnapshots: [pepper, rare] })]);
+  expect(footerSentence(el)?.textContent?.trim() ?? "").toBe("");
+  expect(await noteShown(el)).toBe("warm, no cream");
+  await pressChange(el);
+  expect(seen).toMatchObject([{ revision: 10, patch: { note: "warm, no cream" } }]);
+});
+
 it("keeps a staged change, saying nothing, when the menu stops offering the dish's extras list but the dish is as it was", async () => {
   const lines = [line({ productId: "burger", menuItemId: "offer-burger" }), bacon];
   const el = await openRow({

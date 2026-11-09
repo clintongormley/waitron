@@ -2723,7 +2723,7 @@ export class TillTableOrderScreen extends LitElement {
       lines.map((each) => [
         each.quantity,
         each.note ?? "",
-        JSON.stringify(each.optionSnapshots ?? []),
+        (each.optionSnapshots ?? []).map((answer) => JSON.stringify(answer)).sort(),
         (children.get(each.lineNo) ?? [])
           .map((row) => JSON.stringify([row.listId, row.productId, row.quantity]))
           .sort(),
