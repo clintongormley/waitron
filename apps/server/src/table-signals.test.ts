@@ -7,10 +7,12 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 import {
   assignCatalogueToVenue,
+  assignProductUnit,
   createCatalogue,
   createCategory,
   createProduct,
   updateProduct,
+  units,
 } from "@waitron/catalogue";
 import {
   diningTables,
@@ -37,8 +39,9 @@ import { createStation } from "./kitchen.js";
 import { readBillSignals } from "./table-signals.js";
 import type { Logger } from "./logger.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
+import { republishMenus } from "./testing/publish-menu.js";
 
-import { fireGroup, readHeldCounts, snoozeReminder } from "./order-groups.js";
+import { fireGroup, readCurrentOrders, readHeldCounts, snoozeReminder } from "./order-groups.js";
 import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.js";
 import { finishTable } from "./testing/party-close-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
@@ -213,6 +216,85 @@ async function lineId(v: PartyVenue, billId: string, lineNo: number): Promise<st
 }
 
 describe("the floor's attention signals", () => {
+  it.each([
+    { quantity: "150", hardwareUnit: "g" as const, precision: 0, measure: false },
+    { quantity: "0.640", hardwareUnit: "kg" as const, precision: 3, measure: false },
+    { quantity: "330", hardwareUnit: null, precision: 0, measure: true },
+  ])(
+    "counts a ready measured dish ($quantity, $hardwareUnit) as one item on the floor",
+    async ({ quantity, hardwareUnit, precision, measure }) => {
+      const v = await setupPartyVenue(suite.db);
+      await inTx(v, async (tx) => {
+        const [gram] = await tx
+          .insert(units)
+          .values({
+            staffName: "Gram",
+            staffAbbreviation: "g",
+            name: { en: "Gram" },
+            abbreviation: { en: "g" },
+            hardwareUnit,
+            precision,
+            measure,
+          })
+          .returning({ id: units.id });
+        await assignProductUnit(tx, v.productId("Burger"), gram!.id);
+        await republishMenus(tx);
+      });
+      const table = await v.table("Mesa 2");
+      const { tabId, partyId } = await seat(v, table);
+      await inTx(v, (tx) =>
+        addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.item("Burger"), quantity }]),
+      );
+      await makeReady(v, tabId, "Burger");
+
+      const ready = (await floorRow(v, table)).signals.find((signal) => signal.kind === "ready");
+      expect(ready).toMatchObject({ kind: "ready", byStation: [{ count: 1 }] });
+      const current = await inTx(v, (tx) => readCurrentOrders(tx, partyId));
+      expect(current.ungrouped).toMatchObject([{ countsWholePortions: false }]);
+    },
+  );
+
+  it("counts a held zero-precision measure as one without changing the reminder", async () => {
+    const v = await setupPartyVenue(suite.db);
+    await inTx(v, async (tx) => {
+      await setReleaseReminderInEveryDepartment(tx, 10);
+      const [measure] = await tx
+        .insert(units)
+        .values({
+          staffName: "Millilitre",
+          staffAbbreviation: "ml",
+          name: { en: "Millilitre" },
+          abbreviation: { en: "ml" },
+          precision: 0,
+          measure: true,
+        })
+        .returning({ id: units.id });
+      await assignProductUnit(tx, v.productId("Burger"), measure!.id);
+      await republishMenus(tx);
+    });
+    const table = await v.table("Mesa 2");
+    const seated = await seat(v, table);
+    const placed = await inTx(v, (tx) =>
+      placeGroupedRound(
+        tx,
+        v.cfg,
+        seated,
+        {
+          lines: [{ menuItemId: v.item("Burger"), quantity: "330" }],
+          release: "hold",
+        },
+        OPERATOR,
+      ),
+    );
+    expect(await inTx(v, (tx) => readHeldCounts(tx, [seated.partyId]))).toEqual(
+      new Map([[seated.partyId, 1]]),
+    );
+    expect((await floorRow(v, table)).party!.reminder).toEqual({
+      groupId: placed.groups[0]!.id,
+      dueAt: null,
+    });
+  });
+
   it("A725 ready signals sort opposite dish insertion order by station name", async () => {
     const v = await setupPartyVenue(suite.db);
     const bar = await withBar(v);

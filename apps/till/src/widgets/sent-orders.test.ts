@@ -401,32 +401,43 @@ it("shows exact Spanish counts, ready age and charged cancellations without a mi
 });
 
 it.each([
-  ["en", "0.125 ready · 0.25 firing · 0.375 held · 0.625 served", "0.625"],
-  ["es", "Listos: 0,125 · Marchados: 0,25 · En espera: 0,375 · Servidos: 0,625", "0,625"],
-] as const)("formats fractional Sent counters in %s", async (locale, summary, served) => {
-  setLocale(locale);
-  const el = await mount(
-    current(
-      [
-        row("ready", { quantity: "0.125", unitPrecision: 3, readyAt: at(59) }),
-        row("firing", { quantity: "0.250", unitPrecision: 3 }),
-        row("served", { quantity: "0.500", unitPrecision: 3, servedQuantity: "0.500" }),
-        row("charged", { quantity: "0.125", unitPrecision: 3, cancelledQuantity: "0.125" }),
-      ],
-      [group("g", [row("held", { quantity: "0.375", unitPrecision: 3, released: false })])],
-    ),
-  );
-  expect(find(el, ".summary").textContent).toBe(summary);
-  expect(find(el, "[data-served-toggle]").textContent).toContain(` · ${served} ·`);
-  await click(el, "[data-sent-toggle]");
-  expect(open(el)).toBe("false");
-  expect(find(el, ".summary").textContent).toBe(summary);
-});
+  ["en", "1 ready · 1 firing · 1 held · 2 served", "2"],
+  [
+    "es",
+    es["table.sent_counts"]
+      .replace("{ready}", "1")
+      .replace("{firing}", "1")
+      .replace("{held}", "1")
+      .replace("{served}", "2"),
+    "2",
+  ],
+] as const)(
+  "counts measured dishes in the Sent counters in %s",
+  async (locale, summary, served) => {
+    setLocale(locale);
+    const el = await mount(
+      current(
+        [
+          row("ready", { quantity: "0.125", unitPrecision: 3, readyAt: at(59) }),
+          row("firing", { quantity: "0.250", unitPrecision: 3 }),
+          row("served", { quantity: "0.500", unitPrecision: 3, servedQuantity: "0.500" }),
+          row("charged", { quantity: "0.125", unitPrecision: 3, cancelledQuantity: "0.125" }),
+        ],
+        [group("g", [row("held", { quantity: "0.375", unitPrecision: 3, released: false })])],
+      ),
+    );
+    expect(find(el, ".summary").textContent).toBe(summary);
+    expect(find(el, "[data-served-toggle]").textContent).toContain(` · ${served} ·`);
+    await click(el, "[data-sent-toggle]");
+    expect(open(el)).toBe("false");
+    expect(find(el, ".summary").textContent).toBe(summary);
+  },
+);
 
 it.each([
-  ["en", "Mains (0.375) · Desserts (2)"],
-  ["es", "Mains (0,375) · Desserts (2)"],
-] as const)("formats fractional held-course totals in %s", async (locale, summary) => {
+  ["en", "Mains (2) · Desserts (2)"],
+  ["es", "Mains (2) · Desserts (2)"],
+] as const)("counts measured dishes in held-course totals in %s", async (locale, summary) => {
   setLocale(locale);
   const data = current(
     [],

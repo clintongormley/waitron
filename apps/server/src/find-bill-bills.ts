@@ -32,6 +32,7 @@ type RawBill = {
 
 export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
   const zone = VENUE_SERVICE.orderZoneIdSql(sql`wo.id`);
+  const active = sql`l.quantity - coalesce(cancelled.quantity, 0)`;
   return sql`with facts as (
     select wo.id, wo.opened_at, wo.order_number, wo.label, wo.party_id,
       wo.status as order_status, p.name as party_name, p.table_names as party_table_names,
@@ -39,7 +40,17 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
       ${zone} as zone_id,
       s.id as sale_id, case when s.id is null then null else sr.code || '/' || s.invoice_number end as invoice_number,
       ud.recorded_at as departed_at,
-      (select count(*) from working_order_lines l where l.working_order_id = wo.id) as item_count,
+      (select coalesce(sum(case
+        when ${active} <= 0 then 0
+        when unit.hardware_unit is not null or coalesce(l.unit_precision, unit.precision, 0) <> 0
+          or unit.measure = 1 or (${active}) % 1000 <> 0 then 1
+        else (${active}) / 1000 end), 0)
+       from working_order_lines l
+       left join line_service_cancellations cancelled on cancelled.line_id = l.id
+       left join products product on product.id = l.product_id
+       left join product_units owned on owned.product_id = coalesce(product.parent_id, product.id)
+       left join units unit on unit.id = owned.unit_id
+       where l.working_order_id = wo.id and l.parent_line_id is null) as item_count,
       coalesce(s.total, (select coalesce(sum(l.line_total),0) from working_order_lines l where l.working_order_id = wo.id)) as total_cents,
       coalesce((select sum(c.total) from sales c where c.corrects_sale_id = s.id),0) as corrections,
       case when exists(select 1 from sale_settlements settled where settled.sale_id = s.id) then

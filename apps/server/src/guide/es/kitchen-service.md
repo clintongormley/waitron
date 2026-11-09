@@ -117,13 +117,10 @@ termine el grupo que las reúne.
 En la mesa, un plato listo sigue como **Listo** en su ventana de detalle hasta que lo marques
 como servido. La lista Enviado conserva el tiempo que lleva listo para que veas qué falta servir.
 
-La tarjeta de la mesa en la sala también cuenta como listo cada plato listo que aún no has servido.
-Si una etiqueta de estación muestra ese recuento, sustituye al de la tarjeta para que lo veas una
-sola vez al decidir qué servir.
-
-En los detalles de una mesa en el plano, cada plato listo pendiente de servir cuenta como listo.
-Cuando las etiquetas de las estaciones muestran esas cantidades, la línea de progreso las omite
-para que cada plato se cuente una sola vez.
+Usa la etiqueta de platos listos de cada estación en el plano para decidir qué recoger allí.
+Una ración al peso cuenta como un plato: 150 g o 0,64 kg muestra **1**, y tres raciones enteras
+muestran **3**. Si un plato tiene partes en dos estaciones, recógelas en ambas; cada estación lo
+cuenta una vez. En **Enviado**, espera a que diga **Listo** para saber que todas sus partes están listas.
 
 Cuando sirves uno de los dos platos de una línea, el pase muestra el que queda por servir.
 Deshacer restaura la cantidad servida sin reiniciar el tiempo de preparación ni el que lleva listo.

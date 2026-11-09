@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { setLocale } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import { mount, resized } from "./till-table-order-screen.test-helpers.js";
+import { beer, mount, resized } from "./till-table-order-screen.test-helpers.js";
 import {
   current,
   currentGroup,
@@ -60,6 +60,30 @@ it("places this bill's Sent panel before its New order on the table screen", asy
   await click(el, "[data-held-toggle]");
   expect(inside(el, '[data-held-line="l-flan"]').textContent).toContain("Cream ×2.000");
   expect(panel(el).shadowRoot!.querySelector('[data-fired-line="l-pulpo"]')).toBeNull();
+});
+
+it("the draft already counts 330 ml as one item while keeping its quantity", async () => {
+  const drink = {
+    ...beer,
+    name: "Milk",
+    unit: {
+      id: "00000000-0000-0000-0000-000000000005",
+      staffName: "Millilitre",
+      staffAbbreviation: "ml",
+      name: { en: "Millilitre" },
+      abbreviation: { en: "ml" },
+      hardwareUnit: null,
+      precision: 0,
+      measure: true as const,
+    },
+  };
+  const { el } = await sent({ products: [drink] });
+  el.style.width = "390px";
+  await resized(el);
+  el.draftStore!.addProduct(drink, "330");
+  await el.updateComplete;
+  expect(find(el, "[data-review-open]").textContent!.trim()).toBe("Review (1)");
+  expect(el.draftStore!.lines[0]!.quantity).toBe("330");
 });
 
 it("serves a fired row's entire active remainder through the table's real event boundary once", async () => {

@@ -101,14 +101,14 @@ export function readyText(n: number): string {
   return countText(n, "table.flash_ready", "table.flash_ready_one");
 }
 
-function readyCount(table: TableState): number {
-  if (table.readyToServe > 0) return table.readyToServe;
-  return table.signals
-    .flatMap((signal) => (signal.kind === "ready" ? signal.byStation : []))
-    .reduce((sum, { count }) => sum + count, 0);
+export function readyCount(table: TableState): number {
+  const signal = table.signals.find((signal) => signal.kind === "ready");
+  return signal === undefined
+    ? table.readyToServe
+    : signal.byStation.reduce((sum, { count }) => sum + count, 0);
 }
 
-// Joined tables carry the same party's ready quantity; adding their counts would repeat its dishes.
+// Joined tables carry the same party's ready count; adding their counts would repeat its dishes.
 const largestReady = (members: readonly TableState[]): number =>
   Math.max(0, ...members.map(readyCount));
 

@@ -64,6 +64,60 @@ const slices = (rows: ReturnType<typeof sentPanel>["served"]) =>
   rows.map(({ row, kind, quantity, amount }) => ({ id: row.lineId, kind, quantity, amount }));
 
 describe("Sent panel (A773)", () => {
+  it.each([
+    { quantity: "3", unitPrecision: 0, firing: "3" },
+    { quantity: "3", unitPrecision: 3, firing: "1" },
+  ])(
+    "uses precision when classification is absent ($unitPrecision)",
+    ({ quantity, unitPrecision, firing }) => {
+      const panel = sentPanel(
+        current([], [row("missing-flag", { quantity, unitPrecision })]),
+        "bill-1",
+        now,
+      );
+      expect(panel.counts.firing).toBe(firing);
+    },
+  );
+
+  it("counts a fully cancelled fractional dish once from its original quantity", () => {
+    const panel = sentPanel(
+      current(
+        [],
+        [
+          row("fraction", {
+            quantity: "2.5",
+            cancelledQuantity: "2.5",
+            countsWholePortions: true,
+          }),
+        ],
+      ),
+      "bill-1",
+      now,
+    );
+    expect(panel.counts).toEqual({ ready: "0", firing: "0", held: "0", served: "1" });
+    expect(panel.served[0]!.quantity).toBe("2.5");
+  });
+
+  it("uses the served stamp when counting the remaining portions of a cancelled dish", () => {
+    const panel = sentPanel(
+      current(
+        [],
+        [
+          row("stamped", {
+            quantity: "3",
+            cancelledQuantity: "2",
+            servedQuantity: "0",
+            servedAt: at(1),
+          }),
+        ],
+      ),
+      "bill-1",
+      now,
+    );
+    expect(panel.counts.served).toBe("3");
+    expect(panel.served[0]!.kind).toBe("cancelled_charged");
+  });
+
   it("separates actual serving, charged cancellation and active food without losing a rounding cent", () => {
     const dish = row("dish", {
       quantity: "3.000",
@@ -167,7 +221,7 @@ describe("Sent panel (A773)", () => {
     expect(panel.subtotals).toEqual({ served: "4.00", fired: "0.00", held: "8.00" });
   });
 
-  it("keeps exact fractional counts and large money values, clamps serving to the uncancelled food", () => {
+  it("counts measured food once per state while keeping exact portions and large money values", () => {
     const data = current(
       [],
       [
@@ -196,12 +250,51 @@ describe("Sent panel (A773)", () => {
       { id: "clamped", kind: "cancelled_charged", quantity: "1", amount: "0.01" },
       { id: "clamped", kind: "served", quantity: "1", amount: "0.00" },
     ]);
-    expect(panel.counts).toEqual({ ready: "0", firing: "0.125", held: "0", served: "2.25" });
+    expect(panel.counts).toEqual({ ready: "0", firing: "1", held: "0", served: "3" });
     expect(panel.subtotals).toEqual({
       served: "666666666666.65",
       fired: "333333333333.33",
       held: "0.00",
     });
+  });
+
+  it.each(["150", "330"])(
+    "counts a zero-precision measure of %s once using its classification",
+    (quantity) => {
+      const panel = sentPanel(
+        current([], [row("measure", { quantity, countsWholePortions: false })]),
+        "bill-1",
+        now,
+      );
+      expect(panel.counts).toEqual({ ready: "0", firing: "1", held: "0", served: "0" });
+      expect(panel.fired[0]!.quantity).toBe(quantity);
+      expect(panel.subtotals.fired).toBe("3.00");
+    },
+  );
+
+  it("rounds whole portions left up and assigns the rest of the count to Served", () => {
+    const panel = sentPanel(
+      current([], [row("portions", { quantity: "3", servedQuantity: "1.5", netAmount: "9.00" })]),
+      "bill-1",
+      now,
+    );
+    expect(panel.counts).toEqual({ ready: "0", firing: "2", held: "0", served: "1" });
+    expect(slices(panel.fired)).toEqual([
+      { id: "portions", kind: "fired", quantity: "1.5", amount: "4.50" },
+    ]);
+    expect(slices(panel.served)).toEqual([
+      { id: "portions", kind: "served", quantity: "1.5", amount: "4.50" },
+    ]);
+  });
+
+  it("counts a fractional active quantity once even for a whole-portion unit", () => {
+    const panel = sentPanel(
+      current([], [row("fraction", { quantity: "1.5", countsWholePortions: true })]),
+      "bill-1",
+      now,
+    );
+    expect(panel.counts.firing).toBe("1");
+    expect(panel.fired[0]!.quantity).toBe("1.5");
   });
 
   it("retains the party-wide reminder for a group shared with another bill without redating it", () => {

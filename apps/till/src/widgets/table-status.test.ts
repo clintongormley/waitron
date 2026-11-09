@@ -260,6 +260,35 @@ describe("till-table-status", () => {
     expect(pin(el)!.textContent!.trim()).toBe("2 listos");
   });
 
+  it("uses ready station counts in both its pin and its first flash", async () => {
+    const p = party();
+    const { el } = await mount({
+      party: p,
+      tables: [
+        row(p, {
+          readyToServe: 150,
+          signals: [
+            {
+              kind: "ready",
+              byStation: [
+                {
+                  stationId: "k",
+                  stationName: "Kitchen",
+                  count: 1,
+                  oldestReadyAt: null,
+                  readyWarningAfterMinutes: 3,
+                },
+              ],
+            },
+          ],
+        }),
+      ],
+    });
+    await settled(el);
+    expect(toast(el)!.message).toBe("1 ready");
+    expect(pin(el)!.textContent!.trim()).toBe("1 ready");
+  });
+
   it("says one ready dish in Spanish", async () => {
     setLocale("es-ES");
     const p = party();

@@ -1150,18 +1150,6 @@ owner's floor: its Terrace zone, eight tables in one row, draws them at 28.7–3
 they show names but no cue. Once the owner's real floor is drawn, measure each zone's tables at 390
 and 360 px in the till page and bring any zone under either limit back to the owner.
 
-## A995. The floor's ready and held chips count a gram or millilitre dish by its quantity
-
-**A995 (left open by A757 slice 6).** As read on 2026-10-21: the floor's ready chip counts a dish as
-one only when its frozen `unit_precision` is above 0 (`apps/server/src/table-signals.ts:96-103`),
-and the held chip the same (`readHeldCounts`, `apps/server/src/order-groups.ts:1567`), and new
-venues get `g`, `mg` and `ml` at 0 places (`packages/catalogue/src/provisioning.ts:27-51`), so
-150 g of a dish reads as 150 there while slice 6's rows read 1 item. The till's own draft count
-decides "whole units" with `soldByTheUnit`, which does not read `measure`
-(`apps/till/src/screens/till-table-order-screen.ts:214-215`,
-`apps/till/src/widgets/product-name.ts:85-88`), so it adds 330 for a 330 ml dish. Fix: the
-`takesExtras` rule (`apps/server/src/working-order.ts:486-488`) in all three.
-
 ## A859. Floor plans and the till's layout banner: looks left to the owner
 
 **A859 (2026-10-18).** A504's LOOK passes kept these as built, as judgement calls: the solid
@@ -1286,6 +1274,10 @@ before `assignProductUnit` moved its product to a whole-portion unit and `ordere
 plan's owner point 15 names this default. The fix freezes that choice on the line, which takes a
 migration.
 
+
+The affected readers are `readOrderStateCounts`, the floor’s ready and held counts, the
+Current orders classification sent to Sent, and Find a bill’s saved item count. Find a bill
+excludes open drafts; Parked orders can include them.
 
 ## A900. A757 slice 7's open questions, built with defaults (left open by slice 7, 2026-10-19).
 
@@ -2386,19 +2378,8 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: One count of items everywhere
 
-4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size M.
 
-- **A1293. The Sent summary counts weighed quantities as dishes (seen in A803 slice 4a's LOOK).** It
-  read "0 ready · 6.64 firing" for 3 beers, 2 calamari, a paella and 0.64 kg of ham. I believe this
-  predates slice 4a; not checked. Picture `s3-refusal-3s3` (`~/waitron-campaign-c/a803-4-shots/`, not in the repository).
-- **A995. The floor's ready and held chips count a gram or millilitre dish by its quantity (left
-  open by A757 slice 6).** 150 g of a dish reads 150 on the floor's chips and 1 item on the order
-  lists, and the order screen's draft count adds 330 for a 330 ml dish; the fix is to use the
-  server's whole-portion rule in all three.
-  [Detail](till.md#a995-the-floors-ready-and-held-chips-count-a-gram-or-millilitre-dish-by-its-quantity)
-- **A996. Find a bill still counts lines (left open by A757 slice 6).** Its Items column counts a
-  bill's lines (`apps/server/src/find-bill-bills.ts:44`), so for one bill it can disagree with the
-  Parked orders row, which counts items.
 - **A997. An open order's item counts change when its dish's unit is changed (left open by A757
   slice 6).** The fix freezes that choice on the line, which takes a migration.
   [Detail](till.md#a997-an-open-orders-item-counts-change-when-its-dishs-unit-is-changed-left-open-by-a757-slice-6)

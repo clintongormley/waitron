@@ -613,8 +613,9 @@ export interface CurrentOrderRow {
   quantity: string;
   /** Part of the billed quantity cancelled without removing its charge. */
   cancelledQuantity?: string;
-  /** Decimal places the line's unit takes (0 = sold by the unit). */
+  /** Decimal places the line's unit takes. */
   unitPrecision: number | null;
+  countsWholePortions?: boolean;
   servedQuantity: string;
   servedAt: string | null;
   released: boolean;

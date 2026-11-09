@@ -7,6 +7,7 @@ import {
   multiplyDecimal,
   subtractDecimal,
   sumDecimals,
+  stringToThousandths,
   toScale,
 } from "@waitron/shared";
 import { reminderDueAt } from "./release-reminder.js";
@@ -68,6 +69,33 @@ function splitRow(row: CurrentOrderRow, held: boolean): SentSlice[] {
   });
 }
 
+export function sentItemCount(slices: readonly SentSlice[]): string {
+  const dishes = new Map<string, SentSlice[]>();
+  for (const slice of slices)
+    dishes.set(slice.row.lineId, [...(dishes.get(slice.row.lineId) ?? []), slice]);
+  let count = 0;
+  for (const parts of dishes.values()) {
+    const { row, kind } = parts[0]!;
+    const quantity = stringToThousandths(row.quantity);
+    const active = Math.max(0, quantity - stringToThousandths(row.cancelledQuantity ?? "0"));
+    const byTheUnit = row.countsWholePortions ?? (row.unitPrecision ?? 0) === 0;
+    if (!byTheUnit || (active || quantity) % 1000 !== 0) {
+      count++;
+    } else if (kind === "served" || kind === "cancelled_charged") {
+      const left =
+        row.servedAt === null
+          ? Math.max(0, active - Math.max(0, stringToThousandths(row.servedQuantity)))
+          : 0;
+      count += Math.ceil(quantity / 1000) - Math.ceil(left / 1000);
+    } else {
+      count += Math.ceil(
+        parts.reduce((sum, part) => sum + stringToThousandths(part.quantity), 0) / 1000,
+      );
+    }
+  }
+  return String(count);
+}
+
 export function sentPanel(current: CurrentOrders, billId: string, now: number): SentPanel {
   const served: SentSlice[] = [];
   const fired: SentSlice[] = [];
@@ -108,8 +136,7 @@ export function sentPanel(current: CurrentOrders, billId: string, now: number): 
     return order || a.row.lineId.localeCompare(b.row.lineId);
   });
   const heldRows = held.flatMap((group) => group.rows);
-  const count = (rows: SentSlice[]) =>
-    trimQuantity(sumDecimals(rows.map((slice) => decimal(slice.quantity))));
+  const count = sentItemCount;
   const amount = (rows: SentSlice[]) =>
     toScale(sumDecimals(rows.map((slice) => decimal(slice.amount))), MONEY_SCALE);
   const ready = fired.filter((slice) => slice.row.readyAt !== null);

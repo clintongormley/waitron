@@ -9,7 +9,7 @@ export type TableSignal =
   | { kind: "service_step"; steps: ServiceStepDue[] }
   /** The owners of the party's open drafts holding a line, oldest first; "" for one no longer known. */
   | { kind: "unsent_draft"; ownerNames: string[] }
-  /** Dishes the kitchen has made ready and nobody has served yet, counted in units per station. */
+  /** Ready food left to serve, counted as items at each station. */
   | { kind: "ready"; byStation: ReadyAtStation[] }
   /**
    * The worst waiting band over dishes still to serve that were fired or are waiting for the pass,

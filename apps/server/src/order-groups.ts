@@ -22,7 +22,8 @@ import {
   sql,
 } from "drizzle-orm";
 import type { Column, SQL } from "drizzle-orm";
-import { staffPresentationName } from "@waitron/catalogue";
+import { productUnits, staffPresentationName, unitOwnerJoin, units } from "@waitron/catalogue";
+import { countsWholePortions } from "./order-state-counts.js";
 import {
   devices,
   kitchenCourses,
@@ -37,6 +38,7 @@ import {
   orderDrafts,
   ticketItems,
   parties,
+  products,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -1988,12 +1990,21 @@ export async function readHeldCounts(
       partyId: orderGroups.partyId,
       quantity: workingOrderLines.quantity,
       unitPrecision: workingOrderLines.unitPrecision,
+      unit: {
+        id: units.id,
+        hardwareUnit: units.hardwareUnit,
+        precision: units.precision,
+        measure: units.measure,
+      },
       cancelledQuantity: sql<number>`coalesce(${lineServiceCancellations.quantity}, 0)`,
     })
     .from(workingOrderLines)
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .innerJoin(parties, eq(parties.id, orderGroups.partyId))
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .leftJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(productUnits, unitOwnerJoin)
+    .leftJoin(units, eq(units.id, productUnits.unitId))
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .where(
       and(
@@ -2009,7 +2020,7 @@ export async function readHeldCounts(
   for (const line of lines) {
     const { active } = serviceQuantities(line.quantity, 0, line.cancelledQuantity);
     if (active <= 0) continue;
-    const items = line.unitPrecision ? 1 : active / 1000;
+    const items = !countsWholePortions(line) || active % 1000 !== 0 ? 1 : active / 1000;
     counts.set(line.partyId, (counts.get(line.partyId) ?? 0) + items);
   }
   return counts;
@@ -2062,8 +2073,9 @@ export interface CurrentOrderRow {
   quantity: string;
   /** Part of the billed quantity cancelled without removing its charge. */
   cancelledQuantity?: string;
-  /** Decimal places the line's unit takes, so a part can be served (0 = sold by the unit). */
+  /** Decimal places the line's unit takes, so a part can be served. */
   unitPrecision: number | null;
+  countsWholePortions?: boolean;
   servedQuantity: string;
   servedAt: string | null;
   /** Whether Serve is offered: the waiter has asked for the dish ({@link serviceRequested}) and
@@ -2176,6 +2188,12 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       quantity: workingOrderLines.quantity,
       unitPrecision: workingOrderLines.unitPrecision,
       servedQuantity: workingOrderLines.servedQuantity,
+      unit: {
+        id: units.id,
+        hardwareUnit: units.hardwareUnit,
+        precision: units.precision,
+        measure: units.measure,
+      },
       servedAt: workingOrderLines.servedAt,
       cancelledQuantity: sql<number>`coalesce(${lineServiceCancellations.quantity}, 0)`,
       cancelledAt: lineServiceCancellations.cancelledAt,
@@ -2195,6 +2213,9 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
+    .leftJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(productUnits, unitOwnerJoin)
+    .leftJoin(units, eq(units.id, productUnits.unitId))
     .leftJoin(lineServiceCancellations, eq(lineServiceCancellations.lineId, workingOrderLines.id))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(and(inArray(workingOrders.partyId, family), onShownBill()))
@@ -2308,6 +2329,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
         ? { cancelledQuantity: thousandthsToDecimal(line.cancelledQuantity) }
         : {}),
       unitPrecision: line.unitPrecision,
+      countsWholePortions: countsWholePortions(line),
       servedQuantity: thousandthsToDecimal(line.servedQuantity),
       servedAt: line.servedAt,
       released: dishReleased(line, heldExtras.has(line.id)),

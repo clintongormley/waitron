@@ -103,10 +103,10 @@ party, their paid bills' food stays on the pass until the surviving party finish
 On the table, a ready dish stays **Ready** in its detail window until you mark it served.
 The Sent list keeps showing how long it has been ready so you can see what still needs serving.
 
-In a table's details on the floor, every unserved ready dish counts as ready. When the station
-chips show those counts, the progress line leaves them out so you see each dish counted once.
-The floor's table card also keeps every unserved ready dish in its ready count. A station's ready
-chip replaces that count on the card, so you see it once while deciding what to serve.
+Use each station’s ready chip on the floor to choose what to collect there. A weighed serving
+counts as one dish: 150 g or 0.64 kg shows **1**, and three whole portions show **3**.
+If a dish has parts at two stations, collect them from both; each station counts it once.
+In **Sent**, wait for **Ready** to see when all its parts are ready.
 
 When you serve one of two dishes on a line, the pass shows the one still to serve. Undo restores
 the served quantity without restarting the kitchen's preparation or ready time. A cancelled
