@@ -174,7 +174,7 @@ describe("GitHub-first routing", () => {
     ],
   ])("counts a setup job using a %s", (_, before, after) => {
     const changed = workflow.replace(
-      /(  test-setup:\n)([\s\S]*?)(?=^ {2}[\w-]+:)/m,
+      /( {2}test-setup:\n)([\s\S]*?)(?=^ {2}[\w-]+:)/m,
       (_, start, body) => start + body.replace(before, after),
     );
     expect(initialJobs({ code: "true", setup: "true" }, changed)).toBe(5);
@@ -182,7 +182,7 @@ describe("GitHub-first routing", () => {
 
   it("refuses an unsupported additional matrix dimension", () => {
     const changed = workflow.replace(
-      /(  test-till:\n[\s\S]*?      matrix:\n)/m,
+      /( {2}test-till:\n[\s\S]*? {6}matrix:\n)/m,
       "$1        flavour: [a, b]\n",
     );
     expect(initialJobs({ code: "true", till: "true" })).toBe(11);
