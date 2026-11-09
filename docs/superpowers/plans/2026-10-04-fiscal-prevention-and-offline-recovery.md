@@ -596,6 +596,10 @@ rename the original sale or replace its stored payload.
 
 ## Task 9: fiscal filing screen and missing-history investigation
 
+**2026-11-09 execution remap:** follow the [W41s-9 plan](2026-11-09-w41s-9-fiscal-filing-screen.md)
+for this task's current files, scope and gates. The original task below remains the acceptance
+outline; this pointer claims no implementation.
+
 **Create:** `apps/server/src/fiscal-filing-api.ts` and route tests;
 `apps/dashboard/src/screens/fiscal-filing-screen.ts` and browser/accessibility tests.
 **Modify:** `boot.ts`, dashboard navigation/API/i18n, module query/action seats and case projections.
