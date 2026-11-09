@@ -8,7 +8,8 @@
 and its current version) folds into `ticket_items`; `kitchen_notices` gains an index on its bill
 (A1351) and the ticket item a MOVED notice was written for (A1366), so two alike dishes on one bill
 stop sharing one MOVED notice; `routing_cell_periods` drops its copy of the period's department;
-and appendix §8 item 8 decides whether `ticket_items.node_id` stays.
+and `ticket_items.node_id` goes, since appendix §8 item 8's question was settled on `main` by #2570
+(the overdue report no longer filters by box).
 
 **Architecture:** `ticket_item_allergies` is keyed by the ticket item, and "a row exists" meant
 "this ticket's allergy block is frozen", which becomes the flag `allergy_frozen` (appendix §1.17).
@@ -46,8 +47,13 @@ this cannot be restored or imported."
   rerouted dish would count paper printed at its new station).
 - `routing_cell_periods.department_id` is dropped; its composite key becomes `period_id` →
   `menu_periods(id)` `ON DELETE CASCADE`.
-- Appendix §8 item 8, measured; if its failing result shows (Task 4), the overdue report's node
-  filter and `ticket_items.node_id` (with its key to `nodes`) are removed.
+- `ticket_items.node_id` (with its key to `nodes`) is removed (Task 4). Appendix §8 item 8 needs no
+  measurement any more: #2570 (A1425 part 1, `df7fc95182`) deleted the overdue report's node filter
+  (`computeOverdueOrders(tx)` at `packages/reporting/src/overdue-orders.ts:34` takes no box), so a
+  ticket written before a takeover is already listed (`packages/reporting/src/overdue-orders.test.ts:448`,
+  "another box's overdue order is listed"), and the column has no product reader left
+  (`git grep -n "ticketItems\.nodeId" origin/main -- apps packages ':!*.test.ts'` prints nothing).
+  The design's answer for that case is "the filter and `ticket_items.node_id` then go" (§8.8).
 - Deletes the backlog entries A1351 and A1366 from `docs/backlog/architecture.md`'s bundle, takes
   their ids out of the bundle line in `docs/backlog.md:2300` ("Holds A1368, A1351, A1366"), and
   lowers the bundle's entry count by two from `main`'s value in both places (`docs/backlog.md:2300`
@@ -82,13 +88,12 @@ this cannot be restored or imported."
   `packages/venue-service/src/operations.ts:405-420` (`configureZone`'s clean-up),
   `packages/venue-service/src/service-delete-settings.ts:50-62`,
   `packages/venue-service/src/configuration-transfer.ts:535-552`.
-- Modify (only if Task 4 removes `node_id`): `packages/reporting/src/overdue-orders.ts:20-70`,
-  `apps/server/src/report-api.ts:415`, `apps/server/src/working-order.ts:2041, 2335` (the two ticket
-  inserts that name `nodeId`; the copy at :5205 spreads the old row, `...ticket`, and names no
-  `nodeId`, so dropping the column drops it there too).
+- Modify (`node_id`, Task 4): `apps/server/src/working-order.ts:2041, 2335` (the two ticket
+  inserts that name `nodeId`; the copy at :5203 spreads the old row, `...ticket`, and names no
+  `nodeId`, so dropping the column drops it there too). The overdue report and `report-api.ts` need
+  nothing: #2570 already removed the filter and the input.
 - Create: `scripts/a1308/fk8-kitchen-fixtures.mjs` and `.test.mjs`,
-  `apps/server/src/kitchen-print.moved-notice-ticket.test.ts`,
-  `packages/reporting/src/overdue-orders.takeover.test.ts`.
+  `apps/server/src/kitchen-print.moved-notice-ticket.test.ts`.
 - Generated (uncounted): core's starting migration and the epoch file.
 - Docs: `docs/developers/conventions-data.md` (no section names these tables by fold today; add one
   sentence to "Latest station move follows insertion order" only if Task 3 changes split behaviour,
@@ -102,17 +107,17 @@ this cannot be restored or imported."
 | Allergy snapshot store (four functions) | 50 |
 | MOVED notice ticket: writer and `readNamesOnPaper` | 40 |
 | Routing periods | 30 |
-| Node filter removal (only if Task 4 says so) | 40 |
+| `ticket_items.node_id` removal (the filter is already gone, #2570) | 15 |
 | Fixture script config and test | 60 |
-| New tests (schema, snapshot, A1366's two dishes, routing clean-up, §8.8) | 230 |
+| New tests (schema, snapshot, A1366's two dishes, routing clean-up) | 200 |
 | Hand edits to tests the script reports | 90 |
 | Docs and backlog | 15 |
 | Format version, the D6 and reroute cases, the assertions above | 60 |
-| **Total** | **≈ 685** |
+| **Total** | **≈ 630** |
 
 Uncounted: the script's output (`ticket_item_allergies` inserts, `departmentId` in routing-period
-inserts in 7 test files, and, if Task 4 removes it, `nodeId` in `ticket_items` inserts in
-about 16 test files), deletions, generated files.
+inserts in 7 test files, and `nodeId` in `ticket_items` inserts in about 16 test files), deletions,
+generated files.
 
 ## Finish line
 
@@ -122,8 +127,7 @@ pnpm --filter @waitron/venue-service exec vitest run src/kitchen-allergy.test.ts
   src/operations.test.ts src/service-delete-settings.test.ts src/configuration-transfer.test.ts \
   src/classification.test.ts src/schema
 pnpm --filter @waitron/db exec vitest run src/schema
-pnpm --filter @waitron/reporting exec vitest run src/overdue-orders.test.ts \
-  src/overdue-orders.takeover.test.ts
+pnpm --filter @waitron/reporting exec vitest run src/overdue-orders.test.ts
 pnpm --filter @waitron/server exec vitest run src/kitchen-allergy*.test.ts \
   src/kitchen-request.release.test.ts src/kitchen-request.tab-send.test.ts \
   src/line-cancel-context.test.ts src/working-order.many-tickets.test.ts src/kitchen-print*.test.ts \
@@ -140,8 +144,8 @@ moved slip" -- 'apps/server/src/*.test.ts'`) pass with assertions unchanged.
 
 ## Expected protection-list difference
 
-Under all six venue headers unless "change-feed only". Lines marked † appear only if Task 4 removes
-`node_id`.
+Under all six venue headers unless "change-feed only". Lines marked † come from Task 4's removal
+of `node_id`.
 
 | Table | Lines |
 | --- | --- |
@@ -159,7 +163,8 @@ pull request.
 1. Task 3: an existing Split-a-table suite changes its slips (prints one it did not, or misses one)
    with the ticket-keyed lookup, including the case of a dish whose line was split after its MOVED
    notice: stop; describe the case for the watcher.
-2. Task 4 gives its failing result (below): the watcher confirms before the filter and column go.
+2. Task 4 Step 1 finds a product reader of `ticket_items.node_id`, or the overdue report filtering
+   by box again: the column stays until the watcher decides.
 3. `menu_periods`' unique index on `(id, department_id)` is used only by the composite key this
    removes: leave it; the menu area decides (it owns `menu_periods`).
 
@@ -169,7 +174,7 @@ pull request.
   fk1–fk7 (lane order).
 - Batch 1: 1a, 5.
 - Outside: A1403 (unpaid kitchen stop, lane H) edits the overdue report's reads with no table
-  change; whichever of it and Task 4 lands second rebases (rules §8).
+  change; Task 4 no longer edits that report, so only a fixture overlap can need a rebase (rules §8).
 
 ## Assumptions about batch 1
 
@@ -307,29 +312,21 @@ signature; for `kind === "moved"` it reads `ticket_items.id` for the items' line
 - [ ] **Step 4: Run** the Finish-line server command, including the Split-a-table suites; expect pass
   with assertions unchanged. **Commit.**
 
-## Task 4: The overdue report after a takeover (§8 item 8)
+## Task 4: `ticket_items.node_id` goes (§8 item 8, settled by #2570)
 
-**Run Steps 1-2 first, straight after Task 0:** they read today's schema, so the answer (and the
-watcher's confirmation, if it fails) is known before Task 1 writes the schema; Step 3, if taken, is
-then built after Task 1 with its own rebuild.
+The measurement this task used to run is answered on `main`: #2570 removed the overdue report's
+`eq(ticketItems.nodeId, input.nodeId)` filter and its `OverdueOrdersInput`, and replaced the case
+"scopes to nodeId: another node's overdue order in the same tenant is excluded" with "another box's
+overdue order is listed" (`packages/reporting/src/overdue-orders.test.ts:448`), which is §8.8's
+case: a ticket under another box's `node_id`, still waiting, is shown.
 
-- [ ] **Step 1: Write the test** `packages/reporting/src/overdue-orders.takeover.test.ts`: seed node
-  N1 (this box) and N2 (the box before a takeover) in one venue database; a bill with a ticket item
-  written under `node_id = N2`, fired 40 minutes ago, not served, at a station whose overdue limit is
-  10 minutes. Call `computeOverdueOrders(tx, { nodeId: N1 })` (what `report-api.ts:415` passes on this
-  box) and assert the bill **is** in the report. **Failing result named in advance (expected by
-  reading `overdue-orders.ts:61`):** the bill is missing — the filter hides a late dish after a
-  takeover. The design's answer: "the filter and `ticket_items.node_id` then go, with its key to
-  `nodes`" (appendix §8.8).
-- [ ] **Step 2: Run it.** If it passes (the bill is shown), the column stays: delete nothing, keep the
-  test, and record the result. If it fails, record the output, stop for the watcher (stop point 2),
-  and on confirmation:
-- [ ] **Step 3 (on confirmation):** remove `eq(ticketItems.nodeId, input.nodeId)` and the
-  `nodeId` field of `OverdueOrdersInput`; `report-api.ts:415` stops passing it; remove `nodeId`
-  from `ticketItems` and the two ticket inserts that name it (`working-order.ts:2041, 2335`; the
-  copy at :5205 spreads the old row and follows); extend the fixture script
-  with a rule dropping `nodeId` from `insert(ticketItems).values({…})` objects; rebuild core; run
-  Step 1 (passes) and the reporting and server Finish-line commands. **Commit.**
+- [ ] **Step 1: Check the column has no reader.** `git grep -n "ticketItems\.nodeId\|ticket_items\.node_id" -- apps packages ':!*.test.ts' ':!*.json' ':!*.sql'`
+  prints nothing (at `48d527dbc8` it prints nothing). A hit is stop point 2.
+- [ ] **Step 2: Remove it.** Remove `nodeId` from `ticketItems` (with its key to `nodes`) and from
+  the two ticket inserts that name it (`working-order.ts:2041, 2335`; the copy at :5203 spreads the
+  old row and follows); extend the fixture script with a rule dropping `nodeId` from
+  `insert(ticketItems).values({…})` objects; rebuild core; run the reporting and server
+  Finish-line commands, with `overdue-orders.test.ts` passing unchanged. **Commit.**
 
 ## Task 5: Routing periods reach their department through the menu period
 
@@ -353,7 +350,7 @@ then built after Task 1 with its own rebuild.
 - [ ] Drop `ticket_item_allergies` from live-query lists (keep `ticket_items`); Madrid baseline: fold
   `ticket_item_allergies` into `ticket_items` (match `ticket_item_id` → `id`; `allergy_frozen` 1 for
   matched rows), drop `department_id` from `routing_cell_periods`, add `ticket_item_id` (null) to
-  `kitchen_notices`, and, if Task 4 removed it, drop `node_id` from `ticket_items`.
+  `kitchen_notices`, and drop `node_id` from `ticket_items` (Task 4).
 - [ ] Delete A1351 and A1366 from the bundle and from `docs/backlog.md:2300`'s "Holds" list.
 - [ ] Re-run `scripts/floor-kitchen-triggers.test.ts` (fk6); expect pass unchanged.
 - [ ] Protection list compare; paste and mark (with or without the † lines). Finish line;

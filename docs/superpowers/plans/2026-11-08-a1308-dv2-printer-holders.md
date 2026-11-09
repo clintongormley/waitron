@@ -193,7 +193,7 @@ dv1 (it regenerated core's starting migration last; nothing else).
 - **A405 PRs 3–4** (lane B, schema-free, `docs/superpowers/plans/2026-11-05-a405-printer-details.md:313-344`):
   they change `printers-screen.ts` and the resend route, not these columns. If either is open when
   this starts, it rebases after; nothing to fold.
-- **D1, PR #2594** (open): adds `print_jobs_printer_kind_idx`; not this table.
+- **D1, PR #2594** (landed 2026-11-08, `5f11ab6405`): added `print_jobs_printer_kind_idx`; not this table.
 
 ---
 

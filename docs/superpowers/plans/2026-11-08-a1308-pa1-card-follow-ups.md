@@ -55,7 +55,7 @@ not depend on pa1–pa4 (a different migration set) and may be built in any gap.
 
 ## Area files for the package move
 
-The CI package move (agreed 2026-11-08, design not written; order from A1453) takes each area's
+The CI package move (agreed 2026-11-08, design not written; order from the build order's "Order of areas", proposed, the owner decides) takes each area's
 `apps/server/src` files into a package of its own. Not planned here. The files that belong to this
 area, read at `a086eedfb7`:
 
@@ -82,7 +82,7 @@ area, read at `a086eedfb7`:
 
 **Where the move sits:** after pa4 for the payments files (pa4 is the last pull request that
 changes them; pa2 touches only `packages/payments` and root guards) and after pa5 for the
-adjustments files. If A1453 orders this area first, the move goes after pa5 as one pull request.
+adjustments files. If the build order puts this area's move first, the move goes after pa5 as one pull request.
 
 ---
 

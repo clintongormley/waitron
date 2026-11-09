@@ -348,7 +348,8 @@ Decisions for `grow-fiscal`:
     identity B (`activate`, as `allocation.test.ts` does), append: the record has `secuencia` 3,
     `primer_registro` 1 and null `anterior_*`; append again: `secuencia` 4 chained to 3.
   - "an append under a supplied identity chains to that identity's latest record": the four calls in
-    `backend.ts` pass `sif` (`:333`, `:469`, `:560`, `:688`); the head uses its id.
+    `backend.ts` pass `sif` inside `appendToChain`'s fourth argument, `reads: AppendReads`
+    (`{ sif, chart }` since #2570; `chain.ts:145-149`); the head uses its id.
 - [ ] **Step 2:** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/chain.test.ts`. FAIL.
 - [ ] **Step 3: Implement.** `selectHead` becomes the one query of Task 1 Step 5; `readChainHead`
   returns `{ secuencia: row?.secuencia ?? 0, ultimoRegistroId: row && row.sif_id === sifId ? row.id : null, ultimaHuella: … }`,

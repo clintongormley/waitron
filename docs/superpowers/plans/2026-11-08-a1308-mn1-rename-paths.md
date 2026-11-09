@@ -102,7 +102,7 @@ pages, not the menu (tables-menu.md §1, "Two uses of the word mean something el
 ## Area files for the package move
 
 Agreed 2026-11-08 and not designed yet: `apps/server`'s domain areas move into packages of their
-own, each move paired with its A1308 area so code moves once; A1453 sets the order of areas. This
+own, each move paired with its A1308 area so code moves once; the build order's "Order of areas" sets the order (proposed; the owner decides), since A1453's measurement was dropped (`docs/backlog/ci.md`, 8c4166f9ac). This
 area's files in `apps/server/src` (paths after this PR; every `*.test.ts` beside each belongs with it):
 
 - `menu-api.ts` and `menu-api.*.test.ts`, `menu-allergen-workflow.test.ts`,
@@ -122,7 +122,7 @@ Boundary files that read menu tables but belong to another area, and so stay out
 seed under `apps/server/scripts/demo-seed/` (not `src`).
 
 **Where the move sits in this area's sequence:** after mn3, before mn4. Then every later menu PR
-edits the moved files with final names, and the move itself carries no rename. If A1453 puts this
+edits the moved files with final names, and the move itself carries no rename. If the build order puts this
 area's move later, it goes after mn13; plans mn4–mn13 cite `apps/server/src` paths, and a file found
 under its new package by the same name and identifier is not a stop.
 

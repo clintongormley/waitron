@@ -96,10 +96,11 @@ the new names.
   `packages/identity/src/person-constraints.db.test.ts`, `packages/db/src/schema/identity/persons.test.ts`.
 - Changed by the script (uncounted): every direct `insert(persons).values(` (453 calls in 330 files
   at `a086eedfb7`) and every `update(persons).set(` (240 lines with `update(persons)`) in
-  `apps`, `packages`, `scripts`. That includes four product writers, which already fold and whose
+  `apps`, `packages`, `scripts`. That includes three product writers, which already fold and whose
   behaviour the wrap does not change: `packages/identity/src/staff.ts`,
-  `apps/server/src/mirror-session.ts`, `packages/provisioning/src/venue-apply.ts`,
-  `apps/server/scripts/demo-seed/seed-staff.ts`.
+  `packages/provisioning/src/venue-apply.ts`, `apps/server/scripts/demo-seed/seed-staff.ts`
+  (`apps/server/src/mirror-session.ts` wrote the mirror viewer's person until #2592, A1113; it now
+  writes no `persons` row).
 - Hand edits (counted): raw-SQL `update persons set email…/pending_email…/display_name…` in tests
   (at `a086eedfb7` among them `apps/server/src/me-api.test.ts:437`,
   `packages/identity/src/account-action.test.ts:89`, `:288`, `:1064`; `git grep -n "update persons set"`
@@ -138,15 +139,16 @@ pnpm --filter @waitron/identity exec vitest run src/person-constraints.db.test.t
   src/staff-lifecycle.test.ts src/staff-authority.test.ts src/account-action.test.ts src/profile.test.ts \
   src/google-oidc.test.ts src/backup-verification.test.ts src/index.test.ts
 pnpm --filter @waitron/server exec vitest run src/email-settings-api.test.ts src/attendance-email-worker.test.ts src/me-api.test.ts
-pnpm --filter @waitron/server exec vitest run src/mirror-session.test.ts src/management-api.test.ts src/till-api.test.ts
+pnpm --filter @waitron/server exec vitest run src/boot.mirror.test.ts src/management-api.test.ts src/till-api.test.ts
 pnpm --filter @waitron/provisioning exec vitest run src/venue-apply.test.ts src/configuration-transfer.security.test.ts
 pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts src/drain.test.ts
 pnpm exec vitest run scripts/schema-constraints.test.ts scripts/starting-migrations.test.ts scripts/migration-upgrade.test.ts
 node scripts/a1308/pp4-fold-person-inserts.mjs --write && git diff --exit-code
 ```
 
-CI runs every package suite (most packages' fixtures change); read its result on the current head
-(CLAUDE.md §2).
+A pull request's CI tests only the packages the script and the hand edits change (most of them), not
+unchanged dependents (#2619, A1461); run locally any package that writes `persons` but has no
+changed file (rules §4). Read CI's result on the current head (CLAUDE.md §2).
 
 ## Expected protection-list difference
 
@@ -162,9 +164,9 @@ Any other line is a stop.
 ## Stop points (beyond rules §5)
 
 1. A product path (not a test or seed) writes `persons` with a raw value and no folded value, found
-   when the CHECK refuses it in a suite. Every product writer is in `@waitron/identity`,
-   `packages/provisioning/src/venue-apply.ts` or `apps/server/src/mirror-session.ts` at
-   `a086eedfb7`, and all fold already (backlog entry above); a fourth is a stop.
+   when the CHECK refuses it in a suite. Every product writer is in `@waitron/identity` or
+   `packages/provisioning/src/venue-apply.ts` on `main` after #2592 (which removed
+   `mirror-session.ts`'s viewer insert), and all fold already (backlog entry above); a third is a stop.
 2. A uniqueness test changes its expected result (for example "José García" beside "JOSÉ GARCÍA"
    must still be refused, "Lopez" beside "López" still accepted).
 3. The script finds an `insert(persons).values(` whose argument it cannot wrap (a spread of a

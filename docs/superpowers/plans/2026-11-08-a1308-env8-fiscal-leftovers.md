@@ -57,13 +57,19 @@ live that box is re-set up (CLAUDE.md §3). The pull request's first line says s
 ## Review Focus
 
 1. After a restore or a promotion the box has a new node id; the install record is `local` and keyed
-   by node. If the latest install for the new node is missing, AEAT sending breaks where it works
-   today. Task 1 step 1 measures this before anything changes.
+   by node. Since #2570, `latestInstall` reads the installs of the box and of every box it took over
+   from (`certificate-record.ts:8-10`, through `readHistoryNodes`, which follows
+   `handover_activations`); the only writer of that table is the handover activation
+   (`apps/server/src/handover-activation.ts:117`). A box with no activation row (a restore, or a
+   promotion that writes none) still finds nothing for its new id. If the latest install for the new
+   node is missing, AEAT sending breaks where it works today. Task 1 step 1 measures this before
+   anything changes.
 2. A certificate sealed in setup whose file did not open gets no install record
    (`provisioning-secret.ts:89-91`). Today sending then fails on the file; after this it fails on the
    kind first. Both are `server.credential_unusable`; the field differs.
-3. Backup verification checks the archived certificate's kind (`backup-verification-secrets.ts:54-59`);
-   it must read the archived install record for the archive's source node.
+3. Backup verification checks the archived certificate's kind (`backup-verification-secrets.ts:70-77`);
+   it must read the archived install record for the archive's source node and the boxes it took over
+   from, as the file's own `historyNodes` (`:32-45`, added by #2570) already does.
 4. A staged restore record written by the web form carries the key in a staged file
    (`restore-request.ts:556-561`); removing the environment fallback must not touch that path.
 5. Waitron Cloud's authorised-archive fixture sets `WAITRON_NODE_RECOVERY_KEY` on the `restore`
@@ -120,9 +126,12 @@ export function readCertMaterial(db: Database, ring: KeyRing, nodeId: string): P
 ## Size
 
 Counted, hand-written: about 70 lines of code and about 150 lines of tests if both tasks are built.
-Task 1's measurement will probably give the failing result: `latestInstall` looks up by node id
-(`certificate-record.ts:8-13`), and no code was found that moves install rows to a restored or
-promoted box's new id (read, not run). Then Task 1 ends at step 1 with its fallback (`certKind` stays
+Task 1's measurement will probably give the failing result for a restore: `latestInstall` looks up
+the box's own node id and the boxes in its takeover history (`certificate-record.ts:8-10`, since
+#2570), a restore writes no `handover_activations` row (its one writer is
+`apps/server/src/handover-activation.ts:117`), and no code was found that moves install rows to a
+restored box's new id (read, not run). A box that took over through a handover finds the old box's
+install (`certificate-record.test.ts:238-292`, "latestInstall after a handover"). Then Task 1 ends at step 1 with its fallback (`certKind` stays
 sealed; the throwaway measurement is not committed, only the decision line in the pull request), and
 the pull request is Task 2 alone: about 20 lines of code and 30 of tests. About 2½ hours either way,
 because both measurements run the restore, promotion and hour-recovery suites.
@@ -169,13 +178,15 @@ EQUAL. Any line is a stop.
   - `certificate-install.test.ts` and `provisioning-secret.test.ts`: the sealed payload has exactly
     `pfxBase64` and `passphrase`; the install record's kind is what was chosen.
   - `backup-verification-secrets.test.ts`: an archive whose install record for its source node says
-    `representante` passes; one with no install record for that node is `"invalid"`.
+    `representante` passes; one with no install record for that node or any box it took over from
+    is `"invalid"`.
   - `purposes.test.ts`: `PURPOSES["fiscal.aeat"]` equals `["pfxBase64", "passphrase"]`.
 - [ ] **Step 3: Run; fail. Step 4: Implement** per **Interfaces**; each caller passes its own node
   id (the drain and the diagnosis already hold one: `certificate-diagnosis.ts:96` reads
-  `latestInstall(deps.db, deps.nodeId)`). Backup verification reads
-  `select kind from <install table> where node_id = ? order by installed_at desc limit 1` with the
-  archive's `context.source.nodeId` (the query style of `backup-verification-secrets.ts:70`).
+  `latestInstall(deps.db, deps.nodeId)`). Backup verification already reads the newest install row
+  across `historyNodes(query, context.source.nodeId)` (`backup-verification-secrets.ts:94-102`);
+  it takes the kind from that row (`latest.kind`) instead of comparing it with the sealed one
+  (`:105`).
 - [ ] **Step 5: Run** finish lines 1 and 3; pass. **Step 6: Commit:**
   `git commit -s -m "The AEAT certificate's kind is read from its install record (A1308 env8)"`
 

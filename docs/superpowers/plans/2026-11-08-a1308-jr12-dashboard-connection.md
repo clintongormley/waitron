@@ -45,7 +45,8 @@ tills"). Slice rules apply.
      `listUnits`, `listOptionLists`, `getOptionList`, `listExtraLists`, `getExtraList`, `listMadeAt`*.
    - Theme: `getVenueTheme`, `listThemes`.
    - Printing: `listPrinters`, `listPrinterProfiles`, `listPrinterStationNames`, `listPagePrinters`,
-     `listPrinterStations`, `listRecentJobs`, `getPrinterDeleteImpact`*.
+     `listPrinterStations`, `getPrinterDeleteImpact`*. (`listRecentJobs` is not here since #2594:
+     see item 4, memory.)
    - Payments: `listReaders`, `listReaderHolders`, `getProfileReaders`, `listHeldPayments`.
    - Reports with explicit days: `getDailyClose`, `getSalesPeriod`, `getCategorySales`,
      `getReportPrinters`, `getOrderPrinters`, `listOrderStaff`.
@@ -74,7 +75,12 @@ tills"). Slice rules apply.
      traced), the bookings screen's tables (`/management-api/tables` → `listTables(tx, new Date())`,
      `management-api.ts:1545`), the venue-service loader, routing and opening-hours watches, the
      adjustment report's "current" range;
-   - **memory:** `getDiskStop`, `joinRequests`, `listDiscoveredPrinters`, `listStuckPayments`,
+   - **memory:** `listRecentJobs` (since #2594, `5f11ab6405`, each USB or Bluetooth job still
+     waiting carries `waitReason: "printer.not_visible"` when no fresh agent report in the server's
+     in-memory discovered list names its printer, `apps/server/src/print-api.ts:1497-1526` on
+     `48d527dbc8`, and the dashboard re-reads it every 15 seconds for that,
+     `apps/dashboard/src/api/live-queries.ts:604`), `getDiskStop`, `joinRequests`,
+     `listDiscoveredPrinters`, `listStuckPayments`,
      `listStuckBillPayments`, `listStuckBillRefunds`, `listStuckTenderRefunds`, `getStreamSettings`,
      `getContentLanguageRules`;
    - **outside the database:** `listAgents` (the OS's addresses), `getContentSuggestions` and

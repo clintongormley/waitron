@@ -141,14 +141,12 @@ default-menu work below assumes both are gone).
 
 ## Work beside this slice (rules §8)
 
-- **#2594** (D1, drawer jobs) adds `print_jobs_printer_kind_idx` to `print_jobs` in
-  `packages/db/drizzle/0001_print_job_kind_index.sql` (`gh pr view 2594 --json files`, 2026-11-08).
-  What it must do: either land before 1a, and 1a's one-off rebuild folds core's `0001` into the
-  starting migration (as it does `workforce-es`' `0001`); or, after 1a, delete its `0001` SQL, snapshot
-  and journal entry, keep the index in `packages/db/src/schema/print-jobs.ts`, run
-  `pnpm --filter @waitron/server migration-baseline rebuild --set core`, and open with the
-  venue-reset line (rules §2). Never while this slice is in flight. If it is open when this slice
-  starts, stop and ask the watcher.
+- **#2594** (D1, drawer jobs) landed on `main` on 2026-11-08 (`5f11ab6405`), before 1a: it added
+  `print_jobs_printer_kind_idx` in `packages/db/drizzle/0001_print_job_kind_index.sql`, and 1a's
+  one-off rebuild folds that `0001` into core's starting migration (1a plan, item 6). On this
+  slice's base the index is in the starting migration and in the base protection list, so it prints
+  nothing here; the index is on `(printer_id, kind)` and does not name `location_id`
+  (`packages/db/src/schema/print-jobs.ts:79` on `48d527dbc8`).
 - **A790 Cut A (#2455)** adds six tables with foreign keys to `devices`, `page_printers`,
   `print_agents` and `sales` and no `location_id` (read at `f1f184de51`). The build order lands it
   before devices and printing; whether before or after this slice, the two share no column. If it
@@ -334,11 +332,11 @@ Reasons: A1301 design §4 for every `location_id` line; tables-venuebox §5 ("`l
 FK → catalogues" becomes `menus.is_default` with "one default") and tables-menu §1.1 for the
 `catalogues` and `catalogue_id` lines. The two `.body` lines differ from the old text only by the
 removed `location_id` comparisons (the simulation printed them; compare the `old:`/`new:` text in the
-report). If #2594 or A790 Cut A landed in between, they are in the base and print nothing.
+report). #2594's index and, if it landed in between, A790 Cut A are in the base and print nothing.
 
 ## Stop points (beyond rules §5)
 
-1. #2594 is open when the slice starts (above).
+1. (Retired 2026-11-09: #2594 landed before 1a, so it cannot be open when this slice starts.)
 2. A `.body` line for either trigger differs by anything but the removed comparisons.
 3. A transferred table still has a foreign key to `locations` when item 4's import rule goes
    (`pragma_foreign_key_list` over the transfer lists in a migrated database).

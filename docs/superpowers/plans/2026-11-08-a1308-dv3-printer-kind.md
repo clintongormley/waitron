@@ -74,6 +74,7 @@ condition. "Both in dv4" marks a read that dv4 turns into one query of both kind
 | --- | --- | --- |
 | `apps/server/src/alert-sources.ts:582` | untracked receipt originals | |
 | `apps/server/src/box-health.ts:298` | printers on the health page | A4 printers are not on it today |
+| `apps/server/src/box-staff-notices.ts:166` (#2594, read on `48d527dbc8`) | the device's cash-drawer printer, for the "Drawer didn't open" notice | drawer jobs are thermal only |
 | `apps/server/src/demo-printer.ts:38`, `:50`, `:69`, `:129` | the demo printer by `local_key`; its switch off and on (updates) | |
 | `apps/server/src/device-delete.ts:95-99` (after dv2), `:117` | held and chosen printers | |
 | `apps/server/src/device-equipment.ts:360-366` | a scanned printer label | an A4 id answers `printer.not_found`, as an unknown id does today |
@@ -97,7 +98,7 @@ condition. "Both in dv4" marks a read that dv4 turns into one query of both kind
 | `packages/printing/src/outbox.ts:55` | `insertPrintJob`'s printer check | see decision 2 |
 | `packages/printing/src/outbox.ts:100` | a resend's target | |
 | `packages/printing/src/printers.ts:134`, `:141`, `:154`, `:179` | receipt printer edit and list | the insert at `:67` writes `kind: 'receipt'` explicitly |
-| `packages/printing/src/runtime.ts:106`, `:128-131`, `:163` | the agent's job pull and its returned printer fields; unpaired Bluetooth jobs | already safe by transport (`tables-devices.md` §1.6); add `p.kind = 'receipt'` anyway, so dv13's A4 jobs stay out of the thermal pull |
+| `packages/printing/src/runtime.ts:106`, `:128-131`, `:163`, and `endStaleDrawerJobs` (`:81` on `48d527dbc8`, #2594) | the agent's job pull and its returned printer fields; unpaired Bluetooth jobs; ending stale drawer jobs | already safe by transport (`tables-devices.md` §1.6); add `p.kind = 'receipt'` anyway, so dv13's A4 jobs stay out of the thermal pull |
 
 Before Task 2, the builder re-runs the inventory to catch reads added since this plan:
 
@@ -196,9 +197,11 @@ dv2.
 
 ## In-flight work folded in (rules §8)
 
-- **D1, PR #2594:** changes `runtime.ts` and `print-api.ts` reads (drawer expiry, queue
-  explanations). If landed, its new reads of `printers` are sites too (the inventory grep finds
-  them); if still open, it rebases after this and adds the filter to its own reads.
+- **D1, PR #2594 (landed, `5f11ab6405`):** its two new reads of `printers` are in the site table
+  above (`box-staff-notices.ts`, `endStaleDrawerJobs`); the queue read it widened (`print-api.ts`
+  `:1459`, now also reading `active`, `transport` and `local_key` for `waitReason`) was already a
+  site. Its new claim-time update and the station-output read name `print_jobs_pull_idx` with
+  `indexed by`, so stop 3 covers them too.
 - **A405 PR 4** ("reprint to another printer"): its target-printer check is a receipt read and
   gains the filter, whichever lands second.
 

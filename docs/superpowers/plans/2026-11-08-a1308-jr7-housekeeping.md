@@ -29,7 +29,7 @@ sessions nobody signs out"). Slice rules apply.
 | Step | Deletes | Rule |
 | --- | --- | --- |
 | `sign_in_challenges` | rows with `expires_at <= now` or `expires_at > now + 10 minutes` | pp2's insert-time sweep predicate (a clock stepped back makes the second half); reuse pp2's helper if it exports one |
-| `dashboard_sessions` | rows that ended (`ended_at` set) or whose `last_seen_at` is more than `IDLE_TIMEOUT_MS` (`packages/identity/src/management-session.ts:11`, 30 minutes) away from now **in either direction** — the sign-in check itself treats a session stamped further ahead than that as expired (`Math.abs`, `:79`) — **except** `MIRROR_VIEWER_SESSION_ID` (`apps/server/src/mirror-session.ts:20`), whatever its state | jobs.md R16 ("rows that ended, or idle past `IDLE_TIMEOUT_MS`"); tables-people.md: the viewer's keepalive only updates its row, so a deleted row is not recreated until the next start. After pp3 a sign-out deletes the row, so ended rows are only left by paths pp3 did not convert |
+| `dashboard_sessions` | rows that ended (`ended_at` set) or whose `last_seen_at` is more than `IDLE_TIMEOUT_MS` (`packages/identity/src/management-session.ts:11`, 30 minutes) away from now **in either direction** — the sign-in check itself treats a session stamped further ahead than that as expired (`Math.abs`, `:79`) —. No exception for the old mirror viewer's row (`MIRROR_VIEWER_SESSION_ID`): since #2592 (A1113) nothing creates or revives it, and every trading start ends a leftover one (`endMirrorViewer`, `apps/server/src/mirror-session.ts:8-20`; `apps/server/src/boot.ts:2044`), so it is an ended row like any other | jobs.md R16 ("rows that ended, or idle past `IDLE_TIMEOUT_MS`"). After pp3 a sign-out deletes the row, so ended rows are only left by paths pp3 did not convert |
 | `media_blobs` | rows no photo's `original_hash` or `source_hash` names | tables-menu.md §1.23: the photo write deletes its own unused blob; this is the safety net, and the RESTRICT keys make deleting a blob in use impossible |
 | `service_commands` (**off**) | rows whose party or bill closed more than a day ago | tables-ordersales.md §1.8; `HOUSEKEEPING_SERVICE_COMMANDS = false` until M10 is confirmed |
 
@@ -51,7 +51,7 @@ Not pruned, by design: ended `till_sessions`, `staff_activity`, print job payloa
 
 ## Finish line
 
-1. `pnpm --filter @waitron/server exec vitest run src/housekeeping.test.ts src/boot.promote.test.ts src/mirror-session.test.ts` — passes, `Tests` count printed.
+1. `pnpm --filter @waitron/server exec vitest run src/housekeeping.test.ts src/boot.promote.test.ts` — passes, `Tests` count printed.
 2. Measure 10's two runs recorded in the PR description (Task 1).
 3. Typecheck, format clean; protection list EQUAL.
 
@@ -80,17 +80,16 @@ jr1–jr3; pp2, pp3 (the people slice's `sign_in_challenges` and `dashboard_sess
 
 ## Review Focus
 
-1. **The mirror viewer's session row on a read mirror.** Never deleted, however long idle. Task 2.
-2. **A photo replaced mid-run.** The RESTRICT keys refuse deleting a blob a new photo names between
+1. **A photo replaced mid-run.** The RESTRICT keys refuse deleting a blob a new photo names between
    the select and the delete; the delete selects and deletes in one statement. Task 2's
    "a blob a photo names is never deleted".
-3. **A clock stepped back.** A challenge stamped in the future past the 10-minute window goes; a
+2. **A clock stepped back.** A challenge stamped in the future past the 10-minute window goes; a
    session stamped more than 30 minutes in the future goes too, because the sign-in check already
    answers `management_session.expired` for it (`management-session.ts:78-81`); one stamped less
    than 30 minutes ahead stays. Task 2.
-4. **The box restarting the night the job was due.** The next due time is worked out from the
+3. **The box restarting the night the job was due.** The next due time is worked out from the
    schedule at start, so a missed 04:00 runs at the next one; nothing here is urgent.
-5. **A stepdown during a long `media_blobs` run.** No further batch starts once the signal is aborted.
+4. **A stepdown during a long `media_blobs` run.** No further batch starts once the signal is aborted.
 
 ---
 
@@ -145,7 +144,6 @@ and returns it; on a pass at or after `fireAt` it runs every enabled step, then 
   `"deletes expired challenges and ones stamped more than ten minutes ahead, and keeps live ones"`;
   `"deletes dashboard sessions idle past thirty minutes and keeps active ones"`;
   `"deletes ended dashboard sessions"`; `"deletes a session stamped more than thirty minutes ahead and keeps one stamped ten minutes ahead"`;
-  `"never deletes the mirror viewer's session, however long idle"`;
   `"deletes photo bytes no photo names"`; `"a blob a photo names is never deleted"`;
   `"deletes in batches of HOUSEKEEPING_BATCH, one transaction each"` (count transactions with a
   batch of 2 over 5 rows: 3);

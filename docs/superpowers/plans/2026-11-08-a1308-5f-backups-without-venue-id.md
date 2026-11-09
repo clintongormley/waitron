@@ -123,7 +123,10 @@ block keeps its generation and block-id checks (`paper-evidence.ts:533-536`). No
 - **env6** (`docs/superpowers/plans/2026-11-08-a1308-env6-backup-document.md`) moves the archive's
   non-secret settings into a `settings.backup` document. Whichever lands second takes the other's
   shape; neither reintroduces `venueId`.
-- **#2570** changes `packages/fiscal-verifactu/src/backup-verification-secrets.ts`; a rebase.
+- **#2570** has landed (`df7fc95182`): `packages/fiscal-verifactu/src/backup-verification-secrets.ts`
+  now reads the source's install rows across its takeover history (`:32-45`, `:94-98`). That is the
+  fiscal module's file, not `apps/server/src/backup-verification-secrets.ts`, which this slice
+  modifies; #2570 changed no file this slice lists.
 
 ## Files
 

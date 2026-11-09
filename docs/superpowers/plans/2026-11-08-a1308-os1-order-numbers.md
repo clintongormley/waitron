@@ -7,9 +7,23 @@ highest `working_orders.order_number`, under the venue file's write lock, and a 
 `order_number` refuses a repeat. In the same pass, give the station queue's "uncollected bills" read
 an index of its own, and drop the word "tenant" from `working_orders`' status index.
 
+**What is already done on main.** #2570 (`df7fc95182`, A1425 part 1) made order numbers one
+venue-wide sequence: `allocateOrderNumber(tx, nodeId)` still upserts this box's counter row, but
+the value it stores and returns is one above the highest `next_number` of ANY box's row
+(`packages/db/src/allocate-order-number.ts:5-9`, `:21`). So a box that takes over, or takes back,
+already carries on above every number given out; the handover test
+`"M2's next order number is above every number given out, and none repeats"`
+(`apps/server/src/handover-controlled.e2e.test.ts:2157`) holds it. This PR changes **where** the
+number is read from (the bills, not a second table) and adds the database guard; it does not change
+which number a bill gets.
+
 **Architecture:** One starting-migration change to core's set (slice rules §2), made through the
 rebuild command. `allocateOrderNumber` keeps its name and moves from an upsert on the counter to a
-`max()+1` read that the new unique index answers with a seek. No other table changes here.
+`max()+1` read that the new unique index answers with a seek. No other table changes here. Because
+the read stores nothing, a number is taken only when the caller inserts the bill in the same
+transaction: two reads with no insert between give the same number (checked with a scratch
+`node:sqlite` table, 2026-11-09: two reads printed `[1, 1]`, a read after one insert printed `2`,
+and the plan was `SEARCH … USING COVERING INDEX`).
 
 **Tech stack:** TypeScript, Drizzle ORM on `node:sqlite`, Vitest.
 
@@ -56,7 +70,7 @@ coordinator made that docs edit on the plans branch on 2026-11-08, before A446's
 
 - Modify: `packages/db/src/schema/orders.ts:79-82` (comment and `orderNumber`), `:115` (index rename),
   table callback (two new indexes)
-- Modify: `packages/db/src/allocate-order-number.ts` (whole file, 28 lines)
+- Modify: `packages/db/src/allocate-order-number.ts` (whole file, 31 lines)
 - Delete: `packages/db/src/schema/working-order-counters.ts`
 - Modify: `packages/db/src/index.ts` (drop the `workingOrderCounters` export; `allocateOrderNumber`
   export at `:285` stays)
@@ -70,8 +84,10 @@ coordinator made that docs edit on the plans branch on 2026-11-08, before A446's
   `apps/server/src/party-table-actions.test.ts:2711, :3118`, `apps/server/src/draft-split.test.ts`
   (2 lines naming `workingOrderCounters`), `scripts/schema-constraints.test.ts:341`,
   `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts:38` (`REMOVED_TABLES`)
-- Modify (test): `packages/db/src/allocate-order-number.test.ts` (exists: `:35`, `:42`, `:50`, `:81`);
-  `apps/server/src/working-order.test.ts:160-164` (the `setupVenue` comment)
+- Modify (test): `packages/db/src/allocate-order-number.test.ts` (exists: `:34`, `:41`, `:49`, `:58`,
+  `:75`, `:106`; `:5` imports `workingOrderCounters`); `apps/server/src/till-api.test.ts:3107` (the
+  comment "The venue-wide counter is shared across this suite's tests" names the deleted counter:
+  "Order numbers are shared across this suite's tests")
 - Modify (test): `apps/server/src/history-read-plans.test.ts` (one case)
 - Generated: `packages/db/drizzle/0000_baseline.sql`, `packages/db/drizzle/meta/*`,
   `scripts/migration-baseline-epoch.json` via the rebuild command (never by hand)
@@ -83,7 +99,7 @@ coordinator made that docs edit on the plans branch on 2026-11-08, before A446's
 | | Counted (hand-written) | Not counted |
 | --- | --- | --- |
 | Code | about 70 lines | the deleted schema file (20 lines); generated migration files |
-| Tests | about 140 lines, plus whatever M1's fixture fixes need (estimate below) | output of the codemod, if Task 1 needs one |
+| Tests | about 120 lines (six existing allocator cases re-pointed to insert a bill per number, one new refusal case, three re-pointed refusal suites, the query-plan case), plus whatever M1's fixture fixes need (estimate below) | output of the codemod, if Task 1 needs one |
 | Docs | about 5 lines (backlog) | — |
 
 Fixture risk: 189 test files write a literal `orderNumber:` (`git grep -c "orderNumber: [0-9]" -- apps packages`
@@ -99,7 +115,11 @@ pnpm --filter @waitron/db exec vitest run src/allocate-order-number.test.ts src/
 pnpm --filter @waitron/server exec vitest run src/history-read-plans.test.ts src/order-creation-zone.test.ts src/till-api.unroutable-dish.test.ts src/till-api.zone-required.test.ts src/party-table-actions.test.ts src/draft-split.test.ts --reporter=dot
 pnpm exec vitest run scripts/schema-constraints.test.ts scripts/classification-complete.test.ts scripts/starting-migrations.test.ts scripts/migration-upgrade.test.ts --reporter=dot
 pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.madrid-baseline.test.ts --reporter=dot
+cd apps/server && TESTCONTAINERS_RYUK_DISABLED=true pnpm exec vitest run src/handover-controlled.e2e.test.ts
 ```
+
+The last is #2570's takeover receipt: its case "M2's next order number is above every number given
+out, and none repeats" must still pass when the number is read from the bills M2 inherited.
 
 Each prints a `Tests` count with no failure (CLAUDE.md §4: a run without a count proves nothing).
 Then the protection list (rules §3) prints exactly the lines below.
@@ -130,14 +150,24 @@ No `changed trigger` line: no column is added, so neither `working_orders_enforc
 
 ## Assertions that change, by design (rules §4)
 
-- `packages/db/src/allocate-order-number.test.ts:42` `"numbers each node independently"` (expects
-  `[1, 2, 1]`): numbers are now one series per venue, so it becomes `"a second node continues the venue's
-  numbers"` (`[1, 2, 3]`), design §1.1 and §6 item 2. `:35` loses its node argument; `:50` and `:81` keep
-  their assertions.
-- The comment at `apps/server/src/working-order.test.ts:163` ("`allocateOrderNumber` counts per node, so
-  the order number is that test's own — always 1 on the first park") becomes false. Delete that
-  sentence; if a case there asserts order number 1 on a shared database, it is a fixture fix under Task 1,
-  listed in the PR.
+The venue-wide numbering itself is not a change here: #2570 already replaced
+`"numbers each node independently"` (`[1, 2, 1]`) with `"numbers never repeat across boxes"`
+(`[1, 2, 3, 4]`). What changes is that the allocator no longer stores anything, so each case in
+`packages/db/src/allocate-order-number.test.ts` that calls it twice must insert the bill between calls
+(rules §4: re-pointed, same assertion):
+
+- `:34` `"allocates 1, then 2, for a node"`, `:41` `"numbers never repeat across boxes"` and `:106`
+  `"hands out distinct numbers to allocators started together"`: each allocation inserts a
+  `working_orders` row with the number in the same transaction; the expected `[1, 2]`, `[1, 2, 3, 4]`
+  and twenty distinct numbers from 1 to 20 stay. `:75` (`typeof n === "number"`) only loses its node
+  argument.
+- `:49` `"a box's first number follows the highest of any box"`: the seeded counter row
+  (`nextNumber: 5` for box A) becomes a bill numbered 5 written for box A; box B's next two bills still
+  get `[6, 7]`.
+- `:58` `"a box that took back carries on above every number"`: the seeded counter rows (5 for A, 7 for
+  B) become bills numbered 5 and 7; box A's next bill still gets `8`. Its second assertion, the counter
+  rows' contents (`{ A: 8, B: 7 }`, `:66-72`), is deleted with the table — the one assertion this PR
+  removes by design (tables-ordersales.md §4, `working_order_counters` → delete).
 - Any other changed assertion is a stop.
 
 ## Needs
@@ -175,7 +205,8 @@ Not this area's: `kitchen*.ts`, `pass-*.ts`, `station-*.ts`, `table-actions.ts`,
 
 **Where the move sits in this sequence:** between os1 and os2. os1 touches few server files; os2 to
 os11 rewrite most of the files above, so moving them first means each later PR edits them in their
-final package. If A1453 places this area's move later, it goes after os11 and before os12, never in
+final package. If the build order's "Order of areas" (proposed; the owner decides) places this area's
+move later, it goes after os11 and before os12, never in
 the middle of os2–os11. The move is not planned here.
 
 ---
@@ -188,22 +219,26 @@ the middle of os2–os11. The move is not planned here.
   exists, typed back in to retrieve the order (`packages/db/src/schema/orders.ts:79-81`). "Never reused"
   holds within the copy of the venue the box holds: after a restore that lost the most recent bills, their
   numbers are given out again, because the next number is read from the bills the copy has. The PR
-  description says so; today's per-node counter has the same property, since the counter is in the same
-  file.
+  description says so; today's counter has the same property, since the counter is in the same file
+  (backup verification already treats it as a table that never goes back,
+  `packages/db/src/backup-evidence.ts:101`). The two sources give the same next number as long as no
+  bill row is deleted, and no product path deletes one (`git grep -n "delete(workingOrders)\|delete from
+  working_orders" origin/main -- apps packages ':!*.test.ts'` printed nothing on 2026-11-09).
 - No backwards-compatibility code (CLAUDE.md §3, "No backwards-compatibility … until production").
 
 ## Review Focus
 
-1. **A promoted or restored box continues the venue's numbers.** Today each node has its own counter
-   starting at 1 (`working-order-counters.ts:5`), so a box that took over started again at 1. After
-   this PR it continues from the highest number in the copy it holds. The design wants one unique
-   number per bill (§1.1); this is the consequence, and the PR description says so in plain words.
-   Test: Task 2's "a second node continues the venue's numbers".
+1. **A promoted or restored box still continues the venue's numbers.** Since #2570 it does today,
+   through the counter's highest row (`allocate-order-number.ts:21`). After this PR it continues from
+   the highest bill in the copy it holds, which is the same number while no bill is deleted (Global
+   Constraints). Tests: the re-pointed `:41`, `:49` and `:58` cases, and the handover case in the
+   Finish line.
 2. **A refused order allocates nothing.** Three suites assert today that a refused order left the
    counter unchanged; they now assert that `max(order_number)` is unchanged and no row was added.
 3. **Two orders in one transaction** (a split creates bills inside one transaction,
    `working-order.ts:1711` runs per bill): `max()+1` reads the earlier insert of the same
-   transaction. Test: Task 2's "two bills in one transaction take consecutive numbers".
+   transaction. Test: the re-pointed `:34` "allocates 1, then 2, for a node" (two bills inserted in
+   one transaction).
 4. **The partial index is actually used.** A partial index whose predicate the query does not imply is
    ignored silently. Test: Task 3's query-plan case.
 5. **A test fixture that writes a number the database already holds** now fails with a unique error
@@ -263,20 +298,19 @@ and run the suites with the unique index.
 **Interfaces:** Produces `allocateOrderNumber(tx: Transaction): Promise<number>` (the `nodeId`
 parameter goes; the one caller is `working-order.ts:1711`).
 
-- [ ] **Step 1: Write the failing tests** in the existing `packages/db/src/allocate-order-number.test.ts`
-  (and change `:42` as "Assertions that change, by design" says):
-  - `"the first bill of a venue is number 1"`: `expect(await allocateOrderNumber(tx)).toBe(1)`.
-  - `"two bills in one transaction take consecutive numbers"`: allocate, insert a row with it,
-    allocate again: `[1, 2]`.
-  - `"a second node continues the venue's numbers"`: seed bills 1–3 with `nodeId` A, then allocate in a
-    transaction whose bills are written for node B: `4`.
+- [ ] **Step 1: Re-point the existing cases and write the new one** in
+  `packages/db/src/allocate-order-number.test.ts`, as "Assertions that change, by design" says: a
+  small helper allocates and inserts the bill in one transaction; `:49` and `:58` seed bills instead of
+  counter rows; `:5`'s `workingOrderCounters` import goes. New case:
   - `"a number a bill holds is refused a second time"`: inserting two `working_orders` rows with
     `orderNumber: 7` throws `UNIQUE constraint failed: working_orders.order_number`; the accepting
     control inserts 7 and 8.
-- [ ] **Step 2: Run them; the first three fail to compile** (the function still takes `nodeId`).
+- [ ] **Step 2: Run them; they fail** (the calls omit the `nodeId` the function still takes, and the
+  re-pointed `:49` and `:58` seed no counter row, so today's allocator cannot know to start above 5
+  or 7).
 - [ ] **Step 3: Implement.** One `select coalesce(max(order_number), 0) + 1` under the caller's
   transaction; keep the module comment's point that `withTransaction` serialises writers
-  (`allocate-order-number.ts:7-11`) and say the unique index is the guard. Replace the comment at
+  (`allocate-order-number.ts:11-14`) and say the unique index is the guard. Replace the comment at
   `orders.ts:79-81` with one line: the number is unique and read from the bills. Delete the schema file,
   its export, its classification entry and its backup-evidence name.
 - [ ] **Step 4: Re-point the three "a refused order allocated no number" suites.** Each snapshot of

@@ -175,7 +175,7 @@ Under the two `change-feed` headers, also `changed trigger waitron_change_print_
 
 Reasons: `tables-devices.md` §1.7 (the two columns and their CHECK, R4) and README "Additions of 6
 November 2026" (`next_attempt_at`). `receipt_handover` had no protection to carry. D1's
-`print_jobs_printer_kind_idx` (PR #2594), if landed, prints nothing: it is unchanged.
+`print_jobs_printer_kind_idx` (PR #2594, landed 2026-11-08 and folded into the starting migration by 1a) prints nothing: it is unchanged.
 
 ### Stop points (beyond rules §5)
 

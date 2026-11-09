@@ -14,7 +14,11 @@ connection, added and removed with the person's session.
 
 **Architecture:** `apps/till/src/api/live-connection.ts` reads the device stream with the till
 client's own `fetch`, as the till reads its transfer stream today (`apps/till/src/api/transfer-events.ts:1-69`),
-so its device proof goes with it. A small gate, `liveGate`, wraps each existing timer: the read is
+so its device proof goes with it. Since #2534 the transfer stream's `fetch` also names the
+signed-in person (`#fetchFor(person)` and the `onRefused` callback, `apps/till/src/api/client.ts:2740-2752`
+and `transfer-events.ts:6` on `48d527dbc8`); the device stream is read with the plain `#fetchImpl`,
+naming no person, because it outlives each sign-in and its recheck is device proof alone (jr11), and
+`readTransferEvents`' `onRefused` goes with the transfer stream. A small gate, `liveGate`, wraps each existing timer: the read is
 kept; it runs once when the connection comes up, on each `change` naming one of its types, and on
 its timer — always, or only while the connection is down for a timer marked `quietWhileConnected`.
 

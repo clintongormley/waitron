@@ -307,7 +307,7 @@ Each changes because U9 renames the name it asserts; the script makes the change
 ## Area files for the package move
 
 Agreed 2026-11-08: `apps/server`'s domain areas move into packages, each move paired with its A1308
-area; A1453 sets the order. This list is by which tables each file mainly reads or writes; the move
+area; the build order's "Order of areas" sets the order (proposed; the owner decides), since A1453's measurement was dropped (`docs/backlog/ci.md`, 8c4166f9ac). This list is by which tables each file mainly reads or writes; the move
 design may regroup it. Tests travel with their files (`<name>.test.ts`, `<name>.*.test.ts`).
 
 - **Taxpayer and venue:** `apps/server/src/venue-settings-api.ts`, `venue-details.ts`,

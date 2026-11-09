@@ -154,7 +154,10 @@ export function parseInterests(raw: string | undefined, allowed: ReadonlySet<str
   throws `device.unauthorized` when the device is inactive or its token hash changed.
   `readTillSession(db: Database, token: string): Promise<<requireSession's return type>>` —
   `requireSession`'s lookup (`till-session.ts:95-128`) as a plain read with no stamp; throws
-  `session.required` or `device.unauthorized`.
+  `session.required`, `device.unauthorized`, or (since #2534, `till-session.ts:163-164` on
+  `48d527dbc8`) `session.person_not_signed_in` when the stream request's `x-waitron-person` header
+  does not name the session's person — it keeps `personRefusal`, so the wake recheck still makes
+  that check.
 - `device-live-api.ts`: `mountDeviceLiveApi(app, deps: { db; bus: LiveEvents; resourceTypes: readonly string[]; devMode?: boolean }, log)`
   — `GET /api/live/events`; connect: `requireDeviceProof(deps, c, { passive: true })`; interests
   parsed against `resourceTypes` (the same list the dashboard gets, `liveResourceTypes`,

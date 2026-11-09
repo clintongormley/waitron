@@ -8,8 +8,9 @@
 
 **Goal:** (1) Ending a dashboard session deletes its `dashboard_sessions` row, and the sign-in and
 sign-out are written to `activity_log` as `dashboard.signed_in` and `dashboard.signed_out`; the
-personal-data file reads them from there. The mirror viewer's one fixed session keeps using
-`ended_at`. (2) `account_actions.target_email` goes: an email-change proof uses the person's
+personal-data file reads them from there. The old mirror viewer's fixed session, which nothing
+creates since #2592 (A1113) and every start ends (`endMirrorViewer`, `apps/server/src/mirror-session.ts:8-20`),
+keeps using `ended_at`. (2) `account_actions.target_email` goes: an email-change proof uses the person's
 `pending_email`, which its code hash now mixes in (appendix §6 item 5, measurement 6).
 
 **Architecture:** `startManagementSession` and `endManagementSession` take a required `method` and
@@ -86,7 +87,7 @@ email change to the pending address read at send; slice 3a-iii
 | Left out | Owner |
 | --- | --- |
 | Deleting idle dashboard sessions nobody signs out | the job runner's daily tidy-up (batch 3, `jobs.md` R16) |
-| The mirror viewer's session (`mirror-session.ts:70-130`) | unchanged until A1113 retires the viewer (appendix §1) |
+| `endMirrorViewer` (`mirror-session.ts:8-20`), the one writer left of the retired mirror viewer (#2592, A1113) | unchanged: it stamps `ended_at` on a leftover viewer row; pinned by `boot.mirror.test.ts`'s "%s boot revokes a previously valid viewer token" |
 | Till sign-ins in `activity_log` | not logged: `till_sessions` is the record (appendix §3) |
 | Other person audit kinds (`person.*`) | follow-ups outside A1308 (README U11) |
 | Renaming `management_session.*` codes or `*ManagementSession` functions | not renamed (pp1 "leaves out") |
@@ -145,7 +146,7 @@ pnpm --filter @waitron/identity exec vitest run src/management-session.test.ts s
   src/personal-data.test.ts src/manager-login.test.ts src/passkey.test.ts src/google-oidc.test.ts
 pnpm --filter @waitron/server exec vitest run src/management-api.test.ts src/me-api.test.ts \
   src/personal-data-export-api.test.ts src/break-glass-command.test.ts src/promote-api.test.ts \
-  src/operation-authentication.test.ts src/mirror-session.test.ts src/handover-dormant-setup.test.ts \
+  src/operation-authentication.test.ts src/boot.mirror.test.ts src/handover-dormant-setup.test.ts \
   src/box-retire.route.test.ts
 pnpm --filter @waitron/provisioning exec vitest run src/venue-apply.test.ts
 pnpm --filter @waitron/db exec vitest run src/activity-log.test.ts

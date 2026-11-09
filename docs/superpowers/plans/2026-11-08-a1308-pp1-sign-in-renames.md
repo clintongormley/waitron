@@ -69,7 +69,7 @@ pp12, slice 0's year-of-trading bench. So the lane builds pp1–pp8, then other 
 
 ## Area files for the package move
 
-The CI package move (agreed 2026-11-08, design not written; area order from A1453) will move this
+The CI package move (agreed 2026-11-08, design not written; area order from the build order's "Order of areas", proposed, the owner decides) will move this
 area's server code into its own package. These `apps/server/src` files belong to people and working
 time, each with its `*.test.ts` siblings (`<name>.test.ts`, `<name>.*.test.ts`):
 
@@ -87,7 +87,7 @@ time, each with its `*.test.ts` siblings (`<name>.test.ts`, `<name>.*.test.ts`):
 - Test helpers: `apps/server/src/testing/clock-venue.ts`, `signed-in-till.ts`;
   `apps/server/test/attendance-export-fixture.ts`.
 - Not this area although they touch its tables: `management-api.ts` (shared by several areas'
-  routes), `mirror-session.ts` (second box, A1113 retires it), `personal-data-export-api.ts`,
+  routes), `mirror-session.ts` (second box; since #2592, A1113, it holds only `endMirrorViewer`), `personal-data-export-api.ts`,
   `personal-data-actions.ts` (every area's data), `till-api.ts`, `till-sale.ts`, `working-order.ts`,
   `order-*.ts`, `bill-*.ts` (orders and sales).
 
@@ -95,7 +95,7 @@ time, each with its `*.test.ts` siblings (`<name>.test.ts`, `<name>.*.test.ts`):
 of the attendance code above (`attendance-discovery.ts` 620, `attendance-integrated.ts` 152,
 `attendance-source-changes.ts` 83, at `a086eedfb7`) and about 1,900 lines of their tests; moving them
 first would move code that is then deleted, and every later plan cites `apps/server/src/...:line`.
-If A1453 wants this area's move earlier, the sign-in, clock and rota files can move after pp8 and
+If the build order wants this area's move earlier, the sign-in, clock and rota files can move after pp8 and
 the attendance files after pp12.
 
 ---
@@ -111,8 +111,12 @@ the attendance files after pp12.
 - The two cookie-shape screens the backlog names ("the UUID shape screens in `requireSession` and
   the till logout route") go: `isUuid(token)` in `requireSession` (`apps/server/src/till-session.ts:101`)
   and in the till sign-out route (`apps/server/src/till-api.ts:1512`). A value that is not a UUID
-  hashes to no row, so the refusal and the sign-out's answer are unchanged. `signedInPersonOn`
-  (`till-session.ts:71`, a read that refuses nothing) and the dashboard sign-out
+  hashes to no row, so the refusal and the sign-out's answer are unchanged (since #2534 the
+  sign-out looks the token up with `openSessionPerson` and clears the cookie only when the request
+  carries no `x-waitron-person` header, `till-api.ts:1514-1529` on `48d527dbc8`; a token that hashes to
+  no row still ends nothing and answers ok). `signedInPersonOn` (`till-session.ts:116-127` on
+  `48d527dbc8`, which throws nothing: it answers nobody, the person, or a refusal its caller throws)
+  and the dashboard sign-out
   (`management-api.ts:1050`) keep their checks: the backlog does not name them.
 - The backlog entry "Task 1b (#554, session cookies stored only as hashes)" loses the parts this
   plan finishes (the screens sentence, the two session keys); pp2 finishes and deletes the rest.
@@ -183,7 +187,8 @@ pnpm --filter @waitron/identity exec vitest run src/authorize.test.ts src/manage
   src/schema-ownership.test.ts src/personal-data.test.ts src/index.test.ts
 pnpm --filter @waitron/server exec vitest run src/till-api.test.ts src/me-api.test.ts \
   src/device-delete.db.test.ts src/attendance-facts.test.ts src/attendance-discovery.test.ts \
-  src/management-api.test.ts src/break-glass-command.test.ts
+  src/management-api.test.ts src/break-glass-command.test.ts \
+  src/till-session.person.test.ts src/till-api.session-person.test.ts
 pnpm --filter @waitron/composition exec vitest run src/composition.test.ts
 pnpm exec vitest run scripts/schema-constraints.test.ts scripts/classification-complete.test.ts \
   scripts/starting-migrations.test.ts scripts/migration-upgrade.test.ts \
@@ -419,7 +424,9 @@ whose person is gone signs nobody in") is now guaranteed by the key.
 - [ ] **Step 1: Find the tests that send a non-UUID cookie** to `requireSession` and to the till
   sign-out (`git grep -n "not-a-uuid\|isUuid" -- apps/server/src/*.test.ts`). If none exists for one
   of the two, write it now: `"refuses a till cookie that is not a UUID with session.required"`,
-  `"signs a till out with a cookie that is not a UUID: clears the cookie and answers ok"`. Run them;
+  `"signs a till out with a cookie that is not a UUID: clears the cookie and answers ok"` (sent with
+  no `x-waitron-person` header: since #2534 a sign-out carrying the header never clears the cookie,
+  `till-api.ts:1512-1513`). Run them;
   they pass on the current code (they pin the behaviour the deletion must keep).
 - [ ] **Step 2:** Delete the two `isUuid(token)` conditions (keep `token === null`). Keep the import
   and re-export: `till-session.ts:71` and `promote-api.ts:22` still use it.

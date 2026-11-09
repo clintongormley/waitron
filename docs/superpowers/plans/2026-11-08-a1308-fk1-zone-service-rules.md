@@ -55,7 +55,7 @@ which no other pull request here needs.
 
 ## Area files for the package move
 
-The CI package move (agreed 2026-11-08, design not yet written; area order from A1453) will move
+The CI package move (agreed 2026-11-08, design not yet written; area order from the build order's "Order of areas", proposed, the owner decides) will move
 this area's server code into its own package. These are the `apps/server/src` files that belong to
 floor and kitchen, each with its `*.test.ts` siblings (`<name>.test.ts`, `<name>.*.test.ts`):
 

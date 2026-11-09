@@ -90,6 +90,14 @@ jr11 (nothing structural; ordered last in this part).
    get prompt results: the agent ends its hold when a discovery pass finds devices or a Bluetooth
    command finishes (today both cut its sleep short, `agent.ts:26-27`), and the server ends a held
    pull when a Bluetooth command for that agent is queued.
+6. **A drawer kick left waiting.** Since #2594 (`5f11ab6405`) every claim first ends drawer jobs
+   queued 30 seconds or claimed past the 60-second lease (`endStaleDrawerJobs`,
+   `packages/printing/src/runtime.ts:70-105` on `48d527dbc8`), and the till's "Drawer didn't open"
+   notice reads that ending (`apps/server/src/box-staff-notices.ts:155-189`). It runs only when a pull
+   claims, and a drawer job going stale is not a `print_jobs` change, so a 25-second hold can end
+   such a job, and show the notice, up to about 25 seconds later than today's 2-second pull. Task 1
+   records it; the verdict says whether the hold must also end at the earliest queued drawer job's
+   30-second mark.
 
 ---
 
