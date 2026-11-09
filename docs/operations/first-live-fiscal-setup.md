@@ -93,7 +93,7 @@ You can select the saved pack, or an older sheet, during recovery or type its gr
 typing check catches mistakes; opening the selected backup still authenticates the complete secret.
 See [recovering a box](hour-recovery.md).
 
-## Resume an interruption
+## After an interruption
 
 Reconnect to inspect the attempt before starting another setup. A reloaded tab that still holds
 the setup's key carries on with it until activation starts; any other tab, and every attempt past

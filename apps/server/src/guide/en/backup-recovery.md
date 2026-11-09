@@ -31,11 +31,10 @@ out "No invoice was sent to AEAT.", because the box may not have been able to ch
 for invoices. Start again and Recover from backup still delete it.
 
 Neither is offered, and the page says why in the same words for both, if the setup already
-finished, or if the setup database holds an invoice or another record Waitron never deletes. A
-setup that already saved the settings the box sells with is still offered both. If the box cannot
-confirm that deleting the setup is safe, the page says so and offers neither. That includes a setup
-whose own record cannot be read: then the only way out is to reinstall Waitron. Over a plain
-connection neither works: set up the secure connection first.
+finished, or if the setup database holds an invoice or another record Waitron never deletes. If the
+box cannot confirm that deleting the setup is safe, the page says so and offers neither. That
+includes a setup whose own record cannot be read: then the only way out is to reinstall Waitron.
+Over a plain connection neither works: set up the secure connection first.
 
 Once the setup is deleted the box restarts. After **Recover from backup**, **Reconnect** opens "Join
 or recover an existing restaurant", where you choose **Restore a backup** or **Restore from my

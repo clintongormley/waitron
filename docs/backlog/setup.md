@@ -724,7 +724,8 @@ minute, a sale is then refused by the clock-behind stop, and a confirmation list
 - **Built with it, to respect the owner's fiscal stop (A1131 part 1; awaiting the owner's
   confirmation in the PR):** Start again does not go ahead when the database holds an invoice or another
   row Waitron never deletes (said to be a fault), when the setup saved its trading settings, or
-  when it finished.
+  when it finished. (2026-11-09, A1379: a setup that saved its trading settings is now deleted
+  too.)
 - **DECIDED (owner, 2026-10-29 ~11:00): "Yes. Start again can delete the failed setup dB."** —
   a setup database the box cannot fully read. Built in A1131bc slice 2: damage is SQLite's code 11
   or 26, or a table a reader expects missing; the box still refuses when the readable part shows a
@@ -784,7 +785,8 @@ so after the setup password and the missing-database confirmation; with it prese
 password and the discard confirmation, and only for an empty, never-activated attempt
 (`startAgainFirstSetup`, `apps/server/src/first-setup-resolution.ts`). A1042. (2026-10-28, A1131:
 a database that holds records goes too, unless it holds a row Waitron never deletes, the setup saved
-its trading settings, or it finished.) (2026-10-30, A1131bc slice 2: offered without a stopped
+its trading settings, or it finished.) (2026-11-09, A1379: a setup that saved its trading settings
+is now deleted too.) (2026-10-30, A1131bc slice 2: offered without a stopped
 recovery and without a password.) (2026-11-04, A1131bc slice 4: the setup page no longer reads,
 shows or discards an old recovery from backup.) (2026-11-04, A1131bc slice 4: no box makes such a
 recovery any more; one whose state folder still holds its folder shows the reinstall page.)

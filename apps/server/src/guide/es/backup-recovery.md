@@ -36,12 +36,10 @@ Empezar de nuevo y Recuperar desde una copia la borran igualmente.
 
 No se ofrece ninguna de las dos, y la página dice por qué con las mismas palabras para ambas, si la
 configuración ya terminó, o si la base de datos de configuración tiene una factura u otro registro
-que Waitron nunca borra. Una configuración que ya guardó los ajustes con los que vende el equipo
-sigue ofreciendo las dos. Si el equipo no puede
-confirmar que borrar la configuración sea seguro, la página lo indica y no ofrece ninguna. Eso
-incluye una configuración cuyo propio registro no se puede leer: entonces la única salida es
-reinstalar Waitron. Con una conexión sin cifrar no funciona ninguna: configura antes la conexión
-segura.
+que Waitron nunca borra. Si el equipo no puede confirmar que borrar la configuración sea seguro, la
+página lo indica y no ofrece ninguna. Eso incluye una configuración cuyo propio registro no se puede
+leer: entonces la única salida es reinstalar Waitron. Con una conexión sin cifrar no funciona
+ninguna: configura antes la conexión segura.
 
 Cuando se ha borrado la configuración, el equipo se reinicia. Después de **Recuperar desde una
 copia**, **Reconectar** abre «Unirse a un restaurante existente o recuperarlo», donde eliges

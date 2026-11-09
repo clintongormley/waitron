@@ -143,7 +143,8 @@ automated deployment stand a venue up with no browser and no setup wizard, which
 that stamped before.
 
 The stamp goes through `stampDeployment` (`@waitron/db`) — the same primitive the setup wizard's
-handler calls in the same position (`provisionVenue`, `apps/server/src/provision.ts`) — so a
+handler calls (`provisionVenue`, `apps/server/src/provision.ts`); the command writes it only once
+activation has started — so a
 directory already stamped for the **other** environment is refused with `deployment.already_stamped`
 and nothing is minted, and a directory already stamped for THIS one passes through untouched. It is
 written after the confirmation prompt, never before: a stamp is permanent, so an operator who

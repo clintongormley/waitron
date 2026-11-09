@@ -1,5 +1,11 @@
 # A679 changed test checks
 
+_2026-11-09, A1379: setup-password recovery ("Continue"), publication-only Finish, the command's
+resumption and its retained configuration import are removed, with their suites
+(`first-setup-finish.route.test.ts`, `first-fiscal-hour-finish.test.ts`,
+`first-setup-command-import.test.ts`, `first-setup-owner-audit.test.ts` and the resolution record
+store's tests). Sections below that describe them record the earlier tree._
+
 _2026-11-07, A1383: the clock sample, committed preparation action and early recovery-source
 gaps described below are now pinned by the [clock](../../packages/fiscal-verifactu/src/hour-clock.test.ts),
 [action](../../packages/fiscal-verifactu/src/hour-selection.test.ts) and

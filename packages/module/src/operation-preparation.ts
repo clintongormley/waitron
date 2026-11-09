@@ -32,7 +32,6 @@ export interface ModuleOperationHost {
   readSetupFacts?(binding: OperationBinding): Promise<{
     readonly context: InitialSetupContext;
     readonly contextKey: string;
-    /** Pending work survives ownership recovery; selected material keeps the owner-scoped key. */
     readonly continuationKey?: string;
     readonly localHistory: unknown;
   }>;

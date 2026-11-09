@@ -594,7 +594,6 @@ it("with the database missing, a finished setup is refused setup-finished by the
     { kind: "activation-started" },
     { kind: "committed", result: {} },
   ]);
-  // The setup password cannot be proved on a complete attempt, so it completes after the proof.
   let state = (await f.store.read())!;
   for (const change of [{ kind: "publication" }, { kind: "complete" }] as const)
     state = await f.store.update(state.frozen.attemptId, state.revision, change);

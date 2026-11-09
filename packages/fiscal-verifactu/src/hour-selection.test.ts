@@ -1120,7 +1120,7 @@ async function setupPickedAt0902() {
   expect(f.writes).toHaveLength(2);
   return f;
 }
-it("control: a new pick a minute after a recorded pick writes one wait the spy sees", async () => {
+it("a new pick a minute after a recorded pick writes one wait the spy sees", async () => {
   const f = await setupPickedAt0902();
   f.at(at("2026-10-24T09:03:00Z"), 180_000);
   const { engine, replaced } = spiedEngine(f);
