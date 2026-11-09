@@ -48,6 +48,7 @@ import { DashboardQueries } from "./api/query-controller.js";
 import { createSessionEpoch, type SessionEpoch } from "./session-signals.js";
 import { consumePermissionReturn, PermissionContinuation } from "./permission-continuation.js";
 import { diag } from "./diagnostics.js";
+import "./problem-report.js";
 import { signalAcceptedPasskeys } from "./passkey-signals.js";
 import type { StringKey } from "./i18n/strings.js";
 // Modules are mounted generically from the browser-safe registry, never named here. `tKit` is the
@@ -2153,6 +2154,7 @@ export class DashboardApp extends LitElement {
         </div>
       </div>
       <div class="banner-actions">
+        <dashboard-problem-report></dashboard-problem-report>
         ${
           authenticated
             ? nothing
