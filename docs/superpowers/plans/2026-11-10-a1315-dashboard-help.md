@@ -1,0 +1,24 @@
+# A1315 dashboard help implementation plan
+
+**Status:** Plan only, not approved for build. One Claude read and watcher **PLAN FOR APPROVAL** must follow. No product code or tests have changed.
+
+**Authority:** queue owner2026-11-03: “Keep it concise, clear, mention just the main points, gloss over the detail... The info text should just orientate the user.” Watcher2026-11-10 00:47: “A1315 ... Start with the dashboard area. Read the code each bubble describes before rewriting it.”
+
+**Scope:** One dashboard copy/docs PR, one hour from the item start to an open PR, excluding manager waits. Base `ccb480fa8a`. No behavior, authentication, fiscal or money changes; no wording framework or scanning guard. Work inline. Resolve other lanes’ overlaps on rebase without changing their branches.
+
+**Evidence:** [External source audit](/Users/clintongormley/waitron-campaign-k/receipts/a1315-dashboard-20261110/source-audit.md) records all 21 rendered bodies, dynamic menu/column badges, other i18n help strings, retained decisions, code summaries with file:line, and bilingual before/after candidates. Describing server/domain code was read before drafting candidates. Read conventions-ui’s orientation, guide-action and hint rules; design-system’s Help mode; backlog A1315/A237 and dashboard A1315/A1247. Recheck changed sources after rebasing.
+
+- [ ] **Shorten five bubbles in EN/ES.** `help.account.settings` lists fields instead of orienting: describe personal details and sign-in. `profile.data_copy_holds` inventories export categories: summarize profile/sign-in, recorded work/actions and README/rights, without promising unrecorded work data. `box_status.retry_help` explains batching and disabled-state mechanics: keep retry purpose, possible waiting and stopped-record limit. `box_status.free_help` gives deletion thresholds: keep file categories and protection of sales/settings/backups. `help.products.vat` explains automatic invoice-date rate selection: retain class and republishing instruction. Use audited candidates. Preserve owner-approved literal wording; flag any necessary departure FYI before changing it.
+- [ ] **Preserve useful facts and links.** Expand staff `#own-account` in both languages with omitted settings choices; `#own-data` already holds every removed export fact. Add matching products `{#vat}` sections by moving existing VAT instructions, then connect the VAT tooltip through `products.vat`. Cut automatic batch exceptions, retry cadences and cleanup thresholds from touched guide sections too; do not relocate them. Keep certificate installation, stopped-record guidance and protected data. Menu-row/table badges cannot link under A1247; leave their interfaces alone. Retain the other sixteen bodies, including variants, availability and clock-check: their distinctions affect staff decisions. A237 requires no placement changes here. Change only Spanish `orders.col.table`: “Mesa o barra” → “Mesa o mostrador”, and `orders.counter`: “Barra” → “Mostrador”; unrelated slashes/bars stay.
+- [ ] **Use focused verification.** Before any code/test editing, read TDD skill. First fail the existing VAT no-link case against the new EN/ES link; implement minimally, then pass. Update literal-copy assertions while retaining meaning, language, visibility and action assertions. Add only the two-key counter wording case. Run named help cases for product-editor, profile personal-data, account menu, Free and Retry, plus help-guide cases. Existing guide-content render/link/twin cases and guide-links own those checks; duplicate nothing. Inspect EN/ES, both themes, phone width and guide destinations. No whole suites.
+
+**Exact implementation file list:**
+
+- Product source: `apps/dashboard/src/i18n/strings.ts`, `apps/dashboard/src/help-guide.ts`, `apps/dashboard/src/widgets/product-editor.ts`.
+- Tests: `apps/dashboard/src/i18n/t.test.ts`, `apps/dashboard/src/help-guide.test.ts`, `apps/dashboard/src/widgets/product-editor.test.ts`, `apps/dashboard/src/screens/profile-screen.personal-data.test.ts`.
+- Guides: `apps/server/src/guide/en/staff.md`, `apps/server/src/guide/es/staff.md`, `apps/server/src/guide/en/products.md`, `apps/server/src/guide/es/products.md`, `apps/server/src/guide/en/box-status.md`, `apps/server/src/guide/es/box-status.md`.
+- Queue: `docs/backlog.md`, `docs/backlog/dashboard.md`.
+
+**Estimated size:** product code 25–45 changed lines; tests 30–55; guide/backlog prose 50–90.
+
+**Finish line:** Remove dashboard from A1315’s remaining work and VAT from A1247’s missing-link clause; retain server work and other limits. Attach every changed EN/ES before/after and source receipt to the PR. Run finish-branch, normal hooks and current-head scoped CI, then land-branch under the shared landing lock using the owner’s campaign authorisation. Verify the merge run and clean up only owned runtime state.
