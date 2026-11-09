@@ -492,3 +492,25 @@ export {
   type AdjustmentAction,
   type AdjustmentPolicySnapshot,
 } from "./adjustment-policy-types.js";
+
+export {
+  canonicalDeliveryIntent,
+  parseDeliveryIntent,
+  parseInvoiceSave,
+} from "./document-delivery.js";
+export type {
+  RoutingOrigin,
+  OperationIdentity,
+  DocumentChoice,
+  Designation,
+  DeliveryContext,
+  PrintIntent,
+  EmailIntent,
+  DeliveryIntent,
+  DeliveryResult,
+  OperationResult,
+  InvoiceSave,
+  InvoiceSaveResult,
+  RecoveryResolution,
+  DocumentOffers,
+} from "./document-delivery.js";

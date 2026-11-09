@@ -41,6 +41,7 @@ const EXPECTED = [
   "clock_confirmations",
   "clock_stop_restarts",
   "daily_closes",
+  "document_page_reprints",
   "filing_case_events",
   "filing_cases",
   "fiscal_allocations",

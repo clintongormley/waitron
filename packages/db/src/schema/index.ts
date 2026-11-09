@@ -73,3 +73,11 @@ export * from "./identity/index.js";
 export * from "./catalogue/index.js";
 export * from "./adjustments/index.js";
 export * from "./venue-service/index.js";
+
+export * from "./document-delivery-requests.js";
+
+export * from "./device-invoice-save-operations.js";
+
+export * from "./device-invoice-revisions.js";
+
+export * from "./document-page-jobs.js";
