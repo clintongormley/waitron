@@ -108,3 +108,70 @@ it("paints the selected Floor tab with its border token beside the counter menu"
   expect(floor.getAttribute("aria-pressed")).toBe("true");
   expect(getComputedStyle(floor).borderTopColor).toBe("rgb(13, 27, 39)");
 });
+
+it("a long counter menu follows a phone rotation and keeps its last zone reachable", async () => {
+  await page.viewport(390, 844);
+  try {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      operatorName: "Ana",
+      activeScreen: "counter",
+      counterZones: Array.from({ length: 20 }, (_, index) => ({
+        id: `zone-${index}`,
+        name: `Counter ${index}`,
+      })),
+      selectedCounterZoneId: "zone-0",
+    });
+    const menu = el.shadowRoot!.querySelector<HTMLElement>("[data-counter-zones]")!;
+    await (menu as TillShell).updateComplete;
+    const trigger = menu.shadowRoot!.querySelector("button")!;
+    const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    await userEvent.click(trigger);
+    await userEvent.keyboard("{End}");
+    await page.viewport(844, 390);
+    await vi.waitFor(() => {
+      const box = popup.getBoundingClientRect();
+      expect(box.bottom).toBeLessThanOrEqual(innerHeight - 8);
+      expect(box.top).toBeGreaterThanOrEqual(8);
+      const last = menu.querySelector<HTMLElement>('[data-counter-zone="zone-19"]')!;
+      expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom);
+    });
+    const selected: string[] = [];
+    el.addEventListener("counter-zone-selected", (event) =>
+      selected.push((event as CustomEvent<{ zoneId: string }>).detail.zoneId),
+    );
+    await userEvent.keyboard("{Enter}");
+    expect(selected).toEqual(["zone-19"]);
+    expect(menu.shadowRoot!.activeElement).toBe(trigger);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+it("the handheld More menu keeps its host height cap below the bar after rotation", async () => {
+  await page.viewport(390, 844);
+  try {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "phone-portrait",
+      operatorName: "Ana",
+      activeScreen: "floor",
+      affordances: ["find-bill", "schedule", "station"],
+      canSwitchProfile: true,
+    });
+    const menu = el.shadowRoot!.querySelector<HTMLElement>('[data-test="more-menu"]')!;
+    await (menu as TillShell).updateComplete;
+    const trigger = menu.shadowRoot!.querySelector("button")!;
+    const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    await userEvent.click(trigger);
+    await page.viewport(844, 390);
+    await vi.waitFor(() => {
+      expect(popup.getBoundingClientRect().top).toBeCloseTo(
+        trigger.getBoundingClientRect().bottom,
+        0,
+      );
+      expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
+      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+    });
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});

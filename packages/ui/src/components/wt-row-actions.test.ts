@@ -183,7 +183,7 @@ describe("row actions", () => {
   });
 
   it("supports Tab then Enter to activate an action and close the disclosure", async () => {
-    const { edit, trigger, popup } = await mountActions();
+    const { el, edit, trigger, popup } = await mountActions();
     const action = vi.fn();
     edit.addEventListener("click", action);
     trigger.focus();
@@ -192,6 +192,7 @@ describe("row actions", () => {
     await userEvent.keyboard("{Enter}");
     expect(action).toHaveBeenCalledTimes(1);
     await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
+    expect(el.shadowRoot!.activeElement).toBe(trigger);
   });
 
   it("closes on Escape and returns focus to its trigger", async () => {
@@ -226,7 +227,7 @@ describe("row actions", () => {
   });
 
   it("leaves keyboard focus in a modal opened by an action", async () => {
-    const { edit, host, trigger, popup } = await mountActions();
+    const { el, edit, host, trigger, popup } = await mountActions();
     const dialog = document.createElement("dialog");
     const input = document.createElement("input");
     input.setAttribute("aria-label", "Printer name");
@@ -238,7 +239,12 @@ describe("row actions", () => {
     expect(dialog.open).toBe(true);
     expect(popup.matches(":popover-open")).toBe(false);
     expect(document.activeElement).toBe(input);
+    const closed = new Promise<void>((resolve) => {
+      dialog.addEventListener("close", () => resolve(), { once: true });
+    });
     dialog.close();
+    await closed;
+    expect(el.shadowRoot!.activeElement).toBe(trigger);
   });
 
   it("lets the last action receive a real pointer click beyond a horizontally scrolling table", async () => {
@@ -549,6 +555,78 @@ describe("opens-below", () => {
       expect(picked).toEqual(["Action 15"]);
     } finally {
       await page.viewport(1280, 900);
+    }
+  });
+
+  it.each([false, true])(
+    "repositions an open list (opens-below=%s) on resize and keeps its focused last action in view without observer loops",
+    async (opensBelow) => {
+      const errors: string[] = [];
+      const onError = (event: ErrorEvent) => errors.push(event.message);
+      window.addEventListener("error", onError);
+      await page.viewport(900, 800);
+      try {
+        const { el, trigger, popup, actions } = await longMenu(15);
+        el.opensBelow = opensBelow;
+        el.style.insetInlineStart = "auto";
+        el.style.right = "8px";
+        await el.updateComplete;
+        await userEvent.click(trigger);
+        const last = actions.at(-1)!;
+        last.focus();
+        await page.viewport(390, 400);
+        await vi.waitFor(() => {
+          const box = popup.getBoundingClientRect();
+          expect(box.right).toBeLessThanOrEqual(innerWidth - 8 + 0.5);
+          expect(box.bottom).toBeLessThanOrEqual(innerHeight - 8 + 0.5);
+          if (opensBelow) expect(box.top).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
+          expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom);
+        });
+        expect(last.shadowRoot!.activeElement).toBe(last.shadowRoot!.querySelector("button"));
+        expect(errors.filter((message) => message.includes("ResizeObserver"))).toEqual([]);
+      } finally {
+        window.removeEventListener("error", onError);
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
+  it("positions the drawn height when a host caps its scrolling menu below the trigger", async () => {
+    await page.viewport(390, 400);
+    try {
+      const { el, trigger, popup } = await longMenu(15);
+      const style = document.createElement("style");
+      style.textContent = `wt-row-actions::part(popup) { max-height: calc(100vh - ${trigger.getBoundingClientRect().bottom + 8}px); overflow-y: auto; }`;
+      host.append(style);
+      el.show();
+      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+      expect(popup.getBoundingClientRect().top).toBeCloseTo(
+        trigger.getBoundingClientRect().bottom,
+        0,
+      );
+      expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("removes its window resize listener on close and removal, and installs a fresh one on reopen", async () => {
+    const add = vi.spyOn(window, "addEventListener");
+    const remove = vi.spyOn(window, "removeEventListener");
+    try {
+      const { el, popup } = await longMenu(3);
+      el.show();
+      const listener = add.mock.calls.find(([type]) => type === "resize")![1];
+      el.hide();
+      await vi.waitFor(() => expect(remove).toHaveBeenCalledWith("resize", listener));
+      el.show();
+      expect(popup.matches(":popover-open")).toBe(true);
+      remove.mockClear();
+      el.remove();
+      expect(remove).toHaveBeenCalledWith("resize", listener);
+    } finally {
+      add.mockRestore();
+      remove.mockRestore();
     }
   });
 
@@ -1310,4 +1388,79 @@ describe("a help badge inside a menu row, and a menu that changes size", () => {
       vi.restoreAllMocks();
     }
   });
+});
+
+describe("role-menu navigation", () => {
+  async function menu() {
+    const el = (await mount(`<wt-row-actions label="Bills"><div role="menu">
+      <button role="menuitemradio" aria-checked="false" id="first">First</button>
+      <button role="menuitem" disabled>Unavailable</button>
+      <button role="menuitemradio" aria-checked="true" id="checked">Current</button>
+      <button role="menuitem" hidden>Hidden</button>
+      <button role="menuitem" id="last">New bill</button>
+    </div></wt-row-actions>`)) as WtRowActions;
+    const trigger = el.shadowRoot!.querySelector("button")!;
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    return {
+      el,
+      trigger,
+      popup,
+      first: el.querySelector<HTMLButtonElement>("#first")!,
+      checked: el.querySelector<HTMLButtonElement>("#checked")!,
+      last: el.querySelector<HTMLButtonElement>("#last")!,
+    };
+  }
+
+  it("names a menu, focuses its checked choice and wraps arrows past disabled and hidden rows", async () => {
+    const { trigger, first, checked, last } = await menu();
+    await userEvent.click(trigger);
+    expect(trigger.getAttribute("aria-haspopup")).toBe("menu");
+    expect(document.activeElement).toBe(checked);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(last);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(first);
+    await userEvent.keyboard("{ArrowUp}");
+    expect(document.activeElement).toBe(last);
+    await userEvent.keyboard("{Home}");
+    expect(document.activeElement).toBe(first);
+    await userEvent.keyboard("{End}");
+    expect(document.activeElement).toBe(last);
+  });
+
+  it("closes on Tab and continues after the trigger", async () => {
+    const { trigger, last, popup } = await menu();
+    const outside = document.createElement("button");
+    outside.textContent = "After the menu";
+    host.append(outside);
+    await userEvent.click(trigger);
+    last.focus();
+    await userEvent.keyboard("{Tab}");
+    expect(popup.matches(":popover-open")).toBe(false);
+    expect(document.activeElement).toBe(outside);
+  });
+});
+
+it("opens on the first enabled menu item when a checked choice is disabled or invisible", async () => {
+  const el = (await mount(`<wt-row-actions label="Bills"><div role="menu">
+    <button role="menuitemradio" aria-checked="true" disabled>Unavailable</button>
+    <button role="menuitem" style="visibility:hidden">Invisible</button>
+    <button role="menuitem">New bill</button>
+  </div></wt-row-actions>`)) as WtRowActions;
+  el.show();
+  expect(document.activeElement).toBe(el.querySelectorAll("button")[2]);
+  await userEvent.keyboard("{ArrowDown}");
+  expect(document.activeElement).toBe(el.querySelectorAll("button")[2]);
+});
+
+it("an empty menu tolerates navigation and Escape still closes it", async () => {
+  const el = (await mount(
+    '<wt-row-actions label="Bills"><div role="menu"></div></wt-row-actions>',
+  )) as WtRowActions;
+  const trigger = el.shadowRoot!.querySelector("button")!;
+  await userEvent.click(trigger);
+  await userEvent.keyboard("{ArrowDown}{ArrowUp}{Home}{End}");
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+  await userEvent.keyboard("{Escape}");
+  expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
 });

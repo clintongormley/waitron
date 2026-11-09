@@ -7,6 +7,7 @@ import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { foldCache, foldForSearch, searchFor } from "@waitron/shared";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
+import { popupIndex, popupPlacement } from "../popup-helpers.js";
 
 export interface ComboboxOption {
   value: string;
@@ -577,8 +578,7 @@ export class WtCombobox extends LitElement {
     this.trigger.focus();
   }
 
-  /** Places the panel again for the matched rows, keeping its top, so the search box being typed
-   * into stays where it is unless the panel would now cross the bottom gutter. */
+  /** A filtered panel stays on its opening side of the field. */
   private async onSearchInput(event: Event): Promise<void> {
     this.searchText = (event.target as HTMLInputElement).value;
     this.activeIndex = this.firstRowIndex;
@@ -602,22 +602,7 @@ export class WtCombobox extends LitElement {
   /** The arrows wrap at both ends; ArrowUp with no row active goes to the last row. An index left
    * past the end of the rows counts as the last row. */
   private async moveActive(key: NavigationKey): Promise<void> {
-    const count = this.rowCount;
-    const current = Math.min(this.activeIndex, count - 1);
-    switch (key) {
-      case "ArrowDown":
-        this.activeIndex = count === 0 ? -1 : (current + 1) % count;
-        break;
-      case "ArrowUp":
-        this.activeIndex = current <= 0 ? count - 1 : current - 1;
-        break;
-      case "Home":
-        this.activeIndex = count > 0 ? 0 : -1;
-        break;
-      case "End":
-        this.activeIndex = count - 1;
-        break;
-    }
+    this.activeIndex = popupIndex(key, this.activeIndex, this.rowCount)!;
     await this.scrollActiveIntoView();
   }
 
@@ -748,6 +733,7 @@ export class WtCombobox extends LitElement {
     else this.activeIndex = this.firstRowIndex;
     // Opening synchronously makes its dimensions available before the first paint.
     this.popup.showPopover();
+    window.addEventListener("resize", this.onWindowResize);
     this.focusPanelControl();
     // The search text changes the rows, so measure the re-rendered list. The await resolves on a
     // microtask, still ahead of the frame this paints.
@@ -768,21 +754,45 @@ export class WtCombobox extends LitElement {
     }
   }
 
+  private panelAbove = false;
+
+  private readonly onWindowResize = (): void => {
+    this.positionPopup();
+    this.scrollRowIntoView(this.activeIndex);
+  };
+
   private positionPopup(keepTop = false): void {
+    if (!this.popup.matches(":popover-open")) return;
     const anchor = this.trigger.getBoundingClientRect();
-    // The width is applied before the panel is measured: it changes how the labels wrap, and so the
-    // height the vertical clamp below depends on. An explicit max-content, because the popover's
-    // default fit-content would measure against the left written by the previous opening.
+    const scrollTop = this.listbox.scrollTop;
+    const previousTop = this.popup.getBoundingClientRect().top;
+    // Measure at the final width so wrapped rows contribute their drawn height.
     this.popup.style.width = "max-content";
     this.popup.style.minWidth = `${anchor.width}px`;
     this.popup.style.maxWidth = `${innerWidth - 16}px`;
+    this.listbox.style.maxHeight = "";
+    const natural = this.popup.getBoundingClientRect();
+    const placement = popupPlacement(anchor, natural.height, innerHeight, "above");
+    if (!keepTop) this.panelAbove = placement.top < anchor.top;
+    const maxHeight = this.panelAbove
+      ? Math.max(0, anchor.top - 8)
+      : popupPlacement(anchor, natural.height, innerHeight, "below").maxHeight;
+    const extra = natural.height - this.listbox.getBoundingClientRect().height;
+    this.listbox.style.maxHeight = `${Math.max(0, Math.min(this.listbox.getBoundingClientRect().height, maxHeight - extra))}px`;
     const popup = this.popup.getBoundingClientRect();
-    // Left-aligned with the trigger, pulled left only far enough to keep the panel inside the
-    // viewport's 8px right gutter.
     const maxLeft = Math.max(0, innerWidth - popup.width - 8);
     this.popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;
-    const top = keepTop ? popup.top : anchor.bottom;
-    this.popup.style.top = `${Math.max(8, Math.min(top, innerHeight - popup.height - 8))}px`;
+    this.popup.style.top = `${
+      this.panelAbove
+        ? Math.max(
+            8,
+            keepTop ? Math.min(previousTop, anchor.top - popup.height) : anchor.top - popup.height,
+          )
+        : keepTop
+          ? Math.min(previousTop, innerHeight - popup.height - 8)
+          : anchor.bottom
+    }px`;
+    this.listbox.scrollTop = scrollTop;
   }
 
   /** Set while a render runs with focus in the panel. A render can swap the panel's control
@@ -816,6 +826,7 @@ export class WtCombobox extends LitElement {
   }
 
   override updated(changed: PropertyValues<this>): void {
+    if (changed.has("options") && this.popup?.matches(":popover-open")) this.positionPopup(true);
     if (this.keepingPanelFocus) {
       this.keepingPanelFocus = false;
       this.focusPanelControl();
@@ -857,11 +868,13 @@ export class WtCombobox extends LitElement {
 
   override disconnectedCallback(): void {
     this.expanded = false;
+    window.removeEventListener("resize", this.onWindowResize);
     super.disconnectedCallback();
   }
 
   private onToggle(event: ToggleEvent): void {
     this.expanded = event.newState === "open";
+    if (!this.expanded) window.removeEventListener("resize", this.onWindowResize);
   }
 
   private onKeydown(event: KeyboardEvent): void {

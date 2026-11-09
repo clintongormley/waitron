@@ -607,28 +607,13 @@ plans to retire the editor.
 
 ## Bundle: Wt popups
 
-7 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **A781. One shared panel-placement and arrow-key helper for the `wt-*` pop-up fields (left open by
-  #1828).**
-  [Detail](dashboard.md#a781-one-shared-panel-placement-and-arrow-key-helper-for-the-wt--pop-up-fields-left-open-by-1828)
-- **A1256. A `wt-row-actions` menu of `role="menu"` items has no arrow keys, and choosing an item
-  drops focus to the page (found in A803 slice 3's Task 9 review, 2026-10-31).** The till's bill
-  switcher shows it too: Enter on a bill leaves focus on the page, and there are no arrow keys
-  (A803 slice 3's LOOK, finding F6).
-  [Detail](dashboard.md#a1256-a-wt-row-actions-menu-of-rolemenu-items-has-no-arrow-keys-and-choosing-an-item-drops-focus-to-the-page-found-in-a803-slice-3s-task-9-review-2026-10-31)
-- **A1258. An open `wt-row-actions` menu is not placed again when the window is resized or rotated
-  (found in A803 slice 3's Task 10 fix review, 2026-10-31).**
-  [Detail](dashboard.md#a1258-an-open-wt-row-actions-menu-is-not-placed-again-when-the-window-is-resized-or-rotated-found-in-a803-slice-3s-task-10-fix-review-2026-10-31)
 - **A625. Check whether a row menu still wraps its two-word items after the window is resized to
   phone width (owner, 2026-10-17: keep as a check).**
   [Detail](dashboard.md#a625-check-whether-a-row-menu-still-wraps-its-two-word-items-after-the-window-is-resized-to-phone-width-owner-2026-10-17-keep-as-a-check)
 - **`wt-combobox` without a search box never exposes `aria-required`**
   [Detail](dashboard.md#wt-combobox-without-a-search-box-never-exposes-aria-required)
-- **A1058. A `wt-combobox` list with no room below its field covers the field's own value.**
-  `positionPopup` (`packages/ui/src/components/wt-combobox.ts`) pulls the list up only as far as
-  the window needs, never above the field: at a 900 px-tall window the station editor's last field,
-  Changes after sending, opens its list over its own value and the Save button (A756 PR 8's look).
 - **A903. Check that the course list's row menus stay on screen at 390 px (left open by A827).**
   [Detail](dashboard.md#a903-check-that-the-course-lists-row-menus-stay-on-screen-at-390-px-left-open-by-a827)
 
@@ -1153,49 +1138,6 @@ The off track is `--wt-color-border` (`packages/ui/src/components/wt-switch.ts:7
   the dark one, read from pixel colours in those screenshots, where WCAG 1.4.11 asks 3 to 1 for a
   control's boundary. Not measured from the component's tokens; `wt-switch` itself was not changed
   by A639 (last changed by W97, #1311).
-
-
-## A781. One shared panel-placement and arrow-key helper for the `wt-*` pop-up fields (left open by #1828).
-
-`wt-colour-chooser` copies the panel placement (which since A783 also picks two or four
-  columns) and the arrow-key handling that other `wt-*` components (`wt-combobox` among them)
-  each carry their own copy of;
-  `wt-language-chooser` and `wt-theme-chooser` already share theirs through
-  `packages/ui/src/menu-popover.ts`. Move both into shared helpers in `packages/ui` and have every
-  copy use them; each component's own tests and mutation score must hold.
-
-
-## A1256. A `wt-row-actions` menu of `role="menu"` items has no arrow keys, and choosing an item drops focus to the page (found in A803 slice 3's Task 9 review, 2026-10-31).
-
-`packages/ui/src/components/wt-row-actions.ts` opens its list on Enter but leaves focus on the
-  trigger; ArrowDown does nothing; Tab reaches the items; Escape closes and puts focus back on the
-  trigger; choosing an item with Enter or a click closes the list and leaves focus on `body`; the
-  trigger carries no `aria-haspopup`. The till's bill switcher and counter-zone menu
-  (`apps/till/src/screens/table-bill-controls.ts`, `apps/till/src/widgets/till-shell.ts`) both
-  slot a `role="menu"` list into it, which tells a screen reader to expect arrow keys. Measured by
-  the A803 slice 3 Task 9 review's key probe on the mounted table screen (`userEvent.keyboard`:
-  Enter, ArrowDown, Tab, Tab, Escape, then Enter and a click on a row, reading
-  `document.activeElement` after each). Fix in the primitive, once: put focus back on the trigger
-  after an item closes the list, and, when the slotted content is a `role="menu"`, add arrow-key
-  movement and `aria-haspopup="menu"` as `packages/ui/src/menu-popover.ts` does for the language
-  and theme choosers (A781 is the shared-helper half of this).
-
-  The till's bill switcher has the same fault (A803 slice 3's LOOK, finding F6,
-  `~/waitron-campaign-c/a803-3-look-report.md`, outside the repository): Enter on the switcher
-  opens it with focus left on the trigger, ArrowDown does nothing though the list is
-  `role="menu"` with `menuitemradio` rows, and Enter on "Bill 2" showed Bill 2 with focus on
-  `<body>`, not back on the switcher.
-
-
-## A1258. An open `wt-row-actions` menu is not placed again when the window is resized or rotated (found in A803 slice 3's Task 10 fix review, 2026-10-31).
-
-`packages/ui/src/components/wt-row-actions.ts` places its popup when it opens and again when the
-  popup's own size changes (its `ResizeObserver`), and a window resize does not change that size.
-  Measured by the A803 slice 3 Task 10 fix review's probes (15 items, trigger at 58–102 px): shrunk
-  from 1024×768 to 1024×500 while open, the popup kept its place and ran past the window's bottom,
-  with and without `opens-below`; rotated to 768×1024, the table screen's ⋮ kept its old height cap.
-  Fix in the primitive, once: while open, call `positionPopup()` on `resize` of `window` (or
-  `visualViewport`), and remove the listener when it closes.
 
 
 ## The box's trust page still follows the device's setting, not the Theme choice (left open by A681).

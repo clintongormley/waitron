@@ -1445,7 +1445,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Contrast pass** (bundle of 2, 1 important, size S). [Detail](backlog/dashboard.md#bundle-contrast-pass)
 
-- **Wt popups** (bundle of 7, 2 important, size M). Holds A781, A1256, A1258, A625, A1058, A903. [Detail](backlog/dashboard.md#bundle-wt-popups)
+- **Wt popups** (bundle of 3, size S). Holds A625, A903 and the combobox aria-required check. [Detail](backlog/dashboard.md#bundle-wt-popups)
 
 - **Theme logo** (bundle of 2, size M). [Detail](backlog/dashboard.md#bundle-theme-logo)
 

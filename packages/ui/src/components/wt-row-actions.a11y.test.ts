@@ -25,6 +25,19 @@ describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (the
       await expectNoA11yViolations(host);
     },
   );
+  test("announces a role menu with its checked choice in both closed and open states", async () => {
+    const el = await mountThemed(
+      `<wt-row-actions label="Bills"><div role="menu" aria-label="Bills">
+      <button role="menuitemradio" aria-checked="true">Bill 1</button>
+      <button role="menuitemradio" aria-checked="false">Bill 2</button>
+    </div></wt-row-actions>`,
+      theme,
+    );
+    await expectNoA11yViolations(host);
+    await userEvent.click(el.shadowRoot!.querySelector("button")!);
+    await expectNoA11yViolations(host);
+  });
+
   test("names the hamburger and its open create, edit and delete actions", async () => {
     const el = await mountThemed(
       `<wt-row-actions label="Department actions">

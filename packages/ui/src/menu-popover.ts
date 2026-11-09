@@ -1,4 +1,5 @@
 import { css, type LitElement, type ReactiveController } from "lit";
+import { popupIndex } from "./popup-helpers.js";
 
 export interface MenuPopoverParts {
   trigger: () => HTMLElement;
@@ -143,24 +144,8 @@ export class MenuPopover implements ReactiveController {
     const options = this.#options();
     const at = options.indexOf(event.target as HTMLElement);
     if (at === -1) return;
-    const last = options.length - 1;
-    let to: number;
-    switch (event.key) {
-      case "ArrowDown":
-        to = at === last ? 0 : at + 1;
-        break;
-      case "ArrowUp":
-        to = at === 0 ? last : at - 1;
-        break;
-      case "Home":
-        to = 0;
-        break;
-      case "End":
-        to = last;
-        break;
-      default:
-        return;
-    }
+    const to = popupIndex(event.key, at, options.length);
+    if (to === undefined) return;
     event.preventDefault();
     options[to]!.focus();
   }

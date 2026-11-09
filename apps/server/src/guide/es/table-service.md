@@ -282,6 +282,10 @@ fila para poner esa cuenta en pantalla. Una cuenta pagada también se abre, para
 nombre o, si tiene ticket, imprimir una copia, pero no admite platos nuevos. **+ Cuenta nueva** está
 siempre al final de la lista: abre una cuenta nueva y vacía en la mesa y la pone en pantalla.
 
+Con el teclado, pulsa Intro para abrir el selector, usa las flechas arriba y abajo para llegar
+a una cuenta y pulsa Intro para mostrarla. Inicio y Fin llevan a la primera y la última opción.
+Escape cierra la lista.
+
 Todo lo demás que haces en la mesa está en el menú **⋮**, junto al selector, en dos partes. La
 primera, con el nombre de la cuenta en pantalla como título, por ejemplo **Cuenta 2 · Clint**, actúa
 solo sobre esa cuenta: **Poner nombre a esta cuenta**, **Mover platos…**, **Juntar cuentas**,

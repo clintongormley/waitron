@@ -1233,7 +1233,6 @@ the list is `apps/dashboard/src/widgets/course-list.ts`.
   2026-11-08). Change `wt-row-actions` so that menu draws an icon button opening the same
   confirmation, its accessible name naming the row ("Delete: Starters"); a menu with any other single
   action stays a menu. Add a trash icon to `wt-icon` if it has none. Courses has exactly this menu.
-  The Wt popups bundle (A1256, A1258, in dashboard.md) changes `wt-row-actions` too.
 - **A1075. On the Courses page the row dividers stop short of the card's sides** (mock-up 02 runs
   them to the edge; needs `course-list.ts` styles), and an error under the list would sit on the
   card's bottom border (read from the code, not seen). Left open by #1854, A756.
