@@ -3818,6 +3818,18 @@ ways its header states — it reads the schema the migrations BUILD rather than 
 insert, so it cannot tell a key SQLite records from a key SQLite enforces, and it matches a unique
 index by NAME, so an index whose columns changed under a kept name passes.
 
+## A migration set needs only its newest snapshot
+
+`drizzle-kit generate` gave the same result with only a set's newest `meta/NNNN_snapshot.json` as with all of them.
+Experiment on 2026-11-09, `packages/db` at main 8d38a3bbfe, four snapshots: with the three older ones
+deleted and the schema unchanged it printed "No schema changes, nothing to migrate"; with one column
+added, the generated SQL was byte-identical with and without them. Control: with all four deleted it
+wrote a new migration of 192 `CREATE TABLE`s. An earlier run, in a clone of main 6084db1b7e, also
+checked `workforce-es` and passed the schema guards and `inmutabilidad` with the older snapshots gone.
+The non-test code that opens one by number (`packages/provisioning/src/first-setup-empty-database.ts:54`)
+and the test helper `packages/sync-enrolment/src/testing/migration-sets.ts:44` open the journal's last
+entry only.
+
 ## Editing a shipped migration file, even a comment, needs a venue reset
 
 Drizzle records a hash of each migration file's whole text in the database's journal table, and
