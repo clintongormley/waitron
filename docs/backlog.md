@@ -1295,18 +1295,13 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **Guest count** (bundle of 2, size S, needs the owner). [Detail](backlog/printers.md#bundle-guest-count)
 
-- **A790. Till document and printer choice, then the remaining entries.** The folded Invoice
-  chooser landed in #2640. Owner20:34 on 9 November: “Drop it, small slices”. The
-  [proposed next slice](superpowers/plans/2026-11-09-a790-till-document-printer.md) puts one
-  Print/Reprint entry on the till ticket view: recorded Receipt/Invoice first, then that role's
-  device-profile printers, default first, with explicit named Print and the existing Equipment
-  save/holder/delivery rules. It covers live sales and history with a working-order id using
-  today's routes; the Claude read is complete and watcher approval remains. The proposed boundary releases
-  A739 after this usable till slice, then A840/A842/A848 together; orderless F1 Invoice delivery and dashboard
-  routing remain unfinished. G4, recovery-origin file, browser operation journal and prepare/accept
-  are dropped entirely; no A947 dependency or new duplicate-print protection. Landed foundations
-  grant no cleanup authority. Keep the mixed-printer payment choice and Devices A4 marker as later
-  A790 work; fiscal issuance and F2 replacement stay outside this slice.
+- **A790. Remaining document and printer choices.** Orderless historical F1 Invoice delivery,
+  dashboard routing and its separate browser preference remain open. Keep the mixed-printer
+  payment choice and Devices-table A4 marker in this item. A739’s order-linked till prerequisite
+  is released by the [till document/printer slice](superpowers/plans/2026-11-09-a790-till-document-printer.md);
+  its payment window comes before the combined A840/A842/A848 change. G4/A947, recovery-origin
+  file, browser journal, prepare/accept and duplicate-print protection are dropped. Landed
+  foundations grant no cleanup authority; fiscal issuance and F2 replacement stay outside A790.
   [Detail](backlog/printers.md#a790-document-and-printer-routing-plan)
 
 - **Loose ends left by A661 (#1745).**

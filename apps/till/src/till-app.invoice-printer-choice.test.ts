@@ -106,10 +106,21 @@ async function sold(overrides: Record<string, unknown> = {}) {
   emit(counter, "confirm-payment", { method: "cash", amount: "12.00" });
   await flush(el);
   expect(ticket(el)).not.toBeNull();
+  await openInvoice(el);
+  await userEvent.click(part(el, "invoice-printer-toggle")!);
+  await flush(el);
   return { el, api, id };
 }
 
+async function openInvoice(el: TillApp) {
+  if (part(el, "invoice-printer-toggle")) return;
+  await userEvent.click(part(el, "document-print-toggle")!);
+  await userEvent.click(part(el, "document-invoice")!);
+  await flush(el);
+}
+
 async function choose(el: TillApp, value: string) {
+  await openInvoice(el);
   if (!ticket(el).shadowRoot!.querySelector("wt-combobox")) {
     expect(part(el, "invoice-printer-toggle")).not.toBeNull();
     await userEvent.click(part(el, "invoice-printer-toggle")!);
@@ -441,6 +452,7 @@ it("a new invoice clears the old hold and ignores the old invoice's delayed stat
   counter.store.addProduct(product, "1");
   emit(counter, "confirm-payment", { method: "cash", amount: "12.00" });
   await flush(el);
+  await openInvoice(el);
   expect(part(el, "print-invoice")!.hasAttribute("disabled")).toBe(false);
   old.resolve(delivery(bar));
   await flush(el);

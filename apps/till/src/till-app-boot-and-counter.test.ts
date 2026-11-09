@@ -6547,6 +6547,13 @@ it.each(retirementActionLooks)(
       await flush(el);
       await ticket(el)!.updateComplete;
       expect(ticket(el)!.result.invoiceNumber).toBe("F-0001");
+      await userEvent.click(
+        ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=document-print-toggle]")!,
+      );
+      await userEvent.click(
+        ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=document-receipt]")!,
+      );
+      await flush(el);
       expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
       await page.screenshot({
         path: `../__screenshots__/a182-find/${locale}-${theme}-${width}-receipt.png`,

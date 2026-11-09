@@ -34,14 +34,20 @@ it in the receipt language. Order details name it in your screen language.
 Counter payment cannot issue a full invoice yet. Keep the customer's order on a table bill and
 use that bill's payments. Placing a counter order alone does not issue an invoice.
 
-## Choose the invoice printer {#invoice-printer}
+## Choose a document and printer {#invoice-printer}
 
-To print a full invoice elsewhere, expand **Invoice printer** in the invoice view and choose a
-printer. The list shows A4 and receipt-paper printers allowed for your device. **Use default**
-returns to the profile's default. Your choice is saved in **Equipment** for this device.
+On a sale’s ticket, choose **Print/Reprint**. For a full invoice, choose **Receipt** for the compact
+version or **Invoice** for the invoice layout. A simplified invoice goes straight to its receipt
+printers. Both versions of a full invoice keep the recorded customer details.
 
-Wait for **Print on {printer}** to name your destination, then press it. Choosing a printer alone
-prints nothing. After a failed save, choose **Retry**; use **Refresh** if the list could not load.
+Choose a printer from your device’s list. **Use default** follows the profile’s default; another
+choice is saved in **Equipment** for this device. If another device carries the receipt printer,
+Waitron asks before you take it over.
+
+Wait for **Print on {printer}** or **Print a copy on {printer}** to name your destination, then press
+it. Choosing a document or printer, refreshing the list and going back print nothing. A copy still
+asks for its language when more than one is available; cancelling prints nothing. After a failed
+save, choose **Retry**; use **Refresh** if the list could not load.
 
 ## Avoid duplicate card slips {#reader-slips}
 

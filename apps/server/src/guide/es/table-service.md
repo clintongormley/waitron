@@ -38,15 +38,21 @@ opcionales en otros países. Por ejemplo, una dirección francesa puede ser **2 
 impresa y el ticket en la pantalla de caja muestran el país en el idioma del ticket. El detalle
 del pedido lo muestra en el idioma de tu pantalla.
 
-## Elegir la impresora de facturas {#invoice-printer}
+## Elegir un documento y una impresora {#invoice-printer}
 
-Para imprimir una factura completa en otro sitio, despliega **Impresora de facturas** en la vista
-de la factura y elige una impresora. La lista muestra las impresoras A4 y de papel de recibo
-permitidas para tu dispositivo. **Usar el predeterminado** vuelve a la predeterminada del perfil.
-La elección se guarda en **Equipo de este dispositivo** para este dispositivo.
+En el ticket de una venta, elige **Imprimir/Reimprimir**. Para una factura completa, elige
+**Recibo** para la versión compacta o **Factura** para el formato de factura. Una factura
+simplificada muestra directamente sus impresoras de recibos. Ambas versiones de una factura
+completa conservan los datos del cliente registrados.
 
-Espera a que **Imprimir en {printer}** nombre tu destino y púlsalo. Elegir una impresora por sí solo
-no imprime. Si no se ha guardado, pulsa **Reintentar**; usa **Actualizar** si no se ha podido leer la lista.
+Elige una impresora de la lista de tu dispositivo. **Usar el predeterminado** sigue la
+predeterminada del perfil; otra elección se guarda en **Equipo de este dispositivo**. Si otro
+dispositivo lleva la impresora de recibos, Waitron pregunta antes de que te la quedes.
+
+Espera a que **Imprimir en {printer}** o **Imprimir una copia en {printer}** nombre tu destino y
+púlsalo. Elegir un documento o una impresora, actualizar la lista y volver atrás no imprime nada.
+La copia sigue preguntando el idioma cuando hay más de uno; cancelar no imprime nada. Si la
+elección no se ha guardado, pulsa **Reintentar**; usa **Actualizar** si no se ha podido leer la lista.
 
 ## Evitar justificantes de tarjeta duplicados {#reader-slips}
 

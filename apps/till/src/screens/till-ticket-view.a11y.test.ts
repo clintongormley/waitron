@@ -249,13 +249,54 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
         theme,
       );
       await userEvent.click(
-        el.shadowRoot!.querySelector<HTMLElement>("[data-test=invoice-printer-toggle]")!,
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=document-print-toggle]")!,
+      );
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=document-invoice]")!,
       );
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("[aria-expanded=true]")).not.toBeNull();
       await expectNoA11yViolations(host);
     },
   );
+
+  it("has no violations choosing a document and taking over a Receipt printer", async () => {
+    const carried = equipmentItem("belt", "Belt", {
+      kind: "receipt",
+      portable: true,
+      heldBy: { deviceId: "other", deviceName: "Patio", personName: "Alex" },
+    });
+    const { el, host } = await mountWidget<TillTicketView>(
+      "till-ticket-view",
+      {
+        issuer,
+        result: { ...result, invoiceType: "F1" },
+        invoicePrintersEnabled: true,
+        originalReceiptPrint: { status: "not_queued" },
+        receiptEquipment: roleOf("receipt", null, [carried]),
+      },
+      theme,
+    );
+    await userEvent.click(
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=document-print-toggle]")!,
+    );
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+    await userEvent.click(
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=document-receipt]")!,
+    );
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector("wt-combobox")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "belt" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
 
   it.each(["en-GB", "es-ES"])(
     "has no violations with the saved F1 operation date in %s",
