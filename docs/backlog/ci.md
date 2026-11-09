@@ -163,65 +163,14 @@ could happen; `startS3TestServer` now recovers from it. A sibling scan found two
 That is not two draws before either bind. The remaining work concerns the release-to-bind
 interval, including single draws.
 
-## A1251: setup-test cleanup after a listener-readiness refusal
-
-The retrospective review of [PR #2143](https://github.com/clintongormley/waitron/pull/2143)
-found that `withSetupBoot` in `apps/server/src/boot.setup-routes.test.ts` awaits
-`awaitListening(port!)` before entering the block that closes its server. Put that wait under
-cleanup and add a regression that checks the fixture can accept writes after the refused wait.
-Preserve the existing setup assertions and configured-port contracts.
-
-On 31 October 2026, a disposable real-boot probe injected a readiness error at that await.
-The assertion `expect(() => beforeServerStarts()).not.toThrow()` failed because the server
-remained registered as running. Moving the injected error inside the existing cleanup block
-passed the same assertion. Both runs used
-`pnpm --filter @waitron/server exec vitest run src/boot.setup-routes.test.ts -t 'A1251 closes the setup server when listener readiness refuses'`.
-The probe explicitly closed the retained server afterwards. This isolates the cleanup gap;
-it does not establish that a natural bind failure reaches the wait before the fatal-exit path.
-The startup and cleanup prefix was identical in the reviewed squash and main at the check.
-
 Keep the shared fixture’s scope explicit when extending it: `ephemeralHttpMock` in
 `apps/server/src/testing/ephemeral-listener.ts` rewrites every `serve` port in its default mode,
 and `httpPort()` reports the last listener. A synthetic two-listener request reached the second
 listener. The converted suites passed 233 cases with listener-call instrumentation.
 Paired main/landing listeners retain the configured binding;
 do not assume the default fixture can identify the main listener in that shape.
-The remaining configured-port hand-off work stays in the preceding entry.
 
-## A1251: Spanish exhausted-cleanup test checks mapping only
-
-The retrospective review of [PR #2077](https://github.com/clintongormley/waitron/pull/2077)
-found that the Spanish exhausted-cleanup case in
-`apps/dashboard/src/screens/box-status-screen.test.ts` compares the screen with the current
-catalogue entry. Restoring the old Spanish installer referral on the reviewed squash left both
-locale cases passing. Restoring the old English text too failed the English case while Spanish
-still passed. Reproduce with
-`pnpm --filter @waitron/dashboard exec vitest run src/screens/box-status-screen.test.ts -t 'exhausted cleanup'`.
-Add an independent check that rejects the Spanish referral while retaining the locale-mapping
-assertion and every unrelated check. The Spanish branch still used the catalogue comparison on
-main when checked on 31 October 2026. The retained screenshots show the intended wording; the
-failing control concerns what the test catches.
-
-## A1251: archive-settings advice needs its own condition
-
-The retrospective review of [PR #2068](https://github.com/clintongormley/waitron/pull/2068)
-found that both backup-recovery guides put scheduled-backup reconfiguration under **Prove access
-to the selected backup**. The paragraph immediately follows advice to stop changing keys and leave
-without another submission, but starts unconditionally with opening Backups and choosing settings
-again. Say that it applies when scheduled backups are off because their saved settings cannot be
-used. Keep that choice separate from proving access to a selected copy or responding to an
-unconfirmed key. The paragraph still has that placement and opening on 1 November 2026; this is
-an editorial finding, not an observed failed recovery. Preserve the existing section and link checks.
-
-The same PR's four browser cases check the action name in both languages, but only English checks
-leaving without applying and the absence of a support referral. Removing the Spanish leave choice
-and substituting a support referral left all four cases passing in the reviewed checkout. Repeating
-the control with current main's alert text in that checkout also passed all four cases; the matching
-English fault failed its semantic check. The original four-case group is unchanged on main.
-Reproduce with
-`pnpm --filter @waitron/dashboard exec vitest run src/screens/backup-screen.test.ts -t 'A1089 unreadable archive settings choices'`.
-Add independent Spanish checks for both promises while retaining the action-name checks and the
-existing refusal, corrected-apply and no-write assertions.
+## Archive-settings inline advice must name its available action
 
 An older, separate wording mismatch remains in `apps/dashboard/src/i18n/codes.ts`:
 `backup.archive_settings_invalid` tells you to save again on Backups, while the shown action is
@@ -1662,15 +1611,10 @@ Use the [qualified public-connection wording receipt](self-service-refusals.md#t
 without treating browser refusal checks as certificate-recovery qualification.
 Check the later regional demo guides’ photo-library name claims against image metadata and the
 screen’s content-language selection.
-Repair the setup-test helper’s cleanup after a listener-readiness refusal, and retain the
-shared port fixture’s multiple-listener limit. Keep the IPP clock-driver limit explicit when
+Keep the IPP clock-driver limit explicit when
 changing the polling continuation, and check that a failed fixture’s print call settles after
-teardown. Strengthen the Spanish exhausted-cleanup check so restoring the installer referral
-fails it. [Setup cleanup](#a1251-setup-test-cleanup-after-a-listener-readiness-refusal),
-[Spanish cleanup guidance](#a1251-spanish-exhausted-cleanup-test-checks-mapping-only).
-Give the archive-settings advice its own condition so it does not follow a failed key check as
-another recovery step. Strengthen its Spanish checks to reject a support referral and require
-leaving without applying. [Archive settings findings](#a1251-archive-settings-advice-needs-its-own-condition).
+teardown. Align the archive-settings inline instruction with its available action.
+[Inline advice](#archive-settings-inline-advice-must-name-its-available-action).
 
 ## A1213. Does a re-run till shard's report reach `test-till-merge`?
 

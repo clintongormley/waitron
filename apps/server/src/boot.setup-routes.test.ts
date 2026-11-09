@@ -76,6 +76,7 @@ import {
   fetchHealthOk,
 } from "./testing/boot-harness.js";
 import { createHourTestClock } from "./testing/hour-test-clock.js";
+import * as bootHarness from "./testing/boot-harness.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -358,7 +359,12 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     {
       extraPortCount = 0,
       beforeStart,
-    }: { extraPortCount?: number; beforeStart?: (stateDir: string) => Promise<void> } = {},
+      onStarted,
+    }: {
+      extraPortCount?: number;
+      beforeStart?: (stateDir: string) => Promise<void>;
+      onStarted?: (server: StartedServer) => void;
+    } = {},
   ): Promise<void> {
     const [port, ...drawn] = await freePorts(1 + extraPortCount);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-routes-"));
@@ -406,9 +412,12 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           {},
           { testClock },
         );
-        if (extraPortCount > 0) await awaitListening(port!);
-        const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
+        onStarted?.(server);
+        let closeTls: (() => Promise<void>) | undefined;
         try {
+          if (extraPortCount > 0) await awaitListening(port!);
+          const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
+          closeTls = close;
           await use({
             post: async (path, init) => {
               if (path === "/setup-api/provision" && typeof init.body === "string") {
@@ -451,8 +460,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             extraPorts: drawn,
           });
         } finally {
-          await close();
-          await server.close();
+          try {
+            await closeTls?.();
+          } finally {
+            await server.close();
+          }
         }
       });
     } finally {
@@ -462,6 +474,39 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await rm(stateDir, { recursive: true, force: true });
     }
   }
+
+  it("A1251 closes the setup server when listener readiness refuses", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const refused = new Error("setup listener readiness refused");
+    const ready = bootHarness.awaitListening;
+    const readiness = vi.spyOn(bootHarness, "awaitListening").mockImplementation(async (port) => {
+      await ready(port);
+      throw refused;
+    });
+    let server: StartedServer | undefined;
+    const use = vi.fn();
+    try {
+      await expect(
+        withSetupBoot(venue.directory, {}, use, {
+          extraPortCount: 1,
+          onStarted: (started) => {
+            server = started;
+          },
+        }),
+      ).rejects.toBe(refused);
+      expect(use).not.toHaveBeenCalled();
+      expect(() => beforeServerStarts()).not.toThrow();
+    } finally {
+      readiness.mockRestore();
+      try {
+        await server?.close();
+      } finally {
+        await venue.store.close();
+        await rm(venue.directory, { recursive: true, force: true });
+      }
+    }
+  });
 
   it("finishes a provision whose venue had already committed, re-using that venue rather than minting another", async () => {
     beforeServerStarts();
