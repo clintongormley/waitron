@@ -54,6 +54,7 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { nodeId as brandNodeId } from "@waitron/shared";
+import { createPrinter } from "@waitron/printing";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
@@ -76,7 +77,6 @@ import {
   type OrderLinePatch,
 } from "./working-order.js";
 import { recallToDraft } from "./draft-recall.js";
-import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { readBillEditState } from "./bill-editing.js";

@@ -124,7 +124,7 @@ plato no puedes cambiarlo, pero sí añadir más. Aquí no puedes bajar la canti
 usa **Cancelar…**.
 **Retirar**, en **Más** dentro de la ventana, devuelve el plato a **Nuevo pedido**, para enviarlo de
 nuevo con platos aún sin enviar.
-El plato conserva el precio al que se vendió; un extra que añadas se cobra a su precio actual.
+El plato conserva el precio al que se vendió; lo que añadas, más unidades o un extra, se cobra a su precio actual.
 
 Para que la caja deje de pedir una lista sin eliminarla, desactiva su interruptor **Activa**, o
 quítala de la sección Modificadores de ese producto concreto.
