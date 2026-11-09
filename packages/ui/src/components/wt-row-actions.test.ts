@@ -953,6 +953,7 @@ describe("a link entry", () => {
 
   it("paints its border, background, text, corners and size from the tokens", async () => {
     const { link } = await mountLinkAndButton();
+    link.style.width = "200px";
     host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
     host.style.setProperty("--wt-color-surface", "rgb(4, 5, 6)");
     host.style.setProperty("--wt-color-text", "rgb(7, 8, 9)");
