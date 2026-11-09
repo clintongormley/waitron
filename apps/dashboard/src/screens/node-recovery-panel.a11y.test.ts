@@ -33,6 +33,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
     for (const width of [390, 1280]) {
       it(`${locale} ${theme} ${width}: input, refusal and downloads remain readable and accessible`, async () => {
         const oldLocale = currentLocale();
+        const read = vi.spyOn(File.prototype, "text");
         try {
           setLocale(locale);
           await page.viewport(width, 1000);
@@ -67,13 +68,17 @@ for (const locale of ["en-GB", "es-ES"] as const)
           select("not-json");
           await el.updateComplete;
           root.querySelector<WtButton>("wt-button")!.click();
+          expect(read).toHaveBeenCalledTimes(1);
+          await read.mock.results[0]!.value;
           await vi.waitFor(() =>
-            expect(root.querySelector("[data-test=file-error]")?.textContent).toBeTruthy(),
+            expect(root.querySelector("[data-test=file-error]")?.textContent?.trim()).toBeTruthy(),
           );
           await expectNoA11yViolations(el);
           select('{"test-regime": {"register": "public"}}');
           await el.updateComplete;
           root.querySelector<WtButton>("wt-button")!.click();
+          expect(read).toHaveBeenCalledTimes(2);
+          await read.mock.results[1]!.value;
           await vi.waitFor(() =>
             expect(root.querySelector("[data-test=print-pack]")).not.toBeNull(),
           );
@@ -126,6 +131,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
             await cdp().send("Emulation.setEmulatedMedia", { media: "screen" });
           }
         } finally {
+          read.mockRestore();
           setLocale(oldLocale);
         }
       });
