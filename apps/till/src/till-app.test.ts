@@ -5270,9 +5270,7 @@ describe("till-app", () => {
       await flush(el);
       expect(part(el, "print-invoice")!.hasAttribute("disabled")).toBe(false);
       expect(deliveryLine(el)).toBe("No entregada.");
-      expect(part(el, "print-invoice")!.textContent!.trim()).toBe(
-        "Volver a enviar a la impresora de oficina",
-      );
+      expect(part(el, "print-invoice")!.textContent!.trim()).toBe("Volver a enviar a Office");
       emit(ticket(el)!, "print-invoice");
       await flush(el);
       release();

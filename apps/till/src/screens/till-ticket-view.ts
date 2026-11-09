@@ -1,6 +1,6 @@
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { baseStyles } from "@waitron/ui";
 import {
@@ -25,6 +25,7 @@ import type { StringKey } from "../i18n/strings.js";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
 import "../widgets/invoice-email-dialog.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import type { InvoiceEmailRefusal } from "../widgets/invoice-email-dialog.js";
 import {
   a4HoldCodes,
@@ -32,6 +33,7 @@ import {
   type InvoiceDeliveryAttempt,
   type InvoiceDeliveryStatus,
   type OriginalReceiptPrint,
+  type RoleEquipment,
   type ReceiptAdjustment,
   type TillSaleLine,
   type TillSaleResult,
@@ -339,21 +341,15 @@ function renderTender(result: TillSaleResult, locale: string, labels: ReceiptLab
   `;
 }
 
-/** An A4 printer keeps its A4 words; a receipt printer is named. */
 function printLabel(
   print: NonNullable<InvoiceDeliveryStatus["actions"]["print"]>,
   againOnA4: boolean,
 ): string {
   const printer = print.printers[0]!;
   const copy = print.designation === "duplicate";
-  if (printer.kind === "a4")
-    return t(
-      againOnA4 ? "invoice.send_a4_again" : copy ? "invoice.print_a4_copy" : "invoice.print_a4",
-    );
-  return t(copy ? "invoice.print_on_copy" : "invoice.print_on").replace(
-    "{printer}",
-    () => printer.name,
-  );
+  return t(
+    againOnA4 ? "invoice.send_on_again" : copy ? "invoice.print_on_copy" : "invoice.print_on",
+  ).replace("{printer}", () => printer.name);
 }
 
 /** The current attempt in words; a receipt attempt is worded by the original's print status. */
@@ -595,6 +591,14 @@ export class TillTicketView extends LitElement {
         margin: 0;
       }
 
+      .invoice-printer {
+        flex-basis: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--wt-space-2);
+      }
+
       .receipt-actions wt-button {
         flex: 1;
       }
@@ -631,6 +635,108 @@ export class TillTicketView extends LitElement {
   /** Whether the app has the email address form open. */
   @property({ type: Boolean }) emailOpen = false;
   @property({ attribute: false }) emailRefusal?: InvoiceEmailRefusal;
+  @property({ type: Boolean }) invoicePrintersEnabled = false;
+  @property({ attribute: false }) invoiceEquipment?: RoleEquipment;
+  @property({ attribute: false }) invoicePrinterValue?: string;
+  @property({ type: Boolean }) invoicePrinterLoading = false;
+  @property({ type: Boolean }) invoicePrinterReadFailed = false;
+  @property({ type: Boolean }) invoicePrinterBlocked = false;
+  @property() invoicePrinterError = "";
+  @state() private invoicePrinterOpen = false;
+
+  #readInvoicePrinters(): void {
+    this.dispatchEvent(new CustomEvent("invoice-printer-open", { bubbles: true, composed: true }));
+  }
+
+  #renderInvoicePrinter() {
+    if (!this.invoicePrintersEnabled || !this.canPrintReceipt) return nothing;
+    const role = this.invoiceEquipment;
+    return html`<div class="invoice-printer">
+      <wt-button
+        data-test="invoice-printer-toggle"
+        variant="secondary"
+        aria-expanded=${this.invoicePrinterOpen}
+        @click=${() => {
+          this.invoicePrinterOpen = !this.invoicePrinterOpen;
+          if (this.invoicePrinterOpen) this.#readInvoicePrinters();
+        }}
+        >${t("equipment.invoice")}:
+        ${role?.resolved?.name ?? this.deliveries?.actions.print?.printers[0]?.name ?? t("equipment.none")}</wt-button
+      >
+      ${
+        this.invoicePrinterOpen
+          ? html`
+              ${this.invoicePrinterLoading ? html`<p>${t("login.loading")}</p>` : nothing}
+              ${
+                this.invoicePrinterReadFailed
+                  ? html`<p>${t("invoice.printer_read_failed")}</p>`
+                  : role
+                    ? html`<wt-combobox
+                          name="invoicePrinterId"
+                          label=${t("equipment.invoice")}
+                          search="auto"
+                          searchPlaceholder=${t("form.combobox_search")}
+                          noResultsLabel=${t("form.combobox_no_results")}
+                          .value=${this.invoicePrinterValue ?? (role.selection === "default" ? "" : (role.chosenId ?? ""))}
+                          .options=${[
+                            {
+                              value: "",
+                              label: t("equipment.use_default").replace(
+                                "{name}",
+                                () => role.default?.name ?? t("equipment.none"),
+                              ),
+                            },
+                            ...role.choices.map((item) => ({
+                              value: item.id,
+                              label: `${item.name} · ${item.kind === "a4" ? "A4" : t("invoice.receipt_paper")}`,
+                            })),
+                          ]}
+                          .error=${this.invoicePrinterError}
+                          .invalid=${this.invoicePrinterError !== ""}
+                          ?disabled=${this.invoicePrinterLoading}
+                          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                            event.stopPropagation();
+                            this.dispatchEvent(
+                              new CustomEvent("equipment-change", {
+                                detail: {
+                                  role: "invoice",
+                                  selection:
+                                    event.detail.value === ""
+                                      ? "default"
+                                      : { id: event.detail.value },
+                                  via: "list",
+                                },
+                                bubbles: true,
+                                composed: true,
+                              }),
+                            );
+                          }}
+                        ></wt-combobox>
+                        ${role.choices.length === 0 ? html`<p>${t("invoice.no_printers")}</p>` : nothing}`
+                    : nothing
+              }
+              <wt-button
+                data-test="invoice-printer-read-retry"
+                variant="secondary"
+                ?disabled=${this.invoicePrinterLoading}
+                @click=${() => this.#readInvoicePrinters()}
+                >${t("hours.refresh")}</wt-button
+              >
+              ${
+                this.invoicePrinterError
+                  ? html`<wt-button
+                      data-test="invoice-printer-save-retry"
+                      variant="secondary"
+                      @click=${() => this.dispatchEvent(new CustomEvent("invoice-printer-retry", { bubbles: true, composed: true }))}
+                      >${t("find_page.retry")}</wt-button
+                    >`
+                  : nothing
+              }
+            `
+          : nothing
+      }
+    </div>`;
+  }
 
   #newSale(): void {
     this.dispatchEvent(new CustomEvent("new-sale", { bubbles: true, composed: true }));
@@ -679,12 +785,13 @@ export class TillTicketView extends LitElement {
             </p>`
           : nothing
       }
+      ${this.#renderInvoicePrinter()}
       ${
         print
           ? html`<wt-button
               variant="secondary"
               data-test="print-invoice"
-              ?disabled=${busy}
+              ?disabled=${busy || this.invoicePrinterBlocked || this.deliveriesReadFailed}
               @click=${() => this.dispatchEvent(new CustomEvent("print-invoice", { bubbles: true, composed: true }))}
               >${printLabel(print, status?.actions.retryOriginal?.medium === "a4")}</wt-button
             >`
@@ -954,8 +1061,8 @@ export class TillTicketView extends LitElement {
 
       ${
         r.invoiceType === "F1" && (!this.historical || this.historicalDelivery)
-          ? html`<section class="original-delivery" data-test="original-delivery" role="status">
-              <p>
+          ? html`<section class="original-delivery" data-test="original-delivery">
+              <p role="status">
                 <strong
                   >${t(this.originalReceiptPrint?.status !== "not_queued" && this.originalReceiptPrint?.handover ? "invoice.handover_confirmed" : (notQueued && this.deliveries?.originalCompleted) || failedButDelivered ? "invoice.delivered" : "invoice.not_delivered")}</strong
                 >

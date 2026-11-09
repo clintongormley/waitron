@@ -410,6 +410,10 @@ export const en = {
   "invoice.print_a4_copy": "Print a copy on A4",
   "invoice.send_a4_again": "Send to the office printer again",
   "invoice.print_on": "Print on {printer}",
+  "invoice.send_on_again": "Send to {printer} again",
+  "invoice.printer_read_failed": "Could not read the invoice printers. Refresh to try again.",
+  "invoice.receipt_paper": "receipt paper",
+  "invoice.no_printers": "No invoice printers are available. Refresh after changing Equipment.",
   "invoice.print_on_copy": "Print a copy on {printer}",
   "invoice.receipt_instead": "Print on the receipt printer instead",
   "invoice.email_send": "Send by email",
@@ -2369,6 +2373,12 @@ export const es: Record<StringKey, string> = {
   "invoice.print_a4_copy": "Imprimir una copia en A4",
   "invoice.send_a4_again": "Volver a enviar a la impresora de oficina",
   "invoice.print_on": "Imprimir en {printer}",
+  "invoice.send_on_again": "Volver a enviar a {printer}",
+  "invoice.printer_read_failed":
+    "No se han podido consultar las impresoras de facturas. Actualiza para volver a intentarlo.",
+  "invoice.receipt_paper": "papel de recibo",
+  "invoice.no_printers":
+    "No hay impresoras de facturas disponibles. Actualiza después de cambiar Equipo.",
   "invoice.print_on_copy": "Imprimir una copia en {printer}",
   "invoice.receipt_instead": "Imprimir en la impresora de tickets en su lugar",
   "invoice.email_send": "Enviar por correo electrónico",
