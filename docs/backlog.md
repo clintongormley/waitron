@@ -2353,7 +2353,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   The party bill-action suite still uses Spanish dish samples. Bill-move, arriving-dish,
   receipt-guest, till-API bill-move/groups/fiscal-sale and order-portion filing/adjustment suites
   still use Spanish display samples; fiscal-sale and adjustment order-portion test descriptions,
-  other bill-payment fixtures in `bill-payments-api.test.ts` and `bill-payments.issue-clock.test.ts`,
   shared helpers and their consumers' dish selectors and screen expectations remain.
   Triage made-here route and receipt-document fixture
   text there while preserving Spanish receipt output and locale checks. Low priority.

@@ -127,7 +127,7 @@ function refund(billId: string, paymentId: string, applied: string) {
       submissionId: randomUUID(),
       appliedAmount: applied,
       tipAmount: "0.00",
-      reason: "El cliente pagó de más",
+      reason: "Customer overpaid",
       override: { personId: venue.adminId, pin: "1234" },
     },
   );

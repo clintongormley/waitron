@@ -1017,7 +1017,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
       `/api/working-orders/${otherBill}/lines/1`,
       {
         revision: otherLines.json.revision,
-        note: "sin espuma",
+        note: "no foam",
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, otherBill)),
       },
     );

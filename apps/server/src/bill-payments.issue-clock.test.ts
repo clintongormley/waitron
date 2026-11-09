@@ -71,9 +71,9 @@ interface Venue {
 let venue: Venue;
 
 const MENU: { name: string; customer: string; kitchen: string; price: string }[] = [
-  { name: "Chuletón", customer: "Chuletón a la brasa", kitchen: "CHULETA", price: "25.00" },
-  { name: "Tarta", customer: "Tarta de queso", kitchen: "TARTA", price: "18.00" },
-  { name: "Caña", customer: "Caña de cerveza", kitchen: "CANA", price: "3.00" },
+  { name: "Steak", customer: "Chuletón a la brasa", kitchen: "STEAK", price: "25.00" },
+  { name: "Cake", customer: "Tarta de queso", kitchen: "CAKE", price: "18.00" },
+  { name: "Beer", customer: "Caña de cerveza", kitchen: "BEER", price: "3.00" },
 ];
 
 async function provision(db: typeof suite.db): Promise<Venue> {
@@ -107,7 +107,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
         taxId: "62000001M",
         legalName: "Pagos SL",
         taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
-        name: "Sala",
+        name: "Dining room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
         operationDescription: "Restaurante",
@@ -121,7 +121,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
@@ -157,7 +157,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     const cat = await createCatalogue(tx, {
       name: `Bill payments issue clock menu ${cfg.locationId}`,
     });
-    const dishes = await createCategory(tx, { name: "Platos" });
+    const dishes = await createCategory(tx, { name: "Dishes" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {
       const product = await createProduct(tx, {
@@ -174,7 +174,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     }
     await assignCatalogueToVenue(tx, cat.id);
     const printer = await createPrinter(tx, {
-      name: "Recibos",
+      name: "Receipts",
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
     });
@@ -249,7 +249,7 @@ describe("the invoice at full payment", () => {
   it.each([60, 0, -480])(
     "retains saved F1 issue offset %s across replay and a live zone change",
     async (offsetMinutes) => {
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
         revision: 0,
         invoiceType: "F1",
@@ -315,7 +315,7 @@ describe("the invoice at full payment", () => {
   ])(
     "retains the full-invoice service date from bill opening %s across replay",
     async (openedAt, expected) => {
-      const billId = await tabWith("Caña");
+      const billId = await tabWith("Beer");
       await inTx((tx) =>
         tx.update(workingOrders).set({ openedAt }).where(eq(workingOrders.id, billId)),
       );
