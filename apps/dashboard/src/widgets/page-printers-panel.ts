@@ -18,26 +18,12 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "./row-actions.js";
-import type { DashboardApi, PagePrinterRow, PageTestPage } from "../api/client.js";
-import { holdReason } from "../i18n/a4-holds.js";
+import type { DashboardApi, PagePrinterRow } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage, refusal } from "../i18n/form-message.js";
 import { fill, t } from "../i18n/t.js";
-import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-
-const TEST_PAGE_REASON: Record<NonNullable<PageTestPage["failureCode"]>, StringKey> = {
-  printer_refused: "printers.test_page_reason_refused",
-  printer_unreachable: "printers.test_page_reason_unreachable",
-  document_unavailable: "printers.test_page_reason_document",
-  printer_disabled: "printers.test_page_reason_disabled",
-  not_claimed: "printers.test_page_reason_not_claimed",
-  printer_aborted: "printers.test_page_reason_aborted",
-  timeout: "printers.test_page_reason_timeout",
-};
-
-const isOut = (page: PageTestPage | null | undefined): boolean =>
-  page?.status === "waiting" || page?.status === "printing";
+import { PageTestPages } from "./page-test-pages.js";
 
 /**
  * The venue's office printers (A4 printers), with rename, disable and a test page. `reload` reads
@@ -92,23 +78,24 @@ export class PagePrintersPanel extends LitElement {
   @property({ attribute: false }) reload!: () => Promise<void>;
   /** How long to wait between reads of a test page that is still out. */
   @property({ attribute: false }) testPagePollMs = 2_000;
+  /** The screen's test pages, so the panel and the details follow one page; the panel's own without. */
+  @property({ attribute: false }) testPages?: PageTestPages;
 
   @state() private disabling = new Set<string>();
-  @state() private testPageSending = new Set<string>();
-  /** Each printer's last test page, by printer id. */
-  @state() private testPages = new Map<string, PageTestPage>();
-  @state() private actionError: string | null = null;
-  @state() private readError: string | null = null;
   @state() private renaming: PagePrinterRow | null = null;
   @state() private renameName = "";
   @state() private renameAttempted = false;
   @state() private renameSending = false;
   @state() private renameRefused: { code: string; field: boolean } | null = null;
 
-  /** One poll per printer; a read that returns after its poll was replaced is dropped. */
-  /** The printer whose failed test-page read last set `readError`; another printer's successful read leaves it. */
-  #readErrorFrom: string | null = null;
-  readonly #testPagePolls = new Map<string, { timer: ReturnType<typeof setTimeout> }>();
+  readonly #ownPages = new PageTestPages(this, {
+    api: () => this.api,
+    pollMs: () => this.testPagePollMs,
+  });
+  #unwatchPages?: () => void;
+  get #pages(): PageTestPages {
+    return this.testPages ?? this.#ownPages;
+  }
   readonly #renameId = {};
   #renameScope?: DraftScope<string>;
   #renameLeave?: LeaveCoordinator;
@@ -122,12 +109,12 @@ export class PagePrintersPanel extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.requestUpdate();
-    for (const [id, page] of this.testPages) if (isOut(page)) this.#pollTestPage(id);
+    if (this.testPages) this.#unwatchPages = this.testPages.watch(this);
   }
 
   override disconnectedCallback(): void {
-    for (const { timer } of this.#testPagePolls.values()) clearTimeout(timer);
-    this.#testPagePolls.clear();
+    this.#unwatchPages?.();
+    this.#unwatchPages = undefined;
     this.#renameScope?.dispose();
     this.#renameScope = undefined;
     this.#renameLeave = undefined;
@@ -136,7 +123,11 @@ export class PagePrintersPanel extends LitElement {
 
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (changes.has("canManage") && !this.canManage) this.#closedRename();
-    if (changes.has("rows")) this.readError = null;
+    if (changes.has("testPages") && this.isConnected) {
+      this.#unwatchPages?.();
+      this.#unwatchPages = this.testPages?.watch(this);
+    }
+    if (changes.has("rows")) this.#pages.readError = null;
     if (this.renaming !== null && this.isConnected && !this.#renameScope) {
       const { coordinator, scope } = draftScopeFor<string>(this, {
         id: this.#renameId,
@@ -153,112 +144,23 @@ export class PagePrintersPanel extends LitElement {
     }
   }
 
-  async #reread(): Promise<void> {
-    try {
-      await this.reload();
-      this.readError = null;
-    } catch (error) {
-      this.readError = codeOf(error);
-    }
-    this.#readErrorFrom = null;
+  #reread(): Promise<void> {
+    return this.#pages.reread(this.reload);
   }
 
   async #disable(row: PagePrinterRow): Promise<void> {
     if (!row.active || this.disabling.has(row.id)) return;
-    this.actionError = null;
+    this.#pages.setActionError(null);
     this.disabling = new Set([...this.disabling, row.id]);
     try {
       await this.api!.updatePagePrinter(row.id, { active: false });
     } catch (error) {
-      this.actionError = codeOf(error);
+      this.#pages.setActionError(codeOf(error));
       return;
     } finally {
       this.disabling = new Set([...this.disabling].filter((id) => id !== row.id));
     }
     await this.#reread();
-  }
-
-  #setTestPage(id: string, page: PageTestPage | null): void {
-    const pages = new Map(this.testPages);
-    if (page === null) pages.delete(id);
-    else pages.set(id, page);
-    this.testPages = pages;
-  }
-
-  async #printTestPage(row: PagePrinterRow): Promise<void> {
-    if (!row.active || this.testPageSending.has(row.id) || isOut(this.testPages.get(row.id)))
-      return;
-    this.actionError = null;
-    this.testPageSending = new Set([...this.testPageSending, row.id]);
-    let page: PageTestPage;
-    try {
-      page = await this.api!.printPagePrinterTestPage(row.id);
-    } catch (error) {
-      this.actionError = codeOf(error);
-      return;
-    } finally {
-      this.testPageSending = new Set([...this.testPageSending].filter((id) => id !== row.id));
-    }
-    this.#setTestPage(row.id, page);
-    if (isOut(page)) this.#pollTestPage(row.id);
-  }
-
-  #pollTestPage(id: string): void {
-    if (this.#testPagePolls.has(id) || !this.isConnected) return;
-    const poll = {
-      timer: setTimeout(() => void this.#readTestPage(id, poll), this.testPagePollMs),
-    };
-    this.#testPagePolls.set(id, poll);
-  }
-
-  async #readTestPage(id: string, poll: object): Promise<void> {
-    let page: PageTestPage | null | undefined;
-    let failure: string | null = null;
-    try {
-      page = await this.api!.background.readPagePrinterTestPage(id);
-    } catch (error) {
-      failure = codeOf(error);
-    }
-    if (this.#testPagePolls.get(id) !== poll) return;
-    this.#testPagePolls.delete(id);
-    if (failure !== null) {
-      this.readError = failure;
-      this.#readErrorFrom = id;
-    } else {
-      if (this.#readErrorFrom === id) {
-        this.readError = null;
-        this.#readErrorFrom = null;
-      }
-      this.#setTestPage(id, page!);
-    }
-    if (isOut(this.testPages.get(id))) this.#pollTestPage(id);
-  }
-
-  #printingNote(hold: PageTestPage["hold"]): string {
-    if (hold === undefined) return t("printers.test_page_printing");
-    const reason = holdReason(hold);
-    return reason === undefined
-      ? t("printers.test_page_held_no_reason")
-      : fill("printers.test_page_held", { reason });
-  }
-
-  #testPageNote(row: PagePrinterRow): TemplateResult | typeof nothing {
-    const page = this.testPages.get(row.id);
-    if (page === undefined) return nothing;
-    const reason = page.failureCode === undefined ? "" : t(TEST_PAGE_REASON[page.failureCode]);
-    const note = {
-      waiting: t("printers.test_page_waiting"),
-      printing: this.#printingNote(page.hold),
-      sent: t("printers.test_page_printed"),
-      failed: fill("printers.test_page_failed", { reason }),
-      unknown: fill("printers.test_page_unknown", { reason }),
-    }[page.status];
-    return html`<span
-      part="page-printer-test-page"
-      role="status"
-      data-test=${`page-printer-test-page-${row.id}`}
-      >${note}</span
-    >`;
   }
 
   #openRename(row: PagePrinterRow): void {
@@ -296,7 +198,7 @@ export class PagePrintersPanel extends LitElement {
       void focusFirstInvalid(modal);
       return;
     }
-    this.actionError = null;
+    this.#pages.setActionError(null);
     this.renameSending = true;
     try {
       await this.api!.updatePagePrinter(target.id, { name });
@@ -323,7 +225,7 @@ export class PagePrintersPanel extends LitElement {
         label: t("printers.name"),
         cell: (row) =>
           html`<span data-test=${`page-printer-name-${row.id}`}>${row.name}</span
-            >${this.#testPageNote(row)}`,
+            >${this.#pages.noteFor(row)}`,
       },
       {
         key: "agent",
@@ -397,11 +299,9 @@ export class PagePrintersPanel extends LitElement {
       >
       <wt-button
         data-test=${`print-test-page-${row.id}`}
-        ?disabled=${
-          !row.active || this.testPageSending.has(row.id) || isOut(this.testPages.get(row.id))
-        }
-        ?loading=${this.testPageSending.has(row.id)}
-        @click=${() => void this.#printTestPage(row)}
+        ?disabled=${this.#pages.unavailable(row)}
+        ?loading=${this.#pages.sending.has(row.id)}
+        @click=${() => void this.#pages.print(row)}
         >${t("printers.print_test_page")}</wt-button
       >
     </dashboard-row-actions>`;
@@ -489,17 +389,17 @@ export class PagePrintersPanel extends LitElement {
           .rowKey=${(row: PagePrinterRow) => row.id}
         ></wt-data-table>
         ${
-          this.actionError === null
+          this.#pages.actionError === null
             ? nothing
             : html`<p class="error" role="alert" data-test="page-printers-action-error">
-                ${codeMessage(this.actionError)}
+                ${codeMessage(this.#pages.actionError)}
               </p>`
         }
         ${
-          this.readError === null
+          this.#pages.readError === null
             ? nothing
             : html`<p class="error" role="alert" data-test="page-printers-read-error">
-                ${t("printers.refresh_failed")} ${codeMessage(this.readError)}
+                ${t("printers.refresh_failed")} ${codeMessage(this.#pages.readError)}
               </p>`
         }
       </section>
