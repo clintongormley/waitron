@@ -23,7 +23,11 @@ export interface PartialCorrectionHistory {
     { vatRate: number; quantity: number; lineGross: number | null }
   >;
   earlierBreakdowns: readonly (readonly { rate: string; base: string; tax: string }[])[];
-  earlierLines: readonly { correctsLineId: string | null; lineGross: number | null }[];
+  earlierLines: readonly {
+    correctsLineId: string | null;
+    vatRate: number;
+    lineGross: number | null;
+  }[];
 }
 
 interface Group {
@@ -110,49 +114,68 @@ export function checkPartialCorrectionBreakdown(
  * Refuses a checked split unless each line takes from an invoice line at its own rate, with a
  * stored gross nothing has yet exhausted, and no more than its quantity; and unless, at each
  * rate, the base is the one `correctionBaseAtRate` gives after every earlier correction and the
- * running gross stays within the invoice's.
+ * running gross stays within the invoice's. Refused with `sale.correction_history_unusable` instead
+ * when what is stored cannot be checked: an invoice line or an earlier correction of it with no
+ * gross, an earlier correction line at one of the split's rates naming no invoice line, or an
+ * invoice breakdown without exactly one group at one of them. Every line is known to name a line
+ * of the invoice.
  */
 export function checkPartialCorrectionHistory(
   lines: readonly RecordSaleLine[],
   breakdown: readonly VatBreakdownLine[],
   history: PartialCorrectionHistory,
 ): void {
-  for (const line of lines) {
-    const source = history.invoiceLines.get(line.correctsLineId!);
-    if (
-      source === undefined ||
-      source.lineGross === null ||
-      source.vatRate !== basisPoints(line.vatRate) ||
-      -thousandths(line.quantity) > source.quantity
-    )
-      refuse();
-    const earlier = history.earlierLines.filter(
-      (row) => row.correctsLineId === line.correctsLineId,
+  // Per invoice line, the gross earlier corrections took; null when one stored none.
+  const taken = new Map<string, number | null>();
+  const unlinkedRates = new Set<number>();
+  for (const row of history.earlierLines) {
+    if (row.correctsLineId === null) {
+      unlinkedRates.add(row.vatRate);
+      continue;
+    }
+    const sum = taken.get(row.correctsLineId);
+    taken.set(
+      row.correctsLineId,
+      sum === null || row.lineGross === null ? null : (sum ?? 0) - row.lineGross,
     );
-    if (earlier.some((row) => row.lineGross === null)) refuse();
-    const taken = -earlier.reduce((sum, row) => sum + row.lineGross!, 0) - cents(line.lineGross!);
-    if (taken > source.lineGross) refuse();
+  }
+  for (const line of lines) {
+    const source = history.invoiceLines.get(line.correctsLineId!)!;
+    const earlier = taken.get(line.correctsLineId!);
+    if (source.lineGross === null || earlier === null) unusable();
+    if (source.vatRate !== basisPoints(line.vatRate)) refuse();
+    // Per correction, never cumulative: an amount correction's quantity is the scope shown, not units returned.
+    if (-thousandths(line.quantity) > source.quantity) refuse();
+    if ((earlier ?? 0) - cents(line.lineGross!) > source.lineGross) refuse();
+  }
+  const invoice = new Map<number, Group[]>();
+  for (const group of history.invoiceBreakdown.map(storedGroup)) {
+    invoice.set(group.rate, [...(invoice.get(group.rate) ?? []), group]);
+  }
+  const prior = new Map<number, { base: number; gross: number }>();
+  for (const group of history.earlierBreakdowns.flat().map(storedGroup)) {
+    const sum = prior.get(group.rate) ?? { base: 0, gross: 0 };
+    prior.set(group.rate, {
+      base: sum.base - group.base,
+      gross: sum.gross - group.base - group.tax,
+    });
   }
   for (const group of breakdown) {
     const rate = basisPoints(group.rate);
-    const atRate = (other: { rate: string }) => basisPoints(other.rate) === rate;
-    const invoice = history.invoiceBreakdown.filter(atRate).map(storedGroup);
-    if (invoice.length !== 1) refuse();
-    const earlier = history.earlierBreakdowns.flatMap((stored) =>
-      stored.filter(atRate).map(storedGroup),
-    );
-    const priorBase = -earlier.reduce((sum, prior) => sum + prior.base, 0);
-    const priorGross = -earlier.reduce((sum, prior) => sum + prior.base + prior.tax, 0);
+    const atRate = invoice.get(rate);
+    if (unlinkedRates.has(rate) || atRate?.length !== 1) unusable();
+    const original = atRate[0]!;
+    const before = prior.get(rate) ?? { base: 0, gross: 0 };
     const gross = -(cents(group.base) + cents(group.tax));
     const expected = correctionBaseAtRate(
       basisPointsToDecimal(rate),
-      { base: centsToDecimal(invoice[0]!.base), tax: centsToDecimal(invoice[0]!.tax) },
-      { gross: centsToDecimal(priorGross), base: centsToDecimal(priorBase) },
+      { base: centsToDecimal(original.base), tax: centsToDecimal(original.tax) },
+      { gross: centsToDecimal(before.gross), base: centsToDecimal(before.base) },
       centsToDecimal(gross),
     );
     if (
       compareDecimal(expected, centsToDecimal(-cents(group.base))) !== 0 ||
-      priorGross + gross > invoice[0]!.base + invoice[0]!.tax
+      before.gross + gross > original.base + original.tax
     )
       refuse();
   }
@@ -188,4 +211,8 @@ function exact(value: string, scale: number, count: (value: Decimal) => number):
 
 function refuse(): never {
   throw new AppError("sale.correction_breakdown_invalid", {});
+}
+
+function unusable(): never {
+  throw new AppError("sale.correction_history_unusable", {});
 }

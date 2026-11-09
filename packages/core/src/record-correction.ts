@@ -2,7 +2,7 @@ import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
 import { operationDescriptionFor } from "./operation-description.js";
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { allocateInvoiceNumber, invoiceSeries, saleLines, saleVoids, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -76,8 +76,8 @@ export interface RecordCorrectionInput {
   wholeInvoice?: boolean;
   /**
    * The exact VAT split of a partial correction, signed as filed, stored and filed in place of
-   * one derived from `lines`. Each line must then name the invoice line it takes from and state
-   * its gross. Refused together with `wholeInvoice`.
+   * one derived from `lines`. Each line must then name a different invoice line it takes from and
+   * state its gross. Refused together with `wholeInvoice`.
    */
   partialVatBreakdown?: readonly VatBreakdownLine[];
   /** Checked by `recordCorrection` itself against permission `sale.rectify`; the authorizer is
@@ -102,17 +102,18 @@ export interface RecordCorrectionInput {
  * for line is refused with `sale.correction_line_not_reversed`, also before the number. A
  * `partialVatBreakdown` is refused with `sale.correction_breakdown_invalid` first when it disagrees
  * with the correction's own total or lines, and after `sale.correction_line_not_on_invoice`, before
- * the number, when it disagrees with the invoice or the corrections already recorded against it. A
- * partial correction's lines may name a line or not, and may name the same one. A failed
- * integrity check records an incident and the correction proceeds anyway.
+ * the number, with the same code when it disagrees with the invoice or the corrections already
+ * recorded against it, or with `sale.correction_history_unusable` when what is stored about them
+ * cannot be checked (`checkPartialCorrectionHistory`). Without `partialVatBreakdown`, a partial
+ * correction's lines may name a line or not, and may name the same one; with it, each names a
+ * different invoice line. A failed integrity check records an incident and the correction proceeds
+ * anyway.
  */
 export async function recordCorrection(
   tx: Transaction,
   backend: FiscalBackend,
   input: RecordCorrectionInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
-  // Unless the whole invoice is credited, derived before anything is written; refused when a line
-  // total is past the cent and the breakdown no longer sums to the total (`deriveVatBreakdown`).
   const partial =
     input.partialVatBreakdown === undefined
       ? undefined
@@ -233,21 +234,26 @@ export async function recordCorrection(
   const wholeLineRows =
     input.wholeInvoice === true ? saleLineRows("", input.lines, { corrective: true }) : undefined;
 
-  if (wholeLineRows !== undefined || input.lines.some((line) => line.correctsLineId != null)) {
-    const onInvoice = new Map(
-      (
-        await tx
-          .select({
-            id: saleLines.id,
-            quantity: saleLines.quantity,
-            lineTotal: saleLines.lineTotal,
-            productId: saleLines.productId,
-          })
-          .from(saleLines)
-          .where(eq(saleLines.saleId, input.correctsSaleId))
-          .orderBy(saleLines.lineNo)
-      ).map((row) => [row.id, row]),
-    );
+  const onInvoice =
+    wholeLineRows !== undefined || input.lines.some((line) => line.correctsLineId != null)
+      ? new Map(
+          (
+            await tx
+              .select({
+                id: saleLines.id,
+                quantity: saleLines.quantity,
+                lineTotal: saleLines.lineTotal,
+                productId: saleLines.productId,
+                vatRate: saleLines.vatRate,
+                lineGross: saleLines.lineGross,
+              })
+              .from(saleLines)
+              .where(eq(saleLines.saleId, input.correctsSaleId))
+              .orderBy(saleLines.lineNo)
+          ).map((row) => [row.id, row]),
+        )
+      : undefined;
+  if (onInvoice !== undefined) {
     for (const line of input.lines) {
       if (line.correctsLineId != null && !onInvoice.has(line.correctsLineId)) {
         throw new AppError("sale.correction_line_not_on_invoice", {
@@ -262,22 +268,10 @@ export async function recordCorrection(
     }
   }
   if (partial !== undefined) {
-    const earlier = sql`(select c.id from sales c where c.corrects_sale_id = ${input.correctsSaleId})`;
     checkPartialCorrectionHistory(input.lines, partial, {
       invoiceBreakdown: original.vatBreakdown,
-      invoiceLines: new Map(
-        (
-          await tx
-            .select({
-              id: saleLines.id,
-              vatRate: saleLines.vatRate,
-              quantity: saleLines.quantity,
-              lineGross: saleLines.lineGross,
-            })
-            .from(saleLines)
-            .where(eq(saleLines.saleId, input.correctsSaleId))
-        ).map((row) => [row.id, row]),
-      ),
+      // Read above: every line of a checked split names an invoice line.
+      invoiceLines: onInvoice!,
       earlierBreakdowns: (
         await tx
           .select({ vatBreakdown: sales.vatBreakdown })
@@ -285,9 +279,14 @@ export async function recordCorrection(
           .where(eq(sales.correctsSaleId, input.correctsSaleId))
       ).map((row) => row.vatBreakdown),
       earlierLines: await tx
-        .select({ correctsLineId: saleLines.correctsLineId, lineGross: saleLines.lineGross })
+        .select({
+          correctsLineId: saleLines.correctsLineId,
+          vatRate: saleLines.vatRate,
+          lineGross: saleLines.lineGross,
+        })
         .from(saleLines)
-        .where(inArray(saleLines.saleId, earlier)),
+        .innerJoin(sales, eq(sales.id, saleLines.saleId))
+        .where(eq(sales.correctsSaleId, input.correctsSaleId)),
     });
   }
 

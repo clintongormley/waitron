@@ -1,9 +1,16 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { deviceOrigin } from "@waitron/shared";
+import { decimal, deviceOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
-import { CORE_MIGRATIONS, captureError, saleLines, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  captureError,
+  invoiceSeries,
+  saleLines,
+  sales,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
@@ -33,48 +40,68 @@ const clock: TrustedClock = {
   currentAnchor: () => null,
 };
 
-// The invoice: [rate, quantity, base, stored gross]. 10% 10.00/1.00; 21% 12.00/2.52.
-const INVOICE: [string, string, string, string | undefined][] = [
+type InvoiceLine = [rate: string, quantity: string, base: string, gross: string | undefined];
+
+// The invoice: 10% 10.00/1.00; 21% 12.00/2.52.
+const INVOICE: InvoiceLine[] = [
   ["10.00", "2", "10.00", "11.00"],
   ["21.00", "1", "10.00", "12.10"],
   ["21.00", "1", "1.00", "1.21"],
   ["21.00", "1", "1.00", undefined],
 ];
 
+interface Invoice {
+  saleId: SaleId;
+  lineIds: string[];
+}
+
 let backend: FakeFiscalBackend;
 let deviceId: DeviceId;
 let nodeId: NodeId;
+let seriesId: SeriesId;
 let rectSeriesId: SeriesId;
 let sessionId: string;
-let original: SaleId;
-let invoiceLineIds: string[];
+let staffSessionId: string;
+let invoice: Invoice;
 
 beforeEach(async () => {
-  let seriesId: SeriesId;
   let locationId: string;
   ({ locationId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Supervisor", pinHash: hashPin("1234"), role: "supervisor" })
-    .returning({ id: persons.id });
   const till = (await seedDevice(suite.db, { locationId })).deviceId;
-  sessionId = (
-    await withTransaction(suite.db, (tx) =>
-      loginWithPin(tx, { deviceId: till, personId: person!.id, pin: "1234" }),
-    )
-  ).id;
+  const openSession = async (role: "staff" | "supervisor") => {
+    const [person] = await suite.db
+      .insert(persons)
+      .values({ displayName: `P ${role}`, pinHash: hashPin("1234"), role })
+      .returning({ id: persons.id });
+    return (
+      await withTransaction(suite.db, (tx) =>
+        loginWithPin(tx, { deviceId: till, personId: person!.id, pin: "1234" }),
+      )
+    ).id;
+  };
+  sessionId = await openSession("supervisor");
+  staffSessionId = await openSession("staff");
   backend = new FakeFiscalBackend(suite.db);
-  ({ saleId: original } = await withTransaction(suite.db, async (tx) => {
-    await backend.registerNode(tx, nodeId);
-    return recordSale(tx, backend, {
+  await withTransaction(suite.db, (tx) => backend.registerNode(tx, nodeId));
+  invoice = await sell("25.52", INVOICE);
+});
+
+/** Sells `lines`, with `split` as the stored breakdown when given, else the derived one. */
+async function sell(
+  total: string,
+  lines: InvoiceLine[],
+  split?: [rate: string, base: string, tax: string][],
+): Promise<Invoice> {
+  const { saleId } = await withTransaction(suite.db, (tx) =>
+    recordSale(tx, backend, {
       origin: deviceOrigin(deviceId),
       nodeId,
       seriesId,
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
-      total: "25.52",
-      lines: INVOICE.map(([vatRate, quantity, base, gross], index) => ({
+      total,
+      lines: lines.map(([vatRate, quantity, base, gross], index) => ({
         lineNo: index + 1,
         name: `Dish ${index + 1}`,
         descriptions: { "es-ES": `Dish ${index + 1}` },
@@ -84,22 +111,39 @@ beforeEach(async () => {
         lineTotal: base,
         lineGross: gross ?? null,
       })),
+      ...(split === undefined
+        ? {}
+        : {
+            vatBreakdown: split.map(([rate, base, tax]) => ({
+              rate: decimal(rate),
+              base: decimal(base),
+              tax: decimal(tax),
+            })),
+          }),
       settlement: {
         kind: "immediate",
         tenders: [
-          { method: "cash", amount: "25.52", tipAmount: "0", settledAt: clock.now().instant },
+          { method: "cash", amount: total, tipAmount: "0", settledAt: clock.now().instant },
         ],
       },
       clock,
-    });
-  }));
+    }),
+  );
   const rows = await suite.db
     .select({ id: saleLines.id })
     .from(saleLines)
-    .where(eq(saleLines.saleId, original))
+    .where(eq(saleLines.saleId, saleId))
     .orderBy(saleLines.lineNo);
-  invoiceLineIds = rows.map((row) => row.id);
-});
+  return { saleId, lineIds: rows.map((row) => row.id) };
+}
+
+async function rectSeriesNext(): Promise<number | undefined> {
+  const [series] = await suite.db
+    .select({ n: invoiceSeries.nextNumber })
+    .from(invoiceSeries)
+    .where(eq(invoiceSeries.id, rectSeriesId));
+  return series?.n;
+}
 
 interface Draft {
   total: string;
@@ -140,18 +184,25 @@ function passing(): Draft {
   };
 }
 
-/** Files `draft`; an empty split takes the derived path. */
-function file(draft: Draft) {
+interface Target {
+  to?: Invoice;
+  correctsSaleId?: SaleId;
+  sessionId?: string;
+}
+
+/** Files `draft` against `invoice` unless told otherwise; an empty split takes the derived path. */
+function file(draft: Draft, target: Target = {}) {
+  const to = target.to ?? invoice;
   return withTransaction(suite.db, (tx) =>
     recordCorrection(tx, backend, {
       origin: deviceOrigin(deviceId),
       nodeId,
       seriesId: rectSeriesId,
-      correctsSaleId: original,
+      correctsSaleId: target.correctsSaleId ?? to.saleId,
       total: draft.total,
       lines: draft.lines.map(({ corrects, ...rest }) => ({
         ...rest,
-        correctsLineId: corrects === undefined ? undefined : invoiceLineIds[corrects],
+        correctsLineId: corrects === undefined ? undefined : to.lineIds[corrects],
       })),
       ...(draft.split.length === 0
         ? {}
@@ -161,10 +212,20 @@ function file(draft: Draft) {
             ),
           }),
       ...(draft.wholeInvoice ? { wholeInvoice: true } : {}),
-      authz: { sessionId },
+      authz: { sessionId: target.sessionId ?? sessionId },
       clock,
     }),
   );
+}
+
+/** Refused with `code`, with nothing handed to the backend and no number taken. */
+async function expectRefused(code: string, draft: Draft, target?: Target) {
+  const spy = vi.spyOn(backend, "recordCorrection");
+  const next = await rectSeriesNext();
+  const error = await captureError(() => file(draft, target));
+  expect(error).toMatchObject({ code });
+  expect(spy).not.toHaveBeenCalled();
+  expect(await rectSeriesNext()).toBe(next);
 }
 
 // Corrections already filed against the invoice before the case's own.
@@ -183,9 +244,25 @@ const EARLIER = {
   line1NoGross: () => file({ total: "-1.10", lines: [line(1, 0, "10.00", "-1.00")], split: [] }),
 };
 
-type Case = [name: string, change: (draft: Draft) => void, earlier?: keyof typeof EARLIER];
+const UNUSABLE = "sale.correction_history_unusable";
+
+type Case = [
+  name: string,
+  change: (draft: Draft) => void,
+  earlier?: keyof typeof EARLIER,
+  code?: typeof UNUSABLE,
+];
 
 const at = (draft: Draft, index: number) => draft.lines[index]!;
+
+/** Both 21% lines of `passing` taken from invoice line `second` at one rate. */
+const twoAt21 = (second: number) => (d: Draft) =>
+  void d.lines.splice(
+    1,
+    1,
+    line(2, 1, "21.00", "-0.41", "-0.50"),
+    line(3, second, "21.00", "-0.46", "-0.55"),
+  );
 
 const REFUSED: Case[] = [
   ["a total past the cent", (d) => void (d.total = "-2.001")],
@@ -206,13 +283,15 @@ const REFUSED: Case[] = [
   ["a rate that is not a number", (d) => void (d.split[0]![0] = "ten")],
   ["a total that is not the split's sum", (d) => void (d.total = "-2.01")],
   ["a group base that is not its lines'", (d) => void (d.split[1] = ["21.00", "-0.86", "-0.19"])],
+  ["a line base that is not its group's", (d) => void (at(d, 1).lineTotal = "-0.86")],
   ["a group gross that is not its lines'", (d) => void (at(d, 1).lineGross = "-1.04")],
   ["a rate given twice", (d) => void d.split.push(["21.00", "-0.87", "-0.18"])],
   ["a rate with no lines", (d) => void d.split.push(["4.00", "0.00", "0.00"])],
   ["lines at a rate the split omits", (d) => void ((d.split = [d.split[1]!]), (d.total = "-1.05"))],
   ["no lines", (d) => void (d.lines = [])],
   ["a line naming no invoice line", (d) => void delete at(d, 0).corrects],
-  ["the same invoice line twice", (d) => void (at(d, 1).corrects = 0)],
+  ["the same invoice line twice, at another rate", (d) => void (at(d, 1).corrects = 0)],
+  ["the same invoice line twice, at its rate", twoAt21(1)],
   ["a duplicate line number", (d) => void (at(d, 1).lineNo = 1)],
   ["a line number of zero", (d) => void (at(d, 0).lineNo = 0)],
   ["a line with no gross", (d) => void delete at(d, 0).lineGross],
@@ -225,7 +304,12 @@ const REFUSED: Case[] = [
   ["the field with wholeInvoice", (d) => void (d.wholeInvoice = true)],
   ["a quantity above the invoice line's", (d) => void (at(d, 0).quantity = "-3")],
   ["a line at a rate its invoice line is not", (d) => void (at(d, 0).corrects = 2)],
-  ["an invoice line with no stored gross", (d) => void (at(d, 1).corrects = 3)],
+  [
+    "an invoice line with no stored gross",
+    (d) => void (at(d, 1).corrects = 3),
+    undefined,
+    UNUSABLE,
+  ],
   [
     "a base one cent above the rule",
     (d) => void ((d.split[1] = ["21.00", "-0.88", "-0.17"]), (at(d, 1).lineTotal = "-0.88")),
@@ -239,34 +323,146 @@ const REFUSED: Case[] = [
     (d) => void (at(d, 1).corrects = 2),
     "line3Whole",
   ],
-  // Rule after €10.45: cumulative €11.40 at 10% takes base 10.40, so 0.90 now.
   [
-    "a rate's running gross past the invoice's",
-    (d) => void ((d.split[0] = ["10.00", "-0.90", "-0.05"]), (at(d, 0).lineTotal = "-0.90")),
+    "a rate an earlier correction took from without naming a line",
+    () => undefined,
     "unnamedAt10",
+    UNUSABLE,
   ],
-  ["an earlier correction of the line with no stored gross", () => undefined, "line1NoGross"],
+  [
+    "an earlier correction of the line with no stored gross",
+    () => undefined,
+    "line1NoGross",
+    UNUSABLE,
+  ],
 ];
 
 it.each([
-  ["the passing split", undefined],
-  ["after line 3 was wholly corrected, the same cents from line 2, which has room", "line3Whole"],
-] as const)("files %s as given", async (_name, earlier) => {
+  ["the passing split", () => undefined, undefined],
+  [
+    "after line 3 was wholly corrected, the same cents from line 2, which has room",
+    () => undefined,
+    "line3Whole",
+  ],
+  ["two lines at one rate, each naming its own invoice line", twoAt21(2), undefined],
+] as const)("files %s as given", async (_name, change, earlier) => {
   if (earlier) await EARLIER[earlier]();
   const spy = vi.spyOn(backend, "recordCorrection");
-  await file(passing());
+  const draft = passing();
+  change(draft);
+  await file(draft);
   expect(spy).toHaveBeenCalledOnce();
   expect(spy.mock.calls[0]![1].vatBreakdown).toEqual(
     passing().split.map(([rate, base, tax]) => ({ rate, base, tax })),
   );
 });
 
-it.each(REFUSED)("refuses %s before the backend files", async (_name, change, earlier) => {
+it.each(REFUSED)("refuses %s before the backend files", async (_name, change, earlier, code) => {
   if (earlier) await EARLIER[earlier]();
-  const spy = vi.spyOn(backend, "recordCorrection");
   const draft = passing();
   change(draft);
-  const error = await captureError(() => file(draft));
-  expect(error).toMatchObject({ code: "sale.correction_breakdown_invalid" });
-  expect(spy).not.toHaveBeenCalled();
+  await expectRefused(code ?? "sale.correction_breakdown_invalid", draft);
+});
+
+/** All of the first line's €12.10 at 21%, filed exactly. */
+const firstWhole = (): Draft => ({
+  total: "-12.10",
+  lines: [line(1, 0, "21.00", "-10.00", "-12.10")],
+  split: [["21.00", "-10.00", "-2.10"]],
+});
+
+it.each([
+  ["named no line, refuses the first", undefined, 0, UNUSABLE],
+  ["named the first, refuses the first", 0, 0, "sale.correction_breakdown_invalid"],
+  ["named the first, files the second", 0, 1, undefined],
+] as const)(
+  "after a legacy correction of one of two identical €12.10 lines that %s",
+  async (_name, earlierNames, takes, code) => {
+    const twins = await sell("24.20", [
+      ["21.00", "1", "10.00", "12.10"],
+      ["21.00", "1", "10.00", "12.10"],
+    ]);
+    await file(
+      { total: "-12.10", lines: [line(1, earlierNames, "21.00", "-10.00", "-12.10")], split: [] },
+      { to: twins },
+    );
+    const draft = firstWhole();
+    at(draft, 0).corrects = takes;
+    if (code !== undefined) return expectRefused(code, draft, { to: twins });
+    const spy = vi.spyOn(backend, "recordCorrection");
+    await file(draft, { to: twins });
+    expect(spy.mock.calls[0]![1].vatBreakdown).toEqual([
+      { rate: "21.00", base: "-10.00", tax: "-2.10" },
+    ]);
+  },
+);
+
+it.each([
+  ["no group at the line's rate", [["10.00", "10.00", "2.10"]]],
+  [
+    "two groups at the line's rate",
+    [
+      ["21.00", "5.00", "1.05"],
+      ["21.00", "5.00", "1.05"],
+    ],
+  ],
+] as const)(
+  "refuses a split of an invoice whose stored breakdown has %s",
+  async (_name, stored) => {
+    const odd = await sell(
+      "12.10",
+      [["21.00", "1", "10.00", "12.10"]],
+      stored.map((group) => [...group]),
+    );
+    await expectRefused(
+      UNUSABLE,
+      {
+        total: "-1.21",
+        lines: [line(1, 0, "21.00", "-1.00", "-1.21")],
+        split: [["21.00", "-1.00", "-0.21"]],
+      },
+      { to: odd },
+    );
+  },
+);
+
+// Two 21% lines of 0.03 that each round up to 0.04, while their group's tax rounds down: 0.07.
+it("refuses a rate's gross past the invoice's when each line is within its own", async () => {
+  const rounded = await sell("11.07", [
+    ["21.00", "1", "0.03", "0.04"],
+    ["21.00", "1", "0.03", "0.04"],
+    ["10.00", "1", "10.00", "11.00"],
+  ]);
+  expect(
+    (
+      await suite.db
+        .select({ split: sales.vatBreakdown })
+        .from(sales)
+        .where(eq(sales.id, rounded.saleId))
+    )[0]!.split,
+  ).toContainEqual({ rate: "21.00", base: "0.06", tax: "0.01" });
+  await expectRefused(
+    "sale.correction_breakdown_invalid",
+    {
+      total: "-0.08",
+      lines: [line(1, 0, "21.00", "-0.03", "-0.04"), line(2, 1, "21.00", "-0.04", "-0.04")],
+      split: [["21.00", "-0.07", "-0.01"]],
+    },
+    { to: rounded },
+  );
+});
+
+it("answers a session that may not correct with the permission refusal, not the history's", async () => {
+  const draft = passing();
+  draft.split[1] = ["21.00", "-0.88", "-0.17"];
+  at(draft, 1).lineTotal = "-0.88";
+  await expectRefused("authorization.not_permitted", draft, { sessionId: staffSessionId });
+});
+
+it("refuses a split that disagrees with its own lines before looking for the sale", async () => {
+  const draft = passing();
+  draft.total = "-2.01";
+  await expectRefused("sale.correction_breakdown_invalid", draft, {
+    correctsSaleId: "00000000-0000-4000-8000-000000000000" as SaleId,
+  });
 });
