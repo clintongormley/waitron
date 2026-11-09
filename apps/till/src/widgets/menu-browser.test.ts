@@ -5,7 +5,7 @@ import { page, userEvent } from "vitest/browser";
 import { CATEGORY_PALETTE, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { formatMoney, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type { DocumentMember, DocumentTile, HomeDevice, HomeDisplay } from "@waitron/shared";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { countText, currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget, type Theme } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
@@ -2663,6 +2663,123 @@ describe("till-menu-browser", () => {
       await search(el, "c");
       expect(notice(el)).toBeNull();
     });
+  });
+});
+
+describe("a tile's number in the New order (A797-10 D7)", () => {
+  const beerDish = product("beer", "Beer", { id: "beer", productId: "p-beer" });
+  const inOrderMenu = (overrides: Partial<TillZoneMenu> = {}) =>
+    lunch({
+      structure: { members: [member("beer"), member("cola"), member("water")] },
+      ...withShortcuts([productTile("beer"), productTile("cola")]),
+      ...overrides,
+    });
+  const badge = (tile: Button) => tile.querySelector<HTMLElement>("[data-in-order-count]");
+
+  it("a tile shows the number it is given, and none for 0 or no map", async () => {
+    const { el } = await mount({
+      menu: inOrderMenu(),
+      products: [beerDish, cola, water],
+      inOrder: new Map([["beer", 2]]),
+    });
+    const tile = entry(el, "structure", "Beer");
+    expect(tile.hasAttribute("data-in-order")).toBe(true);
+    expect(badge(tile)!.textContent!.trim()).toBe("2");
+    expect(badge(tile)!.getAttribute("aria-hidden")).toBe("true");
+    expect(tile.querySelector(".name")!.textContent).toBe("Beer");
+    const unsent = (n: number) =>
+      countText(n, "order_counts.unsent", "order_counts.unsent_one").replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&",
+      );
+    const named = (n: number) =>
+      page.getByRole("button", { name: new RegExp(`^Beer\\b.*, ${unsent(n)}$`) }).elements();
+    expect(named(2)).toEqual(
+      [
+        ...entries(el, "shortcuts").filter(
+          (each) => each.querySelector(".name")!.textContent === "Beer",
+        ),
+        tile,
+      ].map((each) => each.shadowRoot!.querySelector("button")),
+    );
+    for (const other of ["Cola", "Agua"]) expect(badge(entry(el, "structure", other))).toBeNull();
+
+    el.inOrder = new Map([["beer", 1]]);
+    await el.updateComplete;
+    expect(badge(tile)!.textContent!.trim()).toBe("1");
+    expect(named(1)).toHaveLength(2);
+
+    el.inOrder = new Map([["beer", 0]]);
+    await el.updateComplete;
+    expect(badge(tile)).toBeNull();
+    expect(tile.hasAttribute("data-in-order")).toBe(false);
+    expect(page.getByRole("button", { name: /unsent/ }).elements()).toHaveLength(0);
+
+    el.inOrder = undefined;
+    await el.updateComplete;
+    expect(badge(tile)).toBeNull();
+    expect(page.getByRole("button", { name: /unsent/ }).elements()).toHaveLength(0);
+  });
+
+  it("a search result and a shortcut of the same dish show the same number", async () => {
+    const { el } = await mount({
+      menu: inOrderMenu(),
+      products: [beerDish, cola, water],
+      inOrder: new Map([["beer", 3]]),
+    });
+    expect(badge(entry(el, "shortcuts", "Beer"))!.textContent!.trim()).toBe("3");
+    await search(el, "beer");
+    expect(badge(entry(el, "results", "Beer"))!.textContent!.trim()).toBe("3");
+  });
+
+  it("the badge keeps clear of the name and the photo, and the allergen mark keeps the other corner", async () => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    try {
+      const allergens = { milk: {} } as TillProduct["allergens"];
+      const pictured = product("photo", "Grilled octopus with smoked paprika", {
+        image: mediaTestReference("cafe.webp"),
+        allergens,
+      });
+      const plainDish = product("plain", "Mediterranean vegetables", { allergens });
+      const overlaps = (a: DOMRect, b: DOMRect) =>
+        a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+      // Each dish in a grid of its own, so no taller neighbour stretches its tile and centres the
+      // name away from the corner.
+      for (const dish of [pictured, plainDish]) {
+        const { el } = await mount({
+          menu: display(
+            "handheld",
+            { tiles: "thumbnails" },
+            lunch({ structure: { members: [member(dish.id.slice(2))] }, ...withShortcuts([]) }),
+          ),
+          handheld: true,
+          products: [dish],
+          inOrder: new Map([[dish.id, 12]]),
+        });
+        const tile = entry(el, "structure", dish.name);
+        const box = badge(tile)!.getBoundingClientRect();
+        const outer = tile.getBoundingClientRect();
+        expect(box.width).toBeGreaterThan(0);
+        expect(box.left).toBeGreaterThanOrEqual(outer.left);
+        expect(box.top).toBeGreaterThanOrEqual(outer.top);
+        expect(box.right).toBeLessThanOrEqual(outer.right);
+        expect(box.bottom).toBeLessThanOrEqual(outer.bottom);
+        const text = document.createRange();
+        text.selectNodeContents(tile.querySelector(".name")!);
+        for (const line of text.getClientRects())
+          expect(overlaps(box, line), dish.name).toBe(false);
+        const photo = tile.querySelector(".thumb");
+        expect(photo !== null, dish.name).toBe(dish === pictured);
+        if (photo) expect(overlaps(box, photo.getBoundingClientRect()), dish.name).toBe(false);
+        expect(box.right).toBeLessThanOrEqual(
+          tile.querySelector(".nutrition-mark")!.getBoundingClientRect().left,
+        );
+        cleanupWidgets();
+      }
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
   });
 });
 

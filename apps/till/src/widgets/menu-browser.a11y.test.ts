@@ -469,6 +469,20 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it("a numbered tile, painted and plain, has no violations", async () => {
+    const { el, host } = await mount(theme, {
+      inOrder: new Map([
+        ["p-blue", 2],
+        ["p-pink", 1],
+        ["p-cafe", 12],
+      ]),
+    });
+    for (const name of ["Blue", "Pink", "Café"])
+      expect(button(el, name).querySelector("[data-in-order-count]")).not.toBeNull();
+    expect(button(el, "Café").hasAttribute("data-painted")).toBe(false);
+    await expectNoA11yViolations(host);
+  });
+
   it("the Not found notice has no violations", async () => {
     const { el, host } = await mount(theme);
     button(el, "Drinks (EN)").click();

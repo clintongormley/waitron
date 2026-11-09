@@ -3,7 +3,8 @@ import { userEvent } from "vitest/browser";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { countText, fill, setLocale, t } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
-import type { TillProduct } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/client.js";
+import { productAsVariant } from "../state/order-line.js";
 import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
 import {
   beer,
@@ -13,6 +14,7 @@ import {
   resized,
   shown,
   shownView,
+  store,
   tap,
 } from "./till-table-order-screen.test-helpers.js";
 
@@ -203,5 +205,50 @@ describe("till-table-order-screen: the Menu's New order bar", () => {
     for (const key of ["table.draft_title", "order_counts.items", "table.draft_send_all"] as const)
       expect(es[key]).not.toBe(en[key]);
     expect(es["table.new_order_dish"]).toBe(en["table.new_order_dish"]);
+  });
+});
+
+describe("till-table-order-screen: the Menu's tile numbers", () => {
+  const tile = (el: TillTableOrderScreen, name: string) =>
+    [...browser(el).shadowRoot!.querySelectorAll<HTMLElement>("wt-button.tile")].find(
+      (each) => each.querySelector(".name")?.textContent === name,
+    )!;
+  const number = (el: TillTableOrderScreen, name: string) =>
+    tile(el, name).querySelector("[data-in-order-count]")?.textContent?.trim() ?? null;
+
+  it("tapping a tile numbers it; a variant counts on its dish; removing the line clears it", async () => {
+    const { el, host } = await phone();
+    expect(number(el, "Croquettes")).toBeNull();
+
+    await tap(el, "Croquettes");
+    expect(number(el, "Croquettes")).toBe("1");
+    expect(number(el, "Pork shoulder")).toBeNull();
+
+    const sauce = productAsVariant(croquettes, {
+      ...sellingValuesOf(croquettes),
+      id: "v-sauce",
+      name: "Croquettes with aioli",
+      unitPrice: "4.00",
+      unitPriceDifference: null,
+      available: true,
+    });
+    store(el).addProduct(sauce, "2");
+    await el.updateComplete;
+    expect(store(el).lines).toHaveLength(2);
+    expect(number(el, "Croquettes")).toBe("3");
+
+    store(el).removeLine(1);
+    await el.updateComplete;
+    expect(number(el, "Croquettes")).toBe("1");
+    store(el).removeLine(0);
+    await el.updateComplete;
+    expect(number(el, "Croquettes")).toBeNull();
+
+    await tap(el, "Croquettes");
+    expect(number(el, "Croquettes")).toBe("1");
+    host.style.width = "1280px";
+    await resized(el);
+    expect(store(el).lines).toHaveLength(1);
+    expect(number(el, "Croquettes")).toBeNull();
   });
 });

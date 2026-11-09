@@ -158,7 +158,7 @@ import type {
 import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
 import { heldGroupIds, inHeldGroup } from "../state/held-groups.js";
 import type { DraftGroup } from "../state/draft-groups.js";
-import { newOrderDishes, newOrderItems } from "../state/new-order-count.js";
+import { newOrderByProduct, newOrderDishes, newOrderItems } from "../state/new-order-count.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import type { Place } from "../state/draft-place.js";
 import {
@@ -2834,6 +2834,18 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The browser gets the products through the diet lens; a tab line's name still resolves against
    * the FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
+  #inOrderIndexed?: { store: WorkingOrderStore; epoch: number; counts: Map<string, number> };
+
+  /** The tiles' numbers, the same map until the draft changes, so the browser redraws only then. */
+  #inOrder(store: WorkingOrderStore): Map<string, number> {
+    const indexed = this.#inOrderIndexed;
+    if (indexed?.store === store && indexed.epoch === this.#draftEpoch) return indexed.counts;
+    const counts = newOrderByProduct(store.lines);
+    this.#inOrderIndexed =
+      this.#watchedDraft?.store === store ? { store, epoch: this.#draftEpoch, counts } : undefined;
+    return counts;
+  }
+
   #menuBrowser(store: WorkingOrderStore): TemplateResult {
     store.canSelectProduct = (product) =>
       this.orderingAllowed &&
@@ -2865,6 +2877,7 @@ export class TillTableOrderScreen extends LitElement {
         EMPTY_MENU_FILTERS,
       )}
       .store=${store}
+      .inOrder=${this.wide ? undefined : this.#inOrder(store)}
       .handheld=${this.handheld}
       weighs
       ><till-diet-filter
