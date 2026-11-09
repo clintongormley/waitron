@@ -431,7 +431,8 @@ async function keptBeforeActivation(stateDir: string) {
     migrationOptionsFor(manifestSets(), null),
   );
   const bundle = {
-    version: 10 as const,
+    version: 11 as const,
+    settings: {},
     createdAt: "2026-10-16T11:00:00.000Z",
     sourceOperatorId: "source-admin",
     venue: {

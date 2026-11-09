@@ -52,7 +52,7 @@ afterEach(() => {
 async function holdOpenWithPendingWrite(venueDir: string) {
   const held = await openVenueDatabase(venueDir);
   held.venue.run(
-    sql`insert into adjustment_settings (id, updated_at) values (1, ${new Date().toISOString()})`,
+    sql`insert into settings (module, version, revision, doc, updated_at) values ('adjustments', 1, 1, '{}', ${new Date().toISOString()})`,
   );
   expect((await stat(join(venueDir, "venue.db-wal"))).size).toBeGreaterThan(0);
   return held;
