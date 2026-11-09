@@ -1108,21 +1108,36 @@ const bacon = line({
   note: null,
 });
 
-it.each<[string, TabLine[], Partial<TillTableOrderScreen>]>([
-  ["its note", [line({ note: "Peanut allergy" })], {}],
-  ["its count", [line({ quantity: "3.000" })], {}],
+const burgerLine = (over: Partial<TabLine> = {}) =>
+  line({ productId: "burger", menuItemId: "offer-burger", ...over });
+const extrasOnly = { products: [flan, { ...burger, offeredModifiers: [extrasList] }] };
+const medium = {
+  ...rare,
+  labelName: { en: "Medium" },
+  labelCustomerName: { es: "Al punto carta" },
+  labelKitchenName: "Al punto KDS",
+};
+
+it.each<[string, TabLine[], TabLine[], Partial<TillTableOrderScreen>, number?]>([
+  ["its note", [line()], [line({ note: "Peanut allergy" })], {}],
+  ["its count", [line()], [line({ quantity: "3.000" })], {}],
+  ["its extras", [burgerLine()], [burgerLine(), bacon], extrasOnly, 1],
   [
-    "its extras",
-    [line({ productId: "burger", menuItemId: "offer-burger" }), bacon],
-    { products: [flan, { ...burger, offeredModifiers: [extrasList] }] },
+    "an answer",
+    [burgerLine({ optionSnapshots: [rare] })],
+    [burgerLine({ optionSnapshots: [medium] })],
+    { products: [flan, steakish] },
+  ],
+  [
+    "an extra's count",
+    [burgerLine(), bacon],
+    [burgerLine(), { ...bacon, quantity: "4.000" }],
+    extrasOnly,
+    2,
   ],
 ])(
   "throws a staged change away and says so when another device changes %s, so the newer one is never overwritten",
-  async (_, newer, over) => {
-    const lines =
-      newer[0]!.productId === "burger"
-        ? [line({ productId: "burger", menuItemId: "offer-burger" })]
-        : [line()];
+  async (_, lines, newer, over, picked) => {
     const el = await openRow({ lines, revision: 9, billEdit, ...over });
     const seen = changes(el);
     await editNote(el, "warm, no cream");
@@ -1138,9 +1153,9 @@ it.each<[string, TabLine[], Partial<TillTableOrderScreen>]>([
     await pressChange(el);
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({ revision: 10, patch: { note: `${newer[0]!.note}, no cream` } });
-    if (newer.length > 1)
+    if (picked !== undefined)
       expect(seen[0]!.patch.extras).toEqual([
-        { listId: "list-extras", picks: [{ productId: "p-bacon", quantity: 1 }] },
+        { listId: "list-extras", picks: [{ productId: "p-bacon", quantity: picked }] },
       ]);
   },
 );
