@@ -1,1 +1,0 @@
-CREATE INDEX `print_jobs_printer_kind_idx` ON `print_jobs` (`printer_id`,`kind`);

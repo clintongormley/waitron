@@ -12,13 +12,14 @@ CREATE TABLE `card_readers` (
 	`provider_ref` text NOT NULL,
 	`name` text NOT NULL,
 	`active` integer DEFAULT true NOT NULL,
+	`prints_own_slip_automatically` integer DEFAULT false NOT NULL,
 	`created_at` text NOT NULL,
 	`disabled_at` text,
-	`unpaired_at` text
-, `deleted_at` text, `prints_own_slip_automatically` integer DEFAULT false NOT NULL);
+	`unpaired_at` text,
+	`deleted_at` text
+);
 --> statement-breakpoint
-CREATE UNIQUE INDEX `card_readers_provider_ref_key` ON `card_readers` (`provider`,`provider_ref`) WHERE "card_readers"."deleted_at" is null;
---> statement-breakpoint
+CREATE UNIQUE INDEX `card_readers_provider_ref_key` ON `card_readers` (`provider`,`provider_ref`) WHERE "card_readers"."deleted_at" is null;--> statement-breakpoint
 CREATE TABLE `device_card_readers` (
 	`device_id` text PRIMARY KEY NOT NULL,
 	`reader_id` text NOT NULL,
@@ -36,8 +37,7 @@ CREATE TABLE `device_profile_card_readers` (
 	FOREIGN KEY (`reader_id`) REFERENCES `card_readers`(`id`) ON UPDATE no action ON DELETE restrict
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `device_profile_card_readers_profile_default_key` ON `device_profile_card_readers` (`device_profile_id`) WHERE "device_profile_card_readers"."is_default" = 1;
---> statement-breakpoint
+CREATE UNIQUE INDEX `device_profile_card_readers_profile_default_key` ON `device_profile_card_readers` (`device_profile_id`) WHERE "device_profile_card_readers"."is_default" = 1;--> statement-breakpoint
 CREATE TABLE `payment_hold_outcomes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`hold_id` text NOT NULL,
@@ -50,8 +50,7 @@ CREATE TABLE `payment_hold_outcomes` (
 	CONSTRAINT "payment_hold_outcomes_note_ck" CHECK("payment_hold_outcomes"."note" is null or length(trim("payment_hold_outcomes"."note")) > 0)
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `payment_hold_outcomes_hold_key` ON `payment_hold_outcomes` (`hold_id`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `payment_hold_outcomes_hold_key` ON `payment_hold_outcomes` (`hold_id`);--> statement-breakpoint
 CREATE TABLE `payment_holds` (
 	`id` text PRIMARY KEY NOT NULL,
 	`payment_id` text NOT NULL,
@@ -61,8 +60,7 @@ CREATE TABLE `payment_holds` (
 	CONSTRAINT "payment_holds_provider_amount_ck" CHECK("payment_holds"."provider_amount" > 0)
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `payment_holds_payment_key` ON `payment_holds` (`payment_id`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `payment_holds_payment_key` ON `payment_holds` (`payment_id`);--> statement-breakpoint
 CREATE TABLE `payment_policy` (
 	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
 	`offline_mode` text NOT NULL,
@@ -82,14 +80,14 @@ CREATE TABLE `payment_refunds` (
 	`amount` integer NOT NULL,
 	`state` text NOT NULL,
 	`authorized_by` text,
-	`created_at` text NOT NULL, `provider_refund_ref` text,
+	`provider_refund_ref` text,
+	`created_at` text NOT NULL,
 	FOREIGN KEY (`payment_id`) REFERENCES `payments`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "payment_refunds_amount_ck" CHECK("payment_refunds"."amount" > 0),
 	CONSTRAINT "payment_refunds_state_ck" CHECK("payment_refunds"."state" in ('succeeded', 'failed'))
 );
 --> statement-breakpoint
-CREATE INDEX `payment_refunds_payment_idx` ON `payment_refunds` (`payment_id`);
---> statement-breakpoint
+CREATE INDEX `payment_refunds_payment_idx` ON `payment_refunds` (`payment_id`);--> statement-breakpoint
 CREATE TABLE `payment_resolutions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`payment_id` text NOT NULL,
@@ -105,10 +103,8 @@ CREATE TABLE `payment_resolutions` (
 	CONSTRAINT "payment_resolutions_cancelled_ck" CHECK("payment_resolutions"."cancelled_at_provider" = 0 or "payment_resolutions"."outcome" = 'failed')
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `payment_resolutions_payment_key` ON `payment_resolutions` (`payment_id`);
---> statement-breakpoint
-CREATE INDEX `payment_resolutions_working_order_idx` ON `payment_resolutions` (`working_order_id`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `payment_resolutions_payment_key` ON `payment_resolutions` (`payment_id`);--> statement-breakpoint
+CREATE INDEX `payment_resolutions_working_order_idx` ON `payment_resolutions` (`working_order_id`);--> statement-breakpoint
 CREATE TABLE `payments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text NOT NULL,
@@ -125,6 +121,7 @@ CREATE TABLE `payments` (
 	`card_entry_mode` text,
 	`card_auth_code` text,
 	`amount` integer NOT NULL,
+	`requested_amount` integer,
 	`state` text NOT NULL,
 	`settled_at` text,
 	`reconcile_remediated_at` text,
@@ -145,20 +142,13 @@ CREATE TABLE `payments` (
 	CONSTRAINT "payments_source_device_ck" CHECK(("payments"."source" = 'device') = ("payments"."device_id" is not null))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `payments_provider_external_ref_key` ON `payments` (`provider`,`external_ref`) WHERE "payments"."external_ref" is not null and "payments"."provider" <> 'manual';
---> statement-breakpoint
-CREATE UNIQUE INDEX `payments_bill_payment_key` ON `payments` (`bill_payment_id`) WHERE "payments"."bill_payment_id" is not null;
---> statement-breakpoint
-CREATE INDEX `payments_working_order_idx` ON `payments` (`working_order_id`);
---> statement-breakpoint
-CREATE INDEX `payments_sale_idx` ON `payments` (`sale_id`);
---> statement-breakpoint
-CREATE INDEX `payments_reader_idx` ON `payments` (`reader_id`);
---> statement-breakpoint
-CREATE INDEX `payments_reconcile_idx` ON `payments` (`provider`,`settled_at`);
---> statement-breakpoint
-CREATE UNIQUE INDEX `payments_provider_ref_key` ON `payments` (`provider`,`payment_ref`);
---> statement-breakpoint
+CREATE UNIQUE INDEX `payments_provider_external_ref_key` ON `payments` (`provider`,`external_ref`) WHERE "payments"."external_ref" is not null and "payments"."provider" <> 'manual';--> statement-breakpoint
+CREATE UNIQUE INDEX `payments_bill_payment_key` ON `payments` (`bill_payment_id`) WHERE "payments"."bill_payment_id" is not null;--> statement-breakpoint
+CREATE INDEX `payments_working_order_idx` ON `payments` (`working_order_id`);--> statement-breakpoint
+CREATE INDEX `payments_sale_idx` ON `payments` (`sale_id`);--> statement-breakpoint
+CREATE INDEX `payments_reader_idx` ON `payments` (`reader_id`);--> statement-breakpoint
+CREATE INDEX `payments_reconcile_idx` ON `payments` (`provider`,`settled_at`);--> statement-breakpoint
+CREATE UNIQUE INDEX `payments_provider_ref_key` ON `payments` (`provider`,`payment_ref`);--> statement-breakpoint
 CREATE TABLE `scheduled_runs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`duty` text NOT NULL,

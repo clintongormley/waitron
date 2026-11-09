@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "bfa10901-854e-4665-82e2-681cb448e4b7",
+  "id": "c75bf7ff-91d7-4e91-8124-4260e61a852d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "locations": {
@@ -5721,6 +5721,14 @@
           "columns": [
             "printer_id",
             "status"
+          ],
+          "isUnique": false
+        },
+        "print_jobs_printer_kind_idx": {
+          "name": "print_jobs_printer_kind_idx",
+          "columns": [
+            "printer_id",
+            "kind"
           ],
           "isUnique": false
         },
@@ -19544,6 +19552,766 @@
           "value": "typeof(\"bill_number_allocations\".\"number\") = 'integer' and \"bill_number_allocations\".\"number\" >= 1"
         }
       }
+    },
+    "document_delivery_requests": {
+      "name": "document_delivery_requests",
+      "columns": {
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recovery_epoch": {
+          "name": "recovery_epoch",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "request_key": {
+          "name": "request_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sale_id": {
+          "name": "sale_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document": {
+          "name": "document",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "context": {
+          "name": "context",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "canonical_intent": {
+          "name": "canonical_intent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fingerprint": {
+          "name": "fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "accepted_result": {
+          "name": "accepted_result",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "acceptance_order": {
+          "name": "acceptance_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "refusal_code": {
+          "name": "refusal_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "acknowledged": {
+          "name": "acknowledged",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "document_delivery_requests_recovery_idx": {
+          "name": "document_delivery_requests_recovery_idx",
+          "columns": [
+            "node_id",
+            "recovery_epoch",
+            "sale_id",
+            "acknowledged"
+          ],
+          "isUnique": false
+        },
+        "document_delivery_requests_acceptance_order_idx": {
+          "name": "document_delivery_requests_acceptance_order_idx",
+          "columns": [
+            "node_id",
+            "recovery_epoch",
+            "acceptance_order"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "document_delivery_requests_node_id_recovery_epoch_request_key_pk": {
+          "columns": [
+            "node_id",
+            "recovery_epoch",
+            "request_key"
+          ],
+          "name": "document_delivery_requests_node_id_recovery_epoch_request_key_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "document_delivery_requests_status_ck": {
+          "name": "document_delivery_requests_status_ck",
+          "value": "\"document_delivery_requests\".\"status\" in ('prepared', 'accepted', 'refused', 'fenced')"
+        },
+        "document_delivery_requests_document_ck": {
+          "name": "document_delivery_requests_document_ck",
+          "value": "\"document_delivery_requests\".\"document\" in ('receipt', 'invoice')"
+        },
+        "document_delivery_requests_outcome_ck": {
+          "name": "document_delivery_requests_outcome_ck",
+          "value": "(\"document_delivery_requests\".\"status\" = 'accepted' and \"document_delivery_requests\".\"accepted_result\" is not null and \"document_delivery_requests\".\"acceptance_order\" is not null) or (\"document_delivery_requests\".\"status\" <> 'accepted' and \"document_delivery_requests\".\"accepted_result\" is null and \"document_delivery_requests\".\"acceptance_order\" is null)"
+        },
+        "document_delivery_requests_order_ck": {
+          "name": "document_delivery_requests_order_ck",
+          "value": "\"document_delivery_requests\".\"acceptance_order\" is null or (\"document_delivery_requests\".\"acceptance_order\" between 1 and 9007199254740991 and \"document_delivery_requests\".\"acceptance_order\" = cast(\"document_delivery_requests\".\"acceptance_order\" as integer))"
+        }
+      }
+    },
+    "document_delivery_sequences": {
+      "name": "document_delivery_sequences",
+      "columns": {
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recovery_epoch": {
+          "name": "recovery_epoch",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "next_acceptance_order": {
+          "name": "next_acceptance_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "document_delivery_sequences_node_id_recovery_epoch_pk": {
+          "columns": [
+            "node_id",
+            "recovery_epoch"
+          ],
+          "name": "document_delivery_sequences_node_id_recovery_epoch_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "document_delivery_sequences_order_ck": {
+          "name": "document_delivery_sequences_order_ck",
+          "value": "\"document_delivery_sequences\".\"next_acceptance_order\" between 1 and 9007199254740991 and \"document_delivery_sequences\".\"next_acceptance_order\" = cast(\"document_delivery_sequences\".\"next_acceptance_order\" as integer)"
+        }
+      }
+    },
+    "device_invoice_save_operations": {
+      "name": "device_invoice_save_operations",
+      "columns": {
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recovery_epoch": {
+          "name": "recovery_epoch",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "save_id": {
+          "name": "save_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "context": {
+          "name": "context",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expected_revision": {
+          "name": "expected_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "selection": {
+          "name": "selection",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "management_edit": {
+          "name": "management_edit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "canonical_intent": {
+          "name": "canonical_intent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fingerprint": {
+          "name": "fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "saved_result": {
+          "name": "saved_result",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "refusal_code": {
+          "name": "refusal_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "acknowledged": {
+          "name": "acknowledged",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "device_invoice_save_operations_recovery_idx": {
+          "name": "device_invoice_save_operations_recovery_idx",
+          "columns": [
+            "node_id",
+            "recovery_epoch",
+            "device_id",
+            "acknowledged"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "device_invoice_save_operations_node_id_recovery_epoch_save_id_pk": {
+          "columns": [
+            "node_id",
+            "recovery_epoch",
+            "save_id"
+          ],
+          "name": "device_invoice_save_operations_node_id_recovery_epoch_save_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "device_invoice_save_operations_status_ck": {
+          "name": "device_invoice_save_operations_status_ck",
+          "value": "\"device_invoice_save_operations\".\"status\" in ('prepared', 'saved', 'refused', 'fenced')"
+        },
+        "device_invoice_save_operations_revision_ck": {
+          "name": "device_invoice_save_operations_revision_ck",
+          "value": "\"device_invoice_save_operations\".\"expected_revision\" between 0 and 9007199254740991 and \"device_invoice_save_operations\".\"expected_revision\" = cast(\"device_invoice_save_operations\".\"expected_revision\" as integer)"
+        }
+      }
+    },
+    "device_invoice_revisions": {
+      "name": "device_invoice_revisions",
+      "columns": {
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revision": {
+          "name": "revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "device_invoice_revisions_device_id_devices_id_fk": {
+          "name": "device_invoice_revisions_device_id_devices_id_fk",
+          "tableFrom": "device_invoice_revisions",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "device_invoice_revisions_revision_ck": {
+          "name": "device_invoice_revisions_revision_ck",
+          "value": "\"device_invoice_revisions\".\"revision\" between 0 and 9007199254740991 and \"device_invoice_revisions\".\"revision\" = cast(\"device_invoice_revisions\".\"revision\" as integer)"
+        }
+      }
+    },
+    "document_page_jobs": {
+      "name": "document_page_jobs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sale_id": {
+          "name": "sale_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "page_printer_id": {
+          "name": "page_printer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "language": {
+          "name": "language",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "designation": {
+          "name": "designation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'queued'"
+        },
+        "generation": {
+          "name": "generation",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "claim_token_hash": {
+          "name": "claim_token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "claimed_by": {
+          "name": "claimed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "claimed_agent_id": {
+          "name": "claimed_agent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "expired_at": {
+          "name": "expired_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "failure_code": {
+          "name": "failure_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reported_outcome": {
+          "name": "reported_outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reported_at": {
+          "name": "reported_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reported_failure_code": {
+          "name": "reported_failure_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "printer_hold": {
+          "name": "printer_hold",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "receipt_handover": {
+          "name": "receipt_handover",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "document_page_jobs_claim_idx": {
+          "name": "document_page_jobs_claim_idx",
+          "columns": [
+            "page_printer_id",
+            "status"
+          ],
+          "isUnique": false
+        },
+        "document_page_jobs_sale_idx": {
+          "name": "document_page_jobs_sale_idx",
+          "columns": [
+            "sale_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "document_page_jobs_sale_id_sales_id_fk": {
+          "name": "document_page_jobs_sale_id_sales_id_fk",
+          "tableFrom": "document_page_jobs",
+          "tableTo": "sales",
+          "columnsFrom": [
+            "sale_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "document_page_jobs_page_printer_id_page_printers_id_fk": {
+          "name": "document_page_jobs_page_printer_id_page_printers_id_fk",
+          "tableFrom": "document_page_jobs",
+          "tableTo": "page_printers",
+          "columnsFrom": [
+            "page_printer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "document_page_jobs_claimed_agent_id_print_agents_id_fk": {
+          "name": "document_page_jobs_claimed_agent_id_print_agents_id_fk",
+          "tableFrom": "document_page_jobs",
+          "tableTo": "print_agents",
+          "columnsFrom": [
+            "claimed_agent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "document_page_jobs_status_ck": {
+          "name": "document_page_jobs_status_ck",
+          "value": "\"document_page_jobs\".\"status\" in ('queued', 'sending', 'sent', 'failed', 'unknown')"
+        },
+        "document_page_jobs_designation_ck": {
+          "name": "document_page_jobs_designation_ck",
+          "value": "\"document_page_jobs\".\"designation\" in ('original', 'duplicate')"
+        },
+        "document_page_jobs_outcome_ck": {
+          "name": "document_page_jobs_outcome_ck",
+          "value": "\"document_page_jobs\".\"reported_outcome\" in ('sent', 'failed', 'unknown')"
+        },
+        "document_page_jobs_generation_ck": {
+          "name": "document_page_jobs_generation_ck",
+          "value": "\"document_page_jobs\".\"generation\" between 1 and 9007199254740991 and \"document_page_jobs\".\"generation\" = cast(\"document_page_jobs\".\"generation\" as integer)"
+        },
+        "document_page_jobs_attempts_ck": {
+          "name": "document_page_jobs_attempts_ck",
+          "value": "\"document_page_jobs\".\"attempts\" between 0 and 9007199254740991 and \"document_page_jobs\".\"attempts\" = cast(\"document_page_jobs\".\"attempts\" as integer)"
+        }
+      }
+    },
+    "document_page_reprints": {
+      "name": "document_page_reprints",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sale_id": {
+          "name": "sale_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "page_job_id": {
+          "name": "page_job_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requested_at": {
+          "name": "requested_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "document_page_reprints_job_uq": {
+          "name": "document_page_reprints_job_uq",
+          "columns": [
+            "page_job_id"
+          ],
+          "isUnique": true
+        },
+        "document_page_reprints_sale_idx": {
+          "name": "document_page_reprints_sale_idx",
+          "columns": [
+            "sale_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "document_page_reprints_sale_id_sales_id_fk": {
+          "name": "document_page_reprints_sale_id_sales_id_fk",
+          "tableFrom": "document_page_reprints",
+          "tableTo": "sales",
+          "columnsFrom": [
+            "sale_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "document_page_reprints_page_job_id_document_page_jobs_id_fk": {
+          "name": "document_page_reprints_page_job_id_document_page_jobs_id_fk",
+          "tableFrom": "document_page_reprints",
+          "tableTo": "document_page_jobs",
+          "columnsFrom": [
+            "page_job_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     }
   },
   "views": {},

@@ -108,8 +108,8 @@ BEGIN
     AND new.kind IS old.kind
     AND new.share_of IS old.share_of
     AND new.method IS old.method
-    AND new.applied IS old.applied
-    AND new.tip IS old.tip
+    AND ((new.applied IS old.applied AND new.tip IS old.tip)
+      OR (old.state = 'pending' AND new.state = 'received' AND old.method = 'card'))
     AND new.tendered IS old.tendered
     AND new.requested_by IS old.requested_by
     AND new.source IS old.source

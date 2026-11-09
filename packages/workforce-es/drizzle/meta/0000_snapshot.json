@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9b9e427c-4e4d-461b-870e-7504a3a12980",
+  "id": "f5fbf2cf-9d7d-4611-8add-852f91aff34e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "convenio_config": {
@@ -151,6 +151,34 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "split_min_segment_minutes": {
+          "name": "split_min_segment_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "split_max_segment_minutes": {
+          "name": "split_max_segment_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "split_min_gap_minutes": {
+          "name": "split_min_gap_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "continuous_paid_break_minutes": {
+          "name": "continuous_paid_break_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",

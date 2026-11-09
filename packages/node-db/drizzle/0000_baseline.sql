@@ -27,8 +27,7 @@ CREATE TABLE `node_handover_operations` (
 	CONSTRAINT "node_handover_operations_state_ck" CHECK("node_handover_operations"."state" in ('prepared', 'source_stepped_down', 'filing_relinquished', 'source_superseded', 'copy_accepted', 'filing_assumed', 'emergency_declared', 'activated', 'return_pending', 'return_complete', 'return_abandoned', 'replaced', 'abandoned'))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `node_handover_one_open_uq` ON `node_handover_operations` (`node_id`) WHERE "node_handover_operations"."state" not in ('return_complete', 'return_abandoned', 'replaced', 'abandoned');
---> statement-breakpoint
+CREATE UNIQUE INDEX `node_handover_one_open_uq` ON `node_handover_operations` (`node_id`) WHERE "node_handover_operations"."state" not in ('return_complete', 'return_abandoned', 'replaced', 'abandoned');--> statement-breakpoint
 CREATE TABLE `node_handover_restriction` (
 	`node_id` text PRIMARY KEY NOT NULL,
 	`operation_id` text,
