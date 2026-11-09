@@ -184,6 +184,48 @@ describe("withAwsRehearsal — the happy path", () => {
     expect(parsed.remaining).toEqual({ bucket: null, uploadIds: [] });
   });
 
+  it("aborts an encryption probe object when the run stops", async () => {
+    const stop = new AbortController();
+    let began!: () => void;
+    const started = new Promise<void>((resolve) => {
+      began = resolve;
+    });
+    let aborted = false;
+    const h = harness(
+      {},
+      {
+        signal: stop.signal,
+        apis: ["PutObject", "GetObject", "DeleteObject"],
+        createScenarioClient: (bucket) =>
+          createBucketClient(bucket, {
+            requestHandler: {
+              handle(_request: unknown, options?: { abortSignal?: AbortSignal }) {
+                began();
+                return new Promise<never>((_resolve, reject) => {
+                  options?.abortSignal?.addEventListener(
+                    "abort",
+                    () => {
+                      aborted = true;
+                      reject(Object.assign(new Error("probe aborted"), { name: "AbortError" }));
+                    },
+                    { once: true },
+                  );
+                });
+              },
+            },
+          }),
+      },
+    );
+    const done = rejection(
+      withAwsRehearsal((ctx) => ctx.prepareBucketEncryption(ctx.prefix("encryption")), h.deps),
+    );
+    await started;
+    stop.abort();
+    await done;
+    expect(aborted).toBe(true);
+    expect((await receipt()).parsed.remaining).toEqual({ bucket: null, uploadIds: [] });
+  });
+
   it("refuses encryption setup for a prefix the run did not issue", async () => {
     const h = harness();
     await withAwsRehearsal(async (ctx) => {

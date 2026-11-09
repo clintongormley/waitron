@@ -31,6 +31,7 @@ describe("AWS rehearsal: encrypted copies and the production recovery pack", () 
               SSECustomerAlgorithm: "AES256",
               SSECustomerKey: randomBytes(32).toString("base64"),
             }),
+            { abortSignal: ctx.signal },
           ),
         ).rejects.toMatchObject({ $metadata: { httpStatusCode: 403 } });
         ctx.record({

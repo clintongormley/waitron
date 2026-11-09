@@ -230,6 +230,7 @@ function differingTables(a: Map<string, string[]>, b: Map<string, string[]>): st
 
 function applyWithFirstSetup(stateDir: string): typeof applyMinuteVenue {
   return async (actions, deps) => {
+    // Leave room for selection's minute wait before the real-time sales.
     const clock = createHourTestClock(Date.now() - 10 * 60_000);
     const taxpayer = actions.find((action) => action.kind === "ensure-tenant")!;
     const initialNodeId = randomUUID();
@@ -282,7 +283,6 @@ function applyWithFirstSetup(stateDir: string): typeof applyMinuteVenue {
       ),
     );
     if (held.status !== "selected") throw new Error(`first setup answered ${held.status}`);
-    await stampDeployment(deps.db, "preproduction");
     const result = await applyMinuteVenue(actions, {
       ...deps,
       initialNodeId,
@@ -487,6 +487,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     const saleInGeneration = async (
       generation: string,
       saleId: string,
+      serverSecret?: string,
     ): Promise<true | undefined> => {
       const folder = await mkdtemp(join(scratch, "probe-"));
       try {
@@ -502,9 +503,30 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         });
         const db = new DatabaseSync(out);
         try {
-          return db.prepare("select 1 as hit from sales where id = ?").get(saleId) === undefined
-            ? undefined
-            : true;
+          if (db.prepare("select 1 as hit from sales where id = ?").get(saleId) === undefined)
+            return undefined;
+          if (serverSecret === undefined) return true;
+          const row = db
+            .prepare("select sealed from node_sealed_state where node_id = ?")
+            .get(a.nodeId) as { sealed: Uint8Array } | undefined;
+          if (row === undefined) return undefined;
+          const nodeCopy = unsealNodeState(row.sealed, recoveryKey).find(
+            (entry) => entry.name === "node.dump",
+          );
+          if (nodeCopy === undefined) return undefined;
+          const nodePath = join(folder, "node.db");
+          await writeFile(nodePath, nodeCopy.bytes);
+          const node = new DatabaseSync(nodePath, { readOnly: true });
+          try {
+            const held = node
+              .prepare("select verifier from node_recovery_key where node_id = ?")
+              .get(a.nodeId) as { verifier: string } | undefined;
+            return held !== undefined && (await verifySecretAsync(serverSecret, held.verifier))
+              ? true
+              : undefined;
+          } finally {
+            node.close();
+          }
         } finally {
           db.close();
         }
@@ -553,6 +575,14 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         await login.arrayBuffer();
         const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
         const headers = { "content-type": "application/json", origin, cookie };
+        const proof = await fetch(`${origin}/management-api/session/me/fresh-sign-in`, {
+          ...via,
+          method: "POST",
+          headers,
+          body: JSON.stringify({ method: "password", password: "dashPass123" }),
+        });
+        expect(proof.status).toBe(204);
+        await proof.arrayBuffer();
         recoveryKey = randomBytes(32).toString("base64");
         const rotated = await fetch(`${origin}/api/backup/rotate`, {
           ...via,
@@ -608,7 +638,6 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
           body: JSON.stringify({
             locale: "es",
             newServerKey: true,
-            signIn: { method: "password", password: "dashPass123" },
           }),
         });
         expect(made.status).toBe(200);
@@ -617,6 +646,9 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         expect(parseRecoveryKit(pack.bucketCode!).recoveryKey === recoveryKey).toBe(true);
         nodeSecret = (pack.serverKey as { nodeKey: { secret: string } }).nodeKey.secret;
         await writeFile(kitPath, pdf);
+        await waitFor("the PDF's server key to reach the bucket", UPLOAD_WAIT_MS, () =>
+          saleInGeneration(pointerA.pointer.body.generation, saleA.saleId, nodeSecret),
+        );
       } finally {
         await close();
       }

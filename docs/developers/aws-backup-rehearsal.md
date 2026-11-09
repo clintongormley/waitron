@@ -167,8 +167,8 @@ checked against the run's plan before it leaves the process
 (`apps/server/src/testing/aws-send-gate.ts`, which wraps the SDK's shared `send`). A request that
 fails the check is refused locally and never reaches Amazon S3. The plan:
 
-- **The runner's own requests** may be only the ones it needs to create, check and tear down the
-  bucket (CreateBucket, the encryption and versioning reads, the policy calls, listing and cancelling
+- **The runner's own requests** may be only the ones it needs to create, check, prepare encryption and tear down the
+  bucket (CreateBucket, encryption read/write, the versioning read, the policy calls, listing and cancelling
   uploads, listing and deleting objects, DeleteBucket), only on the run's bucket; it may put and read
   only the ownership marker.
 - **Every other request** may use only the APIs its scenario declares
