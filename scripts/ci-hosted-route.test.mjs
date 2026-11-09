@@ -86,7 +86,7 @@ describe("GitHub-first routing", () => {
     expect(answer.reason).toContain("19 running, 0 queued");
   });
 
-  it("defaults to hosted when the run inventory names a different repository", async () => {
+  it("uses the server when hosted capacity names a different repository", async () => {
     const f = fixture(20),
       outputs = [],
       reports = [];
@@ -95,7 +95,7 @@ describe("GitHub-first routing", () => {
       output: (line) => outputs.push(line),
       report: (line) => reports.push(line),
     });
-    expect(outputs).toEqual(["server_route=hosted"]);
+    expect(outputs).toEqual(["server_route=server"]);
     expect(reports[0]).toContain("Foreign hosted run inventory");
   });
 
@@ -136,8 +136,68 @@ describe("GitHub-first routing", () => {
     expect((await serverRoute(f.options)).route).toBe("server");
   });
 
+  it.each(["HTTP 502", "empty page"])(
+    "isolates one run's %s and still checks readable server work",
+    async (fault) => {
+      const f = fixture(),
+        request = f.options.request;
+      f.run.head_repository.id = 42;
+      const readable = { ...f.run, id: 60, run_attempt: 1 };
+      let stalled = false;
+      f.options.request = async (path, options) => {
+        if (path.includes("/workflows/ci.yml/runs?"))
+          return {
+            total_count: path.includes("status=in_progress") ? 2 : 0,
+            workflow_runs: path.includes("status=in_progress") ? [f.run, readable] : [],
+          };
+        if (path.includes("/runs/50/attempts/2/jobs?")) {
+          if (fault === "HTTP 502") throw new Error(fault);
+          return { total_count: 1, jobs: [] };
+        }
+        if (path.includes("/runs/60/attempts/1/jobs?")) {
+          f.calls.push([path, options]);
+          return {
+            total_count: stalled ? 1 : 0,
+            jobs: stalled
+              ? [
+                  {
+                    id: 600,
+                    run_id: 60,
+                    run_attempt: 1,
+                    head_sha: readable.head_sha,
+                    status: "queued",
+                    runner_id: 0,
+                    labels: ["self-hosted", "dt-42-60-1-lint-1"],
+                    started_at: "2026-01-01T00:00:00Z",
+                  },
+                ]
+              : [],
+          };
+        }
+        return request(path, options);
+      };
+      const answer = await serverRoute(f.options);
+      expect(answer.route).toBe("server");
+      expect(answer.reason).toMatch(/could not be verified|unavailable/i);
+      expect(f.calls.some(([path]) => path.includes("/runs/60/attempts/1/jobs?"))).toBe(true);
+      stalled = true;
+      expect((await serverRoute(f.options)).route).toBe("hosted");
+      expect(f.calls.every(([, options]) => !options?.method)).toBe(true);
+    },
+  );
+
+  it("uses the server when the active run list shrinks between pages", async () => {
+    const f = fixture(),
+      request = f.options.request;
+    f.options.request = async (path, options) =>
+      path.includes("/workflows/ci.yml/runs?") && path.includes("status=queued")
+        ? { total_count: 1, workflow_runs: [] }
+        : request(path, options);
+    expect((await serverRoute(f.options)).route).toBe("server");
+  });
+
   it.each(["unavailable", "duplicate", "foreign"])(
-    "defaults to hosted on %s capacity inventory",
+    "uses the server on %s unreadable capacity inventory",
     async (fault) => {
       const f = fixture(20),
         request = f.options.request,
@@ -155,7 +215,7 @@ describe("GitHub-first routing", () => {
         output: (line) => outputs.push(line),
         report: (line) => reports.push(line),
       });
-      expect(outputs).toEqual(["server_route=hosted"]);
+      expect(outputs).toEqual(["server_route=server"]);
       expect(reports[0]).toContain("could not be verified");
     },
   );

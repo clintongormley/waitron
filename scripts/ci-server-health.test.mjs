@@ -149,7 +149,7 @@ describe("server health recovery", () => {
     expect(health.githubRequest("/repos/o/r", undefined, () => '{"id":42}')).toEqual({ id: 42 });
   }, 20_000);
 
-  it("routes to GitHub when the health read fails and never changes shared settings", async () => {
+  it("uses the server when the health read fails and never changes shared settings", async () => {
     const outputs = [],
       reports = [];
     await health.healthCommand(
@@ -162,7 +162,7 @@ describe("server health recovery", () => {
       },
       { report: (line) => reports.push(line), output: (line) => outputs.push(line) },
     );
-    expect(outputs).toEqual(["server_route=hosted"]);
+    expect(outputs).toEqual(["server_route=server"]);
     expect(reports[0]).toContain("could not be verified");
   });
 

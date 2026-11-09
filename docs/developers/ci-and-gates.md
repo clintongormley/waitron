@@ -193,7 +193,9 @@ External provenance, read 2026-11-09:
 The existing health check reads CI's queued and running workflows. If a server job has waited five minutes and no server job is
 assigned or running, and no assigned job in those runs started or finished within five
 minutes, this run uses GitHub and records the reason in its summary. An unverifiable
-inventory also chooses GitHub; a timed-out routing step leaves an empty result, which
+inventory makes routing continue with the other readable runs and choose the server unless
+readable work shows the stalled queue above (watcher, 2026-11-09 10:34). The summary
+names the uncertainty rather than presenting partial hosted counts as complete. A timed-out routing step leaves an empty result, which
 every routed job treats as hosted. This does not change the human routing switch.
 A retry reads the previous attempt: an unassigned server job cancelled after that wait
 keeps the retry hosted even after the old queue has disappeared.
@@ -224,7 +226,9 @@ intervention; until it is resolved, younger candidates wait. A changed run ident
 inventory refuses recovery. Short non-final pages continue until the advertised count; an
 early empty page, duplicate ID or changed count stops the read. Recovery and probing report
 that the inventory is unavailable and make no change; the command passes so an uncertain
-read does not itself become a stuck-server alarm. Routing chooses GitHub on an uncertain read.
+read does not itself become a stuck-server alarm. Routing chooses the server on an uncertain read; recovery and probing still require complete inventories.
+An unreadable run can therefore conceal server activity or a stall from routing. The existing
+controller admission and recovery paths remain necessary; this policy does not promise an immediate start.
 The completed-history filter assumes GitHub updates a completed run no earlier than its
 last job finishes. A 2026-11-08 read of 15 completed CI runs and all 855 of their jobs found
 no job completion later than its run's `updated_at`. This observation is not an API
