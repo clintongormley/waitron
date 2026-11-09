@@ -520,6 +520,20 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   const DISCOVERY_WINDOW_MS = 3 * 60_000;
   const isFresh = (at: number | undefined, now: number): boolean =>
     withinTtl(at, now, DISCOVERED_TTL_MS);
+  const visibleNow = (now = Date.now()): Set<string> =>
+    new Set(
+      [...discovered.values()]
+        .filter((entry) => isFresh(entry.visibleAt, now))
+        .map((entry) => `${entry.transport}:${entry.localKey}`),
+    );
+  /** Whether an agent can reach `printer` now: a USB or Bluetooth one only while one reports it. */
+  const seen = (
+    printer: { transport: string; localKey: string | null },
+    visible = visibleNow(),
+  ): boolean =>
+    (printer.transport !== "usb" && printer.transport !== "bluetooth") ||
+    printer.localKey === DEMO_PRINTER_KEY ||
+    visible.has(`${printer.transport}:${printer.localKey}`);
   /** 0 when closed; a window ending further ahead than its length was opened before a backward
    * step of the clock, so it is closed. */
   const openDiscoveryUntil = (now: number): number =>
@@ -1525,7 +1539,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           )
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id));
         const reserved = await tx
-          .select({ saleId: printJobs.saleId })
+          .select({ id: printJobs.id, saleId: printJobs.saleId })
           .from(printJobs)
           .where(
             and(
@@ -1544,7 +1558,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               ),
             ),
           );
-        const reservedSales = new Set(reserved.map((job) => job.saleId));
+        const reservedByAnother = (job: { id: string; saleId: string | null }): boolean =>
+          reserved.some((other) => other.saleId === job.saleId && other.id !== job.id);
         const targets = (
           await tx
             .select({
@@ -1576,12 +1591,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               .map((printer) => printer.id),
           };
         };
-        const checkedAt = Date.now();
-        const visible = new Set(
-          [...discovered.values()]
-            .filter((entry) => isFresh(entry.visibleAt, checkedAt))
-            .map((entry) => `${entry.transport}:${entry.localKey}`),
-        );
+        const visible = visibleNow();
         return jobs.map(
           ({
             kind,
@@ -1594,26 +1604,36 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             head,
             linked,
             ...job
-          }) => ({
-            ...job,
-            ...reprint({ printerId: job.printerId, saleId, head, linked }),
-            ...(printerActive &&
-            printerDeletedAt === null &&
-            printerLocalKey !== DEMO_PRINTER_KEY &&
-            (printerTransport === "usb" || printerTransport === "bluetooth") &&
-            (job.status === "queued" ||
-              job.status === "printing" ||
+          }) => {
+            const where = reprint({ printerId: job.printerId, saleId, head, linked });
+            const waiting =
+              job.status === "queued" ||
               (kind === "document" &&
                 job.status === "failed" &&
-                job.attempts < MAX_DELIVERY_ATTEMPTS)) &&
-            !visible.has(`${printerTransport}:${printerLocalKey}`)
-              ? { waitReason: "printer.not_visible" as const }
-              : {}),
-            canResend:
+                job.attempts < MAX_DELIVERY_ATTEMPTS);
+            const unseen =
+              printerActive &&
               printerDeletedAt === null &&
-              !(receiptCopy === false && reservedSales.has(saleId)) &&
-              canResendPrintJob({ ...job, kind, receiptCopy }),
-          }),
+              !seen({ transport: printerTransport, localKey: printerLocalKey }, visible);
+            const stuck =
+              kind === "document" &&
+              waiting &&
+              printerDeletedAt === null &&
+              (!printerActive || unseen);
+            return {
+              ...job,
+              ...where,
+              ...(unseen && (waiting || job.status === "printing")
+                ? { waitReason: "printer.not_visible" as const }
+                : {}),
+              stuck,
+              canResend:
+                printerDeletedAt === null &&
+                !(receiptCopy === false && reservedByAnother({ id: job.id, saleId })) &&
+                (canResendPrintJob({ ...job, kind, receiptCopy }) ||
+                  (stuck && where.reprintPrinterIds.length > 0)),
+            };
+          },
         );
       });
       return c.json(rows);
@@ -1629,10 +1649,17 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         body.printerId === undefined ? undefined : requireBodyUuid(body.printerId, "printerId");
       const result = await gated(
         sessionId,
-        (tx, personId) =>
-          printerId === undefined
-            ? resendInvoicePrintJob(tx, id, personId, deps.now?.())
-            : reprintJobOn(tx, deps.layOutSaleReceipt, id, printerId, personId, deps.now?.()),
+        async (tx, personId) => {
+          if (printerId === undefined) return resendInvoicePrintJob(tx, id, personId, deps.now?.());
+          const [own] = await tx
+            .select({ transport: printers.transport, localKey: printers.localKey })
+            .from(printJobs)
+            .innerJoin(printers, eq(printers.id, printJobs.printerId))
+            .where(eq(printJobs.id, id));
+          return reprintJobOn(tx, deps.layOutSaleReceipt, id, printerId, personId, deps.now?.(), {
+            ownPrinterUnseen: own !== undefined && !seen(own),
+          });
+        },
         "hardware.manage",
       );
       return c.json(result, 202);

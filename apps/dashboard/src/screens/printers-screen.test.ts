@@ -251,6 +251,7 @@ const jobs: PrintJobRow[] = [
     deliveredAt: null,
     reprintRule: "own",
     reprintPrinterIds: [],
+    stuck: false,
   },
   {
     id: "j2",
@@ -264,6 +265,7 @@ const jobs: PrintJobRow[] = [
     deliveredAt: "2026-08-25T13:00:05.000Z",
     reprintRule: "own",
     reprintPrinterIds: [],
+    stuck: false,
   },
 ];
 
@@ -9395,6 +9397,7 @@ describe("Bluetooth calibration transport outcomes", () => {
     deliveredAt: null,
     reprintRule: "own",
     reprintPrinterIds: [],
+    stuck: false,
     ...over,
   });
   const ended = job({
@@ -9741,6 +9744,7 @@ describe("A job ended because its printer was unpaired", () => {
     deliveredAt: null,
     reprintRule: "own",
     reprintPrinterIds: [],
+    stuck: false,
   };
 
   async function mountWithUnpaired() {
@@ -10962,6 +10966,7 @@ describe("Deleting a printer", () => {
           deliveredAt: null,
           reprintRule: "own",
           reprintPrinterIds: [],
+          stuck: false,
         };
         const { el } = await mounted({ listRecentJobs: vi.fn().mockResolvedValue([ended]) });
         await selectTab(el, "queue");
@@ -11020,6 +11025,7 @@ describe("Deleting a printer", () => {
           deliveredAt: null,
           reprintRule: "own",
           reprintPrinterIds: [],
+          stuck: false,
         };
         const { el } = await mounted({ listRecentJobs: vi.fn().mockResolvedValue([ended]) });
         await selectTab(el, "queue");

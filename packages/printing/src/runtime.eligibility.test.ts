@@ -13,7 +13,7 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { esc } from "./escpos.js";
 import { claimPrintJobs, reportPrintJob } from "./runtime.js";
 import { createPrinter } from "./printers.js";
-import { enqueuePrintJob } from "./outbox.js";
+import { endMovedPrintJob, enqueuePrintJob } from "./outbox.js";
 type PrintConfig = { locationId: string };
 
 const SETTING = { paperWidth: "58mm", resolution: "180dpi" } as const;
@@ -156,6 +156,30 @@ describe("claim eligibility — derived from transport and visible keys", () => 
       expect(
         (await reportPrintJob(tx, { agentId, jobId, outcome: { status: "done" } })).updated,
       ).toBe(true);
+    });
+  });
+
+  it("never hands out a moved job when its printer is back", async () => {
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg, "Bar");
+    await withTransaction(suite.db, async (tx: Transaction) => {
+      const p = await createPrinter(tx, { name: "USB", transport: "usb", localKey: "SER-BACK" });
+      const moved = await enqueuePrintJob(tx, p.id, esc(SETTING).line("moved").bytes());
+      const waiting = await enqueuePrintJob(tx, p.id, esc(SETTING).line("waiting").bytes());
+      expect(await endMovedPrintJob(tx, moved.jobId)).toBe(true);
+
+      // The agent sees the printer again and collects until nothing is left.
+      const handedOut: string[] = [];
+      for (let pass = 0; pass < 10; pass++) {
+        const batch = await claimPrintJobs(tx, agentId, { visibleKeys: ["SER-BACK"] });
+        if (batch.length === 0) break;
+        for (const job of batch) {
+          handedOut.push(job.id);
+          await reportPrintJob(tx, { agentId, jobId: job.id, outcome: { status: "done" } });
+        }
+      }
+
+      expect(handedOut).toEqual([waiting.jobId]);
     });
   });
 });

@@ -125,6 +125,7 @@ const jobs: PrintJobRow[] = [
     deliveredAt: null,
     reprintRule: "own",
     reprintPrinterIds: [],
+    stuck: false,
   },
 ];
 

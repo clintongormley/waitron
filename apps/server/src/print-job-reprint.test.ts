@@ -83,8 +83,10 @@ const dots = (setting: EscSetting) => textGrid(setting.paperWidth, setting.resol
 const layOut = (tx: Transaction, saleId: string, duplicate: boolean, printer: EscSetting) =>
   layOutSaleReceipt(venue.backend, tx, venue.cfg, saleId, duplicate, printer);
 
-function reprint(jobId: string, printerId: string) {
-  return inTx(venue, (tx) => reprintJobOn(tx, layOut, jobId, printerId, venue.adminId));
+function reprint(jobId: string, printerId: string, ownPrinterUnseen = false) {
+  return inTx(venue, (tx) =>
+    reprintJobOn(tx, layOut, jobId, printerId, venue.adminId, undefined, { ownPrinterUnseen }),
+  );
 }
 
 async function refusal(jobId: string, printerId: string): Promise<AppError> {
@@ -117,6 +119,18 @@ function setJob(id: string, values: Partial<typeof printJobs.$inferInsert>) {
 }
 
 const exhausted = { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS } as const;
+
+/** Moves a job onto a new printer at `setting` that is then switched off. */
+async function onDisabledPrinter(
+  jobId: string,
+  setting: EscSetting,
+  status: "queued" | "printing" = "queued",
+) {
+  const disabled = await printerAt(setting);
+  await setJob(jobId, { printerId: disabled, status });
+  await inTx(venue, (tx) => deactivatePrinter(tx, disabled));
+  return disabled;
+}
 
 /** A counter bill paid in cash on the till's receipt printer at `setting`, and its original receipt. */
 async function paidSale(setting: EscSetting) {
@@ -343,6 +357,44 @@ describe("reprintJobOn", () => {
       });
   });
 
+  it("moves a queued original receipt off a disabled printer, ending it there", async () => {
+    const { saleId, original } = await paidSale(at80);
+    await onDisabledPrinter(original.id, at80);
+    const target = await printerAt(at58);
+    const { jobId } = await reprint(original.id, target);
+    expect(await jobRow(original.id)).toMatchObject({
+      status: "failed",
+      attempts: MAX_DELIVERY_ATTEMPTS,
+      lastError: "print_job.moved",
+    });
+    expect(await jobRow(jobId)).toMatchObject({
+      printerId: target,
+      resendOf: original.id,
+      receiptCopy: false,
+    });
+    expect(await inTx(venue, (tx) => readOriginalReceiptPrint(tx, saleId))).toMatchObject({
+      jobId,
+    });
+  });
+
+  it("never moves a job an agent is printing, even on a disabled printer", async () => {
+    const refund = await refundReceipt(ticketAt(at58));
+    await onDisabledPrinter(refund, at58, "printing");
+    expect(await refusal(refund, await printerAt(at80))).toMatchObject({
+      code: "print_job.not_resendable",
+      params: { id: refund },
+    });
+  });
+
+  it("leaves a stuck kitchen ticket waiting when the printer chosen is narrower", async () => {
+    const ticket = await kitchenTicket(at80);
+    await onDisabledPrinter(ticket, at80);
+    expect((await refusal(ticket, await printerAt(at58))).code).toBe(
+      "print_job.printer_unsuitable",
+    );
+    expect((await jobRow(ticket)).status).toBe("queued");
+  });
+
   it("refuses a drawer job on another printer as on its own", async () => {
     const drawer = await inTx(venue, async (tx) => {
       const { jobId } = await enqueuePrintJob(tx, venue.printerId, Uint8Array.of(1), "drawer");
@@ -482,5 +534,39 @@ describe("the print queue's resend to another printer", () => {
       expect(row(id).reprintPrinterIds).not.toContain(disabled);
     }
     expect(row(page)).toMatchObject({ reprintRule: "own", reprintPrinterIds: [] });
+  });
+
+  it("lists a job stuck on a disabled or unseen printer as movable, and moves the unseen one", async () => {
+    const offDisabled = await refundReceipt(ticketAt(at58));
+    await onDisabledPrinter(offDisabled, at58);
+    const unseen = await inTx(
+      venue,
+      async (tx) =>
+        (
+          await createPrinter(tx, {
+            name: `BT ${randomUUID().slice(0, 8)}`,
+            transport: "bluetooth",
+            localKey: `5A:4A:45:${randomUUID().slice(0, 2).toUpperCase()}:FB:BB`,
+          })
+        ).id,
+    );
+    const offUnseen = await refundReceipt(ticketAt(at58));
+    await setJob(offUnseen, { printerId: unseen, status: "queued" });
+    const waiting = await refundReceipt(ticketAt(at58));
+    await setJob(waiting, { status: "queued" });
+    await printerAt(at80);
+
+    const response = await printApi().request("/management-api/print-jobs", {
+      headers: { cookie: venue.adminDashboard },
+    });
+    const rows = (await response.json()) as { id: string; stuck: boolean; canResend: boolean }[];
+    const row = (id: string) => rows.find((each) => each.id === id)!;
+    for (const id of [offDisabled, offUnseen])
+      expect(row(id)).toMatchObject({ stuck: true, canResend: true });
+    expect(row(waiting)).toMatchObject({ stuck: false, canResend: false });
+
+    const moved = await resend(offUnseen, await printerAt(at80));
+    expect(moved.status).toBe(202);
+    expect((await jobRow(offUnseen)).lastError).toBe("print_job.moved");
   });
 });

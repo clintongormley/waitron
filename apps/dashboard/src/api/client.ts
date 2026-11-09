@@ -1409,6 +1409,8 @@ export interface PrintJobRow {
   reprintRule: "any" | "wide_enough" | "own";
   /** The other active printers the server would take this printout on. */
   reprintPrinterIds: string[];
+  /** Waiting on a disabled or unseen printer; a reprint elsewhere ends it there. */
+  stuck: boolean;
 }
 
 export interface StationPrinter {

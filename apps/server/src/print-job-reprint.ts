@@ -11,12 +11,14 @@ import type { FiscalBackend } from "@waitron/fiscal";
 import {
   canResendPrintJob,
   centredForPrinter,
+  endMovedPrintJob,
   jobWidthDots,
+  MAX_DELIVERY_ATTEMPTS,
   textGrid,
   type EscSetting,
 } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
-import { resendInvoicePrintJob } from "./invoice-print.js";
+import { endInvoicePrintDeliveries, resendInvoicePrintJob } from "./invoice-print.js";
 import { buildReceiptBytes } from "./receipt-print.js";
 import type { TradingContext } from "./trading-context.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
@@ -48,7 +50,8 @@ export async function layOutSaleReceipt(
 /**
  * Resend a job on `printerId`: a receipt or full invoice laid out again for it, keeping the job's
  * own original-or-copy marking; a kitchen ticket or refund receipt centred on a printer at least as
- * wide; anything else only on its own printer.
+ * wide; anything else only on its own printer. A document still waiting on a disabled printer, or
+ * on one `ownPrinterUnseen` says no agent sees, is ended there so it never prints twice.
  */
 export async function reprintJobOn(
   tx: Transaction,
@@ -57,11 +60,14 @@ export async function reprintJobOn(
   printerId: string,
   personId: string,
   now = new Date(),
+  { ownPrinterUnseen = false }: { ownPrinterUnseen?: boolean } = {},
 ): Promise<{ jobId: string }> {
   const [job] = await tx.select().from(printJobs).where(eq(printJobs.id, jobId));
   if (job === undefined) throw new AppError("print_job.not_found", { id: jobId });
   if (printerId === job.printerId) return resendInvoicePrintJob(tx, jobId, personId, now);
-  if (!canResendPrintJob(job)) throw new AppError("print_job.not_resendable", { id: jobId });
+  const resendable = canResendPrintJob(job);
+  const stuck = !resendable && (await isStuck(tx, job, ownPrinterUnseen));
+  if (!resendable && !stuck) throw new AppError("print_job.not_resendable", { id: jobId });
   const [target] = await tx
     .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
     .from(printers)
@@ -77,7 +83,28 @@ export async function reprintJobOn(
           printerId,
           textGrid(target.paperWidth, target.resolution).widthDots,
         );
+  // The resend below refuses the job unless this ended it.
+  if (stuck) {
+    await endMovedPrintJob(tx, jobId);
+    await endInvoicePrintDeliveries(tx, [jobId], now);
+  }
   return resendInvoicePrintJob(tx, jobId, personId, now, undefined, { printerId, payload });
+}
+
+/** Waiting, not held by an agent, on a printer that is switched off or that no agent sees. */
+async function isStuck(
+  tx: Transaction,
+  job: { kind: string; status: string; attempts: number; printerId: string },
+  ownPrinterUnseen: boolean,
+): Promise<boolean> {
+  const waiting =
+    job.status === "queued" || (job.status === "failed" && job.attempts < MAX_DELIVERY_ATTEMPTS);
+  if (job.kind !== "document" || !waiting) return false;
+  const [printer] = await tx
+    .select({ active: printers.active })
+    .from(printers)
+    .where(and(eq(printers.id, job.printerId), isNull(printers.deletedAt)));
+  return printer !== undefined && (!printer.active || ownPrinterUnseen);
 }
 
 /** A kitchen ticket or refund receipt is known by its chain's first job's link row. */

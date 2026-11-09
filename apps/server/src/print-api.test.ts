@@ -5041,6 +5041,7 @@ describe("a deleted printer's job history", () => {
         "reprintPrinterIds",
         "reprintRule",
         "status",
+        "stuck",
       ].sort(),
     );
 

@@ -9,7 +9,13 @@ export type {
   PrintTransport,
   UpdatePrinterInput,
 } from "./printers.js";
-export { enqueuePrintJob, resendPrintJob, canResendPrintJob } from "./outbox.js";
+export {
+  enqueuePrintJob,
+  resendPrintJob,
+  canResendPrintJob,
+  endMovedPrintJob,
+  PRINT_JOB_MOVED,
+} from "./outbox.js";
 export { FEED_BEFORE_CUT, EscBuilder, esc } from "./escpos.js";
 export { centredForPrinter, jobWidthDots } from "./job-width.js";
 export type { EscSetting } from "./escpos.js";

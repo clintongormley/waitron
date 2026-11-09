@@ -308,6 +308,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The printer was deleted, so this job will not be retried.",
     es: "La impresora se eliminó, por lo que no se volverá a intentar este trabajo.",
   },
+  "print_job.moved": {
+    en: "Reprinted on another printer, so this job will not be retried.",
+    es: "Se reimprimió en otra impresora, así que este trabajo no se volverá a intentar.",
+  },
   "content.language_invalid": {
     en: "Choose a recognised language.",
     es: "Elige un idioma reconocido.",

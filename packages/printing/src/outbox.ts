@@ -1,6 +1,6 @@
 // Keeps errors.ts's codes reachable from the throwing file (scripts/errors-reachable.test.ts).
 import "./errors.js";
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { printJobs, printers, venueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -85,6 +85,23 @@ export function canResendPrintJob(job: {
     ((job.status === "done" && job.receiptCopy !== false) ||
       (job.status === "failed" && job.attempts >= MAX_DELIVERY_ATTEMPTS))
   );
+}
+
+/** The `last_error` of a job {@link endMovedPrintJob} ended: a code the dashboard words. */
+export const PRINT_JOB_MOVED = "print_job.moved";
+
+/**
+ * Ends a document job still waiting on its printer, so it never prints there once it is reprinted
+ * elsewhere. A job an agent claimed meanwhile is left alone; `false` says nothing was ended.
+ */
+export async function endMovedPrintJob(tx: Transaction, jobId: string): Promise<boolean> {
+  const ended = await tx.execute<{ id: string }>(sql`
+    update print_jobs set status = 'failed', attempts = ${MAX_DELIVERY_ATTEMPTS},
+      last_error = ${PRINT_JOB_MOVED}
+    where id = ${jobId} and kind = 'document'
+      and (status = 'queued' or (status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS}))
+    returning id`);
+  return ended.rows.length > 0;
 }
 
 /**
