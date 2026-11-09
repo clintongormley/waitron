@@ -4187,6 +4187,15 @@ describe("the job of the tests that need Litestream, versitygw or a small filesy
     },
   );
 
+  it("hands the binaries' installers CI's token", () => {
+    const body = stream().body;
+    const installer = body.findIndex((line) => line.trim() === STREAM_BINARY_INSTALLERS[0]);
+    expect(installer, "no step runs the Litestream installer").toBeGreaterThan(-1);
+    const stepStart = body.findLastIndex((line, at) => at < installer && /^ {6}- /.test(line));
+    const runKey = body.findIndex((line, at) => at > stepStart && /^ {8}run:/.test(line));
+    expect(body.slice(stepStart, runKey)).toContain("          GITHUB_TOKEN: ${{ github.token }}");
+  });
+
   it("is the only job that installs the binaries", () => {
     for (const { id, body } of jobs.filter(({ id }) => id !== STREAM_JOB)) {
       const code = body.filter((line) => !line.trim().startsWith("#")).join("\n");

@@ -159,7 +159,8 @@ hook, or how tests are scheduled:
   Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads text, does not judge the limit
   or read an external called workflow.
 - **An apt-get in a workflow, `deploy/Dockerfile`, `deploy/waitron.sh` or the bench's CA probe image
-  runs under an outer `timeout` and retries stalls and failures; so does `playwright install --with-deps`.**
+  runs under an outer `timeout` and retries stalls and failures; so does `playwright install --with-deps`,
+  and every `curl` in `deploy/Dockerfile` carries `--retry`, `--connect-timeout` and `--max-time`.**
   Guards: `scripts/ci-workflow.test.mjs` and `scripts/deploy-image-env.test.ts`, weaker than their names:
   read text, not retries; `scripts/waitron-sh.test.mjs` runs waitron.sh's retries under stubs.
 - **Every workflow pnpm setup runs `scripts/ci-setup-pnpm.sh`: three attempts, each under `timeout`,

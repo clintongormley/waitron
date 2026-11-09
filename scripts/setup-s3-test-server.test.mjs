@@ -197,6 +197,35 @@ describe("install", () => {
     ).rejects.toThrow("answered 404 Not Found");
   });
 
+  it("retries a 503 from the release download and installs from the answer that follows", async () => {
+    const release = fixtureRelease(VERSITYGW_VERSION);
+    const dest = join(release.dir, "out", "versitygw");
+    const seen = [];
+    const succeed = answering(release.bytes, seen);
+    const fetchImpl = async (url, init) =>
+      seen.length === 0
+        ? (seen.push(url), { ok: false, status: 503, statusText: "Service Unavailable" })
+        : succeed(url, init);
+    const waits = [];
+    const lines = [];
+    await expect(
+      install({
+        platform: process.platform,
+        arch: process.arch,
+        assets: release.assets,
+        fetchImpl,
+        sleep: async (ms) => void waits.push(ms),
+        log: (line) => void lines.push(line),
+        dest,
+      }),
+    ).resolves.toEqual({ dest, downloaded: true });
+    expect(seen).toHaveLength(2);
+    expect(waits).toHaveLength(1);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(`${seen[0]} answered 503`);
+    expect(lines[0]).toMatch(/; trying again$/);
+  });
+
   it("refuses a binary that reports a different version from the pin", async () => {
     const release = fixtureRelease("9.9.9");
     await expect(

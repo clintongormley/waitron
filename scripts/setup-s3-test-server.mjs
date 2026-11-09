@@ -9,13 +9,13 @@
  * two binaries, and a skip reads as a pass". The archive's SHA-256 is checked against
  * the value pinned here, copied from the release's own `checksums.txt`, before anything is unpacked.
  */
-import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { downloadRelease } from "./download-release.mjs";
 
 export const VERSITYGW_VERSION = "1.8.0";
 
@@ -86,14 +86,10 @@ function installedVersion(dest) {
  * Download, verify, unpack and version-check one release into `dest`, unless the binary already
  * there reports the pinned version.
  */
-export async function install({ platform, arch, assets, fetchImpl, dest }) {
+export async function install({ platform, arch, assets, fetchImpl, sleep, log, dest }) {
   const asset = assetFor(platform, arch, assets);
   if (installedVersion(dest) === VERSITYGW_VERSION) return { dest, downloaded: false };
-  const response = await fetchImpl(asset.url);
-  if (!response.ok) {
-    throw new Error(`${asset.url} answered ${response.status} ${response.statusText}`);
-  }
-  const bytes = Buffer.from(await response.arrayBuffer());
+  const bytes = await downloadRelease(asset.url, { fetch: fetchImpl, sleep, log });
   const actual = createHash("sha256").update(bytes).digest("hex");
   if (actual !== asset.sha256) {
     throw new Error(

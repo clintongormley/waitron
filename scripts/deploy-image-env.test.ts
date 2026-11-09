@@ -628,6 +628,70 @@ describe("the Dockerfile's apt waits", () => {
 });
 
 /**
+ * What each `curl` in a Dockerfile's `RUN`s misses of the bounded download shape: `--retry <n>`
+ * with n at least 1, a per-attempt `--max-time`, a `--connect-timeout`, and no
+ * `--retry-all-errors`, which would retry every 4xx answer, a 404 included.
+ * Reads TEXT: it does not run curl, judge the numbers, or see a download made any other way
+ * (`wget`, `ADD <url>`, a script).
+ */
+function curlGaps(dockerfile: string): { curls: number; gaps: string[] } {
+  const calls = dockerfile
+    .replace(/\\\n/g, " ")
+    .split("\n")
+    .filter((line) => /^RUN\s/.test(line))
+    .flatMap((run) => [...run.matchAll(/\bcurl\b[^;|&]*/g)].map((call) => call[0]));
+  const gaps = calls.flatMap((call, index) => {
+    const where = `curl ${index + 1}`;
+    const missing: string[] = [];
+    if (!/\s--retry\s+[1-9]\d*\b/.test(call)) missing.push(`${where}: has no --retry <n>`);
+    if (!/\s--max-time\s+[1-9]\d*\b/.test(call)) missing.push(`${where}: has no --max-time`);
+    if (!/\s--connect-timeout\s+[1-9]\d*\b/.test(call)) {
+      missing.push(`${where}: has no --connect-timeout`);
+    }
+    if (call.includes("--retry-all-errors")) {
+      missing.push(`${where}: retries every error, a 4xx included`);
+    }
+    return missing;
+  });
+  return { curls: calls.length, gaps };
+}
+
+describe("the Dockerfile's downloads", () => {
+  const bounded =
+    "RUN set -eux; \\\n" +
+    "  curl -fsSL --retry 2 --connect-timeout 15 --max-time 60 -o /tmp/a.tar.gz \\\n" +
+    '    "https://example.com/a.tar.gz"; \\\n' +
+    "  tar -xzf /tmp/a.tar.gz\n";
+
+  it("passes a curl in the bounded shape", () => {
+    expect(curlGaps(`FROM x\n${bounded}RUN echo hi\n`)).toEqual({ curls: 1, gaps: [] });
+  });
+
+  it.each([
+    ["no retry", bounded.replace("--retry 2 ", ""), "curl 1: has no --retry <n>"],
+    ["no attempt limit", bounded.replace("--max-time 60 ", ""), "curl 1: has no --max-time"],
+    [
+      "no connect limit",
+      bounded.replace("--connect-timeout 15 ", ""),
+      "curl 1: has no --connect-timeout",
+    ],
+    [
+      "a retry of every error",
+      bounded.replace("--retry 2 ", "--retry 2 --retry-all-errors "),
+      "curl 1: retries every error, a 4xx included",
+    ],
+  ])("reports %s", (_shape, dockerfile, gap) => {
+    expect(curlGaps(dockerfile).gaps).toEqual([gap]);
+  });
+
+  it("bounds and retries every curl in deploy/Dockerfile", () => {
+    const { curls, gaps } = curlGaps(DOCKERFILE);
+    expect(curls, "expected the Litestream download to still be here").toBeGreaterThanOrEqual(1);
+    expect(gaps).toEqual([]);
+  });
+});
+
+/**
  * What a box script misses of the bounded apt shape: every `apt-get` runs inside `apt_get()`, whose
  * body runs each one under `"$limit" <n>` (a number or a `"$variable"`) in the same command, with
  * `limit` resolved from gtimeout or timeout. Reads TEXT: a `command -v apt-get` lookup, whole-line

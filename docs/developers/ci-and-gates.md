@@ -3612,8 +3612,13 @@ They are not cached. On 2026-09-25 `gh api repos/:owner/:repo/actions/cache/usag
 11,174,362,480 bytes across 1,066 entries, and the plan's grouping of the entries on 2026-09-23 put
 about nine tenths of that day's total in Docker layers; a new entry would compete under least-recently-used eviction
 with the pnpm store and Playwright entries the test jobs restore (see "The GHA cache is a shared
-per-repository budget, evicted least-recently-used" above). An error answer from a release download fails the job with a message
-naming the URL. Since A399 (2026-10-08) no workflow exports Docker layers; the layers already
+per-repository budget, evicted least-recently-used" above). Both installers download through
+`scripts/download-release.mjs`: a 5xx answer or a network error is retried, up to three attempts
+with a growing wait between them, a 4xx answer fails at once, and in CI the step passes the job's
+`GITHUB_TOKEN`, which the download sends as a bearer token. The last failure fails the job with a
+message naming the URL and the number of attempts. `deploy/Dockerfile`'s `litestream` stage gives
+its `curl` `--retry 2` and per-attempt time limits, guarded by `scripts/deploy-image-env.test.ts`,
+which reads text. Since A399 (2026-10-08) no workflow exports Docker layers; the layers already
 stored stay until GitHub evicts them (see "Neither image build uses the remote layer cache").
 
 **A change to either installer alone selects `apps/server`**, because both are in
@@ -3629,6 +3634,11 @@ pushes emit `server=false` and skip them. Their merge job runs only in full veri
 checks and bundle checks run when code is selected. Full scheduled/manual verification selects all packages and image smoke,
 then publishes main images through the existing tag guard. The PR #682 runs above record the
 older job layout, before A1427 scoped main landings and moved full coverage to the nightly run.
+A change to `scripts/download-release.mjs` alone, which both installers import, selects no
+package, because it is not in `ROOT_SCOPE_CONSUMERS`: `printf 'scripts/download-release.mjs\n' |
+node scripts/changed-packages.mjs` printed `code=false`, `scope=root` on 2026-11-09. Its tests and
+the installers' tests run in `root-guards`; the real download runs only in `test-server-stream`, on
+a pull request that selects `@waitron/server` or on a full run.
 
 **What the guard does not see.** `scripts/ci-workflow.test.mjs` is weaker than its name for the
 `TMPDIR=/dev/shm` setting: it reads `ci.yml` as text, so a step an `if:` switches off, or a `run:`
