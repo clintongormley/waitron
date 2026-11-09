@@ -270,6 +270,7 @@ describe("ALL_MODULES configuration transfer contribution", () => {
       "payments",
       "payment_refunds",
       "tenant_credentials",
+      "outgoing_mail",
       "management_account_actions",
       "management_sessions",
       "sessions",

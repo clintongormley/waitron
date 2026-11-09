@@ -3036,7 +3036,42 @@ CREATE TABLE `document_page_reprints` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `document_page_reprints_job_uq` ON `document_page_reprints` (`page_job_id`);--> statement-breakpoint
-CREATE INDEX `document_page_reprints_sale_idx` ON `document_page_reprints` (`sale_id`);
+CREATE INDEX `document_page_reprints_sale_idx` ON `document_page_reprints` (`sale_id`);--> statement-breakpoint
+CREATE TABLE `outgoing_mail` (
+	`id` text PRIMARY KEY NOT NULL,
+	`seq` integer NOT NULL,
+	`kind` text NOT NULL,
+	`dedupe_key` text NOT NULL,
+	`subject_id` text,
+	`person_id` text,
+	`requested_by` text,
+	`recipient` text,
+	`params` text DEFAULT '{}' NOT NULL,
+	`status` text DEFAULT 'pending' NOT NULL,
+	`attempts` integer DEFAULT 0 NOT NULL,
+	`next_attempt_at` text NOT NULL,
+	`not_after` text NOT NULL,
+	`queued_at` text NOT NULL,
+	`claim_token` text,
+	`claimed_at` text,
+	`finished_at` text,
+	`failure_code` text,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`requested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "outgoing_mail_kind_ck" CHECK("outgoing_mail"."kind" in ('invoice', 'attendance_question', 'certificate_reminder', 'box_alert', 'account_action', 'role_membership_changed')),
+	CONSTRAINT "outgoing_mail_status_ck" CHECK("outgoing_mail"."status" in ('pending', 'sending', 'sent', 'rejected', 'unknown', 'expired', 'cancelled')),
+	CONSTRAINT "outgoing_mail_failure_ck" CHECK("outgoing_mail"."failure_code" in ('email.test_host_not_found', 'email.test_connection_refused', 'email.test_starttls_refused', 'email.test_tls_refused', 'email.test_certificate_untrusted', 'email.test_login_refused', 'email.test_login_required', 'email.test_timeout', 'email.test_refused', 'mail.compose_failed', 'mail.claim_failed', 'mail.claim_abandoned')),
+	CONSTRAINT "outgoing_mail_attempts_ck" CHECK("outgoing_mail"."attempts" >= 0),
+	CONSTRAINT "outgoing_mail_not_after_ck" CHECK("outgoing_mail"."not_after" > "outgoing_mail"."queued_at"),
+	CONSTRAINT "outgoing_mail_claim_ck" CHECK(("outgoing_mail"."claim_token" is null) = ("outgoing_mail"."claimed_at" is null)),
+	CONSTRAINT "outgoing_mail_sending_ck" CHECK("outgoing_mail"."status" <> 'sending' or ("outgoing_mail"."claim_token" is not null and "outgoing_mail"."recipient" is not null)),
+	CONSTRAINT "outgoing_mail_finished_ck" CHECK("outgoing_mail"."status" = 'rejected' or ("outgoing_mail"."status" in ('pending', 'sending') and "outgoing_mail"."finished_at" is null) or ("outgoing_mail"."status" in ('sent', 'unknown', 'expired', 'cancelled') and "outgoing_mail"."finished_at" is not null)),
+	CONSTRAINT "outgoing_mail_person_ck" CHECK("outgoing_mail"."person_id" is not null or "outgoing_mail"."kind" = 'invoice')
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `outgoing_mail_key_uq` ON `outgoing_mail` (`dedupe_key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `outgoing_mail_seq_uq` ON `outgoing_mail` (`seq`);--> statement-breakpoint
+CREATE INDEX `outgoing_mail_due_idx` ON `outgoing_mail` (`status`,`next_attempt_at`,`queued_at`,`seq`);
 --> statement-breakpoint
 CREATE TRIGGER tenders_reject_post_settlement
 BEFORE INSERT ON tenders

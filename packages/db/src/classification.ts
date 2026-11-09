@@ -195,6 +195,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "state",
     "hash-chained order amendments in flight; copied to a standby, never drained back",
   ),
+  classify("outgoing_mail", "state", "the one mail queue; copied to a standby, never drained back"),
   classify("print_jobs", "state", STATE),
   classify(
     "invoice_deliveries",

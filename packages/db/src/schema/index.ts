@@ -83,3 +83,5 @@ export * from "./device-invoice-revisions.js";
 export * from "./document-page-jobs.js";
 
 export { settings } from "./settings.js";
+
+export * from "./outgoing-mail.js";
