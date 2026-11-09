@@ -6182,3 +6182,53 @@ and a different module's accepting control.
 TypeScript run during migration or start. The pinned-CHECK case in `packages/db/src/settings.test.ts`
 reads the built table's text and checks the four shared constraints, not what each enforces.
 Nothing checks that documents hold no row ids or that a module declares its document in its seat.
+
+## Root receipts moved on 2026-11-09
+
+These source excerpts retain the detail moved from `CLAUDE.md` at
+`c7ca274eeb1426f64a825164ee3411630545efcd` by A1467. They are not new measurements or changes to the rules.
+Markdown link targets are relative to this topic file.
+
+### rror codes name the domain concept, never the throwing package; server. names process facts.
+
+**Error codes name the domain concept, never the throwing package; `server.*` names process facts.**
+Every throwing file imports its registry. Before a venue is live, rename/delete freely; afterwards
+either is a migration (owner, 2026-09-26). Move every tree copy together; once live, rewrite stored
+copies and keep external readers accepting both names until both sides deploy. Stored-copy and
+prefix-matcher locations: [conventions-data.md](conventions-data.md).
+
+### eneral code is English only
+
+**General code is English only** (owner, 2026-09-07 and 2026-10-19), including literals, comments,
+identifiers, file names, seeds, starter content and tests. Exceptions: `packages/fiscal-verifactu`,
+AEAT wire names, translation files/guides and Spain-specific packages (`country-es`, `workforce-es`,
+reporting's modelo 303) for official Spain-only text/terms (owner, 2026-10-20, A913).
+[Receipt](conventions-data.md#root-receipts-moved-on-2026-11-02). Country packs
+also provide English and own demo data; Spain receipts use the venue's receipt language, never English. Starter content is English
+in code and translated at setup; its words in other languages go in the writing package's
+`src/starter-content.ts`, which the guard skips by exact path (owner, 2026-10-20, A918);
+non-English screen tests read expected strings. Domain terms
+have one declaring module vocabulary; fiscal terms never enter the base.
+Guard: `scripts/english-only.test.ts`, weaker than its name: listed words and packages only, no apps;
+review greps the diff.
+
+### othing EXTERNAL may block a sale — and a till needs the venue's PRIMARY.
+
+**Nothing EXTERNAL may block a sale — and a till needs the venue's PRIMARY.** AEAT, the card network
+and the internet are never on the sale path of whichever node is primary: records chain locally and
+the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
+the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
+inline. TODAY a venue has ONE node and no failover at all. Detail:
+[conventions-data.md](conventions-data.md).
+
+### estore and promotion start a new chain under a new installation name.
+
+**Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion
+use five symbols for the box's UTC minute, after another machine's clock agrees within 30 seconds
+(no confirmation); a minute whose name is already in a history the box reads is not taken. Its
+waits, its other refusals and when a name can repeat:
+[conventions-data.md](conventions-data.md#root-receipts-moved-on-2026-11-06). Only
+preproduction throwaway skips second-clock/history checks; refuse it outside preproduction.
+Restore takes one source; working-time chain continues from its head. Guards:
+hour-selection/hour-clock/minute-selection-unknown-name suites (the last weaker than its name)
+and `packages/workforce/src/restore-continuation.test.ts`.

@@ -4996,3 +4996,30 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
   rule: that script only; `scripts/ci-diff-paths.sh` never looks for `gnutimeout` (backlog).
   [Receipt](ci-and-gates.md#every-pnpm-setup-is-bounded).
+
+## Root receipts moved on 2026-11-09
+
+These source excerpts retain the detail moved from `CLAUDE.md` at
+`c7ca274eeb1426f64a825164ee3411630545efcd` by A1467. They are not new measurements or changes to the rules.
+Markdown link targets are relative to this topic file.
+
+### R CI runs scoped package tests without package-wide coverage; ordinary main pushes run no package tests in ci.yml; nightly, manual and release runs enforce 98/98/98/95 coverage.
+
+**PR CI runs scoped package tests without package-wide coverage; ordinary main pushes run no
+package tests in `ci.yml`; nightly, manual and release runs enforce `98/98/98/95` coverage.**
+A PR tests only the changed packages, not their dependents (owner, 2026-11-08, A1461); those are
+typechecked on the PR and tested nightly. Root coverage remains on every run. UI registry publication keeps its separate package checks;
+deploy-selected image smoke stays on main (owner, 2026-11-08, A1452). Verify the
+current head's selected jobs, and the full run's coverage or merge jobs before claiming full
+coverage. Shard counts must not exceed the package's test-file count. Guard:
+`scripts/ci-workflow.test.mjs`, weaker than the rule: workflow text and controlled shell fixtures,
+not a hosted Actions run. [Modes and limits](ci-and-gates.md#scoped-tests-and-full-verification).
+
+### I does not run every check on every push.
+
+**CI does not run every check on every push.** Read `changes` outputs `code`, `scope`, `packages`
+and `full`. Main uses the newest completed successful main ancestor to scope quick checks;
+without a baseline, change scope is global. Main's named package gates are false even when `scope`
+and `packages` name code changes. PR evidence is not reused. Container publication, including `:main`, follows
+full scheduled/manual main verification or a fully checked release tag, never an ordinary main
+push. [Modes and limits](ci-and-gates.md#scoped-tests-and-full-verification).
