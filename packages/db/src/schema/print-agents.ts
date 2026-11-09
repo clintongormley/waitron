@@ -3,8 +3,8 @@ import { flag, id, label, newId, nowIso, smallCount, table, tsString } from "./c
 import { locations } from "./tenants.js";
 
 /**
- * An approved local print worker. Its bearer secret stays in the worker; the database holds only a
- * scrypt hash. Revocation retains the identity referenced by print-job claims while denying further
+ * An approved local print worker. Its bearer secret stays in the worker; the database holds only its
+ * `hashDeviceToken` hash. Revocation retains the identity referenced by print-job claims while denying further
  * authentication.
  */
 export const printAgents = table(

@@ -8,7 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
-  hashSecret,
+  hashDeviceToken,
   hashSessionToken,
   loginWithPin,
   persons,
@@ -531,7 +531,7 @@ describe("a deleted device", () => {
       locationId: venue.cfg.locationId,
       kind: "device",
       label: "Bar",
-      tokenHash: hashSecret("a token"),
+      tokenHash: hashDeviceToken("a token"),
       verificationNumber: "41",
       decoyNumbers: ["42", "43"],
     });
@@ -636,7 +636,7 @@ describe("a deleted device", () => {
     const app = mountApp(venue.cfg, mode);
     const { deviceId, jar } = await enrol(app, venue, mode, "Bar");
     await deleteThroughRoute(app, venue, deviceId);
-    const realHash = hashSecret(parseDeviceCookie(cookieValue(jar))!.token);
+    const realHash = hashDeviceToken(parseDeviceCookie(cookieValue(jar))!.token);
     await suite.db.update(devices).set({ tokenHash: realHash }).where(eq(devices.id, deviceId));
 
     const hold = mode.open();

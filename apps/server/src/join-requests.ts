@@ -12,7 +12,7 @@ import {
   venueLocationId,
   withTransaction,
 } from "@waitron/db";
-import { endDeviceSessions, hashSecret, verifySecretAsync } from "@waitron/identity";
+import { deviceTokenMatches, endDeviceSessions, hashDeviceToken } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { FormFactor } from "@waitron/layouts";
 import type { DeviceKitchenScreen, ResolvedKitchenScreen } from "@waitron/module";
@@ -199,7 +199,7 @@ export async function createJoinRequest(
   }
 
   const token = randomBytes(32).toString("base64url");
-  const tokenHash = hashSecret(token);
+  const tokenHash = hashDeviceToken(token);
   const [row] = await tx
     .insert(joinRequests)
     .values({
@@ -236,10 +236,8 @@ export interface ReturningDevice {
  * The disabled device a knock's parsed device cookie proves, or `null` — for no cookie (or a
  * malformed one, which parses to `null`), an id that names no device, an active one or a deleted
  * one, or a token that does not verify. Every `null` makes the knock an ordinary new request,
- * answered as one from a browser with no cookie.
- *
- * Called with no transaction open, so scrypt never holds the write lock; {@link createJoinRequest}
- * re-reads the row before relying on the result.
+ * answered as one from a browser with no cookie. {@link createJoinRequest} re-reads the row before
+ * relying on the result.
  */
 export async function provenDisabledDevice(
   db: Database,
@@ -251,7 +249,7 @@ export async function provenDisabledDevice(
     .from(devices)
     .where(and(eq(devices.id, parsed.id), eq(devices.active, false), isNull(devices.deletedAt)));
   if (row === undefined) return null;
-  if (!(await verifySecretAsync(parsed.token, row.tokenHash))) return null;
+  if (!deviceTokenMatches(parsed.token, row.tokenHash)) return null;
   return { deviceId: parsed.id, tokenHash: row.tokenHash };
 }
 
@@ -403,19 +401,20 @@ export async function challengeFor(
 
 type JoinStatus = "pending" | "approved" | "not_approved";
 
-/** The token hash a poller's selector names: its pending request's, or, only when there is none, its
- * accepted row's. */
-type StoredJoinHash = { pending: string } | { accepted: string } | null;
-
-/** Called once the transaction that read `stored` has closed, so the write lock is not held while
- * scrypt runs. A pending request whose token does not verify is `not_approved`; it never falls
- * through to an accepted row. */
-async function statusFor(token: string, stored: StoredJoinHash): Promise<JoinStatus> {
-  if (stored === null) return "not_approved";
-  if ("pending" in stored) {
-    return (await verifySecretAsync(token, stored.pending)) ? "pending" : "not_approved";
-  }
-  return (await verifySecretAsync(token, stored.accepted)) ? "approved" : "not_approved";
+/** A pending request whose token does not verify is `not_approved`; it never falls through to an
+ * accepted row. */
+async function pendingStatus(
+  tx: Transaction,
+  cfg: TradingContext,
+  joinId: string,
+  token: string,
+): Promise<JoinStatus | undefined> {
+  const [pending] = await tx
+    .select({ tokenHash: joinRequests.tokenHash })
+    .from(joinRequests)
+    .where(and(ownedBy(cfg), eq(joinRequests.id, joinId)));
+  if (pending === undefined) return undefined;
+  return deviceTokenMatches(token, pending.tokenHash) ? "pending" : "not_approved";
 }
 
 /**
@@ -434,22 +433,21 @@ export async function readJoinStatus(
   window: DeviceRequestWindow & Pick<PairingMode, "dropClaim">,
 ): Promise<JoinStatus> {
   let dropped: string[] = [];
-  const stored = await withTransaction(db, async (tx): Promise<StoredJoinHash> => {
+  const status = await withTransaction(db, async (tx): Promise<JoinStatus> => {
     await sweepLapsed(tx, cfg);
     dropped = await discardLapsedDeviceRequests(tx, cfg, window);
-    const [pending] = await tx
-      .select({ tokenHash: joinRequests.tokenHash })
-      .from(joinRequests)
-      .where(and(ownedBy(cfg), eq(joinRequests.id, joinId)));
-    if (pending !== undefined) return { pending: pending.tokenHash };
+    const pending = await pendingStatus(tx, cfg, joinId, token);
+    if (pending !== undefined) return pending;
     const [accepted] = await tx
       .select({ tokenHash: devices.tokenHash })
       .from(devices)
       .where(and(eq(devices.id, joinId), eq(devices.active, true)));
-    return accepted === undefined ? null : { accepted: accepted.tokenHash };
+    return accepted !== undefined && deviceTokenMatches(token, accepted.tokenHash)
+      ? "approved"
+      : "not_approved";
   });
   for (const id of dropped) window.dropClaim(id);
-  return statusFor(token, stored);
+  return status;
 }
 
 /**
@@ -624,20 +622,18 @@ export async function readAgentJoinStatus(
   joinId: string,
   token: string,
 ): Promise<JoinStatus> {
-  const stored = await withTransaction(db, async (tx): Promise<StoredJoinHash> => {
+  return withTransaction(db, async (tx): Promise<JoinStatus> => {
     await sweepLapsed(tx, cfg);
-    const [pending] = await tx
-      .select({ tokenHash: joinRequests.tokenHash })
-      .from(joinRequests)
-      .where(and(ownedBy(cfg), eq(joinRequests.id, joinId)));
-    if (pending !== undefined) return { pending: pending.tokenHash };
+    const pending = await pendingStatus(tx, cfg, joinId, token);
+    if (pending !== undefined) return pending;
     const [accepted] = await tx
       .select({ tokenHash: printAgents.tokenHash })
       .from(printAgents)
       .where(and(eq(printAgents.id, joinId), eq(printAgents.active, true)));
-    return accepted === undefined ? null : { accepted: accepted.tokenHash };
+    return accepted !== undefined && deviceTokenMatches(token, accepted.tokenHash)
+      ? "approved"
+      : "not_approved";
   });
-  return statusFor(token, stored);
 }
 
 /** Refuse a request. Deleting the row is the whole of it — there is no denied state to carry, because
@@ -706,11 +702,10 @@ export async function selfEnrolNodeAgent(
     .from(printAgents)
     .where(eq(printAgents.nodeId, input.nodeId));
 
-  // Checked BEFORE minting so a refused re-enrol does not spend a scrypt it will throw away.
   if (existing !== undefined && !existing.active) throw new AppError("device.join_revoked", {});
 
   const secret = randomBytes(32).toString("base64url");
-  const tokenHash = hashSecret(secret);
+  const tokenHash = hashDeviceToken(secret);
 
   if (existing !== undefined) {
     await tx.update(printAgents).set({ tokenHash }).where(eq(printAgents.id, existing.id));

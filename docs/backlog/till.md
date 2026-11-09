@@ -844,18 +844,14 @@ retired in [#1800](https://github.com/clintongormley/waitron/pull/1800) without 
 
 ## What W105b left open (#1248, a disabled device coming back as itself)
 
-Left OPEN by W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs
-only when the cookie names a disabled device, so the
-response time hints that an id is a disabled device; asks are rate-limited and, outside dev mode,
-accepted only while Add a device is open. (2) Someone holding a copy of a disabled device's
-current cookie can ask first and so replace that cookie; outside dev mode they still cannot get in
-without a manager tapping the number. (3) If an ask's response is lost after the server saved it,
-the browser's next ask joins as a new device and the old row stays disabled. (4) A long name in
-the waiting list overflows a phone's width. (5) An ask that replaces a waiting one always gets a
-later `createdAt`, but an ask made when no ask is waiting under its id, whatever ended the
-previous one (accepting it included, once the device is later disabled), is not forced later.
-It must first prove the token the previous ask issued, a scrypt check, so sharing a millisecond is
-unlikely, but nothing in the code rules it out.
+Left OPEN by W105b (#1248, a disabled device coming back as itself): (1) Someone holding a copy
+of a disabled device's current cookie can ask first and so replace that cookie; outside dev mode
+they still cannot get in without a manager tapping the number. (2) If an ask's response is lost
+after the server saved it, the browser's next ask joins as a new device and the old row stays
+disabled. (3) A long name in the waiting list overflows a phone's width. (4) An ask that replaces
+a waiting one always gets a later `createdAt`, but an ask made when no ask is waiting under its
+id, whatever ended the previous one (accepting it included, once the device is later disabled),
+is not forced later, and nothing in the code rules out the two sharing a millisecond.
 
 ## What W106 left open (the battery on the Devices list, #1240)
 
@@ -997,9 +993,8 @@ see a refusal where the dialog should have asked.
 Search matches the staff name only, not a customer name;
 Matching displayed section names is included (A461). Every `/api/menu-state` read from an enrolled device reads the device, once
 per zone it polls (the counter's, and the open table's while its order shows), and each read also
-reads the till's setup (`readTillSetup`, `apps/server/src/till-setup.ts`) to name `setupRevision`; the token's scrypt check (21.1 ms, measured once on a Mac)
-runs off the lock, once per device until its token changes, the server restarts or the device
-falls out of the 256 the server remembers.
+reads the till's setup (`readTillSetup`, `apps/server/src/till-setup.ts`) to name `setupRevision`; the token check is one SHA-256 of the token on every read, with nothing
+remembered between reads.
 
 ## A custom-unit extra still shows a dot in Spanish, and its kitchen unit can use the English abbreviation
 
@@ -2851,9 +2846,8 @@ Printer identity is separate from the till route inventory.
   - **No till test covers a payment refusal that arrives after the approver's PIN** (since A845,
     #1895, the PIN prompt comes first).
 - **Loose ends left by A268 (add a device, like adding a printer, owner 2026-10-04).**
-  - W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs only when
-    the cookie names a disabled device, so the response time hints that an id is a disabled device;
-    asks are rate-limited and, outside dev mode, accepted only while Add a device is open.
+  - W105b (#1248, a disabled device coming back as itself): (1) someone holding a copy of a
+    disabled device's current cookie can ask first and so replace that cookie.
     [Detail](till.md#what-w105b-left-open-1248-a-disabled-device-coming-back-as-itself)
   - W106 (the battery on the Devices list, #1240): (a) the relative-time words (W106a, #1272,
     `wt-relative-time`) show the exact time in the BROWSER's time zone: the relative-time widget

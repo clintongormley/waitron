@@ -12,7 +12,13 @@ import {
 import type { DeviceId } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorize, hashSessionToken, sessions, type Permission } from "@waitron/identity";
+import {
+  authorize,
+  hashSessionToken,
+  sessions,
+  sightingDue,
+  type Permission,
+} from "@waitron/identity";
 import type { ProfileAction } from "@waitron/layouts";
 import {
   deviceBindingColumns,
@@ -20,7 +26,6 @@ import {
   deviceProfileJoin,
   requireDeviceProof,
   recordSighting,
-  sightingDue,
   toDeviceBinding,
   type DeviceBinding,
 } from "./device-session.js";

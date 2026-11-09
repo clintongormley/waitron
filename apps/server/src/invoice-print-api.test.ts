@@ -27,7 +27,7 @@ import {
   MAX_DELIVERY_ATTEMPTS,
   PRINTER_DELETED,
 } from "@waitron/printing";
-import { hashSecret, hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashDeviceToken, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { createClient, createAgent, FakeSink } from "@waitron/print-agent";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
@@ -127,11 +127,11 @@ async function setup(bluetooth = false) {
   const secret = "synthetic-agent-secret";
   const [agent] = await suite.db
     .insert(printAgents)
-    .values({ locationId: location!.id, name: "Agent", tokenHash: hashSecret(secret) })
+    .values({ locationId: location!.id, name: "Agent", tokenHash: hashDeviceToken(secret) })
     .returning();
   const [other] = await suite.db
     .insert(printAgents)
-    .values({ locationId: location!.id, name: "Other", tokenHash: hashSecret(secret) })
+    .values({ locationId: location!.id, name: "Other", tokenHash: hashDeviceToken(secret) })
     .returning();
   const printer = await withTransaction(suite.db, (tx) =>
     createPrinter(

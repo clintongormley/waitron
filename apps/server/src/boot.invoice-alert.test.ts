@@ -10,7 +10,7 @@ import {
   tenants,
   withTransaction,
 } from "@waitron/db";
-import { hashSecret } from "@waitron/identity";
+import { hashDeviceToken } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
@@ -148,7 +148,7 @@ describe("the running server's undelivered invoice alert", () => {
       .values({
         locationId: venue.cfg.locationId,
         name: "Office agent",
-        tokenHash: hashSecret(secret),
+        tokenHash: hashDeviceToken(secret),
       })
       .returning({ id: printAgents.id });
     const [office] = await suite.db

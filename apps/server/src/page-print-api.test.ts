@@ -16,7 +16,7 @@ import {
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
-import { hashSecret } from "@waitron/identity";
+import { hashDeviceToken } from "@waitron/identity";
 import { createClient, PAGE_FORMATS, PAGE_HOLDS, PAGE_MEDIA } from "@waitron/print-agent";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -139,7 +139,7 @@ async function venue(opts: { render?: Render; realClock?: true } = {}) {
 async function agent(locationId: string, name: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
-    .values({ locationId, name, tokenHash: hashSecret(SECRET) })
+    .values({ locationId, name, tokenHash: hashDeviceToken(SECRET) })
     .returning({ id: printAgents.id });
   return row!.id;
 }
@@ -332,7 +332,7 @@ describe("agent authentication", () => {
       .values({
         locationId: v.locationId,
         name: "Revoked",
-        tokenHash: hashSecret(SECRET),
+        tokenHash: hashDeviceToken(SECRET),
         active: false,
       })
       .returning({ id: printAgents.id });

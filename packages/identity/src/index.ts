@@ -35,6 +35,13 @@ export {
 } from "./management-session.js";
 export type { ManagementSession } from "./management-session.js";
 export { hashSessionToken, mintSessionToken } from "./session-token.js";
+export {
+  deviceTokenMatches,
+  hashDeviceToken,
+  sightingDue,
+  signInWithToken,
+  staleBefore,
+} from "./device-token.js";
 export { encryptTotpSecret } from "./mfa.js";
 export type { TotpKeyEntry, TotpKeyRing } from "./mfa.js";
 export {
@@ -116,8 +123,6 @@ export type {
   IssuedAccountAction,
 } from "./account-action.js";
 export { hashSecret, verifySecretAsync } from "./secret-hash.js";
-export { createVerifiedTokenMemory } from "./verified-tokens.js";
-export type { VerifiedTokenMemory } from "./verified-tokens.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
 export {
   PIN_THROTTLE_FREE_ATTEMPTS,

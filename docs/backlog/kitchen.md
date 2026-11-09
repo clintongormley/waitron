@@ -92,7 +92,7 @@ both surfaces. Decide which name the following extra should show, then make the 
   may never mark dishes ready on its screen. With that screen switched off, each send can raise
   the dark-screen alert for up to an hour while those dishes remain waiting. A kitchen screen
   opened through the dev stack's device chooser never records a check-in: the override returns
-  before the cookie path updates `lastSeenAt` (`apps/server/src/device-session.ts:176-186`).
+  before the cookie path updates `lastSeenAt` (`readDeviceProof` in `apps/server/src/device-session.ts`).
   Improve how the alert distinguishes a kitchen using paper and how the dev chooser records check-ins.
 
 ## Changing sent lines and the kitchen screen (Task 7c, #710, and the kitchen fixes after it)

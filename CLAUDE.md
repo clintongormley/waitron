@@ -587,9 +587,10 @@ called weaker than its name, the topic file lists what it does not see.
   write names, as this box's id or one of the boxes in its takeover history, a seal only a box
   holding the key ring opens, or rows the transaction that wrote them deletes. No guard makes a new `local` table say which.
 - **Store anything that works as a live login as a hash.** Guards: database-copy cases in
-  `apps/server/src/me-api.test.ts`, `apps/server/src/till-api.test.ts` and the stored-hash case in
-  `packages/identity/src/management-session.test.ts`, weaker than the rule: limited credentials,
-  only the dashboard hash tried as a token; new login tables unguarded.
+  `apps/server/src/me-api.test.ts`, `apps/server/src/till-api.test.ts` and the stored-hash cases in
+  `packages/identity/src/management-session.test.ts` and `packages/identity/src/device-token.test.ts`,
+  weaker than the rule: limited credentials, only the dashboard and device hashes tried as a token;
+  new login tables unguarded.
 - **`requireManagementChangeFromOwnPage` checks the page of a change carrying the dashboard's cookie,
   ahead of every main-app route after the request-id middleware and every waiting-app write route;
   register none ahead of it.** Cost: another port's page changed the start screen (B3 PR 9). Guards:

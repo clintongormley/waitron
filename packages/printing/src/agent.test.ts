@@ -1,42 +1,15 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  locations,
-  printAgents,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { describe, expect, it, vi } from "vitest";
+import { CORE_MIGRATIONS, printAgents, withTransaction, venueLocationId } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { hashSecret } from "@waitron/identity";
+import { hashDeviceToken, hashSecret } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { VERIFIED_AGENTS_LIMIT, authenticateAgent } from "./agent.js";
+import { authenticateAgent } from "./agent.js";
 type PrintAgentConfig = { locationId: string };
 import "./errors.js";
-
-const verification = vi.hoisted(() => ({
-  calls: 0,
-  afterVerify: null as (() => Promise<void>) | null,
-}));
-vi.mock("@waitron/identity", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@waitron/identity")>();
-  return {
-    ...actual,
-    verifySecretAsync: async (secret: string, stored: string) => {
-      verification.calls += 1;
-      const verdict = await actual.verifySecretAsync(secret, stored);
-      await verification.afterVerify?.();
-      return verdict;
-    },
-  };
-});
-
-afterEach(() => {
-  verification.afterVerify = null;
-});
 
 const LOCALE = "es-ES";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -144,7 +117,7 @@ describe("authenticateAgent", () => {
       .values({
         locationId: cfg.locationId,
         name: "Auth agent",
-        tokenHash: hashSecret(secret),
+        tokenHash: hashDeviceToken(secret),
         active: true,
       })
       .returning({ id: printAgents.id });
@@ -203,6 +176,17 @@ describe("authenticateAgent", () => {
     expect(await codeOf(() => authenticateAgent(suite.db, forged))).toBe("agent.unauthorized");
   });
 
+  it("a row still holding the token's old scrypt hash → agent.unauthorized", async () => {
+    const { agentId, token } = await enrolled();
+    const secret = token.slice(token.indexOf(".") + 1);
+    await suite.db
+      .update(printAgents)
+      .set({ tokenHash: hashSecret(secret) })
+      .where(eq(printAgents.id, agentId));
+    expect(await codeOf(() => authenticateAgent(suite.db, token))).toBe("agent.unauthorized");
+    expect(await lastSeenAt(agentId)).toBeNull();
+  });
+
   it("a revoked (active=false) agent → agent.unauthorized", async () => {
     const { agentId, token } = await enrolled();
     await setActive(agentId, false);
@@ -212,28 +196,6 @@ describe("authenticateAgent", () => {
   it("an unknown agent id → agent.unauthorized", async () => {
     const token = `${randomUUID()}.${randomBytes(32).toString("base64url")}`;
     expect(await codeOf(() => authenticateAgent(suite.db, token))).toBe("agent.unauthorized");
-  });
-
-  it("lets another writer commit while it derives the key", async () => {
-    const { cfg, token } = await enrolled();
-    const order: string[] = [];
-    const authenticated = authenticateAgent(suite.db, token).then(() =>
-      order.push("authenticated"),
-    );
-    const written = new Promise<void>((resolve, reject) => {
-      setImmediate(() => {
-        withTransaction(suite.db, (tx) =>
-          tx.update(locations).set({ name: "Bar" }).where(eq(locations.id, cfg.locationId)),
-        )
-          .then(() => {
-            order.push("writer");
-            resolve();
-          })
-          .catch(reject);
-      });
-    });
-    await Promise.all([authenticated, written]);
-    expect(order).toEqual(["writer", "authenticated"]);
   });
 
   it("authenticates while another caller holds the write lock, when no sighting is due", async () => {
@@ -285,7 +247,7 @@ describe("authenticateAgent", () => {
   // commits on release, after the call has queued for the lock to record its sighting.
   it.each([
     ["revoked", { active: false }],
-    ["re-keyed", { tokenHash: hashSecret(randomBytes(32).toString("base64url")) }],
+    ["re-keyed", { tokenHash: hashDeviceToken(randomBytes(32).toString("base64url")) }],
   ] as const)(
     "refuses an agent %s while it waits for the lock to record a sighting",
     async (_label, change) => {
@@ -344,51 +306,6 @@ describe("authenticateAgent", () => {
     }
   });
 
-  it("refuses an agent revoked while its key is being derived", async () => {
-    const { agentId, token } = await enrolled();
-    // No sighting is due, so the write that re-checks the row inside the lock never runs.
-    await suite.db
-      .update(printAgents)
-      .set({ lastSeenAt: new Date().toISOString() })
-      .where(eq(printAgents.id, agentId));
-    const revoked = new Promise<void>((resolve, reject) => {
-      setImmediate(() => {
-        withTransaction(suite.db, (tx) =>
-          tx.update(printAgents).set({ active: false }).where(eq(printAgents.id, agentId)),
-        )
-          .then(() => resolve())
-          .catch(reject);
-      });
-    });
-    const code = await codeOf(() => authenticateAgent(suite.db, token));
-    await revoked;
-    expect(code).toBe("agent.unauthorized");
-  });
-
-  it("refuses a token whose agent was re-keyed while its key was being derived", async () => {
-    const { agentId, token } = await enrolled();
-    // No sighting is due, so the write that re-checks the row inside the lock never runs.
-    await suite.db
-      .update(printAgents)
-      .set({ lastSeenAt: new Date().toISOString() })
-      .where(eq(printAgents.id, agentId));
-    const rekeyed = new Promise<void>((resolve, reject) => {
-      setImmediate(() => {
-        withTransaction(suite.db, (tx) =>
-          tx
-            .update(printAgents)
-            .set({ tokenHash: hashSecret(randomBytes(32).toString("base64url")) })
-            .where(eq(printAgents.id, agentId)),
-        )
-          .then(() => resolve())
-          .catch(reject);
-      });
-    });
-    const code = await codeOf(() => authenticateAgent(suite.db, token));
-    await rekeyed;
-    expect(code).toBe("agent.unauthorized");
-  });
-
   it("a malformed token — no separator, trailing dot, or non-uuid selector — → agent.unauthorized", async () => {
     for (const bad of ["nodothere", "abc.", "not-a-uuid.somesecret"]) {
       expect(await codeOf(() => authenticateAgent(suite.db, bad))).toBe("agent.unauthorized");
@@ -426,13 +343,13 @@ describe("authenticateAgent", () => {
       const db = sightingRefused(diskFull(), () =>
         suite.db
           .update(printAgents)
-          .set({ tokenHash: hashSecret(randomBytes(32).toString("base64url")) })
+          .set({ tokenHash: hashDeviceToken(randomBytes(32).toString("base64url")) })
           .where(eq(printAgents.id, agentId)),
       );
       expect(await codeOf(() => authenticateAgent(db, token))).toBe("agent.unauthorized");
     });
 
-    it("on a full disk, a token whose agent was revoked meanwhile is forgotten", async () => {
+    it("on a full disk, a token whose agent was revoked meanwhile is refused, and accepted once active again", async () => {
       const { agentId, token } = await enrolled();
       await authenticateAgent(suite.db, token);
       await makeSightingDue(agentId);
@@ -440,9 +357,7 @@ describe("authenticateAgent", () => {
       expect(await codeOf(() => authenticateAgent(db, token))).toBe("agent.unauthorized");
 
       await setActive(agentId, true);
-      const before = verification.calls;
-      await authenticateAgent(suite.db, token);
-      expect(verification.calls - before).toBe(1);
+      expect(await authenticateAgent(suite.db, token)).toEqual({ agentId });
     });
 
     it("any other failure still fails the call", async () => {
@@ -453,124 +368,30 @@ describe("authenticateAgent", () => {
     });
   });
 
-  describe("remembering a token that passed the key check", () => {
-    /** How many key checks `body` costs. */
-    async function keyChecksDuring(body: () => Promise<unknown>): Promise<number> {
-      const before = verification.calls;
-      await body();
-      return verification.calls - before;
-    }
-
-    it("spends one key check on repeated requests with one valid token", async () => {
-      const { agentId, token } = await enrolled();
-      const checks = await keyChecksDuring(async () => {
-        for (let i = 0; i < 3; i += 1) {
-          expect(await authenticateAgent(suite.db, token)).toEqual({ agentId });
-        }
-      });
-      expect(checks).toBe(1);
-    });
-
-    it("refuses a revoked agent's remembered token with no key check", async () => {
-      const { agentId, token } = await enrolled();
-      await authenticateAgent(suite.db, token);
-      await setActive(agentId, false);
-      let code: string | undefined;
-      const checks = await keyChecksDuring(async () => {
-        code = await codeOf(() => authenticateAgent(suite.db, token));
-      });
-      expect(code).toBe("agent.unauthorized");
-      expect(checks).toBe(0);
-    });
-
-    it("forgets a token once its agent is found revoked", async () => {
-      const { agentId, token } = await enrolled();
-      await authenticateAgent(suite.db, token);
-      await setActive(agentId, false);
-      await codeOf(() => authenticateAgent(suite.db, token));
-      await setActive(agentId, true);
-      expect(await keyChecksDuring(() => authenticateAgent(suite.db, token))).toBe(1);
-    });
-
-    it("refuses the old token after a re-key and key-checks the new one once", async () => {
+  describe("a token that has signed in before", () => {
+    it("refuses the old token after a re-key and accepts the new one", async () => {
       const { agentId, token } = await enrolled();
       await authenticateAgent(suite.db, token);
       const newSecret = randomBytes(32).toString("base64url");
       await suite.db
         .update(printAgents)
-        .set({ tokenHash: hashSecret(newSecret) })
+        .set({ tokenHash: hashDeviceToken(newSecret) })
         .where(eq(printAgents.id, agentId));
 
-      let code: string | undefined;
-      const oldTokenChecks = await keyChecksDuring(async () => {
-        code = await codeOf(() => authenticateAgent(suite.db, token));
-      });
-      expect(code).toBe("agent.unauthorized");
-      expect(oldTokenChecks).toBe(1);
-
-      const newToken = `${agentId}.${newSecret}`;
-      const newTokenChecks = await keyChecksDuring(async () => {
-        expect(await authenticateAgent(suite.db, newToken)).toEqual({ agentId });
-        expect(await authenticateAgent(suite.db, newToken)).toEqual({ agentId });
-      });
-      expect(newTokenChecks).toBe(1);
+      expect(await codeOf(() => authenticateAgent(suite.db, token))).toBe("agent.unauthorized");
+      expect(await authenticateAgent(suite.db, `${agentId}.${newSecret}`)).toEqual({ agentId });
     });
 
-    it("key-checks and refuses a different secret for a remembered agent, and keeps the right token remembered", async () => {
+    it("refuses a different secret for the agent, and still accepts the right one", async () => {
       const { agentId, token } = await enrolled();
       await authenticateAgent(suite.db, token);
       const forged = `${agentId}.${randomBytes(32).toString("base64url")}`;
 
-      let code: string | undefined;
-      const forgedChecks = await keyChecksDuring(async () => {
-        code = await codeOf(() => authenticateAgent(suite.db, forged));
-      });
-      expect(code).toBe("agent.unauthorized");
-      expect(forgedChecks).toBe(1);
-
-      expect(await keyChecksDuring(() => authenticateAgent(suite.db, token))).toBe(0);
+      expect(await codeOf(() => authenticateAgent(suite.db, forged))).toBe("agent.unauthorized");
+      expect(await authenticateAgent(suite.db, token)).toEqual({ agentId });
     });
 
-    it("refuses an agent revoked while its first key check runs, and remembers nothing", async () => {
-      const { agentId, token } = await enrolled();
-      verification.afterVerify = async () => {
-        verification.afterVerify = null;
-        await setActive(agentId, false);
-      };
-      expect(await codeOf(() => authenticateAgent(suite.db, token))).toBe("agent.unauthorized");
-
-      await setActive(agentId, true);
-      expect(await keyChecksDuring(() => authenticateAgent(suite.db, token))).toBe(1);
-    });
-
-    it("forgets the oldest remembered token once more agents than the limit have passed the key check", async () => {
-      const { cfg, agentId, token } = await enrolled();
-      const secret = token.slice(token.indexOf(".") + 1);
-      await authenticateAgent(suite.db, token);
-      const [first] = await suite.db
-        .select({ tokenHash: printAgents.tokenHash })
-        .from(printAgents)
-        .where(eq(printAgents.id, agentId));
-      const others = await suite.db
-        .insert(printAgents)
-        .values(
-          Array.from({ length: VERIFIED_AGENTS_LIMIT }, (_, i) => ({
-            locationId: cfg.locationId,
-            name: `Agent ${i}`,
-            tokenHash: first!.tokenHash,
-            active: true,
-          })),
-        )
-        .returning({ id: printAgents.id });
-      const authenticateOthers = () =>
-        Promise.all(others.map(({ id }) => authenticateAgent(suite.db, `${id}.${secret}`)));
-
-      expect(await keyChecksDuring(authenticateOthers)).toBe(VERIFIED_AGENTS_LIMIT);
-      expect(await keyChecksDuring(authenticateOthers)).toBe(0);
-      expect(await keyChecksDuring(() => authenticateAgent(suite.db, token))).toBe(1);
-    });
-
-    it("forgets a token when the sighting write finds the agent revoked", async () => {
+    it("refuses the token when the sighting write finds the agent revoked, and accepts it once active again", async () => {
       const { agentId, token } = await enrolled();
       await authenticateAgent(suite.db, token);
       await makeSightingDue(agentId);
@@ -591,7 +412,7 @@ describe("authenticateAgent", () => {
       expect(await auth).toBe("agent.unauthorized");
 
       await setActive(agentId, true);
-      expect(await keyChecksDuring(() => authenticateAgent(suite.db, token))).toBe(1);
+      expect(await authenticateAgent(suite.db, token)).toEqual({ agentId });
     });
   });
 });

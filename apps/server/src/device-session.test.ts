@@ -10,7 +10,7 @@ import { type Context, Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError, isAppError } from "@waitron/shared";
-import { hashSecret } from "@waitron/identity";
+import { hashDeviceToken, hashSecret } from "@waitron/identity";
 import { deviceProfiles, devices, withTransaction, venueLocationId } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -38,33 +38,38 @@ import {
   setDeviceCookie,
   toDeviceBinding,
   tryReadDevice,
-  VERIFIED_TOKENS_LIMIT,
 } from "./device-session.js";
 import type { DeviceBinding, DeviceProof } from "./device-session.js";
 import "./errors.js";
 
 /**
- * The real token check, counted, with an optional hook that runs after it has decided and before
- * `tryReadDevice` carries on, so a test can commit a change at exactly that point.
+ * The real sign-in, with an optional hook that runs after its first row read and before it goes
+ * on, so a test can commit a change between that read and the write lock.
  */
-const verification = vi.hoisted(() => ({
-  calls: 0,
-  afterVerify: null as null | (() => Promise<void>),
+const signIn = vi.hoisted(() => ({
+  afterRead: null as null | (() => Promise<void>),
 }));
 vi.mock("@waitron/identity", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/identity")>();
   return {
     ...actual,
-    verifySecretAsync: async (secret: string, stored: string) => {
-      verification.calls += 1;
-      const verified = await actual.verifySecretAsync(secret, stored);
-      if (verification.afterVerify !== null) await verification.afterVerify();
-      return verified;
-    },
+    signInWithToken: ((db, options) => {
+      let first = true;
+      return actual.signInWithToken(db, {
+        ...options,
+        readRow: async (on) => {
+          const row = await options.readRow(on);
+          const hook = first ? signIn.afterRead : null;
+          first = false;
+          if (hook !== null) await hook();
+          return row;
+        },
+      });
+    }) satisfies typeof actual.signInWithToken,
   };
 });
 afterEach(() => {
-  verification.afterVerify = null;
+  signIn.afterRead = null;
 });
 
 const LOCALE = "es-ES";
@@ -104,7 +109,7 @@ async function setupStation(): Promise<{ cfg: WithVenueRowId; stationId: string 
 }
 
 /** Enrol a REAL device via join-and-accept — the only way to obtain a `${deviceId}.${token}` whose
- * scrypt hash actually verifies. Returns the plaintext token the accept route would set in the
+ * stored hash actually verifies. Returns the plaintext token the accept route would set in the
  * cookie, never at rest. */
 async function enrolDeviceFixture(): Promise<{
   cfg: WithVenueRowId;
@@ -435,6 +440,16 @@ describe("requireDevice (venue database)", () => {
     expect(await lastSeenAt(deviceId)).toBeNull();
   });
 
+  it("rejects a cookie whose row still holds the token's old scrypt hash", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    await suite.db
+      .update(devices)
+      .set({ tokenHash: hashSecret(token) })
+      .where(eq(devices.id, deviceId));
+    expect(await probe(`${deviceId}.${token}`)).toEqual({ ok: false, code: "device.unauthorized" });
+    expect(await lastSeenAt(deviceId)).toBeNull();
+  });
+
   it("rejects a MALFORMED cookie (no dot, empty part, non-uuid selector, absent) with device.unauthorized", async () => {
     await enrolDeviceFixture();
     for (const bad of [
@@ -498,7 +513,7 @@ describe("requireDevice (venue database)", () => {
     const { deviceId, token } = await enrolDeviceFixture();
     const db = stampRefused(new AppError("storage.disk_full", {}), async () => {
       await suite.db.execute(
-        sql`update devices set token_hash = ${hashSecret("another-token")} where id = ${deviceId}`,
+        sql`update devices set token_hash = ${hashDeviceToken("another-token")} where id = ${deviceId}`,
       );
     });
     expect(await probe(`${deviceId}.${token}`, db)).toEqual({
@@ -603,7 +618,7 @@ describe("requireDeviceProof and assertDeviceStillProven (venue database)", () =
     const proof = await proofFor({ cookie: `${DEVICE_COOKIE}=${deviceId}.${token}` });
     await suite.db
       .update(devices)
-      .set({ tokenHash: hashSecret("a-newer-token") })
+      .set({ tokenHash: hashDeviceToken("a-newer-token") })
       .where(eq(devices.id, deviceId));
     expect(await stillProven(proof)).toBe("device.unauthorized");
   });
@@ -634,7 +649,7 @@ describe("requireDeviceProof and assertDeviceStillProven (venue database)", () =
     expect(proof.tokenHash).toBeNull();
     await suite.db
       .update(devices)
-      .set({ tokenHash: hashSecret("a-newer-token") })
+      .set({ tokenHash: hashDeviceToken("a-newer-token") })
       .where(eq(devices.id, deviceBId));
     expect(await stillProven(proof)).toBe("proven");
 
@@ -944,7 +959,7 @@ describe("reading the device beside the write lock", () => {
   // commits on release, after the read has queued for the lock to record its sighting.
   it.each([
     ["revoked", { active: false }],
-    ["re-keyed", { tokenHash: hashSecret("replacement") }],
+    ["re-keyed", { tokenHash: hashDeviceToken("replacement") }],
   ] as const)(
     "refuses a device %s while it waits for the lock to record a sighting",
     async (_label, change) => {
@@ -1007,22 +1022,6 @@ describe("reading the device beside the write lock", () => {
     }
   });
 
-  it("lets the event loop turn while it verifies the token", async () => {
-    const { deviceId, token } = await enrolDeviceFixture();
-    await setLastSeen(deviceId, new Date());
-    const cookie = `${DEVICE_COOKIE}=${deviceId}.${token}`;
-    const app = new Hono();
-    const order: string[] = [];
-    app.get("/probe", async (c) => {
-      const read = tryReadDevice({ db: suite.db }, c).then(() => order.push("resolved"));
-      setImmediate(() => order.push("turned"));
-      await read;
-      return c.body(null, 204);
-    });
-    expect((await app.request("/probe", { headers: { cookie } })).status).toBe(204);
-    expect(order).toEqual(["turned", "resolved"]);
-  });
-
   it("writes one sighting when several requests find it due at once", async () => {
     const { deviceId, token } = await enrolDeviceFixture();
     await setLastSeen(deviceId, new Date(Date.now() - 90_000));
@@ -1031,16 +1030,16 @@ describe("reading the device beside the write lock", () => {
       create trigger count_sighting_writes after update of last_seen_at on devices
       begin insert into sighting_writes values (1); end`);
     try {
-      // Every read finishes checking its token before any of them goes on.
+      // Every read finishes reading its row before any of them goes on.
       const READS = 6;
-      let verified = 0;
+      let read = 0;
       let releaseAll!: () => void;
-      const allVerified = new Promise<void>((resolve) => {
+      const allRead = new Promise<void>((resolve) => {
         releaseAll = resolve;
       });
-      verification.afterVerify = async () => {
-        if (++verified === READS) releaseAll();
-        await allVerified;
+      signIn.afterRead = async () => {
+        if (++read === READS) releaseAll();
+        await allRead;
       };
       const reads = await Promise.all(
         Array.from({ length: READS }, () => probeTry(`${deviceId}.${token}`)),
@@ -1057,12 +1056,12 @@ describe("reading the device beside the write lock", () => {
   });
 });
 
-describe("a change committed while the token is being verified", () => {
-  /** Commits `change` once, after the next token check has decided; `fired` says whether it ran. */
-  function commitDuringVerification(change: () => unknown): { fired: () => boolean } {
+describe("a change committed between the row read and the write lock", () => {
+  /** Commits `change` once, after the next sign-in's first row read; `fired` says whether it ran. */
+  function commitAfterRowRead(change: () => unknown): { fired: () => boolean } {
     let fired = false;
-    verification.afterVerify = async () => {
-      verification.afterVerify = null;
+    signIn.afterRead = async () => {
+      signIn.afterRead = null;
       await change();
       fired = true;
     };
@@ -1071,16 +1070,16 @@ describe("a change committed while the token is being verified", () => {
 
   it("refuses a device revoked meanwhile", async () => {
     const { deviceId, token } = await enrolDeviceFixture();
-    const hook = commitDuringVerification(() => revoke(deviceId));
+    const hook = commitAfterRowRead(() => revoke(deviceId));
     expect(await probeTry(`${deviceId}.${token}`)).toBeNull();
     expect(hook.fired()).toBe(true);
   });
 
   it("refuses the old token once its hash has been replaced meanwhile", async () => {
     const { deviceId, token } = await enrolDeviceFixture();
-    const hook = commitDuringVerification(() =>
+    const hook = commitAfterRowRead(() =>
       suite.db.execute(
-        sql`update devices set token_hash = ${hashSecret("replacement")} where id = ${deviceId}`,
+        sql`update devices set token_hash = ${hashDeviceToken("replacement")} where id = ${deviceId}`,
       ),
     );
     expect(await probeTry(`${deviceId}.${token}`)).toBeNull();
@@ -1090,7 +1089,7 @@ describe("a change committed while the token is being verified", () => {
   it("returns the profile the device was moved to meanwhile", async () => {
     const { deviceId, token } = await enrolDeviceFixture();
     const movedTo = await seedDeviceProfile("New screen", "kds", []);
-    const hook = commitDuringVerification(() =>
+    const hook = commitAfterRowRead(() =>
       suite.db.execute(
         sql`update devices set device_profile_id = ${movedTo} where id = ${deviceId}`,
       ),
@@ -1100,24 +1099,14 @@ describe("a change committed while the token is being verified", () => {
   });
 });
 
-describe("a token already verified for its device", () => {
-  it("is not put through scrypt again", async () => {
-    const { deviceId, token } = await enrolDeviceFixture();
-    const before = verification.calls;
-    expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
-    expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
-    expect(verification.calls - before).toBe(1);
-  });
-
-  it("is verified afresh, and refused, once the device's token hash is replaced", async () => {
+describe("a token that has signed in before", () => {
+  it("is refused once the device's token hash is replaced, and the new token signs in", async () => {
     const { deviceId, token } = await enrolDeviceFixture();
     expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
     await suite.db.execute(
-      sql`update devices set token_hash = ${hashSecret("replacement")} where id = ${deviceId}`,
+      sql`update devices set token_hash = ${hashDeviceToken("replacement")} where id = ${deviceId}`,
     );
-    const before = verification.calls;
     expect(await probeTry(`${deviceId}.${token}`)).toBeNull();
-    expect(verification.calls - before).toBe(1);
     expect(await probeTry(`${deviceId}.replacement`)).not.toBeNull();
   });
 
@@ -1125,37 +1114,6 @@ describe("a token already verified for its device", () => {
     const { deviceId, token } = await enrolDeviceFixture();
     expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
     expect(await probeTry(`${deviceId}.not-the-real-token`)).toBeNull();
-  });
-
-  it("is forgotten, oldest first, once more devices than the limit have verified", async () => {
-    const { cfg, deviceId, token, deviceProfileId } = await enrolDeviceFixture();
-    expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
-    // A full memo of other devices sharing its token, each verified after it.
-    const [first] = await suite.db
-      .select({ tokenHash: devices.tokenHash })
-      .from(devices)
-      .where(eq(devices.id, deviceId));
-    const others = await suite.db
-      .insert(devices)
-      .values(
-        Array.from({ length: VERIFIED_TOKENS_LIMIT }, (_, i) => ({
-          locationId: cfg.locationId,
-          deviceProfileId,
-          label: `Screen ${i}`,
-          tokenHash: first!.tokenHash,
-        })),
-      )
-      .returning({ id: devices.id });
-    const readAll = () => Promise.all(others.map(({ id }) => probeTry(`${id}.${token}`)));
-    let before = verification.calls;
-    expect((await readAll()).every((binding) => binding !== null)).toBe(true);
-    expect(verification.calls - before).toBe(VERIFIED_TOKENS_LIMIT);
-
-    before = verification.calls;
-    expect((await readAll()).every((binding) => binding !== null)).toBe(true);
-    expect(verification.calls - before).toBe(0);
-    expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
-    expect(verification.calls - before).toBe(1);
   });
 
   it("is refused once the device is revoked", async () => {

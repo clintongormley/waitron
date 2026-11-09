@@ -31,7 +31,13 @@ import {
   writeMirrorLink,
 } from "@waitron/node-db";
 import { loadKeyRing } from "@waitron/credentials";
-import { hashPassword, hashPin, hashSecret, managementSessions, persons } from "@waitron/identity";
+import {
+  hashPassword,
+  hashPin,
+  hashDeviceToken,
+  managementSessions,
+  persons,
+} from "@waitron/identity";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -279,7 +285,7 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
       locationId: MIRROR_LOCATION_ID,
       deviceProfileId: DEVICE_PROFILE_ID,
       label: "Counter till",
-      tokenHash: hashSecret(DEVICE_TOKEN),
+      tokenHash: hashDeviceToken(DEVICE_TOKEN),
     })
     .onConflictDoNothing();
   await admin
