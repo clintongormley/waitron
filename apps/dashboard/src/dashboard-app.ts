@@ -1931,7 +1931,7 @@ export class DashboardApp extends LitElement {
                 ></div>`
               : nothing
           }
-          <div class="main">
+          <main class="main" tabindex="0">
             ${
               this.contentLanguageError
                 ? html`<div role="alert" data-test="content-language-error">
@@ -1958,7 +1958,7 @@ export class DashboardApp extends LitElement {
                     : nothing
               }
             </div>
-          </div>
+          </main>
         </div>
         ${this.#renderProfileModal()}
       </div>

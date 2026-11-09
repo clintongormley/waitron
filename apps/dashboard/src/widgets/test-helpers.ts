@@ -46,6 +46,7 @@ export async function mountWidget<T extends HTMLElement>(
   theme?: Theme,
 ): Promise<Mounted<T>> {
   const host = document.createElement("div");
+  if (tag === "dashboard-app") host.style.height = "100dvh";
   document.body.appendChild(host);
   applyTokens(host);
   if (theme) host.setAttribute("data-theme", theme);

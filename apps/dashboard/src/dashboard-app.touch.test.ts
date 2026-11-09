@@ -90,6 +90,12 @@ async function dragUp(x: number, y: number, distance: number): Promise<void> {
   }
 }
 
+function scrollEnd(element: HTMLElement): Promise<void> {
+  return new Promise((resolve) =>
+    element.addEventListener("scrollend", () => resolve(), { once: true }),
+  );
+}
+
 it.each([
   [375, 667, 3],
   [390, 844, 6],
@@ -193,16 +199,22 @@ it.each([
     await expect.poll(() => table.querySelectorAll("tbody tr").length).toBe(41);
     const beforeRows = main.scrollTop;
     const row = table.querySelectorAll("tbody tr")[1]!.getBoundingClientRect();
+    const rowsStopped = scrollEnd(scroll);
     await dragUp(row.left + 100, Math.min(row.bottom - 4, height - 12), 100);
     await expect.poll(() => scroll.scrollTop).toBeGreaterThan(0);
+    await rowsStopped;
     expect(main.scrollTop).toBe(beforeRows);
+    const rowsReset = scrollEnd(scroll);
     scroll.scrollTop = 0;
+    await rowsReset;
     const heading = el
       .shadowRoot!.querySelector("dashboard-menus-screen")!
       .shadowRoot!.querySelector("h1")!
       .getBoundingClientRect();
+    const pageStopped = scrollEnd(main);
     await dragUp(heading.left + heading.width / 2, heading.bottom - 2, 200);
     await expect.poll(() => main.scrollTop).toBeGreaterThan(0);
+    await pageStopped;
     expect(scroll.scrollTop).toBe(0);
     const head = table.querySelector("thead")!.getBoundingClientRect();
     const foot = Math.min(

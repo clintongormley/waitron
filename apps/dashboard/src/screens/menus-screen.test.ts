@@ -7646,7 +7646,6 @@ it.each([
       { api: client },
       "light",
     );
-    host.style.height = `${innerHeight}px`;
     if (font !== "") {
       const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
       expect(family).not.toBe("");

@@ -10,7 +10,12 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
-import { cleanupWidgets, menuDocument, mountWidget } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  menuDocument,
+  mountWidget,
+} from "./widgets/test-helpers.js";
 import {
   formMessageOf,
   lockupFileInks,
@@ -2113,8 +2118,7 @@ describe("dashboard-app", () => {
         permissions: ["venue.view", "schedule.manage"],
       }),
     });
-    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
-    host.style.height = `${innerHeight}px`;
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
     await flush(el);
     expect(navItem(el, "opening-hours")).not.toBeNull();
     expect(navRoster(el)).toBeNull();
@@ -5253,6 +5257,39 @@ async function mountInRealPage(
     },
   };
 }
+
+it("keeps an overflowing read-only Overview accessible and scrollable by keyboard", async () => {
+  history.replaceState(null, "", "/manage");
+  const { el, unmount } = await mountInRealPage(
+    stubApi({
+      getSalesOverview: async () => ({
+        businessDay: "2026-11-09",
+        takings: { tenderTotal: "80.00", tipTotal: "0.00", grossTotal: "80.00" },
+        counts: { sales: 40, corrections: 0, voids: 0 },
+        openTables: { open: 0, total: 10 },
+        topSellers: Array.from({ length: 40 }, (_, i) => ({
+          name: `Dish ${i + 1}`,
+          quantity: "1.000",
+          total: "2.00",
+          variants: [],
+        })),
+      }),
+    }),
+    375,
+    667,
+  );
+  try {
+    const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+    await expect.poll(() => main.scrollHeight).toBeGreaterThan(main.clientHeight);
+    await expectNoA11yViolations(el);
+    main.focus();
+    expect(el.shadowRoot!.activeElement).toBe(main);
+    await userEvent.keyboard("{PageDown}");
+    await expect.poll(() => main.scrollTop).toBeGreaterThan(0);
+  } finally {
+    await unmount();
+  }
+});
 
 const bannerTrigger = (host: Element) =>
   host
