@@ -30,11 +30,10 @@ go.
 §3 rows `WAITRON_NODE_RECOVERY_KEY` and `WAITRON_RECOVERY_OPERATION_FILE`, §5 measure 1. Rules:
 [the slice rules](2026-11-08-a1308-slice-rules.md). Part overview: [env1](2026-11-08-a1308-env1-tuning-constants.md).
 
-**A decision this plan makes, for the owner to confirm in review.** tables-venuebox §1.16 says
+**A decision this plan makes; confirmed by the owner, 2026-11-09.** tables-venuebox §1.16 says
 `certKind` moves to "its owning module's settings document", but tables-fiscal §2 says the fiscal
 module keeps no settings document, and the install record already holds the same value. This plan
-reads the install record: it removes the duplicate instead of making a third copy. If the owner
-prefers a `verifactu` settings document, Task 1 is replaced and nothing else here changes.
+reads the install record: it removes the duplicate instead of making a third copy.
 
 **Needs:** env7 (the list declares the two names; Task 2's fallback, if taken, edits their source);
 [fi1](2026-11-08-a1308-fi1-verifactu-names.md) landed (`fiscal_certificate_installs` →

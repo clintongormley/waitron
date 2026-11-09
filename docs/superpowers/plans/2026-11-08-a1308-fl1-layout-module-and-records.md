@@ -30,11 +30,11 @@ at `9c66ef0356`.
 **Who lands:** the lane (rules §6: it changes no sales, invoice numbering, fiscal record, fiscal
 identity, AEAT sending or value that feeds a fiscal hash).
 
-**Blocked on the owner.** This plan cannot start until A1379 pull request 2 has landed, and that
-pull request waits for the owner's answers to Questions 1-3 of
-[`2026-11-06-a1379-setup-start-again.md`](2026-11-06-a1379-setup-start-again.md) ("Questions for
-the owner"; recorded as waiting in `87375f075f`, `docs/backlog/setup.md:575`). fl2 to fl5 need this
-plan, so they wait too. See Needs.
+**Waits for A1379 pull request 2 to land.** This plan cannot start until it has. The owner
+answered that plan's Questions 1-3 on 2026-11-09 ("The owner's answers" in
+[`2026-11-06-a1379-setup-start-again.md`](2026-11-06-a1379-setup-start-again.md)), so nothing waits
+for an answer any more; the owner lands that pull request. fl2 to fl5 need this plan, so they wait
+too. See Needs.
 
 **First line of the pull request:** "Boxes keep working across this change; Start-again choice
 records and set-aside files written before it are left at their old names, and a plain reset now
@@ -144,12 +144,11 @@ Rules §5, plus:
 ## Needs
 
 - A1379 pull request 2 (A1322, "Continue" removed) landed:
-  [`2026-11-06-a1379-setup-start-again.md`](2026-11-06-a1379-setup-start-again.md). **What waits
-  for the owner:** that pull request is not dispatched until the owner answers its Questions 1-3
-  (may Start again delete the setup's own certificate record; what a reloaded setup tab does; who
-  may stop a setup from another page). Part 1 landed as #2521; part 2's wait is recorded in
-  `87375f075f` and `docs/backlog/setup.md:575`. If the owner answers yes to Question 1, the owner
-  also lands that pull request. Only after it lands can this plan start.
+  [`2026-11-06-a1379-setup-start-again.md`](2026-11-06-a1379-setup-start-again.md). Part 1 landed
+  as #2521. **Owner, 2026-11-09:** Questions 1-3 answered (Start again may delete the attempt's own
+  certificate rows; a reloaded tab carries on with its key; another page may stop a setup over
+  HTTPS from the box's own page), and the owner lands part 2. Only after it lands can this plan
+  start.
 - Nothing else. This slice changes no table or column, so it does not wait for A1308's table
   slices (rules §8, "Work that changes no table or column goes ahead in any lane").
 

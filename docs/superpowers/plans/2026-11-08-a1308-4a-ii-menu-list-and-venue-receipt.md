@@ -118,13 +118,13 @@
     arm). Delete an arm that hides both tables (`"both"`) too, because it is now the same as the
     `"department"` arm.
   - (d) Delete an assertion that reads `tenant_receipts` itself, or calls a deleted store function.
-  - (e) **Owner's call, default shown** (`docs/backlog/printers.md:1125-1130`). Two choices:
-    - default: in `receipt-print.test.ts`, "omits a corrupt explicit department picture without
-      substituting the `tenant_receipts` logo" (`:3517`) keeps its corrupt-picture half, under the
-      title "omits a corrupt explicit department picture";
-    - the owner's alternative: delete the case, because the newer case for a department naming a
-      logo whose pictures are bad already covers the rule.
-    The pull request asks the owner and applies the default unless told otherwise.
+  - (e) **Owner, 2026-11-09:** delete the whole case (`docs/backlog/printers.md:1125-1130`). In
+    `receipt-print.test.ts`, "omits a corrupt explicit department picture without substituting the
+    `tenant_receipts` logo" (`:3517`) is deleted, not halved. The newer case that covers the rule,
+    and must still pass unchanged: "a department naming a logo whose pictures are bad prints
+    nothing, not the theme's" (`receipt-print.test.ts:3919`). If that case is gone or no longer
+    asserts that nothing is printed for the bad pictures, stop (rules §5.1) rather than delete the
+    older one.
 - **D4. A test whose subject is a deleted thing is deleted; a test that only used one as set-up is
   re-pointed.**
   - Removing a deleted field from an expected object (`sellable`, from the removed GET route) is not
@@ -166,6 +166,8 @@
   - what remains moves to `logo-rasters.test.ts`, or the file is deleted if nothing remains.
 - `packages/layouts/src/department-receipt-validation.test.ts:125-170`: the
   `validateVenueReceiptSettings` cases.
+- D3(e): `receipt-print.test.ts:3517`, "omits a corrupt explicit department picture without
+  substituting the `tenant_receipts` logo" (covered by `:3919`, above).
 - D3(c) arms:
   - `receipt-print.test.ts:3560`, the `"venue"` arm;
   - `receipt-presentation.test.ts:210`, the `"venue"` and `"both"` arms;
@@ -523,7 +525,7 @@ Any other line is a stop (rules §5.2).
   or `git grep -l -w getReceipt -- apps packages` prints.
   - `configuration-transfer.test.ts`: drop the inserts at `:2223` and `:6808`. Keep
     `not.toHaveProperty("tenant_receipts")` at `:2233` and `:6831`, because both still pass.
-  - Apply D3(e) as the default.
+  - Apply D3(e): delete the case at `:3517`, after checking `:3919` passes before and after.
 - [ ] **Step 5: Rebuild and run.**
   - Rebuild core, then run the root guards from Task 1.
   - Run `pnpm --filter @waitron/layouts exec vitest run`.
@@ -557,17 +559,15 @@ Any other line is a stop (rules §5.2).
     - "`location_catalogues`: decide the remaining UPDATE restriction" (`:1276`);
     - "`tenant_receipts`: decide the remaining DELETE restriction" (`:1282`).
   - Delete `catalogue.md:538-553`.
-  - "Half of an older receipt test can no longer fail" (`architecture.md:1288-1290`,
-    `printers.md:1125-1130`) is the owner's call (D3 e):
-    - if the owner confirms the default before landing, delete both entries;
-    - otherwise, reword both to say that 4a-ii kept only the corrupt-picture half, and that whether
-      to delete the case stays the owner's call.
+  - Delete "Half of an older receipt test can no longer fail" in both places
+    (`architecture.md:1288-1290`, `printers.md:1125-1130`): the owner chose to delete the case
+    (D3 e, 2026-11-09).
   - `kitchen.md:414`: append "**<date>:** A1308 4a-ii moved it to version <n>."
 - [ ] **Step 5:** Commit `-s -m "docs: A1308 4a-ii retires the venue's menu list and tenant_receipts"`.
   Then run `/finish-branch` with this plan's path. In the pull request:
   - the first line is the reset sentence;
   - the body lists the protection-list report, every deleted case, every D3(c) arm, and the D3(e)
-    question to the owner.
+    deletion with the owner's decision of 2026-11-09.
 
 ## Other plans that name these (docs only; not edited here)
 
@@ -591,5 +591,4 @@ Any other line is a stop (rules §5.2).
   seed (`seed.ts:105`) and the test helper `party-venue.ts:163` call it. No till or sale path reads
   it. The default is to keep it re-scoped. The fallback if stop point 2 fires is "the default menu
   only".
-- **Q2 (for the owner).** D3(e): keep only the corrupt-picture half of the older receipt test, or
-  delete the case. This is the owner's call; the default is shown above.
+- **Q2.** D3(e): **Owner, 2026-11-09:** delete the case (above).

@@ -47,10 +47,10 @@ paper and Cloud files, none of them these. Name the folders explicitly: a `packa
 wildcard pathspec matched nothing under `git grep <revision>`. No restore or promotion reads these
 files.
 
-**Blocked on A1379 part 2, and so on the owner.** This slice needs fl7, which needs A1379 pull
-request 2 (removing Continue), and also needs part 2 itself (Needs). Part 2 waits for the owner's
-answers to the three questions in `docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md`
-(`docs/backlog/setup.md:575`). fl8b and fl10 need this slice, so they wait too.
+**Waits for A1379 part 2 to land.** This slice needs fl7, which needs A1379 pull request 2
+(removing Continue), and also needs part 2 itself (Needs). The owner answered part 2's three
+questions on 2026-11-09 (`docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md`), so it
+waits only to land. fl8b and fl10 need this slice, so they wait too.
 
 **First line of the pull request:** "A box part way through a first setup when this lands must use
 Start again; other boxes keep working."

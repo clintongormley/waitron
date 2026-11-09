@@ -7,9 +7,9 @@
 
 **Lands: the owner** (rules §6):
 
-- the fiscal module's recovery-pack check takes its venue value from this slice (the venue-id
-  design's open question 6; [design](../specs/2026-11-04-a1301-venue-id-design.md), "Who lands it":
-  S18e is owner-landed by rule (c));
+- the fiscal module's recovery-pack check stops comparing a venue value (the venue-id design's
+  question 6, answered by the owner on 2026-11-09; [design](../specs/2026-11-04-a1301-venue-id-design.md),
+  "Who lands it": S18e is owner-landed by rule (c));
 - `nodes.location_id` goes, and its writers write the box's identity row (`insertReservedNodeTx`, the
   setup `create-node` step): A1301 made that slice (S25) owner-landed under its rule (c);
 - the live-venue guard moves to the venue document, and its readers include adoption
@@ -25,24 +25,38 @@ stream's signed generation marker, and the recovery kit (Cloud builds version-1 
 **Pull request's first line:** "Every venue is reset: core; backups, exports and printed recovery
 packs from before this cannot be restored, imported or used." (rules §2; venue-id design question 5).
 
-**Needs before it:** 5e; **the owner's answer to the venue-id design's question 6** (the probe below
-runs on `main` today, so the owner can answer before this slice starts).
+**Needs before it:** 5e. (The owner answered the venue-id design's question 6 on 2026-11-09; see
+below.)
 
-## A probe the owner can run now (the venue-id design's question 6)
+## The recovery pack's venue check (the venue-id design's question 6)
 
-The fiscal module's recovery pack compares the box's venue value with a paper block's signed
-`recipientVenueId` (`apps/server/src/recovery-pack.ts:36,54` → `packages/fiscal-verifactu/src/recovery-pack.ts:38`,
-compared at `paper-evidence.ts:280`; the value reaches it through `packages/module/src/module.ts:1427`,
-`ProvisionedNode & { venueId }`). The writers the design found set `recipientVenueId` to the
-first-setup source (`packages/provisioning/src/first-setup-module-context.ts:28`) or
-`"throwaway-preproduction"` (`packages/fiscal-verifactu/src/throwaway-allocation.ts:16,77`), never a
-location id (read, not run). It runs on `main` now, with nothing from the sweep: in `apps/server`, a
-case built on `first-fiscal-setup.e2e.test.ts`'s helpers sets a box up for real, issues the recovery
-pack through `mountRecoveryPackApi`, and records the paper blocks' `recipientVenueId` and whether the
-check passes with today's `venueId` (the `locations` row's id). The watcher can have it run and put
-the result to the owner. The choice: (a) the check compares against the value the blocks really carry
-(the first-setup source, read where it is stored), or (b) the venue half of the check goes and the
-block keeps its generation and block-id checks (`paper-evidence.ts:533-536`). No default is built.
+**Owner, 2026-11-09:** drop the venue half of the check. In the owner's words: "There is only one
+venue so there is no point comparing the ID. We have the name on the sheet that the user can check,
+but the important bit for us is the recovery key."
+
+What that means for the code (read at `4a6211786e`, not run). The fiscal module's recovery pack
+compares the box's venue value with a paper block's signed `recipientVenueId`
+(`apps/server/src/recovery-pack.ts:36,54` → `packages/fiscal-verifactu/src/recovery-pack.ts:38` →
+`verifyPaperBlockSnapshot`, compared at `paper-evidence.ts:280`; the value reaches the module through
+`packages/module/src/module.ts:1427`, `ProvisionedNode & { venueId }`, and `boot.ts:3234-3243`). After
+this slice nothing compares a venue value there. What stays:
+
+- the recovery key: `createRecoveryPack` refuses a wrong `nodeRecoveryKey` as
+  `promotion.break_glass_invalid` (`apps/server/src/recovery-pack.ts:62-63`);
+- the paper block's signature against the custodian's key (`paper-evidence.ts:267-278`,
+  `untrusted`), and its taxpayer, software and environment (`:281-287`, `scope_mismatch`) and series
+  (`:289-298`, `series_mismatch`) checks;
+- the generation and block-id checks where a block is consumed (`paper-evidence.ts:533-536`,
+  `:601-604`); those compare against the custodian's authority, not the box's venue, so this slice
+  leaves them as they are;
+- the venue's name printed on the sheet for the person to check by eye
+  (`apps/server/src/backup-recovery-pack-api.ts:327-329`, `legalName` and `venueName`), unchanged.
+
+The signed block keeps its `recipientVenueId` field: its writers, its parse, its signed bytes and the
+register sheet's line (`register-pdf.ts:115`) do not change, so no paper block already signed needs
+re-signing. Only the snapshot check stops reading it. The other caller of `verifyPaperBlockSnapshot`,
+`paper-recovery-export.ts:80`, then relies on `verifyPaperEvidence`'s later comparison at
+`paper-evidence.ts:601-604`, which still holds the block to its authority's `recipientVenueId`.
 
 ## What it builds
 
@@ -73,8 +87,14 @@ block keeps its generation and block-id checks (`paper-evidence.ts:533-536`). No
 5. **Boot:** `venueId` (`boot.ts:2095`) stops reaching the backup supervisor (`:2862-2868`) and the
    backup API (`:3315`). It still reaches the stream API, the recovery-pack make API's kit and the Cloud
    connection until 5g.
-6. **The fiscal recovery-pack check takes the owner's answer** to question 6 (the probe above);
-   `mountRecoveryPackApi`'s `venueId` (`boot.ts:3236-3243`) and `module.ts:1427`'s `venueId` follow it.
+6. **The fiscal recovery-pack check compares no venue value** (owner, 2026-11-09; the section
+   above). `verifyPaperBlockSnapshot`'s context loses `recipientVenueId` and its comparison at
+   `paper-evidence.ts:280`; `packages/fiscal-verifactu/src/recovery-pack.ts:38` stops passing
+   `node.venueId`; `module.ts:1427`'s `recoveryPack` takes a plain `ProvisionedNode`;
+   `createRecoveryPack` loses its `venueId` dependency (`apps/server/src/recovery-pack.ts:36,54`);
+   `mountRecoveryPackApi` takes its dependencies from that type (`recovery-pack-api.ts:11`), so only
+   its call at `boot.ts:3234-3243` and the two test files' set-up stop passing it. `paper-recovery-export.ts:76-80` keeps `recipientVenueId` in its `scope`, which it also hands to
+   `validateAllocationEnvelope`, but the snapshot check no longer reads it.
 7. **`nodes` loses `location_id`** (A1301 design §4, S25): the column and its foreign key
    (`packages/db/src/schema/nodes.ts:22`, prose comment `:16`); `ReservedNodeInput.locationId`
    (`packages/db/src/reserved-identity.ts:13`) and its fill at `apps/server/src/reserved-identity.ts:76-79`
@@ -143,11 +163,14 @@ Modify — server: `archive-settings.ts`, `storage-backend.ts`, `backup-config.t
 `apps/server/scripts/dev-setup.ts`, `cloud-integration-fixture.ts`, `cloud-recovery-client-fixture.ts`.
 
 Modify — elsewhere: `apps/dashboard/src/screens/backup-destination-model.ts`; `packages/module/src/module.ts:1427`;
-`packages/fiscal-verifactu/src/recovery-pack.ts` (per the owner's answer); `packages/db/src/schema/nodes.ts`,
+`packages/fiscal-verifactu/src/recovery-pack.ts`, `paper-evidence.ts`, `paper-recovery-export.ts`
+(only if typecheck asks for it); `packages/db/src/schema/nodes.ts`,
 `reserved-identity.ts`, `backup-evidence.ts`, `testing/seed.ts`; `packages/provisioning/src/venue-apply.ts`,
 `tenant-guard.ts`, `first-setup-resolution-inspection.ts`, `index.ts`.
 
-Tests: the suites of those files; `apps/server/src/reserved-identity.no-venue-key.test.ts` (deleted:
+Tests: the suites of those files, including `packages/fiscal-verifactu/src/paper-pack.test.ts`,
+`paper-custodian.test.ts`, `apps/server/src/recovery-pack.test.ts`, `recovery-pack-api.test.ts` and
+`boot.recovery-pack.test.ts`; `apps/server/src/reserved-identity.no-venue-key.test.ts` (deleted:
 its first assertion, `:19`, checks the `nodes` → `locations` key exists before removing it in a scratch
 table, and `reserved-identity.test.ts:247` already makes its point on the real schema).
 
@@ -165,7 +188,7 @@ Regenerated: `packages/db/drizzle/**`, `scripts/migration-baseline-epoch.json`.
 | Archive folder, overlap (nesting kept), config parse, screen and status (code, tests) | ~100 + ~130 |
 | Archive recovery-pack part | ~20 + ~25 |
 | Backup checks without the copy's venue row | ~30 + ~40 |
-| Fiscal recovery-pack check, per the answer | ~60 |
+| Fiscal recovery-pack check without a venue value (code, tests) | ~15 + ~45 |
 | `nodes` column, writers, copy checks, seed, fixtures; hand fixture edits | ~55 + ~80 |
 | Live-venue guard and its six readers; the two interim refusals; verification's venue check | ~70 + ~80 |
 | Guides EN/ES, boot, Madrid | ~40 |
@@ -179,6 +202,9 @@ Not counted: the script's output for `nodes`, deletions, regenerated files.
 2. `pnpm --filter @waitron/server exec vitest run src/archive-settings.test.ts src/backup-config.test.ts src/backup-api.route.test.ts src/backup-verification.test.ts src/backup-data-placement.test.ts src/archive-recovery-pack.test.ts src/reserved-identity.test.ts src/adoption-allocation-refusal.test.ts src/adopt.test.ts src/reset-request.test.ts src/boot.test.ts src/backup-verification-compatibility.test.ts` passes.
 3. `pnpm --filter @waitron/provisioning exec vitest run src/tenant-guard.db.test.ts src/first-setup-resolution-inspection.test.ts src/venue-apply.test.ts` and
    `pnpm --filter @waitron/db exec vitest run src/backup-evidence.test.ts` pass; `pnpm --filter @waitron/server typecheck` passes (it includes `scripts/`).
+   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/paper-pack.test.ts src/paper-custodian.test.ts`,
+   `pnpm --filter @waitron/server exec vitest run src/recovery-pack.test.ts src/recovery-pack-api.test.ts src/boot.recovery-pack.test.ts`
+   and `pnpm --filter @waitron/fiscal-verifactu typecheck` pass.
 4. `git grep -n -w -E "readCopyNodeAndVenue|readOperationalVenueIds|assertSingleOperationalVenue" -- apps packages` prints nothing.
 5. `git grep -n -w venueId -- apps/server/src packages/module/src ':!*.test.ts'` prints only the
    stream's and the kit's lines (5g: `stream-api.ts`, `stream-host.ts`, `restore-stream.ts`,
@@ -209,12 +235,11 @@ FK". The backup and guard changes touch no schema.
 
 ## Stop points (beyond rules §5)
 
-1. **The owner has not answered question 6** when Tasks 1–4 are done: commit and wait; the pull
-   request is not opened without it.
-2. The probe shows the check cannot pass today on a box set up for real: report it; the owner's answer
-   says whether that is a defect to fix here.
-3. A restore, adoption or verification case can only pass with a changed refusal code.
-4. A file this slice changes turns out to carry the stream's or the kit's `venueId` as well (it is
+1. Removing the venue comparison from `verifyPaperBlockSnapshot` changes any assertion other than
+   the one listed under "Assertions that change, by design", or a caller other than
+   `recovery-pack.ts` and `paper-recovery-export.ts` turns up.
+2. A restore, adoption or verification case can only pass with a changed refusal code.
+3. A file this slice changes turns out to carry the stream's or the kit's `venueId` as well (it is
    5g's): leave that half and say so in the pull request.
 
 ## Assertions that change, by design
@@ -226,6 +251,10 @@ FK". The backup and guard changes touch no schema.
 - Guard cases assert "a venue row exists" (a boolean) instead of a list of ids; the codes stay.
 - Setup's re-apply finds the node without the location filter (one venue: the same row).
 - `reserved-identity.no-venue-key.test.ts` is deleted (Files).
+- `paper-pack.test.ts`'s "refuses a signed block belonging to a different scope" loses its
+  `{ recipientVenueId: "venue-two" }` row (owner, 2026-11-09: the venue half of the check goes); its
+  taxpayer, software and environment rows stay. `boot.recovery-pack.test.ts:66` no longer needs the
+  block's `recipientVenueId` set to `node.locationId` (set-up only).
 
 ---
 
@@ -265,9 +294,18 @@ FK". The backup and guard changes touch no schema.
   document refuses `provisioning.second_venue`".
 - [ ] **Step 2:** Items 8, 9. Run Finish line 3. Commit.
 
-### Task 5: After the owner's answer, and finish
+### Task 5: The recovery-pack check, and finish
 
-- [ ] **Step 1:** Item 6, test first (the probe's case, changed to the answer).
+- [ ] **Step 1: Failing cases**, then item 6. In `paper-pack.test.ts`: "a signed block is accepted
+  whatever venue value it names" (a block whose `recipientVenueId` is `"venue-two"`, scope unchanged:
+  `{ ok: true }`; fails before item 6 with `scope_mismatch`). In `boot.recovery-pack.test.ts`, on the
+  real boot path: "a recovery pack is made from a block naming the first-setup source, not the
+  venue's row id" (leave the fixture's `recipientVenueId` as the allocation fixture made it; fails
+  before item 6). The cases that must keep refusing, run before and after: a wrong recovery key →
+  `promotion.break_glass_invalid` (`recovery-pack.test.ts`); a block signed by another key →
+  `untrusted`; another taxpayer, software or environment → `scope_mismatch`; a missing series →
+  `series_mismatch` (`paper-pack.test.ts`). Proof by deletion: with the recovery-key check in
+  `createRecoveryPack` removed, the wrong-key case fails; restore.
 - [ ] **Step 2:** Backlog, A1301 entry: delete the archive half of "Until `venueLocationId` goes, boot
   takes the venue row's id for backup settings …" (keep the stream, kit and Cloud parts for 5g); the
   `verifyCoreBackupData` sentence; the S4/S25 node note; "the backup screen's folder wording goes with

@@ -404,7 +404,7 @@ and shows a clear message.
 
 ## Bundle: Stripe adapter upkeep
 
-5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Loose ends left by A633.**
   [Detail](payments.md#loose-ends-left-by-a633)
@@ -421,6 +421,10 @@ and shows a clear message.
   left open by A519 (#1566). Whether test-mode Stripe answers those two cases the same way is
   unchecked; a sandbox case beside `checkout.sandbox.test.ts` would settle it.
   [Detail](payments.md#check-how-real-stripe-answers-a-malformed-reader-id-and-one-from-another-stripe-account)
+- **Stripe's two return addresses (`successUrl`, `cancelUrl`) are still sealed with its secrets**,
+  and their only reader, `createCheckoutSession`, has no production caller (read, not run). A1308's
+  env4 left them as they are (owner, 2026-11-09: "Leave this for when we test Stripe"): decide then
+  whether to move them to the payments settings document or stop collecting them.
 
 ## Bundle: Tap to pay restore
 

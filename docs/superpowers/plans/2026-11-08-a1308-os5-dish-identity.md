@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **OWNER LANDS THIS PULL REQUEST.** It renames `sale_line_portions`, an append-only ledger table
+> **OWNER LANDS THIS PULL REQUEST** (owner, 2026-11-09: confirmed). It renames `sale_line_portions`, an append-only ledger table
 > written in the sale's transaction (`linkSalePortions` after `recordSale`,
 > `apps/server/src/till-sale.ts:999-1028`, `bill-payments.ts:739-753`, `working-order.ts:7312-7326`),
 > to `sale_line_dishes` and changes what its rows point at. It changes no `sales` row, invoice number or

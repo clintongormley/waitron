@@ -27,7 +27,7 @@ state (`/api/menu-state` works out service-open, period and default menu from `n
 `apps/server/src/till-api.ts:1667-1674`, and is the only regular carrier of `setupRevision`, `:1681`),
 the equipment read (`device-api.ts:424-444`: wall clock, clock witnesses, notices), and the floor
 (`/api/tables/state` → `ensureToday(… clock.now())`, `till-api.ts:1308`) depend on the clock or
-memory: **they keep their timers** and gain an immediate re-read on change. The department
+memory: **they keep their timers** (owner, 2026-11-09: confirmed) and gain an immediate re-read on change. The department
 transfer list (`department-transfer-api.ts:193-226`), the table allergy read
 (`party-allergy-api.ts:93`) and the kitchen screen's notice read (`/api/device/me`, `device-api.ts:350`)
 read rows alone: **they go quiet while connected**. The audit only skimmed the last three's

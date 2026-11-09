@@ -33,11 +33,11 @@ Lines at `649b7576e0`.
 
 **Who lands:** the lane (no fiscal file or value; the setup record keeps its content).
 
-**Blocked on A1379 part 2, and so on the owner.** This slice cannot start until A1379 pull request 2
-(removing Continue) has landed, and that waits for the owner's answers to the three questions in
-`docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md` (`docs/backlog/setup.md:575`).
-fl8a, fl8b, fl9 and fl10 all come after this slice, so the whole chain from here waits on those
-answers (Needs; Stop points).
+**Waits for A1379 part 2 to land.** This slice cannot start until A1379 pull request 2 (removing
+Continue) has landed. The owner answered that plan's three questions on 2026-11-09
+(`docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md`, "The owner's answers") and lands
+it. fl8a, fl8b, fl9 and fl10 all come after this slice, so the whole chain from here waits for that
+pull request to land (Needs; Stop points).
 
 **First line of the pull request:** "A box part way through a first setup when this lands must use
 Start again (its claim file is no longer read); other boxes keep working."
@@ -52,8 +52,8 @@ WAITRON_VENUE_DIR -- '*.test.ts' '*.test.mjs'`, then those files holding the lit
 gain on a box, because a box cannot receive it: compose forwards only the names it lists, and none
 is `WAITRON_VENUE_DIR`. So the guarantee lives in the deploy files and their guard, and the variable
 moves to the development group of the product's list (the environment plans' variable module).
-**Open question for the owner:** whether the server should also refuse the variable outside
-development; this plan does not.
+**Owner, 2026-11-09:** the server does not refuse the variable outside development; it is listed
+as a development setting.
 
 ## T3 — read, not run, then pinned by Task 3's test
 
@@ -127,7 +127,7 @@ held.
 | Moving `first-setup.json` and its side files into `flows/setup/` | Next pull request | fl8a |
 | `first-setup-deleting.json` in the venue folder | Start again's own crash record; stays (files.md row 57) | — |
 | Classifying `WAITRON_VENUE_DIR` in the product's variable list | The environment plans own the list | environment plans |
-| A production refusal of `WAITRON_VENUE_DIR` | See "What development only means here" | owner (open question) |
+| A production refusal of `WAITRON_VENUE_DIR` | See "What development only means here" | not built (owner, 2026-11-09) |
 
 ## Assertions that change, by design (rules §4)
 

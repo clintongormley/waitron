@@ -212,6 +212,10 @@ Design reasons: tables-fiscal §5, the `clock_checks`, `clock_confirmations` and
 3. A case of `clock-confirmations.test.ts` has no carried twin in `schema/verifactu-history.test.ts`:
    add it there (fi4a's list says how it changes) before deleting the file; a case whose carried
    form would need a change fi4a did not list is a stop.
+4. A clock suite or a fixture is refused with fi4a's `HISTORY_CONFIRMATION_CHECK_REFUSAL` (the
+   trigger the owner added on 2026-11-09: a confirmation must name a clock check). The production
+   writer takes a check id only from `openCheck`'s answer, so such a refusal means some path names
+   another row: report it; do not loosen the trigger.
 
 ## Needs
 

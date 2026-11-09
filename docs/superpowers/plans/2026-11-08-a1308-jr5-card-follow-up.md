@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Owner lands: YES.** Two steps write `sales`: recovery of paid-but-unrecorded sales files them
+**Owner lands: YES** (owner, 2026-11-09: confirmed). Two steps write `sales`: recovery of paid-but-unrecorded sales files them
 (`payWorkingOrderIntegratedOrchestration`, `apps/server/src/pending-card-recovery.ts:86-90`), and
 settlement files invoices for bill payments it settles (`boot.ts:715-717`: "Settling files invoices
 and fails payments this process is not driving"). This pull request changes when both run, and

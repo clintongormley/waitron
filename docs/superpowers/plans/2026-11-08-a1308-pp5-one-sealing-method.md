@@ -286,7 +286,7 @@ ring of version 1, then a ring of version 2 whose previous entry is version 1 (a
     `resealers: readonly ((db: Database, ring: KeyRing) => Promise<ResealResult>)[]`, and `rotate`
     runs each after the vault and signing-key rows, adding their counts and printing `unopened`.
     `runBin` takes the resealers as a parameter. Because identity depends on credentials, the
-    `waitron-credentials` command's entry moves to a small `packages/identity/src/credentials-bin.ts`
+    `waitron-credentials` command's entry moves (owner, 2026-11-09: confirmed) to a small `packages/identity/src/credentials-bin.ts`
     that calls `runBin(argv, env, io, [resealTwoStepSecrets])`; the `waitron.commands` declaration
     and the build script move from `packages/credentials/package.json` to
     `packages/identity/package.json`. Any image or guard that names the command's path

@@ -13,9 +13,9 @@ so that reason is gone. No `sales` row, number, record or hashed value changes: 
 this slice edits lose only the dropped column from their "nothing else changed" lists. The S11 note
 that `apps/server/src/working-order.ts` is an invoice-path file applied to its `:7038` call alone
 (A1301 design §6, S11 row); the line this slice edits there (`:1717`) fills an open order's column.
-**The owner may want to land it anyway:** it edits the refund guard trigger
-(`tender_refunds_guard_update`) and `apps/server/src/tender-refund-reservation.ts`, and the build
-order gives refunds' money trigger to the owner. The watcher asks before the lane lands it.
+**Owner, 2026-11-09:** the lane lands 5e, and the watcher does not ask the owner first, although
+it edits the refund guard trigger (`tender_refunds_guard_update`) and
+`apps/server/src/tender-refund-reservation.ts`.
 
 **Pull request's first line:** "Every venue is reset: core; backups and exports from before this
 cannot be restored or imported." (rules §2).

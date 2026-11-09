@@ -98,7 +98,7 @@ before this cannot be restored or imported."
   `:1236-1262`), and `on conflict … do update` fires update triggers. "No row" stays a real state: a
   venue that has never sent has none (`schema/envio-flujo.ts`, the table comment: "Lazily created").
 
-**Decision this plan makes** (open to the owner): *every write that replaces a held answer value
+**Decision this plan makes** (confirmed by the owner, 2026-11-09): *every write that replaces a held answer value
 keeps it, not only the two the design names.* tables-fiscal §3 names reconcile's resubmission and the
 hold at `drain.ts:934` (now `:932`). The trace below finds a third writer that loses a value, reconcile's drift
 correction (`correct`, `reconcile.ts:523-524`, rewrites `confirmado_en` on an `aceptado` row AEAT now
@@ -315,7 +315,7 @@ not of these kinds is stop 3.
 
 ## Needs
 
-fi6 (the trigger file and refusal constants it creates).
+fi6 (the trigger file and refusal constants fi4a creates and fi6 adds to).
 
 **Landed by: owner.**
 

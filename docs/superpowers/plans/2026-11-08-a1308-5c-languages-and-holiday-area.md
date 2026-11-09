@@ -7,10 +7,10 @@
 > The 1b-i API names: [5b](2026-11-08-a1308-5b-venue-document.md#the-api-this-slice-uses-slice-1b-i-exact-names).
 
 **Lands:** the lane (rules §6): no `sales` row, invoice number, fiscal record, fiscal identity, AEAT
-message or hashed value changes. **Note for the watcher:** under A1301's own rule (a) this slice
-would be owner-landed, because each sale's invoice languages (`sales.invoice_locales`, copied at
+message or hashed value changes. **Owner, 2026-11-09:** the lane lands 5c. (Why it was asked: under
+A1301's own rule (a) this slice would be owner-landed, because each sale's invoice languages (`sales.invoice_locales`, copied at
 issue) are then read from a new place; under A1308's rule (§6) it is the lane's. The default content
-language's text is printed on invoice lines, but it is neither filed nor hashed.
+language's text is printed on invoice lines, but it is neither filed nor hashed.)
 
 **Pull request's first line:** "Every venue is reset: core; backups and exports from before this
 cannot be restored or imported." (rules §2).

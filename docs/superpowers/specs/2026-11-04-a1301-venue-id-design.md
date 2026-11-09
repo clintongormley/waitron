@@ -183,6 +183,10 @@ reading the interim `venueLocationId(tx)`, and only S28 waits for S18e.
    read, not run, so whether the check can pass today is unproven. Default: S18e's first task
    establishes it with a test from a real first setup, and the owner chooses the value the check
    uses.
+   **Owner, 2026-11-09:** drop the venue half of the check. There is one venue, so comparing an id
+   proves nothing; the venue's name stays printed on the sheet for a person to check, and the
+   recovery key is what matters. Built in A1308 slice 5f
+   (`docs/superpowers/plans/2026-11-08-a1308-5f-backups-without-venue-id.md`).
 7. **Standbys and Cloud.** Cloud keeps one current installation per venue
    (`001_registration.sql:28`; `index.ts:232`). Default: unchanged. Only the box that sells writes
    the row, and a promoted standby pairs again as the venue.

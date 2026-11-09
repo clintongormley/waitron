@@ -117,9 +117,30 @@ confirmation naming this record").
   sequence, tables-fiscal §5 `clock_checks` row: "the shared unique `seq`");
   `verifactu_history_registro_kind_seq_idx` replaces `clock_confirmations_registro_idx` (fi4b
   deletes the old ones).
-- **Weaker in one way** (tables-fiscal §5, stated at the column): `ref_id` cannot check that it names
-  a `clock.check_opened` row rather than another kind. `appendHistory` takes a check id only from
-  `openCheck`'s answer (fi4b).
+- **A confirmation names a clock check** (**owner, 2026-11-09:** add the rule; tables-fiscal §5,
+  the note after the table: "Add a trigger if that matters"). The old table's foreign key to
+  `clock_checks` refused a confirmation naming anything else; the history's `ref_id` key only proves
+  the row exists, so one `BEFORE INSERT` trigger restores the rest, in a new hand-written file
+  `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql` (slice 1a's rebuild command appends a
+  set's `triggers/<set>.sql`, [1a](2026-11-08-a1308-1a-baseline-rebuild.md), "Words used here"):
+
+  ```sql
+  CREATE TRIGGER verifactu_history_confirmation_names_check BEFORE INSERT ON verifactu_history
+  WHEN new.kind = 'clock.confirmed' AND new.ref_id IS NOT NULL
+    AND EXISTS (SELECT 1 FROM verifactu_history h
+                WHERE h.id = new.ref_id AND h.kind <> 'clock.check_opened')
+  BEGIN SELECT RAISE(ABORT, 'verifactu_history: a clock confirmation names a clock check'); END
+  ```
+
+  It fires only when the named row exists and is another kind, so a `ref_id` naming no row is still
+  refused by the foreign key, as the carried case at `clock-confirmations.test.ts:132-139` expects
+  (a `BEFORE` trigger runs before the key is checked; written from how SQLite orders them, and Task 1
+  runs both cases). A confirmation with no check (`ref_id` null) is not touched. The refusal text is
+  a constant, `HISTORY_CONFIRMATION_CHECK_REFUSAL`, in a new
+  `packages/fiscal-verifactu/src/trigger-refusals.ts`, with a comment saying why: a confirmation is
+  the evidence that lifts the clock stop for one check, so naming anything but that check would let
+  it answer a check it never saw. `scripts/behavioural-triggers.test.ts` imports it, like core's
+  (`:9-29`). This plan, not fi6, now creates both files; fi6, fi7 and fi9 add to them.
 
 Ten CHECKs in all (`data`, `kind`, two for checks, six for confirmations) and four foreign keys.
 
@@ -137,20 +158,14 @@ here on their own; fi4b moves the clock code onto them.
 | `conflict.observed`, `conflict.lookup` | fi5 |
 | `case.note` | fi6 |
 | `aeat.answer_cleared` | fi7 |
-| A trigger checking that `ref_id` names a check | Not built: tables-fiscal §5 "Add a trigger if that matters"; owner question 1 below |
 | Pruning | Never: append-only (README U10) |
 
-## Owner question
+## Owner decision
 
 1. **Should the database refuse a confirmation whose `ref_id` names a row that is not a clock
-   check?** The design leaves it open (tables-fiscal §5, the note after the table: "Add a trigger if
-   that matters"). The old table's foreign key to `clock_checks` refused it; the history's `ref_id`
-   key only proves the row exists. **Recommended default: no trigger.** The one writer takes the id
-   only from `openCheck`'s answer (fi4b), and fi5–fi7's kinds carry no `ref_id` (every CHECK their
-   plans add requires `ref_id is null`), so a confirmation is the only row with a `ref_id` and a
-   check the only row it is written to name. A yes adds one `BEFORE INSERT`
-   trigger in this plan (about 15 lines and two test cases). The builder builds the default unless
-   the owner has answered otherwise before the slice starts.
+   check?** **Owner, 2026-11-09: yes** — the trigger in "What it builds" ("A confirmation names a
+   clock check"). Without it the only guard was the one writer, which takes a check id only from
+   `openCheck`'s answer (fi4b).
 
 ## Interfaces
 
@@ -193,6 +208,8 @@ The row interfaces carry today's field names (`schema/clock-checks.ts`,
 
 **Create**
 - `packages/fiscal-verifactu/src/schema/verifactu-history.ts`, `src/history.ts`.
+- `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql` (the one trigger) and
+  `src/trigger-refusals.ts` (its refusal text).
 - `packages/fiscal-verifactu/src/schema/verifactu-history.test.ts` (the CHECKs, Task 1).
 - `packages/fiscal-verifactu/src/history.test.ts` (writer, readers, plans, Task 2).
 
@@ -200,7 +217,9 @@ The row interfaces carry today's field names (`schema/clock-checks.ts`,
 - `packages/fiscal-verifactu/src/schema/index.ts`, `src/classification.ts`,
   `packages/migrations/migrations.manifest.json` (fiscal entry: add `verifactu_history`).
 - `scripts/append-only-triggers.test.ts` (`EXPECTED` gains the table), `scripts/schema-constraints.test.ts`
-  (the new keys, uniques and CHECKs).
+  (the new keys, uniques and CHECKs), `scripts/behavioural-triggers.test.ts` (the new trigger: a
+  product-migrated database refuses a confirmation naming another confirmation with
+  `HISTORY_CONFIRMATION_CHECK_REFUSAL`).
 - `apps/server/scripts/bench/grow-fiscal.ts` and `grow-fiscal.test.ts` (`--history <n>`, Task 3).
 - `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` (`verifactu_history` joins
   `ADDED_TABLES`, `:24-37`; the seed writes no row to it).
@@ -211,9 +230,9 @@ The row interfaces carry today's field names (`schema/clock-checks.ts`,
 
 | Counted (hand-written) | Lines, estimated |
 | --- | --- |
-| Code: schema with CHECKs 95, `history.ts` 170, lists 15, bench flag 30 | ~310 |
-| Tests: CHECK test 230 (with the cases carried from `clock-confirmations.test.ts`), writer/reader/plan test 110, bench case 20, demo list 2 | ~362 |
-| **Total** | **~672** |
+| Code: schema with CHECKs 95, `history.ts` 170, lists 15, bench flag 30, trigger file and refusal constant 15 | ~325 |
+| Tests: CHECK test 230 (with the cases carried from `clock-confirmations.test.ts`), the trigger's two cases 20, behavioural-triggers guard 15, writer/reader/plan test 110, bench case 20, demo list 2 | ~397 |
+| **Total** | **~722** |
 
 Not counted: the generated migration.
 
@@ -247,7 +266,7 @@ re-pointed.
 pnpm --filter @waitron/fiscal-verifactu exec vitest run src/schema/verifactu-history.test.ts src/history.test.ts src/classification.test.ts src/schema-ownership.test.ts src/clock-confirmations.test.ts
 # and fi1's record suites (fi1 plan, "Finish line")
 pnpm --filter @waitron/server exec vitest run scripts/bench/grow-fiscal.test.ts scripts/demo-seed/seed.madrid-baseline.test.ts
-pnpm exec vitest run scripts/append-only-triggers.test.ts scripts/schema-constraints.test.ts scripts/classification-complete.test.ts scripts/starting-migrations.test.ts scripts/migration-upgrade.test.ts scripts/two-file-foreign-keys.test.ts scripts/id-columns-are-references.test.ts scripts/module-graph-honesty.test.ts
+pnpm exec vitest run scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/schema-constraints.test.ts scripts/classification-complete.test.ts scripts/starting-migrations.test.ts scripts/migration-upgrade.test.ts scripts/two-file-foreign-keys.test.ts scripts/id-columns-are-references.test.ts scripts/module-graph-honesty.test.ts
 pnpm --filter @waitron/composition exec vitest run src/composition.test.ts
 ```
 
@@ -268,20 +287,30 @@ extra index verifactu_history_kind_seq_idx
 extra index verifactu_history_registro_kind_seq_idx
 extra index verifactu_history_seq_uq
 extra table verifactu_history
+extra trigger verifactu_history_confirmation_names_check
 ```
 
-`phase=migrated` and `phase=change-feed`: the same, plus, at the end,
+(The hand-written trigger is part of the starting migration's SQL, so it is there from `sql-only`.)
+
+`phase=migrated` and `phase=change-feed`: the same, with the two append-only triggers the code
+installs at migration; the trigger lines then read, at the end,
 
 ```text
 extra trigger verifactu_history_append_only_delete
 extra trigger verifactu_history_append_only_update
+extra trigger verifactu_history_confirmation_names_check
 ```
+
+Where the tool prints a new trigger's position among the table's triggers (rules §3), the
+hand-written trigger is the only `BEFORE INSERT` one on the table, so it has no neighbour to be
+ordered against; read the real `list` output and mark it.
 
 The new table's four keys and ten CHECKs are fields of `extra table verifactu_history`; the
 reviewer reads them in the list's JSON for `verifactu_history` against "What it builds". No
 change-feed trigger: the fiscal module declares no live-update source (fi1 plan, "Expected
 protection-list difference"). Design reasons: tables-fiscal §1.1 `verifactu_history`, §5 the
-`clock_checks` and `clock_confirmations` rows and the note after the table.
+`clock_checks` and `clock_confirmations` rows and the note after the table (the trigger: owner,
+2026-11-09).
 
 ## Stop points (beyond rules §5)
 
@@ -294,6 +323,10 @@ protection-list difference"). Design reasons: tables-fiscal §1.1 `verifactu_his
 3. The rebuilt `0000_baseline.sql` lists any per-kind CHECK before `verifactu_history_data_ck`, and
    reordering the table callback does not change that.
 4. Any of fi1's record suites fails.
+5. The rebuild command does not append `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql`
+   (the protection list's `sql-only` phase has no `verifactu_history_confirmation_names_check`), or
+   boot's append-only check refuses a table carrying a hand-written trigger beside its two
+   append-only ones.
 
 ## Needs
 
@@ -310,9 +343,11 @@ fi3. fi2's `bench grow-fiscal`, which needs slice 0's bench: branch `feat/a1308-
 
 ### Task 1: the table and its CHECKs, measured first (§8 item 4)
 
-**Files:** create `schema/verifactu-history.ts`, `schema/verifactu-history.test.ts`; modify
-`schema/index.ts`, `classification.ts`, the manifest, `scripts/append-only-triggers.test.ts`,
-`scripts/schema-constraints.test.ts`, the demo test's `ADDED_TABLES`; rebuild the set.
+**Files:** create `schema/verifactu-history.ts`, `schema/verifactu-history.test.ts`,
+`triggers/fiscal-verifactu.sql`, `src/trigger-refusals.ts`; modify `schema/index.ts`,
+`classification.ts`, the manifest, `scripts/append-only-triggers.test.ts`,
+`scripts/behavioural-triggers.test.ts`, `scripts/schema-constraints.test.ts`, the demo test's
+`ADDED_TABLES`; rebuild the set.
 
 - [ ] **Step 1: Failing test** `verifactu-history.test.ts` (`useVenueDb` with the fiscal migrations;
   seed a node, a person and a record with the package's fixtures). For **each** CHECK in "What it
@@ -323,12 +358,21 @@ fi3. fi2's `bench grow-fiscal`, which needs slice 0's bench: branch `feat/a1308-
   kind, and the unique cases: a second row with the same `seq`; a check and a confirmation with the
   same `seq`; a second `clock.confirmed` naming the same check (same `event_key`); update and delete
   refused (`triggerRaised(error, "verifactu_history is append-only")`); a `person_id` with no person
-  refused by its key. Carry every case of `clock-confirmations.test.ts` as "Assertions that change,
-  by design" lists.
+  refused by its key. The trigger's two cases: `"a confirmation naming a clock check is stored"`
+  (a check, then a `clock.confirmed` with `ref_id` = its id: one row more) and `"a confirmation
+  naming a row that is not a clock check is refused"` (a check, a confirmation of it, then a second
+  confirmation whose `ref_id` is the first confirmation's id: refused,
+  `triggerRaised(error, HISTORY_CONFIRMATION_CHECK_REFUSAL)`, and no row added). Proof by deletion:
+  with the trigger left out of `triggers/fiscal-verifactu.sql` and the set rebuilt, the second case
+  fails because the row is stored; restore and rebuild. Carry every case of
+  `clock-confirmations.test.ts` as "Assertions that change, by design" lists; the carried "naming no
+  check" case (`:132-139`) must still be refused by the foreign key, not the trigger.
 - [ ] **Step 2:** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/schema/verifactu-history.test.ts`. FAIL.
 - [ ] **Step 3:** Write the schema as "What it builds": `verifactu_history_data_ck` first in the
   table callback, then `verifactu_history_kind_ck`, then the per-kind CHECKs, every per-kind
-  condition inside `coalesce(…, 0)`. Classify `appendOnly("verifactu_history", "ledger", LEDGER)`;
+  condition inside `coalesce(…, 0)`. Write `triggers/fiscal-verifactu.sql` and
+  `trigger-refusals.ts` as "What it builds", and add the trigger to
+  `scripts/behavioural-triggers.test.ts`. Classify `appendOnly("verifactu_history", "ledger", LEDGER)`;
   manifest; guards; `ADDED_TABLES`.
   `pnpm --filter @waitron/server migration-baseline rebuild --set fiscal-verifactu`. Read the
   rebuilt `packages/fiscal-verifactu/drizzle/0000_baseline.sql`: the `verifactu_history_data_ck`

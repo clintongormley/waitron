@@ -54,7 +54,7 @@ when it is written still records a `staff_activity` row (source `draft`, key `ev
 `group:<id>`, as os6 keeps them, its plan's ":136-137"), and the read keeps today's union (the event
 row while its party has a bill and no such `staff_activity` row exists, plus every `staff_activity`
 row). This departs from the appendix, which lists these copies among those that go (§6 item 1);
-**Stop point 1 asks the watcher to confirm it before building.** pp9's case 11 already marks both
+**Owner, 2026-11-09:** confirmed, so no one needs to confirm it before building. pp9's case 11 already marks both
 parties' days when a bill moves.
 
 ## What it builds
@@ -151,9 +151,8 @@ Any other line is a stop.
 
 ## Stop points (beyond rules §5)
 
-1. **Before building: the order-event decision.** The watcher confirms keeping attributed-at-write
-   order-event rows in `staff_activity`, or names another read that keeps
-   `attendance-discovery.test.ts:1005-1019` unchanged.
+1. (Answered: **owner, 2026-11-09** — order-event rows stay in `staff_activity` with their
+   attribution fixed as written; no watcher check is needed before building.)
 2. A behaviour test's expected result changes because a fact's time moved from the write's clock
    reading to the row's `created_at` (appendix §6 item 1 predicts it for bill payments). Name each
    with the two times; the watcher confirms (rules §5.3).

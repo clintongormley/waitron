@@ -20,6 +20,9 @@ the box last checked under.
 
 ## Decision: no per-day evidence hash; the safety net re-checks recent days
 
+**Owner, 2026-11-09:** confirmed (no per-day hash; re-check the last 62 days). Where the stamp lives
+stays the watcher's choice (below).
+
 The appendix drew `attendance_days.evidence_hash`, a hash of exactly what a day's evaluation read
 (§1, §8 item 2). Reading `processAttendanceDay` (`packages/workforce/src/end-of-day.ts:113-420`):
 for each person the day concerns it reads the person's **whole** working-time record

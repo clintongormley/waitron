@@ -102,7 +102,7 @@ pages, not the menu (tables-menu.md §1, "Two uses of the word mean something el
 ## Area files for the package move
 
 Agreed 2026-11-08 and not designed yet: `apps/server`'s domain areas move into packages of their
-own, each move paired with its A1308 area so code moves once; the build order's "Order of areas" sets the order (proposed; the owner decides), since A1453's measurement was dropped (`docs/backlog/ci.md`, 8c4166f9ac). This
+own, each move paired with its A1308 area so code moves once; the build order's "Order of areas" sets the order (owner, 2026-11-09: the proposed order), since A1453's measurement was dropped (`docs/backlog/ci.md`, 8c4166f9ac). This
 area's files in `apps/server/src` (paths after this PR; every `*.test.ts` beside each belongs with it):
 
 - `menu-api.ts` and `menu-api.*.test.ts`, `menu-allergen-workflow.test.ts`,

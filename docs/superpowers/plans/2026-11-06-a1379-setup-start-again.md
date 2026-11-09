@@ -9,9 +9,9 @@ in ("Continue with your setup password") and everything that only it reached are
 **Architecture:** Two pull requests. **PR 1** needs no owner answer: the setup record store
 stops taking two dead actions (item 2), Start again is offered for a record whose claim mark needs
 repair (item 6), the repair page's heading and button fixes (item 3), and a real-disk test plus
-corrected words for the full disk (item 5). **PR 2** is A1322 and what depends on it, built after
-the owner answers Questions 1-3: Start again's deletion list gains `trading.env` beside a held
-database (and, if the owner allows, the setup's own certificate record); the ordinary setup server
+corrected words for the full disk (item 5). **PR 2** is A1322 and what depends on it; the owner
+answered Questions 1-3 on 2026-11-09: Start again's deletion list gains `trading.env` beside a held
+database and the setup's own certificate record; the ordinary setup server
 gains a way to stop a setup so the repair page can delete it; Continue, Finish setup (reachable
 only after Continue), the command line's way back in and the record store go; the repair page
 loses the password step. The `kept-records` refusal stays in both and is proved by deletion.
@@ -110,7 +110,7 @@ append-only (`packages/fiscal-verifactu/src/classification.ts:22-26`) and not in
 `FISCAL_START_AGAIN_DELETABLE = ["fiscal_allocations"]` (`start-again-holdings.ts:6`). The test
 helper's save writes nothing (`apps/server/test/held-setup-database.ts:105-113`). The reviewer ran
 a throwaway `heldSetup()` with one such row: refused `kept-records` (`rows=105 kept=1 records=0`);
-the control without it was accepted. So without Question 1, A1322 is not delivered for any setup
+the control without it was accepted. So without Question 1's yes (given 2026-11-09), A1322 would not be delivered for any setup
 that got as far as saving its certificate, and the same refusal already applies today to one that
 stopped between the two saves.
 
@@ -201,9 +201,10 @@ was already true.
   `claimed` or `consumption-intent` attempt and restarts the box; the box then starts on the repair
   page (`needsResolution`, `first-setup-entry.ts:40-47`), whose Start again accepts an abandoned
   attempt (`PRESENT_START_AGAIN_STATUSES`, `first-setup-resolution.ts:175-179`). It deletes nothing
-  on a server holding the database open (`boot.ts:1233`) and adds no file. Question 3.
-- **D3. A reloaded tab keeps going on the key it already holds** (Question 2, recommended
-  default). The server asks a tab for nothing more than its key, revision, owner generation and a
+  on a server holding the database open (`boot.ts:1233`) and adds no file. Question 3 (owner,
+  2026-11-09: yes).
+- **D3. A reloaded tab keeps going on the key it already holds** (Question 2; owner, 2026-11-09:
+  yes). The server asks a tab for nothing more than its key, revision, owner generation and a
   live status (`authorize`, `first-setup-owner.ts:171-186`); the tab saves the revision and
   generation on every state it accepts (`#acceptState`, `first-setup-session.ts:265-275`); a
   duplicated tab is fenced by the attempt's Web Lock, taken `ifAvailable` at `open()`
@@ -240,24 +241,22 @@ Left open for other reasons:
   may have been used (`apps/server/src/first-setup-unused-assignment.ts`). PR 2 Task 3 tests the
   ordinary case; if refused, the implementer stops and reports.
 
-## Questions for the owner (with defaults)
+## The owner's answers (2026-11-09)
 
-Questions 1-3 must be answered before any PR 2 task is dispatched. PR 1 needs no answer.
+PR 1 needed no answer. Questions 1-3 are answered, so PR 2 waits only for PR 1 to land.
 
-1. **May Start again delete the setup's own certificate record?** (fiscal; F3b) A real box's
+1. **May Start again delete the setup's own certificate record?** (fiscal; F3b) **Owner,
+   2026-11-09: yes** — Start again may delete `fiscal_certificate_installs` rows that are this
+   attempt's own (this node's id, `source = 'setup'`), and no other rows; that change is in
+   `packages/fiscal-verifactu`, so **the owner lands PR 2**. (Why it was asked: a real box's
    activation saves the AEAT certificate before the trading settings, writing a row into an
-   append-only table no module lets Start again delete. So once activation got that far, Start
-   again refuses as `kept-records` and A1322 is not delivered on a real box. If yes, Start again
-   may delete `fiscal_certificate_installs` rows that are this attempt's own (this node's id,
-   `source = 'setup'`); that change is in `packages/fiscal-verifactu`, so you land PR 2. **Default:
-   none; it is your call.** If no, PR 2 must keep a way to finish such a setup, and is re-planned.
-2. **A reload of the setup page part way through. Recommended default: the tab keeps going on
-   the key it already holds** (D3). Alternative: the reloaded tab is offered Start again and the
-   setup is entered again.
+   append-only table no module let Start again delete, so Start again refused as `kept-records`.)
+2. **A reload of the setup page part way through.** **Owner, 2026-11-09:** the default — the tab
+   keeps going on the key it already holds (D3).
 3. **Stopping a setup from a page that does not hold it, while the box is on its ordinary setup
-   screens** (D2). Default: allowed over HTTPS from the box's own page, with no password, as the
-   repair page's Start again already is. Option, smaller: refuse a stop while the setup's own tab
-   has made a request in the last 5 minutes (kept in memory, so a restart clears it).
+   screens** (D2). **Owner, 2026-11-09:** the default — allowed over HTTPS from the box's own page,
+   with no password, as the repair page's Start again already is. The smaller 5-minute gate is not
+   built.
 4. **A setup record that cannot be read.** Default: left as it is, entry kept in the backlog.
 5. **New and changed words**, collected by each PR's last task.
 
@@ -267,19 +266,19 @@ Questions 1-3 must be answered before any PR 2 task is dispatched. PR 1 needs no
 (fiscal-invariant area), and changes the setup record store's validator. Per-task review on
 P1-2 and P1-3; full `/finish-branch` wave, two Codex run-it reviews.
 
-**PR 2: FULL.** It deletes data (Start again's list, the certificate rows if Question 1 is yes),
+**PR 2: FULL.** It deletes data (Start again's list, the attempt's own certificate rows),
 changes authentication (removes password recovery, adds a route with no owner) and cross-package
 contracts. Per-task review on P2-1, P2-2, P2-3, P2-8, P2-9, P2-10; two Codex run-it reviews; the
-simplify seat runs. If Question 1 is yes, the owner lands it.
+simplify seat runs. The owner lands it (Question 1, answered yes 2026-11-09).
 
 ## Review Focus
 
 1. **A setup stopped at each step from claimed to publication, then Start again** — with a real
-   certificate row. Expected (Question 1 yes): state folder empty, venue folder lock files only,
+   certificate row. Expected (Question 1, yes): state folder empty, venue folder lock files only,
    zero fiscal records. Pinned by P2-2 and P2-3.
 2. **An invoice beside saved trading settings and a certificate.** Expected: `kept-records`,
    nothing changes. P2-2, proved by deletion.
-3. **A reloaded tab.** Expected (Question 2 default): it carries on with no password. P2-10.
+3. **A reloaded tab.** Expected (Question 2, the default): it carries on with no password. P2-10.
 4. **The owner's tab after another page stopped its setup.** Expected: next change refused
    `setup.owner_required`; the page says it no longer holds the setup and offers Start again. P2-3, P2-13.
 5. **A full disk.** Expected: refused before a restart, deleted after it. P1-4.
@@ -371,17 +370,18 @@ the heading `:2337` reads `t.heading` once `firstRestarting`), tests `setup-app-
 
 ---
 
-## Pull request 2 — A1322 and what depends on it (after Questions 1-3 are answered)
+## Pull request 2 — A1322 and what depends on it (Questions 1-3 answered 2026-11-09)
 
 Branch `feat/a1379-continue-removed` from `main` after PR 1 lands
 (`python3 ~/workspace/tools/worktree.py new waitron feat/a1379-continue-removed --headless`).
-Task steps below assume the defaults; adjust P2-1, P2-3, P2-10 and P2-13 to the answers. Where a task says "as the first version's Task N", the full task text
+Task steps below follow the owner's answers of 2026-11-09 (Question 1 yes; Questions 2 and 3 the
+defaults). Where a task says "as the first version's Task N", the full task text
 (files, interfaces, test-first steps) is in this plan's first version:
 `git show 51739a1477:docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md`. Before
 dispatching PR 2, write those tasks out in full here with the owner's answers folded in, and have
 the plan reviewed again.
 
-### Task P2-1: Start again may delete the attempt's own certificate record (only if Question 1 is yes)
+### Task P2-1: Start again may delete the attempt's own certificate record (Question 1: yes)
 
 **Files:** `packages/fiscal-verifactu/src/start-again-holdings.ts:6`, and, to hold it to this
 attempt's rows, the holdings read in `apps/server/src/first-setup-database-holdings.ts` (count a
@@ -419,8 +419,6 @@ As the first version's Task 3 (`stopForStartAgain`, `START_AGAIN_ROUTES.stop`), 
 - A stop sent while the owner's setup step holds the coordinator waits its turn; then the owner's
   next change is refused `setup.owner_required`.
 - The record refuses any further change to the abandoned attempt (`first-setup-state.ts:747-749`).
-- If Question 3 chose the smaller gate: a stop within 5 minutes of the owner tab's last request is
-  refused `setup.attempt_conflict`, and one after that is accepted (fake clock).
 
 ### Tasks P2-4 to P2-6: The server suites stop signing in with the password (tests only)
 
@@ -462,8 +460,8 @@ also `packages/provisioning/src/first-setup-node-key.test.ts:187,505`, which set
 
 ### Task P2-10: The setup record, the inspection and the record store
 
-As the first version's Task 9 (D4 second half, D7), and the session change for Question 2:
-with the default, `FirstSetupSession.open()` no longer requires proof for a saved key
+As the first version's Task 9 (D4 second half, D7), and the session change for Question 2
+(the default): `FirstSetupSession.open()` no longer requires proof for a saved key
 (`first-setup-session.ts:166`; `#proofRequired` only while a claim is pending). Failing tests in
 `first-setup-session.test.ts`: `"a reload carries on with the saved key and sends no password"` and
 `"a duplicated tab is refused while the first holds the attempt"`.
@@ -522,7 +520,7 @@ original setup password" line, the two trading-settings sentences, and the Finis
 ## After the tasks
 
 PR 1: `/finish-branch` on this worktree with this plan as its note, then ready to land. PR 2:
-dispatched only after Questions 1-3 are answered; `/finish-branch` in its own worktree.
+dispatched after PR 1 lands; `/finish-branch` in its own worktree; the owner lands it.
 
 ## Review fold (2026-11-06)
 

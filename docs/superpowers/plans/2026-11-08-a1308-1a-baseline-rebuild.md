@@ -42,7 +42,7 @@ worktree; nothing was committed. A reviewer reproduced the method independently:
 hashes matched, `compare` gave 238 `changed` lines with no `missing` or `extra`, and a second
 generation was byte-identical.
 
-**Who lands it: the owner rules before building** (the coordinator is asking). The rebuild changes
+**Who lands it: the lane.** **Owner, 2026-11-09:** the lane lands 1a. The rebuild changes
 the column order of `sales`, `sale_lines`, `tenants` and `registros_facturacion` (today's name for
 `verifactu_records`), which rules §6 names, and nothing else about them. The reviewer's evidence,
 read not run by this plan's author: no production code depends on column order — `SELECT *` readers
@@ -271,8 +271,6 @@ clause, it printed both `changed` lines and `NOT A REORDERING`.
 
 ## Stop points (beyond rules §5)
 
-0. The owner has not ruled on landing (header). Tasks 1–4 may be built; Task 5's rebuild commit
-   waits for the ruling.
 1. Before Task 1: `git diff --stat a086eedfb7 HEAD -- 'packages/*/drizzle' 'packages/*/src/schema' packages/migrations scripts/migration-baseline-epoch.json`
    prints anything beyond #2594's files (`packages/db/drizzle/0001_print_job_kind_index.sql`,
    `packages/db/drizzle/meta/0001_snapshot.json`, `packages/db/drizzle/meta/_journal.json`, and in
@@ -612,8 +610,7 @@ conflicts on it. The SQL's integrity is pinned by the epoch and `verifyEpoch`.
 
 ### Task 5: Rebuild every set once, and check the result
 
-**Files:** the regenerated and deleted files listed under "Files"; no hand edits. Waits for stop
-point 0.
+**Files:** the regenerated and deleted files listed under "Files"; no hand edits.
 
 - [ ] **Step 1: Base protection list** (rules §3): in a throwaway worktree of the base
   (`git worktree add --detach <dir> <the branch's base on main, at or after 5f11ab6405> && pnpm install --frozen-lockfile` there, so the base list already holds #2594's index),

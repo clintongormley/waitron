@@ -25,10 +25,9 @@ the file layout slice (it rewrites `state-secrets.ts`)"
 "What it leaves out"). Slice rules: [`2026-11-08-a1308-slice-rules.md`](2026-11-08-a1308-slice-rules.md).
 Lines at `649b7576e0`; the cites the 2026-11-08 review touched were re-read at `9c66ef0356`.
 
-**Blocked on the owner, through fl1.** fl1 waits for A1379 pull request 2, which waits for the
-owner's answers to Questions 1-3 of
-[`2026-11-06-a1379-setup-start-again.md`](2026-11-06-a1379-setup-start-again.md). The build-cache
-step also waits for an owner answer (Owner questions, Q1); the rest of this plan does not.
+**Waits for fl1**, which waits for A1379 pull request 2 to land (its questions were answered by
+the owner on 2026-11-09, [`2026-11-06-a1379-setup-start-again.md`](2026-11-06-a1379-setup-start-again.md)).
+Nothing in this plan waits for an owner answer (Owner decisions).
 
 **Who lands:** the lane. `trading.env` (node id, environment, intent) gains a flush; what it holds
 and who reads it do not change, so nothing in rules §6 changes.
@@ -41,8 +40,7 @@ and who reads it do not change, so nothing in rules §6 changes.
 - The venue holder heartbeat (`packages/store/src/venue-holder.ts:94-95`, every 5 s) stays
   unflushed on purpose (files.md row 38).
 - Agents never run `docker builder prune` or any prune on the development machine (global rule,
-  2026-10-23); if the owner keeps the build-cache step (Owner questions, Q1), it is tested only under
-  `scripts/waitron-sh.test.mjs` stubs.
+  2026-10-23). The build-cache step is dropped (Owner decisions, Q1).
 
 ## What it builds
 
@@ -57,8 +55,7 @@ and who reads it do not change, so nothing in rules §6 changes.
 4. Guard `scripts/durable-writes.test.ts`.
 5. `deploy/waitron.sh`: `compose.yml` is downloaded to a temporary name and moved into place
    (row 73); `.env.example` is no longer put on the box, and an old copy is removed (row 73).
-   Row 84 (clear the build cache after a branch install) only if the owner keeps it (Owner
-   questions, Q1).
+   Row 84 (clear the build cache after a branch install) is not built (Owner decisions, Q1).
 6. No Mailpit change. Row 71 ("cap it") is already met: `deploy/compose.yml:85` pins
    `axllent/mailpit:v1.33.0` (#2601, `20a989ca11`), and that version's `config/config.go:66-67`
    reads `// MaxMessages is the maximum number of messages a mailbox can have (auto-pruned every
@@ -73,7 +70,7 @@ and who reads it do not change, so nothing in rules §6 changes.
 
 | Left out | Why | Who |
 | --- | --- | --- |
-| `writeDurableHostJson` merged into `writeFileDurable` (files.md row 62 says "replace") | It already flushes; its exclusive random temporary name and its refusal of a linked parent protect the setup records, while `writeFileDurable` deliberately follows a linked `tls/` (`fs-atomic.ts:43-54`). Merging would weaken one or the other. **Open question for the owner**; this PR keeps both | owner |
+| `writeDurableHostJson` merged into `writeFileDurable` (files.md row 62 says "replace") | It already flushes; its exclusive random temporary name and its refusal of a linked parent protect the setup records, while `writeFileDurable` deliberately follows a linked `tls/` (`fs-atomic.ts:43-54`). Merging would weaken one or the other. **Owner, 2026-11-09:** keep both (Owner decisions, Q2) | — |
 | Waitron Cloud's writers | They already flush; they move with their folder | fl4 |
 | The leaf certificate's two renames and the TLS repair's writer | fl6 rewrites both | fl6 |
 | The restore flow's files (`restore-request.ts:249-257`) | fl5 rewrites them into one folder; Task 1 still converts them so nothing unflushed remains in between | fl5 |
@@ -92,24 +89,21 @@ and who reads it do not change, so nothing in rules §6 changes.
   `apps/server/src/backup-room-note.ts:100-112`, `packages/provisioning/src/backup-room-note-file.ts`
   (the temporary-name helpers fl1 moved there), `apps/server/src/local-fs-backend.ts:35-41`,
   `restore-secrets.ts:8,91`, `restore.ts:79,843,864`, `apps/server/src/errors.ts:1369`,
-  `apps/server/scripts/dev-setup.ts:334` (comment), `deploy/waitron.sh:40-47,195-204` (and
-  `:428-438` plus `deploy/README.md:222-225` only if Q1 keeps the build-cache step),
+  `apps/server/scripts/dev-setup.ts:334` (comment), `deploy/waitron.sh:40-47,195-204`,
   `deploy/README.md:50,694`, `scripts/waitron-sh.test.mjs`,
-  `docs/superpowers/specs/2026-11-02-rationalisation/files.md` (dated notes on rows 71 and, if Q1
-  drops the step, 84).
+  `docs/superpowers/specs/2026-11-02-rationalisation/files.md` (dated notes on rows 71 and 84).
 - Create: `scripts/durable-writes.test.ts`.
 
 ## Size
 
 Estimated (inventory at `649b7576e0`), not measured:
 - Code: ~20 one-line swaps ~25; `backup-room-note.ts` ~15; `local-fs-backend.ts` ~5; `bin.ts` ~8;
-  `state-secrets.ts` rename and plain branch ~15; `copyAtomic`'s flush ~10; `waitron.sh` ~15
-  (~25 if Q1 keeps the build-cache step). **~95.**
+  `state-secrets.ts` rename and plain branch ~15; `copyAtomic`'s flush ~10; `waitron.sh` ~15. **~95.**
 - Tests: guard ~120; `fs-atomic.test.ts` loses its `writeFileAtomic` cases (deletion);
   `backup-room-note.test.ts` temporary-name cases ~25; six test files asserting the renamed code
-  ~20; `waitron-sh.test.mjs` two cases ~60 (a third, ~30, if Q1 keeps the build-cache step);
+  ~20; `waitron-sh.test.mjs` two cases ~60;
   flush-order cases for `recovery.json` and `trading.env` ~60. **~285.**
-- Docs ~30. **Total counted ~410** (~440 with the build-cache step).
+- Docs ~30. **Total counted ~410**.
 
 ## Finish line
 
@@ -133,10 +127,8 @@ Rules §5, plus:
 
 ## Needs
 
-- fl1 landed, which itself waits for A1379 pull request 2 and so for the owner's answers to that
-  plan's Questions 1-3 (fl1, Needs); 4b landed (its recovery bundle code, `recovery-bundle.ts` and
+- fl1 landed, which itself waits for A1379 pull request 2 to land (fl1, Needs); 4b landed (its recovery bundle code, `recovery-bundle.ts` and
   `recovery-unpack-command.ts`, gone). Independent of fl2.
-- Owner questions Q1 answered before Task 4 Step 1 (the rest of the plan does not wait for it).
 
 ## Review Focus
 
@@ -224,17 +216,12 @@ Rules §5, plus:
 - [ ] **Step 1: Failing cases** in `scripts/waitron-sh.test.mjs`, under its stubs:
   `"a cut compose.yml download leaves the old file"` (stub `curl` writes half then fails; old
   `compose.yml` unchanged, no `compose.yml.tmp` left); `"install removes an old .env.example and
-  keeps .env"`. Only if Q1 keeps the step: `"a branch install clears the build cache after
-  building; a tag install does not"` (the `docker` stub records the clearing command only on the
-  branch path).
+  keeps .env"`.
 - [ ] **Step 2:** Run; they fail. `fetch_box_files` fetches to `$WAITRON_DIR/compose.yml.tmp`, then
   `mv -f` onto `compose.yml`; a failed fetch removes the temporary file and dies. Delete the
   `.env.example` fetch, add `rm -f "$WAITRON_DIR/.env.example"`, and rewrite the comment at `:197`.
-  Only if Q1 keeps the step: after the two `docker build` calls succeed (`:430-438`), clear the
-  build cache the way the owner chose; a failure only warns; and `deploy/README.md:222-225` changes
-  to match in the same commit.
 - [ ] **Step 3:** files.md: a dated note on row 71 (the cap is Mailpit's own default, with the cite
-  from What it builds 6) and, if Q1 drops the step, on row 84 (owner's answer, date).
+  from What it builds 6) and on row 84 (the owner dropped the step, 2026-11-09).
 - [ ] **Step 4:** `deploy/README.md:50` and `:694`: `.env.example` is read in the repository at the
   installed ref, not on the box. Run the cases and `scripts/deploy-image-env.test.ts`. Commit.
 
@@ -250,21 +237,18 @@ Rules §5, plus:
   conventions-data.md. `pnpm format:check`;
   commit.
 
-## Owner questions
+## Owner decisions
 
-- **Q1. Clear Docker's build cache after a branch install?** files.md row 84 says "clear build cache
+- **Q1. Clear Docker's build cache after a branch install?** **Owner, 2026-11-09:** no — the step
+  is dropped and `deploy/README.md` stays as it is. (Why: files.md row 84 says "clear build cache
   after a branch install", but `deploy/README.md:222-225` says the install leaves "Docker's build
   cache from branch installs", that "`docker image prune` and `docker builder prune` delete those by
   hand, and also delete what other software on the machine left". `docker builder prune --force`
-  is that same machine-wide command. **Recommended default:** drop the step from fl3 and keep the
-  README as it is (a dated note on row 84 records the answer), because the command deletes cache
-  other software on the box made, the kind of shared state the owner's 2026-10-23 rule keeps agents
-  from deleting. Other answers: keep the step and change the README to say the install clears
-  every build cache on the machine; or clear only Waitron's own cache, for example by building
-  with a builder the install creates and removes — not tested here, so that answer comes back as
-  a measured step before it is built.
-- **Q2. `writeDurableHostJson` merged into `writeFileDurable`?** Already open (What it leaves out,
-  first row). **Default:** this PR keeps both.
+  is that same machine-wide command, which deletes cache other software on the box made, the kind
+  of shared state the owner's 2026-10-23 rule keeps agents from deleting.) A dated note on row 84
+  records the answer (Task 4 Step 3).
+- **Q2. `writeDurableHostJson` merged into `writeFileDurable`?** **Owner, 2026-11-09:** no — keep
+  both (What it leaves out, first row).
 
 ## After the tasks
 

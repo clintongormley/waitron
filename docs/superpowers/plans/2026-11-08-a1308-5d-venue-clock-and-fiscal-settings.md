@@ -23,8 +23,8 @@
    "decides the fiscal module at setup and restore"; tables-venuebox §7, "`nodes.filing_module` is
    chosen at setup from `fiscalTerritory`").
 4. **One edit to the fiscal pair's set-up** (item 6): A1301 kept both files unedited; this slice
-   must change five set-up lines of `write-path.e2e.test.ts` (32 and 552–555), and the owner is the one to accept
-   that (open question for the owner, stated in the pull request's first lines).
+   must change five set-up lines of `write-path.e2e.test.ts` (32 and 552–555). **Owner, 2026-11-09:**
+   accepted (no assertion changes); the pull request's second line still states it.
 
 The rest of the sweep (5e) can then be landed by the lane.
 

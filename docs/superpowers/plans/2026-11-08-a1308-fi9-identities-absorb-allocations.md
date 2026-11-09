@@ -57,7 +57,7 @@ before this cannot be restored or imported."
 1. **Name reuse.** `verifactu_identities_instalacion_uq (nif, id_sistema_informatico, numero_instalacion)`
    stays, and its three columns are `not null`, so an identity with empty allocation columns still
    holds its name; the no-delete trigger keeps every name for good. Whether the second index,
-   `fiscal_allocations_identity_uq`, is kept is the owner question below.
+   `fiscal_allocations_identity_uq`, is kept was the owner's question: dropped (below).
 2. **An empty allocation group read as an allocation.** Every reader in "Readers" either finds rows
    by `event_key` or `allocation_key` equality (an empty group never matches) or filters
    `event_key is not null`; the reviewer checks each one.
@@ -67,7 +67,7 @@ before this cannot be restored or imported."
 
 ---
 
-## Decisions this plan makes (open to the owner)
+## Decisions this plan makes
 
 - **The seven allocation columns are nullable, all empty or all set** (one CHECK). This departs from
   tables-fiscal §1.1, which marks them `not null`. Why: the fixtures that create identities
@@ -82,7 +82,7 @@ before this cannot be restored or imported."
   sets all seven, and it is the only product writer of identity rows (the search in "Why the fold is
   sound" finds no other). The weakening is stated at the columns.
   Never-reuse is not weakened: the index that refuses a used name has no nullable column (Review
-  Focus 1), and the experiment under the owner question shows it refuses a name held by a row with
+  Focus 1), and the experiment under the owner's decision below shows it refuses a name held by a row with
   an empty group.
 - **The intent record's reference** becomes `verifactu_identities/allocation/<event_key>` (it was
   `fiscal_allocations/<event_key>`; the table is gone), in the venue reader and the backup reader
@@ -100,7 +100,7 @@ before this cannot be restored or imported."
   is never reached by Start again. The log-only `rows=` count in a Start again refusal is one lower
   per activation, because the allocation row is now part of the identity row.
 
-**Owner question — keep or drop `fiscal_allocations_identity_uq`? Recommended default: drop it.**
+**Keep or drop `fiscal_allocations_identity_uq`? Owner, 2026-11-09: drop it.**
 tables-fiscal §1.1 keeps it as `(nif, id_sistema_informatico, environment, numero_instalacion)`,
 "the backstop that stops an installation number being reused in any environment". On the folded
 table it refuses nothing `verifactu_identities_instalacion_uq` does not already refuse: its columns
@@ -116,9 +116,7 @@ environment). The one difference with both present: an exact duplicate is report
 (`git grep -n "identity_uq\|instalacion_uq" -- apps packages scripts ':!**/drizzle/**'` finds
 comments, a test comment and `scripts/schema-constraints.test.ts`'s list). Its backstop role held
 while the allocation lived in a separate append-only table that could outlive a deleted identity;
-with the no-delete trigger, `instalacion_uq` does that job. The builder takes the default unless the
-owner answers otherwise before Task 1. Keeping it is one schema line, one unique case and one
-protection-list line (`extra index verifactu_identities_identity_uq`).
+with the no-delete trigger, `instalacion_uq` does that job. The builder drops it.
 
 ## What it builds
 
@@ -144,7 +142,7 @@ protection-list line (`extra index verifactu_identities_identity_uq`).
   (was `fiscal_allocations_allocation_uq`); `verifactu_identities_identity_uq` only if the owner
   keeps it; kept: `verifactu_identities_numero_ck`, `_instalacion_uq`, `_activo_uq`. Empty groups do
   not collide on the two new indexes (SQLite treats nulls in a unique index as distinct).
-- Triggers in `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql` (fi6 creates the file):
+- Triggers in `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql` (fi4a creates the file; fi6 and fi7 add to it):
 
   ```sql
   CREATE TRIGGER verifactu_identities_guard_update BEFORE UPDATE ON verifactu_identities
@@ -491,8 +489,8 @@ trigger"); README "Additions of 6 November 2026" for the no-delete trigger.
 
 ## Needs
 
-fi8; fi6 (creates `triggers/fiscal-verifactu.sql` and `trigger-refusals.ts`). The Cloud lane's
-fixture change, in step. The owner's answer on the second unique index, or its default.
+fi8; fi6 (adds to `triggers/fiscal-verifactu.sql` and `trigger-refusals.ts`, which fi4a creates). The Cloud lane's
+fixture change, in step. (The second unique index is dropped: owner, 2026-11-09.)
 
 **Landed by: owner.**
 

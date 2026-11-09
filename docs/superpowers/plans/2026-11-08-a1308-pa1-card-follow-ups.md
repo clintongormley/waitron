@@ -55,7 +55,7 @@ not depend on pa1–pa4 (a different migration set) and may be built in any gap.
 
 ## Area files for the package move
 
-The CI package move (agreed 2026-11-08, design not written; order from the build order's "Order of areas", proposed, the owner decides) takes each area's
+The CI package move (agreed 2026-11-08, design not written; order from the build order's "Order of areas", the owner accepted the proposed order on 2026-11-09) takes each area's
 `apps/server/src` files into a package of its own. Not planned here. The files that belong to this
 area, read at `a086eedfb7`:
 

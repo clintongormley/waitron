@@ -25,8 +25,8 @@ starting migrations. Nine pull requests, in this strict order (four landed by th
 | [5b](2026-11-08-a1308-5b-venue-document.md) | The venue document (`settings.venue`): name and address | lane | 5a, 1b-i, 1b-ii |
 | [5c](2026-11-08-a1308-5c-languages-and-holiday-area.md) | Receipt languages (with the language triggers and the §8.2 timing), content languages and the holiday area join the venue document | lane | 5b |
 | [5d](2026-11-08-a1308-5d-venue-clock-and-fiscal-settings.md) | The venue's clock (time zone, day start), fiscal territory and operation description leave `locations`; the fiscal pair stops reading a location | **owner** | 5c |
-| [5e](2026-11-08-a1308-5e-floor-and-device-location-columns.md) | `location_id` leaves the floor, kitchen, printing, device, order, refund and join tables; the default menu becomes a flag on `catalogues` | lane (the owner may take it: refund trigger) | 5d, 4a-ii |
-| [5f](2026-11-08-a1308-5f-backups-without-venue-id.md) | Archives name no venue id; the fiscal recovery-pack check; `nodes` loses `location_id`; the live-venue guard reads the venue document | **owner** | 5e, the owner's answer to the venue-id design's question 6 |
+| [5e](2026-11-08-a1308-5e-floor-and-device-location-columns.md) | `location_id` leaves the floor, kitchen, printing, device, order, refund and join tables; the default menu becomes a flag on `catalogues` | lane (owner, 2026-11-09) | 5d, 4a-ii |
+| [5f](2026-11-08-a1308-5f-backups-without-venue-id.md) | Archives name no venue id; the fiscal recovery-pack check; `nodes` loses `location_id`; the live-venue guard reads the venue document | **owner** | 5e |
 | [5f-ii](2026-11-08-a1308-5f-ii-invoice-path-parameters.md) | The unread `cfg` parameters on the invoice path go | **owner** | 5f |
 | [5g](2026-11-08-a1308-5g-cloud-venue-id.md) | Cloud assigns the venue's id (pairing v2); the bucket stream and recovery kit name no venue id | **owner**, with the Cloud lane | 5f-ii, the Cloud lane's plan and pull request |
 | [5h](2026-11-08-a1308-5h-locations-drop.md) | `locations` and `venueLocationId` go; the whole-tree check | lane | 5g |

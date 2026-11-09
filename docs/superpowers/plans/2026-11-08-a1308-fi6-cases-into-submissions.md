@@ -79,7 +79,8 @@ before this cannot be restored or imported."
 - `verifactu_submissions_resolution_ck`: `(case_resolved_at is null) = (case_resolved_by is null) and (case_resolved_at is null) = (case_resolution_action is null) and (case_resolved_at is null) = (case_resolution_key is null) and (case_resolved_at is null or case_opened_at is not null) and (case_remedy_registro_id is null or (case_resolved_at is not null and case_remedy_registro_id <> registro_id))`.
 - Unique `verifactu_submissions_resolution_key_uq (case_resolution_key)`.
 - Partial index `verifactu_submissions_case_idx (case_opened_at) where case_opened_at is not null`.
-- `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql` (new; slice 1a's command appends a set's
+- `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql` (created by fi4a for its one history
+  trigger, owner 2026-11-09; this plan appends to it; slice 1a's command appends a set's
   `<package>/triggers/<set>.sql`, [1a](2026-11-08-a1308-1a-baseline-rebuild.md):60), two statements:
 
   ```sql
@@ -98,7 +99,7 @@ before this cannot be restored or imported."
   BEGIN SELECT RAISE(ABORT, 'verifactu_submissions: a submission row is never deleted'); END
   ```
 
-  The refusal texts are constants in a new `packages/fiscal-verifactu/src/trigger-refusals.ts`,
+  The refusal texts are constants in `packages/fiscal-verifactu/src/trigger-refusals.ts` (created by fi4a),
   imported by `scripts/behavioural-triggers.test.ts` like core's (`:9-29`), each with a comment
   saying why: the case and its resolution are evidence of what a person did about a filing; the row
   is the record's outbox, and deleting it silently drops a legal filing (the A805 decision for
@@ -144,7 +145,7 @@ before this cannot be restored or imported."
   entries, backup links (`backup-verification-history.ts:432-434`).
 - Measured: tables-fiscal §8 item 2, and item 5 for `verifactu_submissions`.
 
-**Decisions this plan makes** (open to the owner):
+**Decisions this plan makes** (confirmed by the owner, 2026-11-09):
 
 - *A remedy request names the case by its record:* the body field `caseId` becomes
   `caseRegistroId` (`record-remedy-http.ts:37-41`, `record-remedy-corrective-http.ts:79-87` and the
@@ -227,8 +228,11 @@ inserts above).
 ## Files
 
 **Create**
-- `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql`, `src/trigger-refusals.ts`.
 - `packages/fiscal-verifactu/src/filing-case-plans.test.ts` (the conflict check's plan).
+
+**Modify (fi4a created them)**
+- `packages/fiscal-verifactu/triggers/fiscal-verifactu.sql`, `src/trigger-refusals.ts`: this plan's
+  two triggers and their constants go after fi4a's history trigger.
 
 **Modify (product)**
 - `packages/fiscal-verifactu/src/schema/verifactu-submissions.ts` (columns, CHECKs, indexes),

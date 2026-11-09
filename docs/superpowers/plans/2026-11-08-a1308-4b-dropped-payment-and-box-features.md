@@ -63,9 +63,18 @@ cannot be restored or imported." (rules §2).
 1. **A real box's card outcome.** No production path may be found that wrote `accepted_offline`,
    `settled` or `declined` payment rows, called `forward()`, or mounted `StripeOnDeviceProvider`.
    Task 1 step 1 re-runs the greps; a hit is a stop, not a fix.
-2. **A bill payment body that still carries `allowOffline`.** After the change it is ignored, not
-   refused (the refusal served a feature that is gone). Task 2 pins that a card bill payment with
-   `allowOffline: true` is paid online exactly as one without it.
+2. **A pay request that still carries `allowOffline`.** **Owner, 2026-11-09:** "let's remove the
+   flag" — it is deleted everywhere, with no special handling: the server treats it like any other
+   field it does not know. What that is, read on `origin/main` at `5ed6b4dc06`: both pay routes read
+   only the fields they name and refuse none they do not. The bill payment parser
+   (`parseRequest` and `parseAsk`, `apps/server/src/bill-payments-api.ts:75-100`, `:114-153`)
+   refuses only a named field with a bad value, and a reader-only field (`readerOnly`, `:123`,
+   `:150-151`) on a payment that is not a reader one; the till's pay route reads the body with
+   `readJsonBody` and checks named fields (`apps/server/src/till-api.ts:1875-1900`). So once
+   `allowOffline` leaves `readerOnly` and its refusal (`:139-141`) goes, a request that still sends
+   it is paid as if the field were absent. No test is kept or added for the old flag: no existing
+   case on these routes asserts the general unknown-field behaviour (`git grep -n -i "unknown field"`
+   over the bill-payment and till-sale suites finds none), so there is nothing of that kind to keep.
 3. **The receipt language.** Removing the override must not move a receipt's language: the
    receipt-language suite keeps every receipt assertion (Task 5).
 4. **A Spanish venue in an area with its own language (Barcelona).** The display language stays
@@ -229,12 +238,12 @@ Estimated, from the greps above (not measured on a built branch):
 | | Counted (hand-written) | Not counted |
 | --- | --- | --- |
 | Production code | ~150 | — |
-| Tests (new and re-pointed) | ~230 | — |
+| Tests (new and re-pointed) | ~210 (no `allowOffline` case, owner 2026-11-09) | — |
 | Docs and backlog | ~50 | — |
 | Pure deletions | — | ~3,000 (bundle files ~930; policy and offline files ~400; offline branches in providers and store ~350; their tests ~1,000; ~120 `invoiceLocales` test lines; till and dashboard ~150) |
 | Script output | — | ~38 lines (alert sample code) |
 | Generated | — | payments' `0000_baseline.sql`, `meta/*`, the epoch file |
-| **Total counted** | **~430** | |
+| **Total counted** | **~410** | |
 
 That is under the ~1,000 cap, so the three removals stay one pull request, as the build order
 lists them. Time: about 3 hours, most of it deletion and test runs.
@@ -366,7 +375,7 @@ Stop point 6.
   → "tip".
 
 **Bill payments** (same decision): `apps/server/src/bill-payments.card.test.ts`, the refusal of
-`allowOffline: true` (270-287) becomes Task 2's "paid exactly as one without it".
+`allowOffline: true` (270-287) is deleted with the flag (Review Focus 2); no case replaces it.
 
 **The display-language override** (design `environment.md` §1, "What the display-language
 deletion reaches"): the cases Task 5 steps 4–5 name.
@@ -539,16 +548,13 @@ git grep -n -E "provider\.forward\(|card\.forward\(|\.forward\(now|new StripeOnD
 - Produces: `IntegratedPayRequest` without `allowOffline`; `CollectCardDetail` without
   `allowOffline`; `CardDraft` = `{ tip: string; simulation: "captured" | "declined" }`.
 
-- [ ] **Step 1: Write the failing test** in `apps/server/src/bill-payments.card.test.ts`: replace
-  the case at 270-287 (which expected `allowOffline: true` refused with
-  `params: { field: "allowOffline" }`) with
-  `it("pays a card bill payment that still sends allowOffline exactly as one that does not")`:
-  the same request with `allowOffline: true` answers the same status and payment state as without
-  it. Delete the table rows at 462-466 (`allowOffline: "yes"`, offline consent on cash). Reason: the
-  refusal guarded a feature that no longer exists (Review Focus 2).
-- [ ] **Step 2: Run it to see it fail.**
-  `pnpm --filter @waitron/server exec vitest run src/bill-payments.card.test.ts` — FAIL with
-  `management.request_invalid` (or this route's refusal code) on `allowOffline`.
+- [ ] **Step 1: Delete the flag's cases** in `apps/server/src/bill-payments.card.test.ts`: the case
+  at 270-287 (which expected `allowOffline: true` refused with `params: { field: "allowOffline" }`)
+  and the table rows at 462-466 (`allowOffline: "yes"`, offline consent on cash). No case replaces
+  them (owner, 2026-11-09; Review Focus 2). This task removes behaviour and adds none, so there is no
+  failing test to write first.
+- [ ] **Step 2: Run the suite before the change** to record its `Tests` count:
+  `pnpm --filter @waitron/server exec vitest run src/bill-payments.card.test.ts` — PASS.
 - [ ] **Step 3: Change the code.**
   - `bill-payments-api.ts:123` drops `"allowOffline"`; delete 138-141 and the comment above them.
   - `till-sale.ts`: delete `allowOffline` (600-602) and its pass-through (1423); `1431` and `2109`

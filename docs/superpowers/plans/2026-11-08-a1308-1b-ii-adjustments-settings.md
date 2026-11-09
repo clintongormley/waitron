@@ -65,7 +65,7 @@ cannot be restored or imported." (rules §2; the export format also moves to N).
 | Left out | Who takes it |
 | --- | --- |
 | Role ids instead of role names in `billApproverRoles`, and clearing a deleted role from it | A1002 cut 2 (tables-fiscal §2: "role ids once A1002 lands"); it now changes the document's checker and the import's id rewrite instead of a CHECK |
-| Recording a save of the limit in `activity_log`; only the latest saver and time are kept. tables-fiscal §3 expects saves "logged however the shared settings table logs saves"; README §5 U11 does not name such a kind | a follow-up the owner may want, after slice 2; not planned |
+| Recording a save of the limit in `activity_log` (**owner, 2026-11-09:** yes) | [slice 2](2026-11-08-a1308-2-activity-log.md), Task 4, through `saveSettings`, so the `adjustments` document is covered with every other |
 | Importing an export whose document is at another version (no conversion before go-live, CLAUDE.md §3) | the first document shape change after go-live |
 | Every other document | each area's slice; core's in slice 5 |
 | `adjustments.comped_extras`, `adjustments.splits` (tables-fiscal §1.4) | the payments-and-adjustments area slice |

@@ -15,7 +15,8 @@ already carries on above every number given out; the handover test
 `"M2's next order number is above every number given out, and none repeats"`
 (`apps/server/src/handover-controlled.e2e.test.ts:2157`) holds it. This PR changes **where** the
 number is read from (the bills, not a second table) and adds the database guard; it does not change
-which number a bill gets.
+which number a bill gets. **Owner, 2026-11-09:** keep #2570's behaviour (including that a restore
+which lost the latest bills can give their numbers out again, as today).
 
 **Architecture:** One starting-migration change to core's set (slice rules §2), made through the
 rebuild command. `allocateOrderNumber` keeps its name and moves from an upsert on the counter to a
@@ -205,7 +206,7 @@ Not this area's: `kitchen*.ts`, `pass-*.ts`, `station-*.ts`, `table-actions.ts`,
 
 **Where the move sits in this sequence:** between os1 and os2. os1 touches few server files; os2 to
 os11 rewrite most of the files above, so moving them first means each later PR edits them in their
-final package. If the build order's "Order of areas" (proposed; the owner decides) places this area's
+final package. If the build order's "Order of areas" (owner, 2026-11-09: the proposed order) places this area's
 move later, it goes after os11 and before os12, never in
 the middle of os2–os11. The move is not planned here.
 

@@ -48,19 +48,36 @@ before this lands holds sealed payloads in the old shape, which the narrowed pur
 state until the owner saves again. No conversion code (CLAUDE.md §3). The pull request description
 says so.
 
-## A consequence the design did not spell out
+## What another box sees after a takeover
 
-`venue_credentials` is classified `local` (one box's own rows, never copied to another box,
-`packages/db/src/classification.ts:443`), but `settings` is `state` (copied to a standby,
-[1b-i](2026-11-08-a1308-1b-settings-table.md) Task 1). So after this, a standby's copy of `venue.db`
-carries the primary's backup choices without the bucket keys. After a promotion the new primary reads
-those choices; a bucket destination then fails as "settings cannot be read" until the keys are
-entered again, and a local folder destination names a folder on the new box's disk. This plan builds
-the design as written and adds two sentences saying what to do about it to the servers guide,
-`apps/server/src/guide/en/servers.md` and its Spanish twin `es/servers.md`, at the end of the section
-"Carry on as the main box" (`{#carry-on}`): after a box becomes the main box, open Backups and enter
-the bucket keys again, and check each folder is on this box. It is listed as an open question for the
-owner.
+**Owner, 2026-11-09:** answered by measurement — the keys already arrive; no change needed. (The
+question was whether a box that takes over gets the backup choices without the bucket keys.)
+
+What was run, on `origin/main` on 2026-11-09 (throwaway probes, not committed): a probe in
+`apps/server/src/handover-controlled.e2e.test.ts`, plus restore probes from an archive and from the
+bucket copy.
+
+- **Controlled handover.** The final copy is a whole-file copy of `venue.db`
+  (`apps/server/src/handover-capture.ts:110-111`). The new box held `tenant_credentials`'
+  `backup.stream` row and read the bucket settings (200, `configured: true`, the saved
+  `accessKeyId`), because the key ring reaches a spare when it joins (`apps/server/src/adopt.ts:163-168`,
+  `mirror-bundle.ts:227`).
+- **Restore from an archive or from the bucket copy.** The archive's key ring replaces the fresh
+  box's, and the bucket settings read back correctly. Control: a read with the box's own original
+  ring gave `credentials.decrypt_failed`. The archive carries `secrets/secrets.env`
+  (`state-secrets.ts:16-23`); the bucket copy carries it inside its sealed state bundle.
+- **Emergency promotion of a standby** does not exist yet: joining copies the ring but no venue
+  rows (`finish-adoption.ts:28-31`), so it has no gap of its own. The copy that A947 slice 3b builds
+  must copy the whole `venue.db`, as the handover does.
+- The `local` class on the credentials table (`packages/db/src/classification.ts:443`) is only a
+  label: the one helper that selects tables by class has no production caller
+  (`packages/sync-enrolment/src/classification.ts:51-56`).
+
+So the bucket keys arrive usable on a handover and on a restore. The one true consequence: a
+local-folder destination names a folder on the old box's disk. This plan adds one sentence to the
+servers guide, `apps/server/src/guide/en/servers.md` and its Spanish twin `es/servers.md`, at the end
+of the section "Carry on as the main box" (`{#carry-on}`): after a box becomes the main box, open
+Backups and check each folder is on this box.
 
 ## Global Constraints
 
@@ -112,7 +129,7 @@ owner.
 | Left out | Who takes it |
 | --- | --- |
 | Backends, Cloud as a target, how backups run | the backup-service part |
-| Recording backup-settings saves in `activity_log` | not in A1308 (README §5 U11) |
+| Recording backup-settings saves in `activity_log` | [slice 2](2026-11-08-a1308-2-activity-log.md), Task 4 (owner, 2026-11-09): every `saveSettings` call records one, so a save of `settings.backup` is recorded with no code here |
 | A per-module `verifyRestoredData` check of the document | not needed: core's row comparison covers `settings` (tables-venuebox §2.4) |
 
 ## Interfaces
@@ -173,13 +190,13 @@ export function readStreamSettingsIn(tx: Transaction, ring: KeyRing): Promise<St
 - Tests whose set-up seals the old payloads: `git grep -l -E "purpose: \"backup\.(stream|archive)\"|STREAM_PURPOSE|ARCHIVE_PURPOSE|streamSettingsPayload|writeArchiveSettings" -- '*.test.ts' 'apps/server/src/testing/*.ts'`
   (includes `testing/old-stream-credential.ts`, `testing/stream-loop-scenario.ts:333`,
   `testing/stream-pause-scenario.ts:347`).
-- Docs: `apps/server/src/guide/en/servers.md` and `es/servers.md` (the two sentences above); `docs/developers/conventions-data.md` where it lists the sealed purposes.
+- Docs: `apps/server/src/guide/en/servers.md` and `es/servers.md` (the one sentence above); `docs/developers/conventions-data.md` where it lists the sealed purposes.
 
 ## Size
 
 Counted, hand-written: about 260 lines of code (document 70, archive read/write 80, stream read/write
 50, routes 35, meta and live type 25) and about 450 lines of tests (document 60, archive 130, stream
-120, the standby case 40, evidence and pack 50, re-pointed fixtures 50), plus 20 lines of guide.
+120, the standby case 40, evidence and pack 50, re-pointed fixtures 50), plus about 6 lines of guide (one sentence, English and Spanish).
 About 3 hours.
 
 ## Finish line
@@ -266,8 +283,10 @@ EQUAL. Any line is a stop.
     (`backup-recovery-pack-api.ts:241`), still sees the pack as out of date. Same for the archive:
     `writeArchiveSettings` with only the bucket destination's `bucket` changed re-seals
     `backup.archive` and mints a new archive `revision`.
-  - `"a standby holding the copied document without keys"` — on a box whose singleton role is not
-    primary, with the document present and neither credential sealed: `GET /api/backup/status` and
+  - `"a bucket destination whose keys cannot be opened"` — a handover and a restore both carry the
+    keys usable (measured 2026-11-09, B7), so this case stands for a sealed pair the box cannot open
+    (A1273's rotation risks) or a missing one, not for a standby's copy. On a box whose singleton
+    role is not primary, with the document present and neither credential sealed: `GET /api/backup/status` and
     `GET /api/backup/stream` answer the screens' existing "settings cannot be read" state
     (`backup.archive_settings_invalid` reason `keys`; the stream's unreadable-credential code), and
     neither the backup supervisor nor the stream host raises an alert, because neither runs off the

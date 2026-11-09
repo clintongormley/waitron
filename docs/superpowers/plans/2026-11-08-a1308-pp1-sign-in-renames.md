@@ -69,7 +69,7 @@ pp12, slice 0's year-of-trading bench. So the lane builds pp1–pp8, then other 
 
 ## Area files for the package move
 
-The CI package move (agreed 2026-11-08, design not written; area order from the build order's "Order of areas", proposed, the owner decides) will move this
+The CI package move (agreed 2026-11-08, design not written; area order from the build order's "Order of areas", the owner accepted the proposed order on 2026-11-09) will move this
 area's server code into its own package. These `apps/server/src` files belong to people and working
 time, each with its `*.test.ts` siblings (`<name>.test.ts`, `<name>.*.test.ts`):
 

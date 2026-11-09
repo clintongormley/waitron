@@ -1101,6 +1101,10 @@ vault rows and its own signing key under the ring's current version (`rotateCred
 joined. From reading, not run: a spare holding a copy of `venue.db` taken after a rotation could
 not open the rows sealed under the new version. Wanted: a way for the ring to reach the spare, or a
 rule that a rotation re-joins it.
+Two related risks, found by reading only, not run (2026-11-09): before a handover the new box
+compares key-ring version numbers, not the keys themselves (`handover-manifest.ts:166-168`); and a
+ring rotated after the bucket copy's sealed state bundle was last refreshed could leave a bucket
+restore unable to read newer rows (`credentials.key_version_unknown`).
 
 ## A1274: a lost node.db beside an intact venue.db reads as a sole primary
 

@@ -24,9 +24,9 @@ go into A1308." The A805 audit's record: `docs/developers/grants-retirement-audi
 
 **Base:** `main` with pa1 landed. Line numbers read at `a086eedfb7`.
 
-**Who lands:** **the owner**. That rule is the watcher's word of 6 November, recorded in the
-design's additions table (README, "Additions of 6 November 2026", row `payments`), not a recorded
-owner decision; the plan keeps it owner-landed as that row says. The
+**Who lands:** **the owner**. That rule was the watcher's word of 6 November, recorded in the
+design's additions table (README, "Additions of 6 November 2026", row `payments`); **owner,
+2026-11-09:** confirmed — the owner lands pa2, and every delete of a payment is refused. The
 lane opens the pull request after pa1 lands and goes on to pa3 without waiting; nothing later in
 this area needs this one.
 

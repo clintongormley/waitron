@@ -26,10 +26,10 @@ inputs in `@waitron/core`, so the compiler finds every caller that relied on the
 
 **Pull request's first line:** "Every venue is reset: core; backups and exports from before this
 cannot be restored or imported." (rules §2). Second line: "FISCAL: changes where the operation
-description sent to AEAT is read; owner lands." Then the two owner questions below, before anything
+description sent to AEAT is read; owner lands." Then the two owner decisions below, before anything
 else.
 
-## Owner questions (in the PR's first lines)
+## Owner decisions (in the PR's first lines)
 
 1. **The readiness test sale.** `packages/provisioning/src/fiscal-readiness-runner.ts:110-139` records
    a test sale that goes to AEAT's test service, with no description: today it takes the venue's
@@ -38,13 +38,13 @@ else.
    `args.contribution.venueFields?.defaults?.operationDescription`. For a setup made in the setup
    app the bytes stay identical, because the app never sends the field and setup fills in that same
    default (`apps/server/src/setup-api.ts:504-509`); a command-line setup that typed its own
-   description would send the default instead. The plan builds the proposal; the owner confirms or
-   names another text.
+   description would send the default instead. **Owner, 2026-11-09:** the proposal — the readiness
+   test sale uses the fiscal contribution's default.
 2. **The configured default as a fallback.** `readSaleOperationDescription` still fills an empty
    department description with the fiscal contribution's default (item 2). The design's "one home"
-   could be read as deleting that too; keeping it is itself an owner choice, and this PR keeps it
-   unless the owner says otherwise (then an empty description refuses
-   `department.operation_description_required`, which today happens only with no default).
+   could be read as deleting that too. **Owner, 2026-11-09:** keep the fallback, so a sale in a
+   department with no description still sends the default (an empty description refuses
+   `department.operation_description_required` only when there is no default, as today).
 
 ## What it builds
 
@@ -84,7 +84,7 @@ else.
      blank text (`text()`, `record-remedy-corrective-http.ts:21-24`; its test at `:522`) — so slice
      5d's note that this path "may carry none" does not hold;
    - the readiness test sale (`packages/provisioning/src/fiscal-readiness-runner.ts:112`) passes the
-     contribution's default (owner question 1);
+     contribution's default (owner decision 1);
    - scripts and helpers that relied on the venue's copy pass the text their venue fixture stored at
      the base: `apps/server/scripts/demo-seed/seed-sales.ts:300` and `scripts/testing/sale.ts:47`
      (the demo venue's description), `apps/server/src/testing/backup-verification-fixture.ts:216`
@@ -196,8 +196,7 @@ vb4's simulated lines.
 
 1. Any filed record's `DescripcionOperacion` text differs from the base in any suite: a test call
    was given different text from its venue fixture. (The readiness test sale is the one named
-   exception, owner question 1.)
-4. The owner answers either question differently from the proposal: rebuild that part as answered.
+   exception, owner decision 1.)
 2. 5d left the venue's copy somewhere item 3 does not name.
 3. A product path reaches a record function without a description (a compile error outside tests
    and scripts that item 4 does not list).

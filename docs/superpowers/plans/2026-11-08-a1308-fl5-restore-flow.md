@@ -32,9 +32,8 @@ A1415's restart check (`restartUncommittedPlacement`, `:450-486`, used at `:606-
 `:639`; `6d763da99a`, #2587, whose description says "This fiscal repair is **for the owner to
 land**"). A phase moved at the wrong moment re-runs or skips that activation, with its series name.
 
-**Blocked on the owner, through fl1.** fl1 waits for A1379 pull request 2, which waits for the
-owner's answers to Questions 1-3 of
-[`2026-11-06-a1379-setup-start-again.md`](2026-11-06-a1379-setup-start-again.md).
+**Waits for fl1**, which waits for A1379 pull request 2 to land (its questions were answered by
+the owner on 2026-11-09, [`2026-11-06-a1379-setup-start-again.md`](2026-11-06-a1379-setup-start-again.md)).
 
 **First line of the pull request:** "A restore staged before this change and not yet run is
 forgotten; stage it again (pre-live, CLAUDE.md §3 last data rule)."
@@ -133,8 +132,9 @@ any code changes; Task 3 kills the new code at each step of the flow.
    code), caught at `:687-693`, so the request is deleted and that start fails once; an unreadable
    rebuild marker still runs the first start, with source `unknown`
    (`rebuild-first-start.ts`, `sourceOf`, "Only a restore writes the marker, so a body that cannot
-   be read still means one happened"). One record cannot keep both answers; Owner questions Q2
-   holds the choice and its default.
+   be read still means one happened"). One record cannot keep both answers; the owner chose (2026-11-09,
+   Owner decisions Q2): no restore runs, the start logs `restore.flow_unreadable`, and a first start
+   is treated as pending with source `unknown`.
 3. `stageRestoreRequest` (`:192-283`) publishes a `staged` flow (attachments as today's files,
    `:249-257`). `runHeld` follows the table in Global Constraints through `updateRestoreFlow`.
    `writeValidated` (`restore.ts:535-549`) records the first start through a new dependency
@@ -240,11 +240,9 @@ Rules §5, plus:
 
 ## Needs
 
-- fl1 (which itself waits for A1379 pull request 2 and so for the owner's answers to that plan's
-  Questions 1-3), fl2 (scratch, for the publish and the ending) and fl3 (durable writes) landed.
+- fl1 (which itself waits for A1379 pull request 2 to land), fl2 (scratch, for the publish and the ending) and fl3 (durable writes) landed.
 - A1415 has landed (`6d763da99a`, #2587) and is already in this plan's base; so has A1390
   (`af36b82132`, #2540). Nothing to wait for; both are kept (Global Constraints).
-- Owner questions Q2 answered (or its default taken).
 
 ## Review Focus
 
@@ -291,7 +289,8 @@ removed after; CLAUDE.md §4 "Measure the old version in a throwaway worktree"):
 - [ ] **Step 1:** Tests in `restore-flow.test.ts`: `"publish makes the folder appear whole"` (a
   failing `attach` leaves no `flows/restore` and a folder under `scratch/`); `"publish replaces an
   existing flow"`; `"update rewrites only record.json"`; `"dropAttachments keeps the record"`; `"end
-  leaves nothing in flows/"`; `"an unparseable record"` per Q2's answer. In
+  leaves nothing in flows/"`; `"an unparseable record runs no restore, logs restore.flow_unreadable and leaves a first start
+  pending with source unknown"` (Q2). In
   `restore-flow-phase.test.ts`: each phase, a missing folder (null) and an unparseable record
   (`"unreadable"`).
 - [ ] **Step 2:** Run; fail. Implement per the interface above, using `writeFileDurable`,
@@ -340,20 +339,22 @@ removed after; CLAUDE.md §4 "Measure the old version in a throwaway worktree"):
   code to `errors.ts` and its words to `sharedRefusal`.
 - [ ] **Step 3:** The docs in Files. Run the guards. `pnpm format:check`. Commit.
 
-## Owner questions
+## Owner decisions
 
-- **Q1. Who lands.** This plan now says the owner lands it (header). Recorded here so the watcher
-  routes the pull request to the owner rather than letting the lane merge it.
-- **Q2. What does a start do with a `record.json` it cannot parse?** Today the two files answer
-  differently (What it builds 2): a malformed request is deleted and that start fails once; an
-  unreadable rebuild marker still runs the first start. **Recommended default:** no restore runs;
+- **Q1. Who lands.** **Owner, 2026-11-09:** the owner lands it (header; confirmed with the
+  coordinator's routing list). Recorded here so the watcher routes the pull request to the owner
+  rather than letting the lane merge it.
+- **Q2. What does a start do with a `record.json` it cannot parse?** **Owner, 2026-11-09:** the
+  default below. Today the two files answer differently (What it builds 2): a malformed request is
+  deleted and that start fails once; an unreadable rebuild marker still runs the first start.
+  **Chosen:** no restore runs;
   the start logs `restore.flow_unreadable` and treats a first start as pending with source
   `unknown`, then the first start's completion ends the flow. Running a first start on a box whose
   restore never placed anything issues a new leaf and raises the membership term by one, which
   every retried first start already does (`rebuild-first-start.ts:96-103`, "Each re-run issues
   another leaf and, once the term has been stored, moves the term up again"). The record is written
   through `writeFileDurable` (a rename), so a crash leaves the old record or the new one, not a torn
-  one. Other answer: delete the flow and fail the start once, as today's request does; that drops a
+  one. Not chosen: delete the flow and fail the start once, as today's request does; that drops a
   pending first start.
 
 ## After the tasks

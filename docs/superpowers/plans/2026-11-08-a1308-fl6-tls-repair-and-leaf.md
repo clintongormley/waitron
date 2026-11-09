@@ -31,7 +31,8 @@ Lines at `649b7576e0`.
 **Who lands:** the lane (no fiscal file or value).
 
 **Depends on A1379 part 2?** Through fl1–fl3: this slice touches no first-setup file, but fl1–fl5
-all wait for A1379 part 2 (the owner's three questions, `docs/backlog/setup.md:575`), so fl6 does too.
+all wait for A1379 part 2 to land (its three questions were answered by the owner on 2026-11-09), so
+fl6 does too.
 
 **First line of the pull request:** "On its first start after this change a box opens the
 connection repair page, because its certificate file has a new name and a fresh certificate is

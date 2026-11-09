@@ -329,7 +329,9 @@ rows for each renamed table ("unchanged … The trigger pair is rebuilt from the
    identity or series a sale uses: any of fi1's record suites fails, or needs an edit beyond the map.
 3. `git grep -lw "registros_devueltos\|envios_devueltos" -- packages` finds a table: A1018 slice 11
    landed first, and the map needs its two tables (proposed `verifactu_returned_records`,
-   `verifactu_returned_submissions`) and their constraint names, which the watcher confirms.
+   `verifactu_returned_submissions`) and their constraint names, which the watcher confirms. (The
+   owner confirmed fi1's naming on 2026-11-09: names follow the renamed tables, `passesWithWork`,
+   and these two proposed names.)
 4. A fixture name in the map was already renamed to something else by an earlier slice (the
    script finds neither the old nor the map's new name): use the name on `main`, drop the pair from
    the map, and tell the watcher.

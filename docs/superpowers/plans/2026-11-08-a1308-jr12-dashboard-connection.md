@@ -24,7 +24,8 @@ while the live connection is down". An audit of every timed dashboard query (202
 run; below) found about thirty whose server answer depends on the clock, server memory or something
 outside the database: a timer-free screen would show a stale "open now", a stale menu that went live
 by time, or a stale Mailpit inbox. Those keep their timers until their server reads stop depending on
-the clock; that is beyond this part, and is listed for the owner in the part summary.
+the clock; that is beyond this part. **Owner, 2026-11-09:** confirmed — those reads keep their timers
+(in jr12, jr13 and jr14).
 
 **Spec:** [jobs.md §1 "Browsers hold one live connection" (the 30-second rule covers the dashboard too); §2 "Browsers"; §3 rows "Dashboard background re-reads", "Dashboard printer and device pairing helpers", "Till payment and receipt status re-reads", "Product image refresh"; §6 J7](../specs/2026-11-02-rationalisation/jobs.md);
 README §10 "Applied as the design" ("The 30-second silence rule applies to the dashboard as well as

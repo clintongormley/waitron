@@ -34,8 +34,10 @@ cannot be restored or imported." (rules §2).
 1. **The picture cache stays (a decision of the plan review, 2026-11-08).** Appendix §8.4 asks for
    the logo's 80 mm drawing to be timed on the reference box, and drops the cache if it takes under
    about 20 ms. A developer Mac is faster than that box, so a lane's timing cannot show the box is
-   under; the lane does not run it. `receipt_logo_rasters` is built here, and the watcher or the owner
-   runs the timing on the reference micro PC; dropping the cache would be its own later PR.
+   under; the lane does not run it. `receipt_logo_rasters` is built here. **Owner, 2026-11-09:** "We
+   can test it" — the owner runs the timing on the reference box; when the lane reaches vb5, the
+   watcher asks the owner to run it (unless the owner has already posted a result). vb5 lands with the
+   cache either way; dropping the cache would be its own later PR.
 2. `departments` gains `receipt_text` (JSON, nullable: `printAddress`, `phone`, `email`,
    `headerSubtitle`, `footerMessage`, and until vb6 `operationDescription`), `receipt_logo_image_id`
    (nullable, foreign key `departments_receipt_logo_fk` → `media_images.id`, `on delete restrict`),
@@ -107,7 +109,7 @@ Delete from `docs/backlog/architecture.md` "What A1308 retires" (`:1291-1300`) a
 | `operation_description` as a column; the venue's copy | vb6 (owner) |
 | A theme logo as a checked key | devices area (`custom_themes`) |
 | Whether the picture cache belongs to the image rather than the department (§8.4's second half) | menu and photos area; this PR keeps it on the department |
-| The §8.4 timing on the reference micro PC, and dropping the cache if it shows under about 20 ms | the watcher or the owner runs it; a drop is its own later PR |
+| The §8.4 timing on the reference micro PC, and dropping the cache if it shows under about 20 ms | the owner runs it, asked by the watcher when the lane reaches vb5 (owner, 2026-11-09); a drop is its own later PR |
 | "Half of an older receipt test can no longer fail" | 4a |
 
 ## Files
@@ -208,7 +210,7 @@ analogy with vb4's simulated lines (same table, same kinds of change), not simul
 
 ## Stop points (beyond rules §5)
 
-1. The watcher or the owner reports a reference-box timing under about 20 ms before this PR lands.
+1. The owner reports a reference-box timing under about 20 ms before this PR lands.
    The design's fallback is to drop `receipt_logo_rasters` and draw at print time (R6); do not fold
    it into this PR — finish with the cache, and the drop is planned as its own PR.
 2. A Madrid capture receipt names a logo file with no `media_images` row in its phase.

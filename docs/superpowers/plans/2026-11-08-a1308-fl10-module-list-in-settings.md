@@ -29,8 +29,8 @@ changes what a restore's recovery preview (`recovery-fiscal-selection.ts:32-39`)
 comparison (`handover-compare.ts:334`) read to decide it.
 
 **Blocked on A1379 part 2, through fl8a.** This slice needs fl8a (Start again's list), which needs
-fl7 and A1379 pull request 2; part 2 waits for the owner's answers to the three questions in
-`docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md` (`docs/backlog/setup.md:575`).
+fl7 and A1379 pull request 2; the owner answered part 2's three questions on 2026-11-09
+(`docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md`), so it waits only to land.
 
 **First line of the pull request:** "Every venue is reset: the module list moves into venue.db;
 backups and exports from before this cannot be restored."

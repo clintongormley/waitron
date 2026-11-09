@@ -102,8 +102,8 @@ cannot be restored or imported." (rules §2).
 
 | Left out | Owner |
 | --- | --- |
-| Settings saves recorded in `activity_log` | not in A1308 ([1b-i](2026-11-08-a1308-1b-settings-table.md), "What it leaves out") |
-| Non-secret fields leaving `venue_credentials` (SMTP `from`, Stripe's return addresses, bucket details) | [env4](2026-11-08-a1308-env4-unsealed-settings.md) |
+| Settings saves recorded in `activity_log` | [slice 2](2026-11-08-a1308-2-activity-log.md), Task 4 (owner, 2026-11-09): every `saveSettings` call records one, so nothing here |
+| Non-secret fields leaving `venue_credentials` (SMTP `from`; bucket details in env6) | [env4](2026-11-08-a1308-env4-unsealed-settings.md); Stripe's return addresses stay sealed (owner, 2026-11-09, deferred to the Stripe work) |
 | A screen that shows these entries | follow-up (README U11) |
 | `incidents.acknowledged_by`'s key, `node_membership.term` | vb3 |
 

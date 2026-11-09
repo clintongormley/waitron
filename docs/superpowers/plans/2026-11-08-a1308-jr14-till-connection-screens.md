@@ -6,7 +6,7 @@
 
 **Goal:** The till's remaining timed re-reads gain jr13's connection: each re-reads at once when its
 data changes; a timer whose server answer depends on rows alone goes quiet while the connection is
-up; a timer whose answer depends on the clock keeps running.
+up; a timer whose answer depends on the clock keeps running (owner, 2026-11-09: confirmed).
 
 **Architecture:** jr13's `liveGate` wraps each timer; each keeps its read and its own in-flight
 guard. Kitchen displays have no person signed in, which is why the device-session mount exists

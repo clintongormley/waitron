@@ -27,10 +27,10 @@ brief's rule that a change to which fiscal state file a restore or promotion rea
 (`handover-place-copy.ts:278-285`) and the recovery pack (`recovery-document-evidence.ts`) read the
 fiscal hour history; the seat hooks are in `packages/fiscal-verifactu`. The PR header says so.
 
-**Blocked on A1379 part 2, and so on the owner.** This slice needs A1379 pull request 2 (the seat
-hooks it deletes lose their last caller there, and fl8a needs it too). Part 2 waits for the owner's
-answers to the three questions in `docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md`
-(`docs/backlog/setup.md:575`).
+**Waits for A1379 part 2 to land.** This slice needs A1379 pull request 2 (the seat hooks it
+deletes lose their last caller there, and fl8a needs it too). The owner answered part 2's three
+questions on 2026-11-09 (`docs/superpowers/plans/2026-11-06-a1379-setup-start-again.md`), so it
+waits only to land.
 
 **First line of the pull request:** "Every venue is reset: a box's kept series names and restored
 hour history move to a new file; backups made before this change restore as before (their archive

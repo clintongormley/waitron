@@ -47,7 +47,7 @@ again until practice providers are switched on under Payments → Settings."
 ## Global Constraints
 
 - Defaults: `tipsEnabled: false` (today's unset `WAITRON_TILL_TIPS`, `till-config.ts:20-21`),
-  `testProviders: false` (today's unset variable, `config.ts:400-402`), `providers: {}`.
+  `testProviders: false` (today's unset variable, `config.ts:400-402`).
 - The practice switch is acted on only when the box's onboarding intent is `prepare`
   (`boot.ts:525-526`'s rule, unchanged); saving `testProviders: true` on any other box is refused.
 - Forms follow `docs/developers/design-system.md` → Forms: save stays quiet and disabled until the
@@ -63,8 +63,7 @@ again until practice providers are switched on under Payments → Settings."
 1. Two managers save the Settings tab at once: the second gets `settings.out_of_date`, keeps their
    draft, and the first one's choice stays (1b-ii's shared wording).
 2. A save of the tips switch alone must not turn off a Prepare box's practice providers (the PUT
-   replaces both switches with what the screen sent, from the same read); and env4's `providers`
-   field must survive both (the PUT keeps `providers` from the row it read).
+   replaces both switches with what the screen sent, from the same read).
 3. A till already showing a bill when tips are switched on must not accept a tip until its setup
    refreshes; the server clamps by the document it reads at payment time, so a stale till's tip is
    refused or clamped exactly as today when tips are off.
@@ -79,7 +78,8 @@ again until practice providers are switched on under Payments → Settings."
 ## What it builds
 
 1. `PAYMENTS_SETTINGS` (module `payments`, version 1, transfers `true`) with
-   `{ tipsEnabled, testProviders, providers }`; `providers` is declared now and filled by env4.
+   `{ tipsEnabled, testProviders }`. (No `providers` field: Stripe's return addresses stay sealed
+   where they are, owner, 2026-11-09, so nothing would fill it; see env4.)
 2. Tips read from the document at the three deciding sites and in the till's setup answer.
 3. A card-simulator seat: the simulator is chosen at start from the document and again after a save
    that changes `testProviders`.
@@ -93,7 +93,7 @@ again until practice providers are switched on under Payments → Settings."
 
 | Left out | Who takes it |
 | --- | --- |
-| Stripe's return addresses into `providers` | env4 |
+| Stripe's return addresses | stay sealed where they are today (owner, 2026-11-09: "Leave this for when we test Stripe"; env4) |
 | The duplicate display language in route deps (`deps.venueLocale` beside `cfg.locale`), which 4b assigned to "when `TillAppSettings` goes" | not here: folding it edits about 137 test files (`git grep -l venueLocale -- 'apps/server/src/*.test.ts'`), past the cap. Open question for the watcher: its own pull request, or the venue-and-box area's next one |
 | Recording who changed the switches in `activity_log` | not in A1308 (README §5 U11) |
 | Google sign-in moving to `settings.identity` | A646 slices 5 and 8 (`docs/superpowers/plans/2026-11-07-a646-modules-page.md:15,57,75`) |
@@ -105,8 +105,6 @@ again until practice providers are switched on under Payments → Settings."
 export interface PaymentsDocument {
   tipsEnabled: boolean;
   testProviders: boolean;
-  /** Per card provider, its settings that are not secret (env4). Keys are provider ids. */
-  providers: Record<string, Record<string, string>>;
 }
 /** module "payments", version 1, transfers true. `parse` fills a missing field with its default and
  * answers { ok: false, field } for a field of the wrong type or an unknown top-level key. */
@@ -215,14 +213,13 @@ EQUAL. A `payments` row in `settings` is data, not schema. Any line is a stop.
 - [ ] **Step 0:** record the base protection list (rules §3).
 - [ ] **Step 1: Failing cases**, describe `"PAYMENTS_SETTINGS"`, on `useVenueDb`:
   - `"reads the defaults when never saved"`: `readPaymentsSettings(db)` →
-    `{ doc: { tipsEnabled: false, testProviders: false, providers: {} }, revision: 0 }`.
-  - `"saves and reads back"`: `saveSettings(tx, PAYMENTS_SETTINGS, { doc: { tipsEnabled: true, testProviders: false, providers: {} }, expectedRevision: 0, personId: null })`
+    `{ doc: { tipsEnabled: false, testProviders: false }, revision: 0 }`.
+  - `"saves and reads back"`: `saveSettings(tx, PAYMENTS_SETTINGS, { doc: { tipsEnabled: true, testProviders: false }, expectedRevision: 0, personId: null })`
     then read → revision 1, `tipsEnabled: true`.
   - `"names the bad field"`: `PAYMENTS_SETTINGS.parse({ tipsEnabled: "yes" })` →
-    `{ ok: false, field: "tipsEnabled" }`; `parse({ providers: { stripe: { successUrl: 3 } } })` →
-    `field: "providers"`; `parse({ other: true })` → `field: "other"`.
+    `{ ok: false, field: "tipsEnabled" }`; `parse({ other: true })` → `field: "other"`.
   - `"fills a missing field"`: `parse({ tipsEnabled: true })` →
-    `{ ok: true, doc: { tipsEnabled: true, testProviders: false, providers: {} } }`.
+    `{ ok: true, doc: { tipsEnabled: true, testProviders: false } }`.
   - `"travels in a configuration export"`: `PAYMENTS_SETTINGS.transfers === true`.
 - [ ] **Step 2: Run; they fail. Step 3: Implement**; add `settings: [PAYMENTS_SETTINGS]` to the
   payments descriptor. **Step 4: Run** them and `scripts/live-subscriptions.test.ts`; pass.
@@ -289,8 +286,7 @@ EQUAL. A `payments` row in `settings` is data, not schema. Any line is a stop.
 - [ ] **Step 1: Failing cases**, describe `"payments settings routes"`, with the suite's real session
   helper:
   - `"answers the defaults"`: GET → `{ tipsEnabled: false, testProviders: false, testProvidersAvailable: false, revision: 0 }` on a Live box.
-  - `"saves tips"`: PUT `{ tipsEnabled: true, testProviders: false, revision: 0 }` → revision 1;
-    the row's `providers` is unchanged from what was stored before (seed `{ stripe: { a: "b" } }` first).
+  - `"saves tips"`: PUT `{ tipsEnabled: true, testProviders: false, revision: 0 }` → revision 1.
   - `"refuses an out-of-date save"`: two PUTs from revision 0 → the second is 409
     `settings.out_of_date` with `{ module: "payments", revision: 1 }`; the stored doc is the first.
   - `"refuses practice providers off a Prepare box"`: Live box, PUT `testProviders: true` → 409

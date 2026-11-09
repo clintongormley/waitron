@@ -177,6 +177,10 @@ sender guards on status takes effect before the transport runs (stop point 2).
 
 ## Decisions this plan makes
 
+**Owner, 2026-11-09:** decisions 1 and 2 confirmed (box alerts retry after 1, 1, 5 and 15 minutes,
+then hourly for up to a day; mail that never reached the server is retried, mail handed over and
+then lost is never sent twice). Account mail's own waits are 3a-ii's (1, 2, 4 and 10 minutes).
+
 1. **Retry waits.** `attendance_question`: every 15 minutes until its `not_after`, today's
    `RETRY_MS` (`packages/workforce/src/attendance-mail.ts:8`): `retryDelaysMs` is 672 entries of
    900 000 (7 days / 15 minutes), `longestWaitMs: 900_000`. `box_alert`: the design asks for back-off

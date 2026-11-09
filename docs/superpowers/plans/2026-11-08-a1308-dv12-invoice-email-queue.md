@@ -11,7 +11,7 @@ claims of **every** medium. From this slice an email delivery's claim, lease, du
 count live on its mail row, so email stops writing `invoice_deliveries`' queue columns; dv13 moves A4
 off them too and dv14 drops them for every medium, so the table becomes a record only in one step.
 
-**Why here:** coordinator, 2026-11-08: slice 3a does not move invoice email; the devices slice does,
+**Why here:** coordinator, 2026-11-08, confirmed by the owner on 2026-11-09: slice 3a does not move invoice email; the devices slice does,
 next to the A4 move, so `invoice_deliveries` stops being a queue in one place. Split from dv13 to keep
 each pull request under the size cap.
 

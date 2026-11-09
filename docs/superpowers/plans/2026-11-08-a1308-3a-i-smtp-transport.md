@@ -39,7 +39,8 @@ decisions N1 and N2 of 2026-11-08 (what 3b needs). [Slice rules](2026-11-08-a130
 
 ## What it builds
 
-1. **N1 — the hand-over rule**, decided in the transport:
+1. **N1 — the hand-over rule**, decided in the transport (**owner, 2026-11-09:** confirmed: mail
+   that never reached the server is retried; mail handed over and then lost is never sent twice):
    - The server answered with a 4xx or 5xx reply at any step (greeting, `EHLO`, `STARTTLS`, `AUTH`,
      `MAIL FROM`, `RCPT TO`, `DATA`, or its final reply to the message) → `rejected`,
      `serverRefused: true`. Nothing was delivered and the server said so.
@@ -146,7 +147,7 @@ when the old code did and `unknown` otherwise.
    `rejected`, `serverRefused: false`, `email.test_timeout`. Task 1.
 2. **STARTTLS and implicit TLS** — the hand-over is detected over an encrypted session too. Task 1.
 3. **A login the server refuses with 535** — `rejected`, `serverRefused: true`, as box alerts treat
-   it today. Task 1.
+   it today (**owner, 2026-11-09:** confirmed). Task 1.
 4. **Cleanup that throws after an accepted send** stays `sent` (`smtp-send.test.ts:35`). Task 1.
 5. **A server that advertises `PIPELINING`** — nodemailer then sends `MAIL`, `RCPT` and `DATA`
    together (`index.js:1883-1904`), and the hand-over is still detected only once `DATA` is

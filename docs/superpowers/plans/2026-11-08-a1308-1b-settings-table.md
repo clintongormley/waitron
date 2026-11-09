@@ -91,7 +91,7 @@ cannot be restored or imported." (rules §2).
 | `adjustment_settings` → the `adjustments` document, its routes, screen and readers | 1b-ii |
 | The shared dashboard wording for `settings.out_of_date` | 1b-ii (its first screen) |
 | Shape upgrades (an `upgrade` step on the definition, applied on read) and tables-venuebox §8.3's backup measurement | the first document shape change after go-live (README §6) |
-| Recording each save in `activity_log`. `updated_by` and `updated_at` keep only the latest save. tables-fiscal §3 says saves "are logged however the shared settings table logs saves", and README §5 U11 does not name a settings kind | a follow-up the owner may want, after slice 2 lands `activity_log`; not planned |
+| Recording each save in `activity_log` (**owner, 2026-11-09:** yes, record each save) | [slice 2](2026-11-08-a1308-2-activity-log.md), Task 4: `saveSettings` records a `settings.saved` entry (document key, saver, revision; never a value) |
 | Core's own `venue` and `business_day` documents, and the `invoiceLocales` trigger (tables-venuebox §2.1, §2.2, §5) | slice 5 (the location sweep) |
 | tables-venuebox §8.2, the language triggers reading a document, timed | slice 5, which rewrites those triggers |
 | `settings.menu`, `settings.payments`, `settings.identity` and the other documents the appendices name | each area's slice |

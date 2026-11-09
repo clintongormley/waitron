@@ -160,7 +160,7 @@ person's screen can no longer hear about a send that fails … `invitationSent` 
 ## Global Constraints
 
 - The reset answer stays 202 before any lookup, whatever the address.
-- The row holds no link, token or code (CLAUDE.md §3). `params` holds `purpose` and, for a reset or invitation, `origin`, the site address the link is built on — a request fact the sender cannot know (`managementSite`, `apps/server/src/request-from-box.ts:47-53`).
+- The row holds no link, token or code (CLAUDE.md §3). `params` holds `purpose` and, for a reset or invitation, `origin` (**owner, 2026-11-09:** store it), the site address the link is built on — a request fact the sender cannot know (`managementSite`, `apps/server/src/request-from-box.ts:47-53`).
 - Don't-send-after: password reset and email change 30 minutes, invitation 24 hours (`ACCOUNT_ACTION_TTL_MS`).
 - Each request is its own mail (`account:<randomUUID()>`), as each is its own send today; the newest link wins because `issueAccountAction` retires the earlier one.
 - The cooldown answer (`acceptInvitation`, `{ invitationSent: false }`, `management-api.ts:1177`, `:1261`, `:1282`) is unchanged and queues nothing.
