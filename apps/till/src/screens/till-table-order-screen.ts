@@ -158,6 +158,7 @@ import type {
 import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
 import { heldGroupIds, inHeldGroup } from "../state/held-groups.js";
 import { itemCount, type DraftEntry, type DraftGroup } from "../state/draft-groups.js";
+import { countsWholeUnits } from "../state/new-order-count.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import type { Place } from "../state/draft-place.js";
 import {
@@ -278,11 +279,6 @@ function flagged(line: OrderLine): boolean {
   return (
     line.blocked !== undefined || line.unavailableOnServer === true || line.notOffered === true
   );
-}
-
-/** A dish no longer offered has no unit to read, so a whole quantity is counted as whole units. */
-function countsWholeUnits(line: OrderLine): boolean {
-  return takesExtras(line.product) || (line.notOffered === true && /^\d+$/.test(line.quantity));
 }
 
 /** The table actions that name a table: Move guests, Join a table and Move this bill. */
