@@ -38,7 +38,6 @@ import { enrolAuthenticator } from "./testing/authenticator.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { readZoneContext, validateRetainedZoneClock } from "./venue-zone-context.js";
 import { runAttendanceLoop } from "./attendance-loop.js";
-import { runAttendanceEmailLoop } from "./attendance-email-worker.js";
 import { startMailSender } from "./mail-sender.js";
 import { runInvoiceEmailLoop } from "./invoice-email-worker.js";
 import { runPendingCardLoop } from "./pending-card-recovery.js";
@@ -84,10 +83,6 @@ vi.mock("./attendance-loop.js", async (load) => {
   const a = await load<typeof import("./attendance-loop.js")>();
   return { ...a, runAttendanceLoop: vi.fn(a.runAttendanceLoop) };
 });
-vi.mock("./attendance-email-worker.js", async (load) => {
-  const a = await load<typeof import("./attendance-email-worker.js")>();
-  return { ...a, runAttendanceEmailLoop: vi.fn(a.runAttendanceEmailLoop) };
-});
 vi.mock("./mail-sender.js", async (load) => {
   const a = await load<typeof import("./mail-sender.js")>();
   return { ...a, startMailSender: vi.fn(a.startMailSender) };
@@ -118,7 +113,6 @@ const PATH = "/management-api/venue-details/time-zone-repair";
 const PASSWORD = "syntheticPassword123";
 const duties = [
   runAttendanceLoop,
-  runAttendanceEmailLoop,
   runInvoiceEmailLoop,
   startMailSender,
   runPendingCardLoop,

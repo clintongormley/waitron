@@ -60,7 +60,6 @@ const LOOPS = [
   "pendingCardLoop",
   "tenderRefundLoop",
   "attendanceLoop",
-  "attendanceEmailLoop",
   "certificateReminderLoop",
   "invoiceEmailLoop",
   "mailLoop",

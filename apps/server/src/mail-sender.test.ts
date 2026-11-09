@@ -74,6 +74,33 @@ describe("one mail sender", () => {
   const update = async (patch: Partial<typeof outgoingMail.$inferInsert>, key = "one") => {
     await suite.db.update(outgoingMail).set(patch).where(eq(outgoingMail.dedupeKey, key));
   };
+  it("does not compose or send if storage refuses to retain the claim", async () => {
+    await queue();
+    const before = await row();
+    await suite.db.execute(sql`create trigger ignore_mail_claim before update on outgoing_mail
+      when new.status = 'sending' begin select raise(ignore); end`);
+    try {
+      await runMailPass(deps);
+    } finally {
+      await suite.db.execute(sql`drop trigger ignore_mail_claim`);
+    }
+    expect(owner.compose).not.toHaveBeenCalled();
+    expect(deps.send).not.toHaveBeenCalled();
+    expect(await row()).toEqual(before);
+  });
+  it("a saved rejected row waits fourteen minutes and is sent at fifteen", async () => {
+    await queue();
+    owner = { ...owner, longestWaitMs: 900000 };
+    deps.owners = [owner];
+    await update({ status: "rejected", attempts: 1, nextAttemptAt: "2026-11-09T12:15:00.000Z" });
+    time = new Date("2026-11-09T12:14:00.000Z");
+    expect(await runMailPass(deps)).toEqual({ processed: false });
+    expect(deps.send).not.toHaveBeenCalled();
+    time = new Date("2026-11-09T12:15:00.000Z");
+    await runMailPass(deps);
+    expect(await row()).toMatchObject({ status: "sent", attempts: 2 });
+    expect(deps.send).toHaveBeenCalledTimes(1);
+  });
   it("resolves delivery in the claim transaction and commits before sending", async () => {
     await queue();
     deps.resolveDelivery = async (tx) => {
@@ -107,6 +134,67 @@ describe("one mail sender", () => {
     deps.resolveDelivery = configured;
     await runMailPass(deps);
     expect((await row())?.status).toBe("sent");
+  });
+  it.each([10000, 86400000])(
+    "puts an unready row back for %s ms, bounded by its longest wait",
+    async (laterMs) => {
+      const { id } = await queue();
+      owner.claim = async () => ({ later: new Date(time.getTime() + laterMs) });
+      expect(await runMailPass(deps)).toEqual({ processed: true, mailId: id, subjectId: null });
+      expect(await row()).toMatchObject({
+        status: "pending",
+        attempts: 0,
+        claimToken: null,
+        recipient: null,
+        nextAttemptAt: laterMs === 10000 ? "2026-11-09T12:00:10.000Z" : "2026-11-09T12:00:30.000Z",
+      });
+      expect(deps.send).not.toHaveBeenCalled();
+      expect(owner.settle).not.toHaveBeenCalled();
+    },
+  );
+  it("a row put back does not block the row behind it", async () => {
+    await queue();
+    await queue("two");
+    owner.claim = async (_tx, mail) =>
+      mail.dedupeKey === "one"
+        ? { later: new Date(time.getTime() + 10000) }
+        : { recipient: "second@example.test", prepared: {} };
+    await runMailPass(deps);
+    await runMailPass(deps);
+    expect((await row())?.status).toBe("pending");
+    expect((await row("two"))?.status).toBe("sent");
+    expect(deps.send).toHaveBeenCalledTimes(1);
+  });
+  it("two passes started together claim a due row once", async () => {
+    await queue();
+    await Promise.all([runMailPass(deps), runMailPass(deps)]);
+    expect(deps.send).toHaveBeenCalledTimes(1);
+    expect((await row())?.status).toBe("sent");
+  });
+  it("a report under a lapsed claim changes nothing", async () => {
+    await queue();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const sending = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    deps.send = async () => {
+      entered();
+      await held;
+      return { status: "sent" };
+    };
+    const pass = runMailPass(deps);
+    await sending;
+    time = new Date(time.getTime() + 60000);
+    await runMailPass(deps);
+    const abandoned = await row();
+    release();
+    await pass;
+    expect(abandoned).toMatchObject({ status: "unknown", failureCode: "mail.claim_abandoned" });
+    expect(await row()).toEqual(abandoned);
   });
   it("cancels what the owner no longer wants", async () => {
     await queue();

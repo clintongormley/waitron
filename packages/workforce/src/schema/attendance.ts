@@ -201,35 +201,3 @@ export const attendanceQuestions = table(
     ),
   ],
 );
-
-const mailStatus = enumType(["pending", "sending", "sent", "rejected", "unknown", "cancelled"]);
-const mailOutcome = enumType(["sent", "rejected", "unknown"]);
-export const attendanceMail = table(
-  "attendance_mail",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    questionId: id("question_id")
-      .notNull()
-      .references(() => attendanceQuestions.id, { onDelete: "restrict" }),
-    status: mailStatus("status").notNull().default("pending"),
-    claimToken: id("claim_token"),
-    claimedAt: tsString("claimed_at"),
-    nextAttemptAt: tsString("next_attempt_at").notNull(),
-    recipient: label("recipient"),
-    outcome: mailOutcome("outcome"),
-  },
-  (t) => [
-    uniqueIndex("attendance_mail_question_uq").on(t.questionId),
-    index("attendance_mail_due_idx").on(t.status, t.nextAttemptAt, t.id),
-    check("attendance_mail_status_ck", enumCheck(t.status)),
-    check("attendance_mail_outcome_ck", enumCheck(t.outcome)),
-    check(
-      "attendance_mail_claim_ck",
-      sql`(${t.claimToken} is null and ${t.claimedAt} is null) or (${t.claimToken} is not null and ${t.claimedAt} is not null)`,
-    ),
-    check(
-      "attendance_mail_sending_ck",
-      sql`${t.status} <> 'sending' or (${t.claimToken} is not null and ${t.recipient} is not null)`,
-    ),
-  ],
-);

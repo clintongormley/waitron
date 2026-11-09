@@ -1,4 +1,5 @@
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
+import { insertAttendanceMail } from "@waitron/workforce/test/fixtures.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { unzipSync } from "fflate";
@@ -35,7 +36,6 @@ import { departments } from "@waitron/venue-service";
 import {
   WorkforceBackend,
   absences,
-  attendanceMail,
   attendanceOperationFacts,
   attendanceQuestions,
   availability,
@@ -402,9 +402,10 @@ beforeEach(async () => {
       createdAt: COLLEAGUE.questionCreatedAt,
     },
   ]);
-  await suite.db.insert(attendanceMail).values([
+  for (const row of [
     {
       questionId: martaQuestion,
+      personId: martaId,
       status: "sent",
       claimToken: MARTA_CLAIM_TOKEN,
       claimedAt: "2026-04-19T04:01:00.000Z",
@@ -414,6 +415,7 @@ beforeEach(async () => {
     },
     {
       questionId: colleagueQuestion,
+      personId: colleagueId,
       status: "rejected",
       claimToken: "holder-9:colleague-claim-token",
       claimedAt: "2026-04-26T04:03:00.000Z",
@@ -421,7 +423,8 @@ beforeEach(async () => {
       recipient: COLLEAGUE.reminderRecipient,
       outcome: "rejected",
     },
-  ]);
+  ] as const)
+    await insertAttendanceMail(suite.db, row);
   // The table is not exported from @waitron/workforce, so its rows are written with bound values.
   const response = async (row: {
     id: string;

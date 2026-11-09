@@ -1,18 +1,15 @@
-import { locations } from "@waitron/db";
+import { attendanceMailOutcome } from "./attendance-mail.js";
+import { locations, outgoingMail } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { jsonFile, type ModulePersonalData, type PersonalDataFile } from "@waitron/module";
 import { centsToDecimal } from "@waitron/shared";
-import { asc, eq, or } from "drizzle-orm";
+import { asc, eq, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { localWallClock } from "./projection.js";
 import { absences } from "./schema/absences.js";
 import { attendanceResponseCommands } from "./schema/attendance-responses.js";
-import {
-  attendanceMail,
-  attendanceOperationFacts,
-  attendanceQuestions,
-} from "./schema/attendance.js";
+import { attendanceOperationFacts, attendanceQuestions } from "./schema/attendance.js";
 import { availability } from "./schema/availability.js";
 import { employments } from "./schema/employments.js";
 import { rosterVersions } from "./schema/roster-versions.js";
@@ -125,15 +122,18 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
         createdAt: attendanceQuestions.createdAt,
         active: attendanceQuestions.active,
         inactiveReason: attendanceQuestions.inactiveReason,
-        mailId: attendanceMail.id,
-        recipient: attendanceMail.recipient,
-        status: attendanceMail.status,
-        outcome: attendanceMail.outcome,
-        claimedAt: attendanceMail.claimedAt,
-        nextAttemptAt: attendanceMail.nextAttemptAt,
+        mailId: outgoingMail.id,
+        recipient: outgoingMail.recipient,
+        status: outgoingMail.status,
+        attempts: outgoingMail.attempts,
+        claimedAt: outgoingMail.claimedAt,
+        nextAttemptAt: outgoingMail.nextAttemptAt,
       })
       .from(attendanceQuestions)
-      .leftJoin(attendanceMail, eq(attendanceMail.questionId, attendanceQuestions.id))
+      .leftJoin(
+        outgoingMail,
+        sql`${outgoingMail.dedupeKey} = 'attendance:' || ${attendanceQuestions.id}`,
+      )
       .where(eq(attendanceQuestions.personId, personId))
       .orderBy(
         asc(attendanceQuestions.businessDay),
@@ -227,7 +227,10 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
                   : {
                       recipient: row.recipient,
                       status: row.status,
-                      outcome: row.outcome,
+                      outcome: attendanceMailOutcome({
+                        status: row.status!,
+                        attempts: row.attempts!,
+                      }),
                       claimedAt: row.claimedAt,
                       nextAttemptAt: row.nextAttemptAt,
                     },

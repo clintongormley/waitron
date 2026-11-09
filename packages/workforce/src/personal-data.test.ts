@@ -1,3 +1,4 @@
+import { insertAttendanceMail, setAttendanceMail } from "../test/fixtures.js";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -11,11 +12,7 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WORKFORCE_PERSONAL_DATA } from "./personal-data.js";
 import { planningEveryStatement } from "../test/query-plans.js";
 import { attendanceResponseCommands } from "./schema/attendance-responses.js";
-import {
-  attendanceMail,
-  attendanceOperationFacts,
-  attendanceQuestions,
-} from "./schema/attendance.js";
+import { attendanceOperationFacts, attendanceQuestions } from "./schema/attendance.js";
 import { absences } from "./schema/absences.js";
 import { availability } from "./schema/availability.js";
 import { employments } from "./schema/employments.js";
@@ -492,8 +489,9 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     evidenceKeys: ["order:evidence-marta-3"],
     createdAt: "2026-04-19T09:45:00.000Z",
   });
-  await db.insert(attendanceMail).values({
+  await insertAttendanceMail(db, {
     questionId: sameDayLater,
+    personId: marta,
     nextAttemptAt: "2026-04-19T09:45:00.000Z",
   });
   // Re-asked late, so recorded after a question about a later day.
@@ -514,8 +512,9 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     active: false,
     inactiveReason: "rota_superseded",
   });
-  await db.insert(attendanceMail).values({
+  await insertAttendanceMail(db, {
     questionId: missingTimes,
+    personId: marta,
     status: "sent",
     claimToken: MARTA_CLAIM_TOKEN,
     claimedAt: "2026-04-19T04:01:00.000Z",
@@ -603,8 +602,9 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     evidenceKeys: ["order:evidence-colleague"],
     createdAt: "2026-04-26T04:02:00.000Z",
   });
-  await db.insert(attendanceMail).values({
+  await insertAttendanceMail(db, {
     questionId: colleagueQuestion,
+    personId: colleague,
     status: "rejected",
     claimToken: "holder-9:colleague-claim-token",
     claimedAt: "2026-04-26T04:03:00.000Z",
@@ -980,6 +980,27 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
     for (const value of COLLEAGUE_ATTENDANCE_VALUES) expect(theirs).toContain(value);
   });
 
+  it("exports rejected as the outcome of an expired reminder tried once", async () => {
+    const people = await seedAll(suite.db);
+    await seedAttendance(suite.db, people);
+    await setAttendanceMail(suite.db, "00000000-0000-4000-8000-0000000000a1", {
+      status: "expired",
+      outcome: "rejected",
+      recipient: null,
+      claimToken: null,
+      claimedAt: null,
+    });
+    const file = JSON.parse(attendanceOf(await download(people.marta))) as {
+      questions: { businessDay: string; reminderEmail: unknown }[];
+    };
+    expect(file.questions.find((q) => q.businessDay === "2026-04-18")!.reminderEmail).toEqual({
+      recipient: null,
+      status: "expired",
+      outcome: "rejected",
+      claimedAt: null,
+      nextAttemptAt: "2026-04-19T04:00:00.000Z",
+    });
+  });
   it("writes the reminder email's recipient but never its claim token", async () => {
     const people = await seedAll(suite.db);
     await seedAttendance(suite.db, people);

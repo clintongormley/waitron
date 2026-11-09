@@ -1,9 +1,9 @@
+import { attendanceMailRows } from "../test/fixtures.js";
 import { describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { attendanceFixture } from "../test/attendance-fixture.js";
 import {
   attendanceDayWork,
-  attendanceMail,
   enqueueAttendanceDay,
   readChain,
   verifyChain,
@@ -51,7 +51,7 @@ describe("completed attendance day", () => {
         evidenceKeys: ["order:early", "order:last"],
       },
     ]);
-    expect(await f.suite.db.select().from(attendanceMail)).toEqual([]);
+    expect(await attendanceMailRows(f.suite.db)).toEqual([]);
     const before = await f.entries();
     expect(await f.process()).toEqual({ automaticEntryIds: [], questionIds: first.questionIds });
     expect(await f.entries()).toEqual(before);
@@ -76,7 +76,7 @@ describe("completed attendance day", () => {
       kind: "missing-times",
       missingKinds: ["out"],
     });
-    expect(await f.suite.db.select().from(attendanceMail)).toMatchObject([
+    expect(await attendanceMailRows(f.suite.db)).toMatchObject([
       { questionId: q!.id, status: "pending" },
     ]);
   });
@@ -252,7 +252,7 @@ describe("completed attendance day", () => {
       { shiftKey: "rota:evening", missingKinds: ["in", "out"], evidenceKeys: [] },
       { shiftKey: "rota:morning", missingKinds: ["in", "out"], evidenceKeys: ["order:morning"] },
     ]);
-    expect(await f.suite.db.select().from(attendanceMail)).toHaveLength(2);
+    expect(await attendanceMailRows(f.suite.db)).toHaveLength(2);
   });
   it("creates unscheduled work questions for separate gaps around real clock intervals", async () => {
     await f.open();
@@ -277,7 +277,7 @@ describe("completed attendance day", () => {
       "order:after",
       "order:earlier",
     ]);
-    expect(await f.suite.db.select().from(attendanceMail)).toHaveLength(2);
+    expect(await attendanceMailRows(f.suite.db)).toHaveLength(2);
   });
   it("matches each real interval to at most one plan, excluding an exact touching endpoint", async () => {
     await f.open();
@@ -315,7 +315,7 @@ describe("completed attendance day", () => {
       automaticEntryIds: [],
       questionIds: first.questionIds,
     });
-    expect(await f.suite.db.select().from(attendanceMail)).toHaveLength(1);
+    expect(await attendanceMailRows(f.suite.db)).toHaveLength(1);
     expect(await f.suite.db.select().from(attendanceDayWork)).toMatchObject([
       { deferredShiftIds: [] },
     ]);

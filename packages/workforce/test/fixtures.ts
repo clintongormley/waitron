@@ -1,4 +1,13 @@
-import { locations, venueLocationId } from "@waitron/db";
+import { and, asc, eq } from "drizzle-orm";
+import { attendanceMailKey, attendanceMailOutcome } from "../src/attendance-mail.js";
+import {
+  locations,
+  venueLocationId,
+  outgoingMail,
+  enqueueMail,
+  MAIL_LIFETIME_MS,
+  type OutgoingMailStatus,
+} from "@waitron/db";
 import { jobOrigin } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { hashPin, persons } from "@waitron/identity";
@@ -264,4 +273,70 @@ export async function insertTimeEntry(
       },
     ),
   );
+}
+
+type AttendanceMailFields = Partial<{
+  status: OutgoingMailStatus;
+  claimToken: string | null;
+  claimedAt: string | null;
+  nextAttemptAt: string;
+  recipient: string | null;
+  outcome: "sent" | "rejected" | "unknown" | null;
+}>;
+export async function attendanceMailRows(db: Database | Transaction) {
+  const rows = await db
+    .select()
+    .from(outgoingMail)
+    .where(eq(outgoingMail.kind, "attendance_question"))
+    .orderBy(asc(outgoingMail.nextAttemptAt), asc(outgoingMail.id));
+  return rows.map((row) => ({
+    id: row.id,
+    questionId: row.subjectId!,
+    status: row.status,
+    claimToken: row.claimToken,
+    claimedAt: row.claimedAt,
+    nextAttemptAt: row.nextAttemptAt,
+    recipient: row.recipient,
+    outcome: attendanceMailOutcome(row),
+  }));
+}
+export async function setAttendanceMail(
+  db: Database | Transaction,
+  questionId: string,
+  fields: AttendanceMailFields,
+): Promise<void> {
+  const { outcome, ...values } = fields;
+  const finished =
+    values.status !== undefined &&
+    ["sent", "unknown", "cancelled", "expired"].includes(values.status);
+  await db
+    .update(outgoingMail)
+    .set({
+      ...values,
+      ...(outcome ? { attempts: 1 } : {}),
+      ...(finished
+        ? { finishedAt: values.claimedAt ?? values.nextAttemptAt ?? new Date().toISOString() }
+        : {}),
+    })
+    .where(
+      and(
+        eq(outgoingMail.kind, "attendance_question"),
+        eq(outgoingMail.dedupeKey, attendanceMailKey(questionId)),
+      ),
+    );
+}
+export async function insertAttendanceMail(
+  db: Database | Transaction,
+  input: { questionId: string; personId: string } & AttendanceMailFields,
+): Promise<void> {
+  const at = new Date(input.nextAttemptAt!);
+  await enqueueMail(db, {
+    kind: "attendance_question",
+    dedupeKey: attendanceMailKey(input.questionId),
+    subjectId: input.questionId,
+    personId: input.personId,
+    now: at,
+    notAfter: new Date(at.getTime() + MAIL_LIFETIME_MS.attendance_question),
+  });
+  await setAttendanceMail(db, input.questionId, input);
 }

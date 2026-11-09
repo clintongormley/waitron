@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b89c6f82-0bd5-4991-a171-cfcdb661dc32",
+  "id": "5314aa8c-8d2a-49bc-aeb2-cb27a1959cd0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "absences": {
@@ -247,121 +247,6 @@
         "attendance_day_work_revision_ck": {
           "name": "attendance_day_work_revision_ck",
           "value": "\"attendance_day_work\".\"dirty_revision\" > 0 and \"attendance_day_work\".\"evaluated_revision\" >= 0 and \"attendance_day_work\".\"evaluated_revision\" <= \"attendance_day_work\".\"dirty_revision\""
-        }
-      }
-    },
-    "attendance_mail": {
-      "name": "attendance_mail",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "question_id": {
-          "name": "question_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'pending'"
-        },
-        "claim_token": {
-          "name": "claim_token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "claimed_at": {
-          "name": "claimed_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "next_attempt_at": {
-          "name": "next_attempt_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "recipient": {
-          "name": "recipient",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "outcome": {
-          "name": "outcome",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "attendance_mail_question_uq": {
-          "name": "attendance_mail_question_uq",
-          "columns": [
-            "question_id"
-          ],
-          "isUnique": true
-        },
-        "attendance_mail_due_idx": {
-          "name": "attendance_mail_due_idx",
-          "columns": [
-            "status",
-            "next_attempt_at",
-            "id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "attendance_mail_question_id_attendance_questions_id_fk": {
-          "name": "attendance_mail_question_id_attendance_questions_id_fk",
-          "tableFrom": "attendance_mail",
-          "tableTo": "attendance_questions",
-          "columnsFrom": [
-            "question_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "attendance_mail_status_ck": {
-          "name": "attendance_mail_status_ck",
-          "value": "\"attendance_mail\".\"status\" in ('pending', 'sending', 'sent', 'rejected', 'unknown', 'cancelled')"
-        },
-        "attendance_mail_outcome_ck": {
-          "name": "attendance_mail_outcome_ck",
-          "value": "\"attendance_mail\".\"outcome\" in ('sent', 'rejected', 'unknown')"
-        },
-        "attendance_mail_claim_ck": {
-          "name": "attendance_mail_claim_ck",
-          "value": "(\"attendance_mail\".\"claim_token\" is null and \"attendance_mail\".\"claimed_at\" is null) or (\"attendance_mail\".\"claim_token\" is not null and \"attendance_mail\".\"claimed_at\" is not null)"
-        },
-        "attendance_mail_sending_ck": {
-          "name": "attendance_mail_sending_ck",
-          "value": "\"attendance_mail\".\"status\" <> 'sending' or (\"attendance_mail\".\"claim_token\" is not null and \"attendance_mail\".\"recipient\" is not null)"
         }
       }
     },

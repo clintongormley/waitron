@@ -1,4 +1,9 @@
-import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import {
+  cancelUnclaimedAttendanceMail as cancelReminder,
+  reopenAttendanceMail,
+  attendanceMailAttempted,
+} from "./attendance-mail.js";
+import { and, eq, gte, lt, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError, jobOrigin } from "@waitron/shared";
 import type {
@@ -9,7 +14,7 @@ import type {
 } from "./attendance-types.js";
 import { assertAttendanceDay } from "./attendance-state.js";
 import { mergeAttendanceQuestions, upsertAttendanceQuestion } from "./attendance-questions.js";
-import { attendanceDayWork, attendanceMail, attendanceQuestions } from "./schema/attendance.js";
+import { attendanceDayWork, attendanceQuestions } from "./schema/attendance.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { WorkforceBackend } from "./clocking.js";
 import { readRecordedEntries } from "./record-reads.js";
@@ -54,18 +59,6 @@ function intervalsFor(entries: readonly TimeEntryRecord[]): Interval[] {
     });
 }
 
-async function cancelReminder(tx: Transaction, questionId: string): Promise<void> {
-  await tx
-    .update(attendanceMail)
-    .set({ status: "cancelled" })
-    .where(
-      and(
-        eq(attendanceMail.questionId, questionId),
-        inArray(attendanceMail.status, ["pending", "rejected"]),
-      ),
-    );
-}
-
 async function retainQuestion(
   tx: Transaction,
   input: Omit<AttendanceQuestion, "id" | "createdAt">,
@@ -86,26 +79,7 @@ async function retainQuestion(
       .set({ active: true, inactiveReason: null })
       .where(eq(attendanceQuestions.id, old.id));
     // Ambiguous or accepted delivery must not be retried when an obligation returns.
-    await tx
-      .update(attendanceMail)
-      .set({ status: "pending", nextAttemptAt: at.toISOString() })
-      .where(
-        and(
-          eq(attendanceMail.questionId, old.id),
-          eq(attendanceMail.status, "cancelled"),
-          sql`${attendanceMail.claimToken} is null`,
-        ),
-      );
-    await tx
-      .update(attendanceMail)
-      .set({ status: "rejected" })
-      .where(
-        and(
-          eq(attendanceMail.questionId, old.id),
-          eq(attendanceMail.status, "cancelled"),
-          eq(attendanceMail.outcome, "rejected"),
-        ),
-      );
+    await reopenAttendanceMail(tx, old.id, at);
   }
   return upsertAttendanceQuestion(tx, input, at);
 }
@@ -213,15 +187,7 @@ export async function processAttendanceDay(
       id = q.id;
     }
     for (const q of retired) {
-      const [attempted] = await tx
-        .select({ id: attendanceMail.id })
-        .from(attendanceMail)
-        .where(
-          and(
-            eq(attendanceMail.questionId, q.id),
-            inArray(attendanceMail.status, ["sending", "sent", "unknown"]),
-          ),
-        );
+      const attempted = await attendanceMailAttempted(tx, q.id);
       if (attempted) await cancelReminder(tx, id);
     }
     if (!result.questionIds.includes(id)) result.questionIds.push(id);

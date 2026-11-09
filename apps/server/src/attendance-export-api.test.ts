@@ -81,7 +81,9 @@ const snapshot = () => ({
   heads: suite.db.all(sql`select * from workforce_chains order by node_id`),
   closures: suite.db.all(sql`select * from pay_period_closures order by id`),
   questions: suite.db.all(sql`select * from attendance_questions order by id`),
-  mail: suite.db.all(sql`select * from attendance_mail order by id`),
+  mail: suite.db.all(
+    sql`select * from outgoing_mail where kind = 'attendance_question' order by id`,
+  ),
 });
 async function fail(response: Response, status: number, code: string) {
   expect(response.status).toBe(status);

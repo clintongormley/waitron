@@ -52,7 +52,7 @@ export interface MailKindOwner<Prepared = unknown> {
     tx: Transaction,
     mail: ClaimedMail,
     now: Date,
-  ): Promise<{ recipient: string; prepared: Prepared } | null>;
+  ): Promise<{ recipient: string; prepared: Prepared } | { later: Date } | null>;
   compose(prepared: Prepared, mail: ClaimedMail): Promise<MailMessage>;
   /** A throw rolls back queue and owner writes together and propagates, including at start. */
   settle(
@@ -249,6 +249,17 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
             .where(eq(outgoingMail.id, row.id));
           return resultFor(row);
         }
+        if ("later" in claim) {
+          await tx
+            .update(outgoingMail)
+            .set({
+              nextAttemptAt: new Date(
+                Math.min(claim.later.getTime(), now.getTime() + owner.longestWaitMs),
+              ).toISOString(),
+            })
+            .where(and(eq(outgoingMail.id, row.id), eq(outgoingMail.status, row.status)));
+          return resultFor(row);
+        }
         const [saved] = await tx
           .update(outgoingMail)
           .set({
@@ -260,7 +271,8 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
           })
           .where(and(eq(outgoingMail.id, row.id), eq(outgoingMail.status, row.status)))
           .returning();
-        claimed = { mail: saved!, owner, prepared: claim.prepared, delivery };
+        if (saved === undefined) return resultFor(row);
+        claimed = { mail: saved, owner, prepared: claim.prepared, delivery };
         return resultFor(row);
       }
       return changed

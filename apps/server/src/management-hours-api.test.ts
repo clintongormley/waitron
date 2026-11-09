@@ -105,7 +105,9 @@ function snapshot() {
     entries: suite.db.all(sql`select * from time_entries order by id`),
     heads: suite.db.all(sql`select * from workforce_chains order by node_id`),
     questions: suite.db.all(sql`select * from attendance_questions order by id`),
-    mail: suite.db.all(sql`select * from attendance_mail order by id`),
+    mail: suite.db.all(
+      sql`select * from outgoing_mail where kind = 'attendance_question' order by id`,
+    ),
   };
 }
 function routes() {

@@ -108,10 +108,6 @@ const CLASSIFIED: Record<string, Classification> = {
       "resolved_by_entry_id",
     ],
   },
-  attendance_mail: {
-    in: ["recipient", "status", "outcome", "claimed_at", "next_attempt_at"],
-    out: ["id", "question_id", "claim_token"],
-  },
   attendance_response_commands: {
     in: ["action", "requested_by_person_id", "authorized_by_person_id", "input", "created_at"],
     out: ["id", "person_id", "location_id", "question_id", "entry_ids"],
