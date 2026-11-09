@@ -231,7 +231,8 @@ it("offers no Change dish on a row of a presented bill, nor one whose line is no
   expect(await offeredFor({ lines: [line({ id: "l-other" })] })).toBe(false);
 });
 
-it("offers no Change dish on a row someone has recalled", async () => {
+/** A draft that has recalled the Flan. */
+function recalled(): DraftStore {
   const draft = new DraftStore();
   draft.loadFrom("draft", [
     {
@@ -241,7 +242,11 @@ it("offers no Change dish on a row someone has recalled", async () => {
       source: { line: line(), extras: [], netAmount: "6.00" },
     },
   ]);
-  expect(await offeredFor({ lines: [line()], draftStore: draft })).toBe(false);
+  return draft;
+}
+
+it("offers no Change dish on a row someone has recalled", async () => {
+  expect(await offeredFor({ lines: [line()], draftStore: recalled() })).toBe(false);
 });
 
 it("offers no Change dish when the row's line is an extra", async () => {
@@ -1020,10 +1025,23 @@ it.each([
   },
 );
 
-it.each([
+it.each<[string, Partial<TillTableOrderScreen>]>([
   ["its station stops allowing changes", { lines: [line({ changesAfterSending: "never" })] }],
   ["its bill is presented", { bills: [bill("placed")] }],
-] as const)(
+  ["the till stops having its product", { products: products.filter((each) => each !== flan) }],
+  [
+    "a payment for it lands",
+    { billBalance: balance([{ lineId: "l-flan", lineNo: 1, paidQuantity: "1.000" }]) },
+  ],
+  [
+    "another person recalls it",
+    {
+      otherDrafts: [
+        { id: "d-2", revision: 1, ownerName: "Ana", takenFromYou: false, lines: recalled().lines },
+      ],
+    },
+  ],
+])(
   "drops a staged change when %s while the window is open, and opens fresh once it can change again",
   async (_, readOnly) => {
     const el = await openRow({ lines: [line()] });
@@ -1035,7 +1053,13 @@ it.each([
     expect(offered(el)).toBe(false);
     expect(titleCount(el)).toBe("×2");
     expect(footerSentence(el)?.textContent?.trim() ?? "").toBe("");
-    Object.assign(el, { lines: [line()], bills: [bill("open")] });
+    Object.assign(el, {
+      lines: [line()],
+      bills: [bill("open")],
+      products,
+      billBalance: null,
+      otherDrafts: [],
+    });
     await el.updateComplete;
     expect(offered(el)).toBe(true);
     await q<TillModifierPicker>(el, "till-modifier-picker")!.updateComplete;
