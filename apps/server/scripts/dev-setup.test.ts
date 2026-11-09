@@ -694,6 +694,16 @@ describe("developer demo regions", () => {
                 invoice_locales: JSON.stringify([expected.receipt]),
               },
             ]);
+            expect(
+              store.venue.all(
+                sql`select s.name from service_steps s join departments d on d.id = s.department_id where d.is_default = 1 order by s.position`,
+              ),
+            ).toEqual(
+              (staff === "en"
+                ? ["Set up", "Take order", "Anything else?"]
+                : ["Montar mesa", "Tomar nota", "¿Algo más?"]
+              ).map((name) => ({ name })),
+            );
             const rows = store.venue.all<{ name: string }>(sql`select name from products`);
             expect(
               rows.some(
@@ -752,6 +762,16 @@ describe("Valencian developer demo", () => {
               invoice_locales: '["es-ES"]',
             },
           ]);
+          expect(
+            store.venue.all(
+              sql`select s.name from service_steps s join departments d on d.id = s.department_id where d.is_default = 1 order by s.position`,
+            ),
+          ).toEqual(
+            (locale === "en-GB"
+              ? ["Set up", "Take order", "Anything else?"]
+              : ["Montar mesa", "Tomar nota", "¿Algo más?"]
+            ).map((name) => ({ name })),
+          );
           const staffName = locale === "en-GB" ? "Eel and potato stew" : "All i pebre";
           expect(
             store.venue.all(sql`select name,kitchen_name from products where name=${staffName}`),
@@ -815,6 +835,16 @@ describe("Galician developer demo", () => {
               invoice_locales: '["es-ES"]',
             },
           ]);
+          expect(
+            store.venue.all(
+              sql`select s.name from service_steps s join departments d on d.id = s.department_id where d.is_default = 1 order by s.position`,
+            ),
+          ).toEqual(
+            (locale === "en-GB"
+              ? ["Set up", "Take order", "Anything else?"]
+              : ["Montar mesa", "Tomar nota", "¿Algo más?"]
+            ).map((name) => ({ name })),
+          );
           const staffName = locale === "en-GB" ? "Galician savoury pie" : "Empanada gallega";
           expect(
             store.venue.all(sql`select name,kitchen_name from products where name=${staffName}`),
