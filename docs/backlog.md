@@ -2278,10 +2278,6 @@ _Formerly parts of B9 and Track C._ Open work:
 - **The till's QR pin compares the code against itself, not an authority.**
   [Detail](backlog/dependencies.md#the-tills-qr-pin-compares-the-code-against-itself-not-an-authority)
 
-- **Minimatch security alert #47 still needs a compatible lint-plugin release** — A1260.
-  The installed import plugin fails to load with minimatch 11.0.3; the older copies remain.
-  [Detail](backlog/dependencies.md#minimatch-security-alert-47-still-needs-a-compatible-lint-plugin-release)
-
 ### Modules, data and code health
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
