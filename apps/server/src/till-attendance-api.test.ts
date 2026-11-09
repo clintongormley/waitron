@@ -694,7 +694,6 @@ it("hides foreign receipts and refuses another worker's question, item and targe
     .insert(attendanceQuestions)
     .values({
       personId: other!.id,
-      locationId: venue.cfg.locationId,
       businessDay: "2026-01-04",
       startAt: "2026-01-04T04:00:00.000Z",
       endAt: "2026-01-05T04:00:00.000Z",
@@ -819,7 +818,6 @@ it("lets the worker answer a reopened missing-time question without a reminder p
     .insert(attendanceQuestions)
     .values({
       personId: venue.personId,
-      locationId: venue.cfg.locationId,
       businessDay: "2026-01-04",
       startAt: "2026-01-04T04:00:00.000Z",
       endAt: "2026-01-05T04:00:00.000Z",
@@ -919,7 +917,6 @@ it.each(["{", "null", "[]"])(
 
 it("delivers paid totals through every attendance read route", async () => {
   await suite.db.insert(convenioConfig).values({
-    locationId: venue.cfg.locationId,
     breakThresholdMinutes: 300,
     splitMinSegmentMinutes: 180,
     splitMaxSegmentMinutes: 300,

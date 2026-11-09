@@ -36,13 +36,11 @@ async function fixture() {
       .insert(departments)
       .values([
         {
-          locationId: cfg.locationId,
           name: "Dining",
           tradingName: "Dining",
           isDefault: true,
         },
         {
-          locationId: cfg.locationId,
           name: "Terrace",
           tradingName: "Terrace",
         },

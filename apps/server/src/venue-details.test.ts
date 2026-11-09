@@ -1109,7 +1109,6 @@ describe("venue detail consumer reads", () => {
     await suite.db.insert(floorTodayTables).values({ tableId: table!.id });
     await suite.db.insert(bookings).values([
       {
-        locationId: venue.cfg.locationId,
         tableId: table!.id,
         bookingDate: "2026-10-03",
         bookingTime: "02:00:00",
@@ -1118,7 +1117,6 @@ describe("venue detail consumer reads", () => {
         createdBy: randomUUID(),
       },
       {
-        locationId: venue.cfg.locationId,
         tableId: table!.id,
         bookingDate: "2026-10-02",
         bookingTime: "23:45:00",

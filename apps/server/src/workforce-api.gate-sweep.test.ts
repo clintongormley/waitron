@@ -125,7 +125,6 @@ async function seedAcceptedSwap(personId: string, locationId: string): Promise<s
     .insert(shifts)
     .values({
       personId,
-      locationId,
       startsAt: "2026-03-02T09:00:00Z",
       startsOffsetMinutes: 0,
       endsAt: "2026-03-02T13:00:00Z",
@@ -295,7 +294,6 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
     const [version] = await suite.db
       .insert(rosterVersions)
       .values({
-        locationId: v.locationId,
         periodStart: "2026-03-02",
         periodEnd: "2026-03-08",
         status: "published",
@@ -304,7 +302,6 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
       .returning({ id: rosterVersions.id });
     await suite.db.insert(shifts).values({
       personId: v.personId,
-      locationId: v.locationId,
       startsAt: "2026-03-02T09:00:00Z",
       startsOffsetMinutes: 0,
       endsAt: "2026-03-02T13:00:00Z",

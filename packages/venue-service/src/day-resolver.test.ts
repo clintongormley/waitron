@@ -77,9 +77,7 @@ async function venue(options: { oneSeason?: boolean } = {}) {
     ])
     .returning({ id: floorZones.id });
   if (options.oneSeason === true)
-    await db
-      .insert(seasons)
-      .values({ locationId: cfg.locationId, name: "All year", startsOn: "01-01" });
+    await db.insert(seasons).values({ name: "All year", startsOn: "01-01" });
   return scoped(async (tx) => {
     const departmentId = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" }))
       .id;
@@ -498,7 +496,6 @@ async function specialDay(
   const [day] = await db
     .insert(specialDays)
     .values({
-      locationId: v.cfg.locationId,
       name: `Special ${date}`,
       repeatsYearly: options.repeats,
     })
@@ -507,7 +504,6 @@ async function specialDay(
     .insert(specialDayDates)
     .values({
       specialDayId: day!.id,
-      locationId: v.cfg.locationId,
       date,
       closedAllDay: options.closedAllDay,
     })
@@ -809,7 +805,6 @@ describe("readSpecialDayPlan", () => {
       .insert(specialDayDates)
       .values({
         specialDayId: id,
-        locationId: v.cfg.locationId,
         date: "2030-11-29",
         closedAllDay: true,
       })
@@ -851,7 +846,7 @@ describe("readSpecialDayPlan", () => {
     const v = await venue();
     const [day] = await db
       .insert(specialDays)
-      .values({ locationId: v.cfg.locationId, name: "Undated" })
+      .values({ name: "Undated" })
       .returning({ id: specialDays.id });
     const { result, texts } = await paintStatements((tx) => readSpecialDayPlan(tx, day!.id));
     expect(result).toEqual({

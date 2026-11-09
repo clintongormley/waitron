@@ -47,18 +47,17 @@ const EVENING_SHIFT = "00000000-0000-4000-8000-0000000000a2";
 /** Marta (`ana`) and a colleague (`marc`), each with distinct roles, areas and shifts. */
 async function seedAll() {
   const venue = await seedVenueWithStaff(suite.db);
-  const locationId = venue.cfg.locationId;
   const marta = venue.ana;
   const colleague = venue.marc;
   await withTransaction(suite.db, async (tx) => {
     const [terrace] = await tx
       .insert(departments)
-      .values({ locationId, name: "Terrace", tradingName: "Terrace" })
+      .values({ name: "Terrace", tradingName: "Terrace" })
       .returning({ id: departments.id });
     await tx.insert(staffRoles).values([
-      { id: WAITER, locationId, name: "Waiter" },
-      { id: BARTENDER, locationId, name: "Bartender" },
-      { id: SOMMELIER, locationId, name: "Sommelier" },
+      { id: WAITER, name: "Waiter" },
+      { id: BARTENDER, name: "Bartender" },
+      { id: SOMMELIER, name: "Sommelier" },
     ]);
     await tx.insert(personStaffRoles).values([
       { personId: marta, staffRoleId: WAITER },
@@ -72,7 +71,6 @@ async function seedAll() {
       {
         id: NIGHT_SHIFT,
         personId: marta,
-        locationId,
         startsAt: "2026-03-14T23:30:00Z",
         startsOffsetMinutes: 60,
         endsAt: "2026-03-15T05:00:00Z",
@@ -81,7 +79,6 @@ async function seedAll() {
       {
         id: EVENING_SHIFT,
         personId: marta,
-        locationId,
         startsAt: "2026-03-10T18:00:00Z",
         startsOffsetMinutes: 60,
         endsAt: "2026-03-10T22:45:00Z",
@@ -90,7 +87,6 @@ async function seedAll() {
     ]);
     await tx.insert(shifts).values({
       personId: marta,
-      locationId,
       startsAt: "2026-03-12T10:00:00Z",
       startsOffsetMinutes: 60,
       endsAt: "2026-03-12T14:00:00Z",
@@ -100,7 +96,6 @@ async function seedAll() {
       .insert(shifts)
       .values({
         personId: colleague,
-        locationId,
         startsAt: "2026-03-11T16:00:00Z",
         startsOffsetMinutes: 60,
         endsAt: "2026-03-11T23:00:00Z",
@@ -149,15 +144,13 @@ describe("STAFFING_PERSONAL_DATA", () => {
 
   it("orders shifts that start together by shift id", async () => {
     const venue = await seedVenueWithStaff(suite.db);
-    const locationId = venue.cfg.locationId;
     await withTransaction(suite.db, async (tx) => {
-      await tx.insert(staffRoles).values({ id: WAITER, locationId, name: "Waiter" });
+      await tx.insert(staffRoles).values({ id: WAITER, name: "Waiter" });
       // The higher id is inserted first, so storage order is the reverse of id order.
       for (const id of [EVENING_SHIFT, NIGHT_SHIFT])
         await tx.insert(shifts).values({
           id,
           personId: venue.marc,
-          locationId,
           startsAt: "2026-03-10T18:00:00Z",
           startsOffsetMinutes: 60,
           endsAt: "2026-03-10T22:00:00Z",
@@ -195,7 +188,6 @@ describe("STAFFING_PERSONAL_DATA", () => {
     const venue = await seedVenueWithStaff(suite.db);
     await suite.db.insert(shifts).values({
       personId: venue.marc,
-      locationId: venue.cfg.locationId,
       startsAt: "2026-03-12T10:00:00Z",
       startsOffsetMinutes: 60,
       endsAt: "2026-03-12T14:00:00Z",
@@ -207,9 +199,7 @@ describe("STAFFING_PERSONAL_DATA", () => {
   it("builds the file for a held role even with no assigned shift", async () => {
     const venue = await seedVenueWithStaff(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      await tx
-        .insert(staffRoles)
-        .values({ id: WAITER, locationId: venue.cfg.locationId, name: "Waiter" });
+      await tx.insert(staffRoles).values({ id: WAITER, name: "Waiter" });
       await tx.insert(personStaffRoles).values({ personId: venue.marc, staffRoleId: WAITER });
     });
     const files = await download(venue.marc);
@@ -220,13 +210,10 @@ describe("STAFFING_PERSONAL_DATA", () => {
   it("builds the file for an assigned shift even when no role is held", async () => {
     const venue = await seedVenueWithStaff(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      await tx
-        .insert(staffRoles)
-        .values({ id: WAITER, locationId: venue.cfg.locationId, name: "Waiter" });
+      await tx.insert(staffRoles).values({ id: WAITER, name: "Waiter" });
       await tx.insert(shifts).values({
         id: NIGHT_SHIFT,
         personId: venue.marc,
-        locationId: venue.cfg.locationId,
         startsAt: "2026-03-14T23:30:00Z",
         startsOffsetMinutes: 60,
         endsAt: "2026-03-15T05:00:00Z",

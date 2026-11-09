@@ -309,7 +309,6 @@ describe("durable attendance discovery", () => {
     const version = newId();
     await suite.db.insert(rosterVersions).values({
       id: version,
-      locationId,
       periodStart: "2026-01-05",
       periodEnd: "2026-01-11",
       status: "published",
@@ -318,7 +317,6 @@ describe("durable attendance discovery", () => {
     for (const day of ["10", "11", "12"])
       await suite.db.insert(shifts).values({
         personId,
-        locationId,
         rosterVersionId: version,
         startsAt: `2026-01-${day}T08:00:00.000Z`,
         endsAt: `2026-01-${day}T17:00:00.000Z`,
@@ -515,7 +513,6 @@ describe("durable attendance discovery", () => {
     const version = newId();
     await suite.db.insert(rosterVersions).values({
       id: version,
-      locationId,
       periodStart: "2026-01-05",
       periodEnd: "2026-01-11",
       status: "published",
@@ -524,7 +521,6 @@ describe("durable attendance discovery", () => {
     await suite.db.insert(shifts).values([
       {
         personId,
-        locationId,
         rosterVersionId: version,
         startsAt: "2026-01-05T08:00:00.000Z",
         endsAt: "2026-01-05T17:00:00.000Z",
@@ -533,7 +529,6 @@ describe("durable attendance discovery", () => {
       },
       {
         personId,
-        locationId,
         startsAt: "2026-01-06T08:00:00.000Z",
         endsAt: "2026-01-06T17:00:00.000Z",
         startsOffsetMinutes: 60,
@@ -721,13 +716,12 @@ describe("mutable attendance source watches", () => {
     const id = newId();
     await suite.db
       .insert(rosterVersions)
-      .values({ id, locationId, periodStart: "2026-01-05", periodEnd: "2026-01-11" });
+      .values({ id, periodStart: "2026-01-05", periodEnd: "2026-01-11" });
     await begin();
     await drain();
     expect(await rows()).toEqual([]);
     await suite.db.insert(shifts).values({
       personId,
-      locationId,
       rosterVersionId: id,
       startsAt: "2026-01-05T08:00:00.000Z",
       endsAt: "2026-01-05T17:00:00.000Z",
@@ -746,7 +740,6 @@ describe("mutable attendance source watches", () => {
       shiftId = newId();
     await suite.db.insert(rosterVersions).values({
       id: version,
-      locationId,
       periodStart: "2026-01-05",
       periodEnd: "2026-01-11",
       status: "published",
@@ -755,7 +748,6 @@ describe("mutable attendance source watches", () => {
     await suite.db.insert(shifts).values({
       id: shiftId,
       personId,
-      locationId,
       rosterVersionId: version,
       startsAt: "2026-01-05T08:00:00.000Z",
       endsAt: "2026-01-05T17:00:00.000Z",
@@ -1082,7 +1074,6 @@ it("reassigns a future published shift to its new start-day after a scheduled cu
   const version = newId();
   await suite.db.insert(rosterVersions).values({
     id: version,
-    locationId,
     periodStart: "2026-01-05",
     periodEnd: "2026-01-11",
     status: "published",
@@ -1090,7 +1081,6 @@ it("reassigns a future published shift to its new start-day after a scheduled cu
   });
   await suite.db.insert(shifts).values({
     personId,
-    locationId,
     rosterVersionId: version,
     startsAt: "2026-01-11T04:00:00.000Z",
     endsAt: "2026-01-11T10:00:00.000Z",

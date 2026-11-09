@@ -155,7 +155,7 @@ export async function createStaffRole(tx: Transaction, input: StaffRoleInput): P
     .from(staffRoles);
   const [row] = await tx
     .insert(staffRoles)
-    .values({ locationId: venueId, ...values, position: next!.position })
+    .values({ ...values, position: next!.position })
     .returning({ id: staffRoles.id });
   return readStaffRole(tx, row!.id);
 }

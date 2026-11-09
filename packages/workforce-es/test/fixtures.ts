@@ -24,7 +24,6 @@ export async function seedConvenioConfig(
   // did not override is left out of the statement, so it takes the column DEFAULT the migration
   // declares.
   await db.insert(convenioConfig).values({
-    locationId: params.locationId,
     ...(params.workingDaysPerWeek === undefined
       ? {}
       : { workingDaysPerWeek: params.workingDaysPerWeek }),

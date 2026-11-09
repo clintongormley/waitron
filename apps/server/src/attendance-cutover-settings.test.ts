@@ -37,7 +37,6 @@ it("an admitted future cutover change does not block activity on its already dis
   const [version] = await suite.db
     .insert(rosterVersions)
     .values({
-      locationId,
       periodStart: "2026-01-05",
       periodEnd: "2026-01-11",
       status: "published",
@@ -45,7 +44,6 @@ it("an admitted future cutover change does not block activity on its already dis
     })
     .returning();
   await suite.db.insert(shifts).values({
-    locationId,
     personId: worker!.id,
     rosterVersionId: version!.id,
     startsAt: "2026-01-07T09:00:00.000Z",
@@ -127,7 +125,6 @@ it("a Save that moves today's end makes attendance evaluate today up to the new 
   const [version] = await suite.db
     .insert(rosterVersions)
     .values({
-      locationId,
       periodStart: "2026-01-05",
       periodEnd: "2026-01-11",
       status: "published",
@@ -135,7 +132,6 @@ it("a Save that moves today's end makes attendance evaluate today up to the new 
     })
     .returning();
   await suite.db.insert(shifts).values({
-    locationId,
     personId: worker!.id,
     rosterVersionId: version!.id,
     startsAt: "2026-01-07T09:00:00.000Z",

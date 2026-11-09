@@ -34,7 +34,6 @@ async function fixture() {
     const [department] = await tx
       .insert(departments)
       .values({
-        locationId: cfg.locationId,
         name: "Dining",
         tradingName: "Dining",
         isDefault: true,
@@ -49,11 +48,9 @@ async function festival(f: Awaited<ReturnType<typeof fixture>>) {
   return withTransaction(suite.db, async (tx) => {
     const [day] = await tx
       .insert(specialDays)
-      .values({ locationId: f.cfg.locationId, name: "Festival", repeatsYearly: false })
+      .values({ name: "Festival", repeatsYearly: false })
       .returning({ id: specialDays.id });
-    await tx
-      .insert(specialDayDates)
-      .values({ specialDayId: day!.id, locationId: f.cfg.locationId, date: "2026-10-09" });
+    await tx.insert(specialDayDates).values({ specialDayId: day!.id, date: "2026-10-09" });
     return day!.id;
   });
 }
@@ -122,7 +119,6 @@ it("keeps local department names in the Opening hours model without station colu
     const [row] = await tx
       .insert(departments)
       .values({
-        locationId: f.cfg.locationId,
         name: "Closed dining",
         tradingName: "Closed dining",
         active: false,

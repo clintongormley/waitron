@@ -267,10 +267,7 @@ describe("department name storage", () => {
   }
   async function insert(locationId: string, name: string) {
     return withTransaction(suite.db, async (tx) => {
-      const [row] = await tx
-        .insert(departments)
-        .values({ locationId, name, tradingName: name })
-        .returning();
+      const [row] = await tx.insert(departments).values({ name, tradingName: name }).returning();
       return row!;
     });
   }

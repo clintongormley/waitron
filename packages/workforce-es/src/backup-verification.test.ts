@@ -22,7 +22,6 @@ beforeEach(async () => {
     });
     await suite.db.insert(convenioConfig).values({
       id: "agreement",
-      locationId: "venue",
       workingDaysPerWeek: 4,
       overtimeModel: "period_net",
       referencePeriodDays: 90,
@@ -208,7 +207,7 @@ describe("agreement backup evidence", () => {
     expect(await run({ absent: true, sourceSchema: 0 })).toEqual(passed);
     await restored.db
       .insert(convenioConfig)
-      .values({ id: "invented", locationId: "venue", createdAt: "2026-10-20T08:00:00.000Z" });
+      .values({ id: "invented", createdAt: "2026-10-20T08:00:00.000Z" });
     expect((await run({ absent: true, sourceSchema: 0 })).status).toBe("invalid");
   });
   it("accepts no config and no parent reference", async () => {

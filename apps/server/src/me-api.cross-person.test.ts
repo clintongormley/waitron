@@ -184,7 +184,6 @@ async function seedShift(
     const [version] = await suite.db
       .insert(rosterVersions)
       .values({
-        locationId,
         periodStart: "2026-01-01",
         periodEnd: "2026-12-31",
         status: "published",
@@ -198,7 +197,6 @@ async function seedShift(
     .values({
       personId,
       rosterVersionId,
-      locationId,
       startsAt,
       startsOffsetMinutes: 0,
       endsAt,

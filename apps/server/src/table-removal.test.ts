@@ -77,7 +77,6 @@ async function zone(): Promise<string> {
       .insert(floorZones)
       .values({ id, locationId: v.cfg.locationId, name: `Zone ${id.slice(0, 8)}` });
     await tx.insert(zoneServicePolicies).values({
-      locationId: v.cfg.locationId,
       zoneId: id,
       departmentId: tables!.departmentId,
     });
@@ -445,7 +444,6 @@ describe("what a removed table's delete waits on", () => {
         const [row] = await tx
           .insert(bookings)
           .values({
-            locationId: v.cfg.locationId,
             tableId: t1!,
             bookingDate,
             bookingTime: "20:00",
@@ -588,7 +586,6 @@ describe("a catch-up that changes nothing", () => {
     await renameInMaster(held!, "Cost held b");
     await inTx(v, (tx) =>
       tx.insert(bookings).values({
-        locationId: v.cfg.locationId,
         tableId: booked!,
         bookingDate: "2026-10-10",
         bookingTime: "20:00",

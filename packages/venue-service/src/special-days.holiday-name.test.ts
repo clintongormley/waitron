@@ -154,11 +154,10 @@ const rawDay = (
   scoped(async (tx) => {
     const [day] = await tx
       .insert(specialDays)
-      .values({ locationId: v.cfg.locationId, name, repeatsYearly })
+      .values({ name, repeatsYearly })
       .returning({ id: specialDays.id });
     await tx.insert(specialDayDates).values({
       specialDayId: day!.id,
-      locationId: v.cfg.locationId,
       date,
       closedAllDay: true,
       holidayName,

@@ -99,7 +99,6 @@ async function insertShift(personId: string, startsAt: string, endsAt: string): 
     const [version] = await suite.db
       .insert(rosterVersions)
       .values({
-        locationId,
         periodStart: "2026-01-01",
         periodEnd: "2026-12-31",
         status: "published",
@@ -112,7 +111,6 @@ async function insertShift(personId: string, startsAt: string, endsAt: string): 
     .insert(shifts)
     .values({
       personId,
-      locationId,
       startsAt,
       startsOffsetMinutes: 0,
       endsAt,
@@ -191,7 +189,6 @@ describe("mountScheduleApi — shifts", () => {
         const [version] = await suite.db
           .insert(rosterVersions)
           .values({
-            locationId,
             periodStart: "2026-09-07",
             periodEnd: "2026-09-13",
             status,
@@ -202,7 +199,6 @@ describe("mountScheduleApi — shifts", () => {
       }
       await suite.db.insert(shifts).values({
         personId: me,
-        locationId,
         rosterVersionId,
         startsAt: "2026-09-07T10:00:00Z",
         endsAt: "2026-09-07T18:00:00Z",

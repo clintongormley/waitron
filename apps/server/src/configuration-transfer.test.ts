@@ -805,7 +805,6 @@ describe("configuration transfer database path", () => {
       });
       await tx.insert(shiftTemplates).values({
         id: "88888888-aaaa-aaaa-aaaa-888888888888",
-        locationId: venueId,
         label: "Evening",
         weekday: 1,
         startsMinute: 1020,
@@ -813,7 +812,6 @@ describe("configuration transfer database path", () => {
       });
       await tx.insert(convenioConfig).values({
         id: "99999999-aaaa-aaaa-aaaa-999999999999",
-        locationId: venueId,
         weeklyRestMinutes: 2880,
         breakThresholdMinutes: 300,
         minBreakMinutes: 20,
@@ -859,7 +857,6 @@ describe("configuration transfer database path", () => {
       });
       await tx.insert(bookings).values({
         id: "dddddddd-bbbb-bbbb-bbbb-dddddddddddd",
-        locationId: venueId,
         bookingDate: "2026-09-10",
         bookingTime: "20:00",
         partySize: 2,
@@ -5961,7 +5958,7 @@ describe("special days in a configuration transfer", () => {
     await withTransaction(suite.db, async (tx) => {
       const [department] = await tx
         .insert(departments)
-        .values({ locationId: venueId, name: "Deli", tradingName: "Deli" })
+        .values({ name: "Deli", tradingName: "Deli" })
         .returning({ id: departments.id });
       await tx.insert(departmentSalePolicies).values({ departmentId: department!.id });
       await tx.insert(kitchenStations).values([
@@ -8270,7 +8267,6 @@ it.each([true, false])(
       modules: ALL_MODULES,
     });
     await suite.db.insert(convenioConfig).values({
-      locationId: await venueLocationId(suite.db),
       breakThresholdMinutes: 300,
       splitMinSegmentMinutes: 180,
       splitMaxSegmentMinutes: 300,

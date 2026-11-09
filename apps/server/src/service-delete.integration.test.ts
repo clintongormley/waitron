@@ -132,7 +132,6 @@ describe("real module floor deletion", () => {
           await tx
             .insert(bookings)
             .values({
-              locationId: venue.cfg.locationId,
               bookingDate: "2026-10-12",
               bookingTime: "20:00:00",
               partySize: 2,
@@ -225,7 +224,6 @@ describe("real module floor deletion", () => {
       const [row] = await tx
         .insert(bookings)
         .values({
-          locationId: venue.cfg.locationId,
           bookingDate: "2026-10-12",
           bookingTime: "20:00:00",
           partySize: 2,

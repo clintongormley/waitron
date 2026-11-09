@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { venueLocationId, type Transaction } from "@waitron/db";
+import { type Transaction } from "@waitron/db";
 import { attendanceOperationFacts, attendanceSourceState } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 
@@ -44,7 +44,6 @@ export async function beginIntegratedAttendance(
     sql`select payment_ref as paymentRef from payments where working_order_id = ${order.id} and provider = ${order.provider} and bill_payment_id is null`,
   );
   await tx.insert(attendanceSourceState).values({
-    locationId: await venueLocationId(tx),
     source: "whole-payment",
     recordKind: "watch",
     key,

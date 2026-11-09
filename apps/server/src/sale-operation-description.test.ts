@@ -35,12 +35,11 @@ async function fixture(nullHeader = false) {
   const nodeId = await seedNode(suite.db);
   const [primary] = await suite.db
     .insert(departments)
-    .values({ locationId: cfg.locationId, name: "Dining", tradingName: "Dining" })
+    .values({ name: "Dining", tradingName: "Dining" })
     .returning();
   const [fallback] = await suite.db
     .insert(departments)
     .values({
-      locationId: cfg.locationId,
       name: "Default",
       tradingName: "Default",
       isDefault: true,
@@ -60,14 +59,12 @@ async function fixture(nullHeader = false) {
     .insert(departmentSalePolicies)
     .values([{ departmentId: primary!.id }, { departmentId: fallback!.id }]);
   await suite.db.insert(zoneServicePolicies).values({
-    locationId: cfg.locationId,
     zoneId: zone!.id,
     departmentId: primary!.id,
   });
   await suite.db.insert(zoneSalePolicies).values({ zoneId: zone!.id });
   await suite.db.insert(orderServiceContexts).values({
     workingOrderId: order.id,
-    locationId: cfg.locationId,
     zoneId: zone!.id,
     departmentId: primary!.id,
     serviceMode: "prepay",

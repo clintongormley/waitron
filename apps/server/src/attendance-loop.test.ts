@@ -105,7 +105,6 @@ describe("attendance duty pass", () => {
     const [version] = await suite.db
       .insert(rosterVersions)
       .values({
-        locationId,
         periodStart: "2026-01-05",
         periodEnd: "2026-01-11",
         status: "published",
@@ -115,7 +114,6 @@ describe("attendance duty pass", () => {
     const [shift] = await suite.db
       .insert(shifts)
       .values({
-        locationId,
         personId,
         startsAt: "2026-01-06T01:00:00.000Z",
         endsAt: "2026-01-06T05:00:00.000Z",

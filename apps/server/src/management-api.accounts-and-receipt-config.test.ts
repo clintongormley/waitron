@@ -2214,11 +2214,9 @@ const departmentReceiptPath = (id: string) =>
   `/management-api/venue-service/departments/${id}/receipt`;
 async function departmentFixture(active = true): Promise<string> {
   await suite.db.update(contentLanguages).set({ languages: ["es", "ca", "gl", "eu"] });
-  const locationId = venueCfg!.locationId as string;
   const [row] = await suite.db
     .insert(departments)
     .values({
-      locationId,
       name: `Receipt ${randomUUID()}`,
       tradingName: "Receipt",
       active,

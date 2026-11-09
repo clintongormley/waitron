@@ -58,7 +58,6 @@ export async function seedFloor(
   const [deliRow] = await tx
     .insert(departments)
     .values({
-      locationId,
       name: plain(floor.departmentNames.deli),
       tradingName: departmentTradingNames.deli,
       active: true,

@@ -37,7 +37,7 @@ async function fixture(role: "manager" | "staff" = "manager") {
     .onConflictDoNothing({ target: contentLanguages.id });
   const [department] = await suite.db
     .insert(departments)
-    .values({ locationId: cfg.locationId, name: randomUUID(), tradingName: "Deli" })
+    .values({ name: randomUUID(), tradingName: "Deli" })
     .returning();
   await suite.db.insert(departmentSalePolicies).values({ departmentId: department!.id, ...policy });
   await suite.db.insert(departmentReceipts).values({

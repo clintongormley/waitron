@@ -2671,7 +2671,6 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     const { cfg, each, zoneId } = await setupVenue();
     await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter() });
     await suite.db.insert(departments).values({
-      locationId: cfg.locationId,
       name: "Retained logo department",
       tradingName: "Retained",
       active: false,

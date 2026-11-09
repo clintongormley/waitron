@@ -26,7 +26,7 @@ export async function seedVenueWithStaff(db: Database) {
     const marc = await person(`Marc ${suffix}`);
     const [department] = await tx
       .insert(departments)
-      .values({ locationId, name: "Dining room", tradingName: "Dining room" })
+      .values({ name: "Dining room", tradingName: "Dining room" })
       .returning({ id: departments.id });
     const [station] = await tx
       .insert(kitchenStations)
@@ -34,7 +34,7 @@ export async function seedVenueWithStaff(db: Database) {
       .returning({ id: kitchenStations.id });
     const [season] = await tx
       .insert(seasons)
-      .values({ locationId, name: "Summer", startsOn: "06-01" })
+      .values({ name: "Summer", startsOn: "06-01" })
       .returning({ id: seasons.id });
     return {
       cfg: { locationId },

@@ -160,14 +160,10 @@ describe("one venue's agreement", () => {
   it("keeps one convenio row", async () => {
     await seedTenant(single.db);
     const locationId = await seedLocation(single.db);
-    const refused = await captureError(() =>
-      single.db.insert(convenioConfig).values({ id: 2, locationId }),
-    );
+    const refused = await captureError(() => single.db.insert(convenioConfig).values({ id: 2 }));
     expect(checkFailed(refused, "convenio_config_singleton_ck")).toBe(true);
-    await single.db.insert(convenioConfig).values({ id: 1, locationId });
-    const duplicate = await captureError(() =>
-      single.db.insert(convenioConfig).values({ id: 1, locationId }),
-    );
+    await single.db.insert(convenioConfig).values({ id: 1 });
+    const duplicate = await captureError(() => single.db.insert(convenioConfig).values({ id: 1 }));
     expect(isRefusal(duplicate, UNIQUE_VIOLATION)).toBe(true);
     expect(await single.db.select({ id: convenioConfig.id }).from(convenioConfig)).toEqual([
       { id: 1 },

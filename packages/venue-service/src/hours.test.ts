@@ -198,7 +198,6 @@ async function addSubjects(f: Fixture) {
     const [terrace] = await tx
       .insert(departments)
       .values({
-        locationId: f.cfg.locationId,
         name: `Terrace ${randomUUID()}`,
         tradingName: "Terrace",
       })
@@ -650,11 +649,9 @@ describe("special-day station occurrences", () => {
     return withTransaction(db, async (tx) => {
       const [day] = await tx
         .insert(specialDays)
-        .values({ locationId, name: "Navidad", repeatsYearly: repeats })
+        .values({ name: "Navidad", repeatsYearly: repeats })
         .returning({ id: specialDays.id });
-      await tx
-        .insert(specialDayDates)
-        .values({ specialDayId: day!.id, locationId, date, closedAllDay: true });
+      await tx.insert(specialDayDates).values({ specialDayId: day!.id, date, closedAllDay: true });
       return day!.id;
     });
   }

@@ -41,13 +41,11 @@ async function fixture() {
       .insert(departments)
       .values([
         {
-          locationId: cfg.locationId,
           name: "Dining",
           tradingName: "Dining",
           isDefault: true,
         },
         {
-          locationId: cfg.locationId,
           name: "Terrace",
           tradingName: "Terrace",
         },
@@ -100,14 +98,14 @@ async function special(
   return run(async (tx) => {
     const [row] = await tx
       .insert(specialDays)
-      .values({ locationId: f.cfg.locationId, name, repeatsYearly })
+      .values({ name, repeatsYearly })
       .returning({ id: specialDays.id });
     for (const entry of dates) {
       const { date, closedAllDay } =
         typeof entry === "string" ? { date: entry, closedAllDay: false } : entry;
       const [stored] = await tx
         .insert(specialDayDates)
-        .values({ specialDayId: row!.id, locationId: f.cfg.locationId, date, closedAllDay })
+        .values({ specialDayId: row!.id, date, closedAllDay })
         .returning({ id: specialDayDates.id });
       if (paint.length === 0) continue;
       const [day] = await tx
@@ -163,11 +161,11 @@ describe("departments and calendar follow special days", () => {
     await run(async (tx) => {
       const [special] = await tx
         .insert(specialDays)
-        .values({ locationId: f.cfg.locationId, name: "Christmas", repeatsYearly: true })
+        .values({ name: "Christmas", repeatsYearly: true })
         .returning({ id: specialDays.id });
       const [date] = await tx
         .insert(specialDayDates)
-        .values({ specialDayId: special!.id, locationId: f.cfg.locationId, date: "2026-03-27" })
+        .values({ specialDayId: special!.id, date: "2026-03-27" })
         .returning({ id: specialDayDates.id });
       const [paint] = await tx
         .insert(departmentDays)
@@ -284,7 +282,6 @@ describe("special-days Calendar model", () => {
     const one = await statements();
     await suite.db.update(departments).set({ active: true }).where(eq(departments.id, f.other));
     await suite.db.insert(departments).values({
-      locationId: f.cfg.locationId,
       name: "Bar",
       tradingName: "Bar",
     });

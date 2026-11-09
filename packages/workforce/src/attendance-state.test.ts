@@ -133,7 +133,6 @@ describe("durable attendance day work", () => {
   it("keeps a source scan and row watch in separate namespaces even with identical keys", async () => {
     await suite.db.insert(attendanceSourceState).values([
       {
-        locationId,
         source: "clock",
         key: "chain",
         recordKind: "scan",
@@ -143,7 +142,6 @@ describe("durable attendance day work", () => {
         completed: false,
       },
       {
-        locationId,
         source: "clock",
         key: "chain",
         recordKind: "watch",

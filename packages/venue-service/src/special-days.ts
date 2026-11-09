@@ -1005,10 +1005,7 @@ export async function saveSpecialDay(
   const specialDayId = id ?? newId();
   let venueId: string | undefined;
   const venueRowId = async () => (venueId ??= await venueLocationId(tx));
-  if (id === null)
-    await tx
-      .insert(specialDays)
-      .values({ id: specialDayId, locationId: await venueRowId(), ...values });
+  if (id === null) await tx.insert(specialDays).values({ id: specialDayId, ...values });
   else await tx.update(specialDays).set(values).where(eq(specialDays.id, id));
 
   const existing = await tx

@@ -475,7 +475,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const [department] = await db
       .insert(departments)
       .values({
-        locationId,
         name: "Bar",
         tradingName: "Bar",
       })
@@ -1429,9 +1428,7 @@ describe("single-venue defaults", () => {
     });
     const locationId = await venueLocationId(single.db);
     async function add(name: string, isDefault: boolean) {
-      return single.db
-        .insert(departments)
-        .values({ locationId, name, tradingName: name, isDefault });
+      return single.db.insert(departments).values({ name, tradingName: name, isDefault });
     }
     await add("Main", true);
     const error = await captureError(() => add("Other default", true));
@@ -1450,13 +1447,13 @@ describe("single-venue defaults", () => {
     const locationId = await venueLocationId(single.db);
     const [department] = await single.db
       .insert(departments)
-      .values({ locationId, name: "Main", tradingName: "Main" })
+      .values({ name: "Main", tradingName: "Main" })
       .returning();
     async function add(name: string, isCounterDefault: boolean) {
       const [zone] = await single.db.insert(floorZones).values({ locationId, name }).returning();
       return single.db
         .insert(zoneServicePolicies)
-        .values({ locationId, zoneId: zone!.id, departmentId: department!.id, isCounterDefault });
+        .values({ zoneId: zone!.id, departmentId: department!.id, isCounterDefault });
     }
     await add("Counter", true);
     const error = await captureError(() => add("Other counter", true));

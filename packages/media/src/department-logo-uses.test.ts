@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, tenantReceipts, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, tenantReceipts, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -24,14 +24,13 @@ it("counts only department logos and protects each until cleared despite retired
       invoiceLocales: ["es-ES"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(tx);
     const rows = await tx
       .insert(departments)
       .values([
-        { locationId: venueId, name: "Dining", tradingName: "Room" },
-        { locationId: venueId, name: "Bar", tradingName: "Counter", active: false },
-        { locationId: venueId, name: "Garden", tradingName: "Terrace" },
-        { locationId: venueId, name: "Events", tradingName: "Events" },
+        { name: "Dining", tradingName: "Room" },
+        { name: "Bar", tradingName: "Counter", active: false },
+        { name: "Garden", tradingName: "Terrace" },
+        { name: "Events", tradingName: "Events" },
       ])
       .returning();
     const { image } = await uploadImage(
@@ -88,12 +87,11 @@ it.each(["{", "null", "[]", "123", '{"logo":null}', '{"logo":[]}', '{"logo":{}}'
         invoiceLocales: ["es-ES"],
         operationDescription: "Hospitality",
       });
-      const venueId = await venueLocationId(tx);
       const [good, broken] = await tx
         .insert(departments)
         .values([
-          { locationId: venueId, name: "Dining", tradingName: "Dining" },
-          { locationId: venueId, name: "Bar", tradingName: "Bar" },
+          { name: "Dining", tradingName: "Dining" },
+          { name: "Bar", tradingName: "Bar" },
         ])
         .returning();
       const { image } = await uploadImage(

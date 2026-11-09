@@ -109,7 +109,6 @@ async function seedBooking(
     const [row] = await tx
       .insert(bookings)
       .values({
-        locationId: cfg.locationId,
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 2,

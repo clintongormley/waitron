@@ -57,7 +57,6 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           const [inserted] = await tx
             .insert(departments)
             .values({
-              locationId: await venueRowId(),
               name: venue.name,
               tradingName: venue.name,
               isDefault: true,
@@ -127,7 +126,6 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         await tx
           .insert(zoneServicePolicies)
           .values({
-            locationId: await venueRowId(),
             zoneId: zone[0]!.id,
             departmentId,
             isCounterDefault: true,

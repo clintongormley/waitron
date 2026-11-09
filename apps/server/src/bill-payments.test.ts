@@ -2517,7 +2517,6 @@ describe("the invoice at full payment", () => {
           tx
             .insert(departments)
             .values({
-              locationId: venue.cfg.locationId,
               name: `Terrace ${randomUUID()}`,
               tradingName: "Terrace",
             })

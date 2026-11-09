@@ -356,7 +356,6 @@ for (const [enabled, spain] of [
             return `waitron_management_session=${session.token}`;
           });
           await suite.db.insert(convenioConfig).values({
-            locationId: venue.cfg.locationId,
             breakThresholdMinutes: 300,
             splitMinSegmentMinutes: 180,
             splitMaxSegmentMinutes: 300,

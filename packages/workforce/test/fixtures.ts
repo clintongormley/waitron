@@ -104,7 +104,6 @@ export async function insertRosterVersion(
   const [row] = await db
     .insert(rosterVersions)
     .values({
-      locationId: params.locationId,
       periodStart: params.periodStart ?? "2026-01-05",
       periodEnd: params.periodEnd ?? "2026-01-11",
     })
@@ -130,7 +129,6 @@ export async function insertDraftShift(
     .insert(shifts)
     .values({
       personId: params.personId,
-      locationId: params.locationId,
       startsAt: params.startsAt ?? "2026-01-05T09:00:00Z",
       startsOffsetMinutes: params.startsOffsetMinutes ?? 0,
       endsAt: params.endsAt ?? "2026-01-05T17:00:00Z",
@@ -210,7 +208,6 @@ export async function insertShiftTemplate(
   const [row] = await db
     .insert(shiftTemplates)
     .values({
-      locationId: params.locationId,
       label: params.label ?? "Evening bar",
       weekday: params.weekday ?? 0,
       startsMinute: params.startsMinute ?? 1080,

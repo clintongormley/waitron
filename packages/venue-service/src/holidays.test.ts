@@ -190,11 +190,9 @@ async function specialDay(
   await run(async (tx) => {
     const [day] = await tx
       .insert(specialDays)
-      .values({ locationId: cfg.locationId, name, repeatsYearly })
+      .values({ name, repeatsYearly })
       .returning({ id: specialDays.id });
-    await tx
-      .insert(specialDayDates)
-      .values({ specialDayId: day!.id, locationId: cfg.locationId, date, closedAllDay: true });
+    await tx.insert(specialDayDates).values({ specialDayId: day!.id, date, closedAllDay: true });
   });
 }
 
@@ -216,11 +214,9 @@ async function seedRetainedGeographyWithSpecialDay(
     .returning();
   const [day] = await tx
     .insert(specialDays)
-    .values({ locationId: cfg.locationId, name, repeatsYearly: false })
+    .values({ name, repeatsYearly: false })
     .returning({ id: specialDays.id });
-  await tx
-    .insert(specialDayDates)
-    .values({ specialDayId: day!.id, locationId: cfg.locationId, date, closedAllDay: false });
+  await tx.insert(specialDayDates).values({ specialDayId: day!.id, date, closedAllDay: false });
 }
 
 async function stored() {

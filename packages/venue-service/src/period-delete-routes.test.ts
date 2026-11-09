@@ -131,7 +131,7 @@ async function routed() {
     await specialDay("Past celebration", PAST, [slot(lunch, "13:00", "15:00")]);
     const [cell] = await tx
       .insert(routingCells)
-      .values({ locationId, stationId: station!.id, noCategory: true })
+      .values({ stationId: station!.id, noCategory: true })
       .returning({ id: routingCells.id });
     await tx.insert(routingCellPeriods).values({
       cellId: cell!.id,

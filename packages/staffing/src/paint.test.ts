@@ -67,11 +67,11 @@ async function venue() {
   return inTx(async (tx) => {
     const [waiter] = await tx
       .insert(staffRoles)
-      .values({ locationId: v.cfg.locationId, name: "Waiter" })
+      .values({ name: "Waiter" })
       .returning({ id: staffRoles.id });
     const [cook] = await tx
       .insert(staffRoles)
-      .values({ locationId: v.cfg.locationId, name: "Cook", position: 1 })
+      .values({ name: "Cook", position: 1 })
       .returning({ id: staffRoles.id });
     const [pass] = await tx
       .insert(kitchenStations)
@@ -79,13 +79,13 @@ async function venue() {
       .returning({ id: kitchenStations.id });
     const [special] = await tx
       .insert(specialDays)
-      .values({ locationId: v.cfg.locationId, name: "Fiesta" })
+      .values({ name: "Fiesta" })
       .returning({ id: specialDays.id });
     const dates = await tx
       .insert(specialDayDates)
       .values([
-        { specialDayId: special!.id, locationId: v.cfg.locationId, date: "2026-08-15" },
-        { specialDayId: special!.id, locationId: v.cfg.locationId, date: "2026-08-14" },
+        { specialDayId: special!.id, date: "2026-08-15" },
+        { specialDayId: special!.id, date: "2026-08-14" },
       ])
       .returning({ id: specialDayDates.id, date: specialDayDates.date });
     return {
@@ -246,7 +246,7 @@ describe("season staffing", () => {
     const [closed] = await inTx((tx) =>
       tx
         .insert(departments)
-        .values({ locationId: v.cfg.locationId, name: "Terrace", tradingName: "Terrace" })
+        .values({ name: "Terrace", tradingName: "Terrace" })
         .returning({ id: departments.id }),
     );
     const periodIds = new Map<string, string>();
@@ -298,7 +298,7 @@ describe("season staffing", () => {
         .where(eq(locations.id, v.cfg.locationId));
       return tx
         .insert(seasons)
-        .values({ locationId: v.cfg.locationId, name: "Winter", startsOn: "01-15", colour: "blue" })
+        .values({ name: "Winter", startsOn: "01-15", colour: "blue" })
         .returning({ id: seasons.id });
     });
     const read = await inTx((tx) => readSeasonStaffing(tx, v.seasonId));
@@ -445,11 +445,10 @@ describe("special-day staffing", () => {
       });
       const [feria] = await tx
         .insert(specialDays)
-        .values({ locationId: v.cfg.locationId, name: "Feria", repeatsYearly: true })
+        .values({ name: "Feria", repeatsYearly: true })
         .returning({ id: specialDays.id });
       await tx.insert(specialDayDates).values({
         specialDayId: feria!.id,
-        locationId: v.cfg.locationId,
         date: "2025-08-14",
         closedAllDay: true,
       });
@@ -543,11 +542,11 @@ describe("special-day staffing", () => {
     const otherDate = await inTx(async (tx) => {
       const [day] = await tx
         .insert(specialDays)
-        .values({ locationId: v.cfg.locationId, name: "Market day" })
+        .values({ name: "Market day" })
         .returning({ id: specialDays.id });
       const [date] = await tx
         .insert(specialDayDates)
-        .values({ specialDayId: day!.id, locationId: v.cfg.locationId, date: "2026-09-01" })
+        .values({ specialDayId: day!.id, date: "2026-09-01" })
         .returning({ id: specialDayDates.id });
       return date!.id;
     });
@@ -868,10 +867,9 @@ it("A724 guides a station by the edited special day, including zone openings", a
       .values({ dayId: special!.id, kind: "open", startsAt: "13:00:00", endsAt: "14:00:00" });
     const [other] = await tx
       .insert(specialDays)
-      .values({ locationId: v.cfg.locationId, name: "Repeating closure", repeatsYearly: true })
+      .values({ name: "Repeating closure", repeatsYearly: true })
       .returning();
     await tx.insert(specialDayDates).values({
-      locationId: v.cfg.locationId,
       specialDayId: other!.id,
       date: "2025-08-14",
       closedAllDay: true,
@@ -890,7 +888,7 @@ it("A724 keeps the sending department identity of every station range", async ()
   const extra = await inTx(async (tx) => {
     const [department] = await tx
       .insert(departments)
-      .values({ locationId: v.cfg.locationId, name: "Takeaway", tradingName: "Takeaway" })
+      .values({ name: "Takeaway", tradingName: "Takeaway" })
       .returning();
     const [zone] = await tx
       .insert(floorZones)
@@ -994,10 +992,9 @@ it("A724 a closed own date wins over a repeating open date with sending hours", 
       .where(eq(specialDayDates.id, v.aug15));
     const [feria] = await tx
       .insert(specialDays)
-      .values({ locationId: v.cfg.locationId, name: "Feria", repeatsYearly: true })
+      .values({ name: "Feria", repeatsYearly: true })
       .returning();
     await tx.insert(specialDayDates).values({
-      locationId: v.cfg.locationId,
       specialDayId: feria!.id,
       date: "2025-08-15",
       closedAllDay: false,

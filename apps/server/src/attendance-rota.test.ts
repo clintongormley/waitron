@@ -43,7 +43,7 @@ beforeEach(async () => {
   otherId = workers[1]!.id;
   const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
   cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
-  await suite.db.insert(convenioConfig).values({ locationId });
+  await suite.db.insert(convenioConfig).values({});
   app = new Hono();
   mountWorkforceApi(app, { db: suite.db, cfg: { nodeId: crypto.randomUUID() } }, () => {});
 });

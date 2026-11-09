@@ -68,7 +68,7 @@ async function fixture(role: "manager" | "staff" = "manager", withFiscal = true)
     .values({ defaultLanguage: "es", languages: ["es", "ca", "en"] });
   const [department] = await suite.db
     .insert(departments)
-    .values({ locationId: cfg.locationId, name: randomUUID(), tradingName: "Deli" })
+    .values({ name: randomUUID(), tradingName: "Deli" })
     .returning();
   await suite.db.insert(departmentSalePolicies).values({ departmentId: department!.id, ...policy });
   await suite.db
@@ -548,7 +548,6 @@ describe("replacement department receipt HTTP contract", () => {
     const [retained] = await suite.db
       .insert(departments)
       .values({
-        locationId: f.cfg.locationId,
         name: "Retained",
         tradingName: "Retained",
         active: false,
@@ -556,7 +555,7 @@ describe("replacement department receipt HTTP contract", () => {
       .returning();
     const [attached] = await suite.db
       .insert(departments)
-      .values({ locationId: f.cfg.locationId, name: "Attached", tradingName: "Attached" })
+      .values({ name: "Attached", tradingName: "Attached" })
       .returning();
     await suite.db.insert(departmentReceipts).values([
       { departmentId: retained!.id, receipt: { logo: image.filename }, logoRasters: rasters },

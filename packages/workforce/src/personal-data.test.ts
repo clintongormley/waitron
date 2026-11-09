@@ -463,7 +463,6 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
   await db.insert(attendanceQuestions).values({
     id: missingTimes,
     personId: marta,
-    locationId,
     businessDay: "2026-04-18",
     startAt: "2026-04-18T04:00:00.000Z",
     endAt: "2026-04-19T04:00:00.000Z",
@@ -479,7 +478,6 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
   await db.insert(attendanceQuestions).values({
     id: sameDayLater,
     personId: marta,
-    locationId,
     businessDay: "2026-04-18",
     startAt: "2026-04-18T04:00:00.000Z",
     endAt: "2026-04-19T04:00:00.000Z",
@@ -498,7 +496,6 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
   await db.insert(attendanceQuestions).values({
     id: "00000000-0000-4000-8000-0000000000a2",
     personId: marta,
-    locationId,
     businessDay: "2026-03-07",
     startAt: "2026-03-07T05:00:00.000Z",
     endAt: "2026-03-08T05:00:00.000Z",
@@ -529,7 +526,6 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     requestedByPersonId: manager.id,
     authorizedByPersonId: manager.id,
     personId: marta,
-    locationId,
     questionId: null,
     action: "propose",
     input: {
@@ -549,7 +545,6 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     requestedByPersonId: marta,
     authorizedByPersonId: marta,
     personId: marta,
-    locationId,
     questionId: missingTimes,
     action: "request",
     input: {
@@ -569,7 +564,6 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     source: "whole-payment",
     key: "payment:marta-1",
     personId: marta,
-    locationId,
     kind: "payment",
     at: "2026-04-18T22:58:00.000Z",
     offsetMinutes: 120,
@@ -580,7 +574,6 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     source: "clock",
     key: "clock:marta-2",
     personId: marta,
-    locationId,
     kind: "break",
     at: "2026-03-07T21:30:00.000Z",
     offsetMinutes: 60,
@@ -592,7 +585,6 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
   await db.insert(attendanceQuestions).values({
     id: colleagueQuestion,
     personId: colleague,
-    locationId,
     businessDay: "2026-04-25",
     startAt: "2026-04-25T04:00:00.000Z",
     endAt: "2026-04-26T04:00:00.000Z",
@@ -617,7 +609,6 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     requestedByPersonId: colleague,
     authorizedByPersonId: colleague,
     personId: colleague,
-    locationId,
     questionId: null,
     action: "disagree",
     input: {
@@ -632,7 +623,6 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     source: "order",
     key: "order:colleague-1",
     personId: colleague,
-    locationId,
     kind: "order",
     at: "2026-04-25T20:47:00.000Z",
     offsetMinutes: 180,
@@ -1032,7 +1022,6 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
     await suite.db.insert(attendanceQuestions).values({
       id: questionId,
       personId: person,
-      locationId,
       businessDay: "2026-06-02",
       startAt: "2026-06-02T04:00:00.000Z",
       endAt: "2026-06-03T04:00:00.000Z",
@@ -1049,7 +1038,6 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
       requestedByPersonId: person,
       authorizedByPersonId: person,
       personId: person,
-      locationId,
       questionId,
       action: "confirm",
       input: { action: "confirm", questionId },

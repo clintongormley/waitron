@@ -59,7 +59,6 @@ async function assignShift(v: Venue, personId: string, staffRoleId: string) {
       .insert(shifts)
       .values({
         personId,
-        locationId: v.cfg.locationId,
         startsAt: "2026-10-14T08:00:00Z",
         startsOffsetMinutes: 120,
         endsAt: "2026-10-14T16:00:00Z",

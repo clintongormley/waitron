@@ -13,10 +13,7 @@ describe("describeShifts", () => {
   it("labels only the requested assigned shifts with their area and staff role, including inactive retained areas", async () => {
     const venue = await seedVenueWithStaff(suite.db);
     const ids = await withTransaction(suite.db, async (tx) => {
-      const [staffRole] = await tx
-        .insert(staffRoles)
-        .values({ locationId: venue.cfg.locationId, name: "Sous chef" })
-        .returning();
+      const [staffRole] = await tx.insert(staffRoles).values({ name: "Sous chef" }).returning();
       const ids: string[] = [];
       for (const area of [
         { departmentId: venue.departmentId },
@@ -28,7 +25,6 @@ describe("describeShifts", () => {
           .insert(shifts)
           .values({
             personId: venue.ana,
-            locationId: venue.cfg.locationId,
             startsAt: "2026-01-05T09:00:00Z",
             startsOffsetMinutes: 0,
             endsAt: "2026-01-05T17:00:00Z",

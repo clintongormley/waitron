@@ -338,7 +338,6 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     const [department] = await db
       .insert(departments)
       .values({
-        locationId: TILL_LOCATION_ID,
         name: "Receipt mount probe",
         tradingName: "Probe",
       })
@@ -2112,7 +2111,6 @@ describe("startServer, against a migrated venue directory", () => {
         db
           .insert(bookings)
           .values({
-            locationId: TILL_LOCATION_ID,
             tableId: liveTableId,
             bookingDate: "2099-01-01",
             bookingTime: "20:00",

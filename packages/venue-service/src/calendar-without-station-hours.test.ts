@@ -35,11 +35,10 @@ it.each(["calendar", "special days", "opening hours"] as const)(
         const cfg = { locationId: await venueLocationId(tx) };
         const [special] = await tx
           .insert(specialDays)
-          .values({ locationId: cfg.locationId, name: "Annual closure", repeatsYearly: true })
+          .values({ name: "Annual closure", repeatsYearly: true })
           .returning({ id: specialDays.id });
         await tx.insert(specialDayDates).values({
           specialDayId: special!.id,
-          locationId: cfg.locationId,
           date: "2026-10-10",
           closedAllDay: true,
         });

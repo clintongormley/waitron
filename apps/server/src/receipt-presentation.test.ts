@@ -33,7 +33,7 @@ async function fixture(header: "department" | "null" | "absent" = "department") 
   const nodeId = await seedNode(suite.db);
   const [department] = await suite.db
     .insert(departments)
-    .values({ locationId: cfg.locationId, name: "Dining", tradingName: "Live brand" })
+    .values({ name: "Dining", tradingName: "Live brand" })
     .returning();
   const [series] = await suite.db.insert(invoiceSeries).values({ nodeId, code: "F" }).returning();
   const [sale] = await suite.db

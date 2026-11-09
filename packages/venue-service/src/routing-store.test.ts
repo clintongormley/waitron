@@ -2938,11 +2938,10 @@ describe("routing on repeating special days", () => {
       await setCategoryCell(tx, f.cocktails, station(f.terraceBar));
       const [navidad] = await tx
         .insert(specialDays)
-        .values({ locationId: f.cfg.locationId, name: "Navidad", repeatsYearly: true })
+        .values({ name: "Navidad", repeatsYearly: true })
         .returning({ id: specialDays.id });
       await tx.insert(specialDayDates).values({
         specialDayId: navidad!.id,
-        locationId: f.cfg.locationId,
         date: "2026-12-25",
         closedAllDay: true,
       });

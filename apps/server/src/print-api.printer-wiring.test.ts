@@ -780,7 +780,7 @@ describe("Receipt-printer and drawer config routes (hardware.manage)", () => {
     const printer = await createPrinter(app, agent.agentId, "Terrace counter");
     const [terrace] = await suite.db
       .insert(departments)
-      .values({ locationId: tenantA.locationId, name: "Terrace", tradingName: "Terrace" })
+      .values({ name: "Terrace", tradingName: "Terrace" })
       .returning({ id: departments.id });
     const [zone] = await suite.db
       .insert(floorZones)

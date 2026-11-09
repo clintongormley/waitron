@@ -238,7 +238,6 @@ async function setupVenue(): Promise<{
     await offerMenuThroughZone(tx, cfg, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
     await publishWorkingMenu(tx, cat.id);
     await tx.insert(routingCells).values({
-      locationId: cfg.locationId,
       categoryId: drinksCategory.id,
       stationId: null,
       noPreparation: true,

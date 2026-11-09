@@ -239,7 +239,6 @@ export async function beginAttendanceDiscovery(
   await tx.delete(attendanceSourceState).where(scanScope(venueId));
   for (const endpoint of await endpoints(tx)) {
     await tx.insert(attendanceSourceState).values({
-      locationId: venueId,
       ...endpoint,
       recordKind: "scan",
       generation: scope.generation,
@@ -331,7 +330,6 @@ async function remember(
   await tx
     .insert(attendanceSourceState)
     .values({
-      locationId: venueId,
       source: scan.source,
       key: row.key,
       recordKind: "watch",
@@ -341,7 +339,6 @@ async function remember(
     })
     .onConflictDoUpdate({
       target: [
-        attendanceSourceState.locationId,
         attendanceSourceState.source,
         attendanceSourceState.recordKind,
         attendanceSourceState.key,
@@ -468,7 +465,6 @@ export async function discoverAttendanceDays(
       const [created] = await tx
         .insert(attendanceSourceState)
         .values({
-          locationId: venueId,
           ...endpoint,
           recordKind: "scan",
           generation,

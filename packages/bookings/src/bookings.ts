@@ -76,7 +76,6 @@ export async function createBooking(
   const [row] = await tx
     .insert(bookings)
     .values({
-      locationId: await venueLocationId(tx),
       bookingDate: input.bookingDate,
       bookingTime: storedTime(input.bookingTime),
       partySize: input.partySize,

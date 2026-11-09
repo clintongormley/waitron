@@ -125,7 +125,6 @@ async function fixture(
     const departmentId = randomUUID();
     await tx.insert(departments).values({
       id: departmentId,
-      locationId: loc,
       name: "Service",
       tradingName: "Service",
       active: !options.disabled,
@@ -141,22 +140,18 @@ async function fixture(
     });
     // One season covers the whole year, so every weekday range is in it.
     const seasonId = randomUUID();
-    await tx
-      .insert(seasons)
-      .values({ id: seasonId, locationId: loc, name: "Winter", startsOn: "12-01" });
+    await tx.insert(seasons).values({ id: seasonId, name: "Winter", startsOn: "12-01" });
     const specialDayId = options.date === undefined ? undefined : randomUUID();
     const specialDayDateId = randomUUID();
     if (specialDayId !== undefined) {
       await tx.insert(specialDays).values({
         id: specialDayId,
-        locationId: loc,
         name: "Named day",
         repeatsYearly: options.annual ?? false,
       });
       await tx.insert(specialDayDates).values({
         id: specialDayDateId,
         specialDayId,
-        locationId: loc,
         date: options.date!,
         closedAllDay: options.closed ?? false,
       });
@@ -167,7 +162,7 @@ async function fixture(
       await tx
         .insert(floorZones)
         .values({ id: zoneId, locationId: loc, name: "Zone", active: !options.disabled });
-      await tx.insert(zoneServicePolicies).values({ zoneId, locationId: loc, departmentId });
+      await tx.insert(zoneServicePolicies).values({ zoneId, departmentId });
       if (ranges.length && specialDayId) {
         const dayId = randomUUID();
         await tx.insert(zoneDays).values({ id: dayId, zoneId, specialDayDateId });
@@ -256,14 +251,12 @@ async function paintedDay(
     dayId = randomUUID();
   await tx.insert(specialDays).values({
     id: specialDayId,
-    locationId: v.cfg.locationId,
     name: day.name,
     repeatsYearly: day.repeatsYearly ?? false,
   });
   await tx.insert(specialDayDates).values({
     id: dateId,
     specialDayId,
-    locationId: v.cfg.locationId,
     date: day.date,
     closedAllDay: day.closedAllDay ?? false,
   });
@@ -826,7 +819,6 @@ describe("a waiting change checks the hours written while it waits", () => {
       const departmentId = randomUUID();
       await tx.insert(departments).values({
         id: departmentId,
-        locationId: v.cfg.locationId,
         name: "Bar",
         tradingName: "Bar",
       });
@@ -1855,7 +1847,7 @@ it.each([false, true])(
       const winter = { id: v.seasonId };
       const [summer] = await tx
         .insert(seasons)
-        .values({ locationId: v.cfg.locationId, name: "Summer", startsOn: "06-01" })
+        .values({ name: "Summer", startsOn: "06-01" })
         .returning();
       const paint = (seasonId: string, ranges: { startsAt: string; endsAt: string }[]) => {
         const on = <T>(entries: T[]) =>
@@ -1912,7 +1904,7 @@ it("names the season of each season range conflict", async () => {
   const result = await withTransaction(suite.db, async (tx) => {
     const [autumn] = await tx
       .insert(seasons)
-      .values({ locationId: v.cfg.locationId, name: "Autumn", startsOn: "09-01" })
+      .values({ name: "Autumn", startsOn: "09-01" })
       .returning();
     for (const seasonId of [v.seasonId, autumn!.id])
       await replaceMenuWeek(
@@ -1987,7 +1979,6 @@ it("counts a range painted in every season once, so a capped list still names ev
       menuId = randomUUID();
     await tx.insert(departments).values({
       id: secondId,
-      locationId: v.cfg.locationId,
       name: "Bar",
       tradingName: "Bar",
     });
@@ -2160,7 +2151,7 @@ async function busyCalendar(count: number, run = 0) {
       startsOn,
       name: `Season ${i}`,
     }));
-    for (const season of seasonIds) await tx.insert(seasons).values({ ...season, locationId: loc });
+    for (const season of seasonIds) await tx.insert(seasons).values({ ...season });
     const menuId = randomUUID();
     await tx.insert(catalogues).values({ id: menuId, name: "Menu" });
     const departmentsMade: { id: string; lunch: string; dinner: string }[] = [];
@@ -2168,7 +2159,6 @@ async function busyCalendar(count: number, run = 0) {
       const id = fixed(2, d);
       await tx.insert(departments).values({
         id,
-        locationId: loc,
         name: `Department ${d}`,
         tradingName: `Department ${d}`,
       });
@@ -2203,13 +2193,10 @@ async function busyCalendar(count: number, run = 0) {
       const namedId = fixed(4, i),
         namedDateId = fixed(8, i),
         namedDayId = fixed(9, i);
-      await tx
-        .insert(specialDays)
-        .values({ id: namedId, locationId: loc, name: `Named ${i}`, repeatsYearly: true });
+      await tx.insert(specialDays).values({ id: namedId, name: `Named ${i}`, repeatsYearly: true });
       await tx.insert(specialDayDates).values({
         id: namedDateId,
         specialDayId: namedId,
-        locationId: loc,
         date: date((i % 12) + 1, 2 + (i % 14)),
         closedAllDay: i % 5 === 4,
       });
@@ -2229,11 +2216,10 @@ async function busyCalendar(count: number, run = 0) {
         dateId = fixed(6, i);
       await tx
         .insert(specialDays)
-        .values({ id: specialDayId, locationId: loc, name: `Special ${i}`, repeatsYearly: true });
+        .values({ id: specialDayId, name: `Special ${i}`, repeatsYearly: true });
       await tx.insert(specialDayDates).values({
         id: dateId,
         specialDayId,
-        locationId: loc,
         date: date((i % 12) + 1, 1 + (i % 14)),
         closedAllDay: i % 7 === 6,
       });

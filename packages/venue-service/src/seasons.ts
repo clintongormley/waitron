@@ -179,7 +179,7 @@ export async function saveSeasons(
   for (const { name, startsOn, colour, split } of added) {
     const [row] = await tx
       .insert(seasons)
-      .values({ name, startsOn, colour, locationId: await venueRowId() })
+      .values({ name, startsOn, colour })
       .returning({ id: seasons.id });
     for (const [departmentId, weeks] of departmentWeeks) {
       const week = weeks.get(split);

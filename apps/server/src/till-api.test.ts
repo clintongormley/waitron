@@ -223,7 +223,6 @@ const suite = useVenueDb({
         const [department] = await tx
           .insert(departments)
           .values({
-            locationId: venueId,
             name: "Restaurant",
             tradingName: "Restaurant",
           })
@@ -4124,7 +4123,6 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     const [department] = await suite.db
       .insert(departments)
       .values({
-        locationId: cfg.locationId,
         name: "Dining room",
         tradingName: "Restaurant",
       })
@@ -4662,7 +4660,6 @@ describe("canonical modifier HTTP serialization", () => {
     const [modifierDepartment] = await suite.db
       .insert(departments)
       .values({
-        locationId: cfg.locationId,
         name: "Modifier tables",
         tradingName: "Restaurant",
       })

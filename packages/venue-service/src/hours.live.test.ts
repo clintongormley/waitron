@@ -63,7 +63,6 @@ it("refreshes Calendar and routing from special days, clock and daily station st
     const [department] = await tx
       .insert(departments)
       .values({
-        locationId: venueId,
         name: "Deli",
         tradingName: "Deli",
         isDefault: true,

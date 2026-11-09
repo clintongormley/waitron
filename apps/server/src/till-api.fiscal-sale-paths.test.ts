@@ -239,8 +239,8 @@ async function setupVenue(): Promise<{
     const defaultStation = sql`(select id from kitchen_stations
            where location_id = ${cfg.locationId} and is_default)`;
     await tx.insert(routingCells).values([
-      { locationId: cfg.locationId, categoryId: foodCategory.id, stationId: defaultStation },
-      { locationId: cfg.locationId, categoryId: drinkCategory.id, stationId: defaultStation },
+      { categoryId: foodCategory.id, stationId: defaultStation },
+      { categoryId: drinkCategory.id, stationId: defaultStation },
     ]);
     // A staff person with a KNOWN PIN ("5555"), so the login route can verify their credential and
     // the sale is attributed to them.

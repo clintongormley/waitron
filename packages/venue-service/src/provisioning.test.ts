@@ -146,7 +146,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     it("adds no courses when promoting a department already authored by the venue", async () => {
       await seedVenue(db, { invoiceLocales: ["en-GB"] });
       const locationId = await venueLocationId(db);
-      await db.insert(departments).values({ locationId, name: "Dining", tradingName: "Dining" });
+      await db.insert(departments).values({ name: "Dining", tradingName: "Dining" });
       const node = { nodeId: await seedNode(db) };
       await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
       expect((await db.execute(sql`select name from kitchen_courses`)).rows).toEqual([]);
@@ -288,7 +288,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       const { locationId, seed, steps } = await venue("Starter promote");
       const [department] = await db
         .insert(departments)
-        .values({ locationId, name: "Bar", tradingName: "Bar", active: true })
+        .values({ name: "Bar", tradingName: "Bar", active: true })
         .returning({ id: departments.id });
       await seed();
       const [promoted] = await db

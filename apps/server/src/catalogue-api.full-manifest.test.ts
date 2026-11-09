@@ -35,7 +35,7 @@ async function routeCategory(locationId: string, categoryId: string, zoneId?: st
   await suite.db
     .insert(routingCells)
     .values([
-      { locationId, categoryId, noPreparation: true },
+      { categoryId, noPreparation: true },
       ...(zoneId === undefined ? [] : [{ locationId, categoryId, zoneId, noPreparation: true }]),
     ]);
 }
@@ -456,7 +456,6 @@ describe("sections and the reporting and routing they do not touch", () => {
     ).toBe(204);
     await routeCategory(v.locationId, categoryId);
     await suite.db.insert(routingCells).values({
-      locationId: v.locationId,
       productId,
       noPreparation: true,
     });

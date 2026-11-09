@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { readVenueClock, venueLocationId, type Transaction } from "@waitron/db";
+import { readVenueClock, type Transaction } from "@waitron/db";
 import { businessDayAt, businessDayBounds } from "@waitron/shared";
 import {
   attendanceDayWork,
@@ -59,7 +59,6 @@ export async function markAttendanceSourceChanged(
   await tx
     .insert(attendanceSourceState)
     .values({
-      locationId: await venueLocationId(tx),
       source: "rota",
       recordKind: "watch",
       key,
@@ -69,7 +68,6 @@ export async function markAttendanceSourceChanged(
     })
     .onConflictDoUpdate({
       target: [
-        attendanceSourceState.locationId,
         attendanceSourceState.source,
         attendanceSourceState.recordKind,
         attendanceSourceState.key,

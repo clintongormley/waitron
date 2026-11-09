@@ -418,7 +418,6 @@ describe("planned attendance shifts", () => {
     const id = newId();
     await suite.db.insert(rosterVersions).values({
       id,
-      locationId: place,
       periodStart: "2026-01-05",
       periodEnd: "2026-01-11",
       status,
@@ -436,7 +435,6 @@ describe("planned attendance shifts", () => {
     await suite.db.insert(shifts).values({
       id,
       personId: ana,
-      locationId: place,
       startsAt,
       endsAt,
       startsOffsetMinutes: 60,

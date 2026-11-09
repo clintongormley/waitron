@@ -396,7 +396,6 @@ async function attachLogo(filename: string, active: boolean) {
   const [department] = await suite.db
     .insert(departments)
     .values({
-      locationId: place!.id,
       name: active ? "Dining" : "Retired",
       tradingName: "Restaurant",
       active,

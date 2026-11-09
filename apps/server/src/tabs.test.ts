@@ -1139,7 +1139,6 @@ describe("listTablesWithState (occupancy)", () => {
       const [department] = await tx
         .insert(departments)
         .values({
-          locationId: cfg.locationId,
           name: "Restaurant",
           tradingName: "Restaurant",
         })

@@ -2738,7 +2738,7 @@ describe("the routing that names a period", () => {
       (
         await db
           .insert(routingCells)
-          .values({ locationId: v.locationId, stationId: cocina!.id, ...values })
+          .values({ stationId: cocina!.id, ...values })
           .returning({ id: routingCells.id })
       )[0]!.id;
     const line = (cellId: string, periodId: string, noPreparation = false) =>
@@ -2845,7 +2845,7 @@ describe("the routing that names a period", () => {
     ]) {
       const [cell] = await db
         .insert(routingCells)
-        .values({ locationId: v.locationId, stationId: cocina!.id, ...values })
+        .values({ stationId: cocina!.id, ...values })
         .returning({ id: routingCells.id });
       await db.insert(routingCellPeriods).values({
         cellId: cell!.id,

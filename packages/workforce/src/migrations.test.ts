@@ -609,7 +609,6 @@ describe("question ownership", () => {
     const [question] = await single.db
       .insert(attendanceQuestions)
       .values({
-        locationId,
         personId,
         businessDay: "2026-11-01",
         startAt: "2026-11-01T09:00:00.000Z",
@@ -627,7 +626,6 @@ describe("question ownership", () => {
         requestedByPersonId: personId,
         authorizedByPersonId: personId,
         personId: subject,
-        locationId: null,
         questionId: question!.id,
         action: "confirm",
         input: { action: "confirm", questionId: question!.id },

@@ -171,7 +171,6 @@ async function setupVenue(): Promise<{
     // (`packages/db/src/schema/venue-service/routing.ts`) is a `$defaultFn` generator, which a raw
     // statement never reaches.
     await tx.insert(routingCells).values({
-      locationId: cfg.locationId,
       categoryId: bebidas.id,
       stationId: null,
       noPreparation: true,

@@ -550,7 +550,6 @@ describe("service deletion", () => {
       const order = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 4 });
       await tx.insert(orderServiceContexts).values({
         workingOrderId: order.id,
-        locationId: f.cfg.locationId,
         zoneId: f.alpha,
         departmentId: f.dining,
         serviceMode: "prepay",
@@ -679,11 +678,7 @@ describe("service deletion", () => {
           .where(eq(departments.id, f.dining)),
       ),
     ).toEqual([{ name: "Dining", active: false }]);
-    await run((tx) =>
-      tx
-        .insert(departments)
-        .values({ locationId: f.cfg.locationId, name: "Dining", tradingName: "Dining" }),
-    );
+    await run((tx) => tx.insert(departments).values({ name: "Dining", tradingName: "Dining" }));
     expect(
       await refusal(run((tx) => serviceDelete.deleteDepartment(tx, noFloor, f.dining, NOW))),
     ).toBe("department.not_found");
