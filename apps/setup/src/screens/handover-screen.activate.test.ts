@@ -52,11 +52,16 @@ async function edit(el: HTMLElement, name: string, value: string) {
 async function mount(
   options: {
     loseAnswer?: boolean;
+    waitForStatus?: boolean;
     refuse?: boolean | { code: string; params: Record<string, unknown> };
   } = {},
 ) {
   const requests: { path: string; body: Record<string, unknown> }[] = [];
   let state = status.state;
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   const fetcher = vi.fn<typeof fetch>(async (path, init) => {
     if (init?.method === "GET") return new Response(JSON.stringify({ body: { ...status, state } }));
     const body = JSON.parse(init!.body as string) as Record<string, unknown>;
@@ -75,6 +80,7 @@ async function mount(
           },
         );
       state = "activated";
+      if (options.waitForStatus) await pending;
       if (options.loseAnswer) throw new TypeError("network lost");
       return new Response(JSON.stringify({ activated: true, restarting: true }));
     }
@@ -99,7 +105,7 @@ async function mount(
   await edit(el, "handover-code", "123456");
   q(el, "[data-test=authenticate]").click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
-  return { el, requests, fetcher };
+  return { el, requests, fetcher, release };
 }
 async function select(el: SetupHandoverScreen) {
   const clockEntry = q<LitElement>(el, "vf-recovery-hour");
@@ -203,3 +209,18 @@ it.each([
     );
   },
 );
+
+it("keeps the completed status when a lost activation answer settles after polling clears its clock entry", async () => {
+  const { el, release } = await mount({ loseAnswer: true, waitForStatus: true });
+  await select(el);
+  q(el, "[data-test=activate]").click();
+  await vi.waitFor(
+    () => expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue"),
+    { timeout: 4000 },
+  );
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  expect(q(el, "vf-recovery-hour")).toBeNull();
+  expect(el.shadowRoot!.textContent).toContain("This box has taken over the venue");
+});

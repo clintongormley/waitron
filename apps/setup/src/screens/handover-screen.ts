@@ -142,8 +142,9 @@ export class SetupHandoverScreen extends LitElement {
     });
   }
   async #activate(): Promise<void> {
-    const moduleOperation = this.entry?.readOperation();
-    if (!moduleOperation || this.busy) return;
+    const entry = this.entry;
+    const moduleOperation = entry?.readOperation();
+    if (!entry || !moduleOperation || this.busy) return;
     const controller = this.#controller;
     this.busy = true;
     this.actionError = "";
@@ -155,7 +156,7 @@ export class SetupHandoverScreen extends LitElement {
       this.#restartPolling();
     } catch (cause) {
       if (controller?.signal.aborted) return;
-      this.actionError = this.entry!.refusalMessage(cause);
+      this.actionError = entry.refusalMessage(cause);
       this.#resetSelection();
       this.#restartPolling();
     } finally {
