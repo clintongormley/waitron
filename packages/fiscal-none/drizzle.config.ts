@@ -4,7 +4,7 @@ export default defineConfig({
   dialect: "sqlite",
   // This module owns no tables — the "no fiscal regime" slot. The migration set is deliberately
   // empty (drizzle/meta/_journal.json has zero entries), and regenerating it produces nothing, which
-  // scripts/migrations-match-schema.test.ts checks.
+  // scripts/starting-migrations.test.ts checks.
   out: "./drizzle",
   schema: "./src/index.ts",
   // Its own journal table: drizzle runs only migrations newer than the table's latest

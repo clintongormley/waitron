@@ -26,8 +26,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "mutation": "stryker run",
-    "db:generate": "drizzle-kit generate",
-    "db:generate:custom": "drizzle-kit generate --custom"
+    "db:generate": "pnpm --filter @waitron/server migration-baseline rebuild --set core"
   },
   "dependencies": {
     "@waitron/membership": "workspace:*",

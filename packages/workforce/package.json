@@ -18,8 +18,7 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "db:generate": "drizzle-kit generate",
-    "db:generate:custom": "drizzle-kit generate --custom"
+    "db:generate": "pnpm --filter @waitron/server migration-baseline rebuild --set workforce"
   },
   "dependencies": {
     "@waitron/dashboard-kit": "workspace:*",

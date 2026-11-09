@@ -24,8 +24,8 @@ import { rootGuardWorkers } from "./scripts/root-test-budget.mjs";
 //   journal-monotonic reads every migration set named by
 //   `packages/migrations/migrations.manifest.json` for a `when` value at or below one
 //   already recorded, which drizzle's `max(created_at)` watermark skips with no error,
-//   and migrations-match-schema runs each package's `drizzle-kit generate` into a copy of its
-//   migration set and fails when that changes anything;
+//   and starting-migrations requires one starting migration per set and runs a check-only
+//   rebuild of each;
 //   `scripts/check-signoff.test.mjs`, which covers the sign-off predicate both gates share and
 //   runs ci.yml's sign-off step extracted from the workflow file.
 //
