@@ -12,7 +12,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, afterEach, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   openVenueDatabase,
@@ -34,7 +34,6 @@ import {
   readContentLanguages,
   writeContentLanguages,
 } from "@waitron/catalogue";
-import { runTunnelClient } from "@waitron/tunnel";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { ALL_MODULES } from "./modules.js";
@@ -122,19 +121,6 @@ vi.mock("undici", async (importOriginal) => {
 });
 
 /**
- * `boot.ts` imports `runTunnelClient` directly, with no injection seam. The tunnel tests observe the
- * call through this spy, which calls through to the real client so `close()`'s teardown runs for
- * real.
- */
-vi.mock("@waitron/tunnel", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@waitron/tunnel")>();
-  return {
-    ...actual,
-    runTunnelClient: vi.fn(actual.runTunnelClient),
-  };
-});
-
-/**
  * Every bucket call the setup routes make is wrapped by `boundObjectStore`. This passes through to
  * the real wrapper, shortening its bound only while a test sets `bucketBound.timeoutMs`, so a test
  * can point a route at a bucket that never answers and see the route give up.
@@ -184,11 +170,6 @@ vi.mock("@waitron/credentials", async (importOriginal) => {
   };
 });
 
-// The tunnel spy is one shared module mock, so its calls accumulate across tests.
-beforeEach(() => {
-  vi.mocked(runTunnelClient).mockClear();
-});
-
 /**
  * The shared, migrated venue directory every boot below points `WAITRON_VENUE_DIR` at, plus the
  * suite's own open handle on it. The suite migrates it, not boot, because the identity rows have to
@@ -219,34 +200,6 @@ afterAll(async () => {
 });
 
 describe("startServer — background listeners and sinks that fail or close", () => {
-  it("logs a tunnel client that rejects, and still closes cleanly", async () => {
-    vi.mocked(runTunnelClient).mockImplementationOnce(() =>
-      Promise.reject(new Error("tunnel client gave up")),
-    );
-    await withCapturedStdout(async (lines) => {
-      const port = await freePort();
-      const server = await startServer({
-        ...KEY_ENV,
-        WAITRON_VENUE_DIR: sharedVenueDir,
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_ENV: "preproduction",
-        WAITRON_TUNNEL_RELAY_URL: "tcp://127.0.0.1:1",
-        WAITRON_TUNNEL_BOX_ID: "box-rejecting",
-        WAITRON_TUNNEL_TOKEN: "tunnel-secret",
-      });
-      try {
-        await awaitListening(httpPort());
-        expect(await waitForEvent(lines, "tunnel.worker_rejected")).toMatchObject({
-          errorCode: "unknown",
-          level: "error",
-        });
-      } finally {
-        await expect(server.close()).resolves.toBeUndefined();
-      }
-    });
-  }, 60_000);
-
   it("serves the plain-HTTP landing page beside a trading boot that holds a minted leaf, and closes it with the server", async () => {
     const [port, landingPort] = await freePorts(2);
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-landing-"));

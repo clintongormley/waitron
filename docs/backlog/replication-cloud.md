@@ -287,8 +287,7 @@ record the stop somewhere that survives the repair.
 
 ## Waitron retains
 
-The implemented Cloud connection screen and manager adapter; box-side networking
-and `@waitron/tunnel`'s retirement; first-contact trust bootstrap; and the cloud-standby end-to-end
+The implemented Cloud connection screen and manager adapter; first-contact trust bootstrap; and the cloud-standby end-to-end
 proof. **Do not restart the cloud-standby work until the Waitron↔Waitron-Cloud boundary contract is
 settled.** The proof to run then: on-prem primary → adopt → mirror → human promotion → tills reroute
 to the promoted cloud → the venue sells and files. Local maintenance requirements remain in
@@ -385,10 +384,10 @@ that slice 3 has to restore:
   in slice 3 has to close this.
 
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
-  wizard's copy was made honest rather than the option removed — `apps/setup`'s role, connect and done
-  screens say plainly that joining does not work in this version and that the box ends up holding
-  none of the restaurant's data, with no till and no dashboard. But the option is still there and the
-  flow still runs, so an operator can still spend a box on it. Removing or disabling it until slice 3
+  wizard still offers the option. The A951-S private build removes the old relay: the primary
+  refuses the request, and the adopting server stays in setup. Its role, connect and refusal
+  wording now points to restore instead of promising a restart or suggesting another attempt.
+  Removing or disabling the option until slice 3
   lands the replacement is a product call, not a wording one. Whoever takes it should decide for
   `apps/setup/src/screens/mode-screen.ts`'s Join or recover row and the `role-screen` card together.
 
@@ -1021,46 +1020,12 @@ stays parked. Use the existing Cloud gateway and one outbound WireGuard containe
 password sign-in on the box; staff-host passkeys enrol separately. Venue devices keep using
 `.local`, and local sales never depend on Cloud or the internet. Customer pages stay later.
 
-The first cut adds an optional dashboard-only HTTPS listener, using the existing staff key and
-certificate files. It excludes the setup and recovery pages, till, device, print and machine-operation routes and marks requests
-remote before the box's own-device check. Password guessing keeps the existing backoff. The local
-listener and its passkey hostname keep their configuration.
+Remote dashboard access, Settings on/off and retirement of the old TCP relay are implemented in
+[PR #2543](https://github.com/clintongormley/waitron/pull/2543). Trial details and limits stay in its
+thread. Standby adoption remains unavailable.
 
-On 6 November a manual Chromium session used the public gateway to sign in to the test box
-with its ordinary password and normal certificate trust, then opened its overview. Installing
-an issued replacement changed new TLS connections without restarting the server. This was a Mac
-client on the home network using the public Internet path. A fresh Chromium session then
-repeated the password sign-in through the rented server's outside-home exit with normal trust.
-The bounded test app and peer were stopped afterwards. At the owner's request a separate
-managed demo then replaced them: the unprivileged app and its separate tunnel recovered from
-controlled process exits, and the public page returned 200. After the shared physical reboot on
-7 November, its enabled service and same tunnel container returned automatically; normal-trust
-Chromium signed in as administrator. The connection JSON's hash changed and its cause remains
-under investigation; the other retained file hashes matched. The final combined installation
-remains unqualified. The owner's three containers returned healthy.
-[Receipt: PR #2525](https://github.com/clintongormley/waitron/pull/2525).
-
-Remaining work, following the owner's certificate-first order:
-
-- Qualify the certificate worker on the managed public demo. The worker uses the existing signed
-  submit/status exchange, resumes pending requests after restart and renews before expiry. A local
-  TLS handshake observed the renewed chain without restarting the listener; no new public
-  certificate was issued for that synthetic test.
-- The existing signed Cloud refresh submits the saved public key through `tunnel-provision`
-  and writes the returned placement to the optional tunnel's control file, sharing one key reader.
-  Automatic provisioning on the managed public demo, image publication, Settings on/off/status
-  and automatic startup remain, followed by retirement of `@waitron/tunnel`. The
-  [runtime](../../deploy/tunnel/README.md) stays off without its control file; its private
-  WireGuard key is held in a separate container volume. The Linux container check covers
-  traffic to the fixed staff upstream, refused source/port, disconnect, reconnect and restart.
-  Final combined installation and physical reboot qualification remain open.
-- Explain the manual demo's changed connection-file hash and qualify the final combined
-  installation across a physical reboot.
-- Verify reconnect, reboot, certificate renewal, wrong-venue refusal, revocation, a sale without the
-  internet and separation from other venues and LAN addresses.
-- Translate all returned one real editable English menu suggestion on the test box on
-  7 November through the signed connection; it remains unaccepted. The address fields still need
-  their trial Cloud provider. Provider keys stay on the gateway host and come from the owner.
+Translate all returned one editable menu suggestion on the test box. Address completion still
+needs its trial Cloud provider. Provider keys stay on the gateway host and come from the owner.
 
 The owner accepts that a compromised Cloud could obtain a staff certificate and intercept logins,
 that the sign-in page and a bug in the remote entrance face the internet, and that this version
@@ -1210,8 +1175,6 @@ restructuring wider than a review fix:
   `apps/server/src/box-secrets.ts` (`keyRingEnv`) and `mirror-bundle.ts` (`encodeKeyRing`) as well
   as `packages/credentials/src/keyring.ts`; adopt decodes the bundle's ring through the env format.
   Own the format in `keyring.ts`.
-- `apps/server/src/mirror-bundle-fetch.ts` hand-writes an HTTPS client on `node:https`;
-  `tunnel-http.ts` already uses undici's `Agent({ connect: { ca } })` with `fetch`.
 - `node.dump` is opened twice in one verification run: read-only with an authorizer
   (`backup-verification-compatibility.ts`) and writable in memory without one
   (`packages/composition/src/node-backup-verification.ts`). Open it once, through the hardened

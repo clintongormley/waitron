@@ -396,6 +396,14 @@ export const en = {
   "cloud.health_failed": "Not working",
 
   "cloud.remote": "Remote access",
+  "cloud.remote_local": "Remote access on this box",
+  "cloud.remote_on": "On in Settings · connection not checked here",
+  "cloud.remote_off": "Off in Settings · disconnection not checked here",
+  "cloud.remote_help":
+    "Turning this off disconnects remote staff, including you if you use the staff address. Keep the local address available to turn it on again. Local use and your other Cloud services continue.",
+  "cloud.remote_stop": "Stop",
+  "cloud.remote_turn_on": "Turn on remote access",
+  "cloud.remote_turn_off": "Turn off remote access",
   "cloud.expires": "Code expires",
   "cloud.retry": "Try again",
   "cloud.retry_start": "Retry request",
@@ -4237,6 +4245,14 @@ export const es: Record<StringKey, string> = {
   "cloud.health_failed": "No funciona",
 
   "cloud.remote": "Acceso remoto",
+  "cloud.remote_local": "Acceso remoto en este equipo",
+  "cloud.remote_on": "Activado en Ajustes · conexión sin comprobar aquí",
+  "cloud.remote_off": "Desactivado en Ajustes · desconexión sin comprobar aquí",
+  "cloud.remote_help":
+    "Desactivarlo desconecta al personal remoto, incluido tú si usas la dirección del personal. Ten a mano la dirección local para volver a activarlo. El uso local y los demás servicios de Cloud continúan.",
+  "cloud.remote_stop": "Detener",
+  "cloud.remote_turn_on": "Activar el acceso remoto",
+  "cloud.remote_turn_off": "Desactivar el acceso remoto",
   "cloud.expires": "El código caduca",
   "cloud.retry": "Volver a intentar",
   "cloud.retry_start": "Reintentar solicitud",

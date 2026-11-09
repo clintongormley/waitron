@@ -4,8 +4,10 @@ To reach the staff entrance through Cloud, the box needs an outbound WireGuard p
 container keeps the network permission and private key separate from the app. It forwards TCP
 bytes to `host.docker.internal:8443`, so TLS still ends at the box's staff listener.
 
-This is the optional runtime cut of A951-S. The signed connection, Settings controls and automatic
-image publication are still to be connected. The default installation does not start it. The
+This is the optional runtime of A951-S. The signed connection submits the public key and writes
+the peer configuration when the Cloud receiver is enabled. On a paired installation, Settings
+lets you turn remote access off and on without pairing again. Off removes the peer configuration;
+automatic image publication remains to be connected. The default installation does not start it. The
 staff listener from PR #2525 must already be running and reachable from the Docker bridge;
 its loopback-only default is not reachable from this container.
 
@@ -22,9 +24,9 @@ containers, volumes, network and tagged image. It checks the fixed staff destina
 another source and port, disconnection, reconnection and a container restart. It does not reboot
 the host, issue a certificate or touch a running Waitron installation.
 
-After the entrance and certificate-worker cuts land and the staff certificate is installed,
-set `WAITRON_STAFF_ORIGIN` to the exact HTTPS staff address Cloud assigned. On a Linux box,
-bind the staff listener to Docker's bridge address so this container can reach it:
+On a connected test installation, set `WAITRON_STAFF_ORIGIN` to the exact HTTPS staff address
+Cloud assigned. The certificate worker opens that listener after installing its first certificate.
+On a Linux box, bind it to Docker's bridge address so this container can reach it:
 
 ```sh
 export WAITRON_STAFF_ORIGIN=https://staff-v-your-assigned-venue.test.waitron.io
@@ -44,7 +46,7 @@ Replace the example origin with your assigned address. The default `127.0.0.1` c
 from the peer. Keep the bridge bind: choosing `0.0.0.0` would also listen on the venue interfaces.
 The runtime's configured message reports local configuration, not a successful gateway handshake.
 
-Until the connection writer is wired in, the container stays off: `tunnel.off` in its logs means
+The container stays off until the signed connection supplies its placement: `tunnel.off` in its logs means
 there is no valid `peer.json` in the shared `tunnel_control` volume. The app sees this volume at
 `/var/lib/waitron/tunnel`. The file takes exactly three fields from Cloud's placement:
 

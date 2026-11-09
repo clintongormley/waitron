@@ -23,6 +23,17 @@ added to the sale path.
 
 ## Submit the test box's tunnel key
 
+Use the WireGuard container for remote staff access. The old in-process TCP relay package
+`@waitron/tunnel` and its `WAITRON_TUNNEL_RELAY_URL`, `WAITRON_TUNNEL_BOX_ID`,
+`WAITRON_TUNNEL_TOKEN` and `WAITRON_TUNNEL_POOL_SIZE` settings are retired. Remove those
+settings from your environment; boot no longer reads them. `WAITRON_TUNNEL_CONTROL_DIR`
+still selects the WireGuard container's control directory.
+
+The staff entrance carries dashboard requests only. It supplies no standby relay to the
+mirror-bundle route, which answers `mirror.no_relay`. The adopting server's fetcher reports
+that refusal as `mirror.bundle_fetch_failed` before saving its setup. A staff connection
+does not enable the parked cloud-standby work.
+
 For the A951-S trial, set `WAITRON_TUNNEL_CONTROL_DIR` to the tunnel container's shared control
 directory. The container persists its private key before publishing `public-key`; the app reads
 only that public file. On a connected test installation, the primary Cloud worker and **Refresh
@@ -227,7 +238,7 @@ provisioning command remains available for manual setup. The writer consumes the
 placement from the signed response without another Cloud request.
 
 A Cloud outage retains the last usable placement. A missing registration, revoked installation,
-unconfigured or failed service, missing peer key or invalid placement removes the peer file.
+unconfigured or failed service, saved remote access off, missing peer key or invalid placement removes the peer file.
 A rejected saved connection also removes the peer. Startup clears a stale peer even without a
 Cloud origin. When the worker is secondary, it reconciles locally recorded state without calling Cloud.
 An authorised **Stop Cloud access** tries local removal before sending the revoke request. A local
@@ -238,7 +249,10 @@ writer temporary files, leaving other control files alone.
 A failed replacement write preserves the previous complete file. Local configuration and file
 errors use `cloud.tunnel_unavailable`; a refused placement can therefore leave the Cloud connection
 active while its tunnel is off. The container notices removal on its next poll; this gives no
-instant shutdown guarantee. The writer runs in Cloud's background refresh.
+instant shutdown guarantee. The writer runs in Cloud's background refresh and when you change remote access in Settings.
+
+The on/off choice belongs to this box. A replacement starts with its own choice; importing the
+Cloud registration does not copy the old box's saved off choice.
 
 The owner approved this simpler A951-S path on 6 November. The watcher explicitly approved
 the operator-provisioned writer on 7 November at 03:06 in Lane E’s local `questions.md`. The

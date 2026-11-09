@@ -1278,7 +1278,6 @@ declare module "@waitron/shared" {
      * environment and `actual` the primary's.
      */
     "mirror.environment_mismatch": { expected: string; actual: string };
-    /** A mirror bundle was requested from a primary that has no relay configured to reach it through. */
     "mirror.no_relay": Record<string, never>;
     /**
      * A mirror-bundle request carried a malformed STANDBY identity: `standbyNodeId` absent or not a

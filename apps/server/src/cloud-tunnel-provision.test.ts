@@ -100,6 +100,133 @@ async function fixture() {
   };
 }
 
+it("turns remote access off locally while Cloud is offline, remembers it, and reconnects with the same key", async () => {
+  const f = await fixture();
+  try {
+    await f.client.refresh();
+    expect(JSON.parse(await readFile(join(f.directory, "peer.json"), "utf8")).address).toBe(
+      "10.77.17.2",
+    );
+    f.offline();
+    expect(await f.client.setRemoteAccess(false, async () => {})).toMatchObject({
+      remoteAccessEnabled: false,
+    });
+    await expect(readFile(join(f.directory, "peer.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    const restarted = createCloudConnection(f.options);
+    expect(await restarted.status()).toMatchObject({
+      remoteAccessEnabled: false,
+      state: "complete",
+    });
+    await expect(restarted.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
+    f.online();
+    f.patch({
+      services: (await f.saved()).lifecycle.view.services.map((s: { service: string }) =>
+        s.service === "remote_access" ? { ...s, state: "unconfigured", configuration: {} } : s,
+      ),
+    });
+    await restarted.refresh();
+    await restarted.syncTunnel();
+    await expect(readFile(join(f.directory, "peer.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(f.submissions()).toHaveLength(1);
+    expect(await restarted.setRemoteAccess(true, async () => {})).toMatchObject({
+      remoteAccessEnabled: true,
+    });
+    await restarted.refresh();
+    expect(JSON.parse(await readFile(join(f.directory, "peer.json"), "utf8")).address).toBe(
+      "10.77.17.2",
+    );
+    expect(await readFile(join(f.directory, "public-key"), "utf8")).toBe(f.publicKey + "\n");
+    expect(f.submissions()).toHaveLength(2);
+  } finally {
+    await f.close();
+  }
+});
+
+it("leaves the local choice alone when the manager is no longer authorised", async () => {
+  const f = await fixture();
+  try {
+    await expect(
+      f.client.setRemoteAccess(false, async () => {
+        throw new Error("signed out");
+      }),
+    ).rejects.toThrow("signed out");
+    expect((await f.client.status()).remoteAccessEnabled).toBe(true);
+    expect((await f.saved()).remoteAccessEnabled).toBeUndefined();
+  } finally {
+    await f.close();
+  }
+});
+
+it.each([null, "false", 0])("refuses a malformed saved remote access choice %j", async (value) => {
+  const f = await fixture();
+  try {
+    const saved = await f.saved();
+    saved.remoteAccessEnabled = value;
+    await writeFile(join(f.stateDir, "cloud-connection.json"), JSON.stringify(saved));
+    await expect(f.client.status()).rejects.toMatchObject({ code: "cloud.state_invalid" });
+    await expect(f.client.syncTunnel()).rejects.toMatchObject({ code: "cloud.state_invalid" });
+    await expect(readFile(join(f.directory, "peer.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  } finally {
+    await f.close();
+  }
+});
+
+it("keeps a failed turn-on off and saves off before a failed peer removal", async () => {
+  const f = await fixture();
+  try {
+    await f.client.refresh();
+    await f.client.setRemoteAccess(false, async () => {});
+    await writeFile(join(f.directory, "public-key"), randomBytes(32).toString("base64"));
+    await expect(f.client.setRemoteAccess(true, async () => {})).rejects.toMatchObject({
+      code: "cloud.tunnel_unavailable",
+    });
+    expect((await f.saved()).remoteAccessEnabled).toBe(false);
+    await writeFile(join(f.directory, "public-key"), f.publicKey + "\n");
+    await f.client.refresh();
+    await expect(readFile(join(f.directory, "peer.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await f.client.setRemoteAccess(true, async () => {});
+    await rm(join(f.directory, "peer.json"));
+    await mkdir(join(f.directory, "peer.json"));
+    await expect(f.client.setRemoteAccess(false, async () => {})).rejects.toMatchObject({
+      code: "cloud.tunnel_unavailable",
+    });
+    expect((await f.saved()).remoteAccessEnabled).toBe(false);
+  } finally {
+    await f.close();
+  }
+});
+it("refuses turn-on after a Cloud stop is pending or confirmed", async () => {
+  const f = await fixture();
+  try {
+    await f.client.refresh();
+    await f.client.setRemoteAccess(false, async () => {});
+    f.offline();
+    await expect(f.client.revoke(async () => {})).rejects.toMatchObject({
+      code: "cloud.unavailable",
+    });
+    await expect(f.client.setRemoteAccess(true, async () => {})).rejects.toMatchObject({
+      code: "cloud.not_configured",
+    });
+    expect((await f.saved()).remoteAccessEnabled).toBe(false);
+    f.online();
+    await f.client.revoke(async () => {});
+    await expect(f.client.setRemoteAccess(true, async () => {})).rejects.toMatchObject({
+      code: "cloud.not_configured",
+    });
+    expect((await f.saved()).remoteAccessEnabled).toBe(false);
+  } finally {
+    await f.close();
+  }
+});
+
 it("submits only the persisted public key with the live lease and retains the fourth service", async () => {
   const f = await fixture();
   try {

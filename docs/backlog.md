@@ -127,7 +127,7 @@ no design yet.
 - [After A760: A877's one helper first](backlog/service-periods.md#bundle-after-a760-a877s-one-helper-first)
 - [One rule for what holds a table back at a reset](backlog/till.md#bundle-one-rule-for-what-holds-a-table-back-at-a-reset)
 - [The key ring after a join](backlog/setup.md#bundle-the-key-ring-after-a-join)
-- [Requests through the tunnel look like the box itself](backlog/box.md#bundle-requests-through-the-tunnel-look-like-the-box-itself)
+- [Qualify clock confirmation through remote access](backlog/box.md#bundle-qualify-clock-confirmation-through-remote-access)
 - [Which state files a handover carries; summary checks](backlog/replication-cloud.md#bundle-which-state-files-a-handover-carries-summary-checks)
 - [Recheck that a spare gets later charts](backlog/replication-cloud.md#bundle-recheck-that-a-spare-gets-later-charts)
 - [Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
@@ -1867,7 +1867,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   same clock appear in no alert. Whether a disproof should stop payments again is for the owner
   (slice 9 decision 14). Left open by A798-B slice 9 (#2025).
 
-- **Requests through the tunnel look like the box itself** (bundle of 2, 1 important, size M, waits for another entry). [Detail](backlog/box.md#bundle-requests-through-the-tunnel-look-like-the-box-itself)
+- **Qualify clock confirmation through remote access** (bundle of 2, 1 important, size M). [Detail](backlog/box.md#bundle-qualify-clock-confirmation-through-remote-access)
 
 - **A1407. A wrong date needs a corrective invoice, and Waitron cannot yet issue the right one.** Research found the remedy is R4 on a full invoice and R5 on a simplified one, and `recordCorrection` handles only F2 to R5. `computeVatReturn` sorts by issue date, so a misdated sale lands in the wrong period in that report. Three identical refusals hold the rest of a chain, so a clock a day ahead could stop later filings; a record refused for a future date should get its corrective at once, naming the refused invoice, which AEAT's developer FAQ §17 says resolves it (case 2.a) and AEAT's test service accepted for an R1 (verifactu run 37286368370). Clocks running behind are not listed for the owner. AEAT's `TimestampPresentacion` is read but not stored: kept with each record, it would prove the real time of most sales, and that part needs a column, so it waits for the A1308 table hold to lift. Read, not run. [Findings](compliance/research/2026-11-06-adviser-clock.md)
 
@@ -2094,25 +2094,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 - **One signed request helper; strict reply readers** (bundle of 2, size M). [Detail](backlog/replication-cloud.md#bundle-one-signed-request-helper-strict-reply-readers)
 
-- **A951-S. Reach the box's dashboard through Cloud.** The owner replaced the earlier A951 build
-  on 6 November with a small remote entrance and the existing gateway. The old branch stays parked.
-  A manual browser signed in through the public gateway with normal certificate trust on
-  6 November ([proof PR](https://github.com/clintongormley/waitron/pull/2525)); live certificate
-  replacement also worked without a server restart. A separate managed demo recovered its app
-  and tunnel after controlled exits. After the shared physical reboot on 7 November, its service
-  and tunnel returned automatically and normal-trust browser sign-in passed. The connection file's
-  changed hash is still being investigated. The certificate worker now resumes pending requests,
-  renews before expiry and opens the listener after first issuance; its automated public-demo
-  deployment is not yet qualified. The optional tunnel runtime now has its own container and box
-  key. The signed Cloud refresh now submits that key and feeds the tunnel's control file through
-  one public-key reader. Left: automatic startup, image publication, Settings on/off/status, remaining isolation
-  qualification, final combined installation and reboot, and retirement of `@waitron/tunnel`.
-  Translate all returned one editable menu suggestion on the test box; address completion
-  remains a trial to build.
+- **A951-S provider trials.** Translate all returned one editable menu suggestion on the test box;
+  address completion still needs its trial. Keep the approved consent and request limits.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
-- **Waitron retains:** box-side networking and `@waitron/tunnel`'s retirement; first-contact trust
-  bootstrap; and the cloud-standby end-to-end proof. Do not restart the cloud-standby work until the boundary contract is settled.
+- **Waitron retains:** first-contact trust bootstrap; and the cloud-standby end-to-end proof. Do not restart the cloud-standby work until the boundary contract is settled.
   [Detail](backlog/replication-cloud.md#waitron-retains)
 
 - **Loose ends left by the SQLite failover-loop prototype gate.** Provider qualification,

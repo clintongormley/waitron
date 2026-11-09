@@ -100,6 +100,7 @@ describe("the user guides", () => {
       "handed-over",
       "waiting",
       "carry-on",
+      "remote-access",
     ]);
   });
 

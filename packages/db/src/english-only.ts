@@ -26,7 +26,6 @@ export const GENERIC_PACKAGES = [
   "identity",
   "catalogue",
   "media",
-  "tunnel",
   "membership",
   "module",
   "layouts",

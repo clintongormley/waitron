@@ -56,6 +56,7 @@ export interface CloudPairingView {
   registration?: CloudRegistration;
 }
 export interface CloudConnectionStatus extends Partial<Omit<CloudPairingView, "state">> {
+  remoteAccessEnabled?: boolean;
   state: "not_connected" | "awaiting_cloud" | "awaiting_local" | "complete";
   code: string;
   installation?: CloudInstallationStatus;
@@ -76,6 +77,7 @@ export interface CloudConnectionOptions {
   environment: "test" | "production";
 }
 export interface SavedCloudState {
+  remoteAccessEnabled?: boolean;
   lifecycle?: CloudInstallationState;
   version: 1;
   origin: string;
@@ -196,6 +198,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         value.origin !== options.origin ||
         value.localVenueId !== options.localVenueId ||
         value.environment !== options.environment ||
+        (value.remoteAccessEnabled !== undefined &&
+          typeof value.remoteAccessEnabled !== "boolean") ||
         !uuid(value.requestId) ||
         typeof value.code !== "string" ||
         !/^\d{8}$/.test(value.code) ||
@@ -259,6 +263,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       ...(state.view?.registration
         ? {
             installation: projectCloudInstallation(state),
+            remoteAccessEnabled: state.remoteAccessEnabled !== false,
             ...(state.lifecycle?.revoked ? {} : { accountUrl: `${options.origin}/account` }),
           }
         : { signupUrl: `${options.origin}/signup` }),
@@ -409,6 +414,30 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       ? `${state.publicKey} ${state.view.registration.installationId}`
       : undefined;
   return {
+    async setRemoteAccess(enabled: boolean, authorize: () => Promise<void>) {
+      return run(async () => {
+        const state = await read();
+        if (
+          !state?.view?.registration ||
+          state.lifecycle?.revoked ||
+          (enabled && state.lifecycle?.pending?.action === "revoke")
+        )
+          throw new AppError("cloud.not_configured", {});
+        await authorize();
+        state.remoteAccessEnabled = enabled;
+        await save(state);
+        try {
+          await writeTunnelConfiguration(options.tunnelDir, state);
+        } catch (error) {
+          if (enabled) {
+            state.remoteAccessEnabled = false;
+            await save(state);
+          }
+          throw error;
+        }
+        return project(state);
+      }, true);
+    },
     async staffCertificate(hostname: string, signal?: AbortSignal): Promise<boolean> {
       const deadline = signal
         ? AbortSignal.any([signal, AbortSignal.timeout(8000)])
@@ -601,7 +630,12 @@ export function createCloudConnection(options: CloudConnectionOptions) {
           if (!state?.view?.registration) return project(state);
           const client = installationClient(state, save);
           await client.refresh(signal);
-          if (options.tunnelDir && state.environment === "test" && !state.lifecycle?.revoked) {
+          if (
+            options.tunnelDir &&
+            state.environment === "test" &&
+            !state.lifecycle?.revoked &&
+            state.remoteAccessEnabled !== false
+          ) {
             const peerPublicKey = await readTunnelPublicKey(options.tunnelDir);
             if (peerPublicKey === undefined) return project(state);
             const remote = state.lifecycle?.view?.services.find(

@@ -36,6 +36,129 @@ async function person(role: "manager" | "staff") {
     return { id: p!.id, session: session.token, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
   });
 }
+it("lets a manager toggle only remote access, with the same origin and primary checks as other Cloud writes", async () => {
+  const f = await installationFixture();
+  try {
+    const manager = await person("manager"),
+      staff = await person("staff"),
+      app = new Hono();
+    const connection = createCloudConnection(f.options);
+    let primary = true;
+    mountCloudApi(
+      app,
+      {
+        db: suite.db,
+        connection,
+        managementOrigin: "https://venue.test",
+        isPrimary: () => primary,
+      },
+      () => {},
+    );
+    const send = (body: unknown, cookie = manager.cookie, origin = "https://venue.test") =>
+      app.request("/management-api/cloud/remote-access", {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    for (const [cookie, origin, code] of [
+      ["", "https://venue.test", "management_session.required"],
+      [staff.cookie, "https://venue.test", "authorization.not_permitted"],
+      [manager.cookie, "https://other.test", "authorization.not_permitted"],
+    ]) {
+      const reply = await send({ enabled: false }, cookie, origin);
+      expect(reply.status).toBe(cookie === "" ? 401 : 403);
+      expect((await reply.json()).error.code).toBe(code);
+    }
+    primary = false;
+    expect((await (await send({ enabled: false })).json()).error.code).toBe("cloud.not_primary");
+    primary = true;
+    for (const body of [
+      {},
+      { enabled: "false" },
+      { enabled: null },
+      { enabled: true, extra: true },
+    ]) {
+      const reply = await send(body);
+      expect(reply.status).toBe(400);
+      expect((await reply.json()).error.code).toBe("cloud.request_invalid");
+    }
+    expect((await (await send({ enabled: false })).json()).remoteAccessEnabled).toBe(false);
+    expect((await connection.status()).state).toBe("complete");
+    expect((await (await send({ enabled: true })).json()).remoteAccessEnabled).toBe(true);
+  } finally {
+    await f.close();
+  }
+});
+for (const lost of ["primary", "session"] as const)
+  it(`refuses a queued remote access change after losing ${lost}`, async () => {
+    const f = await installationFixture();
+    let release!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      const manager = await person("manager"),
+        app = new Hono();
+      const connection = createCloudConnection(f.options);
+      let primary = true,
+        enter!: () => void,
+        queued!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const waiting = new Promise<void>((resolve) => {
+        queued = resolve;
+      });
+      f.delay(async () => {
+        enter();
+        await hold;
+      });
+      const refreshing = connection.refresh();
+      await entered;
+      const original = connection.setRemoteAccess.bind(connection);
+      vi.spyOn(connection, "setRemoteAccess").mockImplementation((...args) => {
+        queued();
+        return original(...args);
+      });
+      mountCloudApi(
+        app,
+        {
+          db: suite.db,
+          connection,
+          managementOrigin: "https://venue.test",
+          isPrimary: () => primary,
+        },
+        () => {},
+      );
+      const answer = app.request("/management-api/cloud/remote-access", {
+        method: "POST",
+        headers: {
+          cookie: manager.cookie,
+          origin: "https://venue.test",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ enabled: false }),
+      });
+      await waiting;
+      if (lost === "primary") primary = false;
+      else
+        await suite.db
+          .delete(managementSessions)
+          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
+      release();
+      await refreshing;
+      const response = await answer;
+      expect(response.status).toBe(lost === "primary" ? 409 : 401);
+      expect((await response.json()).error.code).toBe(
+        lost === "primary" ? "cloud.not_primary" : "management_session.required",
+      );
+      expect((await connection.status()).remoteAccessEnabled).toBe(true);
+    } finally {
+      release();
+      await f.close();
+    }
+  });
+
 it("distinguishes a local tunnel refusal from a Cloud outage in the actual management route", async () => {
   const f = await installationFixture();
   try {
@@ -770,6 +893,54 @@ it("uses the staff origin for remote Cloud controls and refuses another origin",
     const replacement = await send("replacement/check", "https://staff.example.test");
     expect(replacement.status).toBe(409);
     expect(await replacement.json()).toMatchObject({ error: { code: "cloud.not_configured" } });
+  } finally {
+    await f.close();
+  }
+});
+
+it("identifies the actual staff entrance in Cloud status and action replies", async () => {
+  const f = await installationFixture();
+  try {
+    const manager = await person("manager"),
+      local = new Hono();
+    mountCloudApi(
+      local,
+      {
+        db: suite.db,
+        connection: createCloudConnection(f.options),
+        managementOrigin: "https://venue.test",
+        isPrimary: () => true,
+      },
+      () => {},
+    );
+    const staff = createStaffApp(local, "https://staff.example.test");
+    const headers = {
+      cookie: manager.cookie,
+      origin: "https://staff.example.test",
+      "content-type": "application/json",
+    };
+    expect(
+      (await (await local.request("/management-api/cloud/status", { headers })).json()).isRemote,
+    ).toBe(false);
+    expect(
+      (
+        await (
+          await staff.request("https://staff.example.test/management-api/cloud/status", { headers })
+        ).json()
+      ).isRemote,
+    ).toBe(true);
+    for (const action of ["remote-access", "refresh"]) {
+      const result = await staff.request(
+        "https://staff.example.test/management-api/cloud/" + action,
+        {
+          method: "POST",
+          headers,
+          body: action === "refresh" ? "{}" : JSON.stringify({ enabled: false }),
+        },
+      );
+      expect(result.status).toBe(200);
+      expect((await result.json()).isRemote).toBe(true);
+    }
   } finally {
     await f.close();
   }
