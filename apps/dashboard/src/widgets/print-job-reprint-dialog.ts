@@ -6,12 +6,12 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { DashboardApi, PrintJobRow, Printer } from "../api/client.js";
-import { codeOf } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage, refusal } from "../i18n/form-message.js";
 import { fill, t } from "../i18n/t.js";
 
-/** Asks which printer a print-queue job is reprinted on, from what its row already says. Its one
- * input starts chosen, so it holds no draft (as the Orders screen's reprint dialog). Sends a
+/** Asks which printer a print-queue job is reprinted on, from what its row already says. It holds
+ * no draft (as the Orders screen's reprint dialog): its one input is a single choice. Sends a
  * bubbling, composed `reprinted` naming the printer once the server has it, and `reprint-close`
  * when the person closes it. */
 @customElement("dashboard-print-job-reprint-dialog")
@@ -35,15 +35,26 @@ export class PrintJobReprintDialog extends LitElement {
   @state() private printerId = "";
   @state() private sending = false;
   @state() private errorKey: string | null = null;
+  /** A refusal naming the chosen printer, shown under the field until another is chosen. */
+  @state() private printerErrorKey: string | null = null;
   /** Counts openings, so an answer for an earlier job never updates this one. */
   #opening = 0;
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (!changed.has("job")) return;
-    this.#opening += 1;
-    this.sending = false;
-    this.errorKey = null;
-    this.printerId = this.#original()?.id ?? "";
+    if (changed.has("job")) {
+      this.#opening += 1;
+      this.sending = false;
+      this.errorKey = null;
+      this.printerErrorKey = null;
+      this.printerId = this.#original()?.id ?? "";
+    } else if (
+      changed.has("printers") &&
+      this.printerId !== "" &&
+      !this.#offers().some((printer) => printer.id === this.printerId)
+    ) {
+      this.printerId = this.#original()?.id ?? "";
+      this.printerErrorKey = null;
+    }
   }
 
   /** The job's own printer, offered while it is active and the job is not stuck on it. */
@@ -56,7 +67,9 @@ export class PrintJobReprintDialog extends LitElement {
   #offers(): Printer[] {
     const ids = new Set(this.job?.reprintPrinterIds ?? []);
     const others = this.printers
-      .filter((printer) => ids.has(printer.id) && printer.id !== this.job?.printerId)
+      .filter(
+        (printer) => printer.active && ids.has(printer.id) && printer.id !== this.job?.printerId,
+      )
       .sort((a, b) => a.name.localeCompare(b.name));
     const original = this.#original();
     return original ? [original, ...others] : others;
@@ -69,6 +82,7 @@ export class PrintJobReprintDialog extends LitElement {
     const printerName = offers.find((printer) => printer.id === printerId)?.name ?? "";
     this.sending = true;
     this.errorKey = null;
+    this.printerErrorKey = null;
     try {
       await this.api.resendPrintJob(this.job.id, printerId);
       if (opening !== this.#opening) return;
@@ -76,7 +90,10 @@ export class PrintJobReprintDialog extends LitElement {
         new CustomEvent("reprinted", { detail: { printerName }, bubbles: true, composed: true }),
       );
     } catch (error) {
-      if (opening === this.#opening) this.errorKey = codeOf(error);
+      if (opening !== this.#opening) return;
+      const code = codeOf(error);
+      if (code === "print_job.printer_unsuitable") this.printerErrorKey = code;
+      else this.errorKey = code;
     } finally {
       if (opening === this.#opening) this.sending = false;
     }
@@ -111,10 +128,12 @@ export class PrintJobReprintDialog extends LitElement {
         label=${t("printers.reprint_printer")}
         .options=${offers.map((printer) => ({ value: printer.id, label: printer.name }))}
         .value=${this.printerId}
+        .error=${this.printerErrorKey === null ? "" : codeMessage(this.printerErrorKey)}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
           this.printerId = event.detail.value;
           this.errorKey = null;
+          this.printerErrorKey = null;
         }}
       ></wt-combobox
       >${rule === "" ? nothing : html`<p class="rule" data-test="reprint-rule">${rule}</p>`}`;
@@ -134,7 +153,13 @@ export class PrintJobReprintDialog extends LitElement {
       }}
     >
       ${job === null ? nothing : this.#renderChoice(job, offers)}
-      <wt-form-actions slot="footer" .error=${bottomMessage(refusal(this.errorKey))}>
+      <wt-form-actions
+        slot="footer"
+        .error=${bottomMessage(
+          refusal(this.errorKey),
+          this.printerErrorKey === null ? null : t("form.fix_fields"),
+        )}
+      >
         <wt-button
           slot="cancel"
           variant="secondary"

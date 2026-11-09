@@ -172,20 +172,85 @@ it("sends the chosen printer once while the request is on its way, then says whe
   expect((reprinted.mock.calls[0]![0] as CustomEvent).detail).toEqual({ printerName: "Terrace" });
 });
 
-it("shows a refusal at the bottom and leaves Reprint usable", async () => {
+it("shows a refusal naming no printer at the bottom and leaves Reprint usable", async () => {
   const { el } = await mount(job(), {
-    resendPrintJob: vi.fn().mockRejectedValue({ code: "print_job.printer_unsuitable" }),
+    resendPrintJob: vi.fn().mockRejectedValue({ code: "print_job.not_resendable" }),
   });
   const reprinted = vi.fn();
   el.addEventListener("reprinted", reprinted);
   reprint(el).click();
   const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
   await vi.waitFor(async () =>
-    expect(await dialogMessageOf(dialog)).toBe(codeMessage("print_job.printer_unsuitable")),
+    expect(await dialogMessageOf(dialog)).toBe(codeMessage("print_job.not_resendable")),
   );
+  expect(combobox(el)!.error).toBe("");
   expect(reprint(el).disabled).toBe(false);
   expect(reprint(el).loading).toBe(false);
   expect(reprinted).not.toHaveBeenCalled();
+});
+
+it("shows an unsuitable printer's refusal under the printer until another is chosen, and leaves Reprint usable", async () => {
+  const { el } = await mount(job(), {
+    resendPrintJob: vi.fn().mockRejectedValue({ code: "print_job.printer_unsuitable" }),
+  });
+  const reprinted = vi.fn();
+  el.addEventListener("reprinted", reprinted);
+  reprint(el).click();
+  await vi.waitFor(() =>
+    expect(combobox(el)!.error).toBe(codeMessage("print_job.printer_unsuitable")),
+  );
+  const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+  expect(await dialogMessageOf(dialog)).toBe(t("form.fix_fields"));
+  expect(reprint(el).disabled).toBe(false);
+  expect(reprint(el).loading).toBe(false);
+  expect(reprinted).not.toHaveBeenCalled();
+  await chooseOption(combobox(el)!, "p3");
+  await el.updateComplete;
+  expect(combobox(el)!.error).toBe("");
+  expect(await dialogMessageOf(dialog)).toBe("");
+});
+
+it("stops offering a printer switched off while it is open, and goes back to the job's own printer if it was chosen", async () => {
+  const { el } = await mount(job(), {
+    resendPrintJob: vi.fn().mockRejectedValue({ code: "print_job.printer_unsuitable" }),
+  });
+  el.printers = printers.map((p) => (p.id === "p3" ? { ...p, active: false } : p));
+  await el.updateComplete;
+  expect(offered(el)).toEqual(["Kitchen", "Terrace"]);
+  expect(combobox(el)!.value).toBe("p1");
+  await chooseOption(combobox(el)!, "p2");
+  await el.updateComplete;
+  reprint(el).click();
+  await vi.waitFor(() =>
+    expect(combobox(el)!.error).toBe(codeMessage("print_job.printer_unsuitable")),
+  );
+  el.printers = el.printers.map((p) => (p.id === "p2" ? { ...p, active: false } : p));
+  await el.updateComplete;
+  expect(offered(el)).toEqual(["Kitchen"]);
+  expect(combobox(el)!.value).toBe("p1");
+  expect(combobox(el)!.error).toBe("");
+  expect(await dialogMessageOf(el.shadowRoot!.querySelector("wt-dialog")!)).toBe("");
+  expect(reprint(el).disabled).toBe(false);
+});
+
+it("empties a dropped choice and disables Reprint when the job's own printer is not offered", async () => {
+  const { el } = await mount(job({ stuck: true }), {
+    resendPrintJob: vi.fn().mockRejectedValue({ code: "print_job.printer_unsuitable" }),
+  });
+  expect(offered(el)).toEqual(["Bar", "Terrace"]);
+  await chooseOption(combobox(el)!, "p2");
+  await el.updateComplete;
+  reprint(el).click();
+  await vi.waitFor(() =>
+    expect(combobox(el)!.error).toBe(codeMessage("print_job.printer_unsuitable")),
+  );
+  el.printers = printers.map((p) => (p.id === "p2" ? { ...p, active: false } : p));
+  await el.updateComplete;
+  expect(offered(el)).toEqual(["Bar"]);
+  expect(combobox(el)!.value).toBe("");
+  expect(combobox(el)!.error).toBe("");
+  expect(await dialogMessageOf(el.shadowRoot!.querySelector("wt-dialog")!)).toBe("");
+  expect(reprint(el).disabled).toBe(true);
 });
 
 it("asks to close on Cancel", async () => {
