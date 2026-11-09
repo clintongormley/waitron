@@ -451,8 +451,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
   }
 }
 
-/** Runs before any question or secret is asked for, so a person is not walked through a setup the
- * command will then refuse. */
+/** Runs before any question or secret but the venue folder's, so a person is not walked through a
+ * setup the command will then refuse. */
 async function refuseRetainedSetup(
   runtime: ReturnType<typeof createFirstSetupRuntime>,
   io: ProvisioningIo,
@@ -460,7 +460,14 @@ async function refuseRetainedSetup(
   const retained = await runtime.store.readForRepair();
   if (retained === null) return;
   const { status } = retained.state;
-  if (status === "complete") throw new AppError("setup.attempt_uncertain", {});
+  // A record saved complete beside a claim mark still active is a completion cut off between its
+  // two saves, which Start again deletes.
+  if (status === "complete" && retained.marker.status === "complete") {
+    io.stderr(
+      "This box's setup already finished, so the command sets nothing up. Nothing was changed.",
+    );
+    throw new AppError("setup.already_provisioned", {});
+  }
   io.stderr(
     status === "uncertain"
       ? "This setup stopped during activation, and the box could not tell whether activation finished, so the command will not carry on with it. Nothing was changed."

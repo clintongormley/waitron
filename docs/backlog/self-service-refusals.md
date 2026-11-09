@@ -458,6 +458,21 @@ State: Saved setup/owner data cannot be parsed or checked, or a protected read f
 
 Route: Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words. Since A1206 (2026-10-29) Start again no longer reads the attempt's series names, so a damaged record of them neither refuses nor warns; a damaged setup record or claim marker (A1158), the setup databases A1159 lists and the database-present case in A1161 still refuse.
 
+### `shell.operation_conflict`
+
+Screen: Setup wizard. Fix: [setup-state](#setup-state).
+
+| Language | Current words |
+| --- | --- |
+| EN | This server holds saved setup work that does not match this request, so it did not do this one. |
+| ES | Este servidor tiene guardado un trabajo de configuración que no coincide con esta solicitud, así que no ha hecho esta. |
+
+Wording: `apps/setup/src/i18n/strings/shell.ts:41` and `apps/setup/src/i18n/strings/shell.ts:222`. (2026-11-09, A1379: the words no longer send the person to support or offer to resume; the next step below is still missing.)
+
+State: A saved setup-operation file is malformed, or kind/requestHash differs. Waiting cannot change a retained malformed file or reconcile a different request. Receipt: `packages/provisioning/src/setup-operation.ts:94`; `packages/provisioning/src/setup-operation.ts:171`; `apps/setup/src/setup-app.ts:1513`.
+
+Route: Existing for a resumable request: resume the original. Missing for an unrecoverable mismatch: a verified discard/recovery choice. Coordinate with A1042; do not delete retained setup data as an improvised remedy.
+
 ### `shell.already_stamped`
 
 Screen: Setup wizard. Fix: [setup-environment](#setup-environment).

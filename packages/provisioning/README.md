@@ -142,11 +142,11 @@ take back has to be the harmless one). Anything else is refused
 automated deployment stand a venue up with no browser and no setup wizard, which was the only path
 that stamped before.
 
-The stamp goes through `stampDeployment` (`@waitron/db`) — the same primitive the setup wizard's
+The stamp goes through `stampDeployment` (`@waitron/db`), the same primitive the setup wizard's
 handler calls (`provisionVenue`, `apps/server/src/provision.ts`); the command writes it only once
-activation has started — so a
-directory already stamped for the **other** environment is refused with `deployment.already_stamped`
-and nothing is minted, and a directory already stamped for THIS one passes through untouched. It is
+activation has started. A directory already stamped for the **other** environment is refused with
+`deployment.already_stamped` and nothing is minted, and a directory already stamped for THIS one
+passes through untouched. It is
 written after the confirmation prompt, never before: a stamp is permanent, so an operator who
 declines leaves the directory exactly as it was found.
 

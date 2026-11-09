@@ -2730,7 +2730,7 @@ describe("resetting a join that stopped partway", () => {
     ["setup.already_provisioning", "Setup is already in progress on this server."],
     [
       "setup.operation_conflict",
-      "This server holds saved setup work that does not match this request, so it does not carry it out. Reload shows where the server stands now.",
+      "This server holds saved setup work that does not match this request, so it did not do this one.",
     ],
   ])("ends at a Reload for %s", async (code, message) => {
     const resetIncompleteAdopt = vi.fn().mockRejectedValue({ code, params: {}, status: 409 });
@@ -3911,7 +3911,7 @@ describe("restore from my bucket", () => {
     [
       "setup.operation_conflict",
       undefined,
-      "This server holds saved setup work that does not match this request, so it does not carry it out. Reload shows where the server stands now.",
+      "This server holds saved setup work that does not match this request, so it did not do this one.",
     ],
     ["setup.request_invalid", { field: "kit" }, "Check the recovery pack or kit file."],
     [

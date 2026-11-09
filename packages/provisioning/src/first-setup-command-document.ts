@@ -212,21 +212,27 @@ export function createFirstSetupCommandDelivery(options: {
         stop(io, cannotWrite(path), stopped);
       }
       let created: Stats | undefined;
+      let removed: boolean | undefined;
       try {
-        try {
-          created = await file.stat();
-          await file.writeFile(document.bytes);
-          await file.sync();
-        } finally {
-          await file.close();
-        }
+        created = await file.stat();
+        await file.writeFile(document.bytes);
+        await file.sync();
       } catch {
+        // Checked while the handle is open, so a replacement cannot have reused the file's inode.
+        removed = await removePartial(output, created);
+      }
+      const closed = await file.close().then(
+        () => true,
+        () => false,
+      );
+      if (removed !== undefined || !closed)
         stop(
           io,
-          (await removePartial(output, created)) ? cannotWrite(path) : leftBehind(path),
+          (removed ?? (await removePartial(output, created)))
+            ? cannotWrite(path)
+            : leftBehind(path),
           stopped,
         );
-      }
       const reference = {
         module,
         stageId: staged.stage.stageId,
