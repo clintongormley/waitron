@@ -12,8 +12,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { parseModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "@waitron/composition";
 import { loadKeyRing, readNodeSigningKey, sealNodeSigningKeyTx } from "@waitron/credentials";
-import { readMembershipTrustSet, withNodeTransaction } from "@waitron/db";
+import { invoiceSeries, readMembershipTrustSet, withNodeTransaction } from "@waitron/db";
 import { generateNodeKeyPair } from "@waitron/membership";
+import { createClient } from "@waitron/verifactu";
+import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
+import { envios } from "@waitron/fiscal-verifactu/src/schema/envios.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readStartAgainMarker } from "@waitron/provisioning";
@@ -38,6 +41,10 @@ const external = vi.hoisted(() => ({ internet: vi.fn() }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: external.internet,
 }));
+vi.mock("@waitron/verifactu", async (actual) => {
+  const real = await actual<typeof import("@waitron/verifactu")>();
+  return { ...real, createClient: vi.fn(real.createClient) };
+});
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
@@ -234,6 +241,73 @@ it("empty never-activated hour restart deletes the attempt and burns the entire 
       },
     },
   });
+});
+
+const facts = async () => ({
+  series: await suite.db.select().from(invoiceSeries),
+  records: await suite.db.select().from(registrosFacturacion),
+  filing: await suite.db.select().from(envios),
+});
+// Every AEAT request is built by `createClient`; the internet clock is mocked above.
+function expectNothingSentToAeat(fetched: { mock: { calls: unknown[] } }) {
+  expect(vi.mocked(createClient)).not.toHaveBeenCalled();
+  expect(fetched.mock.calls).toEqual([]);
+}
+
+it("setup series names chosen and thrown away by Start again write nothing to the invoice chain or AEAT", async () => {
+  const fetched = vi.spyOn(globalThis, "fetch");
+  const f = await fixture();
+  const chosen = await facts();
+  expect(chosen.records).toEqual([]);
+  expect(chosen.filing).toEqual([]);
+  await f.host.keys.stageInitialNodeKey(
+    f.owner(),
+    await f.host.owner.reconfirm(f.owner(), PASSWORD, "block-use"),
+  );
+  await suite.db.archiveTo(join(f.venueDir, "venue.db"));
+  const before = await f.host.resolution.captureFirstSetupOriginals();
+  await createFirstSetupResolutionActions({
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
+    host: f.host,
+  }).startAgainFirstSetup({
+    inspectionId: before.inspection.inspectionId,
+    revision: before.inspection.revision!,
+    ownerGeneration: before.inspection.ownerGeneration!,
+  });
+  const next = createFirstSetupModuleHost({
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
+    modules: ALL_MODULES,
+    environment: {},
+    database: () => suite.db,
+  });
+  const claim = await next.owner.claimFirstSetup({ environment: "preproduction", request });
+  vi.setSystemTime("2026-10-16T12:01:00Z");
+  const again = await chooseMinute(next, { ...claim.state, capability: claim.capability });
+  expect(firstSetupModuleContext(again.state, MODULE).request).toMatchObject({
+    identity: "0CNPK",
+  });
+  const after = await facts();
+  expect(after.records).toEqual([]);
+  expect(after.filing).toEqual([]);
+  expectNothingSentToAeat(fetched);
+});
+
+it("setup series made at activation, before any invoice, write nothing to the invoice chain or AEAT", async () => {
+  const fetched = vi.spyOn(globalThis, "fetch");
+  const f = await fixture();
+  f.deps.establishIdentity = async () => {
+    throw new Error("synthetic after commit");
+  };
+  await expect(f.activate()).rejects.toThrow("synthetic after commit");
+  const made = await facts();
+  expect(made.series.map(({ code, nextNumber }) => ({ code, nextNumber }))).toEqual(
+    expect.arrayContaining([{ code: "A-0CNNY", nextNumber: 1 }]),
+  );
+  expect(made.records).toEqual([]);
+  expect(made.filing).toEqual([]);
+  expectNothingSentToAeat(fetched);
 });
 
 it.each([
