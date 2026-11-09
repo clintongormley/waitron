@@ -4024,9 +4024,9 @@ again"), and the restore page waits that out with one countdown and checks again
 countdown, checks again quietly and keeps saying why"; owner, 2026-10-30, A1207); one that already recorded a wait moves to the next free
 minute when that starts within 150 seconds, and is otherwise refused with that time (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a restore's recorded wait meeting
 %s, in use, at %s waits for the next free minute"; a refusal past 150 seconds is tested for a promotion and for a restore's first choice, D1 above, but not after a recorded wait: the same file's "waits for a next minute exactly 150 000 ms ahead and refuses one 150 001 ms ahead"). A later name, the backup's newest record and its creation
-time no longer refuse or move the minute (the same file's "selected although a later name is
+time do not refuse or move the minute (the same file's "selected although a later name is
 known" cases; `apps/server/src/hour-recovery-host.test.ts`, "selects at the ordinary wait although
-the backup's newest record and creation time are later"; owner, 2026-10-29, A1207). The minute is
+the backup's newest record is later"; owner, 2026-10-29, A1207). The minute is
 taken 90 to 150 seconds after the clock check (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "restore
 waits until a minute start 90 to 150 seconds after its check"). It retains recovered invoices
 and counters, retires recovered active series and activates the fresh complete series set. The
@@ -5719,7 +5719,7 @@ with an empty history beside $later", "waits for the next minute when the curren
 name is known"; on the server, `apps/server/src/hour-promotion.test.ts` "a promotion takes its
 current minute although a later installation name is recorded",
 `apps/server/src/hour-recovery-host.test.ts` "selects at the ordinary wait although the backup's
-newest record and creation time are later" and `apps/server/src/hour-recovery-placement-3.test.ts`
+newest record is later" and `apps/server/src/hour-recovery-placement-3.test.ts`
 "places an older selected hour over a newer surviving %s destination"; a new setup attempt is
 compared with abandoned ones by exact name only (`apps/server/src/first-setup-retired-assignments.test.ts`,
 "an attempt after an abandoned one may take a minute earlier than the abandoned attempt's name" and "an abandoned
@@ -5728,7 +5728,10 @@ in use with the reason `minute_in_use`; the setup and restore pages wait it out 
 and check again by themselves (`packages/fiscal-verifactu/src/setup/clock-wait.browser.test.ts`, "a
 taken minute shows one countdown and checks again quietly"), while an attempt whose own pick has
 turned up in use is still refused, with no time (`packages/fiscal-verifactu/src/hour-selection.test.ts`,
-"a pick is refused when a record naming its own minute appears after it"); the setup's comparison with abandoned attempts refuses an identical name as `setup.attempt_conflict` (the second case above). The name is
+"a pick is refused when a record naming its own minute appears after it"), and the pages and the
+setup app call that a fault in Waitron (A1385: `packages/fiscal-verifactu/src/setup/clock-wait.ts`,
+`clockWaitStrings` `inUse`; `apps/setup/src/setup-app.test.ts`, "shows a stored series pick found
+taken at activation as a fault in Waitron, without a retry, in both languages"); the setup's comparison with abandoned attempts refuses an identical name as `setup.attempt_conflict` (the second case above). The name is
 refused once more when it is written: activation refuses `installation_used` and `series_collision`
 against the database being written (`packages/fiscal-verifactu/src/allocation.ts`,
 `validateForActivation`; `packages/fiscal-verifactu/src/hour-standby-activation.test.ts`, "also
@@ -5742,9 +5745,8 @@ real time and their first and last time (`apps/server/src/hour-recovery-host.tes
 below the backup's newest invoice names its minute, a sale is then refused by the clock-behind stop,
 and a confirmation lists the later sale"). A later name held only in a database a restore replaces
 is not in the database the restore places (the placement case above reads only that database's series). A box and the machine
-confirming its clock, both behind by the same amount, can name a minute in the past, even one below the
-backup's creation time (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "W: the box and another
-device wrong together, below the backup's creation"); only that exact minute being in use refuses
+confirming its clock, both behind by the same amount, can name a minute in the past (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "W: the box and another
+device wrong together, behind the true time"); only that exact minute being in use refuses
 it. No alert names a later installation name with no invoices under it, or the series names (A1207
 plan, review experiment #7, a promotion only). A setup or restore waits
 90 to 150 seconds first (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "restore waits

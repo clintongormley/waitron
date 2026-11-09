@@ -5582,6 +5582,53 @@ describe("first setup owner refusals", () => {
       }
     },
   );
+  it("shows a stored series pick found taken at activation as a fault in Waitron, without a retry, in both languages", async () => {
+    for (const [locale, sentence] of [
+      [
+        "en-GB",
+        "The series cannot be made: the minute this setup chose is already in this box's records. This is a fault in Waitron.",
+      ],
+      [
+        "es-ES",
+        "No se pueden crear las series: el minuto que eligió esta configuración ya está en los registros de este equipo. Es un fallo de Waitron.",
+      ],
+    ]) {
+      try {
+        const el = await mountSetupApp(
+          stubApi({
+            provision: vi.fn().mockRejectedValue({
+              code: "sif.allocation_invalid",
+              params: { reason: "minute_in_use" },
+            }),
+          }),
+        );
+        setLocale(locale!);
+        provisionRequest(el);
+        await flush(el);
+        expect(await screenText(el, "provisioning", "[data-test=error]")).toBe(sentence);
+        const screen = await screenHost(el, "provisioning");
+        expect(screen.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+        expect(screen.shadowRoot!.querySelector("[data-test=reload]")).not.toBeNull();
+      } finally {
+        setLocale("en-GB");
+      }
+    }
+  });
+  it("keeps the general provisioning failure for another series refusal", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        provision: vi.fn().mockRejectedValue({
+          code: "sif.allocation_invalid",
+          params: { reason: "second_clock_missing" },
+        }),
+      }),
+    );
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toContain(
+      "Provisioning failed",
+    );
+  });
 });
 
 describe("a recovery request refused because another setup holds the server", () => {

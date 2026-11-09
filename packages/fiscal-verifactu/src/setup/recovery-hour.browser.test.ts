@@ -720,6 +720,54 @@ it("Compare clocks with no second clock explains the wait and checks again by it
     vi.useRealTimers();
   }
 });
+it("a recorded wait shown by Compare clocks makes the series by itself at zero, with no press", async () => {
+  const { state, prepare } = scripted();
+  state.preview = { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 };
+  const { el } = await mount(prepare);
+  await ready(el);
+  fakeClock();
+  try {
+    await compare(el);
+    await vi.waitFor(() => expect(remaining(el)).toBe("1:01"));
+    expect(text(el)).toContain(NOTHING_TO_DO);
+    expect(selects(prepare)).toEqual([]);
+    state.preview = undefined;
+    vi.advanceTimersByTime(61_000);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(1));
+    await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+    const sent = prepare.mock.calls.length;
+    vi.advanceTimersByTime(120_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(prepare.mock.calls).toHaveLength(sent);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("Compare clocks after Make the series still makes the series by itself at the end of the wait", async () => {
+  const { state, prepare } = scripted([
+    { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
+    selected,
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("1:24"));
+    expect(selects(prepare)).toHaveLength(1);
+    state.preview = { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 };
+    await userEvent.click(button(el, "compare"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("1:01"));
+    state.preview = undefined;
+    vi.advanceTimersByTime(61_000);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(2));
+    await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("Compare clocks with clocks that differ explains the refusal, not a failure", async () => {
   const { state, prepare } = scripted();
   state.decision = {
@@ -1250,6 +1298,37 @@ it("says in Spanish that the series code already exists, with the countdown", as
     vi.useRealTimers();
   }
 });
+it.each([
+  [
+    "en",
+    "The series cannot be made: the minute for these series is already in this box's records. This is a fault in Waitron. Reload this page and start the restore again: a new restore chooses a new series name.",
+  ],
+  [
+    "es",
+    "No se pueden crear las series: el minuto de estas series ya está en los registros de este equipo. Es un fallo de Waitron. Recarga esta página y vuelve a empezar la restauración: una restauración nueva elige otro nombre de serie.",
+  ],
+] as const)(
+  "a stored pick found taken names the fault and how to start the restore again (%s)",
+  async (locale, words) => {
+    const { prepare } = scripted([
+      { code: "sif.allocation_invalid", params: { reason: "minute_in_use" } },
+    ]);
+    const { el } = await mount(prepare);
+    el.locale = locale;
+    await el.updateComplete;
+    await ready(el);
+    await compare(el);
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() =>
+      expect(
+        el
+          .shadowRoot!.querySelector("[data-test=minute-in-use]")
+          ?.textContent?.replace(/\s+/g, " ")
+          .trim(),
+      ).toBe(words),
+    );
+  },
+);
 it("says in Spanish that the series cannot be made yet", async () => {
   const { prepare } = scripted([
     {

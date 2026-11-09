@@ -728,6 +728,24 @@ describe("selected-hour admission before archive placement", () => {
     expect(external.internet).not.toHaveBeenCalled();
   });
 
+  it("a fresh-box Cloud restore refused at placement for no internet clock keeps its request and places on the next start", async () => {
+    const f = await archiveHost();
+    const managed = await managedHttp(f);
+    const options: Parameters<typeof runStagedRestore>[0] = {
+      ...f.restore,
+      onManagedCloudRestored: (binding) => managed.client().markRestored(binding),
+    };
+    await expect(runStagedRestore(options)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "second_clock_missing" },
+    });
+    expect(await readdir(f.roots.stateDir)).toContain("restore-request.json");
+    agreeInternet();
+    expect(await runStagedRestore(options)).toBe(true);
+    expect(await unretiredSeriesCodes(f.roots.venueDir)).toEqual(expectedSeriesCodes(f));
+    expect(await readdir(f.roots.stateDir)).not.toContain("restore-request.json");
+  });
+
   it("interactive recovery is wired through the real setup boot and a certificate-verified HTTPS connection", async () => {
     const f = await archiveHost();
     vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
@@ -877,3 +895,19 @@ describe("selected-hour admission before archive placement", () => {
     expect(preview).toHaveBeenCalledTimes(1);
   });
 });
+
+function expectedSeriesCodes(f: Awaited<ReturnType<typeof archiveHost>>) {
+  const identity = (f.outcome.input as { allocation: { installationIdentity: string } }).allocation
+    .installationIdentity;
+  return ["A", "FF", "R"].map((code) => `${code}-${identity}`);
+}
+
+async function unretiredSeriesCodes(venueDir: string) {
+  const placed = await openVenueDatabase(venueDir);
+  try {
+    const rows = await placed.venue.select().from(invoiceSeries);
+    return rows.filter((row) => row.retiredAt === null).map((row) => row.code);
+  } finally {
+    await placed.close();
+  }
+}

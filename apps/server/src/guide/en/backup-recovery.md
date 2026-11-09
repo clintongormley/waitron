@@ -159,7 +159,8 @@ payments once the recovery finishes, until its clock catches up or is confirmed:
 [When payments stop because of the clock](box-status.md#clock-behind).
 
 A key that opens the backup does not bypass the history and clock checks. If the clock check
-refuses, resolve its cause and try again.
+refuses, resolve its cause and try again. If the box then shows a page saying it could not make
+its new invoice series, connect it to the internet and press **Retry a normal boot**.
 
 ## If a recovery is interrupted {#resume}
 

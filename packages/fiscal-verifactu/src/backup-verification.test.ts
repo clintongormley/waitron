@@ -259,6 +259,16 @@ it("accepts preserved foreign-node and retired-software preparation", async () =
   retained();
   expect(await verify()).toEqual(passed);
 });
+it("accepts an older backup whose retained hour record carries timeFloorMs", async () => {
+  await capture();
+  retained([retainedRow], { timeFloorMs: 1792152105000 });
+  expect(await verify()).toEqual(passed);
+});
+it("refuses a retained hour record whose timeFloorMs is not a whole millisecond", async () => {
+  await capture();
+  retained([], { timeFloorMs: 1.5 });
+  expectCheck(await verify(), "entries", "invalid");
+});
 it("accepts an explicitly empty retained source", async () => {
   await capture();
   retained([]);

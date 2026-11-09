@@ -13,15 +13,12 @@ import {
   withCollectedModuleAllocation,
 } from "./allocation-operation.js";
 import { liveSeriesBases } from "./reserved-series.js";
-import {
-  readHourHistory,
-  readHourHistoryWithRecordFloor,
-  readNewestRecordTime,
-} from "./hour-history-reader.js";
-import { projectHourHistory } from "./hour-history.js";
+import { readHourHistory } from "./hour-history-reader.js";
+import { projectHourHistory, type HourHistorySource } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalReservations } from "./schema/reservations.js";
 import { registroSif } from "./schema/sif.js";
+import { registrosFacturacion } from "./schema/registros.js";
 import { VerifactuBackend } from "./backend.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -159,11 +156,26 @@ const projection = async () =>
     scope: { taxpayerNif: "89890001K", environment: "preproduction" },
     sources: [await readInventory()],
   });
+function latestRecordedAt(sources: readonly HourHistorySource[]): number | null {
+  const times = sources.flatMap((source) =>
+    source.records.flatMap((row) => {
+      const { taxpayerNif, environment, recordedAtMs } = row as {
+        taxpayerNif: string;
+        environment: string;
+        recordedAtMs: number | null;
+      };
+      return taxpayerNif === "89890001K" && environment === "preproduction" && recordedAtMs !== null
+        ? [recordedAtMs]
+        : [];
+    }),
+  );
+  return times.length === 0 ? null : Math.max(...times);
+}
 it("retains revoked identities and retired series under another software ID", async () => {
   await seedRows({ identity: "0CNPG", softwareId: "OTHER", retired: true });
   const result = await projection();
   expect(result.greatestSpentMinute).toBe(415440);
-  expect(result.recordedTimeFloorMs).toBe(Date.parse("2026-10-16T11:35:00Z"));
+  expect(latestRecordedAt([await readInventory()])).toBe(Date.parse("2026-10-16T11:35:00Z"));
   expect(result.contradictions).toEqual([]);
 });
 it("another taxpayer's higher identity stays independent", async () => {
@@ -192,7 +204,7 @@ it("a malformed hour suffix cannot become empty history", async () => {
   await seedRows({ identity: "0cnn8" });
   expect((await projection()).contradictions.length).toBeGreaterThan(0);
 });
-it("a dormant reservation raises the floor without active series on its node", async () => {
+it("a dormant reservation's time is recorded without active series on its node", async () => {
   await seedRows();
   await suite.db.insert(fiscalReservations).values({
     eventKey: "dormant",
@@ -209,7 +221,7 @@ it("a dormant reservation raises the floor without active series on its node", a
   });
   const result = await projection();
   expect(result.greatestSpentMinute).toBe(415440);
-  expect(result.recordedTimeFloorMs).toBe(Date.parse("2026-10-16T12:00:00Z"));
+  expect(latestRecordedAt([await readInventory()])).toBe(Date.parse("2026-10-16T12:00:00Z"));
   expect(result.references).toContain("fiscal_reservations/dormant");
   expect(result.contradictions).toEqual([]);
 });
@@ -283,10 +295,10 @@ async function seedAllocation(change: Partial<typeof fiscalAllocations.$inferIns
     ...change,
   });
 }
-it("includes the retained allocation's later commit time in the floor", async () => {
+it("records the retained allocation's later commit time", async () => {
   await seedAllocation();
   const result = await projection();
-  expect(result.recordedTimeFloorMs).toBe(Date.parse("2026-10-16T11:50:00Z"));
+  expect(latestRecordedAt([await readInventory()])).toBe(Date.parse("2026-10-16T11:50:00Z"));
   expect(result.references).toContain("fiscal_allocations/event");
   expect(result.contradictions).toEqual([]);
 });
@@ -340,10 +352,10 @@ it("retains a later recorded approval time even when its database commit timesta
       incidentEvidence: "owned/event",
     },
   });
-  expect((await projection()).recordedTimeFloorMs).toBe(Date.parse("2026-10-16T12:30:00Z"));
+  expect(latestRecordedAt([await readInventory()])).toBe(Date.parse("2026-10-16T12:30:00Z"));
 });
 
-it("reads the newest fiscal record's time only through the floor reader, never the shared history", async () => {
+it("the shared history never carries the newest fiscal record's time", async () => {
   // The activation rows are stamped by the column default's real clock; the record must be newer.
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-16T11:40:00.000Z"));
@@ -428,21 +440,6 @@ it("reads the newest fiscal record's time only through the floor reader, never t
     ),
   );
   expect(await readInventory()).not.toHaveProperty("timeFloorMs");
-  expect(await withTransaction(suite.db, (tx) => readNewestRecordTime(tx))).toBe(
-    Date.parse("2026-10-22T20:15:00Z"),
-  );
-  const floored = await withTransaction(suite.db, (tx) =>
-    readHourHistoryWithRecordFloor(tx, "preproduction"),
-  );
-  expect(floored.complete).toBe(true);
-  expect(floored.timeFloorMs).toBe(Date.parse("2026-10-22T20:15:00Z"));
-  expect({ ...floored, timeFloorMs: undefined }).toEqual(await readInventory());
-  expect(
-    projectHourHistory({
-      scope: { taxpayerNif: "89890001K", environment: "preproduction" },
-      sources: [floored],
-    }).recordedTimeFloorMs,
-  ).toBe(Date.parse("2026-10-22T20:15:00Z"));
 });
 
 it("reads the shared history without touching registros_facturacion", async () => {
@@ -451,7 +448,7 @@ it("reads the shared history without touching registros_facturacion", async () =
   await suite.db.execute(sql`alter table registros_facturacion rename to registros_hidden`);
   try {
     await expect(readInventory()).resolves.toMatchObject({ reference: "venue" });
-    await expect(withTransaction(suite.db, (tx) => readNewestRecordTime(tx))).rejects.toThrow(
+    await expect(suite.db.select().from(registrosFacturacion)).rejects.toThrow(
       /no such table: registros_facturacion/,
     );
   } finally {

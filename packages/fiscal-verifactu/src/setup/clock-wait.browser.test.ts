@@ -90,7 +90,7 @@ it.each([
   const target = document.createElement("div");
   render(renderClockProblem(read, words, undefined), target);
   expect(text(target.querySelector("[data-test=minute-in-use]"))).toBe(
-    "The series cannot be made yet: this box's records already hold a series for the minute this box would use.",
+    "The series cannot be made: the minute for these series is already in this box's records. This is a fault in Waitron.",
   );
 });
 
@@ -110,7 +110,7 @@ it("a stored pick refused as in use names no time in Spanish", () => {
     target,
   );
   expect(text(target.querySelector("[data-test=minute-in-use]"))).toBe(
-    "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para el minuto que usaría este equipo.",
+    "No se pueden crear las series: el minuto de estas series ya está en los registros de este equipo. Es un fallo de Waitron.",
   );
 });
 

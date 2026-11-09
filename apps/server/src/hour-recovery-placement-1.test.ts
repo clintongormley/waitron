@@ -19,6 +19,10 @@ import {
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+vi.mock("@waitron/verifactu", async (actual) => {
+  const real = await actual<typeof import("@waitron/verifactu")>();
+  return { ...real, createClient: vi.fn(real.createClient) };
+});
 import { invoiceSeries, openVenueDatabase, withTransaction, type Database } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
 import { readModulePreparationHistory } from "@waitron/provisioning";
@@ -42,7 +46,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import { recordSale } from "@waitron/core";
-import { assertValid, computeHuella } from "@waitron/verifactu";
+import { assertValid, computeHuella, createClient } from "@waitron/verifactu";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
 import { drain } from "@waitron/fiscal-verifactu/src/drain.js";
@@ -215,13 +219,14 @@ describe("selected-hour admission before archive placement", () => {
         now: () => ({ ...steadyClock.now(), instant: new Date(), offsetMinutes: 120 }),
       };
       const aeat = createFakeAeat({ serverNow: new Date() });
+      const aeatClients = vi.fn(() => aeat.client());
       const backend = (db: Database) =>
         new VerifactuBackend({
           db,
           clock,
           deploymentEnvironment: "preproduction",
           environment: "preproduction",
-          resolveClient: async () => aeat.client(),
+          resolveClient: async () => aeatClients(),
         });
       const sell = (db: Database, id: string) =>
         withTransaction(db, (tx) =>
@@ -249,7 +254,7 @@ describe("selected-hour admission before archive placement", () => {
       const submitted = await drain(
         {
           db: suite.db,
-          resolveClient: async () => aeat.client(),
+          resolveClient: async () => aeatClients(),
           environment: "preproduction",
           skipRetryMs: 300_000,
         },
@@ -294,6 +299,11 @@ describe("selected-hour admission before archive placement", () => {
         expect(computeHuella(record)).toBe(row.huella);
       }
       const originalSeries = await suite.db.select().from(invoiceSeries);
+      const aeatBefore = {
+        clients: aeatClients.mock.calls.length,
+        built: vi.mocked(createClient).mock.calls.length,
+      };
+      const fetched = vi.spyOn(globalThis, "fetch");
       const f = await archiveHost(source === "stream" ? "stream" : "archive");
       const common = {
         ...f.restore,
@@ -376,6 +386,12 @@ describe("selected-hour admission before archive placement", () => {
       } else {
         await restoreFromArtifact(common);
       }
+      expect({
+        clients: aeatClients.mock.calls.length,
+        built: vi.mocked(createClient).mock.calls.length,
+      }).toEqual(aeatBefore);
+      expect(fetched.mock.calls).toEqual([]);
+      fetched.mockRestore();
       const placed = await openVenueDatabase(f.roots.venueDir);
       try {
         expect(await snapshot(placed.venue)).toEqual(before);

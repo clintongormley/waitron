@@ -482,7 +482,9 @@ describe("curated operator text", () => {
   // stopped itself reaches the page at once, and the generic line says only that Waitron could not
   // start; `sif.producer_unset`, `software_producer.invalid`, `sif.producer_invalid` and
   // `sif.producer_changed` because a retry of the same version and settings refuses again, and the
-  // generic line does not say what to change.
+  // generic line does not say what to change; `sif.allocation_invalid` because a restore placed
+  // after the restart is refused there when the box cannot read the internet clock, and Retry
+  // places it once it can.
   it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",
@@ -508,6 +510,7 @@ describe("curated operator text", () => {
       "software_producer.invalid",
       "sif.producer_invalid",
       "sif.producer_changed",
+      "sif.allocation_invalid",
     ];
     const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
       (code) => code !== "unknown" && !(code in OPERATOR_TEXT),
@@ -550,6 +553,23 @@ describe("curated operator text", () => {
     expect(spanish).toContain(
       escapeHtml(
         "El equipo ha quitado las copias temporales, los registros y los avisos de fallo antiguos que puede volver a crear, y el disco sigue lleno. Tus ventas y la base de datos del local no se tocan. Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este equipo y archivos que no son de Waitron. Cuando haya más espacio libre, pulsa «Reintentar un arranque normal». Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+      ),
+    );
+  });
+
+  it("names a refused series in both languages", async () => {
+    const english = await pageFor("sif.allocation_invalid");
+    expect(english).toContain(escapeHtml("The box could not make its new invoice series."));
+    expect(english).toContain(
+      escapeHtml(
+        "It checks its time against the internet first. Connect the box to the internet, then press “Retry a normal boot”.",
+      ),
+    );
+    const spanish = await pageFor("sif.allocation_invalid", undefined, SPANISH);
+    expect(spanish).toContain(escapeHtml("El equipo no pudo crear sus nuevas series de facturas."));
+    expect(spanish).toContain(
+      escapeHtml(
+        "El equipo comprueba primero su hora con internet. Conecta el equipo a internet y pulsa «Reintentar un arranque normal».",
       ),
     );
   });

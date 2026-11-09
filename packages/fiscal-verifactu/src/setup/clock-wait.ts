@@ -50,7 +50,7 @@ export const clockWaitStrings = {
     differ: "This box's time and this device's differ by more than 30 seconds.",
     later: "The series cannot be made yet: a later minute is already in use.",
     inUse:
-      "The series cannot be made yet: this box's records already hold a series for the minute this box would use.",
+      "The series cannot be made: the minute for these series is already in this box's records. This is a fault in Waitron.",
     minuteTaken:
       "The auto-generated invoice series code (which is time-based) already exists in the database.",
     newCodeIn: "Generating a new code in:",
@@ -67,7 +67,7 @@ export const clockWaitStrings = {
     later:
       "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
     inUse:
-      "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para el minuto que usaría este equipo.",
+      "No se pueden crear las series: el minuto de estas series ya está en los registros de este equipo. Es un fallo de Waitron.",
     minuteTaken:
       "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
     newCodeIn: "Se generará un código nuevo en",
@@ -128,7 +128,8 @@ export function clockProblem(error: unknown): ClockProblem | undefined {
   if (reason !== "minute_in_use") return undefined;
   return countable(recheckInMs) && countable(remainingMs) && recheckInMs <= remainingMs
     ? { kind: "next-minute", remainingMs, recheckInMs }
-    : { kind: "in-use" };
+    : // A fault in Waitron: a stored pick found taken, or a wait whose times cannot be read.
+      { kind: "in-use" };
 }
 
 /** Asks the box for a clock challenge, then for its comparison with this browser's time. */

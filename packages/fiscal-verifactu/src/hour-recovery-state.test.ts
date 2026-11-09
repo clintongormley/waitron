@@ -10,7 +10,7 @@ import { seedVenueNodes, TENANT_A } from "../test/fixtures.js";
 import { withHourAdmission } from "./allocation-envelope.js";
 import { withCollectedModuleAllocation } from "./allocation-operation.js";
 import { FISCAL_OPERATIONS } from "./index.js";
-import { projectHourHistory } from "./hour-history.js";
+import { projectHourHistory, type HourHistorySource } from "./hour-history.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
 import { VerifactuBackend } from "./backend.js";
@@ -33,6 +33,21 @@ const bases = [
 const read = (operation = binding, target = node) =>
   FISCAL_OPERATIONS.readRecoveryState!(suite.db, target, operation);
 afterEach(() => vi.useRealTimers());
+function latestRecordedAt(sources: readonly unknown[]): number | null {
+  const times = sources.flatMap((source) =>
+    (source as HourHistorySource).records.flatMap((row) => {
+      const { taxpayerNif, environment, recordedAtMs } = row as {
+        taxpayerNif: string;
+        environment: string;
+        recordedAtMs: number | null;
+      };
+      return taxpayerNif === "89890001K" && environment === "preproduction" && recordedAtMs !== null
+        ? [recordedAtMs]
+        : [];
+    }),
+  );
+  return times.length === 0 ? null : Math.max(...times);
+}
 
 async function seed(configuration = bases, seedParents = seedVenueNodes) {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -162,9 +177,9 @@ it("includes higher retired names on another node under another software identif
     }),
   ).toMatchObject({
     greatestSpentMinute: 415510,
-    recordedTimeFloorMs: Date.parse("2026-10-16T13:20:00Z"),
     contradictions: [],
   });
+  expect(latestRecordedAt(facts.history)).toBe(Date.parse("2026-10-16T13:20:00Z"));
   expect(facts.bases).toHaveLength(3);
 });
 
@@ -259,7 +274,7 @@ it("consults an exact committed restore without changing counters or evidence", 
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(before.allocations);
 });
 
-it("gives a restore the backup's newest fiscal record time as its floor", async () => {
+it("gives a restore's history no time floor", async () => {
   await seed();
   const clock = {
     ...steadyClock,
@@ -283,13 +298,11 @@ it("gives a restore the backup's newest fiscal record time as its floor", async 
     ),
   );
   const facts = await read();
+  expect(facts.history[0]).not.toHaveProperty("timeFloorMs");
   expect(
     projectHourHistory({
       scope: { taxpayerNif: "89890001K", environment: "preproduction" },
       sources: facts.history,
     }),
-  ).toMatchObject({
-    recordedTimeFloorMs: Date.parse("2026-10-22T20:15:00Z"),
-    contradictions: [],
-  });
+  ).toMatchObject({ contradictions: [] });
 });

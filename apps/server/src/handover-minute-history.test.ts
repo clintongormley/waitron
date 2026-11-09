@@ -35,7 +35,7 @@ import { FISCAL_HOUR_BACKUP_STATE } from "@waitron/fiscal-verifactu";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
-import { readHourHistoryWithRecordFloor } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
+import { readHourHistory } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
 import { createHourSelection } from "@waitron/fiscal-verifactu/src/hour-selection.js";
 import {
   EPOCH_MS,
@@ -466,11 +466,7 @@ describe("a merged file close to its limit", () => {
       read: async (held) => ({
         ...hourFacts(held.eventId),
         ...(venueHistory && {
-          history: [
-            await withTransaction(suite.db, (tx) =>
-              readHourHistoryWithRecordFloor(tx, "preproduction"),
-            ),
-          ],
+          history: [await withTransaction(suite.db, (tx) => readHourHistory(tx, "preproduction"))],
         }),
       }),
     });

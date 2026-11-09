@@ -4,13 +4,11 @@ import {
   type Transaction,
   type DeploymentEnvironment,
 } from "@waitron/db";
-import { sql } from "drizzle-orm";
 import type { HourHistorySource } from "./hour-history.js";
 import { isMinuteAllocatedSeries, isMinuteSeriesBases } from "./hour-identity.js";
 import { fiscalAllocations, type ActivationResult } from "./schema/allocations.js";
 import type { FiscalAllocation, RecoveryApproval } from "./allocation-envelope.js";
 import { fiscalReservations } from "./schema/reservations.js";
-import { registrosFacturacion } from "./schema/registros.js";
 import { registroSif } from "./schema/sif.js";
 
 function validBases(value: unknown): value is { code: string; purpose: string }[] {
@@ -261,24 +259,4 @@ export async function readHourHistory(
     { tenant: tenant !== null, series, sifs, allocations, reservations },
     environment,
   );
-}
-
-// No index covers this column, so this reads every fiscal record: keep it off any path a trading box runs.
-export async function readNewestRecordTime(tx: Transaction): Promise<number | null> {
-  const [newest] = await tx
-    .select({
-      generatedAt: sql<string | null>`max(${registrosFacturacion.fechaHoraHusoGenRegistro})`,
-    })
-    .from(registrosFacturacion);
-  const generatedAt = newest?.generatedAt ?? null;
-  return generatedAt === null ? null : Date.parse(generatedAt);
-}
-
-export async function readHourHistoryWithRecordFloor(
-  tx: Transaction,
-  environment: DeploymentEnvironment | null,
-): Promise<HourHistorySource> {
-  const source = await readHourHistory(tx, environment);
-  const timeFloorMs = await readNewestRecordTime(tx);
-  return timeFloorMs === null ? source : { ...source, timeFloorMs };
 }
