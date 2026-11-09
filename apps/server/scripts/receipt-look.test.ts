@@ -32,6 +32,8 @@ it("renders English sample identities and dishes while retaining the Spanish inv
       }
     }
     expect(Object.keys(texts)).toHaveLength(13);
+    expect(texts["full-weighed-and-counted-a4.pdf"]).toContain("1 Bloody Mary");
+    expect(texts["full-weighed-and-counted-a4.pdf"]).toContain("0.35 kg");
     const target = texts["full-addresses-match-a4.pdf"]!;
     for (const text of [
       "Water, bread and olive oil",
@@ -48,6 +50,7 @@ it("renders English sample identities and dishes while retaining the Spanish inv
       "Customer with a particularly long registered company name Ltd",
       "Set menu with a particularly long name",
       "Mineral water",
+      "2 Mineral water",
       "19,69",
     ])
       expect(fixture).toContain(text);
