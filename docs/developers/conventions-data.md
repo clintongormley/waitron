@@ -1562,14 +1562,15 @@ node-filtered read of the same id (the "belong to the node" cases in
 
 **Anything that works as a live login is stored as a hash, because a primary streams the whole
 database to the owner's bucket once one is set up.** The dashboard and till session cookies carry a
-random token and the row keeps its SHA-256 (`hashSessionToken`, `@waitron/identity`), as pairing
-tokens and the Google sign-in state already did: reading the bucket must never let anyone into the
+random token and the row keeps its SHA-256 (`hashSessionToken`, `@waitron/identity`), as device and
+print-agent tokens (`hashDeviceToken`) and the Google sign-in state do: reading the bucket must never let anyone into the
 live box.
 
 **Guards, weaker than the rule:** the "what a copy of the database holds" cases in
 `apps/server/src/me-api.test.ts` and `apps/server/src/till-api.test.ts` present the row's id alone,
-and only the dashboard's stored hash is tried as a token
-(`packages/identity/src/management-session.test.ts`); a new login table is seen by nothing.
+and only the dashboard's stored hash (`packages/identity/src/management-session.test.ts`) and a
+device token's (`packages/identity/src/device-token.test.ts`, at the function, not through a route)
+are tried as a token; a new login table is seen by nothing.
 
 ## A change carrying the dashboard's sign-in cookie is checked for the page that sent it
 
@@ -2026,8 +2027,7 @@ A secret check that derives an scrypt key should be the exception: it takes the 
 than a `tx` and derives the key with no transaction open, because `withTransaction` is the venue's
 single write lock (`packages/db/src/tenancy.ts`) and every other write would wait on scrypt. One
 that must act on the row afterwards re-reads it once the key is derived, and opens a transaction
-only for its own write. Sites that follow it include `verifyBreakGlass`
-(`apps/server/src/break-glass.ts`).
+only for its own write.
 
 The PIN, manager-password and own-password checks follow it in two halves (W1, #1117). The route first
 calls `checkPin` (`packages/identity/src/credential.ts`), `checkManagerPassword`
@@ -2942,7 +2942,7 @@ answers 507 `storage.disk_full`, and no case asserts that.
 **What refused them.**
 
 - **The last-seen stamp.** A device-checked request writes the device's `last_seen_at` when a
-  minute has passed since the last one (`sightingDue`, `apps/server/src/device-session.ts`). On a
+  minute has passed since the last one (`sightingDue`, `packages/identity/src/device-token.ts`). On a
   full disk with a stamp due, the equipment read answered 507, and again on the next read (M6);
   `GET /api/till`, a session-checked read (`GET /api/working-orders`) and PIN sign-in all answered
   507 (M10). With no stamp due, the first two answered 200. Passive session checks skip the stamp,
@@ -2959,16 +2959,19 @@ answers 507 `storage.disk_full`, and no case asserts that.
 
 **The two changes.**
 
-- **The stamp gives way to a full disk.** In `readDeviceProof` (`device-session.ts`), when the
-  stamp's `withTransaction` is refused `storage.disk_full`, the device row is read again outside
-  any turn under the same rule — a row now gone, or holding another token hash, is a miss — and the
+- **The stamp gives way to a full disk.** In `signInWithToken`
+  (`packages/identity/src/device-token.ts`), which `readDeviceProof` (`device-session.ts`) and
+  `authenticateAgent` share since A1439, when the stamp's `withTransaction` is refused
+  `storage.disk_full`, the row is read again outside any turn under the same rule — a row now gone, or holding another token hash, is a miss — and the
   request goes on unstamped. In `requireSession` (`apps/server/src/till-session.ts`), when its own
   transaction (the stamp, or the change-log drain at its end; it writes nothing else) is refused
   `storage.disk_full`, the same checks run again outside any transaction with no stamp: the session
   lookup, the device's `active`, `authorize` and the profile's action. Every other error is thrown
   as before. Never the route's own work: a refusal from the route's transaction is not caught.
-  Cases: "a stamp refused for a full disk still authenticates, and saves nothing" and its siblings
-  in `apps/server/src/device-session.test.ts`, and the cases from "a stamp refused for a full disk
+  Cases: "still signs in, unstamped, when the disk is full" and "refuses on a full disk when a new
+  token is committed before the unstamped re-check" in `packages/identity/src/device-token.test.ts`,
+  "a stamp refused for a full disk still authenticates, and saves nothing" and its siblings in
+  `apps/server/src/device-session.test.ts`, and the cases from "a stamp refused for a full disk
   still answers the session" to "with room, a stamp due is saved" in
   `apps/server/src/till-api.test.ts`, through a stand-in database that refuses the stamp.
 - **The equipment read reads in turns.** Its own reads open no `withTransaction` (the device
@@ -4772,7 +4775,7 @@ out.
 | Certificate reminders (`packages/fiscal-verifactu/src/certificate-dates.ts:46`, `certificate-reminders.ts:107`) | the stage jumps ahead; an expired email may go | warnings stop until the date catches up; a failed send waits 400 days | accepted: a reminder, compared with the certificate's own dates, which a clock set right reads correctly |
 | Crash reports kept (`apps/server/src/free-space-now.ts:218`, `start-space.ts:151`) | deleted the next time space is freed | kept 400 days longer | accepted: diagnostic files only |
 | Staged recovery copy (`apps/server/src/recovery-preparation.ts:436`) | the staging copy is dropped | an hour's timer still drops it | accepted: the original backup is untouched |
-| Device last seen (`device-session.ts:287`, `station-outputs-down.ts:219`, `alert-sources.ts:400`; the stamps' `sightingDue` in `till-session.ts` and `device-session.ts`, and the print agent's `last_seen_at` in `packages/printing/src/agent.ts`) | devices may read dark until they next call | stamps not refreshed; dark devices not flagged for 400 days | accepted with a backlog line |
+| Device last seen (`recordSighting` in `device-session.ts`, `station-outputs-down.ts:219`, `alert-sources.ts:400`; the stamps' `sightingDue` in `till-session.ts` and `packages/identity/src/device-token.ts`, and the print agent's `last_seen_at` in `packages/printing/src/agent.ts`) | devices may read dark until they next call | stamps not refreshed; dark devices not flagged for 400 days | accepted with a backlog line |
 | Cloud grants and lease (`cloud-backup.ts:137`, `cloud-backup-upload.ts:29`, `cloud-recovery.ts:121`, `cloud-installation.ts:215`) | refused; a new one is asked for | judged live locally; the Cloud enforces its own expiry | accepted: the times are the Cloud's |
 | Backup schedule (`apps/server/src/backup-sweep.ts`, `runBackupSweep`; `backup-schedule.ts`, `longestFireAheadMs`) | fires within an hour | the next fire was worked out before the step and is not worked out again while it waits, so no scheduled backup is taken for 400 days, until a restart or a settings save | fixed: a fire further ahead than the schedule ever puts one (one interval, or the longest gap between allowed days plus 25 hours) is worked out again within the hour, when the clock also reads earlier than when that fire was worked out, so a fire past the bound with no step (a zone whose clocks change by two hours) is slept toward, not worked out again at every turn (tests: `backup-sweep.test.ts`, "a step back of the box's clock during the wait"; `backup-schedule.test.ts`, "longestFireAheadMs", which walks every fire across both changes of the clocks) |
 | Backup "overdue" alert (`apps/server/src/backup-status.ts`, `freshness`) | reads overdue at once | a local folder's archive stamped before the step stays the newest, with a negative age, so `backup.destination_overdue` stays silent for 400 days whether or not backups are taken | fixed: an archive further ahead than the overdue limit is passed over and the destination is judged by its newest archive that is not; if every archive is that far ahead it reads overdue. A bucket's times are the bucket's clock (tests: `backup-status.test.ts`, "an archive stamped ahead of the clock") |
@@ -5628,8 +5631,9 @@ venue folder, must expect them; no guard finds a new site that does not.
 database to the owner's bucket once one is set up** (`hashSessionToken`, `@waitron/identity`).
 Guards, weaker than the rule: the "what a copy of the database holds" cases in
 `apps/server/src/me-api.test.ts` and `apps/server/src/till-api.test.ts` present the row's id
-alone, and only the dashboard's stored hash is tried as a token
-(`packages/identity/src/management-session.test.ts`); a new login table is seen by nothing.
+alone, and only the dashboard's stored hash (`packages/identity/src/management-session.test.ts`)
+and a device token's (`packages/identity/src/device-token.test.ts`, at the function, not through a
+route) are tried as a token; a new login table is seen by nothing.
 
 ### A migration set depends on another when its SQL `REFERENCES` one of that set's tables, puts a `CREATE TRIGGER … ON` one of them, names one inside a trigger's body, or writes one at top level — and the `requires` of the module owning the set must name it.
 

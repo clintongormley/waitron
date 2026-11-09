@@ -851,9 +851,7 @@ after the server saved it, the browser's next ask joins as a new device and the 
 disabled. (3) A long name in the waiting list overflows a phone's width. (4) An ask that replaces
 a waiting one always gets a later `createdAt`, but an ask made when no ask is waiting under its
 id, whatever ended the previous one (accepting it included, once the device is later disabled),
-is not forced later. When the previous ask was accepted, a person accepted it and later disabled
-the device before the new ask, so sharing a millisecond is unlikely, but nothing in the code rules
-it out.
+is not forced later, and nothing in the code rules out the two sharing a millisecond.
 
 ## What W106 left open (the battery on the Devices list, #1240)
 

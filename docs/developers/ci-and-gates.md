@@ -2178,8 +2178,8 @@ under `apps/server`. Earlier `main` runs the same day had already taken 6.0 and 
   1,210 checks, at about 32 ms each. The shared fixtures under `apps/server/src/testing/` hashed the
   same literal PINs and passwords for every test (`venue-fixtures.ts` alone 620 hashes, 20 s), and
   `restore.test.ts` encrypted the same backup artifact, with its N=2^17 key, for nearly every case.
-  The largest single caller, `createJoinRequest` through `testing/enrol.ts` (691 hashes, 22.5 s), is
-  the product minting a device token and stays.
+  The largest single caller, `createJoinRequest` through `testing/enrol.ts` (691 hashes, 22.5 s), was
+  the product minting a device token, and stayed (since A1439 that mint is a SHA-256, not scrypt).
 
 The fix: `fixturePinHash` and `fixturePasswordHash` (`apps/server/src/testing/known-secret-hashes.ts`)
 hash each distinct secret once per test file, the fixtures and the heaviest set-up functions use
