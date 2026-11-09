@@ -21,6 +21,7 @@ import {
 } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import {
+  MINUTE,
   RECIPIENT,
   clockAt,
   refusal,
@@ -43,8 +44,6 @@ useVenueDb({
   },
 });
 
-const MINUTE = 60_000;
-
 function recorded() {
   const facts: Parameters<AttendanceRecorder>[1][] = [];
   const attendance: AttendanceRecorder = (_tx, fact) => {
@@ -58,10 +57,10 @@ function closures(billId: string) {
   return t.venue.db.all(sql`select id from transfer_closures where working_order_id = ${billId}`);
 }
 
-async function closedCounterBill() {
+async function closedCounterBill(deps = t.depsWith()) {
   const billId = await t.counterOrder("placed");
   const request = await t.requestFor(billId, "18.00", null);
-  const result = await t.close(request);
+  const result = await t.close(request, deps);
   return { billId, request, result };
 }
 
@@ -124,12 +123,12 @@ describe("closeBillByTransferTx, replay", () => {
     const request = await t.requestFor(billId, "18.00", null);
     const result = await t.close(request, t.depsWith({ attendance }));
     const recordedFirst = facts.length;
-    const before = t.ledger();
+    const before = await t.ledger();
 
     const again = await t.close(request, t.depsWith({ attendance }));
 
     expect(again).toEqual(result);
-    expect(t.ledger()).toEqual(before);
+    expect(await t.ledger()).toEqual(before);
     expect(facts).toHaveLength(recordedFirst);
     expect(fiscalRecordCount(t.venue, billId)).toBe(1);
     expect(await tendersOfBill(t.venue, billId)).toHaveLength(1);
@@ -146,7 +145,7 @@ describe("closeBillByTransferTx, replay", () => {
       deploymentEnvironment: deploymentEnvironment(process.env),
       resolveClient: () => Promise.reject(new Error("a sale never submits inline")),
     });
-    const before = t.ledger();
+    const before = await t.ledger();
 
     const again = await t.close(
       request,
@@ -154,7 +153,7 @@ describe("closeBillByTransferTx, replay", () => {
     );
 
     expect(again).toEqual(result);
-    expect(t.ledger()).toEqual(before);
+    expect(await t.ledger()).toEqual(before);
   });
 
   it("answers a replay whose first answer was lost with what was kept", async () => {
@@ -191,26 +190,26 @@ describe("closeBillByTransferTx, replay", () => {
 
   it.each(changes)("refuses the same operation id with a changed %s", async (_name, change) => {
     const { request } = await closedStagedF1();
-    const before = t.ledger();
+    const before = await t.ledger();
 
     const error = await refusal(t.close(change(request)));
 
     expect(error.code).toBe("submission.id_reused");
     expect(error.params).toEqual({ submissionId: request.operationId });
-    expect(t.ledger()).toEqual(before);
+    expect(await t.ledger()).toEqual(before);
   });
 
   it.each(changes)(
     "refuses another operation id on a closed bill with a changed %s",
     async (_name, change) => {
       const { request } = await closedStagedF1();
-      const before = t.ledger();
+      const before = await t.ledger();
 
       const error = await refusal(t.close({ ...change(request), operationId: randomUUID() }));
 
       expect(error.code).toBe("transfer_close.conflict");
       expect(error.params).toEqual({ workingOrderId: request.id });
-      expect(t.ledger()).toEqual(before);
+      expect(await t.ledger()).toEqual(before);
     },
   );
 
@@ -255,7 +254,7 @@ describe("closeBillByTransferTx, replay", () => {
       outcome.status === "rejected" ? [outcome.reason as AppError] : [],
     );
     expect(served).toHaveLength(1);
-    expect(refused.map((error) => [error.code, error.params])).toEqual([
+    expect(refused.map((error): [string, unknown] => [error.code, error.params])).toEqual([
       ["transfer_close.conflict", { workingOrderId: billId }],
     ]);
     expect(fiscalRecordCount(t.venue, billId)).toBe(1);
@@ -278,7 +277,7 @@ describe("closeBillByTransferTx, replay", () => {
   it("refuses an operation id already used on another bill", async () => {
     const { request } = await closedCounterBill();
     const otherBill = await t.counterOrder("placed");
-    const before = t.ledger();
+    const before = await t.ledger();
 
     const error = await refusal(
       t.close(await t.requestFor(otherBill, "18.00", null, { operationId: request.operationId })),
@@ -286,7 +285,7 @@ describe("closeBillByTransferTx, replay", () => {
 
     expect(error.code).toBe("submission.id_reused");
     expect(error.params).toEqual({ submissionId: request.operationId });
-    expect(t.ledger()).toEqual(before);
+    expect(await t.ledger()).toEqual(before);
   });
 
   it("answers an exact replay while the disk is stopped, and refuses new work", async () => {
@@ -309,15 +308,16 @@ describe("closeBillByTransferTx, replay", () => {
 
   // Freezes today's business day, so it runs last.
   it("answers an exact replay once the day is frozen, and refuses new work on that day", async () => {
-    const { request, result } = await closedCounterBill();
+    const sameDay = t.depsWith({ clock: t.sameDayClock() });
+    const { request, result } = await closedCounterBill(sameDay);
     const fresh = await t.requestFor(await t.counterOrder("placed"), "18.00", null);
     await t.freezeDay(result.businessDay);
-    const before = t.ledger();
+    const before = await t.ledger();
 
-    expect(await t.close(request)).toEqual(result);
-    const error = await refusal(t.close(fresh));
+    expect(await t.close(request, sameDay)).toEqual(result);
+    const error = await refusal(t.close(fresh, sameDay));
     expect(error.code).toBe("transfer_close.day_frozen");
     expect(error.params).toEqual({ nodeId: t.venue.cfg.nodeId, businessDay: result.businessDay });
-    expect(t.ledger()).toEqual(before);
+    expect(await t.ledger()).toEqual(before);
   });
 });

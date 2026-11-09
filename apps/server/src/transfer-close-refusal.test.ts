@@ -31,6 +31,7 @@ import { inTx, seatedWith, send, type Answer } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { collectOrderOrchestration } from "./testing/whole-payment-fixture.js";
 import {
+  MINUTE,
   RECIPIENT,
   clockAt,
   refusal,
@@ -52,12 +53,10 @@ useVenueDb({
   },
 });
 
-const MINUTE = 60_000;
-
 async function refusedWithNothingWritten(run: () => Promise<unknown>) {
-  const before = t.ledger();
+  const before = await t.ledger();
   const error = await refusal(run());
-  expect(t.ledger()).toEqual(before);
+  expect(await t.ledger()).toEqual(before);
   return error;
 }
 
@@ -545,11 +544,13 @@ describe("closeBillByTransferTx on a frozen day", () => {
   it("refuses new work on a business day this node has frozen", async () => {
     const billId = await t.counterOrder("placed");
     const request = await counterRequest(billId);
-    const businessDay = (await t.close(await counterRequest(await t.counterOrder("placed"))))
-      .businessDay;
+    const sameDay = t.depsWith({ clock: t.sameDayClock() });
+    const businessDay = (
+      await t.close(await counterRequest(await t.counterOrder("placed")), sameDay)
+    ).businessDay;
     await t.freezeDay(businessDay);
 
-    const error = await refusedWithNothingWritten(() => t.close(request));
+    const error = await refusedWithNothingWritten(() => t.close(request, sameDay));
 
     expect(error.code).toBe("transfer_close.day_frozen");
     expect(error.params).toEqual({ nodeId: t.venue.cfg.nodeId, businessDay });

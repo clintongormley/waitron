@@ -21,7 +21,10 @@ import { inTx, provisionBillVenue, type BillVenue } from "./bill-venue.js";
 import { issueOrderInvoice } from "./issue-order.js";
 import { placeOrder } from "./order-writer-fixture.js";
 import { testTradingAdmission } from "./trading-admission.js";
+import { tableSnapshot } from "./table-snapshot.js";
 import { offerProducts } from "./zone-offers.js";
+
+export const MINUTE = 60_000;
 
 export const RECIPIENT = {
   taxId: "B12345674",
@@ -137,27 +140,9 @@ function transferCloseKit(venue: BillVenue, counterZone: string) {
     return id;
   }
 
-  /** Rows a refused or replayed close must leave as they were. */
+  /** Every row of the venue, which a refused, replayed or rolled-back close leaves as it was. */
   function ledger() {
-    return Object.fromEntries(
-      [
-        "sales",
-        "registros_facturacion",
-        "fiscal_allocations",
-        "fiscal_reservations",
-        "envios",
-        "invoice_series",
-        "invoice_deliveries",
-        "tenders",
-        "sale_settlements",
-        "transfer_closures",
-        "working_orders",
-        "parties",
-      ].map((table) => [
-        table,
-        venue.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),
-      ]),
-    );
+    return tableSnapshot(venue.db);
   }
 
   /** The latest fiscal record's time: the clock-behind stop measures from it. */
@@ -167,6 +152,22 @@ function transferCloseKit(venue: BillVenue, counterZone: string) {
       order by fecha_hora_huso_gen_registro desc, id desc limit 1
     `);
     return new Date(row!.at).getTime();
+  }
+
+  /**
+   * A clock fixed no earlier than now or the latest record, two hours later when that falls
+   * between 04:00 and 06:00 in Madrid, so the 05:00 day change cannot fall between its closes.
+   */
+  function sameDayClock(): TrustedClock {
+    const at = Math.max(Date.now(), latestRecordMs());
+    const hour = Number(
+      new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Europe/Madrid",
+        hour: "numeric",
+        hourCycle: "h23",
+      }).format(at),
+    );
+    return clockAt(hour === 4 || hour === 5 ? at + 120 * MINUTE : at);
   }
 
   /** Freeze this node's business day by its daily close, counting each drawer as expected. */
@@ -209,6 +210,7 @@ function transferCloseKit(venue: BillVenue, counterZone: string) {
     counterOrder,
     ledger,
     latestRecordMs,
+    sameDayClock,
   };
 }
 
