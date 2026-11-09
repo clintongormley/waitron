@@ -30,6 +30,20 @@ export class DepartmentEditDialog extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.requestUpdate();
+    const modal = this.shadowRoot?.querySelector("wt-modal");
+    if (modal)
+      void modal.updateComplete.then(() => {
+        if (
+          this.isConnected &&
+          !this.dismissed &&
+          this.shadowRoot?.querySelector("wt-modal") === modal
+        )
+          modal.open = true;
+      });
+  }
+  override disconnectedCallback() {
+    this.shadowRoot?.querySelector("wt-modal")?.closeAfter("security");
+    super.disconnectedCallback();
   }
   protected override willUpdate(changed: PropertyValues<this>) {
     if (changed.has("departmentId")) this.dismissed = false;
@@ -83,7 +97,7 @@ export class DepartmentEditDialog extends LitElement {
     return keyed(
       department.id,
       html`<wt-modal
-        .open=${!this.dismissed}
+        .open=${this.isConnected && !this.dismissed}
         size=${offersReceiptEditor(this.receiptEditor) ? "wide" : "standard"}
         heading=${`${t("venue.edit_department")}: ${department.name}`}
         .beforeClose=${this.beforeClose}

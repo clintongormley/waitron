@@ -1917,10 +1917,22 @@ test.each([
 
 const nativeOf = (el: HTMLElement) => el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
 
-test.each(["wt-dialog", "wt-modal"] as const)(
-  "%s opens on attachment after open was set during a detached update",
-  async (tag) => {
+test.each([
+  ["wt-dialog", false],
+  ["wt-dialog", true],
+  ["wt-modal", false],
+  ["wt-modal", true],
+] as const)(
+  "%s opens on attachment after a detached update (previously opened: %s)",
+  async (tag, previouslyOpened) => {
     const el = (await mount(`<${tag} heading="Edit"><input name="note" /></${tag}>`)) as WtDialog;
+    if (previouslyOpened) {
+      el.open = true;
+      await el.updateComplete;
+      el.open = false;
+      await el.updateComplete;
+      await closeReportsDelivered();
+    }
     const putBack = takeOut(el);
     el.open = true;
     await expect(el.updateComplete).resolves.toBeDefined();
@@ -1978,42 +1990,6 @@ for (const tag of ["wt-dialog", "wt-modal"] as const)
         expect(input.value).toBe(key === "Home" ? "Zabcdef" : "abcdefZ");
       },
     );
-
-test.each([
-  ["wt-dialog", 390],
-  ["wt-modal", 390],
-  ["wt-modal", 1280],
-] as const)(
-  "returning the covered %s preserves upper focus, choices and both panel rectangles at %ipx",
-  async (tag, width) => {
-    await page.viewport(width, 844);
-    onTestFinished(() => page.viewport(1280, 900));
-    const { parent, child, inChild } = await stacked("beside", tag);
-    const popup = document.createElement("div");
-    popup.popover = "auto";
-    popup.textContent = "Choice";
-    child.append(popup);
-    inChild.focus();
-    popup.showPopover();
-    const blurred = vi.fn();
-    inChild.addEventListener("focusout", blurred);
-    const parentBox = nativeOf(parent).getBoundingClientRect().toJSON();
-    const childBox = nativeOf(child).getBoundingClientRect().toJSON();
-    takeOut(parent)();
-    await settledBoth(parent, child);
-    expect(blurred).not.toHaveBeenCalled();
-    expect(deepActiveElement()).toBe(inChild);
-    expect(popup.matches(":popover-open")).toBe(true);
-    expect(nativeOf(parent).getBoundingClientRect().toJSON()).toEqual(parentBox);
-    expect(nativeOf(child).getBoundingClientRect().toJSON()).toEqual(childBox);
-    expect(takesFocus(parent.querySelector("input")!)).toBe(false);
-    expect(deepActiveElement()).toBe(inChild);
-    await userEvent.keyboard("{Escape}");
-    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
-    expect(child.open).toBe(true);
-    expect(parent.open).toBe(true);
-  },
-);
 
 function takeOut(el: HTMLElement): () => void {
   const parent = el.parentNode!;
@@ -2246,10 +2222,10 @@ test("an open dialog put back with the page body focused leaves its opener as wh
 });
 
 /** Two dialogs, the second opened over the first: inside it, after it in the page, or before it. */
-async function stacked(arrangement: "inside" | "beside" | "before", tag = "wt-modal") {
+async function stacked(arrangement: "inside" | "beside" | "before") {
   const inner = `<wt-modal class="child" heading="Child"><input class="in-child" aria-label="Child" /></wt-modal>`;
   const outer = (content: string) =>
-    `<${tag} class="parent" heading="Parent"><input class="first-in-parent" aria-label="First" /><input class="in-parent" aria-label="Parent" />${content}</${tag}>`;
+    `<wt-modal class="parent" heading="Parent"><input class="first-in-parent" aria-label="First" /><input class="in-parent" aria-label="Parent" />${content}</wt-modal>`;
   await mount("<div></div>");
   host.innerHTML = `<div class="around">${
     arrangement === "inside"
@@ -2283,7 +2259,7 @@ async function settledBoth(parent: WtDialog, child: WtDialog) {
 }
 
 function expectChildOnTop(parent: WtDialog, child: WtDialog, inChild: HTMLInputElement) {
-  expect(nativeOf(parent).open).toBe(true);
+  expect(nativeOf(parent).matches(":modal")).toBe(true);
   expect(nativeOf(child).matches(":modal")).toBe(true);
   expect(takesFocus(inChild)).toBe(true);
   const inParent = parent.querySelector("input")!;
@@ -2350,29 +2326,21 @@ test("the dialog above one put back keeps where its long body was scrolled to", 
   expect(body.scrollTop).toBe(200);
 });
 
-test.each(["field", "disabled field"] as const)(
-  "Escape from %s goes to the dialog above one put back, and focus then lands underneath",
-  async (focus) => {
-    const { parent, child, inParent, inChild } = await stacked("beside");
-    const parentCloses = vi.fn();
-    parent.addEventListener("wt-close", parentCloses);
-    takeOut(parent)();
-    await settledBoth(parent, child);
-    inChild.focus();
-    if (focus === "disabled field") {
-      inChild.disabled = true;
-      await vi.waitFor(() => expect(deepActiveElement()).toBe(document.body));
-    }
-    const closed = new Promise((resolve) => child.addEventListener("wt-close", resolve));
-    await userEvent.keyboard("{Escape}");
-    await closed;
-    expect(child.open).toBe(false);
-    expect(parent.open).toBe(true);
-    expect(nativeOf(parent).matches(":modal")).toBe(true);
-    expect(parentCloses).not.toHaveBeenCalled();
-    expect(deepActiveElement()).toBe(inParent);
-  },
-);
+test("Escape goes to the dialog above one put back, and focus then lands in the one underneath", async () => {
+  const { parent, child, inParent } = await stacked("beside");
+  const parentCloses = vi.fn();
+  parent.addEventListener("wt-close", parentCloses);
+  takeOut(parent)();
+  await settledBoth(parent, child);
+  const closed = new Promise((resolve) => child.addEventListener("wt-close", resolve));
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  expect(child.open).toBe(false);
+  expect(parent.open).toBe(true);
+  expect(nativeOf(parent).matches(":modal")).toBe(true);
+  expect(parentCloses).not.toHaveBeenCalled();
+  expect(deepActiveElement()).toBe(inParent);
+});
 
 test("a dialog above one put back, closed by the browser but not yet reported, is not shown again", async () => {
   const { parent, child } = await stacked("beside");
@@ -2387,16 +2355,20 @@ test("a dialog above one put back, closed by the browser but not yet reported, i
   expect(closes).toHaveBeenCalledTimes(1);
 });
 
-test("removing the upper dialog restores the covered dialog without first blurring the upper field", async () => {
+test("a dialog above one put back, removed by its own focusout handler meanwhile, is left off the page", async () => {
   const { parent, child, inParent, inChild } = await stacked("beside");
+  const errors: unknown[] = [];
+  const onError = (event: ErrorEvent) => {
+    errors.push(event.error);
+    event.preventDefault();
+  };
+  window.addEventListener("error", onError);
+  onTestFinished(() => window.removeEventListener("error", onError));
   inChild.focus();
-  const blurred = vi.fn();
-  inChild.addEventListener("focusout", blurred);
+  inChild.addEventListener("focusout", () => child.remove(), { once: true });
   takeOut(parent)();
   await parent.updateComplete;
-  expect(blurred).not.toHaveBeenCalled();
-  expect(child.isConnected).toBe(true);
-  child.remove();
+  expect(errors).toEqual([]);
   expect(child.isConnected).toBe(false);
   expect(nativeOf(parent).matches(":modal")).toBe(true);
   expect(takesFocus(inParent)).toBe(true);

@@ -545,9 +545,22 @@ plans to retire the editor.
   fallbacks remain outside the dialog work.
   [Detail](dashboard.md#dashboard-leftovers-from-the-coverage-branch)
 - **The till's modifier picker still recreates its modal when put back.** A738 added that because
-  `wt-dialog` lost modality there. The shared primitive now restores its opening order without
-  blurring an upper field. Check whether the picker still needs recreation once lane C's #2642
-  has landed; leave its existing draft and dismissal protections intact.
+  `wt-dialog` lost modality there. Check whether the recreation is still needed after lane C's
+  #2642 lands; preserve the picker's draft and dismissal protections.
+- **The department and zone edit dialogs still close on removal and reopen on return**, so they
+  come back on top with focus as at opening. Their wrappers stay unchanged until the shared
+  covered-dialog case below can be fixed without breaking Escape.
+- **Putting a lower dialog back blurs the upper field and closes its open choices.** The focused
+  Chromium probes reproduced both effects. No production reinsertion trigger was found during
+  the 2026-11-09 source trace; that is not proof that none exists. Deferring the lower native
+  modal preserves focus and geometry, but changes native Escape order. The bare controls
+  `wt-dialog-native-close-control-20261109.log` and
+  `wt-dialog-native-close-before-control-20261109.log` in Lane D's receipts observed: with
+  `closedby=closerequest`, Escape closes the reattached lower dialog; `none`, `auto`, or no
+  attribute swallow Escape for the upper dialog and a native popover opened before reinsertion.
+  A popover opened after reinsertion still closes. The fix needs explicit Escape routing for
+  the upper dialog and its open popovers; watcher 2026-11-09 18:51 deferred that mechanism.
+  Next: name a production trigger and obtain approval for that routing before changing restoration.
 
 ## Bundle: Wt popups
 

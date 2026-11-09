@@ -87,6 +87,9 @@ export class AddContentLanguageDialog extends LitElement {
         event.stopPropagation();
         this.#close();
       }}
+      @keydown=${(event: KeyboardEvent) => {
+        if (this.busy && event.key === "Escape") event.preventDefault();
+      }}
     >
       <wt-combobox
         name="language"

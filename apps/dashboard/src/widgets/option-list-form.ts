@@ -749,6 +749,9 @@ export class OptionListForm extends LitElement {
         .dismissible=${!this.busy}
         .beforeClose=${this.#leave ? this.#beforeClose : undefined}
         heading=${t(this.value ? "options.edit" : "options.create")}
+        @keydown=${(event: KeyboardEvent) => {
+          if (this.busy && event.key === "Escape") event.preventDefault();
+        }}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           this.#reportCancel();
