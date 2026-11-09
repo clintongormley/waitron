@@ -1628,25 +1628,26 @@ it("a stop refused because the setup changed sends the setup as read again on th
   ]);
 });
 
-it("a stop over a connection the box does not accept says nothing changed and that the box stops a setup only from its own page over a secure connection", async () => {
-  const t = initialOwnerStrings.en;
-  const { app } = await mount({
-    resolution: false,
-    intercept(path) {
-      if (path.endsWith("/resolution/stop"))
-        return Response.json(
-          { error: { code: "setup.owner_required", params: {} } },
-          { status: 403 },
-        );
-    },
-  });
-  await click(app, "start-again");
-  await expect.poll(() => q(app, "confirm-stop")).not.toBeNull();
-  await click(app, "confirm-stop");
-  await expect.poll(() => formErrors(app).filter(Boolean)).toEqual([t.stopNotAccepted]);
-  expect(app.shadowRoot!.textContent).not.toContain(t.wipeUnavailable);
-  expect(app.shadowRoot!.textContent).not.toContain(t.stopped);
-});
+it.each(["setup.owner_required", "setup.connection_insecure"])(
+  "a stop the box answers %s says nothing changed and that the box stops a setup only from its own page over a secure connection",
+  async (code) => {
+    const t = initialOwnerStrings.en;
+    const { app } = await mount({
+      resolution: false,
+      intercept(path) {
+        if (path.endsWith("/resolution/stop"))
+          return Response.json({ error: { code, params: {} } }, { status: 403 });
+      },
+    });
+    await click(app, "start-again");
+    await expect.poll(() => q(app, "confirm-stop")).not.toBeNull();
+    await click(app, "confirm-stop");
+    await expect.poll(() => formErrors(app).filter(Boolean)).toEqual([t.stopNotAccepted]);
+    expect(app.shadowRoot!.textContent).not.toContain(t.wipeUnavailable);
+    expect(app.shadowRoot!.textContent).not.toContain(t.wipeInsecure);
+    expect(app.shadowRoot!.textContent).not.toContain(t.stopped);
+  },
+);
 
 it("a page left open while the box restarted, whose stop the box no longer serves, says the box may have restarted and names no activation", async () => {
   const t = initialOwnerStrings.en;
@@ -1758,7 +1759,7 @@ it("a stop the box refuses as Start again would draws the summary's refusal word
   await click(app, "start-again");
   await expect.poll(() => q(app, "confirm-stop")).not.toBeNull();
   await click(app, "confirm-stop");
-  await expect.poll(() => q(app, "start-again-refused")?.textContent).toContain(t.wipeUnavailable);
+  await expect.poll(() => q(app, "start-again-refused")?.textContent).toContain(t.wipeFault);
   expect(stopRequests(requests)).toHaveLength(1);
   expect(app.shadowRoot!.textContent).not.toContain(t.stopped);
   expect(q(app, "confirm-stop")).toBeNull();

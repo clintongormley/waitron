@@ -373,6 +373,9 @@ it("a command cut off before its stamp, beside an earlier attempt that had begun
     previous,
     ...attempt
   } = record;
+  void _version;
+  void _venueDir;
+  void _stateDir;
   record.previous = [...previous, attempt];
   await writeFile(path, JSON.stringify(record), { mode: 0o600 });
   expect((await f.host.store.read())!.previous.at(-1)!.status).toBe("uncertain");

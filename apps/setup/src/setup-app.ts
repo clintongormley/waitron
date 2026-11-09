@@ -251,6 +251,9 @@ const inspectsAttempt = (session: FirstSetupSession, statusRefused: boolean) =>
   pastActivation(session.state) ||
   notCarriedOn(session.state);
 /** Whether the page may ask the box what Start again would delete; the box decides the rest. */
+/** The box refused the stop from this page or over this connection, which deletes nothing. */
+const stopNotAccepted = (code: unknown) =>
+  code === "setup.owner_required" || code === "setup.connection_insecure";
 const wipeOffered = (inspection: FirstSetupInspection) =>
   (inspection.pair === "valid" || inspection.pair === "repairable") &&
   inspection.revision !== null &&
@@ -1390,7 +1393,7 @@ export class SetupApp extends LitElement {
       const code = (error as { code?: unknown })?.code;
       // The stop runs the checks the summary runs, so its refusals read as the summary's do, except
       // the refusal of this page or its connection, which says nothing about deleting.
-      const refusal = code === "setup.owner_required" ? undefined : wipeRefusal(error);
+      const refusal = stopNotAccepted(code) ? undefined : wipeRefusal(error);
       if (code === "setup.attempt_conflict") {
         this.firstWipeError = () => initialOwnerStrings[setupLocale()].heldChanged;
         void this.#focusAfterUpdate(
@@ -1406,7 +1409,7 @@ export class SetupApp extends LitElement {
   }
   #describeStopError(error: unknown): Message {
     const strings = () => initialOwnerStrings[setupLocale()];
-    if ((error as { code?: unknown } | null)?.code === "setup.owner_required")
+    if (stopNotAccepted((error as { code?: unknown } | null)?.code))
       return () => strings().stopNotAccepted;
     const key = repairErrorKey(error);
     return key ? say(key) : () => strings().stopUnanswered;

@@ -92,7 +92,7 @@ it("a stop the repair page would refuse is refused, and writes nothing", async (
 });
 
 it.each([
-  ["plain HTTP", { https: false } as const, (ids: Ids) => ids, 403, "setup.owner_required"],
+  ["plain HTTP", { https: false } as const, (ids: Ids) => ids, 403, "setup.connection_insecure"],
   [
     "a foreign page",
     { headers: { Origin: "https://elsewhere.test" } },
@@ -154,7 +154,7 @@ it("refuses a forwarded HTTPS header on a plain socket, and writes nothing", asy
     headers: { "Content-Type": "application/json", "X-Forwarded-Proto": "https" },
     body: JSON.stringify(ids),
   });
-  await expectRefusedUnchanged(s, response, 403, "setup.owner_required", before);
+  await expectRefusedUnchanged(s, response, 403, "setup.connection_insecure", before);
 });
 
 it("a stop sent while the owner's step holds the coordinator neither writes nor answers until the step ends", async () => {
