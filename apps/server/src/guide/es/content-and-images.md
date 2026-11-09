@@ -8,9 +8,9 @@ La biblioteca de imágenes también los usa, pero una fotografía necesita un no
 predeterminado al subirla o editarla.
 
 La biblioteca de fotografías de demostración conserva los nombres para el cliente.
-En Cataluña y las Islas Baleares incluyen **Botifarra amb mongetes**; en la Comunitat
-Valenciana, **All i pebre** y **Orxata amb fartons**; en Galicia, **Empanada galega**
-y **Filloas**. Estos nombres conservan el idioma regional aunque los nombres internos
+En Cataluña y las Islas Baleares incluyen **Botifarra amb mongetes de la casa**; en la Comunitat
+Valenciana, **All i pebre de la casa** y **Orxata amb fartons de la casa**; en Galicia, **Empanada galega da casa**
+y **Filloas da casa**. Estos nombres conservan el idioma regional aunque los nombres internos
 de la demostración estén en inglés o español. Eliges y sustituyes las imágenes de
 la misma manera.
 

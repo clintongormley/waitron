@@ -376,8 +376,8 @@ platos regionales y cava. En la Comunitat Valenciana empieza como **Casa Delgado
 l'Horta**, con all i pebre, paella y vino de Requena. En Galicia empieza como
 **A Casa Delgado**, con empanada, lacón con grelos, filloas y Albariño.
 
-Los nombres internos y de cocina, las cartas, los departamentos, las estaciones y
-los pasos de servicio siguen el inglés o español usado para preparar la demostración.
+Los nombres internos y de cocina, las cartas, los departamentos y las estaciones siguen
+el inglés o español usado para preparar la demostración.
 Cambiar después el idioma de las pantallas no cambia esos nombres. Los textos para
 el cliente conservan el catalán, valenciano o gallego de la región, además del español
 y el inglés. En Cataluña los tiques salen en catalán; en las demostraciones de Baleares,

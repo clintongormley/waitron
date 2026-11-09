@@ -8,9 +8,9 @@ The image library uses them too, but a photo still needs a name in your default 
 you upload or edit it.
 
 The regional demo's photograph library keeps customer-language labels. In Catalonia
-and the Balearic Islands, these include **Botifarra amb mongetes**; in the Valencian
-Community, **All i pebre** and **Orxata amb fartons**; in Galicia, **Empanada galega**
-and **Filloas**. These labels keep their regional wording when the demo's staff names
+and the Balearic Islands, these include **Botifarra amb mongetes de la casa**; in the Valencian
+Community, **All i pebre de la casa** and **Orxata amb fartons de la casa**; in Galicia, **Empanada galega da casa**
+and **Filloas da casa**. These labels keep their regional wording when the demo's staff names
 are English or Spanish. You choose and replace the pictures in the same way.
 
 ## Choose your content languages {#languages}

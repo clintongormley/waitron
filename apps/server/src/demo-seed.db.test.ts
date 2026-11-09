@@ -84,7 +84,7 @@ it("provisions Spain's demo business and files its practice sales under the demo
   }
 });
 
-it("names a Barcelona demo's dishes in Catalan for a Spanish-speaking admin, with Catalan the content default", async () => {
+it("names a Barcelona demo's dishes in Spanish for a Spanish-speaking admin, with Catalan the content default", async () => {
   const expected = JSON.parse(
     await readFile(
       new URL("plain-names.json", DEMO_BASELINE_FIXTURE_ROOTS["casa-delgado-es"]),
@@ -140,7 +140,7 @@ it("names a Barcelona demo's dishes in Catalan for a Spanish-speaking admin, wit
       sql`select name from products where json_extract(customer_name, '$.en') = ${salad.customerEnglish}`,
     );
     const languages = await withTransaction(suite.db, (tx) => readContentLanguages(tx, "es"));
-    expect(products.map((p) => p.name)).toEqual(["Amanida"]);
+    expect(products.map((p) => p.name)).toEqual([salad.staff.es]);
     expect(languages.defaultLanguage).toBe("ca");
   } finally {
     await rm(stateDir, { recursive: true, force: true });

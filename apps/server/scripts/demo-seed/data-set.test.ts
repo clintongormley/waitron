@@ -355,6 +355,10 @@ it("uses the seed language even with regional text and refuses a missing selecte
     ),
   ).toBe("Spanish label");
   expect(() =>
-    demoPlainText({ es: "Spanish label", ca: "Regional label" } as DemoPlainText, regional, "en"),
+    demoPlainText(
+      { es: "Spanish label", ca: "Regional label" } as unknown as DemoPlainText,
+      regional,
+      "en",
+    ),
   ).toThrow("missing en text (casa-delgado-ca)");
 });

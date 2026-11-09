@@ -672,7 +672,8 @@ that operation's reader. Do not remove exact-content checks to make a large file
 - **Pass the setup choice to the demo** (owner, 2026-11-08). Regional demos now write their
   single staff/kitchen, menu, department, group and station names in the seed's English/Spanish
   language. Their customer maps and regional translations remain. The setup request still needs
-  to supply the explicit choice instead of the existing resolver's result.
+  to supply the explicit choice instead of the demo seed's current language. It must also
+  align the first department's service steps, which provisioning creates before the demo seed.
 - **Remaining course words.** Initial setup now creates Spain’s four courses and Great Britain’s
   three in the existing English/Spanish starter language. Catalan, Valencian, Galician and Basque
   course words still wait for C125; include them in the Native speaker review.

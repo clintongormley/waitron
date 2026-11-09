@@ -108,10 +108,25 @@ for (const locale of ["en", "es"] as const) {
   });
 }
 
-for (const [province, postalCode, image] of [
-  ["Barcelona", "08001", "catalonia-botifarra.png"],
-  ["Valencia/València", "46001", "valencia-all-pebre.png"],
-  ["Coruña, A", "15001", "galicia-empanada.png"],
+for (const [province, postalCode, image, staffNames] of [
+  [
+    "Barcelona",
+    "08001",
+    "catalonia-botifarra.png",
+    { en: "Catalan sausage", es: "Butifarra con judías" },
+  ],
+  [
+    "Valencia/València",
+    "46001",
+    "valencia-all-pebre.png",
+    { en: "Eel and potato stew", es: "All i pebre" },
+  ],
+  [
+    "Coruña, A",
+    "15001",
+    "galicia-empanada.png",
+    { en: "Galician savoury pie", es: "Empanada gallega" },
+  ],
 ] as const)
   for (const locale of ["en", "es"] as const)
     it(`writes ${province} departments, groups and stations in ${locale} and keeps image customer names`, async () => {
@@ -167,6 +182,10 @@ for (const [province, postalCode, image] of [
         .flatMap((menu) => menu.categories.flatMap((category) => category.products))
         .find((p) => p.image === image)!;
       expect(dish, image).toBeDefined();
+      expect(
+        suite.db.all(sql`select name from products
+          where json_extract(customer_name, '$.en') = ${dish.customerName!.en}`),
+      ).toEqual([{ name: staffNames[locale] }]);
       const names = suite.db.all<{ names: string }>(sql`
         select m.names from media_images m join products p on p.image = m.filename
         where p.name = ${dish.staffName![locale]}

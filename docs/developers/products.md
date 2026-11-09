@@ -953,10 +953,11 @@ and the venue's province select the data. The Valencian Community selects
 A Casa Delgado.
 
 The seed's English/Spanish language writes the single names you see for staff and kitchen
-products, menus, departments, stations and service steps. Regional wording remains in the data;
+products, menus, departments and stations. Regional wording remains in the data;
 customer content keeps Catalan/Valencian/Galician, Spanish and English. Receipt language keeps
 its separate choice. A1458's later setup slices add an explicit working-language choice; until
-then the seed uses its existing language resolver. A country without its own demo keeps the
+then an installed demo takes the administrator's language, while a developer demo takes
+`WAITRON_SEED_LOCALE`. A country without its own demo keeps the
 English fallback. Madrid retains its frozen database comparison.
 
 Setup tracks whether the suggested name is automatic or has been edited.

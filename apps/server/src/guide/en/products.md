@@ -357,7 +357,7 @@ dishes and cava. In the Valencian Community, it starts as **Casa Delgado de l'Ho
 with all i pebre, paella and Requena wine. In Galicia, it starts as **A Casa Delgado**,
 with empanada, lacón con grelos, filloas and Albariño.
 
-Staff and kitchen names, menus, departments, stations and service steps follow the
+Staff and kitchen names, menus, departments and stations follow the
 English or Spanish language used to prepare the demo. Changing your screen language
 later does not rename them. Customer wording keeps the region's Catalan, Valencian
 or Galician text alongside Spanish and English. Catalonia uses Catalan receipts;
