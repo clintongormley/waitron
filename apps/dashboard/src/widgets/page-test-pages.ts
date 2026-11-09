@@ -25,8 +25,8 @@ export type PageTestPagesApi = Pick<DashboardApi, "printPagePrinterTestPage"> & 
 
 /**
  * Each A4 printer's last test page, followed by passive reads while it is out. Polls stop while the
- * host is off the page and resume when it is put back. `readError` holds the last failed read —
- * a test page's, or a list read passed through `reread` — and `actionError` the last refusal.
+ * host is off the page and resume when it is put back. `readError` holds the last failed test-page
+ * read and `actionError` the last refusal.
  */
 export class PageTestPages implements ReactiveController {
   /** Each printer's last test page, by printer id. */
@@ -89,18 +89,6 @@ export class PageTestPages implements ReactiveController {
 
   clearReadError(): void {
     this.readError = null;
-    this.#changed();
-  }
-
-  /** A list read: its failure replaces `readError`, its success clears it. */
-  async reread(reload: () => Promise<void>): Promise<void> {
-    try {
-      await reload();
-      this.readError = null;
-    } catch (error) {
-      this.readError = codeOf(error);
-    }
-    this.#readErrorFrom = null;
     this.#changed();
   }
 

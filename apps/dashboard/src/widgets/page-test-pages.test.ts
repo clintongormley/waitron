@@ -10,22 +10,16 @@ import { PageTestPages, type PageTestPagesApi } from "./page-test-pages.js";
 
 afterEach(cleanupWidgets);
 
-/** The least a screen does with the controller: each row's button and note, a Disable that reads the list again, and the two messages. */
+/** The least a screen does with the controller: each row's button and note, and the two messages. */
 class TestPagesHost extends LitElement {
   static override styles = [baseStyles];
-  api?: PageTestPagesApi & Pick<StubApi, "updatePagePrinter">;
+  api?: PageTestPagesApi;
   rows: PagePrinterRow[] = [];
-  reload!: () => Promise<void>;
   testPagePollMs = 2_000;
   readonly pages = new PageTestPages(this, {
     api: () => this.api,
     pollMs: () => this.testPagePollMs,
   });
-
-  async #disable(row: PagePrinterRow): Promise<void> {
-    await this.api!.updatePagePrinter(row.id, { active: false });
-    await this.pages.reread(this.reload);
-  }
 
   override render() {
     const pages = this.pages;
@@ -33,11 +27,6 @@ class TestPagesHost extends LitElement {
       (row) =>
         html`<div>
           <span data-test=${`page-printer-name-${row.id}`}>${row.name}</span>${pages.noteFor(row)}
-          <wt-button
-            data-test=${`disable-page-printer-${row.id}`}
-            @click=${() => void this.#disable(row)}
-            >${t("printers.disable")}</wt-button
-          >
           <wt-button
             data-test=${`print-test-page-${row.id}`}
             ?disabled=${pages.unavailable(row)}
@@ -94,13 +83,11 @@ const ROWS = [
   }),
 ];
 
-type StubApi = ReturnType<typeof stubApi>;
 function stubApi() {
   const background = {
     readPagePrinterTestPage: vi.fn<(id: string) => Promise<PageTestPage | null>>(),
   };
   return {
-    updatePagePrinter: vi.fn().mockResolvedValue(undefined),
     printPagePrinterTestPage: vi
       .fn<(id: string) => Promise<PageTestPage>>()
       .mockResolvedValue({ id: "tp1", status: "waiting" }),
@@ -111,16 +98,14 @@ function stubApi() {
 
 async function mount(over: Partial<TestPagesHost> = {}) {
   const api = stubApi();
-  const reload = vi.fn().mockResolvedValue(undefined);
   const { el } = await mountWidget<TestPagesHost>("page-test-pages-host", {
     api,
     rows: ROWS,
-    reload,
     testPagePollMs: 1,
     ...over,
   } as Partial<TestPagesHost>);
   await flush(el);
-  return { el, api, reload };
+  return { el, api };
 }
 
 async function settleTree(root: ShadowRoot | HTMLElement): Promise<void> {
@@ -368,69 +353,6 @@ it("keeps the page through a failed outcome read, shows it as a load failure, an
   expect(q(el, "[data-test=page-printers-read-error]")).toBeNull();
   expect(button(el, "[data-test=print-test-page-pp2]").disabled).toBe(false);
   expect(api.printPagePrinterTestPage).toHaveBeenCalledTimes(1);
-});
-
-it("leaves a failed list refresh's message in place when a test page's read succeeds", async () => {
-  const { el, api, reload } = await mount();
-  reload.mockRejectedValueOnce({ code: "connection.failed" });
-  let answer!: (page: PageTestPage) => void;
-  api.background.readPagePrinterTestPage.mockReturnValueOnce(
-    new Promise<PageTestPage>((resolve) => {
-      answer = resolve;
-    }),
-  );
-  await click(el, "[data-test=print-test-page-pp1]");
-  await vi.waitFor(() => expect(api.background.readPagePrinterTestPage).toHaveBeenCalled());
-  await click(el, "[data-test=disable-page-printer-pp2]");
-  await vi.waitFor(() => expect(q(el, "[data-test=page-printers-read-error]")).not.toBeNull());
-
-  answer({ id: "tp1", status: "sent" });
-  await vi.waitFor(() => expect(testPageNote(el, "pp1")).toBe(t("printers.test_page_printed")));
-  expect(q(el, "[data-test=page-printers-read-error]")).not.toBeNull();
-});
-
-it("keeps a list refresh's failure that lands after a test page's failed read, when that page's next read succeeds", async () => {
-  const { el, api, reload } = await mount();
-  let failRead!: (error: unknown) => void;
-  let answerRead!: (page: PageTestPage) => void;
-  api.background.readPagePrinterTestPage
-    .mockReturnValueOnce(
-      new Promise<PageTestPage>((_, reject) => {
-        failRead = reject;
-      }),
-    )
-    .mockReturnValueOnce(
-      new Promise<PageTestPage>((resolve) => {
-        answerRead = resolve;
-      }),
-    );
-  let failReload!: (error: unknown) => void;
-  reload.mockReturnValueOnce(
-    new Promise<void>((_, reject) => {
-      failReload = reject;
-    }),
-  );
-  const readError = () => text(el, "[data-test=page-printers-read-error]");
-
-  await click(el, "[data-test=print-test-page-pp1]");
-  await vi.waitFor(() => expect(api.background.readPagePrinterTestPage).toHaveBeenCalledTimes(1));
-  await click(el, "[data-test=disable-page-printer-pp2]");
-  await vi.waitFor(() => expect(reload).toHaveBeenCalled());
-  failRead({ code: "page_printer.not_found" });
-  await vi.waitFor(() =>
-    expect(readError()).toBe(
-      `${t("printers.refresh_failed")} ${codeMessage("page_printer.not_found")}`,
-    ),
-  );
-  failReload({ code: "connection.failed" });
-  await vi.waitFor(() =>
-    expect(readError()).toBe(`${t("printers.refresh_failed")} ${codeMessage("connection.failed")}`),
-  );
-  await vi.waitFor(() => expect(api.background.readPagePrinterTestPage).toHaveBeenCalledTimes(2));
-
-  answerRead({ id: "tp1", status: "sent" });
-  await vi.waitFor(() => expect(testPageNote(el, "pp1")).toBe(t("printers.test_page_printed")));
-  expect(readError()).toBe(`${t("printers.refresh_failed")} ${codeMessage("connection.failed")}`);
 });
 
 it("leaves one printer's failed read in place when another printer's read succeeds", async () => {
