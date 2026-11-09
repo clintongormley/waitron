@@ -19,6 +19,9 @@ import {
   selectPastWaits,
   type HourTestClock,
 } from "./testing/hour-test-clock.js";
+import { useTestProducer } from "./testing/test-producer.js";
+
+useTestProducer();
 vi.mock("./fiscal-readiness.js", { spy: true });
 vi.mock("node:fs/promises", { spy: true });
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({

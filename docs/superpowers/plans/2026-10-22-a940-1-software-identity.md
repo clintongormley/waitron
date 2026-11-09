@@ -567,6 +567,31 @@ taxpayer.
 
 ### Task 8: the producer's name, tax number and address travel with the release (rewritten 2026-11-06)
 
+> **2026-11-08: built** on branch `feat/a940-task8-producer-settings`, parked for the owner, in the
+> order 8a, 8b, 8d, 8c, 8e, 8f, 8g, 8h (8c's rename case needs 8d's test helper). What the build
+> changed from the text below:
+> - 8c's rename case needed an optional `identity` on the bill and order venue test helpers
+>   (`provisionBillVenue` and `provisionOrderVenue`, `apps/server/src/testing/`), which build the
+>   backend directly and so do not read the settings; the default is unchanged.
+> - 8f's re-run of the server suite after the chain check existed found seven production test
+>   starts in `boot.test.ts` and `boot.promote.test.ts` refusing `sif.producer_changed`: their
+>   records came from `seedPendingEnvios` (`packages/fiscal-verifactu/test/drain-fixtures.ts`),
+>   which now takes an optional `producerNif`, and those callers pass the test producer's.
+> - 8g added `scripts/published-image-env.sh`, the one registry read of `:main`'s settings, so a
+>   `v*` tag publish compares the tax number with `:main`'s too (without it, a tag publish would
+>   always have failed the guard).
+> - 8g's Step 5, the real-fork test, waits for the owner to set the three secrets.
+> - Steps 3 and 4 of "How they reach a node", the secrets paragraph and 8g's "push again" assumed
+>   the publish job runs on a push to `main`. It does not: since A1427 (#2557) it runs only on a
+>   full run — the nightly schedule, a manual run on `main` or a `v*` tag (`ci.yml`'s publish `if:`
+>   reads `needs.changes.outputs.full`). So the nightly republishes `:main`, a changed name or
+>   address reaches boxes as they update, and only a changed tax number is held, by 8g's guard.
+>   Each is corrected in place.
+> - The owner answered the A993 question on 2026-11-06; "What A993 inherits" now records it.
+> - 2026-11-08, later: the owner had the three secrets set to placeholder values, so the fork test
+>   no longer waits (it is still not run), and "Setting the secrets" and 8h's "must be set before
+>   it lands" no longer apply. The separate checker became `node /app/server.js check-producer`.
+
 > **This replaces every earlier Task 8.** The original (fill two constants), the 2026-11-03 amendment
 > (a box's private `.env` and `--producer-file`) and the 2026-11-04 proposal (a venue-database row,
 > a build-origin stamp, a file on the owner's own stick) were all withdrawn by the owner on 2026-11-04.
@@ -692,12 +717,17 @@ is why the start check under "The catch" exists.
    then push, with a second build step served from the builder's cache and today's tags (8g). A step before the build fails when any secret is
    empty, printing lengths only. The image-smoke workflow (`image-smoke.yml:133-155`) passes none:
    its box starts blank and preproduction (`image-smoke.yml:195-198`).
-3. Every image published from the official repository then carries them — `:main` and `sha-…` on a
-   push to `main`, and each release tag when slice 4 adds them. `:main` must carry them because
+3. Every image published from the official repository then carries them — `:main` and `sha-…`
+   from a full run on `main` (the nightly schedule or a manual run), and each release tag when
+   slice 4 adds them. `:main` must carry them because
    boxes install it today (`deploy/compose.yml:11`) and no release exists yet (§5.1).
-4. **Changing the values: blocked in production until A993.** A changed secret publishes nothing by
-   itself: the publish job runs only on a push to `main` that changed code
-   (`needs.changes.outputs.code == 'true'`, `ci.yml:3949`). And once a new tax number is published,
+4. **Changing the values: blocked in production until A993.** A changed secret reaches the next
+   image the publish job builds, and that job runs on every full run — the nightly schedule, a
+   manual run on `main`, or a `v*` tag (its `if:` reads `needs.changes.outputs.full`; corrected
+   2026-11-08, since this step first said it ran only on a push that changed code, which stopped
+   being true with A1427, #2557). So the nightly republishes `:main`, and a changed name or address
+   reaches boxes as they update; only a changed tax number is held, by the guard below. Once a new
+   tax number is published,
    every production box upgraded to it **refuses to start** (`sif.producer_changed`, "The catch"):
    its chain's last record names the old number, and nothing before A993 can open the new
    installation a new producer needs. Upgrading the spare first leaves the main box refusing when
@@ -709,8 +739,8 @@ is why the start check under "The catch" exists.
      against the live image, printing only a count: today's `:main` carries 12 `WAITRON_` settings
      and no `WAITRON_PRODUCER_` one), and fails when the new secret's differs, unless the repository
      variable `WAITRON_PRODUCER_CHANGE_ALLOWED` holds that new tax number — a deliberate act that
-     allows exactly one change. The publish job runs on a push, so a variable stands in for a
-     workflow input. An image with no tax number yet (today's `:main`) is no difference, so the first
+     allows a change to that one number. The nightly run has no person to give a workflow input, so a
+     variable stands in for one. An image with no tax number yet (today's `:main`) is no difference, so the first
      publish passes. The read runs under an outer timeout and fails the job on an error or a
      timeout.
 5. **Someone building their own passes their own**: `docker build --build-arg
@@ -732,8 +762,8 @@ reference and concepts pages and "About forks" were searched for it on 2026-11-0
 either way. 8g's fork test settles it by running it.
 
 **Setting the secrets — a step for the owner or the watcher, done once before this pull request
-lands** (after it lands, a code push to `main` with the secrets missing fails the publish job by
-design):
+lands** (after it lands, the next full run on `main` — the nightly or a manual one — fails its
+publish job by design while the secrets are missing):
 
 ```
 gh secret set --env-file ~/waitron-campaign-shared/private/producer-identity.env --app actions --repo clintongormley/waitron
@@ -815,11 +845,15 @@ deliberate override.
 §5.6's approved behaviour). §5.6's start fallback ("Under A, what a start does") opens a new
 installation when a start finds the identities differ. With the producer a node setting, that
 fallback would let a stray value open a new installation at an unattended start, which is exactly
-the case Task 8 refuses. Recommended for A993: a start opens a new installation for a **producer**
-difference only when the upgrade's own step left its marker naming that same new producer (§5.6
-already has the upgrade write a marker in the box's folder before it stops the old release);
-otherwise it keeps Task 8's refusal. Put to the owner together with "a producer switch is blocked in
-production until A993"; Task 8 does not depend on the answer.
+the case Task 8 refuses. **Decided by the owner on 2026-11-06** (about 18:13, relayed by the
+watcher in the campaign questions file, heading "A940 Task 8: the owner says yes to question 1,
+both parts"): (1) a change of producer stays blocked in production until A993 exists; (2) once A993
+exists, a start opens a new installation for a **producer** difference only when the upgrade's own
+marker names that same new producer (§5.6 already has the upgrade write a marker in the box's folder
+before it stops the old release); otherwise it keeps refusing, as Task 8 does. A993's plan is bound
+by both. The owner also settled, about 18:10 the same day, that what a preproduction box does
+before A993 stays as written (it trades, the new producer on the same chain): such a box can always
+be reset.
 
 **The fifth point: the mirror is upgraded first, so the two boxes may hold different values.**
 Traced on `main` at `5558d26e89`; read, not run, except where a command is named.
@@ -1108,9 +1142,11 @@ The publish job, in order:
    (the script hands back the line, or the step that calls it does the reading once for both)
    rather than adding a second. A difference fails the job unless the repository variable
    `WAITRON_PRODUCER_CHANGE_ALLOWED` holds **the new tax number itself** (public), so it lets
-   exactly one change through and a value left set allows nothing further. Whether a re-run of a
+   through only a change to that number, and a value left set lets a later change to the same
+   number through too. Whether a re-run of a
    failed job reads a variable set after its first attempt is unverified; the step says "set the
-   variable, then push again" if a re-run does not. That read runs under an outer `timeout` and
+   variable, then start a new run" (corrected 2026-11-08 from "push again": a push to `main` does
+   not publish). That read runs under an outer `timeout` and
    fails the job on an error or a timeout. Today's registry read and the two build-and-push steps
    (`ci.yml:4054`, `:4068`) have no timeout or retry of their own beyond the job's
    `timeout-minutes: 10`; CLAUDE.md §2's bounded-step rules name checkout, node and pnpm setup,
@@ -1126,6 +1162,10 @@ The publish job, in order:
    byte-for-byte the compared one, but it is built from the same build arguments. `docker push` of
    the loaded image is not used: I believe, not run, that it would drop the provenance attestation
    the published index carries (`main-tag-guard.sh:48`).
+
+(2026-11-08: a step between 4 and 5 now runs the server's own producer check,
+`/app/producer-check.js`, inside the loaded image; `docs/developers/ci-and-gates.md` lists the job
+as built. 2026-11-08, later: the owner replaced the separate program with `node /app/server.js check-producer`.)
 
 - [ ] **Step 1: failing guard cases** in the two script tests; run
   `pnpm exec vitest run scripts/deploy-image-env.test.ts scripts/ci-workflow.test.mjs` — FAIL.

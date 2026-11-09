@@ -6,6 +6,9 @@ export default defineConfig({
   test: {
     globals: true,
     clearMocks: false,
+    // A developer's shell never names a producer to a test; a file that needs one says so
+    // (`src/testing/test-producer.ts`).
+    env: { WAITRON_PRODUCER_NAME: "", WAITRON_PRODUCER_TAX_ID: "", WAITRON_PRODUCER_ADDRESS: "" },
     setupFiles: [
       "src/testing/byte-equality-setup.ts",
       "src/testing/derived-key-cache-setup.ts",
@@ -41,7 +44,6 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
-      // `src/bin.ts` is the process entry point, exercised only by a manual end-to-end boot.
       // `src/boot.ts` is deliberately NOT here: an unreachable branch carries its own `v8 ignore`
       // in place, never a file-level exclusion.
       exclude: [...coverageConfigDefaults.exclude, "scripts/**", "src/testing/**", "src/bin.ts"],

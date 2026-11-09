@@ -1,17 +1,19 @@
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { printJobs } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { fromRegistroRow } from "@waitron/fiscal-verifactu";
 import { decodeRegistroRow, type RegistroRow } from "@waitron/fiscal-verifactu/src/registro-row.js";
+import { runningIdentity } from "@waitron/fiscal-verifactu/src/software-identity.js";
 import { checkChain, computeHuella, type RegistroAlta } from "@waitron/verifactu";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { inTx, send } from "./testing/bill-venue.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
+import { useTestProducer } from "./testing/test-producer.js";
 import {
   collect,
   placedIssuedBill,
@@ -112,5 +114,33 @@ describe("renaming the taxpayer between two sales", () => {
     expect(firstReceipt).not.toContain(NEW_NAME);
     expect(secondReceipt).toContain(NEW_NAME);
     expect(secondReceipt).not.toContain(OLD_NAME);
+  });
+});
+
+describe("renaming the taxpayer while the build names its producer", () => {
+  useTestProducer();
+  // The suite's database is emptied after every case, and its venue is seeded once.
+  beforeEach(async () => {
+    venue = await provisionOrderVenue(venue.db, { identity: runningIdentity("preproduction") });
+  });
+
+  it("keeps the producer in each record's system block while the issuer's name follows the rename", async () => {
+    await paidBill();
+    const renamed = await send(
+      venueDetailsApp(),
+      venue.adminDashboard,
+      "PUT",
+      "/management-api/venue-details/legal-name",
+      { legalName: NEW_NAME, expected: OLD_NAME },
+    );
+    expect(renamed.status).toBe(200);
+    await paidBill();
+
+    const rows = await storedRows();
+    expect(rows.map((row) => row.nombre_razon_emisor)).toEqual([OLD_NAME, NEW_NAME]);
+    expect(rows.map((row) => row.sistema_informatico.NombreRazon)).toEqual([
+      "PRODUCER PERSON",
+      "PRODUCER PERSON",
+    ]);
   });
 });

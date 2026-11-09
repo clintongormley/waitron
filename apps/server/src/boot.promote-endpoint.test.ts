@@ -30,6 +30,9 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { freePort } from "./testing/free-ports.js";
+import { useTestProducer } from "./testing/test-producer.js";
+
+useTestProducer();
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");

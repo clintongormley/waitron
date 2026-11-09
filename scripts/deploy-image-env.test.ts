@@ -247,6 +247,43 @@ describe("the container image's environment", () => {
   });
 });
 
+const PRODUCER_SETTINGS = [
+  "WAITRON_PRODUCER_NAME",
+  "WAITRON_PRODUCER_TAX_ID",
+  "WAITRON_PRODUCER_ADDRESS",
+] as const;
+
+/** The Dockerfile from `FROM … AS <stage>` up to the next `FROM`, or to the end. */
+function stage(name: string): string {
+  return only(
+    DOCKERFILE,
+    new RegExp(`(^FROM \\S+ AS ${name}\\n[\\s\\S]*?)(?=^FROM |(?![\\s\\S]))`, "m"),
+    `${name} stage`,
+  );
+}
+
+// Weaker than its name: it reads the Dockerfile and compose.yml as text. The values reaching a built
+// image is the publish job's in-image comparison, in CI.
+describe("the producer's settings", () => {
+  it("reach the app image's ENV from build arguments its runtime stage declares", () => {
+    const runtime = stage("runtime");
+    const env = imageEnv(runtime);
+    for (const setting of PRODUCER_SETTINGS) {
+      expect(runtime).toMatch(new RegExp(`^ARG ${setting}$`, "m"));
+      expect(env[setting]).toBe(`\${${setting}}`);
+    }
+  });
+
+  it("stay out of the print-agent image", () => {
+    expect(stage("print-agent")).not.toMatch(/WAITRON_PRODUCER_/);
+  });
+
+  it("are named nowhere in compose.yml, so a box's .env cannot set them", () => {
+    expect(COMPOSE).toContain("WAITRON_MANAGEMENT_RP_ID");
+    expect(COMPOSE).not.toMatch(/WAITRON_PRODUCER_/);
+  });
+});
+
 describe("the print-agent image and its compose wiring", () => {
   it("builds a print-agent target from deploy/Dockerfile", () => {
     expect(DOCKERFILE).toContain("FROM node:26-slim AS print-agent");

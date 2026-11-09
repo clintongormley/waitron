@@ -4254,10 +4254,10 @@ jobs:
           fi
 
   # Publishes the image to GHCR — a POST-GATE LEAF, downstream of the WHOLE suite rather than of the
-  # image smoke alone. `needs: [changes, ci]` waits on the `ci` aggregate, so a push to `main` (or a
-  # `v*` tag) whose CI gate goes red never ships `:main` / `:sha-…` / `:<version>` to a
-  # box that follows it via `docker compose pull` (spec §10). `changes` is
-  # needed for its `code` output.
+  # image smoke alone. It runs only on a full run: the nightly schedule or a manual run on `main`, or
+  # a `v*` tag. `needs: [changes, ci]` waits on the `ci` aggregate, so such a run whose CI gate goes
+  # red never ships `:main` / `:sha-…` / `:<version>` to a box that follows it via
+  # `docker compose pull` (spec §10). `changes` is needed for its `full` output.
   #
   # It cannot appear in `ci`'s `needs` — that would be a cycle — so it is the ONE job the
   # "every other job is in ci's needs" rule excepts; scripts/ci-workflow.test.mjs pins it downstream
@@ -4302,6 +4302,26 @@ jobs:
           git rev-parse --is-shallow-repository
           find "$(git rev-parse --git-path objects)/pack" -type f -name '*.pack' -exec wc -c {} +
 
+      # The release image carries the software producer's settings from three repository secrets. A
+      # fork has none of them until it sets its own, so its publish stops here.
+      - name: Refuse to publish without the producer's three settings
+        env:
+          WAITRON_PRODUCER_NAME: ${{ secrets.WAITRON_PRODUCER_NAME }}
+          WAITRON_PRODUCER_TAX_ID: ${{ secrets.WAITRON_PRODUCER_TAX_ID }}
+          WAITRON_PRODUCER_ADDRESS: ${{ secrets.WAITRON_PRODUCER_ADDRESS }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in WAITRON_PRODUCER_NAME WAITRON_PRODUCER_TAX_ID WAITRON_PRODUCER_ADDRESS; do
+            value=${!name}
+            echo "$name: ${#value} characters"
+            if [ -z "$value" ]; then
+              echo "the repository secret $name is empty or not set" >&2
+              missing=1
+            fi
+          done
+          exit "$missing"
+
       - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v4
@@ -4318,6 +4338,7 @@ jobs:
           SHA: ${{ github.sha }}
           REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAIN_TAG_GUARD_ENV_OUT: ${{ runner.temp }}/main-image.env
         run: |
           set -euo pipefail
           # GHCR refuses an uppercase path, and github.repository_owner keeps the account's casing.
@@ -4337,7 +4358,8 @@ jobs:
               # Assigned on its own line, deliberately: `errexit` is SUSPENDED for a command inside
               # an `if` condition, so a failing guard would read there as "do not move the tag" and
               # turn an error into a silently skipped tag move. As an assignment it fails the step.
-              decision=$(scripts/main-tag-guard.sh "$repo:main" "$REPOSITORY" "$SHA")
+              # The time limit fails the step, as any other failure of the guard does.
+              decision=$(timeout 120 scripts/main-tag-guard.sh "$repo:main" "$REPOSITORY" "$SHA")
               case "$decision" in
                 move)
                   tags="$tags,$repo:main"
@@ -4351,14 +4373,74 @@ jobs:
               ;;
             # No release tag exists yet. This line and the `tags:` trigger at the top of the file are
             # together what will make the first `v1.2.3` publish `:1.2.3` rather than nothing.
-            refs/tags/v*) tags="$tags,$repo:${REF#refs/tags/v}"; agent_tags="$agent_tags,$agent_repo:${REF#refs/tags/v}" ;;
+            refs/tags/v*)
+              # A release tag moves no `:main`, but the producer guard below still compares with
+              # `:main`'s settings: the same single registry read, with no decision. Exit 3 means
+              # nothing is published under `:main` yet, which leaves the file empty.
+              read_status=0
+              timeout 120 scripts/published-image-env.sh "$repo:main" >"$MAIN_TAG_GUARD_ENV_OUT" || read_status=$?
+              if [ "$read_status" -ne 0 ] && [ "$read_status" -ne 3 ]; then
+                echo "cannot read :main's settings for the producer guard (exit $read_status)" >&2
+                exit 1
+              fi
+              tags="$tags,$repo:${REF#refs/tags/v}"; agent_tags="$agent_tags,$agent_repo:${REF#refs/tags/v}"
+              ;;
           esac
           echo "$tags"; echo "$agent_tags"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "agent_tags=$agent_tags" >> "$GITHUB_OUTPUT"
 
+      # A production box refuses to start on a chain made under another producer tax number
+      # (`sif.producer_changed`), and nothing can open the new installation a new producer needs
+      # until A993. So a new tax number reaches an image only when the repository variable
+      # WAITRON_PRODUCER_CHANGE_ALLOWED holds that new number. A value left set lets through only a
+      # change to that same number, later ones included. A change of name or address alone is not compared.
+      - name: Refuse a change of the producer's tax number that nobody allowed
+        env:
+          REF: ${{ github.ref }}
+          MAIN_IMAGE_ENV: ${{ runner.temp }}/main-image.env
+          WAITRON_PRODUCER_TAX_ID: ${{ secrets.WAITRON_PRODUCER_TAX_ID }}
+          WAITRON_PRODUCER_CHANGE_ALLOWED: ${{ vars.WAITRON_PRODUCER_CHANGE_ALLOWED }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$MAIN_IMAGE_ENV" ]; then
+            # The step above writes it on every run that publishes: the nightly schedule or a manual
+            # run on main (through main-tag-guard.sh), or a `v*` tag (directly).
+            echo "no read of :main's settings to compare the producer tax number with on $REF" >&2
+            exit 1
+          fi
+          # A box trims this setting, so padding is not a different number. (It refuses a line break: software-producer.ts.)
+          # This is that trim's list of characters, as UTF-8 bytes: `[[:space:]]` varies by locale and
+          # misses the no-break spaces. Guard: `scripts/ci-workflow.test.mjs`, against JavaScript's own.
+          LC_ALL=C
+          shopt -s extglob
+          blank=$'[\t\n\v\f\r ]|\xc2\xa0|\xe1\x9a\x80|\xe2\x80[\x80-\x8a\xa8\xa9\xaf]|\xe2\x81\x9f|\xe3\x80\x80|\xef\xbb\xbf'
+          trimmed() {
+            local value=$1
+            value=${value##+($blank)}
+            value=${value%%+($blank)}
+            printf '%s' "$value"
+          }
+          published=$(sed -n 's/^WAITRON_PRODUCER_TAX_ID=//p' "$MAIN_IMAGE_ENV" | head -n 1)
+          published=$(trimmed "$published")
+          tax_id=$(trimmed "$WAITRON_PRODUCER_TAX_ID")
+          allowed=$(trimmed "${WAITRON_PRODUCER_CHANGE_ALLOWED:-}")
+          if [ -z "$published" ]; then
+            echo ":main carries no producer tax number yet, so this is not a change"
+          elif [ "$published" = "$tax_id" ]; then
+            echo "the producer tax number is the one :main carries"
+          elif [ -n "$allowed" ] && [ "$allowed" = "$tax_id" ]; then
+            echo "the producer tax number changes from :main's; WAITRON_PRODUCER_CHANGE_ALLOWED allows it"
+          else
+            echo "the secret WAITRON_PRODUCER_TAX_ID differs from the one :main carries, and production" >&2
+            echo "boxes refuse to start on it until A993. To publish it anyway, set the repository" >&2
+            echo "variable WAITRON_PRODUCER_CHANGE_ALLOWED to the new tax number, then start a new run" >&2
+            echo "(a re-run of this job may not read a variable set after its first attempt)." >&2
+            exit 1
+          fi
+
       # Single platform: amd64 is what every box runs. The runner is x86, so a second platform would
-      # be built under QEMU. Pay that on a release tag, not on every merge to `main` — and re-add
+      # be built under QEMU. Pay that on a release tag, not on every full run on `main` — and re-add
       # `docker/setup-qemu-action` when you do, since buildx alone registers no binfmt handler and an
       # emulated stage would fail at its first `RUN`.
       - name: Record image build time
@@ -4369,6 +4451,62 @@ jobs:
           mkdir -p build
           git show -s --format='%H:%ct' "$GITHUB_SHA" > build/source-metadata
 
+      # Loaded into the runner's Docker, which takes one platform; a second platform needs this
+      # rechecked. The push below is built again from the builder's cache rather than `docker push`ed,
+      # so the published index keeps its provenance attestation.
+      - name: Build the app image for checking
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: waitron-publish-check:local
+          build-args: |
+            WAITRON_BUILD_ID=${{ github.sha }}
+            WAITRON_PRODUCER_NAME=${{ secrets.WAITRON_PRODUCER_NAME }}
+            WAITRON_PRODUCER_TAX_ID=${{ secrets.WAITRON_PRODUCER_TAX_ID }}
+            WAITRON_PRODUCER_ADDRESS=${{ secrets.WAITRON_PRODUCER_ADDRESS }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
+            org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
+
+      - name: Check the producer's settings inside the built image
+        env:
+          CHECK_IMAGE: waitron-publish-check:local
+          WAITRON_PRODUCER_NAME: ${{ secrets.WAITRON_PRODUCER_NAME }}
+          WAITRON_PRODUCER_TAX_ID: ${{ secrets.WAITRON_PRODUCER_TAX_ID }}
+          WAITRON_PRODUCER_ADDRESS: ${{ secrets.WAITRON_PRODUCER_ADDRESS }}
+        run: |
+          set -euo pipefail
+          # Compared here and never printed: GitHub masks a secret only where it appears verbatim.
+          failed=0
+          for name in WAITRON_PRODUCER_NAME WAITRON_PRODUCER_TAX_ID WAITRON_PRODUCER_ADDRESS; do
+            expected=${!name}
+            status=0
+            inside=$(timeout 60 docker run --rm --pull never --entrypoint printenv "$CHECK_IMAGE" "$name") || status=$?
+            if [ "$status" -ne 0 ]; then
+              echo "could not read $name inside the built image (exit $status)" >&2
+              failed=1
+            elif [ "$inside" != "$expected" ]; then
+              echo "$name inside the built image differs from its secret (${#inside} characters, the secret ${#expected})" >&2
+              failed=1
+            else
+              echo "$name inside the built image matches its secret (${#inside} characters)"
+            fi
+          done
+          exit "$failed"
+
+      # The image's server program runs each fiscal module's start-up check of the settings, for
+      # production. It prints error codes, setting names and reasons, never a value.
+      - name: Run the box's own checks of the producer's settings in the built image
+        env:
+          CHECK_IMAGE: waitron-publish-check:local
+        run: |
+          set -euo pipefail
+          timeout 120 docker run --rm --pull never --network none --entrypoint node "$CHECK_IMAGE" /app/server.js check-producer
+
       - name: Publish to GHCR
         uses: docker/build-push-action@v7
         with:
@@ -4377,7 +4515,11 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ steps.tags.outputs.tags }}
-          build-args: WAITRON_BUILD_ID=${{ github.sha }}
+          build-args: |
+            WAITRON_BUILD_ID=${{ github.sha }}
+            WAITRON_PRODUCER_NAME=${{ secrets.WAITRON_PRODUCER_NAME }}
+            WAITRON_PRODUCER_TAX_ID=${{ secrets.WAITRON_PRODUCER_TAX_ID }}
+            WAITRON_PRODUCER_ADDRESS=${{ secrets.WAITRON_PRODUCER_ADDRESS }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.provenance.outputs.created }}

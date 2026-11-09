@@ -340,6 +340,11 @@ informático comercializado sin dicha certificación».
 > owner's name and NIF are added, and meanwhile a published build set to production refuses to
 > trade (`sif.producer_unset`). See `packages/fiscal-verifactu/src/software-identity.ts`. The line
 > numbers below were taken before slice 1, on 2026-10-21 and 2026-10-22, and are not kept current.
+>
+> **2026-11-08:** slice 1's Task 8 (parked for the owner) replaces that refusal. The producer
+> fields name the producer from the release's three settings; a production start with none of
+> them refuses `sif.producer_unset` whether or not the build is published, and the taxpayer's name
+> and NIF are used there only outside production, when no producer is set.
 
 There is no declaration, no About screen on any terminal, and no release (`git ls-remote --tags
 origin` lists only `pre-sqlite-migration`; `gh api repos/clintongormley/waitron/releases --jq
@@ -1053,9 +1058,16 @@ between (a switch to the spare, say) — more fiscal code, to save a delay that 
 > do it with nobody present. Until A993 is built, a production start refuses instead
 > (`sif.producer_changed`, slice 1's plan, Task 8, which compares the record the chain head points
 > at), and the publish job refuses a changed tax number unless deliberately allowed, so a change
-> of producer is blocked in production until A993 lands. Recommended to A993, and put to the owner:
-> a start opens a new installation for a producer difference only when the upgrade's own marker
-> names that producer; otherwise it keeps refusing.
+> of producer is blocked in production until A993 lands.
+>
+> **2026-11-08, the owner's decision** (2026-11-06 about 18:13, relayed by the watcher in the
+> campaign questions file; recorded in slice 1's plan, Task 8, "What A993 inherits"): (1) a change
+> of producer stays blocked in production until A993 exists; (2) once A993 exists, a start opens a
+> new installation for a producer difference only when the upgrade's own marker names that same new
+> producer; otherwise it keeps refusing. This narrows "Under A, what a start does" below for the
+> producer only; a difference in the code or the mode is unchanged. Before A993, a preproduction
+> box given another producer trades on, the new producer on the same chain (the owner, about 18:10
+> the same day: such a box can always be reset).
 
 **Under A, what a start does.** Every start still compares the identities (above). After an
 upgrade through its step they match. They differ in two cases: the new release was started some

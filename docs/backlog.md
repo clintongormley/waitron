@@ -224,13 +224,13 @@ that bundle's heading in the area's file: take a bundle as one pull request.
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
 - **A940. Waitron's declaración responsable — design approved 2026-10-22; slice 1 landed 2026-10-23 (#2000).**
-  Still open: Task 8, rewritten 2026-11-06 and not built — the producer's name, tax number and postal address as three public settings each official image carries from repository secrets, never committed; a production start refuses without them, and refuses when its chain was made under another producer. Then slices 1b to 6, and A993's plan.
+  Task 8 landed: the producer's name, tax number and postal address are three public settings each official image carries from repository secrets, never committed; a production start refuses without them, and refuses when its chain was made under another producer. The three secrets hold placeholder values for now (owner, 2026-11-08); replacing them (`gh secret set --env-file ~/waitron-campaign-shared/private/producer-identity.env --app actions --repo clintongormley/waitron`) is safe only while no box has started in production, because a production chain refuses a different producer tax number until A993 lands, and every full run's publish job fails while any is missing; once an image carrying a placeholder is published, the publish job also refuses the real tax number unless the repository variable `WAITRON_PRODUCER_CHANGE_ALLOWED` holds it; apart from replacing the placeholder, do not change the tax number until A993 lands; watch the first nightly or manual publish (its load-then-push build had not run on GitHub before). The real-fork test (the plan's 8g Step 5) is still to do. Then slices 1b to 6, and A993's plan.
   Still needed from outside: the asesor's answer to Q53. The owner's publishable address is settled (supplied 2026-11-04; it travels with the other two).
   [Detail](backlog/fiscal.md#a940-waitrons-declaración-responsable--design-approved-2026-10-22-slice-1-landed-2026-10-23-2000).
 
 - **A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.**
   A947's slice 4a landed as #1990 and A940's slice 1 as #2000; its plan comes after slice 1's,
-  and it lands before the first production venue goes live.
+  and it lands before the first production venue goes live. Constraint on its plan (owner, 2026-11-06): a start opens a new installation for a producer difference only when the upgrade's own marker names that same new producer; otherwise it keeps refusing.
   [Detail](backlog/fiscal.md#a993-a-change-of-the-systems-identity-opens-a-new-installation-by-itself--designed-in-a940-56-approved-2026-10-22-fiscal-the-owner-lands-it).
 
 - **One owner session with a real certificate against AEAT** (bundle of 3, 3 important, size S, needs a third party). Holds A1270, A888, A679. [Detail](backlog/fiscal.md#bundle-one-owner-session-with-a-real-certificate-against-aeat)

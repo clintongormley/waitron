@@ -157,6 +157,8 @@ export interface RegistroOptions {
   anterior?: AnteriorPointer;
   /** fecha_hora_huso_gen_registro. Default the fixture sale's issue time. */
   generatedAt?: Date;
+  /** The stored software block. Default `{}`, which names no producer. */
+  sistemaInformatico?: Record<string, unknown>;
 }
 
 /**
@@ -198,7 +200,7 @@ export async function insertFiscalRegistro(
       cuotaTotal: "12.35",
       importeTotal: "123.45",
       primerRegistro: a === undefined,
-      sistemaInformatico: {},
+      sistemaInformatico: opts.sistemaInformatico ?? {},
       anteriorIdEmisorFactura: a?.idEmisorFactura ?? null,
       anteriorNumSerieFactura: a?.numSerieFactura ?? null,
       anteriorFechaExpedicionFactura: a?.fechaExpedicionFactura ?? null,

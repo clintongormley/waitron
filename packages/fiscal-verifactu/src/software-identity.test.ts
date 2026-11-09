@@ -1,17 +1,28 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildAltaRecord, validate } from "@waitron/verifactu";
+import { recordSale } from "@waitron/core";
+import { withTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { seedTenantWithSif } from "../test/fixtures.js";
+import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
+import { registrosFacturacion } from "./schema/registros.js";
+import { makeVerifactuBackend } from "./slot.js";
 import {
   PRODUCER_PENDING,
   SOFTWARE_IDENTITY,
   producerFields,
-  refuseUnsetProducer,
+  refuseProducerSettings,
+  runningProducer,
   softwareVersion,
   type SoftwareIdentity,
 } from "./software-identity.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.doUnmock("./hour-release.js");
   vi.resetModules();
 });
@@ -32,8 +43,8 @@ describe("SOFTWARE_IDENTITY", () => {
       onlyVerifactu: "S",
       multipleTaxpayersPossible: "N",
       multipleTaxpayersNow: "N",
-      producer: PRODUCER_PENDING,
     });
+    expect(SOFTWARE_IDENTITY).not.toHaveProperty("producer");
   });
 });
 
@@ -142,30 +153,148 @@ describe("producerFields", () => {
   });
 });
 
-describe("refuseUnsetProducer", () => {
-  it("refuses a published production build while pending", () => {
-    let thrown: unknown;
-    try {
-      refuseUnsetProducer("production", true, pending);
-    } catch (error) {
-      thrown = error;
-    }
-    expect(thrown).toBeInstanceOf(AppError);
-    expect(thrown).toMatchObject({
-      code: "sif.producer_unset",
-      params: { environment: "production" },
+const PRODUCER = {
+  WAITRON_PRODUCER_NAME: "PRODUCER PERSON",
+  WAITRON_PRODUCER_TAX_ID: "00000000T",
+  WAITRON_PRODUCER_ADDRESS: "1 Example Street, 00000 Nowhere (Province), Spain",
+};
+
+function setProducer(values: Partial<typeof PRODUCER>): void {
+  for (const name of Object.keys(PRODUCER) as (keyof typeof PRODUCER)[])
+    vi.stubEnv(name, values[name] ?? "");
+}
+
+function running(): SoftwareIdentity {
+  return { ...SOFTWARE_IDENTITY, producer: runningProducer() };
+}
+
+function refusal(environment: string): unknown {
+  try {
+    refuseProducerSettings(environment, running());
+  } catch (error) {
+    return error;
+  }
+  return null;
+}
+
+describe("a start, by the producer settings", () => {
+  describe("with none set", () => {
+    beforeEach(() => setProducer({}));
+
+    it("refuses production on a build with no stamp", () => {
+      const thrown = refusal("production");
+      expect(thrown).toBeInstanceOf(AppError);
+      expect(thrown).toMatchObject({
+        code: "sif.producer_unset",
+        params: { environment: "production" },
+      });
+    });
+
+    it("trades in preproduction, naming the taxpayer", () => {
+      expect(refusal("preproduction")).toBeNull();
+      expect(producerFields(running(), taxpayer)).toEqual({
+        NombreRazon: "Bar Lucía S.L.",
+        NIF: "B12345674",
+      });
     });
   });
 
-  it("serves a published preproduction build while pending", () => {
-    expect(() => refuseUnsetProducer("preproduction", true, pending)).not.toThrow();
+  describe("with all three set and valid", () => {
+    beforeEach(() => setProducer(PRODUCER));
+
+    it.each(["production", "preproduction"])("trades in %s, naming the producer", (env) => {
+      expect(refusal(env)).toBeNull();
+      expect(producerFields(running(), taxpayer)).toEqual({
+        NombreRazon: "PRODUCER PERSON",
+        NIF: "00000000T",
+      });
+    });
   });
 
-  it("serves an unpublished production build while pending", () => {
-    expect(() => refuseUnsetProducer("production", false, pending)).not.toThrow();
+  describe.each(["production", "preproduction"])("in %s", (environment) => {
+    it("refuses a partly set producer", () => {
+      setProducer({ WAITRON_PRODUCER_NAME: PRODUCER.WAITRON_PRODUCER_NAME });
+      expect(refusal(environment)).toMatchObject({
+        code: "software_producer.invalid",
+        params: { setting: "WAITRON_PRODUCER_TAX_ID", reason: "partial" },
+      });
+    });
+
+    it("refuses a value failing the shape check", () => {
+      setProducer({ ...PRODUCER, WAITRON_PRODUCER_ADDRESS: "1 Example Street\nSpain" });
+      expect(refusal(environment)).toMatchObject({
+        code: "software_producer.invalid",
+        params: { setting: "WAITRON_PRODUCER_ADDRESS", reason: "line_break" },
+      });
+    });
+
+    it("refuses a tax number with a wrong check letter", () => {
+      setProducer({ ...PRODUCER, WAITRON_PRODUCER_TAX_ID: "X1234567A" });
+      const thrown = refusal(environment);
+      expect(thrown).toBeInstanceOf(AppError);
+      expect(thrown).toMatchObject({
+        code: "sif.producer_invalid",
+        params: { setting: "WAITRON_PRODUCER_TAX_ID", reason: "check_failed" },
+      });
+    });
+
+    it("refuses a name longer than Veri*Factu's 120 characters", () => {
+      setProducer({ ...PRODUCER, WAITRON_PRODUCER_NAME: "P".repeat(121) });
+      expect(refusal(environment)).toMatchObject({
+        code: "sif.producer_invalid",
+        params: { setting: "WAITRON_PRODUCER_NAME", reason: "too_long" },
+      });
+    });
   });
 
-  it("serves a published production build once the producer is supplied", () => {
-    expect(() => refuseUnsetProducer("production", true, filled)).not.toThrow();
+  it("accepts a foreigner's number with its right check letter", () => {
+    setProducer({ ...PRODUCER, WAITRON_PRODUCER_TAX_ID: "X1234567L" });
+    expect(refusal("production")).toBeNull();
+    expect(producerFields(running(), taxpayer).NIF).toBe("X1234567L");
+  });
+
+  it("accepts a name of exactly 120 characters", () => {
+    setProducer({ ...PRODUCER, WAITRON_PRODUCER_NAME: "P".repeat(120) });
+    expect(refusal("production")).toBeNull();
+  });
+
+  it("an invalid producer reached through producerFields throws its error", () => {
+    setProducer({ ...PRODUCER, WAITRON_PRODUCER_TAX_ID: "X1234567A" });
+    expect(() => producerFields(running(), taxpayer)).toThrow(
+      expect.objectContaining({ code: "sif.producer_invalid" }),
+    );
+  });
+
+  it("reads the given environment, not only the process's", () => {
+    setProducer({});
+    expect(runningProducer(PRODUCER)).toEqual({ name: "PRODUCER PERSON", nif: "00000000T" });
+    expect(runningProducer({})).toBe(PRODUCER_PENDING);
+  });
+});
+
+describe("a backend keeps its first reading of the settings", () => {
+  const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
+
+  it("names the producer read when it was built, after the settings change", async () => {
+    const { nodeId, seriesId } = await seedTenantWithSif(suite.db);
+    setProducer(PRODUCER);
+    const backend = makeVerifactuBackend({
+      db: suite.db,
+      clock: steadyClock,
+      environment: "preproduction",
+    });
+    setProducer({});
+
+    const { saleId } = await withTransaction(suite.db, (tx) =>
+      recordSale(tx, backend, saleInput({ nodeId, seriesId })),
+    );
+    const [row] = await suite.db
+      .select({ sistemaInformatico: registrosFacturacion.sistemaInformatico })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.saleId, saleId));
+    expect(row!.sistemaInformatico).toMatchObject({
+      NombreRazon: "PRODUCER PERSON",
+      NIF: "00000000T",
+    });
   });
 });

@@ -366,8 +366,8 @@ disk is full.
 
 ### Trying a branch before it merges
 
-CI does not publish an image for a pull request (only pushes to `main` and `v*` tags publish to
-GHCR), so there is no PR image to `pull`. Give `install` a ref — a branch name or a commit SHA —
+CI does not publish an image for a pull request (only the nightly run, a manual run on `main` and
+`v*` tags publish to GHCR), so there is no PR image to `pull`. Give `install` a ref — a branch name or a commit SHA —
 instead of relying on the default `main`, and it builds that ref's image on the box instead of
 pulling. The script resolves the ref once through GitHub's commit API, then builds both Waitron
 images from that full commit. No checkout or `pnpm` is needed; a failed resolution stops the builds.
@@ -375,6 +375,9 @@ images from that full commit. No checkout or `pnpm` is needed; a failed resoluti
 ```bash
 sudo bash waitron.sh install <branch-or-ref>
 ```
+
+The image it builds names no software producer, so on a Veri\*Factu box set to production it refuses to start trading
+(`sif.producer_unset`); try branches on a preproduction box.
 
 It tags the image after the ref (`waitron:<ref>`, with unsafe characters dashed and the name capped
 to a valid length) and writes that tag into `.env` as `WAITRON_IMAGE` (and the print agent's
@@ -753,6 +756,12 @@ docker build -f deploy/Dockerfile -t waitron:pinned \
 CI prepares the same metadata in its build context. `waitron.sh install <ref>` supplies it for
 both image targets and needs `jq` to read the commit response; it installs `jq` through apt when
 absent. On a host without apt, install `jq` before using a branch or commit ref.
+
+An image you build yourself names you as the software's producer: pass
+`--build-arg WAITRON_PRODUCER_NAME=…`, `--build-arg WAITRON_PRODUCER_TAX_ID=…` and
+`--build-arg WAITRON_PRODUCER_ADDRESS=…` (the address on one line), or its production start refuses
+with `sif.producer_unset`. A fork's publish job reads three repository secrets of those names and
+stops when any is empty, so a fork sets its own.
 
 Then point the compose at both in `.env`: `WAITRON_IMAGE=waitron:dev` and
 `WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:dev`. The print agent is an on-by-default service, so

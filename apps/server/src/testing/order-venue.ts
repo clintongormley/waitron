@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import { devices, invoiceSeries, sales } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
+import type { SoftwareIdentity } from "@waitron/fiscal-verifactu/src/software-identity.js";
 import { recordCorrection, recordSale, recordVoid } from "@waitron/core";
 import { loginWithPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -43,8 +44,11 @@ export interface OrderVenue extends BillVenue {
 
 const quiet: Logger = () => {};
 
-export async function provisionOrderVenue(db: Database): Promise<OrderVenue> {
-  const venue = await provisionBillVenue(db);
+export async function provisionOrderVenue(
+  db: Database,
+  options: { identity?: SoftwareIdentity } = {},
+): Promise<OrderVenue> {
+  const venue = await provisionBillVenue(db, options);
   const [assigned] = await db
     .select({ id: devices.receiptPrinterId })
     .from(devices)

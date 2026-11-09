@@ -12,7 +12,12 @@ import { currentSif } from "./registro-sif.js";
 import { envios } from "./schema/envios.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
-import { producerFields, SOFTWARE_IDENTITY, softwareVersion } from "./software-identity.js";
+import {
+  producerFields,
+  runningIdentity,
+  SOFTWARE_IDENTITY,
+  softwareVersion,
+} from "./software-identity.js";
 
 export async function applyAbsentOriginalCancellation(
   tx: Transaction,
@@ -139,7 +144,10 @@ export async function applyAbsentOriginalCancellation(
         ),
         SinRegistroPrevio: "S",
         SistemaInformatico: {
-          ...producerFields(SOFTWARE_IDENTITY, { legalName: tenant.legalName, nif: sif.nif }),
+          ...producerFields(runningIdentity(generation.environment), {
+            legalName: tenant.legalName,
+            nif: sif.nif,
+          }),
           NombreSistemaInformatico: SOFTWARE_IDENTITY.name,
           IdSistemaInformatico: sif.idSistemaInformatico,
           Version: softwareVersion(),

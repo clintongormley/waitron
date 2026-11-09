@@ -6,7 +6,6 @@ import { AppError, decimal, jobOrigin, seriesId } from "@waitron/shared";
 import { applyCorrectiveInvoice } from "./record-remedy-corrective.js";
 import type { RemedyKind } from "./record-remedy.js";
 import { makeVerifactuBackend } from "./slot.js";
-import { BUILD_COMMIT } from "./software-identity.js";
 
 function invalid(): never {
   throw new AppError("fiscal.remedy_request_invalid", {});
@@ -97,10 +96,11 @@ export async function applyCorrectiveInvoiceRequest(
       lines,
     },
   };
-  const backend = makeVerifactuBackend(
-    { db: ctx.db, clock: generation.clock, environment: generation.environment },
-    BUILD_COMMIT !== null,
-  );
+  const backend = makeVerifactuBackend({
+    db: ctx.db,
+    clock: generation.clock,
+    environment: generation.environment,
+  });
   return applyCorrectiveInvoice(tx, {
     managementSessionId: token,
     generation,

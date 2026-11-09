@@ -143,6 +143,15 @@ export const HOLDER_STALLED = "provisioning.database_holder_stalled";
 /** Typed so a misspelled code below fails the typecheck rather than rendering the generic line. */
 type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE | typeof HOLDER_STALLED;
 
+const MALFORMED_PRODUCER_EN =
+  "This copy of Waitron was built with its producer's details incomplete or in the wrong form, so it cannot be used.";
+const MALFORMED_PRODUCER_ES =
+  "Esta copia de Waitron se creó con los datos de quien la produce incompletos o mal escritos, así que no puede usarse.";
+const PRODUCER_ACTION_EN =
+  "Install an official Waitron update on this box. If you build Waitron yourself, build it with your own producer's details.";
+const PRODUCER_ACTION_ES =
+  "Instala en este equipo una actualización oficial de Waitron. Si creas Waitron tú mismo, créalo con los datos de tu propio productor.";
+
 /**
  * Every string in this table is fixed and chosen by code. The strings on the page that are not —
  * the error code, `lastFailureAt`, the log tail, the last failed start's detail, the recorded
@@ -243,14 +252,35 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
   "sif.producer_unset": {
     "en-GB": {
       title:
-        "This version of Waitron does not yet name its producer, so it cannot be used for real sales.",
-      action: "Ask whoever installed this box to install a version that names its producer.",
+        "This copy of Waitron was built without the name, tax number and address of its producer, so it cannot be used for real sales.",
+      action: PRODUCER_ACTION_EN,
     },
     "es-ES": {
       title:
-        "Esta versión de Waitron todavía no indica quién la produce, así que no puede usarse para ventas reales.",
+        "Esta copia de Waitron se creó sin el nombre, el NIF y la dirección de quien la produce, así que no puede usarse para ventas reales.",
+      action: PRODUCER_ACTION_ES,
+    },
+  },
+  "software_producer.invalid": {
+    "en-GB": { title: MALFORMED_PRODUCER_EN, action: PRODUCER_ACTION_EN },
+    "es-ES": { title: MALFORMED_PRODUCER_ES, action: PRODUCER_ACTION_ES },
+  },
+  "sif.producer_invalid": {
+    "en-GB": { title: MALFORMED_PRODUCER_EN, action: PRODUCER_ACTION_EN },
+    "es-ES": { title: MALFORMED_PRODUCER_ES, action: PRODUCER_ACTION_ES },
+  },
+  "sif.producer_changed": {
+    "en-GB": {
+      title:
+        "This box has been given a different software producer from the one its invoices were recorded under. A new producer needs a new fiscal installation, and this version of Waitron cannot open one, so the box will not sell.",
       action:
-        "Pide a quien instaló este equipo que instale una versión que indique quién la produce.",
+        "Install a Waitron version that names the same producer as this box's invoices. Changing the producer needs a Waitron version that can open a new fiscal installation, which does not exist yet.",
+    },
+    "es-ES": {
+      title:
+        "Este equipo tiene un productor del software distinto del de sus facturas registradas. Un productor nuevo necesita una nueva instalación fiscal, y esta versión de Waitron no puede abrirla, así que el equipo no venderá.",
+      action:
+        "Instala una versión de Waitron que indique el mismo productor que las facturas de este equipo. Cambiar de productor necesita una versión de Waitron capaz de abrir una nueva instalación fiscal, que todavía no existe.",
     },
   },
   "server.config_missing": {

@@ -66,6 +66,9 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+import { useTestProducer } from "./testing/test-producer.js";
+
+useTestProducer();
 
 // The promote endpoint end to end over HTTP, each boot on its own venue directory: an admin-login
 // promote restarts the mirror as a primary that sells and chains on its own reserved SIF without

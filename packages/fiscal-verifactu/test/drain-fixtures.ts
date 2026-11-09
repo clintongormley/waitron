@@ -48,6 +48,8 @@ export interface SeededDrainOptions {
    * `fiscal.environment_unknown`.
    */
   entorno?: Entorno | null;
+  /** The producer tax number each record's software block names. Defaults to `TEST_SISTEMA`'s. */
+  producerNif?: string;
 }
 
 export interface SeededDrain {
@@ -99,6 +101,8 @@ export async function insertPendingAlta(
     entorno: Entorno | null;
     /** Defaults to `"Waitron SL"`. */
     nombreRazonEmisor?: string | undefined;
+    /** Defaults to `TEST_SISTEMA`'s. */
+    producerNif?: string | undefined;
   },
 ): Promise<{ registroId: string; numSerieFactura: string }> {
   const numSerieFactura = `S${String(params.secuencia)}/1`;
@@ -158,6 +162,7 @@ export async function insertPendingAlta(
   `);
   const sistemaInformatico = {
     ...TEST_SISTEMA,
+    NIF: params.producerNif ?? TEST_SISTEMA.NIF,
     NumeroInstalacion: String(sif.rows[0]!.numero_instalacion),
   };
   const [registro] = await db
@@ -259,6 +264,7 @@ export async function seedPendingEnvios(
       fecha,
       generadoEn,
       entorno,
+      producerNif: opts.producerNif,
     });
     registroIds.push(registroId);
     facturaKeys.push(`${sif.nif}|${numSerieFactura}|${toAeatDate(fecha)}`);

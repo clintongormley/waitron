@@ -2060,6 +2060,12 @@ async function bootServer(
   // (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
   const nodeBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
+  // Only a node that can add a record is asked: a mirror's copy may hold its own node's chain from
+  // before it handed over, made under the producer it ran then.
+  if (!fencedOrMirror && nodeBackend.checkFilingIdentity !== undefined) {
+    const checkFilingIdentity = nodeBackend.checkFilingIdentity.bind(nodeBackend);
+    await withTransaction(db, (tx) => checkFilingIdentity(tx, node.nodeId));
+  }
   const operationDescriptionDefault = offeredOperationDescriptionDefault(
     enabledFiscal.venueFields?.defaults?.operationDescription,
   );

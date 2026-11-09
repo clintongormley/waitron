@@ -1870,7 +1870,8 @@ Three things that came out of those commands and are easy to get wrong:
   arg only in the app stage — so the guard reads the app image and the print-agent tag rides along
   on that decision.
 
-The script fails rather than guessing. A transient registry error is repaired by the next merge, but
+The script fails rather than guessing. A transient registry error is repaired by the next full run on `main` (the nightly or a manual
+run), but
 two states are NOT self-repairing: a `:main` carrying no build id, and one built from a commit
 GitHub's comparison cannot place against the commit being published. Both wedge every later publish
 until `:main` is deleted or retagged by hand. While the guard fails, nothing is published, the
@@ -1895,6 +1896,44 @@ So any comparison GitHub refuses stops publishing, including one against an old 
 GitHub no longer holds after a rewrite.
 
 Its suite, `scripts/main-tag-guard.test.mjs`, runs the real script against a stubbed `docker` and `gh`.
+
+### The publish job requires, guards and checks the producer's settings
+
+The app image carries `WAITRON_PRODUCER_NAME`, `WAITRON_PRODUCER_TAX_ID` and
+`WAITRON_PRODUCER_ADDRESS` from three repository secrets of those names, passed as build arguments
+to the app build only. In order, the publish job:
+
+1. fails when any of the three secrets is empty, printing each one's length and never its value;
+2. reads `:main`'s environment off the registry once, under `timeout 120`, through
+   `scripts/published-image-env.sh` (which owns the exact "not found" match), and writes it to the
+   file `MAIN_TAG_GUARD_ENV_OUT` names. The job publishes only on the nightly schedule, a manual run
+   on `main`, or a `v*` tag; on `main` the read happens inside `main-tag-guard.sh`, which also
+   decides `move` or `hold`, and on a tag the tags step calls the read directly, with no decision.
+   A read error or timeout fails the job;
+3. fails when that environment's `WAITRON_PRODUCER_TAX_ID` differs from the secret, both trimmed as
+   a box trims them, unless the repository variable `WAITRON_PRODUCER_CHANGE_ALLOWED`, trimmed the
+   same way and not blank, holds the new tax number itself. A `:main`
+   carrying no tax number, or no `:main` at all, is no difference. A variable left set lets through
+   only a change to that same number, later ones included;
+4. builds the app image with `load: true` (one platform; a second needs this rechecked);
+5. compares each of the three inside that image (`docker run … printenv`) with its secret in the
+   shell, printing lengths only;
+6. runs `node /app/server.js check-producer` in that image, under `timeout 120` and with no network: each
+   fiscal module's `refuseSettings` seat checks the image's own environment as a production start
+   does (for Veri\*Factu, the shared `software_producer.invalid` checks and its own
+   `sif.producer_invalid` ones), and a refusal prints its code, setting and reason, never a value; a fiscal module with no such seat is skipped, and with none at all the step logs that and passes;
+7. builds again with `push: true` from the builder's cache, with the tags step's tags, then pushes
+   the print-agent image, which takes none of the three.
+
+The pushed image is rebuilt from cache rather than `docker push`ed from the loaded one, so it is
+built from the same arguments but is not byte-for-byte the compared image. Guards:
+`scripts/ci-workflow.test.mjs` (runs the four producer step scripts, and the tags step on a
+release tag, against fixtures and a stand-in `docker`; for step 6 the stand-in only answers a
+status and runs nothing; it reads the rest as text), `apps/server/src/bin.commands.test.ts` (runs
+that command in the built program on the test runner, not in an image),
+`scripts/deploy-image-env.test.ts` (reads the Dockerfile and `compose.yml` as text) and
+`scripts/main-tag-guard.test.mjs` (the hand-back and `published-image-env.sh`, against a stubbed
+`docker`). None runs the job.
 
 ### Compare database files as bytes
 
