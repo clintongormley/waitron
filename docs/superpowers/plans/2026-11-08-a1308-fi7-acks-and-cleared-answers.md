@@ -186,8 +186,8 @@ export type ChainSummary = { /* as today */ submissionsSha256: string /* replace
 - `scripts/behavioural-triggers.test.ts`, `scripts/schema-constraints.test.ts` (`acks_state_ck`, the
   `acks` key).
 - Tests that read or write acks. `git grep -lw acks -- apps packages scripts ':!**/drizzle/**'` prints
-  40 files at `9c66ef0356`; of those, `apps/server/src/errors.ts:412`, `apps/server/src/webhook.test.ts`
-  and `packages/tunnel/src/*` use the English word, the three `packages/country-es/test-fixtures/demo/madrid-before-move.*`
+  38 files at `f317c21cea` (40 at `9c66ef0356`, less the two `packages/tunnel` tests #2543 deleted); of
+  those, `apps/server/src/errors.ts:412` and `apps/server/src/webhook.test.ts` use the English word, the three `packages/country-es/test-fixtures/demo/madrid-before-move.*`
   files are the demo capture (no row), and the eight product and schema files are named above. The
   test files, and what each loses:
   - set-up writes of an ack (`writeAck`, raw `delete from acks`), deleted: `reconcile.record-versions.test.ts:10`,

@@ -5,27 +5,35 @@
 **Owner lands:** no (rules §6: nothing fiscal, no AEAT sending).
 
 **Goal:** The runner gains its second kind, the **service** (something long-running that is started
-and stopped rather than run in passes); the bucket copy and the tunnel become services that start
-and stop when the box's role changes; the sealed copy of the box's keys becomes a job woken by each
+and stopped rather than run in passes); the bucket copy becomes a service that starts and stops
+when the box's role changes; the sealed copy of the box's keys becomes a job woken by each
 `node.db` commit; and the close stops jobs together, then services in a fixed order with the bucket
 copy last.
 
 **Architecture:** `JobRunner` (jr1, `apps/server/src/job-runner.ts`) gains `addService` and
 `stopServices`. Today the bucket copy checks the role only when it starts
-(`apps/server/src/stream-host.ts:137-140`) and the tunnel only at boot (`apps/server/src/boot.ts:3372`).
+(`apps/server/src/stream-host.ts:137-140`).
 The deployment holders (`apps/server/src/deployment-holders.ts:8-34`) gain a change listener, so an
 in-process promotion (`apps/server/src/promote.ts:176`) tells the runner at once; the runner then
 wakes every job and starts or suspends every service. A slow re-check every 60 seconds is the safety
 net.
 
-**Spec:** [jobs.md §1 "The clean version" (stop order), "What A1018 asks of the runner"; §2 R0, R13, R14, R19; §4 "Data loss"; §5 measures 4, 5, 8](../specs/2026-11-02-rationalisation/jobs.md).
+**Spec:** [jobs.md §1 "The clean version" (stop order), "What A1018 asks of the runner"; §2 R0, R13, R14; §4 "Data loss"; §5 measures 4, 5, 8](../specs/2026-11-02-rationalisation/jobs.md).
 Slice rules apply throughout. jr1's interfaces are used as fixed there.
+
+**R19, the tunnel, is gone.** #2543 (A951, `f317c21cea`, landed 2026-11-09) deleted `packages/tunnel`,
+`loadTunnelConfig` and the box's relay client with its `tunnelController` and `tunnelWorker`
+closers, so the bucket copy is the one service; the spec's own R19 row said "until A951 lands,
+then delete". The staff tunnel that remains is the compose `tunnel` service (profile `staff-tunnel`,
+`deploy/compose.yml:175-177`); the server only writes its settings through
+`writeTunnelConfiguration` (`apps/server/src/cloud-tunnel.ts:44`, called at `boot.ts:1158` and from
+`cloud-client.ts`) and runs no tunnel of its own, so there is no service to move.
 
 ## What it builds
 
-1. Services on the runner, with `SERVICE_STOP_ORDER = ["tunnel", "stream"]` (bucket copy last).
+1. Services on the runner, with `SERVICE_STOP_ORDER = ["stream"]` (the bucket copy, stopped last).
 2. `DeploymentHolders.onChange`, wired to `jobRunner.roleChanged()`.
-3. R14 `stream` and R19 `tunnel` as services; R13 `backups.sealed_state` as a job.
+3. R14 `stream` as a service; R13 `backups.sealed_state` as a job.
 4. The close: `jobRunner` (jobs, together) first among the closers, `jobRunnerServices` last.
 5. Measures 4 and 5 (Tasks 1 and 4), and measure 8's promotion test, which later PRs extend.
 
@@ -37,22 +45,22 @@ Backups (`backups.scheduled`) stay on `BackupSupervisor` until jr8; the alert un
 
 - Modify: `apps/server/src/job-runner.ts`, `job-runner.test.ts`, `deployment-holders.ts`,
   `deployment-holders.test.ts` (create if absent), `stream-host.ts` (`:200-230`), `stream-host.test.ts`,
-  `sealed-state.ts` (`:160-201`), `sealed-state.test.ts`, `boot.ts` (`:2894-2937`, `:3369-3392`,
-  `:3872-3907`, `:3909-3926`), `background-duties.ts` (`:55-58, 63-64, 137-153, 182-196, 215-220`),
-  `background-duties.test.ts`, `handover-stepdown.test.ts` (`:284-313`), `boot.promote.test.ts`
-- Create: `apps/server/src/tunnel-service.ts`, `apps/server/src/tunnel-service.test.ts`
+  `sealed-state.ts` (`:160-201`), `sealed-state.test.ts`, `boot.ts` (`:2894-2937`,
+  `:3872-3907`, `:3909-3926`), `background-duties.ts` (at `f317c21cea`: handles `:49-50, 62`,
+  closers `:139-151, 203-208`), `background-duties.test.ts`, `handover-stepdown.test.ts`
+  (`:284-313`), `boot.promote.test.ts`
 
 ## Size
 
 | Hand-written | Lines |
 | --- | --- |
-| Code: runner services 120, holders 20, `stream-host.ts` 25, `tunnel-service.ts` 45, `sealed-state.ts` 25, `boot.ts` 50, `background-duties.ts` 15, docs 10 | **~310** |
-| Tests: runner 180, holders 30, stream-host 50, tunnel-service 60, sealed-state 40, stepdown and duties 55, promotion (measure 8) 100 | **~515** |
-| Total | **~825** |
+| Code: runner services 120, holders 20, `stream-host.ts` 25, `sealed-state.ts` 25, `boot.ts` 45, `background-duties.ts` 15, docs 10 | **~260** |
+| Tests: runner 180, holders 30, stream-host 50, sealed-state 40, stepdown and duties 55, promotion (measure 8) 100 | **~455** |
+| Total | **~715** |
 
 ## Finish line
 
-1. `pnpm --filter @waitron/server exec vitest run src/job-runner.test.ts src/deployment-holders.test.ts src/stream-host.test.ts src/tunnel-service.test.ts src/sealed-state.test.ts src/background-duties.test.ts src/handover-stepdown.test.ts src/boot.promote.test.ts src/boot.restricted-quiet.test.ts src/boot.failed-start.test.ts` — passes, `Tests` count printed.
+1. `pnpm --filter @waitron/server exec vitest run src/job-runner.test.ts src/deployment-holders.test.ts src/stream-host.test.ts src/sealed-state.test.ts src/background-duties.test.ts src/handover-stepdown.test.ts src/boot.promote.test.ts src/boot.restricted-quiet.test.ts src/boot.failed-start.test.ts` — passes, `Tests` count printed.
 2. With Litestream and the S3 test server installed (`node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`): `pnpm --filter @waitron/server exec vitest run src/stream-loop.e2e.test.ts src/stream-pause.e2e.test.ts` — passes (CLAUDE.md §4: missing binaries skip locally, so read the count).
 3. Typecheck and format clean; measures 4 and 5 in the PR description.
 
@@ -74,7 +82,7 @@ jr1.
 
 ## Global Constraints
 
-- The bucket copy stops last, after anything that may still write `venue.db` (`background-duties.ts:215-220`).
+- The bucket copy stops last, after anything that may still write `venue.db` (`background-duties.ts:203-208`).
 - A service never starts after `signalStepdown()`; the stepdown leaves running services running
   until the close (today's behaviour, `handover-stepdown.test.ts:284`).
 - A role read is always the holders' `current` value, re-read at each check (`deployment-holders.ts:4-7`).
@@ -86,8 +94,8 @@ jr1.
    `stream-host.ts:221-230`). The runner's start must not interleave with a reload: a start during a
    reload is skipped and the 60-second re-check settles it. Task 2's "a re-check while the host
    reloads starts nothing twice".
-2. **A demotion in process** (role leaves `primary`). The bucket copy and tunnel are suspended, not
-   stopped for good, so a later promotion starts them again. Task 2's "suspends, then starts again".
+2. **A demotion in process** (role leaves `primary`). The bucket copy is suspended, not stopped for
+   good, so a later promotion starts it again. Task 2's "suspends, then starts again".
 3. **A close during a service's start.** `stopServices` waits for the start under way, then stops.
 4. **A burst of `node.db` commits** (a handover writes several rows). The sealed state refreshes once
    for the burst, then once more, as `sealed-state.ts:186-195` already collapses requests. Task 4.
@@ -127,7 +135,7 @@ export interface ServiceDefinition {
    *  with no settings starts nothing, `stream-host.ts:137-157`). */
   describe(): { running: boolean; reason: string | null };
 }
-export const SERVICE_STOP_ORDER: readonly JobName[] = ["tunnel", "stream"];
+export const SERVICE_STOP_ORDER: readonly JobName[] = ["stream"];
 // JobRunner gains:
 addService(service: ServiceDefinition): Promise<void>; // starts it before resolving when applies()
 stopServices(): Promise<void>;     // each in SERVICE_STOP_ORDER, one after another; idempotent
@@ -156,15 +164,15 @@ runner's own flag, because `StreamHost.start()` can return having started nothin
   `"roleChanged starts a service that now applies, and suspends one that no longer does"`;
   `"suspends, then starts again on the next promotion"`; `"the 60-second re-check settles a missed change"`;
   `"a re-check while one is under way starts nothing twice"`; `"no service starts after signalStepdown"`;
-  `"stopServices stops tunnel then stream, each after the one before settles, and waits for a start under way"`;
+  `"stopServices stops each service in SERVICE_STOP_ORDER, waits for a start under way, and stops once when called twice"`;
   `"a throwing start is logged and retried at the next check"`. `deployment-holders.test.ts`:
   `"tells its listeners when the role changes, and not when a refresh changes nothing"`;
   `"a listener that throws does not fail the refresh"`.
 - [ ] **Step 2:** Run — FAIL. **Step 3:** Implement. **Step 4:** Run — PASS. Commit: "Add services to the job runner and tell it when the role changes".
 
-### Task 3: The bucket copy and the tunnel as services
+### Task 3: The bucket copy as a service
 
-**Files:** `stream-host.ts`, `stream-host.test.ts`, create `tunnel-service.ts`, `tunnel-service.test.ts`
+**Files:** `stream-host.ts`, `stream-host.test.ts`
 
 **Interfaces:**
 - `StreamHost.suspend(): Promise<void>` — today's private `#retire()` (`stream-host.ts:207-217`) made
@@ -173,22 +181,12 @@ runner's own flag, because `StreamHost.start()` can return having started nothin
   `stream`, `applies: isPrimary`, the three methods mapped one to one, and `describe` from
   `host.status()`: running when its `state` is not `off`, `reason` its `reason` (or `not_configured`
   when off with none).
-- `tunnelService(deps: { config: TunnelConfig; isPrimary: () => boolean; localPort: number; log: Logger; run?: typeof runTunnelClient }): ServiceDefinition` —
-  name `tunnel`; `start` makes an `AbortController` and calls `run` with today's arguments
-  (`boot.ts:3373-3384`), keeping the promise and today's `tunnel.worker_rejected` log;
-  `suspend`/`stop` abort it and await the promise (rejection swallowed, as `background-duties.ts:194` does).
-  Built only when `loadTunnelConfig(env)` returns a config; the `tunnel.disabled` log stays. **If
-  A951 has removed `@waitron/tunnel` at the base, skip the tunnel half of this task** and drop
-  `"tunnel"` from `SERVICE_STOP_ORDER`.
 
 - [ ] **Step 1: Failing tests.** `stream-host.test.ts`: `"suspend stops the copy and a later start runs it again; stop is for good"`;
   `"with a bucket configured, the stream service describes itself running once the host runs"` (the
   host's `spawn`/`store` seams, as its existing cases set a bucket up); `"with no settings, it
-  describes itself not running, reason not_configured"`. The tunnel service's `describe` is running
-  while its client promise is unsettled.
-  `tunnel-service.test.ts`: `"starts the tunnel client on the primary with a relay set"`;
-  `"suspend aborts the client and waits for it"`; `"a client that rejects is logged and suspend still settles"`.
-- [ ] **Step 2–4:** Run — FAIL; implement; run — PASS. Commit: "Run the bucket copy and the tunnel as services".
+  describes itself not running, reason not_configured"`.
+- [ ] **Step 2–4:** Run — FAIL; implement; run — PASS. Commit: "Run the bucket copy as a service".
 
 ### Task 4: The sealed state as a job, and measure 5
 
@@ -208,7 +206,7 @@ runner's own flag, because `StreamHost.start()` can return having started nothin
   (boot has just refreshed, `boot.ts:2912`); `backoff { firstMs: 60_000, maxMs: 3_600_000 }`;
   `ownFailureAlert: "backup.sealed_state_failed"` (its own alert, `alert-sources.ts:240-258`);
   `onStop`: `unsubscribe()`, then `await refresher.settled()` (today's closer order,
-  `background-duties.ts:141-153`). Cases: `"a node.db commit wakes one refresh"`;
+  `background-duties.ts:139-151`). Cases: `"a node.db commit wakes one refresh"`;
   `"a burst of commits gives one refresh and one more"`; `"a failed refresh marks the view degraded and raises no job.failing"`;
   `"stop unhooks the commit listener, then waits for a refresh under way"`.
 - [ ] **Step 3–5:** Run — FAIL; implement; run — PASS. Commit: "Refresh the sealed state as a job woken by node.db commits".
@@ -225,15 +223,14 @@ runner's own flag, because `StreamHost.start()` can return having started nothin
     skips each job's floor, jr1), each job in it has a `lastRunAt` after the promote, each service
     in it is no longer `not_applicable`, and the restart seam was never called. `PRIMARY_ONLY`, an
     array at the top of the file, holds only names that apply on the primary alone and are built in
-    the case's venue: jr2 starts it with `menu.activation`, `stream` and `tunnel` (the case sets a
-    relay in its environment pointing at a closed local port; the client backs off quietly). Later
+    the case's venue: jr2 starts it with `menu.activation` and `stream`. Later
     plans add `attendance.end_of_day`, `mail.send`, `fiscal.certificate_reminders` (jr4),
     `payments.reconcile`, `fiscal.reconciliation` (jr6), `cloud.suggestions` (jr3, when the case
     has a Cloud connection), `housekeeping` (jr7) and `backups.scheduled` (jr8). Never
     `box.alert_mail` or `fiscal.drain`, which run on every box (measure 8, jobs.md §5.8). A separate
     case configures a bucket and asserts `stream` reaches `running`.
-  - `handover-stepdown.test.ts`: the closer names change (`streamHost`, `tunnelController`,
-    `tunnelWorker`, `stopSealingNodeCommits`, `sealedState` go; `jobRunnerServices` comes, last).
+  - `handover-stepdown.test.ts`: the closer names change (`streamHost`, `stopSealingNodeCommits`,
+    `sealedState` go; `jobRunnerServices` comes, last).
     "backups and Litestream are not stopped before the answer" now asserts `jobRunnerServices` is
     not called before the answer; "the close runs in the table's order, Litestream last" asserts the
     last closer is `jobRunnerServices`. Assertions keep their shape (stop point 3).
@@ -246,9 +243,6 @@ runner's own flag, because `StreamHost.start()` can return having started nothin
     directly (`mountBackupApi`, `mountStreamApi`) keep doing so.
   - `:2935-2936`: `await jobRunner.addService(streamService(streamHost, () => holders.singletonRole.current === "primary"));`,
     dropping `undoOnFailure.push(() => streamHost.stop())`. `mountStreamApi` keeps `stream: streamHost`.
-  - `:3369-3392`: `if (tunnelConfig !== undefined) await jobRunner.addService(tunnelService({ … }))`
-    replacing the `isSingletonPrimary &&` start; `tunnel.disabled` logs when `tunnelConfig` is
-    undefined on the primary, as now.
   - `background-duties.ts`: remove the handles and closers named above; move the `jobRunner` closer
     to the top of `closers`; add `{ name: "jobRunnerServices", close: () => h.jobRunner.stopServices(), reason: "stops the runner's services in SERVICE_STOP_ORDER, the bucket copy last, after anything that may still write venue.db" }`
     as the last closer. `jobRunner`'s handle type gains `stopServices`.
@@ -260,5 +254,5 @@ runner's own flag, because `StreamHost.start()` can return having started nothin
   is stop point 1.
 - [ ] **Step 2:** `apps/server/README.md` "What `/health` means": services appear under `jobs` with
   `running`/`not_applicable`. `rg -n "checked only on .start|only if the box is primary at start" docs`
-  — update any runbook sentence that says the bucket copy or tunnel needs a restart after a promotion
+  — update any runbook sentence that says the bucket copy needs a restart after a promotion
   (CLAUDE.md §1, a behaviour change retires its receipts). Commit: "Document services on the runner".

@@ -106,7 +106,7 @@ and [jr7](2026-11-08-a1308-jr7-housekeeping.md):132-133 use `timings.x` from `Du
 | Left out | Who takes it |
 | --- | --- |
 | `WAITRON_BACKUP_STALE_AFTER_MS` → constant | env5, which removes every environment backup setting together |
-| `WAITRON_TUNNEL_POOL_SIZE` | stays as it is until A951 (environment.md §1, §2 "Until A951 lands") |
+| `WAITRON_TUNNEL_POOL_SIZE` | already gone: #2543 (A951, `f317c21cea`) deleted it with `loadTunnelConfig` and the other three `WAITRON_TUNNEL_*` relay names |
 | `WAITRON_SPARE_SPACE_DIR` → a start option | already done before this plan: the name is gone and `StartServerSeams.spareBytes` exists (`boot.ts:969`, `node-entry.ts:124`) |
 | The job runner's per-job constants | the job-runner part (jobs.md §4) |
 | Declaring the remaining names in one list | env7 |
@@ -214,8 +214,8 @@ EQUAL: no table, trigger or index changes. Run rules §3's two commands anyway; 
   the two boot cases at `boot.test.ts:2978-3005` (refusal at the budget, acceptance one below).
 - [ ] **Step 2: Run them; they fail** (`DEFAULT_DUTY_TIMINGS` is not exported).
 - [ ] **Step 3: Implement** the exports in `config.ts` and delete the eleven reads from `loadConfig`
-  with the `ServerConfig` fields named in **Files**. Keep `positiveInt` (env5 and the tunnel still
-  use it).
+  with the `ServerConfig` fields named in **Files**. Keep `positiveInt` (`WAITRON_HTTP_PORT`,
+  `WAITRON_STAFF_PORT` and the backup settings env5 removes, `backup-config.ts`, still use it).
 - [ ] **Step 4: Wire boot.** In `bootServer`, compute `const timings = resolveDutyTimings(seams.timings)`
   where the drain-budget check stood (`boot.ts:1071-1080`, deleted). Replace every
   `config.minTickMs`, `config.maxTickMs`, `config.skipRetryMs`, `config.settlementLagMs` and

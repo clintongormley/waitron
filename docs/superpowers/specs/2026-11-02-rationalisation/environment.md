@@ -2,6 +2,11 @@
 
 # Environment variables — a rationalised design
 
+> **2026-11-09, #2543:** the legacy relay tunnel is removed: `packages/tunnel`, `tunnel-http.ts` and the
+> four `WAITRON_TUNNEL_*` variables are gone, and the staff tunnel is its own compose service. Rows
+> below that name them describe the code before that change; the A1308 plans (jr1–jr3, env1, env7)
+> follow main.
+>
 > **2026-11-08, A1113:** the ambient mirror viewer and its keepalive are removed. Existing viewer-session
 > revocation remains at boot. The bind guard and `WAITRON_MIRROR_ALLOW_EXPOSED` remain for the
 > promotion routes; how a spare listens on the network stays with A947 slice3b.

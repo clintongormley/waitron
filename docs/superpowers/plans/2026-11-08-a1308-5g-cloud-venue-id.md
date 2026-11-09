@@ -123,9 +123,12 @@ From the venue-id design's "What Cloud must change" (items 1–6) and the coordi
 
 ## Work beside this slice (rules §8)
 
-- **#2543** (A951) changes `cloud-client.ts`, `cloud-api.ts`, `cloud-tunnel.ts`,
-  `cloud-integration-fixture.ts`, `boot.ts` (`gh pr view 2543 --json files`, 2026-11-08). No table; a
-  rebase. If it changes the pairing state's shape, this slice builds on its shape.
+- **#2543** (A951) landed on main as `f317c21cea` (2026-11-09). It added an optional
+  `remoteAccessEnabled` to `SavedCloudState` and `CloudConnectionStatus` (`cloud-client.ts:59,80`),
+  checked in the saved-file read beside `localVenueId` (`:199-202`), and the
+  `POST /management-api/cloud/remote-access` route (`cloud-api.ts`). It left the v1 signed bytes
+  (`:279-284`) and the `localVenueId` option (`:76`) as they were, and changed only a tax id in
+  `cloud-integration-fixture.ts`. No table. Pairing v2 keeps `remoteAccessEnabled` as it is.
 - **#2599** (A1404 slice 1) and its second pull request (a key salted with the stream's id): A1404 reads
   the stream id from item 1.
 
@@ -193,8 +196,7 @@ None: `EQUAL`.
 2. The Cloud pull request is not ready: build and commit, but do not open this one until both can land
    together.
 3. The shared vector differs between the two sides.
-4. #2543 changed the pairing state in a way item 2 does not fit.
-5. A restore or rebuild case changes its refusal code.
+4. A restore or rebuild case changes its refusal code.
 
 ## Assertions that change, by design
 

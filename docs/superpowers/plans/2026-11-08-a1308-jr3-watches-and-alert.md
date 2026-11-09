@@ -33,8 +33,8 @@ CLAUDE.md §3 (alert wording in English and Spanish). Slice rules apply.
    its own alert. `lastErrorCode` surviving those skips plays no part. Severity `error` for a judged job,
    `warning` otherwise. Not raised for a job with `ownFailureAlert`. Area `box`, permission
    `system.manage`, screen `box-status` (as `storageAlertSource`, `alert-sources.ts:312-327`).
-2. English and Spanish words for every one of the 20 catalogue names, so no later PR touches the
-   dashboard's wording.
+2. English and Spanish words for every one of the 19 catalogue names (jr1; the tunnel went with
+   #2543), so no later PR touches the dashboard's wording.
 3. R9, R10, R11, R15, R17, R18 on the runner.
 4. `/api/box/status` (a manager's route, `box-status.ts:111-140`) gains `jobs` with the full
    `JobView`, `lastErrorCode` and `ownFailureAlert` included; unauthenticated `/health` keeps jr1's
@@ -62,9 +62,9 @@ Cloud snapshots (`cloudSnapshots`, `boot.ts:3827-3862`) stay on `cloudController
 
 | Hand-written | Lines |
 | --- | --- |
-| Code: alert source 35, wording (message + 20 word pairs) 95, guard 15, box status 10, six job adapters 170, clock-watch halt 15, `boot.ts` 60, `background-duties.ts` 15 | **~415** |
+| Code: alert source 35, wording (message + 19 word pairs) 90, guard 15, box status 10, six job adapters 170, clock-watch halt 15, `boot.ts` 60, `background-duties.ts` 15 | **~410** |
 | Tests: alert source 80, guard 10, box status 15, re-pointed watch suites 300, stepdown and duties 30, promotion 5 | **~440** |
-| Total | **~855** |
+| Total | **~850** |
 
 ## Finish line
 
@@ -146,7 +146,6 @@ jr1, jr2.
 | `housekeeping` | the daily tidy-up | la limpieza diaria |
 | `cloud.suggestions` | translation suggestions from Waitron Cloud | las sugerencias de traducción de Waitron Cloud |
 | `demo.printer` | the practice printer | la impresora de prácticas |
-| `tunnel` | the remote-access tunnel | el túnel de acceso remoto |
 | `fiscal.reconciliation` | checking what the tax agency holds | la comprobación de lo que tiene la Agencia Tributaria |
 | `otherwise` | one of its background tasks | una de sus tareas de fondo |
 
