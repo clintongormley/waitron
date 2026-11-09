@@ -363,14 +363,12 @@ describe("the running server's managers' email check", () => {
           .set({ timeZone: "Invalid/Zone" })
           .where(eq(locations.id, venue.cfg.locationId));
       const booted: Booted = {};
-      await suite.db
-        .insert(persons)
-        .values(
-          [1, 2].map((n) => ({
-            displayName: `Queued mail ${n}`,
-            email: `queued-${n}@example.test`,
-          })),
-        );
+      await suite.db.insert(persons).values(
+        [1, 2].map((n) => ({
+          displayName: `Queued mail ${n}`,
+          email: `queued-${n}@example.test`,
+        })),
+      );
       try {
         await bootServer(booted, venue, { intent, development });
         for (const n of [1, 2]) {
