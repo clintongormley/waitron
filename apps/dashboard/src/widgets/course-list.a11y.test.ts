@@ -28,7 +28,7 @@ function stubApi(state: State): DashboardApi {
       state === "load failed"
         ? vi.fn().mockRejectedValue({ code: "connection.failed" })
         : vi.fn().mockResolvedValue(
-            state === "empty"
+            state === "empty" || state === "first course"
               ? []
               : COURSES.map((c) => ({
                   ...c,
@@ -64,6 +64,7 @@ const states = [
   "load failed",
   "renaming, refused blank",
   "adding",
+  "first course",
   "direct Delete at phone width",
   "Delete dialog, products",
   "Delete dialog, loading",
@@ -112,7 +113,7 @@ describe.each(["light", "dark"] as const)("course list (%s)", (theme) => {
       await settle(el);
       expect(q('wt-input[name="course-name"]').getAttribute("error")).not.toBe("");
     }
-    if (state === "adding") {
+    if (state === "adding" || state === "first course") {
       q('[data-test="add-course"]').click();
       await settle(el);
     }

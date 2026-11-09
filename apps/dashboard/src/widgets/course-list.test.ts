@@ -1814,6 +1814,8 @@ it("keeps timing choices in place and focused while a change waits", async () =>
   expect(control.getBoundingClientRect().width).toBeCloseTo(before.width, 1);
   await userEvent.keyboard("{ArrowLeft}");
   expect(control.value).toBe("true");
+  expect(control.shadowRoot!.activeElement).toBe(radios[1]);
+  expect(radios[1]!.tabIndex).toBe(0);
   expect(api.updateCourse).toHaveBeenCalledTimes(1);
   pending.resolve();
   await el.settled();
@@ -1897,4 +1899,21 @@ it("holds live replacement rows after a real pointer crosses a row", async () =>
     expect(q(el, '[data-test="name-c1"]')!.textContent!.trim()).toBe("Starters updated"),
   );
   expect(api.moveCourse).toHaveBeenCalledTimes(1);
+});
+
+it("does not measure every timing group while a course name is typed", async () => {
+  const { el } = await mount(stubApi());
+  await openRename(el, "c1");
+  await new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+  const groups = [...el.shadowRoot!.querySelectorAll("wt-segmented-control")].map((control) =>
+    control.shadowRoot!.querySelector<HTMLElement>('[role="radiogroup"]')!,
+  );
+  const reads = groups.map((group) => vi.spyOn(group, "getBoundingClientRect"));
+  await typeName(el, "Starters revised");
+  await new Promise<void>((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+  for (const read of reads) expect(read).not.toHaveBeenCalled();
 });

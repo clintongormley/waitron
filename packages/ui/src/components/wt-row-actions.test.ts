@@ -88,6 +88,7 @@ describe("direct Delete", () => {
     for (const content of [
       "<wt-button>Remove</wt-button>",
       '<wt-button>Edit</wt-button><wt-button data-action="delete">Delete</wt-button>',
+      '<wt-button data-action="delete">Delete</wt-button><wt-button>Edit</wt-button>',
     ]) {
       const el = (await mount(
         `<wt-row-actions label="Actions">${content}</wt-row-actions>`,

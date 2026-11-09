@@ -843,7 +843,8 @@ A `wt-row-actions` containing exactly one directly slotted button marked `data-a
 uses its trigger as a trash button. Give that action a localized `aria-label` naming the row,
 such as “Delete: Starters”, and register the `bin` icon in the application. The trigger invokes
 the action's native button, so its disabled and loading states still refuse the action. `show()`
-does nothing in this mode. A sole Remove or a mixed set of actions keeps the popup.
+does nothing in this mode. A sole Remove or a mixed set of actions keeps the popup. When a row is renamed, update the
+disclosure’s `label` as well as the action’s `aria-label`.
 
 A `wt-disclosure` with `ruled` draws a line under its title. Its named `summary` slot replaces
 the generated closed summary when assigned. The `section`, `header` and `summary` parts let

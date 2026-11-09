@@ -1,8 +1,15 @@
-import { ReorderController, baseStyles, reorder, type ReorderModel } from "@waitron/ui";
+import {
+  ReorderController,
+  baseStyles,
+  reorder,
+  type ReorderModel,
+  type WtSegmentedControl,
+} from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
+import { guard } from "lit/directives/guard.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -14,7 +21,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type { Course, DashboardApi } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { ListWriteQueue } from "./section-writes.js";
@@ -110,7 +117,7 @@ export class CourseList extends LitElement {
       th.held-heading {
         position: relative;
         text-align: start;
-        padding-inline: var(--wt-space-2);
+        padding-inline: var(--wt-space-1);
       }
       th wt-help-tooltip {
         margin-block-start: 0;
@@ -563,17 +570,21 @@ export class CourseList extends LitElement {
           name="heldUntilFired"
           label=${`${t("courses.on_the_till")}: ${course.name}`}
           hide-label
-          .options=${[
+          .options=${guard([currentLocale()], () => [
             { value: "false", label: t("courses.fire_now") },
             { value: "true", label: t("courses.hold_for_later") },
-          ]}
+          ])}
           .value=${String(this.#heldPending.get(course.id) ?? course.heldUntilFired)}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          @wt-change=${async (event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
+            const pending = this.#heldPending.has(course.id);
+            const control = event.currentTarget as WtSegmentedControl;
             this.#setHeld(course, event.detail.value === "true");
-            (event.currentTarget as HTMLElement & { value: string }).value = String(
-              this.#heldPending.get(course.id) ?? course.heldUntilFired,
-            );
+            control.value = String(this.#heldPending.get(course.id) ?? course.heldUntilFired);
+            if (pending) {
+              await control.updateComplete;
+              control.focus();
+            }
           }}
         ></wt-segmented-control>
       </td>
@@ -647,7 +658,7 @@ export class CourseList extends LitElement {
                         guide-label=${t("courses.help_guide")}
                         >${t("courses.help")}</wt-help-tooltip
                       >`
-                  : nothing
+                  : html`<span class="visually-hidden">${t("courses.on_the_till")}</span>`
               }
             </th>
             <th scope="col"><span class="visually-hidden">${t("kitchen.course_actions")}</span></th>

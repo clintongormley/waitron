@@ -5402,11 +5402,11 @@ export const es: Record<StringKey, string> = {
   "kitchen.make_default": "Hacer predeterminada",
   "kitchen.default_badge": "Predeterminada",
   "kitchen.courses_title": "Cursos",
-  "courses.on_the_till": "En el TPV",
+  "courses.on_the_till": "En la caja",
   "courses.fire_now": "Marchar ya",
   "courses.hold_for_later": "Dejar para después",
   "courses.name_hint": "Por ejemplo, Entradas",
-  "courses.help_label": "Cómo funcionan los cursos en el TPV",
+  "courses.help_label": "Cómo funcionan los cursos en la caja",
   "courses.help_guide": "Guía de cursos",
   "courses.help":
     "En las mesas, Marchar ya coloca los platos nuevos en Marchar ya. Dejar para después agrupa el primer pedido por curso. En pedidos posteriores, comprueba el grupo propuesto. Puedes mover los platos antes de enviarlos.",
