@@ -16,6 +16,7 @@ import type { OriginConfig } from "./trading-context.js";
 import { moveSettledBillToCounter } from "./move-bill.js";
 import { releaseHeldWorkOf } from "./order-groups.js";
 import { invalid } from "./bill-allocation.js";
+import { refuseBillHoldingMoney } from "./bill-payments.js";
 import type { OrderAttendance } from "./working-order.js";
 import {
   billOwes,
@@ -115,43 +116,9 @@ async function finish(
   args: FinishPartyArgs,
   attendance?: OrderAttendance,
 ): Promise<FinishPartyAnswer> {
-  await requireOpenParty(tx, args.partyId);
-  const revision = await partyRevision(tx, args.partyId);
-  if (revision !== args.expectedPartyRevision)
-    throw new AppError("party.out_of_date", { partyId: args.partyId, revision });
-  const bills = await readFamilyBills(tx, await partyFamily(tx, args.partyId));
-  if (bills.some(billOwes)) throw new AppError("party.bill_outstanding", { partyId: args.partyId });
-  await requirePartyClosingEdits(tx, args.partyId, args.operatorId, args.expectedEdits);
-  const rows = await tx
-    .select({
-      line: workingOrderLines,
-      billRevision: workingOrders.revision,
-      partyId: workingOrders.partyId,
-    })
-    .from(workingOrderLines)
-    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(
-      and(
-        inArray(
-          workingOrders.id,
-          bills.filter((bill) => bill.status === "settled").map((bill) => bill.id),
-        ),
-        isNull(workingOrderLines.parentLineId),
-      ),
-    )
-    .orderBy(workingOrders.id, workingOrderLines.lineNo);
-  const cancelled = await readLineCancellations(
-    tx,
-    rows.map(({ line }) => line.id),
-  );
+  const { remaining } = await readFinishState(tx, args);
   const dishes: UnservedDish[] = [];
-  for (const { line, billRevision, partyId } of rows) {
-    const quantity = serviceQuantities(
-      line.quantity,
-      line.servedQuantity,
-      cancelled.get(line.id) ?? 0,
-    ).remaining;
-    if (quantity === 0) continue;
+  for (const { line, billRevision, partyId, quantity } of remaining)
     dishes.push({
       billId: line.workingOrderId,
       billRevision,
@@ -160,7 +127,6 @@ async function finish(
       quantity: thousandthsToDecimal(quantity),
       context: await readCancellationContext(tx, partyId!, line.id),
     });
-  }
   const refused = () => new AppError("party.unserved_dishes", { partyId: args.partyId, dishes });
   if (args.collect !== undefined) {
     const moved = await collectAtCounter(tx, cfg, args, args.collect, dishes, refused, attendance);
@@ -269,4 +235,93 @@ async function collectAtCounter(
       args.expectedEdits.find((edit) => edit.billId === billId)!,
     );
   return moving;
+}
+
+type FinishStateArgs = Pick<
+  FinishPartyArgs,
+  "partyId" | "expectedPartyRevision" | "operatorId" | "expectedEdits"
+>;
+
+/**
+ * Explicit finish's refusals, in its order, then the family's bills and every paid dish's unserved
+ * remainder. Reads only.
+ */
+async function readFinishState(tx: Transaction, args: FinishStateArgs) {
+  await requireOpenParty(tx, args.partyId);
+  const revision = await partyRevision(tx, args.partyId);
+  if (revision !== args.expectedPartyRevision)
+    throw new AppError("party.out_of_date", { partyId: args.partyId, revision });
+  const bills = await readFamilyBills(tx, await partyFamily(tx, args.partyId));
+  if (bills.some(billOwes)) throw new AppError("party.bill_outstanding", { partyId: args.partyId });
+  await requirePartyClosingEdits(tx, args.partyId, args.operatorId, args.expectedEdits);
+  const rows = await tx
+    .select({
+      line: workingOrderLines,
+      billRevision: workingOrders.revision,
+      partyId: workingOrders.partyId,
+    })
+    .from(workingOrderLines)
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .where(
+      and(
+        inArray(
+          workingOrders.id,
+          bills.filter((bill) => bill.status === "settled").map((bill) => bill.id),
+        ),
+        isNull(workingOrderLines.parentLineId),
+      ),
+    )
+    .orderBy(workingOrders.id, workingOrderLines.lineNo);
+  const cancelled = await readLineCancellations(
+    tx,
+    rows.map(({ line }) => line.id),
+  );
+  const remaining = rows
+    .map((row) => ({
+      ...row,
+      quantity: serviceQuantities(
+        row.line.quantity,
+        row.line.servedQuantity,
+        cancelled.get(row.line.id) ?? 0,
+      ).remaining,
+    }))
+    .filter((row) => row.quantity !== 0);
+  return { bills, remaining };
+}
+
+/** Scope and authority are the later command's admission to supply; this read emits neither. */
+export type PartyFinishBlocker =
+  "other_bills" | "service" | "revision" | "editor" | "scope" | "authority";
+
+const BLOCKERS: Partial<Record<string, PartyFinishBlocker>> = {
+  "party.out_of_date": "revision",
+  "party.bill_outstanding": "other_bills",
+  "draft.taken_over": "editor",
+  "draft.out_of_date": "editor",
+  "bill.unsent_dishes": "editor",
+  "bill.payments_received": "other_bills",
+};
+
+/**
+ * Whether explicit finish would close the party with nothing to cancel, and if not the first
+ * blocker it meets. Writes nothing; a refusal it cannot name as a blocker is thrown as it came.
+ */
+export async function readPartyFinishReadiness(
+  tx: Transaction,
+  args: FinishStateArgs,
+): Promise<{ ready: true } | { ready: false; blockers: PartyFinishBlocker[] }> {
+  try {
+    const { bills, remaining } = await readFinishState(tx, args);
+    if (remaining.length > 0) return { ready: false, blockers: ["service"] };
+    // Explicit finish meets this refusal only in closeParty, after its own writes.
+    await refuseBillHoldingMoney(
+      tx,
+      bills.filter((bill) => bill.status === "open").map((bill) => bill.id),
+    );
+    return { ready: true };
+  } catch (error) {
+    const blocker = error instanceof AppError ? BLOCKERS[error.code] : undefined;
+    if (blocker === undefined) throw error;
+    return { ready: false, blockers: [blocker] };
+  }
 }
