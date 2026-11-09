@@ -144,24 +144,18 @@ event each time it opens (`apps/setup/src/screens/recovery-copy.ts` mounts the p
 binding, and `apps/setup/src/screens/recovery-allocation.ts` then uses
 `eventId: crypto.randomUUID()`), and the box keeps each event's wait apart
 (`packages/fiscal-verifactu/src/hour-selection.ts`, `sameEvent`). No test reloads a
-restore page end to end. The page goes back to the box by itself only after **Make the series**
-was pressed on this page load; **Compare clocks** (**Check again**), Clear, the key or either
-declaration cancel that press. A wait the page shows without a press (a reload during the box's
-wait, or a wait the box had recorded that **Compare clocks** shows) says "When the time left
-reaches zero, press “Make the series”." and "Time left:", and at zero it sends nothing and offers
-**Make the series** (`recovery-hour.browser.test.ts`, "a recorded wait shown by Compare clocks
-ends at zero with no request and offers Make the series" and "a recorded wait shown by Compare
-clocks says to press Make the series at zero"). What the page shows when it cannot go ahead, and
-what it asks for:
+restore page end to end. The page goes back to the box by itself whether or not **Make the
+series** was pressed: a wait the box had recorded that **Compare clocks** shows makes the series at
+zero with no press (`recovery-hour.browser.test.ts`, "a recorded wait shown by Compare clocks makes
+the series by itself at zero, with no press"), and **Compare clocks** during a wait does not stop
+that (the same file's "Compare clocks after Make the series still makes the series by itself at the
+end of the wait"). What the page shows when it cannot go ahead, and what it asks for:
 
 - **No second clock** (no internet, and the page is on the box itself): connect the box to the
-  internet, or open the page on a phone or laptop on the venue's network that has the backup.
-  After **Make the series** it checks again about every 15 seconds and carries on by itself
-  (`recovery-hour.browser.test.ts`, "with no second clock it explains itself and carries on when
-  the internet arrives"). After **Compare clocks** alone it checks nothing by itself and says
-  "Once the box reaches the internet, press “Check again”." (`recovery-hour.browser.test.ts`,
-  "Compare clocks with no second clock explains the wait and leaves the next check to the person"
-  and "Compare clocks with no second clock asks the person to press Check again").
+  internet, or open the page on a phone or laptop on the venue's network that has the backup. It
+  checks again about every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`, "Compare
+  clocks with no second clock explains the wait and checks again by itself" and "with no second
+  clock it explains itself and carries on when the internet arrives").
 - **The clocks differ by more than 30 seconds**: the page shows both readings and asks you to try
   from another phone or laptop that has the backup; if they still differ, the box's time may be
   wrong, so ask for help. It does not retry by itself; press **Check again**

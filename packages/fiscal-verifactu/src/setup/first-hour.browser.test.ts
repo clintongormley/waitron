@@ -378,13 +378,9 @@ it("a reload during a wait shows the server's time left", async () => {
     vi.useRealTimers();
   }
 });
-const flush = async (el: LitElement) => {
-  await new Promise((r) => setTimeout(r, 0));
-  await el.updateComplete;
-};
 const detailsTick = (el: LitElement) =>
   el.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-details-confirmed"]')!;
-it("a reload during the box's wait ends at zero with no request, and Make the series waits for the tick", async () => {
+it("a reload during the box's wait makes the series by itself at zero, with no press or tick", async () => {
   fakeClock();
   try {
     const { el, calls } = await mount({
@@ -394,45 +390,19 @@ it("a reload during the box's wait ends at zero with no request, and Make the se
     vi.advanceTimersByTime(0);
     await el.updateComplete;
     expect(remaining(el)).toBe("1:01");
-    const sent = calls.length;
+    expect(text(el)).toContain(NOTHING_TO_DO);
+    expect(detailsTick(el).checked).toBe(false);
+    expect(calls.some((c) => c.action === "candidates")).toBe(false);
     vi.advanceTimersByTime(61_000);
-    await flush(el);
-    expect(calls.length).toBe(sent);
-    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
-    expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
-    vi.useRealTimers();
-    await userEvent.click(detailsTick(el));
-    await el.updateComplete;
-    expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
-    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1));
     await vi.waitFor(() =>
-      expect(calls.filter((c) => c.action === "candidates")).toEqual([
-        { action: "candidates", value: { comparisonId: "comparison-2" } },
-      ]),
+      expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
     );
   } finally {
     vi.useRealTimers();
   }
 });
-it("a reload during the box's wait says to press Make the series at zero", async () => {
-  fakeClock();
-  try {
-    const { el } = await mount({
-      preview: { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 },
-    });
-    await vi.waitFor(() => expect(remaining(el)).toBeDefined());
-    vi.advanceTimersByTime(0);
-    await el.updateComplete;
-    expect(remaining(el)).toBe("1:01");
-    expect(text(el)).toContain("When the time left reaches zero, press “Make the series”.");
-    expect(text(el)).toContain("Time left: 1:01");
-    expect(text(el)).not.toContain(NOTHING_TO_DO);
-    expect(text(el)).not.toContain("Continues in");
-  } finally {
-    vi.useRealTimers();
-  }
-});
-it("Check again after Make the series starts over: the wait it shows ends with no request", async () => {
+it("Check again after Make the series still makes the series by itself at the end of the wait", async () => {
   let previews = 0;
   let compared = 0;
   const prepare = async (proposal: unknown) => {
@@ -445,10 +415,11 @@ it("Check again after Make the series starts over: the wait it shows ends with n
         : { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 };
     throw new Error("unexpected action");
   };
-  const { el, calls } = await mount({
-    prepare,
-    select: async () => ({ status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 }),
-  });
+  const answers: unknown[] = [
+    { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
+    selected,
+  ];
+  const { el, calls } = await mount({ prepare, select: async () => answers.shift() });
   await ready(el);
   fakeClock();
   try {
@@ -461,11 +432,11 @@ it("Check again after Make the series starts over: the wait it shows ends with n
     await userEvent.click(button(el, "compare"));
     await vi.waitFor(() => expect(remaining(el)).toBe("1:01"));
     expect(detailsTick(el).checked).toBe(false);
-    const sent = calls.length;
     vi.advanceTimersByTime(61_000);
-    await flush(el);
-    expect(calls.length).toBe(sent);
-    expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
+    await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(2));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
+    );
   } finally {
     vi.useRealTimers();
   }

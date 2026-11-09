@@ -148,11 +148,7 @@ export class RecoveryHourEntry extends LitElement {
   #secret?: string;
   #generation = 0;
   #scope?: DraftScope<Draft>;
-  /** Make the series was pressed on this page load and nothing since cancelled it. */
-  #pressed = false;
-  #wait = new ClockWait<Selected>(this, () =>
-    this.#pressed ? void this.#select(true) : this.#wait.show(),
-  );
+  #wait = new ClockWait<Selected>(this, () => void this.#select(true));
   override connectedCallback(): void {
     super.connectedCallback();
     this.#register();
@@ -191,7 +187,6 @@ export class RecoveryHourEntry extends LitElement {
   }
   #invalidate(): void {
     ++this.#generation;
-    this.#pressed = false;
     this.busy = false;
     this.comparison = undefined;
     this.error = false;
@@ -297,7 +292,6 @@ export class RecoveryHourEntry extends LitElement {
   }
   async #compare(): Promise<void> {
     if (this.busy || !this.#canCompare) return;
-    this.#pressed = false;
     const { call, current } = this.#begin();
     this.comparison = undefined;
     this.#wait.show();
@@ -308,14 +302,8 @@ export class RecoveryHourEntry extends LitElement {
       this.#wait.showPreview(await call({ action: "preview" }));
     } catch (cause) {
       // A taken minute is counted down only after Make the series, whose select the box answers.
-      const problem = clockProblem(cause);
-      if (!current() || problem?.kind === "next-minute") return;
-      // `show`, not `settle`: a second-clock wait the person did not start checks again only on Check again.
-      if (problem) this.#wait.show(problem);
-      else {
-        this.#wait.show();
-        this.#failed(cause);
-      }
+      if (current() && clockProblem(cause)?.kind !== "next-minute")
+        this.#wait.settle(cause, false, (error) => this.#failed(error));
     } finally {
       if (current()) {
         this.busy = false;
@@ -326,7 +314,6 @@ export class RecoveryHourEntry extends LitElement {
   async #select(automatic = false): Promise<void> {
     if (this.busy || this.#wait.result?.status === "selected") return;
     if (!(automatic ? this.#canCompare : this.#canSelect)) return;
-    if (!automatic) this.#pressed = true;
     const { call, current } = this.#begin();
     const context = this.context;
     // An automatic re-check leaves the current explanation up until its answer replaces it.
@@ -459,10 +446,10 @@ export class RecoveryHourEntry extends LitElement {
             </section>`
           : nothing
       }
-      ${renderClockProblem(this.#wait.problem, words, clock, this.#pressed)}
+      ${renderClockProblem(this.#wait.problem, words, clock)}
       ${
         this.#wait.counting
-          ? this.#wait.renderWait(words, this.#pressed)
+          ? this.#wait.renderWait(words)
           : result?.status === "selected"
             ? html`<p role="status" data-test="selected-hour">
                 ${words.chosen}: <strong>${result.identity}</strong>

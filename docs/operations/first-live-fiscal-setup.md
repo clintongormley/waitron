@@ -34,12 +34,11 @@ and the page counts down; keep it open (`packages/fiscal-verifactu/src/hour-sele
 "setup checked at %s waits until %s"; `first-hour.browser.test.ts`, "explains a waiting setup with
 a countdown that goes back to the server at zero"). A reload during the wait shows the time the
 box has left (`first-hour.browser.test.ts`, "a reload during a wait shows the server's time
-left"); the page then says "When the time left reaches zero, press “Make the series”.", and at zero
-it sends nothing: tick the details again and press **Make the series** (`first-hour.browser.test.ts`,
-"a reload during the box's wait ends at zero with no request, and Make the series waits for the
-tick" and "a reload during the box's wait says to press Make the series at zero"). **Check again**
-also cancels an earlier press: a wait it shows ends the same way (`first-hour.browser.test.ts`,
-"Check again after Make the series starts over: the wait it shows ends with no request"). What the page shows when it cannot go ahead, and what it asks for:
+left"), and at zero the page makes the series by itself, with no press and whether or not the
+details are ticked (`first-hour.browser.test.ts`, "a reload during the box's wait makes the series
+by itself at zero, with no press or tick"); **Check again** during a wait does not stop that (the
+same file's "Check again after Make the series still makes the series by itself at the end of the
+wait"). What the page shows when it cannot go ahead, and what it asks for:
 
 - **No second clock** (no internet, and the page is on the box itself): connect the box to the
   internet, or open the page on a phone or till on the venue's network and enter the setup

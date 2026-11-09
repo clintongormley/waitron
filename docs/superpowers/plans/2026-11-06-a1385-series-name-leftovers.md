@@ -1,5 +1,7 @@
 # A1385: the A1207 leftovers in choosing a series name — implementation plan
 
+> **9 November 2026:** the A1226 press rule below was taken out on the owner's answer of 7 November: the setup and restore pages carry on by themselves, pressed or not, reloaded or not (`docs/backlog/setup.md`, Decisions).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`. Keep the ledger `docs/handoffs/2026-11-06-a1385-series-name-leftovers.md` current at the end of every task.
 
 **Goal:** close bundle A1385 in one PR: pin what a Waitron Cloud restore whose download is slow actually does, delete the time floors nothing reads, stop the setup and restore pages from making a series unless Make the series was pressed, say plainly that a stored pick found taken is a fault in Waitron, and word the two places that refusal can show at activation.

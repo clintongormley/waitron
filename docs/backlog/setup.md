@@ -597,11 +597,10 @@ Ask the owner which fire immediately and which wait. Left open by A1458.
   shipped backups, and of each box's retained
   `<state>/module-evidence/fiscal-verifactu/hour-history.json` (read by
   `apps/server/src/recovery-document-evidence.ts:26-31`), finds none carrying it.
-- **A page's own re-check never makes a series** (A1385, 2026-11-06): only a press of Make the
-  series on this page load, not cancelled since (Compare clocks, Check again, an edit or Clear cancel
-  it), lets the page check with the box by itself; a wait the page shows without a press ends with no
-  request. Built as the plan's default; it narrows the owner's 2026-10-30 decision (A1207) and is
-  pending the owner (A1385 PR).
+- **The setup and restore pages carry on by themselves, pressed or not, reloaded or not** (owner,
+  2026-11-07, on A1385): making a series and throwing it away unused costs nothing, because the first
+  invoice is what commits a series, so a page's countdown and second-clock checks make the series
+  without anyone being asked.
 - **A reload between the deletion and Reconnect forgets which button was pressed (A1131bc slice 3,
   plan OQ2's default).** The page keeps the choice in memory only, so after a reload it opens its
   first screen, and the person chooses **Join or recover** there to restore.

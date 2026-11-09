@@ -53,8 +53,6 @@ for (const theme of ["light", "dark"] as const)
             "empty",
             "invalid",
             "compared",
-            "compared-waiting",
-            "compared-second-clock",
             "disagreement",
             "second-clock",
             "waiting",
@@ -64,7 +62,6 @@ for (const theme of ["light", "dark"] as const)
             "selected",
             "refusal",
           ] as const) {
-            const noSecondClock = state === "second-clock" || state === "compared-second-clock";
             const clock = {
               usable: [
                 { source: "box", lowerMs: instant, upperMs: instant },
@@ -76,11 +73,11 @@ for (const theme of ["light", "dark"] as const)
               ],
               unavailable: [
                 { source: "internet", result: "unavailable", reason: "tls" },
-                ...(noSecondClock
+                ...(state === "second-clock"
                   ? [{ source: "browser", result: "unavailable", reason: "same_machine" }]
                   : []),
               ],
-              secondClock: !noSecondClock,
+              secondClock: state !== "second-clock",
               disagreement: state === "disagreement",
               releaseBlocked: false,
               rangeBlocked: false,
@@ -110,21 +107,12 @@ for (const theme of ["light", "dark"] as const)
                 if (action === "compare-clocks")
                   return {
                     id: "comparison",
-                    clock: noSecondClock ? { ...clock, usable: clock.usable.slice(0, 1) } : clock,
+                    clock:
+                      state === "second-clock"
+                        ? { ...clock, usable: clock.usable.slice(0, 1) }
+                        : clock,
                   };
-                if (action === "preview" && state === "compared-second-clock")
-                  throw {
-                    code: "sif.allocation_invalid",
-                    params: { reason: "second_clock_missing" },
-                  };
-                if (action === "preview")
-                  return state === "compared-waiting"
-                    ? {
-                        status: "waiting",
-                        targetMs: Date.parse("2026-10-18T13:00:00Z"),
-                        remainingMs: 1_800_000,
-                      }
-                    : { status: "preview" };
+                if (action === "preview") return { status: "preview" };
                 if (state === "in-use-no-time")
                   throw { code: "sif.allocation_invalid", params: { reason: "minute_in_use" } };
                 if (state === "later" || state === "in-use")
@@ -189,15 +177,7 @@ for (const theme of ["light", "dark"] as const)
                 await vi.waitFor(() =>
                   expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
                 );
-              if (state === "compared-waiting")
-                await vi.waitFor(() =>
-                  expect(el.shadowRoot!.querySelector("[data-test=remaining]")).not.toBeNull(),
-                );
-              else if (state === "compared-second-clock")
-                await vi.waitFor(() =>
-                  expect(el.shadowRoot!.querySelector("[data-test=clock-wait]")).not.toBeNull(),
-                );
-              else if (state !== "compared" && state !== "refusal") {
+              if (state !== "compared" && state !== "refusal") {
                 el.shadowRoot!.querySelector<HTMLElement>("[data-test=select]")!.click();
                 const shown: string = {
                   disagreement: "[data-test=clock-refused]",

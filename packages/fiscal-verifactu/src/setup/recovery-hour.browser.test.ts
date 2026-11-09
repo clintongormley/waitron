@@ -695,11 +695,7 @@ it("Check again during a wait shows the server's time left", async () => {
     vi.useRealTimers();
   }
 });
-const flush = async (el: Entry) => {
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await el.updateComplete;
-};
-it("Compare clocks with no second clock explains the wait and leaves the next check to the person", async () => {
+it("Compare clocks with no second clock explains the wait and checks again by itself", async () => {
   const { state, prepare } = scripted();
   state.decision = noSecondClock;
   const { el } = await mount(prepare);
@@ -710,30 +706,21 @@ it("Compare clocks with no second clock explains the wait and leaves the next ch
     await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
     expect(text(el)).toContain(WHY_SECOND);
     expect(text(el)).toContain(ON_BOX);
+    expect(text(el)).toContain(RESTORE_ENDS);
     expect(
       (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
     ).toBe("");
     expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
     expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
-    const sent = prepare.mock.calls.length;
     state.decision = clock;
-    vi.advanceTimersByTime(60_000);
-    await flush(el);
-    expect(prepare.mock.calls).toHaveLength(sent);
-    expect(selects(prepare)).toEqual([]);
-    expect(text(el)).toContain(RESTORE_DO);
-    await userEvent.click(button(el, "compare"));
-    await vi.waitFor(() => expect(text(el)).not.toContain(RESTORE_DO));
-    await vi.waitFor(() => expect(quiet(el)).toEqual({ disabled: false, variant: "primary" }));
-    expect(el.readCredentials()).toBeNull();
-    await userEvent.click(button(el, "select"));
+    vi.advanceTimersByTime(15_000);
     await vi.waitFor(() => expect(selects(prepare)).toHaveLength(1));
     await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
   } finally {
     vi.useRealTimers();
   }
 });
-it("a recorded wait shown by Compare clocks ends at zero with no request and offers Make the series", async () => {
+it("a recorded wait shown by Compare clocks makes the series by itself at zero, with no press", async () => {
   const { state, prepare } = scripted();
   state.preview = { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 };
   const { el } = await mount(prepare);
@@ -742,51 +729,20 @@ it("a recorded wait shown by Compare clocks ends at zero with no request and off
   try {
     await compare(el);
     await vi.waitFor(() => expect(remaining(el)).toBe("1:01"));
-    const sent = prepare.mock.calls.length;
-    vi.advanceTimersByTime(61_000);
-    await flush(el);
-    expect(prepare.mock.calls).toHaveLength(sent);
-    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=hour-wait]")).toBeNull();
-    expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
-    expect(el.readCredentials()).toBeNull();
+    expect(text(el)).toContain(NOTHING_TO_DO);
+    expect(selects(prepare)).toEqual([]);
     state.preview = undefined;
-    await userEvent.click(button(el, "select"));
+    vi.advanceTimersByTime(61_000);
     await vi.waitFor(() => expect(selects(prepare)).toHaveLength(1));
+    await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
   } finally {
     vi.useRealTimers();
   }
 });
-it("Compare clocks with no second clock asks the person to press Check again", async () => {
-  const { state, prepare } = scripted();
-  state.decision = noSecondClock;
-  const { el } = await mount(prepare);
-  await ready(el);
-  await compare(el);
-  await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
-  expect(text(el)).toContain("Once the box reaches the internet, press “Check again”.");
-  expect(text(el)).not.toContain(RESTORE_ENDS);
-});
-it("a recorded wait shown by Compare clocks says to press Make the series at zero", async () => {
-  const { state, prepare } = scripted();
-  state.preview = { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 };
-  const { el } = await mount(prepare);
-  await ready(el);
-  fakeClock();
-  try {
-    await compare(el);
-    await vi.waitFor(() => expect(remaining(el)).toBe("1:01"));
-    expect(text(el)).toContain("When the time left reaches zero, press “Make the series”.");
-    expect(text(el)).toContain("Time left: 1:01");
-    expect(text(el)).not.toContain(NOTHING_TO_DO);
-    expect(text(el)).not.toContain("Continues in");
-  } finally {
-    vi.useRealTimers();
-  }
-});
-it("Compare clocks after Make the series starts over: the wait it shows ends with no request", async () => {
+it("Compare clocks after Make the series still makes the series by itself at the end of the wait", async () => {
   const { state, prepare } = scripted([
     { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
+    selected,
   ]);
   const { el } = await mount(prepare);
   await ready(el);
@@ -799,11 +755,10 @@ it("Compare clocks after Make the series starts over: the wait it shows ends wit
     state.preview = { status: "waiting", targetMs: instant + 61_000, remainingMs: 61_000 };
     await userEvent.click(button(el, "compare"));
     await vi.waitFor(() => expect(remaining(el)).toBe("1:01"));
-    const sent = prepare.mock.calls.length;
+    state.preview = undefined;
     vi.advanceTimersByTime(61_000);
-    await flush(el);
-    expect(prepare.mock.calls).toHaveLength(sent);
-    expect(selects(prepare)).toHaveLength(1);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(2));
+    await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
   } finally {
     vi.useRealTimers();
   }
@@ -1390,13 +1345,12 @@ it("says in Spanish that the series cannot be made yet", async () => {
 });
 it("keeps the 15-second rhythm when a re-check again finds no second clock", async () => {
   const { state, prepare } = scripted();
+  state.decision = noSecondClock;
   const { el } = await mount(prepare);
   await ready(el);
-  await compare(el);
-  state.decision = noSecondClock;
   fakeClock();
   try {
-    await userEvent.click(button(el, "select"));
+    await compare(el);
     await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
     let release!: () => void;
     state.hold = new Promise((resolve) => {
@@ -1404,7 +1358,7 @@ it("keeps the 15-second rhythm when a re-check again finds no second clock", asy
     });
     const compares = () => actionsOf(prepare).filter((a) => a === "compare-clocks").length;
     vi.advanceTimersByTime(15_000);
-    await vi.waitFor(() => expect(compares()).toBe(3));
+    await vi.waitFor(() => expect(compares()).toBe(2));
     vi.advanceTimersByTime(10_000);
     state.hold = undefined;
     release();
@@ -1412,8 +1366,7 @@ it("keeps the 15-second rhythm when a re-check again finds no second clock", asy
     await el.updateComplete;
     expect(text(el)).toContain(RESTORE_DO);
     vi.advanceTimersByTime(5_000);
-    await vi.waitFor(() => expect(compares()).toBe(4));
-    expect(selects(prepare)).toEqual([]);
+    await vi.waitFor(() => expect(compares()).toBe(3));
   } finally {
     vi.useRealTimers();
   }

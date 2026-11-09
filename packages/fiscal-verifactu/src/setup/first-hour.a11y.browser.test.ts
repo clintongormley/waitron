@@ -3,7 +3,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement } from "lit";
 import { applyTokens } from "@waitron/ui";
-import { clockWaitStrings } from "./clock-wait.js";
 import { FISCAL_SETUP } from "./first-fiscal-screen.js";
 const hosts: HTMLElement[] = [];
 afterEach(() => {
@@ -27,7 +26,6 @@ for (const theme of ["light", "dark"] as const)
           const instant = Date.parse("2026-10-18T12:30:00Z");
           let mode:
             | "review"
-            | "compared-waiting"
             | "refused"
             | "second-clock"
             | "waiting"
@@ -55,12 +53,8 @@ for (const theme of ["light", "dark"] as const)
             },
             api: {
               async preparation(value) {
-                const { action } = value as { action: string };
-                if (action === "clock-challenge") return { id: "challenge" };
-                if (action === "selection")
-                  return mode === "compared-waiting"
-                    ? { status: "waiting", targetMs: instant + 1800000, remainingMs: 1800000 }
-                    : { status: "preview" };
+                if ((value as { action: string }).action === "clock-challenge")
+                  return { id: "challenge" };
                 return {
                   id: "comparison",
                   clock: {
@@ -170,7 +164,6 @@ for (const theme of ["light", "dark"] as const)
           );
           for (const state of [
             "review",
-            "compared-waiting",
             "refused",
             "second-clock",
             "waiting",
@@ -180,15 +173,7 @@ for (const theme of ["light", "dark"] as const)
             "pdf",
           ] as const) {
             mode = state;
-            if (state === "compared-waiting") {
-              await click("compare");
-              await vi.waitFor(() =>
-                expect(el.shadowRoot!.querySelector("[data-test=remaining]")).not.toBeNull(),
-              );
-              const wait = el.shadowRoot!.querySelector("[data-test=hour-wait]")!.textContent!;
-              expect(wait).toContain(clockWaitStrings[locale].pressAtZero);
-              expect(wait).toContain(clockWaitStrings[locale].timeLeft);
-            } else if (state !== "review") {
+            if (state !== "review") {
               await click("compare");
               await vi.waitFor(() =>
                 expect(el.shadowRoot!.querySelector("[data-test=clock-readings]")).not.toBeNull(),
