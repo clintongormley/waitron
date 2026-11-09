@@ -1400,6 +1400,30 @@ CREATE TABLE `unpaid_departures` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `unpaid_departures_working_order_key` ON `unpaid_departures` (`working_order_id`);--> statement-breakpoint
+CREATE TABLE `transfer_closures` (
+	`id` text PRIMARY KEY NOT NULL,
+	`working_order_id` text NOT NULL,
+	`sale_id` text NOT NULL,
+	`intent` text NOT NULL,
+	`actor_id` text NOT NULL,
+	`source` text NOT NULL,
+	`device_id` text,
+	`node_id` text NOT NULL,
+	`closed_at` text NOT NULL,
+	`business_day` text NOT NULL,
+	`result` text NOT NULL,
+	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "transfer_closures_business_day_ck" CHECK(length("transfer_closures"."business_day") = 10 and "transfer_closures"."business_day" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+	CONSTRAINT "transfer_closures_source_ck" CHECK("transfer_closures"."source" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')),
+	CONSTRAINT "transfer_closures_source_device_ck" CHECK(("transfer_closures"."source" = 'device') = ("transfer_closures"."device_id" is not null))
+);
+--> statement-breakpoint
+CREATE INDEX `transfer_closures_node_day_idx` ON `transfer_closures` (`node_id`,`business_day`,`closed_at`,`id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `transfer_closures_working_order_key` ON `transfer_closures` (`working_order_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `transfer_closures_sale_key` ON `transfer_closures` (`sale_id`);--> statement-breakpoint
 CREATE TABLE `daily_close_chain` (
 	`node_id` text PRIMARY KEY NOT NULL,
 	`sequence_no` integer DEFAULT 0 NOT NULL,
