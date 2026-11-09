@@ -1,4 +1,4 @@
-import { insertAttendanceMail } from "../test/fixtures.js";
+import { insertAttendanceMail, setAttendanceMail } from "../test/fixtures.js";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -980,6 +980,27 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
     for (const value of COLLEAGUE_ATTENDANCE_VALUES) expect(theirs).toContain(value);
   });
 
+  it("exports rejected as the outcome of an expired reminder tried once", async () => {
+    const people = await seedAll(suite.db);
+    await seedAttendance(suite.db, people);
+    await setAttendanceMail(suite.db, "00000000-0000-4000-8000-0000000000a1", {
+      status: "expired",
+      outcome: "rejected",
+      recipient: null,
+      claimToken: null,
+      claimedAt: null,
+    });
+    const file = JSON.parse(attendanceOf(await download(people.marta))) as {
+      questions: { businessDay: string; reminderEmail: unknown }[];
+    };
+    expect(file.questions.find((q) => q.businessDay === "2026-04-18")!.reminderEmail).toEqual({
+      recipient: null,
+      status: "expired",
+      outcome: "rejected",
+      claimedAt: null,
+      nextAttemptAt: "2026-04-19T04:00:00.000Z",
+    });
+  });
   it("writes the reminder email's recipient but never its claim token", async () => {
     const people = await seedAll(suite.db);
     await seedAttendance(suite.db, people);

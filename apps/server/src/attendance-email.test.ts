@@ -23,6 +23,7 @@ import {
   timeEntries,
   executeAttendanceCommand,
   readAttendanceInbox,
+  retireObsoleteRotaQuestions,
 } from "@waitron/workforce";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { readAttendanceFacts, readPlannedAttendanceShifts } from "./attendance-facts.js";
@@ -649,6 +650,25 @@ describe("attendance_question queue owner", () => {
     });
     expect(sent()[0]!.to).toBe("new@example.test");
     expect(await mail()).toMatchObject([{ recipient: "new@example.test", status: "sent" }]);
+  });
+  it("does not retry a refused in-flight reminder after its rota question is retired", async () => {
+    await seedRota();
+    send.mockImplementationOnce(async () => {
+      await run(async (tx) => {
+        const versionId = await backend.createRosterVersion(tx, { period: "2026-01-05" });
+        await backend.publishRoster(tx, { versionId });
+        await retireObsoleteRotaQuestions(tx, day());
+      });
+      return { status: "rejected", serverRefused: true, reason: "email.test_refused" };
+    });
+    await pass();
+    expect(await questions()).toMatchObject([{ active: false, inactiveReason: "rota_superseded" }]);
+    expect(await mail()).toMatchObject([{ status: "rejected", claimToken: null }]);
+    now = new Date("2026-01-08T06:15:00Z");
+    await pass();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(await questions()).toMatchObject([{ active: false, inactiveReason: "rota_superseded" }]);
+    expect(await mail()).toMatchObject([{ status: "rejected", claimToken: null }]);
   });
   it("retries proven rejection only after its durable fifteen-minute delay", async () => {
     await seedMissing();
