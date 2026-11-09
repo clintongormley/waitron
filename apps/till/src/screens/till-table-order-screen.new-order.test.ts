@@ -32,7 +32,7 @@ const dish = (name: string, courseId: string | null = null) => ({
   courseId,
 });
 async function openReview(el: TillTableOrderScreen) {
-  root(el).querySelector<HTMLElement>("[data-review-open]")!.click();
+  root(el).querySelector<HTMLElement>("[data-view=order]")!.click();
   await el.updateComplete;
 }
 const root = (el: TillTableOrderScreen) => el.shadowRoot!;

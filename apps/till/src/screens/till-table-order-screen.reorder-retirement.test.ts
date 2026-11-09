@@ -17,7 +17,7 @@ it.each([390, 1280])(
     const { el } = await mount({ orderId: "wo-4", groups, currentOrders: current(), now });
     el.style.width = `${width}px`;
     await resized(el);
-    const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+    const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
     if (review?.checkVisibility()) {
       await userEvent.click(review);
       await el.updateComplete;

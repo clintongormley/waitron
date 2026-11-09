@@ -170,7 +170,7 @@ afterEach(cleanupWidgets);
 
 /** Below the side-by-side width, as in Vitest's default frame, the draft is on its Review view. */
 async function openReview(el: TillTableOrderScreen): Promise<void> {
-  el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+  el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
   await el.updateComplete;
 }
 
@@ -1081,7 +1081,7 @@ describe.each(["light", "dark"] as const)(
       await el.updateComplete;
     }
 
-    it("has no violations while browsing, with the last-added bar and Review", async () => {
+    it("has no violations while browsing, with the last-added bar and Order", async () => {
       const { el, host } = await phoneDraft();
       await settled(el);
       if (
@@ -1106,9 +1106,9 @@ describe.each(["light", "dark"] as const)(
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations on the Review view, with Split quantity offered", async () => {
+    it("has no violations on the Order view, with Split quantity offered", async () => {
       const { el, host } = await phoneDraft();
-      el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+      el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
       await el.updateComplete;
       await settled(el);
       if (!el.shadowRoot!.querySelector("[data-split-draft-line]")?.checkVisibility())

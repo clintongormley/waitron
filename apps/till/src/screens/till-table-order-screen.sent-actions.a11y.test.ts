@@ -61,7 +61,7 @@ describe.each(["en", "es"] as const)("Sent dish actions in %s", (locale) => {
       );
       host.style.width = "100%";
       await resized(el);
-      const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+      const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
       if (review?.checkVisibility()) {
         await userEvent.click(review);
         await el.updateComplete;

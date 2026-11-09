@@ -67,7 +67,7 @@ export async function chooseSentServing(
 export async function sentFallbackFor(screen: TillTableOrderScreen): Promise<HTMLElement> {
   const pane = screen.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]")!;
   if (pane.hidden) {
-    await userEvent.click(screen.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
+    await userEvent.click(screen.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!);
     await screen.updateComplete;
   }
   const fallback = screen.shadowRoot!.querySelector<HTMLElement>("[data-sent-fallback]");

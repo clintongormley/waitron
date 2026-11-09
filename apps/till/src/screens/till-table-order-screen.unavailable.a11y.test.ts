@@ -69,9 +69,9 @@ describe.each(["light", "dark"] as const)(
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations on Review at phone width, once a line is kept", async () => {
+    it("has no violations on Order at phone width, once a line is kept", async () => {
       const { el, host } = await flaggedDraft("390px");
-      el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+      el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
       await settled(el);
       const picker = await openDraftLine(el, 0);
       el.shadowRoot!.querySelector<HTMLElement>('[data-flag-keep="0"]')!.click();

@@ -1563,7 +1563,7 @@ describe("a round at phone width", () => {
       await flush(el);
       roundGrid(el).shadowRoot!.querySelector<HTMLElement>("wt-button")!.click();
       await flush(el);
-      tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+      tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
       await flush(el);
       const basket = tableScreen(el).shadowRoot!.querySelector(".round-bar till-basket")!;
       const remove = basket.shadowRoot!.querySelector<HTMLElement>("wt-button.remove")!;

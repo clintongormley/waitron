@@ -191,7 +191,7 @@ it("a drop on another mounted table cannot move this bill's draft", async () => 
   other.el.style.width = "500px";
   other.el.style.zIndex = "10";
   await resized(other.el);
-  const review = q(other.el, "[data-review-open]");
+  const review = q(other.el, "[data-view=order]");
   if (review?.checkVisibility()) await userEvent.click(review);
   await other.el.updateComplete;
   await drop(el, lead(el, 0), q(other.el, '[data-draft-group="new:2"] h3'));

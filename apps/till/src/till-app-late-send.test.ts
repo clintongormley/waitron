@@ -935,7 +935,7 @@ describe("a manager's PIN", () => {
     await act(el, "send-all");
     await choose(el, "data-late-agreed");
     expect(api.serviceDayAuthorizers).toHaveBeenCalledOnce();
-    await userEvent.click(screen(el).querySelector<HTMLElement>("[data-review-open]")!);
+    await userEvent.click(screen(el).querySelector<HTMLElement>("[data-view=order]")!);
     await flush(el);
 
     const send = screen(el).querySelector<HTMLElement>('[data-draft-action="send-all"]')!;

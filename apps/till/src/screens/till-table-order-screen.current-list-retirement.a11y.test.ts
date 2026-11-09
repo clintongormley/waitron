@@ -65,7 +65,7 @@ describe.each(["en", "es"] as const)("Sent paid facts %s", (locale) => {
         host.style.width = "100%";
         await resized(el);
         const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector)!;
-        const review = q("[data-review-open]");
+        const review = q("[data-view=order]");
         if (review?.checkVisibility()) {
           await userEvent.click(review);
           await el.updateComplete;

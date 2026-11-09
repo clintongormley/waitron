@@ -171,7 +171,7 @@ export async function openDraftLine(
   el: TillTableOrderScreen,
   index: number,
 ): Promise<TillModifierPicker> {
-  const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+  const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
   if (review?.checkVisibility()) {
     await userEvent.click(review);
     await el.updateComplete;

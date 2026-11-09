@@ -51,7 +51,7 @@ describe.each(["en", "es"] as const)("retained routing warning %s", (locale) => 
       host.style.width = "100%";
       await resized(el);
       if (width < 1280) {
-        await userEvent.click(el.shadowRoot!.querySelector<WtButton>("[data-review-open]")!);
+        await userEvent.click(el.shadowRoot!.querySelector<WtButton>("[data-view=order]")!);
         await el.updateComplete;
       }
       const checked = new Promise<{ sent: readonly OrderLine[]; checkId: number }>((resolve) =>

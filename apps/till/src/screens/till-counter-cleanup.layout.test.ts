@@ -295,7 +295,7 @@ it.each([390, 1280])(
       );
     await el.updateComplete;
     if (width === 390) {
-      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
+      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!);
       await el.updateComplete;
     }
     const basket = [...el.shadowRoot!.querySelectorAll<LitElement>("till-basket")].at(-1)!;

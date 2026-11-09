@@ -34,7 +34,7 @@ describe.each(["en", "es"] as const)("automatic routing %s", (locale) => {
       host.style.width = "100%";
       await resized(el);
       if (width === 390) {
-        await userEvent.click(el.shadowRoot!.querySelector<WtButton>("[data-review-open]")!);
+        await userEvent.click(el.shadowRoot!.querySelector<WtButton>("[data-view=order]")!);
         await el.updateComplete;
       }
       const answer: DeadEndAnswer = {

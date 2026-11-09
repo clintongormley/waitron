@@ -361,7 +361,7 @@ export async function addDish(el: TillApp): Promise<void> {
   )!;
   await userEvent.click(tile);
   await flush(el);
-  const review = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+  const review = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
   if (review && review.getBoundingClientRect().width > 0) await userEvent.click(review);
   await flush(el);
 }

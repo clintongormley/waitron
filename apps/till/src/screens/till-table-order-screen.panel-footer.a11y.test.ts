@@ -46,7 +46,7 @@ describe.each(["en", "es"] as const)("the bill footer in %s", (locale) => {
           host.style.width = "100%";
           await resized(el);
           if (width < 1280) {
-            await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
+            await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!);
             await el.updateComplete;
           }
           const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector);

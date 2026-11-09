@@ -138,7 +138,7 @@ describe("till-table-order-screen handheld Pay button look", () => {
           expect(window.innerWidth).toBe(width);
           const { el } = await mountHandheld(theme, bill, balance);
           await resized(el);
-          const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+          const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
           if (review?.checkVisibility()) {
             await userEvent.click(review);
             await el.updateComplete;

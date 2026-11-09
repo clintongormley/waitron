@@ -531,7 +531,7 @@ describe("A803 pay scope", () => {
     /** The foot, which a narrow screen with a New order shows on its Review view. */
     async function showFoot(el: TillTableOrderScreen): Promise<void> {
       await resized(el);
-      const review = q(el, "[data-review-open]");
+      const review = q(el, "[data-view=order]");
       if (review?.checkVisibility()) {
         await userEvent.click(review);
         await el.updateComplete;

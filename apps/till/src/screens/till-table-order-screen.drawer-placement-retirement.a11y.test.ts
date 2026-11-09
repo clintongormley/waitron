@@ -83,7 +83,7 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
       });
       await closeTableMenu(el);
       if (width < 1280) {
-        await userEvent.click(q("[data-review-open]"));
+        await userEvent.click(q("[data-view=order]"));
         await el.updateComplete;
       }
       const panel = q("till-sent-orders") as TillSentOrders;

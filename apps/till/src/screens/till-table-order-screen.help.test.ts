@@ -34,7 +34,7 @@ async function mountWithLines(over: Partial<TillTableOrderScreen> = {}, theme?: 
   store(mounted.el).addProduct(flan, "1");
   await mounted.el.updateComplete;
   await resized(mounted.el);
-  const review = mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+  const review = mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
   if (review?.checkVisibility()) {
     await userEvent.click(review);
     await mounted.el.updateComplete;

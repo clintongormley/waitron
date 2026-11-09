@@ -27,7 +27,7 @@ describe.each(["en", "es"] as const)("Split quantity %s", (locale) => {
       host.style.width = "100%";
       await resized(el);
       if (width < 1280) {
-        await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
+        await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!);
         await el.updateComplete;
       }
       const pane = el.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]")!;

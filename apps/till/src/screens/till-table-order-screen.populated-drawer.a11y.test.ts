@@ -109,7 +109,7 @@ describe.each(["en", "es"] as const)("table menu with sent dishes in %s", (local
         });
         await closeTableMenu(el);
         if (q("[data-draft-pane]").hidden) {
-          await userEvent.click(q("[data-review-open]"));
+          await userEvent.click(q("[data-view=order]"));
           await el.updateComplete;
         }
         const panel = q("till-sent-orders") as TillSentOrders;

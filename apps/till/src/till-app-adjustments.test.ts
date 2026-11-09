@@ -2183,7 +2183,7 @@ describe("till-app: service cancellation consent", () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await order.updateComplete;
-      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
       if (review?.checkVisibility()) {
         await userEvent.click(review);
         await order.updateComplete;
@@ -4786,7 +4786,7 @@ it.each([
     });
     await closeTableMenu(order);
     if (width < 1280) {
-      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!);
       await order.updateComplete;
     }
     const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;

@@ -42,7 +42,7 @@ async function opening(kind: "split" | "source" | "fold") {
   if (kind === "source")
     draft.lines[0]!.source = { line: storedDish, extras: [storedExtra], netAmount: "8.00" };
   const { el } = await mount({ draftStore: draft, billEdit: { ...observation } });
-  const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+  const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
   if (review?.checkVisibility()) await userEvent.click(review);
   await el.updateComplete;
   if (kind === "fold") {

@@ -28,7 +28,7 @@ afterEach(cleanupWidgets);
 
 describe("till-table-order-screen: browsing and the order by the screen's width", () => {
   const review = (el: TillTableOrderScreen) =>
-    el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
   const draftPane = (el: TillTableOrderScreen) =>
     el.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]");
   const browsing = (el: TillTableOrderScreen) =>
@@ -138,7 +138,7 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     }
   });
 
-  it("gives each line's name the Review view's width at 390 px, so it is not broken letter by letter", async () => {
+  it("gives each line's name the Order view's width at 390 px, so it is not broken letter by letter", async () => {
     const { el, host } = await mount();
     host.style.width = "390px";
     await resized(el);
@@ -185,7 +185,7 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
 
     review(el)!.click();
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-review-back]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view=menu]")!.click();
     await resized(el);
 
     expect(browser(el)).toBe(before);
@@ -195,7 +195,7 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     expect(shown(browsing(el))).toBe(true);
   });
 
-  it("closes Review when the screen widens to side by side, putting browsing's scroll back", async () => {
+  it("closes Order when the screen widens to side by side, putting browsing's scroll back", async () => {
     const tapas = Array.from({ length: 40 }, (_, n) => ({
       ...beer,
       id: `tapa-${n}`,
@@ -228,7 +228,7 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     expect(shown(draftPane(el))).toBe(false);
   });
 
-  it("shows browsing and the draft side by side at the width and above, with no Review", async () => {
+  it("shows browsing and the draft side by side at the width and above, with no Order", async () => {
     const { el, host } = await mount();
     host.style.width = `${DRAFT_SIDE_BY_SIDE_MIN_WIDTH}px`;
     await resized(el);
@@ -242,7 +242,7 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     expect(pane.left).toBeGreaterThanOrEqual(side.right);
   });
 
-  it("goes back to Review below the width, from side by side", async () => {
+  it("goes back to Order below the width, from side by side", async () => {
     const { el, host } = await mount();
     host.style.width = "1280px";
     await resized(el);

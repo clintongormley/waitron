@@ -28,7 +28,7 @@ describe("New order quantities keep display separate from submission", () => {
           if (locked) draft.lockEdits();
           el.requestUpdate();
           await el.updateComplete;
-          const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+          const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
           if (review?.checkVisibility()) {
             await userEvent.click(review);
             await el.updateComplete;

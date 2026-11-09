@@ -302,7 +302,7 @@ const draftToggle = (el: TillTableOrderScreen, name: string) =>
 
 /** Below the side-by-side width, as in Vitest's default frame, the draft is on its Review view. */
 async function openReview(el: TillTableOrderScreen): Promise<void> {
-  el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+  el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
   await el.updateComplete;
 }
 
@@ -5876,7 +5876,7 @@ describe("closed department ordering", () => {
     expect(el.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
     expect(draft.lines.map((line) => [line.product.id, line.quantity])).toEqual([["cafe", "2"]]);
-    expect(el.shadowRoot!.querySelector("[data-review-open]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-view=order]")).not.toBeNull();
     expect(el.lines.map((line) => line.id)).toEqual(["line-1"]);
   });
 });

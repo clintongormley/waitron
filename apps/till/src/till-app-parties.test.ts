@@ -462,7 +462,7 @@ const tableOrder = (el: TillApp) =>
 const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
 async function heldGroupsList(el: TillApp) {
   const order = tableOrder(el)!;
-  const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+  const review = order.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
   if (review?.checkVisibility()) {
     await userEvent.click(review);
     await flush(el);
@@ -7395,7 +7395,7 @@ describe("till-app: the order's groups", () => {
 
     async function openSent(el: TillApp) {
       const order = tableOrder(el)!;
-      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
       if (review?.checkVisibility()) {
         await userEvent.click(review);
         await flush(el);
@@ -9759,7 +9759,7 @@ describe("till-app: Current orders", () => {
               .poll(
                 () =>
                   order
-                    .shadowRoot!.querySelector<HTMLElement>("[data-review-open]")
+                    .shadowRoot!.querySelector<HTMLElement>("[data-view=order]")
                     ?.checkVisibility() ?? false,
               )
               .toBe(width === 390);
@@ -9858,7 +9858,7 @@ describe("till-app: Current orders", () => {
 
     async function visiblePanel(order: TillTableOrderScreen): Promise<TillSentOrders> {
       await order.updateComplete;
-      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
       if (review?.checkVisibility()) {
         await userEvent.click(review);
         await order.updateComplete;

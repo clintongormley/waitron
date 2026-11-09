@@ -2985,7 +2985,6 @@ export class TillTableOrderScreen extends LitElement {
         type="button"
         class="option"
         data-view="menu"
-        data-review-back
         aria-pressed=${String(!onOrder)}
         @click=${() => void this.#showMenu()}
       >
@@ -2995,7 +2994,6 @@ export class TillTableOrderScreen extends LitElement {
         type="button"
         class="option"
         data-view="order"
-        data-review-open
         aria-pressed=${String(onOrder)}
         @click=${() => void this.#showOrder()}
       >

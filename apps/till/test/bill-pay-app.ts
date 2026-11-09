@@ -406,7 +406,7 @@ export async function openDialog(el: TillApp, way: "items" | "contribution" | "s
 
 export async function showBillFooter(order: TillTableOrderScreen): Promise<void> {
   await resized(order);
-  const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+  const review = order.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
   if (review?.checkVisibility()) {
     await userEvent.click(review);
     await order.updateComplete;

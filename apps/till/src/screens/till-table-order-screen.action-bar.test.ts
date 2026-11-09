@@ -107,9 +107,9 @@ describe("till-table-order-screen: the unsent order's action bar stays in the wi
     expectInside(el.shadowRoot!.querySelector('[data-draft-action="send-all"]')!, host);
   });
 
-  it("keeps Send all on screen without scrolling on the phone's Review view, with a long order", async () => {
+  it("keeps Send all on screen without scrolling on the phone's Order view, with a long order", async () => {
     const { el, host } = await orderedInWindow(390, 700);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
     await el.updateComplete;
     await linesRendered(el);
     host.scrollTop = 0;
@@ -133,14 +133,14 @@ describe("till-table-order-screen: the unsent order's action bar stays in the wi
     expectInside(el.shadowRoot!.querySelector('[data-draft-action="send-all"]')!, host);
   });
 
-  it("keeps Send all on screen on the phone's Review view with twenty sent dishes listed above a short order", async () => {
+  it("keeps Send all on screen on the phone's Order view with twenty sent dishes listed above a short order", async () => {
     const { el, host } = await orderedInWindow(
       390,
       700,
       { currentOrders: longSent },
       dishes.slice(0, 2),
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
     await el.updateComplete;
     await sentExpanded(el);
     await linesRendered(el);
@@ -230,7 +230,7 @@ describe("till-table-order-screen: the unsent order's action bar under the shell
       await pageAt(width, height);
       const { screen, area, overlay } = await inShell(height);
       if (width === 390) {
-        screen.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+        screen.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
         await screen.updateComplete;
         await linesRendered(screen);
       }
@@ -323,9 +323,9 @@ describe("till-table-order-screen: a newly added line is not hidden behind the a
     expectClearOfBar(el, host);
   });
 
-  it("shows the newest line above the bar when the phone's Review view opens on a long order", async () => {
+  it("shows the newest line above the bar when the phone's Order view opens on a long order", async () => {
     const { el, host } = await orderedInWindow(390, 700);
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!);
     await el.updateComplete;
     await linesRendered(el);
     await scrollSettled(host);

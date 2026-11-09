@@ -3015,7 +3015,7 @@ describe("a handheld's zones", () => {
       await el.updateComplete;
       await order()!.updateComplete;
       // A handheld sends from its Review sheet; a till from the order screen itself.
-      const review = order()!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+      const review = order()!.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
       if (review !== null) await userEvent.click(review);
       const sendAll = () =>
         order()!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(

@@ -46,7 +46,7 @@ async function open(theme: "light" | "dark") {
     theme,
   );
   await resized(el);
-  const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+  const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
   if (review?.checkVisibility()) await userEvent.click(review);
   await el.updateComplete;
   for (const basket of el.shadowRoot!.querySelectorAll<TillBasket>("till-basket"))
