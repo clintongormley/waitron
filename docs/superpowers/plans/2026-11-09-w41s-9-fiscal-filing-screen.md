@@ -78,8 +78,8 @@ switched off in production today (item 5 below), and retrying is already on Box 
     ([fi9 plan](2026-11-08-a1308-fi9-identities-absorb-allocations.md), Goal).
 
   If this item lands first, each of those four slices must also rewrite this item's queries, so
-  fi1, fi5, fi6 and fi9 would each need it added to their "Needs" lists. This plan does not edit
-  those plans. To keep that cost small, every query lives in one file (`filing-overview.ts`) plus
+  fi1, fi5, fi6 and fi9 each need it in their "Needs" lists; Task 5 adds those lines when the owner
+  answers "build now" (question 3). To keep that cost small, every query lives in one file (`filing-overview.ts`) plus
   one new reader in `filing-cases.ts`, and cases are identified by their **record id**, never a
   case id, in the payload, the export, the screen and the tests, so fi6 changes no outside contract.
   Whether to build now or after those slices is owner question 3.
@@ -199,8 +199,8 @@ Out:
 - Importing, matching or reconciling recovered history (Q41).
 - Resolved cases and case notes: none can be written at a venue today (item 5).
 - Live updates. The page reads when it opens and when **Refresh** is pressed.
-- Rewording the bell's "Contact support" sentences (A1089's "fiscal filing-case alerts need a real
-  decision route").
+- Rewording the bell's "Contact support" sentences on alerts this screen does not link (A1089).
+  The ones Task 6 links are reworded there.
 - The A1089 areas marked "No" above, history before the oldest reconciled month (W41s-10b/W41s-11),
   and any AEAT request.
 
@@ -269,10 +269,11 @@ The golden huella suite and `inmutabilidad` pass **unedited** in every task.
    in `ENVIO_STATES` (`handover-summary.ts:7-15`), the generation time of the oldest `pendiente` or
    `enviando` record, and the latest `confirmado_en`.
 2. `cases`: a new `openFilingCases(tx, limit)` in `filing-cases.ts`: cases with no `resolved` event,
-   oldest first by `rowid` as `listFilingCases` orders, joined to their record, its identity row and
-   its submission row, reading no events. Move the existing `notExists(...)` condition of
+   newest first (descending `rowid`, the reverse of `listFilingCases`'s order), joined to their
+   record, its identity row and its submission row, reading no events. Move the existing `notExists(...)` condition of
    `openFilingCasesSummary` (`filing-cases.ts:218-226`) into a helper both use;
-   `openFilingCasesSummary`'s behaviour does not change. Returns the first `limit` rows and the total.
+   `openFilingCasesSummary`'s behaviour does not change. Returns the first `limit` rows and the total;
+   `limit: null` returns every open case (the export's read, below).
 3. `conflicts`: one query over `fiscal_conflict_evidence` and one over `fiscal_lookup_conflicts`,
    each restricted to the record ids from query 2 (`inArray`), grouped onto their cases in memory.
 4. `held`: `heldRecords(tx)` once (`filing-cases.ts:244-304`, one SQL statement), reduced in memory
@@ -280,9 +281,11 @@ The golden huella suite and `inmutabilidad` pass **unedited** in every task.
 5. `activeConflicts`: `readActiveConflicts(tx, nodeId)` once (`conflict-evidence.ts:36-129`) when
    `nodeId` is not null; an empty list otherwise.
 
-**The bound.** The case list returns the oldest **200** open cases and `totalCases`. Because no case
-can be resolved at a venue (item 5), "open" means every case ever opened, so the list only grows.
-The screen and the export both say "the oldest 200 of N" when N is larger. Held records are not
+**The bound.** The screen's read returns the **newest 200** open cases and `totalCases`. Because no
+case can be resolved at a venue (item 5), "open" means every case ever opened, so the list only
+grows; showing the oldest 200 would hide every newer case for good once there are 200. The screen
+says "the newest 200 of N" when N is larger. The **export** reads with no bound, so the file holds
+every open case; the measurement step below times that read too. Held records are not
 listed, only counted, so the answer's size does not grow with them; query 4 still reads every
 held and refused record, so the task measures it (step below). This settles the backlog note at
 `docs/backlog.md:317-319`: the case list gains its filter and bound, and `heldRecords` stays a
@@ -322,7 +325,7 @@ and person ids, and every column of every other table. `mensaje`, `mensajeError`
   with no case, a series-conflict row on a live series, and a case resolved through
   `recordCaseEvent` (synthetic, to prove the filter). Cases:
   1. `progress` counts each state and gives the oldest waiting generation time.
-  2. `cases` lists the three open cases oldest first by record id, leaves out the resolved one, and
+  2. `cases` lists the three open cases newest first by record id, leaves out the resolved one, and
      gives `heldBehind` 2 for the refusal; `heldWithoutCase` is 1.
   3. `activeConflicts` holds the fingerprint case and the live series-conflict row for that node,
      and is empty for a null node.
@@ -331,13 +334,15 @@ and person ids, and every column of every other table. `mensaje`, `mensajeError`
      recipient name, `RefExterna` and `IdPeticionRegistroDuplicado` set to distinctive strings,
      `JSON.stringify(overview)` contains none of them. This proves which fields can appear; it does
      not inspect what AEAT's free text says.
-  5. **Bound.** With 201 open cases, `cases` has 200, the oldest, and `totalCases` is 201.
+  5. **Bound.** With 201 open cases, `cases` has 200, the newest (the first-opened case is the one
+     left out), and `totalCases` is 201; with `limit: null` it has all 201.
 
   Make each case fail once for its own reason (for case 4, temporarily spread a stored reply line).
 - [ ] Write `filing-overview-types.ts`, `openFilingCases` and `readFilingOverview`.
-- [ ] **Measure** `readFilingOverview` once on a seeded chain with 10,000 held records and 200 open
-  cases (a throwaway script or a skipped-by-default case, not a committed timing assertion). Record
-  the command and time in the pull request. Above one second, stop and ask before going on.
+- [ ] **Measure** `readFilingOverview` once on a seeded chain with 10,000 held records and 2,000 open
+  cases, bounded and with `limit: null` (a throwaway script or a skipped-by-default case, not a
+  committed timing assertion). Record the command and times in the pull request. Above one second,
+  stop and ask before going on.
 - [ ] Run, and read the `Tests` count:
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/filing-overview.test.ts src/filing-cases.test.ts src/submission-alerts.cases.test.ts src/conflict-recovery.test.ts`
 - [ ] Guards, unedited:
@@ -396,7 +401,9 @@ missing.
 `fiscalDrain` early return (`:28`), so a box that is not filing still shows its evidence. It sets
 `Cache-Control: no-store`, takes the session with `requireManagementSession`, and inside one
 `withTransaction` checks `authorizeManager(tx, { managementSessionId, permission: "report.export" })`
-before `readFilingOverview(tx, { nodeId: ctx.recordGeneration?.nodeId ?? null })`. Boot sets
+before `readFilingOverview(tx, { nodeId: ctx.recordGeneration?.nodeId ?? null, limit })`, where
+`limit` is 200, or `null` when the query string is `?cases=all` (the export's read; any other value
+is ignored). Boot sets
 `recordGeneration` from the trading node (`apps/server/src/boot.ts:2774-2775`). It adds `filing`
 and `awaitingCertificate` from `ctx.fiscalDrain` (false when absent). Error boundary: the four
 session and permission codes of `routes.ts:13-16`, log tag `fiscal-filing.failed`; no new error
@@ -405,7 +412,8 @@ session handling.
 
 - [ ] **Failing test first.** A manager session gets 200 and `no-store`; a supervisor session
   (holds `report.view`, not `report.export`) gets 403 `authorization.not_permitted`; no session gets
-  401. The payload's content is Task 1's and is not re-tested here.
+  401. `?cases=all` reaches `readFilingOverview` with `limit: null` and no query string with 200.
+  The payload's content is Task 1's and is not re-tested here.
 - [ ] Implement; mount it.
 - [ ] Run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/filing-overview-routes.test.ts src/routes.test.ts src/record-remedy-routes.test.ts`
   and `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/module-seams.test.ts`.
@@ -439,7 +447,7 @@ no `*.unsaved.test.ts`.
 - **Sending progress**: the seven counts with plain names (Waiting, Sending, Accepted, Accepted
   with errors, Refused, Held, Set aside), the oldest waiting time and the last acceptance.
 - **Filing cases**: a `wt-data-table` (opened, invoice number and date, reason, AEAT code, records
-  held behind it), client-side paging, rows keyed by record id, with "The oldest 200 of {N}" when
+  held behind it), client-side paging, rows keyed by record id, with "The newest 200 of {N}" when
   bounded. A **View** row action (column keyed `actions`, `pinned: "end"`) opens a plain-text
   details panel, as Products' archived-row View does (design-system "Products: Active and Available
   are two different words"): the invoice facts, the record's fingerprint and the previous one,
@@ -452,7 +460,8 @@ no `*.unsaved.test.ts`.
   Task 2 gives.
 - Read failure: one message under the action row; Refresh clears it once a read succeeds. The first
   read and every Refresh are passive GETs (`{ passive: true }`).
-- **Export**: reads again (not passive: the person asked), then saves the answer as
+- **Export**: reads again with `?cases=all` (not passive: the person asked), so the file holds
+  every open case, then saves the answer as
   `fiscal-filing-<YYYY-MM-DD>.json`, pretty-printed, through a Blob and a temporary link as the VAT
   return screen does (`apps/dashboard/src/screens/vat-return-screen.ts:122-127`). The file is the
   route's answer, so it holds only the fields Task 1's field-list test admits.
@@ -463,10 +472,10 @@ no `*.unsaved.test.ts`.
 - [ ] **Failing test first** (`fiscal-filing-screen.test.ts`, real Chromium, client stubbed at
   `DashboardRequest`). Cases, each once:
   1. With a fixture overview, every part shows its figures and "Read at"; View on the conflict case
-     shows both fingerprints; a bounded list shows "The oldest 200 of 201".
+     shows both fingerprints; a bounded list shows "The newest 200 of 201".
   2. Active conflicts show the recovery link with that exact path; none shows no notice.
-  3. Export saves one file whose parsed content equals the second read's answer, and the first read
-     was passive.
+  3. Export reads with `?cases=all` and saves one file whose parsed content equals that read's
+     answer, and the first read was passive.
   4. A refused read shows the read message; a later successful Refresh clears it.
 - [ ] Before the browser runs, check headroom (`memory_pressure | grep free`); run beside other
   browser work only well above 15% free.
@@ -511,6 +520,10 @@ no `*.unsaved.test.ts`.
   W41s section, a dated paragraph saying what landed and what stays out; in the A1089 lines
   (`docs/backlog.md:211-212` and `self-service-refusals.md` "fiscal-cases"), that the evidence page
   exists and the decision step still waits for remedy enablement.
+- [ ] If the owner chose "build now" (question 3): add one line to the "Needs" list of each of the
+  fi1, fi5, fi6 and fi9 plans (`docs/superpowers/plans/2026-11-08-a1308-fi{1,5,6,9}-*.md`) naming
+  `packages/fiscal-verifactu/src/filing-overview.ts` and `openFilingCases` in `filing-cases.ts` as
+  readers of the tables that slice reshapes, and that cases are named by record id.
 - [ ] Commit.
 
 ## Task 6 (only after the owner approves the exact lines): alerts go to the screen
@@ -520,6 +533,18 @@ existing exact assertions in the fiscal package, which the W41s rules allow only
 approval of the exact changed lines. Until that approval is recorded, skip this task; the screen
 lands without it.
 
+The same task rewords the alerts it links, because a "Go to" button beside "Contact support" breaks
+the owner's rule never to send the person to somebody else (owner, 2026-10-25). In
+`apps/dashboard/src/i18n/alert-messages.ts`, `fiscal.filing_cases_open` (`:313-316`),
+`fiscal.refusals_repeated` (`:317-320`), `fiscal.registro_rechazado` (`:238`),
+`fiscal.duplicado_anulado` (`:254`), `fiscal.anulacion_retenida` (`:258`) and
+`fiscal.huella_divergente` (`:262`) end "Contact support." / "Contacta con soporte." Replace that
+sentence, in English and Spanish, with one saying the record and AEAT's answer are on Fiscal
+filing, and that Waitron keeps sending later records where that is true for the code (write it from
+the drain's code). On main `8edd51e544`, `git grep -n "Contact support\|Contacta con soporte" --
+'*.test.ts'` finds only backup and setup messages, and a `git grep -l` for distinctive phrases of
+each of the six sentences, English and Spanish, finds no test, so no existing test pins them.
+
 | Change | Existing assertion that changes |
 | --- | --- |
 | `alerts.ts:11-16`: add five claims, `{ prefix: "fiscal.registro_rechazado" \| "fiscal.huella_divergente" \| "fiscal.duplicado_anulado" \| "fiscal.aceptado_con_errores" \| "fiscal.anulacion_retenida", area: "fiscal", permission: "fiscal.view", screen: "fiscal-filing" }` | `alerts.test.ts:7-15`: the `events` list gains those five lines. |
@@ -527,7 +552,8 @@ lands without it.
 | `submission-alerts.ts:145-150`: the same on `fiscal.refusals_repeated` | `submission-alerts.cases.test.ts:179-187`: the object gains the same line. |
 | `submission-alerts.ts:55-61`: the same on `fiscal.submission_stopped` | none (`submission-alerts.test.ts:133-137` uses `toMatchObject`). |
 
-- [ ] Once approved: make exactly those changes; run
+- [ ] Once approved: make exactly those changes and the rewording; run
+  `pnpm --filter @waitron/dashboard exec vitest run src/i18n`,
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/alerts.test.ts src/submission-alerts.test.ts src/submission-alerts.cases.test.ts src/drain.probe.test.ts`,
   `pnpm --filter @waitron/server exec vitest run src/alerts.test.ts src/alerts.brake-probe.test.ts`,
   `pnpm exec vitest run scripts/alert-codes.test.ts`, and the two unedited fiscal guards.
@@ -545,14 +571,29 @@ should sit between the conflict page and the adjustment report. Test lines count
 | 1. Progress, cases, conflicts, held records | 230 | 220 | — |
 | 2. Possibly missing history | 110 | 140 | — |
 | 3. Read route | 50 | 70 | — |
-| 4a. Screen, client, strings (EN+ES), placement entry | 715 | 280 | — |
-| 4b. Accessibility, placement, look | 0 | 130 | screenshots, not committed |
+| 4a. Screen, client, strings (EN+ES), placement entry | 715 | 450 | — |
+| 4b. Accessibility, placement, look | 0 | 150 | screenshots, not committed |
 | 5. Guide page and catalogue | 1 | 0 | ~90 guide prose, ~30 docs |
 | 6. Alert links (if approved) | 25 | ~8 changed | — |
-| **Total** | **~1,130** | **~840 new, ~8 changed** | **~120** |
+| **Total** | **~1,130** | **~1,030 new, ~8 changed** | **~120** |
 
 Task 4a's 715 is about 550 for the screen, 130 for the strings in two languages and 35 for the
-client and registration. No generated files and no migration. Each task should fit well under 100
+client and registration. Its tests were first put at 280 and 4b's at 130; the recovery page
+(`conflict-recovery.ts`, 467 lines) has 805 + 179 + 82 = 1,066 test lines, part of them for its
+form and unsaved draft, which this screen does not have, so 4a and 4b are re-estimated at 450 and
+150 (counted with `wc -l` on main `8edd51e544`).
+
+## Two slices, two pull requests
+
+Watcher, 2026-11-09 23:23: about 2,000 lines is past what one build fits, so the item lands in two
+pull requests, each working on its own.
+
+- **Slice 1:** Tasks 1, 3, 4a without the "Possibly missing history" part, 4b, 5, and 6 if the
+  owner approves its lines. About 960 production and 850 test lines. A manager can open Fiscal
+  filing, read progress, cases, conflicts and held records, and export every open case.
+- **Slice 2:** Task 2, the screen's "Possibly missing history" part with its strings and test case,
+  and its guide paragraph. About 210 production and 180 test lines. W41s-11's exercise reads this
+  list, so W41s-11 waits for slice 2. No generated files and no migration. Each task should fit well under 100
 tool calls; 4a is the largest and can split again into "parts 1–3" and "cases, history and export".
 
 ## Questions for the owner
@@ -568,10 +609,19 @@ tool calls; 4a is the largest and can split again into "parts 1–3" and "cases,
 3. **Build now, or after A1308's fiscal slices?** Building now means fi1, fi5, fi6 and fi9 each also
    rewrite this item's queries (one file plus one reader) and need it in their "Needs" lists.
    Building after them means writing against the new tables once, but the screen waits until fi9 has
-   landed, at the end of A1308's fiscal sequence. **No default is assumed**; the lane does not start
-   Task 1 until this is answered.
+   landed, at the end of A1308's fiscal sequence. **Recommended default: build now** (watcher,
+   2026-11-09 23:23): A1308's design lets work on these tables "land before the slice that touches
+   their tables, or [be] re-planned onto the new shape", the fi slices run last in their lane, and
+   the lifted A1308 hold says reading existing tables is fine. Task 5 then adds this item to the four
+   slices' "Needs" lists. The lane still waits for the owner's answer before Task 1.
 
 ## How this plan was checked
+
+Reviews: one fresh Claude read of draft `b1112a504b`, saved at
+`~/waitron-campaign-l/receipts/w41s-9-plan-20261109/claude-plan-review.md`, and the watcher's
+reviewer-account read of `7a06dadba6` (verdict CHANGE), at
+`~/waitron-campaign-l/receipts/w41s-9-watcher-plan-verdict-20261109-2323.txt`. Every point of both
+is applied in this revision.
 
 Read: the files and lines cited above at `1252e2b6b3`; the W41s plan, design and backlog sections;
 the lane-L queue's W41s rules and RUNNER H2; A1308's fi1, fi5, fi6 and fi9 plans; the self-service
