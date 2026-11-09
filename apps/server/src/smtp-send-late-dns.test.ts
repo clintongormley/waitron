@@ -36,7 +36,11 @@ it("does not open a connection if DNS completes after the send deadline", async 
       { timeoutMs: 100 },
     );
     await vi.waitFor(() => expect(release.length).toBeGreaterThan(0));
-    expect(await sending).toEqual({ status: "unknown", reason: "email.test_timeout" });
+    expect(await sending).toEqual({
+      status: "rejected",
+      reason: "email.test_timeout",
+      serverRefused: false,
+    });
     const dialsBeforeDeadline = connect.mock.calls.length;
     for (const answer of release) answer();
     await new Promise((resolve) => setImmediate(resolve));

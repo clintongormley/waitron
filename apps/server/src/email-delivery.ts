@@ -30,7 +30,31 @@ export async function resolveEmailDeliveryIn(
   practiceMode: boolean,
   captureOnly = false,
 ): Promise<EmailDelivery> {
-  if (captureOnly) return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
+  return resolveMailDeliveryIn(
+    tx,
+    ring,
+    {
+      devMode: practiceMode && !captureOnly,
+      onboardingIntent: captureOnly ? "demo" : undefined,
+    },
+    "notice",
+  );
+}
+
+export type MailDeliveryRule = "notice" | "invoice";
+
+export async function resolveMailDeliveryIn(
+  tx: Transaction,
+  ring: KeyRing,
+  config: { onboardingIntent: OnboardingIntent | undefined; devMode: boolean },
+  rule: MailDeliveryRule,
+): Promise<EmailDelivery> {
+  if (
+    (config.onboardingIntent === "demo" && !config.devMode) ||
+    (rule === "invoice" && (config.devMode || config.onboardingIntent === "demo"))
+  ) {
+    return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
+  }
   const configured = await readSavedSmtp(tx, ring);
   if (configured !== null) {
     const name = (await readVenue(tx)).name;
@@ -51,7 +75,7 @@ export async function resolveEmailDeliveryIn(
       throw error;
     }
   }
-  if (practiceMode) return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
+  if (config.devMode) return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
   return { mode: "unconfigured" };
 }
 
@@ -73,8 +97,5 @@ export async function resolveInvoiceEmailDelivery(
   ring: KeyRing,
   config: { onboardingIntent: OnboardingIntent | undefined; devMode: boolean },
 ): Promise<EmailDelivery> {
-  if (config.devMode || config.onboardingIntent === "demo") {
-    return { mode: "local_capture", smtp: LOCAL_CAPTURE_SMTP };
-  }
-  return resolveEmailDelivery(db, ring, false);
+  return withTransaction(db, (tx) => resolveMailDeliveryIn(tx, ring, config, "invoice"));
 }

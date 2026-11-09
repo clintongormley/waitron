@@ -1,5 +1,5 @@
 import { ATTENDANCE_EMAIL_WORDS } from "./i18n/attendance-email.js";
-import { sendSmtpMessage, type SmtpConnection } from "./smtp-send.js";
+import { sendSmtpMessage, statusAsBefore, type SmtpConnection } from "./smtp-send.js";
 import type { SmtpTestCode } from "./smtp-failure.js";
 
 export type AttendanceMailOutcome = "sent" | "rejected" | "unknown";
@@ -35,6 +35,6 @@ export function createAttendanceEmailSender(
         // Diagnostics must not change whether a worker may retry this message.
       }
     }
-    return outcome.status;
+    return statusAsBefore(outcome);
   };
 }
