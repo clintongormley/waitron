@@ -1430,6 +1430,11 @@ async function payIntegrated(
     await releasePaymentAttempt(deps, req.id, attemptAt);
     throw collectFailure(deps, req.id, error);
   }
+  if (result.state === "partially_refunded")
+    throw new AppError("sale.charged_not_recorded", {
+      workingOrderId: req.id,
+      reason: "partial_refund",
+    });
   if (result.state !== "captured" && result.state !== "accepted_offline") {
     if (result.state === "failed" || result.state === "network_unavailable") {
       await withTransaction(deps.db, (tx) =>
@@ -1608,7 +1613,12 @@ export async function ordersWithUnfiledPayment(
         or(
           eq(payments.state, "attempting"),
           and(
-            inArray(payments.state, ["captured", "accepted_offline", "settled"]),
+            inArray(payments.state, [
+              "captured",
+              "accepted_offline",
+              "settled",
+              "partially_refunded",
+            ]),
             isNull(payments.saleId),
             or(isNull(billPayments.id), ne(billPayments.state, "received")),
           ),

@@ -1,4 +1,7 @@
+import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
+import { eq } from "drizzle-orm";
+import { sumupClient } from "./sumup-client.js";
 import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
@@ -6,6 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
 import {
   PAYMENTS_MIGRATIONS,
+  payments,
   getPaymentByRef,
   failAttempting,
   insertAttempting,
@@ -75,6 +79,148 @@ async function setup(incidentRecorded = true) {
 }
 
 describe("SumUpCloudProvider.resolvePending", () => {
+  it.each([
+    { refund: 7, want: "refunded", net: 0 },
+    { refund: 2, want: "partially_refunded", net: 500 },
+  ])(
+    "recovers gross and identified refunds atomically ($want), including replay",
+    async ({ refund, want, net }) => {
+      const { t, attempting, state, raised } = await setup();
+      await attempting("refunded-charge");
+      const requests: string[] = [];
+      const event = { id: 123, status: "REFUNDED", amount: refund, timestamp: T0.toISOString() };
+      const client = sumupClient({
+        apiKey: "k",
+        merchantCode: "M",
+        fetch: async (_url, init) => {
+          requests.push(init?.method ?? "GET");
+          return Response.json({
+            id: "txn_refunded",
+            status: "SUCCESSFUL",
+            amount: 7,
+            transaction_events: [{ ...event, event_type: "REFUND" }],
+            events: [{ ...event, type: "REFUND" }],
+          });
+        },
+      });
+      const provider = new SumUpCloudProvider({
+        client,
+        db: suite.db,
+        captureAlerts,
+        incidents: async (_tx, input) => {
+          raised.push(input);
+          return true;
+        },
+      });
+      const owners = { nodeId: t.nodeId, takenOverFrom: [], unowned: false };
+      await Promise.all([provider.resolvePending(T0, owners), provider.resolvePending(T0, owners)]);
+      await provider.resolvePending(T0, owners);
+      const saved = await state("refunded-charge");
+      expect(saved).toMatchObject({
+        state: want,
+        amount: decimal("7.00"),
+        externalRef: "txn_refunded",
+      });
+      const [gross] = await suite.db
+        .select({ amount: payments.amount, requested: payments.requestedAmount })
+        .from(payments)
+        .where(eq(payments.id, saved.id));
+      const refunds = await suite.db
+        .select({
+          amount: paymentRefunds.amount,
+          state: paymentRefunds.state,
+          ref: paymentRefunds.providerRefundRef,
+        })
+        .from(paymentRefunds)
+        .where(eq(paymentRefunds.paymentId, saved.id));
+      expect(gross).toEqual({ amount: 700, requested: 700 });
+      expect(refunds).toEqual([{ amount: refund * 100, state: "succeeded", ref: "123" }]);
+      expect(gross!.amount - refunds[0]!.amount).toBe(net);
+      expect(raised.map((i) => i.error.params)).toEqual([
+        {
+          paymentRef: "refunded-charge",
+          status: want === "refunded" ? "refund_completed" : "partial_refund",
+        },
+      ]);
+      expect(requests.every((method) => method === "GET")).toBe(true);
+    },
+  );
+
+  it.each([
+    { events: [{ id: 1, status: "PENDING", amount: 2 }], want: "attempting" },
+    { events: [{ id: 1, status: "UNKNOWN", amount: 2 }], want: "attempting" },
+    { events: [{ id: 1, status: "REFUNDED" }], want: "attempting" },
+    { events: [{ id: 1, status: "REFUNDED", amount: 8 }], want: "attempting" },
+    { events: [{ id: 1, status: "REFUNDED", amount: 0 }], want: "attempting" },
+    {
+      events: [
+        { id: 1, status: "REFUNDED", amount: 2 },
+        { id: 1, status: "REFUNDED", amount: 3 },
+      ],
+      want: "attempting",
+    },
+    { events: [{ id: 1, status: "FAILED", amount: 2 }], want: "captured" },
+  ])("keeps uncertain refund evidence for recheck: $events", async ({ events, want }) => {
+    const { provider, fake, attempting, state } = await setup();
+    await attempting("uncertain-refund");
+    const wire = sumupClient({
+      apiKey: "k",
+      merchantCode: "M",
+      fetch: async () =>
+        Response.json({
+          id: "txn",
+          status: "SUCCESSFUL",
+          amount: 7,
+          events: events.map((e) => ({ ...e, type: "REFUND", timestamp: T0.toISOString() })),
+        }),
+    });
+    vi.spyOn(fake, "findTransaction").mockImplementation((q) => wire.findTransaction(q));
+    const result = await provider.resolvePending(T0, await ownsEveryPayment(suite.db));
+    expect((await state("uncertain-refund")).state).toBe(want);
+    expect(result.nextDueAt).toEqual(
+      want === "attempting" ? new Date(T0.getTime() + RESOLVE_RETRY_MS) : null,
+    );
+    if (want === "attempting") {
+      vi.spyOn(fake, "findTransaction").mockResolvedValue({
+        id: "txn",
+        status: "SUCCESSFUL",
+        amount: decimal("7.00"),
+        refundEvents: [
+          { id: "1", status: "FAILED", amount: decimal("2.00"), timestamp: T0.toISOString() },
+        ],
+      });
+      await provider.resolvePending(T0, await ownsEveryPayment(suite.db));
+      expect((await state("uncertain-refund")).state).toBe("captured");
+    }
+  });
+
+  it("rolls the gross capture and refund back together if the refund incident cannot be saved", async () => {
+    const { fake, attempting, state } = await setup();
+    await attempting("refund-rollback");
+    vi.spyOn(fake, "findTransaction").mockResolvedValue({
+      id: "txn",
+      status: "SUCCESSFUL",
+      amount: decimal("7.00"),
+      refundEvents: [
+        { id: "refund", status: "REFUNDED", amount: decimal("2.00"), timestamp: T0.toISOString() },
+      ],
+    });
+    const failure = new Error("incident save failed");
+    const provider = new SumUpCloudProvider({
+      client: fake,
+      db: suite.db,
+      captureAlerts,
+      incidents: async () => {
+        throw failure;
+      },
+    });
+    await expect(provider.resolvePending(T0, await ownsEveryPayment(suite.db))).rejects.toBe(
+      failure,
+    );
+    expect((await state("refund-rollback")).state).toBe("attempting");
+    expect(await suite.db.select().from(paymentRefunds)).toEqual([]);
+  });
+
   it.each([true, false])(
     "alerts a capture that lost to a contradictory failure and continues, incident recorded %s",
     async (recorded) => {
@@ -190,13 +336,21 @@ describe("SumUpCloudProvider.resolvePending", () => {
         status === "SUCCESSFUL" ? 2 : 0,
       );
       expect(passes.reduce((sum, pass) => sum + pass.declined, 0)).toBe(
-        status === "SUCCESSFUL" ? 0 : 2,
+        status === "SUCCESSFUL" || status === "REFUNDED" ? 0 : 2,
       );
-      expect(passes.map((pass) => pass.nextDueAt)).toEqual([null, null]);
+      expect(passes.map((pass) => pass.nextDueAt)).toEqual(
+        status === "REFUNDED"
+          ? [new Date(now.getTime() + RESOLVE_RETRY_MS), new Date(now.getTime() + RESOLVE_RETRY_MS)]
+          : [null, null],
+      );
       expect([(await state("race-a")).state, (await state("race-b")).state]).toEqual(
-        status === "SUCCESSFUL" ? ["captured", "captured"] : ["failed", "failed"],
+        status === "SUCCESSFUL"
+          ? ["captured", "captured"]
+          : status === "REFUNDED"
+            ? ["attempting", "attempting"]
+            : ["failed", "failed"],
       );
-      expect(raised).toHaveLength(status === "REFUNDED" || status === "missing" ? 2 : 0);
+      expect(raised).toHaveLength(status === "REFUNDED" ? 4 : status === "missing" ? 2 : 0);
     },
   );
 
@@ -357,14 +511,14 @@ describe("SumUpCloudProvider.resolvePending", () => {
     expect(raised[0]!.error.params).toEqual({ paymentRef: "ghost-dup", status: "not_found" });
   });
 
-  it("REFUNDED resolves failed WITH a payment.pending_outcome_unactionable incident naming the payment check", async () => {
+  it("REFUNDED without event evidence stays attempting with a refund incident", async () => {
     const { provider, attempting, state, raised } = await setup();
     await attempting("r", { status: "REFUNDED" });
     expect(await provider.resolvePending(T0, await ownsEveryPayment(suite.db))).toMatchObject({
-      declined: 1,
+      declined: 0,
       incidentsRaised: 1,
     });
-    expect((await state("r")).state).toBe("failed");
+    expect((await state("r")).state).toBe("attempting");
     expect(raised).toHaveLength(1);
     // toEqual (not toMatchObject) so the incident input's FULL key set is pinned — in particular that
     // no `saleId` is passed (an attempting row has no sale; §4: toMatchObject checks only listed keys).
@@ -375,7 +529,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
       detectedAt: T0,
     });
     expect(raised[0]!.error.code).toBe("payment.pending_outcome_unactionable");
-    expect(raised[0]!.error.params).toEqual({ paymentRef: "r", status: "REFUNDED" });
+    expect(raised[0]!.error.params).toEqual({ paymentRef: "r", status: "refund_pending" });
   });
 
   it("hands the sink the unactionable incidents of two devices' orders under the payment check's origin", async () => {

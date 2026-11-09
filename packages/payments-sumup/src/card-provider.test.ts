@@ -49,12 +49,7 @@ const memberships = (items: { resource_id: string; resource: { name: string } }[
   json(200, { items });
 
 /** Seeds the tenant row and a sealed `payments.sumup` credential. */
-async function seedSumUp(value: {
-  apiKey: string;
-  merchantCode: string;
-  affiliateAppId: string;
-  affiliateKey: string;
-}): Promise<void> {
+async function seedSumUp(value: { apiKey: string; merchantCode: string }): Promise<void> {
   await seedTenant(suite.db);
   await withTransaction(suite.db, (tx) =>
     putCredential(tx, ring, { purpose: "payments.sumup", value }),
@@ -69,18 +64,14 @@ describe("SUMUP_CARD_PROVIDER seat metadata", () => {
       kind: "pairing-poll",
       codeLabelKey: "payments.sumup.pairing_code",
     });
-    // The FORM asks for the API key (+ optional affiliate); merchantCode is DERIVED by connect, so
+    // The form asks for the API key; merchantCode is derived by connect, so
     // it is never a form field.
     const names = SUMUP_CARD_PROVIDER.credentialFields.map((f) => f.name);
     expect(names).toContain("apiKey");
     expect(names).not.toContain("merchantCode");
     const apiKey = SUMUP_CARD_PROVIDER.credentialFields.find((f) => f.name === "apiKey");
     expect(apiKey?.secret).toBe(true);
-    const affiliateAppId = SUMUP_CARD_PROVIDER.credentialFields.find(
-      (f) => f.name === "affiliateAppId",
-    );
-    expect(affiliateAppId?.secret).toBe(true);
-    expect(affiliateAppId?.optional).toBe(true);
+    expect(names).toEqual(["apiKey"]);
   });
 });
 
@@ -97,13 +88,11 @@ describe("SUMUP_CARD_PROVIDER.connect", () => {
       sealedPayload: {
         apiKey: "sup_sk_x",
         merchantCode: "MY2NPHDW",
-        affiliateAppId: "-",
-        affiliateKey: "-",
       },
     });
   });
 
-  it("carries the operator's affiliate values into the sealed payload", async () => {
+  it("ignores affiliate values supplied by the operator", async () => {
     const fetch = routedFetch({
       "GET /v0.1/memberships": memberships([
         { resource_id: "MY2NPHDW", resource: { name: "Test restaurant" } },
@@ -116,8 +105,6 @@ describe("SUMUP_CARD_PROVIDER.connect", () => {
     expect(result.sealedPayload).toEqual({
       apiKey: "sup_sk_x",
       merchantCode: "MY2NPHDW",
-      affiliateAppId: "com.waitron.pos",
-      affiliateKey: "aff-key",
     });
   });
 
@@ -200,8 +187,6 @@ describe("SUMUP_CARD_PROVIDER.build", () => {
     await seedSumUp({
       apiKey: "sup_sk_x",
       merchantCode: "MABC123",
-      affiliateAppId: "-",
-      affiliateKey: "-",
     });
     const incidents: IncidentSink = () => Promise.resolve(true);
     const provider = SUMUP_CARD_PROVIDER.build({
@@ -220,8 +205,6 @@ describe("SUMUP_CARD_PROVIDER.readers", () => {
     await seedSumUp({
       apiKey: "sup_sk_x",
       merchantCode: "MABC123",
-      affiliateAppId: "-",
-      affiliateKey: "-",
     });
     return { db: suite.db, ring, fetch: fetchImpl };
   }
@@ -472,8 +455,6 @@ describe("SUMUP_CARD_PROVIDER without an injected fetch", () => {
     await seedSumUp({
       apiKey: "sup_sk_x",
       merchantCode: "MABC123",
-      affiliateAppId: "-",
-      affiliateKey: "-",
     });
     const seen: Seen[] = [];
     vi.stubGlobal(
@@ -494,7 +475,7 @@ describe("SUMUP_CARD_PROVIDER without an injected fetch", () => {
 });
 
 describe("optionsFromSealed", () => {
-  it("builds the affiliate block when both affiliate fields carry real values", () => {
+  it("reads only merchant credentials even when old affiliate fields are present", () => {
     expect(
       optionsFromSealed({
         apiKey: "k",
@@ -505,12 +486,11 @@ describe("optionsFromSealed", () => {
     ).toEqual({
       apiKey: "k",
       merchantCode: "M",
-      affiliate: { appId: "com.waitron.pos", key: "aff-key" },
     });
   });
 
   it("rejects a sealed payload missing a field it needs", () => {
-    // putCredential seals all four fields, so this is a stale/forged payload driven straight
+    // A forged payload driven straight
     // through the pure validator — the server's stripeSecretKeyFrom convention.
     expect(() =>
       optionsFromSealed({ apiKey: "k", affiliateAppId: "-", affiliateKey: "-" }),
@@ -523,8 +503,6 @@ describe("deferredClient", () => {
     await seedSumUp({
       apiKey: "sup_sk_x",
       merchantCode: "MABC123",
-      affiliateAppId: "-",
-      affiliateKey: "-",
     });
     const fetch = routedFetch({
       "GET /v0.1/memberships": memberships([
@@ -549,7 +527,7 @@ describe("deferredClient", () => {
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         purpose: "payments.sumup",
-        value: { apiKey: "k", merchantCode: "M", affiliateAppId: "-", affiliateKey: "-" },
+        value: { apiKey: "k", merchantCode: "M" },
       }),
     );
     expect(await client.memberships()).toEqual([{ merchantCode: "M", name: "x" }]);

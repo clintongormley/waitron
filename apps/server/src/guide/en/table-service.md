@@ -254,6 +254,11 @@ them when you choose custom names; **Add joined table** asks for one.
 
 ## Switch bills {#bill-switcher}
 
+If a payment was partly returned before its invoice was recorded, do not charge again.
+The order stays held. Check the payment and its refunds in SumUp's dashboard before deciding
+what the guest still owes.
+Checking SumUp does not release the hold. Waitron cannot release this hold yet.
+
 Guests often pay separately: two couples at one table, or one guest who pays for their own drinks.
 Each of them gets a bill of their own at the table. The bill switcher, at the top of the table
 screen, says which bill is on screen, such as **Bill 1 · €38.50**, or **Bill 2 · 3 bills · Clint

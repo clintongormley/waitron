@@ -343,9 +343,13 @@ export const ALERT_MESSAGES: Readonly<
       es: "Pedido {orderNumber}, {provider:card_provider} {externalRef} (Waitron {paymentRef}): Waitron solicitó {requestedAmount:money}; el proveedor de pagos indicó {reportedAmount:money}.",
     },
   },
+  "payment.affiliate_rejected": {
+    en: "SumUp rejected Waitron's partner key for payment {paymentRef}. Waitron retried without it. Check the payment in SumUp's dashboard before charging again.",
+    es: "SumUp rechazó la clave de socio de Waitron para el pago {paymentRef}. Waitron volvió a intentarlo sin ella. Comprueba el pago en el panel de SumUp antes de volver a cobrar.",
+  },
   "payment.pending_outcome_unactionable": {
-    en: "Waitron could not tell what happened to card payment {paymentRef}: the card provider reported {status}, and money may have moved without reaching a sale. Waitron has marked the payment as failed. Check it in the provider's own dashboard.",
-    es: "Waitron no ha podido saber qué pasó con el pago con tarjeta {paymentRef}: el proveedor de pagos indicó {status}, y puede que se haya movido dinero sin llegar a una venta. Waitron ha marcado el pago como fallido. Compruébalo en el panel del proveedor.",
+    en: `Check card payment {paymentRef} and any refunds in the provider's own dashboard before charging again.${MORE_EN}`,
+    es: `Comprueba el pago con tarjeta {paymentRef} y sus devoluciones en el panel del proveedor antes de volver a cobrar.${MORE_ES}`,
   },
   "payment.bill_settle_failed": {
     en: `A card payment of {amount:money} towards a bill was charged, but Waitron could not record it or issue the bill's invoice. The bill cannot be changed or invoiced until it is recorded. Contact support.${MORE_EN}`,

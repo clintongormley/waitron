@@ -180,40 +180,15 @@ describe("sumup-connect-form", () => {
     expect(fieldError(el, "api-key")).toBe("");
   });
 
-  it("carries the optional affiliate fields through and reveals their help tooltip", async () => {
+  it("asks only for the merchant's API key", async () => {
     const request = vi.fn(async () => ({ merchantName: "Deli" })) as unknown as DashboardRequest;
     const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
-
-    expect(q(el, "[data-test=affiliate-help]")).not.toBeNull();
+    expect(
+      [...el.shadowRoot!.querySelectorAll("wt-input")].map((input) => input.getAttribute("name")),
+    ).toEqual(["apiKey"]);
     await setInput(el, "api-key", "k");
-    await setInput(el, "affiliate-app-id", "app-1");
-    await setInput(el, "affiliate-key", "aff-key");
     await connect(el);
-
-    expect(request).toHaveBeenCalledWith(CONNECT_PATH, "POST", {
-      apiKey: "k",
-      affiliateAppId: "app-1",
-      affiliateKey: "aff-key",
-    });
-  });
-
-  it("the affiliate help is hidden until help is on, then hangs over the heading's top trailing corner", async () => {
-    const request = vi.fn() as unknown as DashboardRequest;
-    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
-    const help = q(el, "[data-test=affiliate-help]") as HTMLElement & {
-      updateComplete: Promise<unknown>;
-    };
-    const heading = help.previousElementSibling as HTMLElement;
-
-    expect(help.checkVisibility()).toBe(false);
-
-    setHelpMode(true);
-    await help.updateComplete;
-    expect(help.checkVisibility()).toBe(true);
-    const button = help.shadowRoot!.querySelector("button")!.getBoundingClientRect();
-    const box = heading.getBoundingClientRect();
-    expect(Math.abs(button.left + button.width / 2 - box.right)).toBeLessThanOrEqual(1);
-    expect(Math.abs(button.top + button.height / 2 - box.top)).toBeLessThanOrEqual(1);
+    expect(request).toHaveBeenCalledWith(CONNECT_PATH, "POST", { apiKey: "k" });
   });
 
   it("refuses to re-submit an ambiguous key until a merchant is picked", async () => {
@@ -294,7 +269,6 @@ describe("sumup-connect-form", () => {
     const request = vi.fn() as unknown as DashboardRequest;
     const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
 
-    await setInput(el, "affiliate-app-id", "app-1");
     await connect(el);
 
     expect(request).not.toHaveBeenCalled();
@@ -302,9 +276,6 @@ describe("sumup-connect-form", () => {
     expect(await bottomOf(el)).toBe(t("payments.sumup.fix_fields"));
     expect(connectDisabled(el)).toBe(true);
     await vi.waitFor(() => expect(focused(el, "api-key")).toBe(true));
-    expect((q(el, "[data-test=affiliate-app-id]") as unknown as { value: string }).value).toBe(
-      "app-1",
-    );
   });
 
   it("re-checks every change after a failed press, and Connect works again once the key is filled", async () => {

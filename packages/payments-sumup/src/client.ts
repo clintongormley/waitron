@@ -1,4 +1,4 @@
-import type { ReaderStatus, RefundRefusalReason } from "@waitron/payments";
+import type { ReaderStatus, RefundRefusalReason, RefundOutcome } from "@waitron/payments";
 import { decimal, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 
@@ -21,6 +21,12 @@ export interface SumUpRefundEvent {
   timestamp: string;
 }
 
+export function refundOutcomeOf(status: string): RefundOutcome {
+  if (status === "REFUNDED" || status === "SUCCESSFUL") return "completed";
+  if (status === "FAILED") return "failed";
+  return "pending";
+}
+
 export interface SumUpTransaction {
   /** SumUp's transaction id — what the refund endpoint addresses. */
   id: string;
@@ -32,6 +38,7 @@ export interface SumUpTransaction {
   authCode?: string | null;
   /** Present when SumUp's answer carried the transaction's events. */
   refundEvents?: SumUpRefundEvent[];
+  refundEvidenceInvalid?: boolean;
 }
 
 /** A create call has three outcomes, not two: accepted (the reader will wake), REFUSED by SumUp
@@ -40,7 +47,7 @@ export interface SumUpTransaction {
  * the three differently (T2 `failed` only for the second). */
 export type CreateCheckoutOutcome =
   | { accepted: true; checkoutId: string; clientTransactionId: string }
-  | { accepted: false; reason: string };
+  | { accepted: false; reason: string; affiliateRejected?: boolean };
 
 export type TransactionQuery =
   { clientTransactionId: string } | { foreignTransactionId: string } | { id: string };
@@ -59,14 +66,15 @@ export interface SumUpReader {
  * has started a checkout, SumUp may hold no transaction yet, and the adapter reads null as
  * "still pending", never as an error. */
 export interface SumUpClient {
+  prepareCollect?(): Promise<void>;
   createCheckout(params: {
     readerId: string;
     amount: Decimal;
     currency: string;
     description: string;
-    /** OUR `payment_ref`, sent as `affiliate.foreign_transaction_id` when the merchant holds an
-     * affiliate key — the client-supplied lookup key. */
+    /** Our reference travels with the affiliate metadata except on the refusal fallback. */
     foreignTransactionId: string;
+    omitAffiliate?: boolean;
   }): Promise<CreateCheckoutOutcome>;
   findTransaction(query: TransactionQuery): Promise<SumUpTransaction | null>;
   refund(params: {

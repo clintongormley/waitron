@@ -17,8 +17,6 @@ import { SumUpCloudProvider } from "./provider.js";
 const API_KEY = process.env.SUMUP_API_KEY;
 const MERCHANT_CODE = process.env.SUMUP_MERCHANT_CODE;
 const READER_ID = process.env.SUMUP_READER_ID;
-const AFFILIATE_APP_ID = process.env.SUMUP_AFFILIATE_APP_ID;
-const AFFILIATE_KEY = process.env.SUMUP_AFFILIATE_KEY;
 
 // Self-skipping: the three required env vars come from the runbook's plug-in checklist (§7), not
 // from CI secrets.
@@ -35,9 +33,6 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
     const rawClient = sumupClient({
       apiKey: API_KEY!,
       merchantCode: MERCHANT_CODE!,
-      ...(AFFILIATE_APP_ID && AFFILIATE_KEY
-        ? { affiliate: { appId: AFFILIATE_APP_ID, key: AFFILIATE_KEY } }
-        : {}),
     });
 
     // The adapter never exposes SumUp's `client_transaction_id` past `collect()` (only OUR

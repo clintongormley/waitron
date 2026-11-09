@@ -12,10 +12,7 @@ export const PURPOSES = {
    * is the RFC 5322 sender shown to recipients. */
   "email.smtp": ["url", "from"],
   "payments.stripe": ["secretKey", "webhookSecret", "successUrl", "cancelUrl"],
-  /** SumUp Cloud API. `affiliateAppId`/`affiliateKey` come from the developer portal's Affiliate
-   * Keys page and carry our `payment_ref` to SumUp as the client-supplied lookup key; a merchant
-   * without one seals the literal `-` in both, and the host then omits the affiliate block. */
-  "payments.sumup": ["apiKey", "merchantCode", "affiliateAppId", "affiliateKey"],
+  "payments.sumup": ["apiKey", "merchantCode"],
   /**
    * `certKind` is `"sello"` or `"representante"` — validated by the READER, not here: this package
    * declares field names and never their vocabularies. The AEAT endpoint depends on it
@@ -34,8 +31,7 @@ export const PURPOSES = {
   "membership.node_key": ["privateKey"],
   /**
    * The owner's S3-compatible bucket the venue's database streams to. `venueId` names the venue's
-   * folder in it. An absent `endpoint` (Amazon itself) or `prefix` is sealed as `-`, the same
-   * convention `payments.sumup`'s affiliate fields use, because every field must be non-empty.
+   * folder in it. An absent `endpoint` (Amazon itself) or `prefix` is sealed as `-` because every field must be non-empty.
    */
   "backup.stream": [
     "venueId",

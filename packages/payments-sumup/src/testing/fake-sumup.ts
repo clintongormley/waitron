@@ -105,8 +105,6 @@ export class FakeSumUp implements SumUpClient {
   refundRefusesNext(): void {
     this.nextRefundRefuses = true;
   }
-  /** The next checkout created is given `status` the first time it is looked up — the sweep tests'
-   * "resolved mid-collect" control (e.g. a `REFUNDED` the adapter must not treat as a T2 basis). */
   resolveOnFirstFind(status: SumUpTransaction["status"]): void {
     this.nextResolveOnFirstFind = status;
   }

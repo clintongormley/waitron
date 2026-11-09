@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AppError, compareDecimal, decimal, jobOrigin } from "@waitron/shared";
+import { AppError, compareDecimal, decimal, jobOrigin, sumDecimals } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -16,7 +16,6 @@ import type {
   RefundAnswer,
   RefundLookup,
   RefundLookupQuery,
-  RefundOutcome,
   RefundRefusalReason,
   RefundSend,
 } from "@waitron/payments";
@@ -24,6 +23,7 @@ import {
   captureAttempting,
   getPaymentByRef,
   recordCaptureMismatch,
+  recordRefund,
   failAttempting,
   insertAttempting,
   listAttempting,
@@ -31,8 +31,8 @@ import {
   saveCharge,
   stampAttemptingRef,
 } from "@waitron/payments";
-import type { SumUpClient, SumUpTransaction } from "./client.js";
-import { DOCUMENTED_REFUND_REFUSALS, SUMUP_PROVIDER } from "./client.js";
+import type { SumUpClient, SumUpTransaction, SumUpRefundEvent } from "./client.js";
+import { DOCUMENTED_REFUND_REFUSALS, SUMUP_PROVIDER, refundOutcomeOf } from "./client.js";
 import { reverseViaSumUp } from "./reverse.js";
 import "./errors.js";
 
@@ -46,9 +46,6 @@ const DEFAULT_POLL = {
 };
 
 export const RESOLVE_RETRY_MS = 60_000;
-/** How long a row SumUp holds NO transaction for is still "pending". A create whose response was
- * lost may have been accepted; SumUp's own 60 s reader window plus a generous tap allowance is far
- * inside 15 min. After it, SumUp having nothing means no money moved: `failed`, no incident. */
 export const NOT_FOUND_GRACE_MS = 15 * 60_000;
 
 /**
@@ -58,16 +55,6 @@ export const NOT_FOUND_GRACE_MS = 15 * 60_000;
  * the send (`refsBeforeSend`) does.
  */
 const CLOCK_ALLOWANCE_MS = 2 * 60_000;
-
-/** SumUp's event statuses: "`REFUNDED`: A refund event has been accepted and recorded in the refund
- * flow", "`SUCCESSFUL`: The event completed successfully", "`FAILED`: The event could not be
- * completed" and "`PENDING`: … whose final outcome is not known yet"
- * (https://developer.sumup.com/api/transactions). A status it adds later is `pending`. */
-function refundOutcomeOf(status: string): RefundOutcome {
-  if (status === "REFUNDED" || status === "SUCCESSFUL") return "completed";
-  if (status === "FAILED") return "failed";
-  return "pending";
-}
 
 export interface SumUpCloudProviderOptions {
   client: SumUpClient;
@@ -112,10 +99,6 @@ export function cardFromTransaction(t: SumUpTransaction): CardDetails | undefine
   };
 }
 
-/** One SumUp status mapped onto a T2 decision, as DATA. `pending` = keep polling; `deferred` = a
- * status this adapter is not entitled to act on (`REFUNDED`, unknown) — the loop stops, the row
- * stays `attempting`, and `resolvePending` decides. `card` rides the `captured`
- * variant so both capture paths persist it without re-fetching the transaction. */
 type PollOutcome =
   | {
       kind: "captured";
@@ -123,9 +106,10 @@ type PollOutcome =
       settledAt: Date;
       amount: Decimal;
       card?: CardDetails;
+      refunds: SumUpRefundEvent[];
     }
   | { kind: "failed" }
-  | { kind: "pending" }
+  | { kind: "pending"; refundUncertain?: boolean }
   | { kind: "deferred" };
 
 /** The attempt is committed before the checkout begins. While attempting, `externalRef` is the
@@ -157,6 +141,7 @@ export class SumUpCloudProvider implements PaymentProvider {
       throw new Error(
         "sumup collect requires a readerRef (the chosen reader's provider reference)",
       );
+    await this.opts.client.prepareCollect?.();
     const readerId = params.readerRef;
     const paymentRef = randomUUID();
     const key = { provider: SUMUP_PROVIDER, paymentRef };
@@ -179,13 +164,25 @@ export class SumUpCloudProvider implements PaymentProvider {
     // Network: create. Three outcomes (see `CreateCheckoutOutcome`).
     let created;
     try {
-      created = await this.opts.client.createCheckout({
+      const checkout = {
         readerId,
         amount: params.amount,
         currency: CURRENCY,
         description: `waitron ${params.workingOrderId}`,
         foreignTransactionId: paymentRef,
-      });
+      };
+      created = await this.opts.client.createCheckout(checkout);
+      if (!created.accepted && created.affiliateRejected === true) {
+        await this.inTransaction((tx) =>
+          this.opts.incidents(tx, {
+            origin: params.origin,
+            error: new AppError("payment.affiliate_rejected", { paymentRef }),
+            severity: "error",
+            detectedAt: this.now(),
+          }),
+        );
+        created = await this.opts.client.createCheckout({ ...checkout, omitAffiliate: true });
+      }
     } catch {
       return this.pendingResult(paymentRef);
     }
@@ -213,6 +210,10 @@ export class SumUpCloudProvider implements PaymentProvider {
 
     // T2 — only a captured or failed outcome is a basis for it.
     if (outcome.kind === "pending" || outcome.kind === "deferred") {
+      if (outcome.kind === "pending" && outcome.refundUncertain)
+        await this.inTransaction((tx) =>
+          this.refundIncident(tx, paymentRef, "refund_pending", this.now()),
+        );
       return this.pendingResult(paymentRef);
     }
     const card = outcome.kind === "captured" ? outcome.card : undefined;
@@ -236,13 +237,15 @@ export class SumUpCloudProvider implements PaymentProvider {
             );
           }
           if (compareDecimal(outcome.amount, decimal("0")) === 0) return failAttempting(tx, key);
-          return captureAttempting(tx, {
+          await captureAttempting(tx, {
             ...key,
             settledAt: outcome.settledAt,
             externalRef: outcome.transactionId,
             card,
             amount: outcome.amount,
           });
+          await this.saveRefunds(tx, key, outcome);
+          return (await getPaymentByRef(tx, key))!;
         }
         return failAttempting(tx, key);
       });
@@ -272,14 +275,39 @@ export class SumUpCloudProvider implements PaymentProvider {
 
   static classify(t: SumUpTransaction | null, now: Date): PollOutcome {
     if (t === null || t.status === "PENDING") return { kind: "pending" };
-    if (t.status === "SUCCESSFUL")
+    if (t.status === "SUCCESSFUL" || t.status === "REFUNDED") {
+      const events = new Map<string, SumUpRefundEvent>();
+      for (const event of t.refundEvents ?? []) {
+        const prior = events.get(event.id);
+        if (
+          prior !== undefined &&
+          (refundOutcomeOf(prior.status) !== refundOutcomeOf(event.status) ||
+            compareDecimal(prior.amount, event.amount) !== 0 ||
+            Date.parse(prior.timestamp) !== Date.parse(event.timestamp))
+        )
+          return { kind: "pending", refundUncertain: true };
+        events.set(event.id, event);
+      }
+      const refunds = [...events.values()].filter((e) => refundOutcomeOf(e.status) === "completed");
+      if (
+        t.refundEvidenceInvalid ||
+        [...events.values()].some(
+          (e) =>
+            refundOutcomeOf(e.status) === "pending" || compareDecimal(e.amount, decimal("0")) <= 0,
+        ) ||
+        compareDecimal(sumDecimals(refunds.map((e) => e.amount)), t.amount) > 0 ||
+        (t.status === "REFUNDED" && refunds.length === 0)
+      )
+        return { kind: "pending", refundUncertain: true };
       return {
         kind: "captured",
         transactionId: t.id,
         amount: t.amount,
         settledAt: now,
         card: cardFromTransaction(t),
+        refunds,
       };
+    }
     if (t.status === "FAILED" || t.status === "CANCELLED") return { kind: "failed" };
     return { kind: "deferred" };
   }
@@ -287,6 +315,7 @@ export class SumUpCloudProvider implements PaymentProvider {
   /** Poll until a T2 decision or the window closes. A network error mid-poll and an exhausted
    * window both come back as `pending`: the caller leaves the row `attempting` either way. */
   private async pollUntilResolved(query: { clientTransactionId: string }): Promise<PollOutcome> {
+    let last: PollOutcome = { kind: "pending" };
     try {
       for (let attempt = 0; attempt < this.poll.maxAttempts; attempt++) {
         const outcome = SumUpCloudProvider.classify(
@@ -294,12 +323,44 @@ export class SumUpCloudProvider implements PaymentProvider {
           this.now(),
         );
         if (outcome.kind !== "pending") return outcome;
+        last = outcome;
         await this.poll.sleep(this.poll.intervalMs);
       }
-      return { kind: "pending" };
+      return last;
     } catch {
-      return { kind: "pending" };
+      return last;
     }
+  }
+
+  private refundIncident(
+    tx: Transaction,
+    paymentRef: string,
+    status: string,
+    now: Date,
+  ): Promise<boolean> {
+    return this.opts.incidents(tx, {
+      origin: jobOrigin("payment_check"),
+      error: new AppError("payment.pending_outcome_unactionable", { paymentRef, status }),
+      severity: "error",
+      detectedAt: now,
+    });
+  }
+
+  private async saveRefunds(
+    tx: Transaction,
+    key: { provider: string; paymentRef: string },
+    outcome: Extract<PollOutcome, { kind: "captured" }>,
+  ): Promise<boolean> {
+    if (outcome.refunds.length === 0) return false;
+    for (const refund of outcome.refunds)
+      await recordRefund(tx, { ...key, amount: refund.amount, providerRefundRef: refund.id });
+    const row = (await getPaymentByRef(tx, key))!;
+    return this.refundIncident(
+      tx,
+      key.paymentRef,
+      row.state === "refunded" ? "refund_completed" : "partial_refund",
+      outcome.settledAt,
+    );
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- `now` is part of the interface; a no-op forward ignores it
@@ -377,6 +438,14 @@ export class SumUpCloudProvider implements PaymentProvider {
       const outcome = SumUpCloudProvider.classify(t, now);
       if (outcome.kind === "pending") {
         deferred = true;
+        if (
+          outcome.refundUncertain &&
+          (await this.inTransaction(async (tx) => {
+            if ((await getPaymentByRef(tx, key))?.state !== "attempting") return false;
+            return this.refundIncident(tx, key.paymentRef, "refund_pending", now);
+          }))
+        )
+          incidentsRaised++;
         continue;
       }
       if (outcome.kind === "captured") {
@@ -416,12 +485,13 @@ export class SumUpCloudProvider implements PaymentProvider {
             card: outcome.card,
             amount: outcome.amount,
           });
+          if (await this.saveRefunds(tx, key, outcome)) incidentsRaised++;
           return true;
         });
         if (captured) forwarded++;
         continue;
       }
-      // failed → no incident; deferred (REFUNDED / unknown) → incident naming the status.
+      // Unknown transaction statuses need a provider check.
       const status = outcome.kind === "deferred" ? t.status : null;
       const failed = await failWith(key, status);
       if (failed.raised) incidentsRaised++;

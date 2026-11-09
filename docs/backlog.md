@@ -1354,8 +1354,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   if a move can change what a bill charges (ask the owner first). Read, not run.
   [Detail](backlog/payments.md#a875-check-two-writes-the-bill-payments-design-says-a-pending-card-refund-refuses)
 
-- **The SumUp Solo experiments.** Still open after the 5 November session: signature-required
-  cards, pending-reference lookup, the statement/fee check, remaining connection
+- **The SumUp Solo experiments.** Still open after the 9 November cross-account session: signature-required
+  cards, declined-card behavior, the statement/fee check, remaining connection
   probes and a second standalone machine sample. The reported decimal-`0.40` probe refunded the
   full payment, but its request bytes were not saved and the cause is unknown.
   No further paid request unattended.
@@ -1371,7 +1371,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 - **The SumUp reconciler** — settlement-report audit and orphan self-heal. A949 also includes
   durable reversal attempts (W44) and the owner's backup-machine matching contract. The November
-  results inform its design; any table changes wait for A760 under the A1308 hold.
+  results now include cross-account affiliate acceptance, pending/paid references, REFUNDED events
+  and unpaid cancellation. The first recovery slice supplies Waitron's partner key and records
+  identified refunds; manager release of a partial-refund hold, report audit, orphan self-heal,
+  durable reversals and backup-machine
+  matching remain to build.
   [Detail](backlog/payments.md#the-sumup-reconciler)
 
 - **A SumUp API drift-detection suite** on a Virtual Solo in a sandbox merchant account — would have

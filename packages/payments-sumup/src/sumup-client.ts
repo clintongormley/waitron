@@ -1,3 +1,4 @@
+import { WAITRON_SUMUP_AFFILIATE } from "./affiliate.js";
 import type { SumUpReader } from "./client.js";
 import { AppError } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
@@ -7,6 +8,7 @@ import "@waitron/payments";
 import {
   DOCUMENTED_REFUND_REFUSALS,
   fromMajorUnits,
+  refundOutcomeOf,
   SUMUP_PROVIDER,
   toMinorUnits,
 } from "./client.js";
@@ -35,10 +37,6 @@ export class SumUpPairingRefused extends Error {
 export interface SumUpClientOptions {
   apiKey: string;
   merchantCode: string;
-  /** The merchant's affiliate key (developer portal → Affiliate Keys). Absent → the `affiliate`
-   * block is omitted and our `payment_ref` is NOT sent; the sweep then relies on the stamped
-   * `client_transaction_id` alone. */
-  affiliate?: { appId: string; key: string };
   baseUrl?: string;
   fetch?: typeof fetch;
   /** Per-request deadline. A hung SumUp call is aborted after this and rejects — the caller reads
@@ -60,25 +58,60 @@ interface RawEvent {
 
 /** SumUp's refund history of a transaction: "inspect `events` or `transaction_events` when you
  * need refund, payout, or chargeback history" (https://developer.sumup.com/api/transactions). */
-function refundEventsOf(t: { transaction_events?: RawEvent[]; events?: RawEvent[] }): {
-  refundEvents?: SumUpRefundEvent[];
-} {
-  const raw = t.transaction_events ?? t.events;
-  if (raw === undefined) return {};
-  return {
-    refundEvents: raw
-      .filter((e) => (e.event_type ?? e.type) === "REFUND")
-      .filter(
-        (e) =>
-          e.id !== undefined && typeof e.amount === "number" && typeof e.timestamp === "string",
-      )
-      .map((e) => ({
+function refundEventsOf(t: {
+  transaction_events?: RawEvent[];
+  events?: RawEvent[];
+}): Pick<SumUpTransaction, "refundEvents" | "refundEvidenceInvalid"> {
+  if (t.transaction_events === undefined && t.events === undefined) return {};
+  const refundEvents: SumUpRefundEvent[] = [];
+  let refundEvidenceInvalid = false;
+  for (const events of [t.transaction_events, t.events]) {
+    if (events === undefined) continue;
+    if (!Array.isArray(events)) {
+      refundEvidenceInvalid = true;
+      continue;
+    }
+    for (const e of events) {
+      if (e === null || typeof e !== "object") {
+        refundEvidenceInvalid = true;
+        continue;
+      }
+      const kind = e.event_type ?? e.type;
+      if (typeof kind !== "string" || kind === "") {
+        refundEvidenceInvalid = true;
+        continue;
+      }
+      if (kind !== "REFUND") continue;
+      if (
+        (typeof e.id !== "number" && typeof e.id !== "string") ||
+        String(e.id) === "" ||
+        typeof e.amount !== "number" ||
+        !Number.isFinite(e.amount) ||
+        typeof e.timestamp !== "string" ||
+        !Number.isFinite(Date.parse(e.timestamp))
+      ) {
+        refundEvidenceInvalid = true;
+        continue;
+      }
+      const event = {
         id: String(e.id),
         status: e.status ?? "",
-        amount: fromMajorUnits(e.amount!),
-        timestamp: e.timestamp!,
-      })),
-  };
+        amount: fromMajorUnits(e.amount),
+        timestamp: e.timestamp,
+      };
+      if (
+        !refundEvents.some(
+          (prior) =>
+            prior.id === event.id &&
+            refundOutcomeOf(prior.status) === refundOutcomeOf(event.status) &&
+            prior.amount === event.amount &&
+            Date.parse(prior.timestamp) === Date.parse(event.timestamp),
+        )
+      )
+        refundEvents.push(event);
+    }
+  }
+  return { refundEvents, ...(refundEvidenceInvalid ? { refundEvidenceInvalid: true } : {}) };
 }
 
 const unpairFailed = (reason: string) =>
@@ -210,11 +243,11 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       const body = {
         total_amount: { currency: p.currency, minor_unit: 2, value: toMinorUnits(p.amount) },
         description: p.description,
-        ...(opts.affiliate
+        ...(!p.omitAffiliate
           ? {
               affiliate: {
-                app_id: opts.affiliate.appId,
-                key: opts.affiliate.key,
+                app_id: WAITRON_SUMUP_AFFILIATE.appId,
+                key: WAITRON_SUMUP_AFFILIATE.key,
                 foreign_transaction_id: p.foreignTransactionId,
               },
             }
@@ -225,7 +258,18 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         `/v0.1/merchants/${mc}/readers/${encodeURIComponent(p.readerId)}/checkout`,
         body,
       );
-      if (r.status >= 400) return { accepted: false, reason: problemTitle(r.json) };
+      if (r.status >= 400) {
+        const problem = r.json as { errors?: { type?: unknown }; type?: unknown } | null;
+        const affiliateRejected =
+          r.status === 400 &&
+          (problem?.errors?.type === "INVALID_AFFILIATE_KEY" ||
+            problem?.type === "https://developer.sumup.com/problem/invalid-affiliate-key");
+        return {
+          accepted: false,
+          reason: problemTitle(r.json),
+          ...(affiliateRejected ? { affiliateRejected: true } : {}),
+        };
+      }
       const data = (r.json as { data: { checkout_id: string; client_transaction_id: string } })
         .data;
       return {

@@ -2543,8 +2543,7 @@ the pass's are in `till-pass-screen.a11y.test.ts`).
 
 - A help badge is `<wt-help-tooltip mode="help-mode">` placed in a primitive's `help` slot, or
   drawn by a primitive from its own `help` (a `wt-menu-row`, a `wt-data-table` column, a `wt-tabs`
-  item) — a screen draws one loose only inside a box it positions itself, as SumUp's affiliate
-  fields do (below). With help on it hangs over the top trailing corner of the
+  item) — a screen draws one loose only inside a box it positions itself. With help on it hangs over the top trailing corner of the
   nearest positioned box, so a badge with no positioned wrapper hangs over some far ancestor's
   corner — except in a `wt-menu-row`, where it takes its own square in the flow, and in `wt-tabs`,
   which places each badge itself (below).
@@ -2629,9 +2628,7 @@ badge" cases; `packages/ui/src/components/wt-help-switch.test.ts`, `wt-menu-row.
 `wt-data-table.help.test.ts` and `wt-tabs.help.test.ts`, beside them, for the switch, menu rows,
 columns and tabs; and the "a help badge inside a menu row, and a menu that changes size" cases in
 `wt-row-actions.test.ts`. A badge a screen places outside a primitive's `help` slot is checked
-only by that screen's own tests: SumUp's affiliate badge by the "the affiliate
-help is hidden until help is on, then hangs over the heading's top trailing corner" case in
-`packages/payments-sumup/src/dashboard/sumup-connect-form.test.ts`; the till's screen badges by
+only by that screen's own tests: the till's screen badges by
 the `*.help.test.ts` files beside the counter, floor and table-order screens, `menu-browser.ts` and
 `till-shell.ts`; the menu editor's Patch live menu badge by the cases under "patching the live
 menu" in `apps/dashboard/src/screens/menus-screen.test.ts`; nothing checks a new one.

@@ -105,6 +105,10 @@ export async function settleFromProviderRow(
     await failBillPayment(tx, billPaymentId, now, undefined, deps.attendance);
     return { settled: "failed" };
   }
+  if (provided.state === "refunded") {
+    await failBillPayment(tx, billPaymentId, now, undefined, deps.attendance);
+    return { settled: "failed" };
+  }
   if (provided.state === "failed") {
     const [resolved] = await tx
       .select({ id: paymentResolutions.id })

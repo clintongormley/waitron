@@ -10,11 +10,6 @@ const en = {
   "payments.sumup.name": "SumUp",
   "payments.sumup.connect_heading": "Connect SumUp",
   "payments.sumup.api_key": "API key",
-  "payments.sumup.affiliate_app_id": "Affiliate app ID",
-  "payments.sumup.affiliate_key": "Affiliate key",
-  "payments.sumup.affiliate_help":
-    "Only fill these in if SumUp gave you affiliate credentials for card readers. Leave both blank otherwise.",
-  "payments.sumup.affiliate_help_label": "About the affiliate fields",
   "payments.sumup.connect": "Connect",
   "payments.sumup.connected_as": "Connected as {name}",
   "payments.sumup.merchant_prompt":
@@ -46,11 +41,6 @@ const es: Record<keyof typeof en, string> = {
   "payments.sumup.name": "SumUp",
   "payments.sumup.connect_heading": "Conectar SumUp",
   "payments.sumup.api_key": "Clave de API",
-  "payments.sumup.affiliate_app_id": "ID de app de afiliado",
-  "payments.sumup.affiliate_key": "Clave de afiliado",
-  "payments.sumup.affiliate_help":
-    "Rellena estos campos solo si SumUp te dio credenciales de afiliado para los lectores. Déjalos en blanco en caso contrario.",
-  "payments.sumup.affiliate_help_label": "Acerca de los campos de afiliado",
   "payments.sumup.connect": "Conectar",
   "payments.sumup.connected_as": "Conectado como {name}",
   "payments.sumup.merchant_prompt": "Esta clave abarca más de un comercio. Elige cuál conectar.",

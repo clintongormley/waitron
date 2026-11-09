@@ -21,10 +21,6 @@ import "./errors.js";
 const PROVIDER_ID = "sumup";
 const CREDENTIAL_PURPOSE = "payments.sumup";
 
-/** The literal sealed for an absent affiliate field: a `-` in either affiliate slot means "no
- * affiliate", and the create call omits the `affiliate` block. */
-const NO_AFFILIATE = "-";
-
 /** `memberships()` reads `GET /v0.1/memberships`, which does not carry a merchant code, so `connect`
  * builds its probe client with this placeholder rather than a real one it does not yet know. */
 const UNKNOWN_MERCHANT = "";
@@ -62,24 +58,13 @@ export async function sumupClientForTenant(deps: {
   });
 }
 
-/** Turn a decrypted `payments.sumup` payload into client options, validating it at the read site.
- * A `-` in either affiliate slot (or an absent slot) means
- * no affiliate. A payload missing `apiKey` or `merchantCode` cannot build a client, so it is
- * rejected here rather than reaching the network with an undefined bearer or merchant. */
 export function optionsFromSealed(
   payload: Record<string, string>,
-): Pick<SumUpClientOptions, "apiKey" | "merchantCode" | "affiliate"> {
-  const { apiKey, merchantCode, affiliateAppId, affiliateKey } = payload;
-  if (apiKey === undefined || merchantCode === undefined)
+): Pick<SumUpClientOptions, "apiKey" | "merchantCode"> {
+  const { apiKey, merchantCode } = payload;
+  if (apiKey === undefined || apiKey === "" || merchantCode === undefined || merchantCode === "")
     throw new AppError("payment.provider_credential_rejected", { providerId: PROVIDER_ID });
-  const affiliate =
-    affiliateAppId === undefined ||
-    affiliateKey === undefined ||
-    affiliateAppId === NO_AFFILIATE ||
-    affiliateKey === NO_AFFILIATE
-      ? undefined
-      : { appId: affiliateAppId, key: affiliateKey };
-  return { apiKey, merchantCode, ...(affiliate ? { affiliate } : {}) };
+  return { apiKey, merchantCode };
 }
 
 /** A `SumUpClient` that resolves the real client (from the sealed credential) on first use. `build`
@@ -105,7 +90,12 @@ export function deferredClient(deps: {
         client().then((c) => (c[method] as (...a: unknown[]) => unknown)(...args)),
     ]),
   );
-  return wrapped as unknown as SumUpClient;
+  return {
+    ...wrapped,
+    prepareCollect: async () => {
+      await client();
+    },
+  } as unknown as SumUpClient;
 }
 
 /** Map SumUp's reader status string onto the seat's two-value pairing outcome. SumUp returns
@@ -133,21 +123,7 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
       throw error;
     }
   },
-  credentialFields: [
-    { name: "apiKey", labelKey: "payments.sumup.api_key", secret: true },
-    {
-      name: "affiliateAppId",
-      labelKey: "payments.sumup.affiliate_app_id",
-      secret: true,
-      optional: true,
-    },
-    {
-      name: "affiliateKey",
-      labelKey: "payments.sumup.affiliate_key",
-      secret: true,
-      optional: true,
-    },
-  ],
+  credentialFields: [{ name: "apiKey", labelKey: "payments.sumup.api_key", secret: true }],
   readerAdd: { kind: "pairing-poll", codeLabelKey: "payments.sumup.pairing_code" },
 
   async connect(deps, payload): Promise<ConnectResult> {
@@ -186,8 +162,6 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
       sealedPayload: {
         apiKey,
         merchantCode: chosen.merchantCode,
-        affiliateAppId: payload.affiliateAppId || NO_AFFILIATE,
-        affiliateKey: payload.affiliateKey || NO_AFFILIATE,
       },
     };
   },

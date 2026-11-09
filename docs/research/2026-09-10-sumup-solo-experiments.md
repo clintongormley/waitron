@@ -1,5 +1,9 @@
 # SumUp Solo experiments — answering the four questions with the reader in hand
 
+**2026-11-09, A949:** read [the cross-account session](#11-a949-cross-account-session-2026-11-09)
+for the new Waitron affiliate key, pending/paid reference reads, refund events and cancellation.
+It supplements the earlier measurements; it does not establish commercial terms or settlement.
+
 **2026-11-05, A949:** the owner and watcher completed the Solo session. Read
 [the November results](#10-a949-solo-session-2026-11-05) before using the older instructions below.
 Affiliate checkout and lookup after payment worked; repeating the reference started another
@@ -1346,3 +1350,100 @@ cannot recover the earlier request bytes, prove a signature flow or settle state
 These local captures and operator observations are the sources for the November measurements.
 §10.7 separately records three authenticated read-only requests and real-adapter replays. No
 newly fetched vendor documentation or paid operation is claimed.
+
+## 11. A949 cross-account session, 2026-11-09
+
+You can recover the observed reader payment using the restaurant's credential and your supplied
+reference, even when Waitron owns the affiliate key in a separate account. The owner and watcher
+ran this session, relayed at 17:52 Europe/Rome. This write-up sends no provider requests.
+
+The restaurant account was `MY2NPHDW`; the new Waitron account supplied the affiliate block with
+app id `io.waitron.pos`. The October affiliate credentials were not used. Two owner-session
+checkout requests were accepted, including the first intended cancellation that the owner
+accidentally paid. Both paid transactions were refunded. The final unpaid cancellation has its
+own reference and captures. Account ownership comes from the watcher's operator report;
+HTTP acceptance and transaction fields come from the retained replies.
+
+### 11.1 Reference recovery before and after the tap
+
+The first request at 16:39 UTC returned `422 READER_OFFLINE`; the owner reported a sleeping
+reader. Its reference lookup returned 404. A separate successful run saved a checkout `201`
+reply at `16:45:08.826Z`, a reference `404` at `16:45:09.109Z`, then `200` with `status: PENDING`
+at `16:45:09.479Z`, before the requested tap. These are saved-response times, not a visibility
+service guarantee. An immediate 404 still does not permit another charge.
+
+After the tap, `GET /v2.1/merchants/{merchant}/transactions?foreign_transaction_id=R` returned
+`200` and `SUCCESSFUL`. The saved client id, merchant, supplied reference, EUR 1.00 and currency
+match the private checkout receipt. Recovery used the restaurant's API credential and R;
+checkout ids were used separately for comparison reads. This exercises a recovery caller that
+withholds returned ids; it does not simulate a server crash or restart.
+
+### 11.2 A refund changes the event, while the payment stays successful
+
+The saved request body `{"amount":100}` returned `201`. Its immediate reference readback kept
+`status: SUCCESSFUL`, with an identified EUR 1.00 REFUND event whose status was `REFUNDED`
+in both `events` and `transaction_events`. The first refund followed the payment's provider
+timestamp by about two minutes; the accidentally paid cancellation was refunded about a minute
+and a half later. Neither met a 409. This qualifies these integer-cents requests, not the cause
+of the earlier decimal result or a promise that refunds never wait.
+
+The local session script stopped with "Refund outcome not confirmed" after the first refund:
+its accepted-event list omitted `REFUNDED`. A local regression for each event array failed with
+that message; adding the observed status makes all 11 script tests pass, with one refund POST
+per successful scenario. The product adapter already maps `REFUNDED` to completed; replaying both saved refund replies through the real HTTP client and provider returns completed,
+while wrong-amount and excluded-id controls return none (two focused cases passed).
+The full live script has not been rerun.
+
+Before the refund, `events` showed a PAYOUT of EUR 0.98 with status `SCHEDULED`;
+`transaction_events` described it as `PENDING`. Neither is completed settlement. Do not treat
+payment success, the net payout amount, or this scheduled event as a paid-out settlement record.
+
+### 11.3 Cancellation needs the saved checkout to explain its cause
+
+For the final attempt the owner cancelled on the reader without tapping. Reference lookup
+returned `200`, `status: FAILED`, `simple_status: FAILED`, EUR 1.00 and no events. The checkout
+read returned `status: failed`, `payment_status: failed`, and
+`payment_failure_reason: "CANCELLED: Transaction cancelled by cancel button on reader (before PIN entry)"`.
+The transaction's `FAILED` alone does not distinguish cancellation from a decline. No declined
+card was tested. The local session script's separate cancellation check still expects
+`data.status: cancelled`; do not reuse it as a qualified complete-session runner.
+
+### 11.4 Provenance and remaining work
+
+Private raw replies stay outside the repository in Lane F's
+`receipts/a949-session-20261109/runs/`. A local verification checks reference/id/merchant/amount
+identity, the pending response, both refund arrays and cancellation fields. Its 31-file SHA-256
+manifest and result are in `receipts/a949-post-session-20261109/`.
+
+| Observation | Source's own fields | Private receipt and limit |
+| --- | --- | --- |
+| New affiliate block across accounts | `201`; `app_id: io.waitron.pos` | `session-mMX3wf/001.json`; app id and distinct ownership relayed by watcher 17:52; affiliate request values are redacted in this capture. |
+| Reference before tap | `404`, then `200`, `status: PENDING` | `session-mMX3wf/{002,004}.json`; two observations, no guaranteed deadline. |
+| Paid reference identity | `status: SUCCESSFUL`, `amount: 1.0`, `currency: EUR` | `session-mMX3wf/005.json`, matching the private creation ids/reference. |
+| Full refund | request `amount: 100`; response `201`; event `status: REFUNDED` | `session-mMX3wf/{007,008}.json`; the original remains SUCCESSFUL. |
+| Accidental second payment and refund | `SUCCESSFUL`; REFUND `REFUNDED`, `amount: 1.0` | `manual-cancel-174859/{after,after-refund}.json`; action and HTTP status from watcher 17:52, manual captures contain bodies only. |
+| Unpaid cancellation | transaction `FAILED`; checkout reason `CANCELLED: …` | `manual-cancel2-175129/{after,checkout}.json`; action from watcher, no declined-card measurement. |
+| Partner key is separate from authorization | "Affiliate keys are not an authorization mechanism." | [Affiliate Keys](https://developer.sumup.com/tools/authorization/affiliate-keys/), read 9 November. Separate restaurant credential used in the session. |
+
+Cross-account checkout acceptance and these reference/refund/cancellation shapes are now
+measured. Waitron's commercial revenue share still needs its agreement. Signature-required cards,
+declines, a positive completed payout, statement fees, connection/termination probes and a second
+standalone machine's matching sample remain open. No additional paid request is authorised
+unattended. Revise the reconciler proposal against this evidence before building it.
+
+### 11.5 First recovery slice, 9 November 2026
+
+The owner permitted public distribution of the Waitron partner key (watcher 18:48/18:49).
+`WAITRON_SUMUP_AFFILIATE` in `packages/payments-sumup/src/affiliate.ts` is its single source;
+venue credentials hold only the API key and merchant code. A documented HTTP 400
+`INVALID_AFFILIATE_KEY` or its problem URI permits one retry without the affiliate block,
+with an alert. No timeout, server error or unrelated refusal permits that retry. The
+[checkout endpoint](https://developer.sumup.com/api/readers/create-checkout/) says
+“Optionally include an `affiliate` object”; the [Cloud guide](https://developer.sumup.com/terminal-payments/cloud-api/)
+says it “requires this key in checkout requests”. This is an evidence-limited fallback policy,
+not a measured fallback checkout. A lost fallback reply lacks our reference.
+
+Recovery now checks both refund arrays, records identified completed events with the gross
+capture, and leaves uncertain evidence for another pass. The first slice does not perform
+settlement audit, orphan reconciliation or a provider refund. The hands-on qualifications
+still open in §11 remain open; no additional provider call was made for this slice.

@@ -1461,12 +1461,12 @@ export async function failBillPayment(
   return payment!;
 }
 
-/** The collect results that establish no money moved; any other non-captured one leaves the payment
- * pending for the loop or a manager to settle from the provider's row. */
-const NOT_CHARGED: ReadonlySet<PaymentResultState> = new Set([
+/** These outcomes leave no retained charge to allocate to the bill. */
+const NO_RETAINED_CHARGE: ReadonlySet<PaymentResultState> = new Set([
   "failed",
   "declined",
   "network_unavailable",
+  "refunded",
 ]);
 
 /** `insertAttempting` (`@waitron/payments`) refuses these before the provider's first write: the
@@ -1568,6 +1568,9 @@ export async function takeReaderBillPayment(
       throw collectFailure(deps, workingOrderId, error);
     }
 
+    if (result.state === "partially_refunded")
+      throw new AppError("sale.charged_not_recorded", { workingOrderId, reason: "partial_refund" });
+
     if (result.state === "captured") {
       // A captured result carries its time (`PaymentResult`, provider.ts).
       const settledAt = result.settledAt!;
@@ -1594,7 +1597,7 @@ export async function takeReaderBillPayment(
     }
     return await withTransaction(deps.db, async (tx) => {
       await requireEconomicWrite(tx, cfg, deps.admission);
-      if (!NOT_CHARGED.has(result.state)) {
+      if (!NO_RETAINED_CHARGE.has(result.state)) {
         const answer = await resultOf(tx, deps, cfg, payment, null);
         return { ...answer, outcome: "timeout" };
       }

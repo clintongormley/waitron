@@ -40,12 +40,10 @@ export interface ReaderStatus {
   pairingStatus?: "processing" | "paired";
 }
 
-/** The SumUp connect-form payload: the API key plus the optional affiliate pair, and (on the
+/** The SumUp connect-form payload: the API key and (on the
  * multi-merchant re-submit) the chosen merchant code. */
 export interface SumUpConnectPayload {
   apiKey: string;
-  affiliateAppId?: string;
-  affiliateKey?: string;
   merchantCode?: string;
 }
 
