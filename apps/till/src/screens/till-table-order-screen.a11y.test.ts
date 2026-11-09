@@ -1106,6 +1106,14 @@ describe.each(["light", "dark"] as const)(
       await expectNoA11yViolations(host);
     });
 
+    it("the bar has no violations", async () => {
+      const { el, host } = await phoneDraft();
+      await settled(el);
+      if (!el.shadowRoot!.querySelector("[data-new-order-bar]")?.checkVisibility())
+        throw new Error("the scan must include the Menu's New order bar");
+      await expectNoA11yViolations(host);
+    });
+
     it("has no violations on the Order view, with Split quantity offered", async () => {
       const { el, host } = await phoneDraft();
       el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();

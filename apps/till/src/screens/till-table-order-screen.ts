@@ -158,7 +158,7 @@ import type {
 import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
 import { heldGroupIds, inHeldGroup } from "../state/held-groups.js";
 import type { DraftGroup } from "../state/draft-groups.js";
-import { newOrderItems } from "../state/new-order-count.js";
+import { newOrderDishes, newOrderItems } from "../state/new-order-count.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import type { Place } from "../state/draft-place.js";
 import {
@@ -1203,6 +1203,34 @@ export class TillTableOrderScreen extends LitElement {
         padding-block: var(--wt-space-2);
         padding-inline-end: calc(var(--wt-tap-min) + 2 * var(--wt-space-3));
         background: var(--wt-color-bg);
+      }
+
+      .new-order-bar {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        padding-block: var(--wt-space-2);
+        border-block-start: 1px solid var(--wt-color-border);
+        background: var(--wt-color-bg);
+      }
+
+      .new-order-summary {
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: var(--wt-tap-min);
+        padding: 0;
+        border: none;
+        background: none;
+        color: var(--wt-color-text);
+        font: inherit;
+        text-align: start;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
       }
 
       .other-draft {
@@ -3913,11 +3941,43 @@ export class TillTableOrderScreen extends LitElement {
     this.#dispatch("take-over-draft", detail);
   }
 
-  /** Under browsing: the line the last tap added or grew. */
+  /** Under browsing: the line the last tap added or grew and, below the width, the New order bar.
+   * The bar is a sibling of the strip, directly in `.browsing`, so it sticks to the window's foot
+   * rather than to the strip's box. */
   #bottomBar(draft: WorkingOrderStore, separate: boolean): TemplateResult | typeof nothing {
     const lastAdded = this.#lastAdded(draft);
     if (lastAdded === nothing && !separate) return nothing;
-    return html`<div class="bottom-bar">${lastAdded}</div>`;
+    return html`<div class="bottom-bar">${lastAdded}</div>
+      ${separate && draft.lineCount > 0 ? this.#newOrderBar(draft) : nothing}`;
+  }
+
+  #newOrderBar(store: WorkingOrderStore): TemplateResult {
+    const items = newOrderItems(store.lines);
+    const dishes = newOrderDishes(store.lines, (line) => shownName(line.product))
+      .map((dish) => fill(t("table.new_order_dish"), { n: String(dish.items), name: dish.name }))
+      .join(" · ");
+    const text = `${t("table.draft_title")} · ${countText(items, "order_counts.items", "order_counts.items_one")} — ${dishes}`;
+    const disabled = this.#sendAllDisabled(store);
+    return html`<div class="new-order-bar" data-new-order-bar>
+      <button
+        type="button"
+        class="new-order-summary"
+        data-new-order-summary
+        @click=${() => void this.#showOrder()}
+      >
+        ${text}
+      </button>
+      <wt-button
+        data-menu-send-all
+        variant=${disabled ? "secondary" : "primary"}
+        size="lg"
+        ?disabled=${disabled}
+        @click=${() => {
+          if (this.#submitArrangement(store, false)) void this.#showOrder();
+        }}
+        >${t("table.draft_send_all")}</wt-button
+      >
+    </div>`;
   }
 
   #lastAdded(store: WorkingOrderStore): TemplateResult | typeof nothing {
@@ -4551,7 +4611,8 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #submitArrangement(store: WorkingOrderStore, selectedOnly: boolean): void {
+  /** Whether it dispatched `submit-draft`. */
+  #submitArrangement(store: WorkingOrderStore, selectedOnly: boolean): boolean {
     if (
       !this.isConnected ||
       store !== this.#draftStore ||
@@ -4560,7 +4621,7 @@ export class TillTableOrderScreen extends LitElement {
       this.groupCommandBusy ||
       !(this.draftActionsAllowed ?? this.orderingAllowed)
     )
-      return;
+      return false;
     const lines = this.#draftLayout(store).flatMap((group) =>
       group.sections.flatMap((section) => section.indexes.map((index) => store.lines[index]!)),
     );
@@ -4569,7 +4630,7 @@ export class TillTableOrderScreen extends LitElement {
       ? fireGroups(lines, this.#selectedIndexes(lines), sendable)
       : sendAllGroups(lines, this.groups, sendable);
     const indexes = groups.flatMap((group) => group.indexes);
-    if (indexes.length === 0) return;
+    if (indexes.length === 0) return false;
     const sent = indexes.map((index) => lines[index]!);
     const positions = new Map(indexes.map((index, position) => [index, position]));
     const detail: SubmitDraftDetail = {
@@ -4595,14 +4656,24 @@ export class TillTableOrderScreen extends LitElement {
       draft: this.#draftOf(store),
     };
     this.#dispatch("submit-draft", detail);
+    return true;
   }
 
-  #draftBar(store: WorkingOrderStore): TemplateResult {
-    const busy =
+  #draftActionsBusy(store: WorkingOrderStore): boolean {
+    return (
       store.sending ||
       store.editsLocked ||
       this.groupCommandBusy ||
-      !(this.draftActionsAllowed ?? this.orderingAllowed);
+      !(this.draftActionsAllowed ?? this.orderingAllowed)
+    );
+  }
+
+  #sendAllDisabled(store: WorkingOrderStore): boolean {
+    return this.#draftActionsBusy(store) || !store.lines.some((line) => this.#draftSendable(line));
+  }
+
+  #draftBar(store: WorkingOrderStore): TemplateResult {
+    const busy = this.#draftActionsBusy(store);
     const sendable = store.lines.filter((line) => this.#draftSendable(line));
     const button = (selectedOnly: boolean, key: StringKey, name: string) => {
       const disabled = busy || !sendable.some((line) => !selectedOnly || this.#selected.has(line));
