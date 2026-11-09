@@ -3931,11 +3931,14 @@ describe("field stays clear of its open list", () => {
       el.style.cssText = "position: fixed; left: 20px; bottom: 12px; width: 250px";
       await el.updateComplete;
       await userEvent.click(trigger);
+      const initialHeight = popup.getBoundingClientRect().height;
       el.options = Array.from({ length: 20 }, (_, index) => ({
         value: String(index),
         label: `Option ${index}`,
       }));
       await el.updateComplete;
+      expect(el.shadowRoot!.querySelectorAll(".option")).toHaveLength(20);
+      expect(popup.getBoundingClientRect().height).toBeGreaterThan(initialHeight + 100);
       expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(
         trigger.getBoundingClientRect().top,
       );
