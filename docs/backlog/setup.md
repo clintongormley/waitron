@@ -654,26 +654,10 @@ that operation's reader. Do not remove exact-content checks to make a large file
   live source screens, the dashboard's node recovery panel, and the fiscal first-setup, recovery
   key and offline custodian pages. `wt-file-input` hides that control and draws its own words.
 
-## Bundle A1458: Setup asks which language the venue works in, and starts each country with its own courses (owner, 2026-11-08)
+## Starter courses for Italy
 
-2 entries, size M. Spanish and English can be built now; every other language waits for C125
-([languages.md](languages.md#bundle-regional-languages)).
-
-- **Setup asks which language the venue works in.** The setup request now accepts an optional
-  English/Spanish working language for fresh starters and demo names. Add the wizard's picker,
-  offering the language derived from the country, area and receipt language as the default.
-  Every starter holding one name is written in the choice (A918's rule in
-  [architecture.md](architecture.md), unchanged: a one-name row takes the staff language). Today
-  those are the table states (the service steps "Set up", "Take order", "Anything else?"), seasons,
-  the Counter zone and the "Open" period (`packages/venue-service/src/starter-content.ts`), the
-  first menu, the kitchen station and the device profiles, plus the courses below. Their
-  `StaffNames` files carry Spanish only, so each needs words for every language C125 adds, Valencian
-  as a variant of Catalan. Until C125 lands, setup offers Spanish and English.
-- **Remaining course words.** Initial setup now creates Spain’s four courses and Great Britain’s
-  three in the existing English/Spanish starter language. Catalan, Valencian, Galician and Basque
-  course words still wait for C125; include them in the Native speaker review.
-  - Italy, when its pack is built: Antipasti, Primi piatti, Secondi piatti, Dolci. Which fire now
-    was not decided; ask the owner then.
+When Italy's country pack is built, seed Antipasti, Primi piatti, Secondi piatti and Dolci.
+Ask the owner which fire immediately and which wait. Left open by A1458.
 
 ## Decisions and deliberate limits
 

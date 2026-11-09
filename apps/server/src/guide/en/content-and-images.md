@@ -13,6 +13,15 @@ Community, **All i pebre de la casa** and **Orxata amb fartons de la casa**; in 
 and **Filloas da casa**. These labels keep their regional wording when the demo's staff names
 are English or Spanish. You choose and replace the pictures in the same way.
 
+## Choose your working language {#working-language}
+
+During setup, choose **Working language** on **Your shop**. Choose **English** or **Spanish** for
+your initial menu, courses and other starter names, and for the staff and kitchen names in a demo.
+Your screen, receipt and customer-facing languages have their own choices.
+
+You can rename those items after setup. To change a name from an imported configuration, edit
+that item after setup.
+
 ## Choose your content languages {#languages}
 
 A new venue starts with its content languages already chosen: the languages Waitron keeps enabled

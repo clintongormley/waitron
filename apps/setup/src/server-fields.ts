@@ -1,7 +1,6 @@
 /** Fiscal-regime refusal paths, compared with the regime by scripts/setup-wizard-fiscal-fields.test.ts.
  * VENUE_SERVER_FIELDS adds setup API paths for the shell and venue form.
- * Inputs clear refusal marks in #onField; dropdown handlers do not, so these keys must name inputs
- * wherever the venue form shows one; a refusal for a field it does not show appears above Next. */
+ */
 
 import { t } from "./i18n/t.js";
 
@@ -12,10 +11,10 @@ export type ServerFieldKey =
   | "seriesCode"
   | "fullSeriesCode"
   | "rectificativeSeriesCode"
-  | "operationDescription";
+  | "operationDescription"
+  | "staffLanguage";
 
 export interface ServerField {
-  /** The field's `name` attribute where the venue form has one; the screen focuses that input. */
   readonly key: ServerFieldKey;
   /** Translated on each read, so it follows a language switch. */
   readonly message: string;
@@ -57,6 +56,12 @@ export const SERVER_FIELDS: Readonly<Record<string, ServerField | undefined>> = 
 /** The shell and form also handle fields refused by the setup API itself. */
 export const VENUE_SERVER_FIELDS: Readonly<Record<string, ServerField | undefined>> = {
   ...SERVER_FIELDS,
+  staffLanguage: {
+    key: "staffLanguage",
+    get message() {
+      return t("venue.error.staff_language");
+    },
+  },
   taxId: {
     key: "taxId",
     get message() {

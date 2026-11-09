@@ -5,8 +5,9 @@ their full text.
 
 ## Catalan, Valencian, Galician and Basque — the receipt's words checked, and the whole app in all four (C125, owner 2026-10-02; off hold 2026-11-08)
 
-- **Off hold (owner, 2026-11-08): the staff screens should be offered in every official language,
-  and setup asks which one a venue works in (A1458, in [setup.md](setup.md)).** Decided the same
+- **Off hold (owner, 2026-11-08): the staff screens should be offered in every official language.**
+  Extend setup's English/Spanish working-language choice and its starter translations to the new
+  languages, including Catalan, Valencian, Galician and Basque course names (A1458). Decided the same
   day: **Valencian is a variant of Catalan**, not a separate translation; only the words that differ
   get their own. Setup's starting content languages (`STARTER_CONTENT_LANGUAGES`,
   `packages/country-packs/src/starter-languages.ts`) lack Basque today; add it. Parked from
@@ -125,7 +126,8 @@ among them «PIN de gerente») say «gerente». Pick one word and use it everywh
   owner decision 4, 2026-10-06). A speaker of each should read it.
   [Detail](setup.md#the-demo-data-carries-catalan-and-galician-text-w109-3-1321-task-3-of-the-same-plan--done-the-text-is-unchecked-by-a-speaker-owner-decision-4-2026-10-06--open)
 - **The recovery page's Spanish has not been read by a native speaker.**
-- **The translations need a native or official check.**
+- **The translations need a native or official check**, including Catalan, Valencian, Galician
+  and Basque starter-course words when C125 adds them.
   [Detail](languages.md#the-translations-need-a-native-or-official-check)
 
 ## Bundle: Regional languages

@@ -14,6 +14,16 @@ y **Filloas da casa**. Estos nombres conservan el idioma regional aunque los nom
 de la demostración estén en inglés o español. Eliges y sustituyes las imágenes de
 la misma manera.
 
+## Elige tu idioma de trabajo {#working-language}
+
+Durante la configuración, elige **Idioma de trabajo** en **Tu tienda**. Elige **Inglés** o **Español**
+para los nombres del menú inicial, los pases y los demás elementos iniciales, y para los nombres
+del personal y la cocina en la demostración. El idioma de la pantalla, el del recibo y los idiomas
+para el cliente tienen sus propias opciones.
+
+Puedes cambiar esos nombres después. Para cambiar un nombre de una configuración importada,
+edita ese elemento después de la configuración.
+
 ## Elige los idiomas de tu contenido {#languages}
 
 Un local nuevo empieza con los idiomas que Waitron mantiene activados para su región, más el inglés.

@@ -88,6 +88,40 @@ function unload() {
 }
 
 describe("setup venue unsaved changes", () => {
+  it("keeps or discards an unsaved working-language choice", async () => {
+    const { el, venue } = await mount();
+    await edit(venue, "staffLanguage", "en");
+    expect(unload()).toBe(true);
+    back(venue);
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "keep");
+    expect(field(venue, "staffLanguage").value).toBe("en");
+    back(venue);
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "discard");
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    expect((el as unknown as State).draft.venue).toEqual(initialVenue);
+  });
+
+  it("keeps the working language on Back after the venue screen was accepted", async () => {
+    const { el, venue } = await mount();
+    await edit(venue, "staffLanguage", "en");
+    next(venue);
+    await expect.poll(() => (el as unknown as State).screen).toBe("email");
+    el.shadowRoot!.querySelector("setup-email-screen")!.dispatchEvent(
+      new CustomEvent("setup-goto", {
+        detail: { screen: "venue" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await expect.poll(() => (el as unknown as State).screen).toBe("venue");
+    const returned = el.shadowRoot!.querySelector<SetupVenueScreen>("setup-venue-screen")!;
+    await returned.updateComplete;
+    expect(field(returned, "staffLanguage").value).toBe("en");
+    expect(assembleBody((el as unknown as State).draft).venue.staffLanguage).toBe("en");
+  });
+
   it("a seeded demo stays clean until a shown field changes", async () => {
     const { el, venue } = await mount({ mode: "demo", venue: structuredClone(initialVenue) });
     expect(unload()).toBe(false);
@@ -248,6 +282,7 @@ describe("setup venue unsaved changes", () => {
     expect(warning(el).open).toBe(false);
     expect((el as unknown as State).draft.venue).toEqual({
       ...initialVenue,
+      staffLanguage: "es",
       name: "  New venue  ",
     });
     expect(unload()).toBe(true);

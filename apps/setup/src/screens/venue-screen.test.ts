@@ -134,6 +134,73 @@ const EXPECTED_VENUE = {
 
 afterEach(cleanupWidgets);
 
+describe("working language", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  it.each(["demo", "prepare", "live"] as const)(
+    "offers English and Spanish with the derived default in %s",
+    async (mode) => {
+      setLocale("en-GB");
+      const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+        draft: { mode, venue: EXPECTED_VENUE },
+      });
+      const language = q(el, "[data-test=staffLanguage]") as Dropdown & { value: string };
+      expect(language).not.toBeNull();
+      expect(language.options.map(({ value }) => value).sort()).toEqual(["en", "es"]);
+      expect(language.value).toBe("es");
+      expect(language.getAttribute("name")).toBe("staffLanguage");
+      expect(language.hasAttribute("required")).toBe(true);
+    },
+  );
+
+  it("derives English from the first receipt language rather than the screen language", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "prepare", venue: { ...EXPECTED_VENUE, invoiceLocales: ["en-GB"] } },
+    });
+    expect(q(el, "[data-test=staffLanguage]")).not.toBeNull();
+    expect((q(el, "[data-test=staffLanguage]") as HTMLElement & { value: string }).value).toBe(
+      "en",
+    );
+  });
+
+  it("puts a working-language refusal under the picker and clears it on a new choice", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "prepare", venue: EXPECTED_VENUE },
+      invalidField: "staffLanguage",
+    });
+    const picker = q(el, "[data-test=staffLanguage]") as Dropdown;
+    expect(picker.error).toBe(t("venue.error.staff_language"));
+    expect(await bottomOf(el)).toBe(t("venue.fix_fields"));
+    await type(el, "staffLanguage", "en");
+    expect(picker.error).toBe("");
+  });
+
+  it("keeps the explicit choice through geography and screen-language changes and sends it", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "prepare", venue: EXPECTED_VENUE },
+    });
+    const events = collect(host);
+    expect(q(el, "[data-test=staffLanguage]")).not.toBeNull();
+    await type(el, "staffLanguage", "en");
+    await type(el, "postalCode", "08001");
+    await type(el, "city", "Barcelona");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect((q(el, "[data-test=staffLanguage]") as HTMLElement & { value: string }).value).toBe(
+      "en",
+    );
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
+    expect((events[0]!.detail as { patch: ProvisionBody }).patch.venue).toMatchObject({
+      staffLanguage: "en",
+      province: "Barcelona",
+      invoiceLocales: ["ca-ES"],
+    });
+  });
+});
+
 describe("setup country admission", () => {
   it.each(["demo", "prepare", "live"] as const)(
     "refuses a saved country without a setup pack in %s",
@@ -184,7 +251,7 @@ describe("setup-venue-screen", () => {
     q(el, "[data-test=next]")!.click();
     // Pinned whole, so a mis-named field fails here.
     expect(events).toEqual([
-      { kind: "patch", detail: { patch: { venue: EXPECTED_VENUE } } },
+      { kind: "patch", detail: { patch: { venue: { ...EXPECTED_VENUE, staffLanguage: "es" } } } },
       { kind: "advance", detail: null },
     ]);
   });
@@ -1210,7 +1277,7 @@ it("submits the form when Enter is pressed in a field", async () => {
   q(el, "[data-test=city]")!.shadowRoot!.querySelector("input")!.focus();
   await userEvent.keyboard("{Enter}");
   expect(events).toEqual([
-    { kind: "patch", detail: { patch: { venue: EXPECTED_VENUE } } },
+    { kind: "patch", detail: { patch: { venue: { ...EXPECTED_VENUE, staffLanguage: "es" } } } },
     { kind: "advance", detail: null },
   ]);
 });
@@ -1305,6 +1372,7 @@ it("emits a country pack with no provinces or validators as the operator typed i
               name: "Harbour",
               fiscalTerritory: "ZZ-main",
               invoiceLocales: ["zz-ZZ"],
+              staffLanguage: "en",
               addressLine1: "1 Quay",
               addressLine2: null,
               postalCode: " zz-9 ",
