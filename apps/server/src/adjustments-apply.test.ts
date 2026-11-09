@@ -600,8 +600,8 @@ describe("a line discount (plan D4)", () => {
     });
   });
 
-  it("keeps whole cents a unit: 10% off Croquetas ×3 at €3.33 is 2 × €3.00 and 1 × €2.99, filed at €8.99", async () => {
-    const { billId } = await bill([{ name: "Croquetas", quantity: "3" }]);
+  it("keeps whole cents a unit: 10% off Croquettes ×3 at €3.33 is 2 × €3.00 and 1 × €2.99, filed at €8.99", async () => {
+    const { billId } = await bill([{ name: "Croquettes", quantity: "3" }]);
 
     await adjust(billId, {
       ...(await todayLine(venue, billId, 1)),
@@ -610,9 +610,9 @@ describe("a line discount (plan D4)", () => {
     });
 
     expect(await priced(billId)).toEqual([
-      ["Croquetas", "1.000", "3.00", "3.33", "3.00"],
-      ["Croquetas", "1.000", "3.00", "3.33", "3.00"],
-      ["Croquetas", "1.000", "2.99", "3.33", "2.99"],
+      ["Croquettes", "1.000", "3.00", "3.33", "3.00"],
+      ["Croquettes", "1.000", "3.00", "3.33", "3.00"],
+      ["Croquettes", "1.000", "2.99", "3.33", "2.99"],
     ]);
     expect((await recordedOn(billId))[0]).toMatchObject({ reduction: 100 });
     const { sale, lines } = await payAll(billId);
@@ -660,7 +660,7 @@ describe("a line discount (plan D4)", () => {
   });
 
   it("discounts part of a line by splitting that part off first", async () => {
-    const { billId } = await bill([{ name: "Croquetas", quantity: "5" }]);
+    const { billId } = await bill([{ name: "Croquettes", quantity: "5" }]);
 
     await adjust(billId, {
       ...(await todayLine(venue, billId, 1)),
@@ -670,11 +670,11 @@ describe("a line discount (plan D4)", () => {
     });
 
     expect(await priced(billId)).toEqual([
-      ["Croquetas", "1.000", "3.33", "3.33", "3.33"],
-      ["Croquetas", "1.000", "3.33", "3.33", "3.33"],
-      ["Croquetas", "1.000", "3.00", "3.33", "3.00"],
-      ["Croquetas", "1.000", "3.00", "3.33", "3.00"],
-      ["Croquetas", "1.000", "2.99", "3.33", "2.99"],
+      ["Croquettes", "1.000", "3.33", "3.33", "3.33"],
+      ["Croquettes", "1.000", "3.33", "3.33", "3.33"],
+      ["Croquettes", "1.000", "3.00", "3.33", "3.00"],
+      ["Croquettes", "1.000", "3.00", "3.33", "3.00"],
+      ["Croquettes", "1.000", "2.99", "3.33", "2.99"],
     ]);
     const [row] = await recordedOn(billId);
     expect(row).toMatchObject({ quantity: 3000, beforeAmount: 999, reduction: 100 });
@@ -793,8 +793,8 @@ describe("a bill discount across VAT rates (Review Focus 5)", () => {
     for (let run = 0; run < 2; run++) {
       const { billId } = await bill([
         { name: "Tortilla" },
-        { name: "Pimientos" },
-        { name: "Cana" },
+        { name: "Peppers" },
+        { name: "Draught beer" },
       ]);
 
       await adjust(billId, { action: "discount_amount", amount: "5.00" });
@@ -802,8 +802,8 @@ describe("a bill discount across VAT rates (Review Focus 5)", () => {
       const rows = await priced(billId);
       expect(rows).toEqual([
         ["Tortilla", "1.000", "1.66", "3.33", "1.66"],
-        ["Pimientos", "1.000", "1.67", "3.33", "1.67"],
-        ["Cana", "1.000", "1.67", "3.34", "1.67"],
+        ["Peppers", "1.000", "1.67", "3.33", "1.67"],
+        ["Draught beer", "1.000", "1.67", "3.34", "1.67"],
       ]);
       shares.push(rows);
       const { sale } = await payAll(billId);

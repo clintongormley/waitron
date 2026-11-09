@@ -185,7 +185,7 @@ describe("corrections through order actions on a station's printers", () => {
       const [beer] = await tx
         .select({ id: products.id })
         .from(products)
-        .where(eq(products.name, "Cana"));
+        .where(eq(products.name, "Draught beer"));
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: beer!.id }, zoneId: null },
@@ -213,7 +213,7 @@ describe("corrections through order actions on a station's printers", () => {
       return { beerId: beer!.id, printerIds: ids, listed };
     });
     try {
-      const { billId } = await billWith(venue, [{ name: "Steak" }, { name: "Cana" }]);
+      const { billId } = await billWith(venue, [{ name: "Steak" }, { name: "Draught beer" }]);
       const on = (printerId: string) =>
         inTx(venue, (tx) =>
           tx
