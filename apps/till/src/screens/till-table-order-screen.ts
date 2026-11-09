@@ -449,6 +449,10 @@ function barSize(bar: HTMLElement, height: number): void {
   bar.parentElement!.style.setProperty("--draft-bar-size", `${Math.ceil(height)}px`);
 }
 
+function footSize(foot: HTMLElement, height: number): void {
+  foot.parentElement!.style.setProperty("--order-foot-size", `${Math.ceil(height)}px`);
+}
+
 /** `fire-group`: a held group the waiter confirmed firing. */
 export interface FireGroupDetail {
   groupId: string;
@@ -1295,10 +1299,31 @@ export class TillTableOrderScreen extends LitElement {
         overflow-wrap: anywhere;
       }
 
+      .handheld-foot .order-foot {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        padding-block: var(--wt-space-2);
+        border-block-start: 1px solid var(--wt-color-border);
+        background: var(--wt-color-bg);
+      }
+
+      .handheld-foot .order-foot > .total-row {
+        border-top: none;
+        padding-top: 0;
+      }
+
+      .handheld-foot .draft-bar {
+        bottom: var(--order-foot-size);
+      }
+
       /* A line revealed at the scroll area's foot stops above the stuck bar rather than under it.
          The bar's height depends on how its buttons lay out, so the screen measures it. */
       .round-bar till-basket::part(entry) {
-        scroll-margin-block-end: var(--draft-bar-size);
+        scroll-margin-block-end: calc(var(--draft-bar-size) + var(--order-foot-size, 0px));
       }
     `,
     segmentedOptionStyles,
@@ -1450,6 +1475,10 @@ export class TillTableOrderScreen extends LitElement {
   #barSizing?: ResizeObserver;
   #sizedBar?: HTMLElement;
   #sizedBarShown = false;
+  #footSizing?: ResizeObserver;
+  #sizedFoot?: HTMLElement;
+  #sizedFootPane?: HTMLElement;
+  #sizedFootShown = false;
   /** Where browsing was scrolled when Order was shown, put back on Menu. */
   #browsingScroll?: { scroller: Element; top: number };
 
@@ -1850,6 +1879,10 @@ export class TillTableOrderScreen extends LitElement {
     this.#barSizing?.disconnect();
     this.#barSizing = undefined;
     this.#sizedBar = undefined;
+    this.#footSizing?.disconnect();
+    this.#footSizing = undefined;
+    this.#sizedFoot = undefined;
+    this.#sizedFootPane = undefined;
   }
 
   /** Side by side has no views, so Order left shown goes back to Menu rather than being kept for a
@@ -2372,6 +2405,7 @@ export class TillTableOrderScreen extends LitElement {
     if (changed.has("splitRead")) this.#returnToSplitFoot();
     this.#watchAutomaticRouting();
     this.#sizeDraftBar();
+    this.#sizeOrderFoot();
     this.#observeSplit();
     this.#tellSplitDeclined();
   }
@@ -2497,6 +2531,27 @@ export class TillTableOrderScreen extends LitElement {
       if (bar !== undefined) this.#barSizing.observe(bar);
     }
     if (bar !== undefined) barSize(bar, bar.getBoundingClientRect().height);
+  }
+
+  /** Copies the fixed foot's height to `--order-foot-size` on the order pane, so the draft bar
+   * sticks above it; measured at once when drawn or shown, as `#sizeDraftBar` does. */
+  #sizeOrderFoot(): void {
+    const foot = this.renderRoot.querySelector<HTMLElement>("[data-order-foot]") ?? undefined;
+    const shown = this.wide || this.view === "order";
+    if (foot === this.#sizedFoot && shown === this.#sizedFootShown) return;
+    this.#sizedFootShown = shown;
+    this.#footSizing ??= new ResizeObserver((entries) => {
+      const entry = entries.at(-1)!;
+      footSize(entry.target as HTMLElement, entry.borderBoxSize[0]!.blockSize);
+    });
+    if (foot !== this.#sizedFoot) {
+      if (this.#sizedFoot !== undefined) this.#footSizing.unobserve(this.#sizedFoot);
+      this.#sizedFootPane?.style.removeProperty("--order-foot-size");
+      this.#sizedFoot = foot;
+      this.#sizedFootPane = foot?.parentElement ?? undefined;
+      if (foot !== undefined) this.#footSizing.observe(foot);
+    }
+    if (foot !== undefined) footSize(foot, foot.getBoundingClientRect().height);
   }
 
   #lineGross(line: TabLine): Decimal {
@@ -2951,7 +3006,10 @@ export class TillTableOrderScreen extends LitElement {
         <div class="layout">
           ${
             draft === null
-              ? html`<section class="draft-pane" data-draft-pane>
+              ? html`<section
+                  class=${this.#footFixed() ? "draft-pane handheld-foot" : "draft-pane"}
+                  data-draft-pane
+                >
                   ${this.#sentOrders()} ${this.#orderSummary(null)}
                 </section>`
               : this.#ordering(draft)
@@ -3006,7 +3064,7 @@ export class TillTableOrderScreen extends LitElement {
         ${this.#gridRegion(draft)} ${this.#bottomBar(draft, separate)}
       </div>
       <section
-        class="draft-pane"
+        class=${this.#footFixed() ? "draft-pane handheld-foot" : "draft-pane"}
         data-draft-pane
         aria-labelledby="draft-title"
         ?hidden=${separate && !onOrder}
@@ -3048,9 +3106,64 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
+  /** On a handheld below 720 px whose pay section is one Pay, or absent: Total, Still to pay and
+   * Pay are fixed at the order pane's foot. The whole tender, fixed there, would cover the order. */
+  #footFixed(): boolean {
+    if (!this.handheld || this.wide) return false;
+    return !(this.canSettle && this.#chargeable()) || this.#paysOnSheet(this.#shownBill);
+  }
+
   #orderSummary(draft: WorkingOrderStore | null): TemplateResult {
+    if (!this.#footFixed())
+      return html`${this.#finishRefusal()} ${this.#totals(draft)}
+        <div data-bill-actions>
+          ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
+        </div>`;
+    const pays = this.canSettle && this.#chargeable();
+    const shown = this.#shownBill;
     return html`${this.#finishRefusal()}
-      <div class="total-row" data-order-summary>
+      <div data-bill-actions>${pays ? this.#payHeadSection(shown) : nothing}</div>
+      <div class="order-foot" data-order-foot>
+        ${this.#totals(draft)}
+        ${
+          pays
+            ? html`<div class="pay foot-pay">
+                ${this.#payUnsent()} ${this.#paySheetButton(shown)}
+              </div>`
+            : nothing
+        }
+      </div>`;
+  }
+
+  /** The pay section's parts kept in the flow above a handheld's fixed foot. */
+  #payHeadSection(shown: PartyBill | undefined): TemplateResult {
+    const partlyPaid =
+      this.paymentConfirmation === undefined && shown !== undefined && paidInPart(shown)
+        ? shown
+        : undefined;
+    const choices = this.paymentConfirmation === undefined ? this.#billChoices(shown) : nothing;
+    if (partlyPaid === undefined)
+      return html`<section class="pay">
+        <h2>${t("table.pay_title")}</h2>
+        ${choices}
+      </section>`;
+    const received = this.#balanceShown()?.received;
+    return html`<section class="pay" data-bill-payments>
+      <h2>${t("table.pay_title")}</h2>
+      <p class="amount">
+        ${t("table.bill_to_pay").replace("{amount}", () => this.#money(partlyPaid.outstanding))}
+      </p>
+      ${
+        received === undefined
+          ? nothing
+          : html`<p data-bill-received>${t("bill_pay.received")}: ${this.#money(received)}</p>`
+      }
+      ${choices}
+    </section>`;
+  }
+
+  #totals(draft: WorkingOrderStore | null): TemplateResult {
+    return html`<div class="total-row" data-order-summary>
         <span class="label">${t("label.total")}</span>
         <span class="amount" data-order-total
           >${this.#money(
@@ -3072,10 +3185,7 @@ export class TillTableOrderScreen extends LitElement {
                 >${this.#money(this.party.outstanding)}</span
               >
             </div>`
-      }
-      <div data-bill-actions>
-        ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
-      </div>`;
+      }`;
   }
 
   /** The server reads lines only of an open bill (`tab.not_open`), so a presented or paid bill's

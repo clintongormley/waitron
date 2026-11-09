@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import {
   cleanupWidgets,
@@ -13,7 +13,19 @@ import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import { beer, menuOf, mount, resized, tap } from "./till-table-order-screen.test-helpers.js";
+import {
+  beer,
+  menuOf,
+  mount,
+  resized,
+  showView,
+  tap,
+} from "./till-table-order-screen.test-helpers.js";
+import {
+  footerBalance,
+  footerBill,
+  footerParty,
+} from "./till-table-order-screen.panel-footer.test-helpers.js";
 import {
   current,
   currentGroup,
@@ -332,5 +344,119 @@ describe("till-table-order-screen: a newly added line is not hidden behind the a
 
     expect(host.scrollTop).toBeGreaterThan(0);
     expectClearOfBar(el, host);
+  });
+});
+
+/** Twenty sent dishes listed and two unsent, on a part-paid bill with Full invoice, two receipt
+ * languages and a saved full-invoice customer, on Order, scrolled to the top. */
+async function longBill(over: Partial<TillTableOrderScreen>) {
+  const { el, host } = await orderedInWindow(
+    390,
+    700,
+    {
+      currentOrders: longSent,
+      fullInvoices: true,
+      receiptLanguages: ["es-ES", "en-GB"],
+      party: footerParty,
+      bills: [
+        {
+          ...footerBill,
+          outstanding: "8.00",
+          hasPayments: true,
+          invoiceType: "F1",
+          recipient: {
+            taxId: "B12345674",
+            legalName: "Cliente SL",
+            address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+            countryCode: "ES",
+          },
+        },
+      ],
+      billBalance: footerBalance,
+      ...over,
+    },
+    dishes.slice(0, 2),
+  );
+  await showView(el, "order");
+  await sentExpanded(el);
+  await linesRendered(el);
+  host.scrollTop = 0;
+  await resized(el);
+  expect(host.scrollHeight).toBeGreaterThan(host.clientHeight);
+  return { el, host };
+}
+
+describe("till-table-order-screen: the fixed foot on a handheld", () => {
+  it("a handheld's Order foot: only Total, Still to pay and Pay stay in the window over a long Order", async () => {
+    const { el, host } = await longBill({ handheld: true });
+    const root = el.shadowRoot!;
+    const foot = root.querySelector<HTMLElement>("[data-order-foot]")!;
+    const box = foot.getBoundingClientRect();
+    const area = host.getBoundingClientRect();
+
+    expect(box.top).toBeGreaterThanOrEqual(area.top);
+    expect(Math.abs(box.bottom - area.bottom)).toBeLessThanOrEqual(1);
+    for (const kept of ["[data-order-total]", "[data-party-outstanding]", "[data-pay-sheet]"])
+      expect(foot.querySelector(kept)).not.toBeNull();
+    for (const before of [
+      "[data-choose-bill-invoice]",
+      "[data-choose-bill-language]",
+      "[data-invoice-choice]",
+      "[data-bill-payments] > .amount",
+      "[data-bill-received]",
+      "[data-bill-actions] h2",
+    ]) {
+      const part = root.querySelector(before)!;
+      expect(part, before).not.toBeNull();
+      expect(foot.contains(part), before).toBe(false);
+      expect(part.compareDocumentPosition(foot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  it("a handheld's Order foot: Send all rides just above the foot", async () => {
+    const { el } = await longBill({ handheld: true });
+    const foot = el.shadowRoot!.querySelector("[data-order-foot]")!.getBoundingClientRect();
+    const bar = el.shadowRoot!.querySelector(".draft-bar")!.getBoundingClientRect();
+
+    expect(bar.height).toBeGreaterThan(0);
+    expect(Math.abs(bar.bottom - foot.top)).toBeLessThanOrEqual(1);
+  });
+
+  it("a handheld's Order foot: the quiet sentence shows inside the foot", async () => {
+    const { el, host } = await longBill({ handheld: true });
+    const root = el.shadowRoot!;
+    await userEvent.click(root.querySelector<HTMLElement>("[data-pay-sheet]")!);
+    const alert = await vi.waitFor(() => root.querySelector("[data-pay-unsent]")!);
+    await resized(el);
+
+    expect(root.querySelector("[data-order-foot]")!.contains(alert)).toBe(true);
+    expectInside(alert, host);
+  });
+
+  it("a handheld's Order foot: a till below 720 px, and a handheld drawing the whole tender, keep today's foot", async () => {
+    // Not part-paid, so the till draws the tender rather than Pay the rest.
+    const bills = [footerBill];
+    for (const over of [
+      { handheld: false, bills },
+      {
+        handheld: true,
+        bills,
+        paymentConfirmation: {
+          tender: { method: "cash" as const, amount: "10.00" },
+          outstanding: "10.00",
+          guestCount: 3,
+        },
+      },
+    ]) {
+      const { el } = await longBill(over);
+      const root = el.shadowRoot!;
+
+      expect(
+        root.querySelector("[data-bill-actions] till-tender-pay"),
+        JSON.stringify(over),
+      ).not.toBeNull();
+      expect(root.querySelector("[data-order-foot]"), JSON.stringify(over)).toBeNull();
+      cleanupWidgets();
+    }
   });
 });
