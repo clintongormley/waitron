@@ -10,7 +10,7 @@ import { type Context, Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError, isAppError } from "@waitron/shared";
-import { hashDeviceToken } from "@waitron/identity";
+import { hashDeviceToken, hashSecret } from "@waitron/identity";
 import { deviceProfiles, devices, withTransaction, venueLocationId } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -437,6 +437,16 @@ describe("requireDevice (venue database)", () => {
     const result = await probe(`${deviceId}.not-the-real-token`);
     expect(result).toEqual({ ok: false, code: "device.unauthorized" });
     // A failed authentication is a no-op on the row: the sighting is recorded only after verify.
+    expect(await lastSeenAt(deviceId)).toBeNull();
+  });
+
+  it("rejects a cookie whose row still holds the token's old scrypt hash, so the device pairs again", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    await suite.db
+      .update(devices)
+      .set({ tokenHash: hashSecret(token) })
+      .where(eq(devices.id, deviceId));
+    expect(await probe(`${deviceId}.${token}`)).toEqual({ ok: false, code: "device.unauthorized" });
     expect(await lastSeenAt(deviceId)).toBeNull();
   });
 
@@ -1048,7 +1058,7 @@ describe("reading the device beside the write lock", () => {
 
 describe("a change committed between the row read and the write lock", () => {
   /** Commits `change` once, after the next sign-in's first row read; `fired` says whether it ran. */
-  function commitDuringVerification(change: () => unknown): { fired: () => boolean } {
+  function commitAfterRowRead(change: () => unknown): { fired: () => boolean } {
     let fired = false;
     signIn.afterRead = async () => {
       signIn.afterRead = null;
@@ -1060,14 +1070,14 @@ describe("a change committed between the row read and the write lock", () => {
 
   it("refuses a device revoked meanwhile", async () => {
     const { deviceId, token } = await enrolDeviceFixture();
-    const hook = commitDuringVerification(() => revoke(deviceId));
+    const hook = commitAfterRowRead(() => revoke(deviceId));
     expect(await probeTry(`${deviceId}.${token}`)).toBeNull();
     expect(hook.fired()).toBe(true);
   });
 
   it("refuses the old token once its hash has been replaced meanwhile", async () => {
     const { deviceId, token } = await enrolDeviceFixture();
-    const hook = commitDuringVerification(() =>
+    const hook = commitAfterRowRead(() =>
       suite.db.execute(
         sql`update devices set token_hash = ${hashDeviceToken("replacement")} where id = ${deviceId}`,
       ),
@@ -1079,7 +1089,7 @@ describe("a change committed between the row read and the write lock", () => {
   it("returns the profile the device was moved to meanwhile", async () => {
     const { deviceId, token } = await enrolDeviceFixture();
     const movedTo = await seedDeviceProfile("New screen", "kds", []);
-    const hook = commitDuringVerification(() =>
+    const hook = commitAfterRowRead(() =>
       suite.db.execute(
         sql`update devices set device_profile_id = ${movedTo} where id = ${deviceId}`,
       ),
@@ -1089,8 +1099,8 @@ describe("a change committed between the row read and the write lock", () => {
   });
 });
 
-describe("a token already verified for its device", () => {
-  it("is verified afresh, and refused, once the device's token hash is replaced", async () => {
+describe("a token that has signed in before", () => {
+  it("is refused once the device's token hash is replaced, and the new token signs in", async () => {
     const { deviceId, token } = await enrolDeviceFixture();
     expect(await probeTry(`${deviceId}.${token}`)).not.toBeNull();
     await suite.db.execute(

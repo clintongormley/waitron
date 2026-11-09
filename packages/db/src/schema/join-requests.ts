@@ -49,7 +49,7 @@ export const joinRequests = table(
     // The name the joiner asked for. An agent accept copies it to `print_agents.name`; a device accept
     // stores the name its caller passes (the Pair form's, or in dev mode the asked-for one).
     label: label("label").notNull(),
-    // scrypt of the token minted at join. Copied to the real row at accept, so the joiner's cookie or
+    // `hashDeviceToken` of the token minted at join. Copied to the real row at accept, so the joiner's cookie or
     // bearer token survives approval unchanged — only its SELECTOR changes.
     tokenHash: label("token_hash").notNull(),
     // The two-digit number the joiner displays and the admin matches. NOT a secret and NOT typed: its

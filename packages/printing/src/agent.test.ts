@@ -5,7 +5,7 @@ import { CORE_MIGRATIONS, printAgents, withTransaction, venueLocationId } from "
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { hashDeviceToken } from "@waitron/identity";
+import { hashDeviceToken, hashSecret } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { authenticateAgent } from "./agent.js";
 type PrintAgentConfig = { locationId: string };
@@ -174,6 +174,17 @@ describe("authenticateAgent", () => {
     const { agentId } = await enrolled();
     const forged = `${agentId}.${randomBytes(32).toString("base64url")}`;
     expect(await codeOf(() => authenticateAgent(suite.db, forged))).toBe("agent.unauthorized");
+  });
+
+  it("a row still holding the token's old scrypt hash → agent.unauthorized, so the agent enrols again", async () => {
+    const { agentId, token } = await enrolled();
+    const secret = token.slice(token.indexOf(".") + 1);
+    await suite.db
+      .update(printAgents)
+      .set({ tokenHash: hashSecret(secret) })
+      .where(eq(printAgents.id, agentId));
+    expect(await codeOf(() => authenticateAgent(suite.db, token))).toBe("agent.unauthorized");
+    expect(await lastSeenAt(agentId)).toBeNull();
   });
 
   it("a revoked (active=false) agent → agent.unauthorized", async () => {

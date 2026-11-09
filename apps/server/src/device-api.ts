@@ -279,7 +279,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
       // A disabled device's browser still holds its cookie; proven, the knock comes back as that
-      // device. Checked before the transaction, so scrypt does not hold the write lock.
+      // device.
       const returning = await provenDisabledDevice(deps.db, parseDeviceCookie(readDeviceCookie(c)));
       let dropped: string[] = [];
       const made = await withTransaction(deps.db, async (tx) => {

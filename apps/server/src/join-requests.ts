@@ -703,7 +703,6 @@ export async function selfEnrolNodeAgent(
     .from(printAgents)
     .where(eq(printAgents.nodeId, input.nodeId));
 
-  // Checked BEFORE minting so a refused re-enrol does not spend a scrypt it will throw away.
   if (existing !== undefined && !existing.active) throw new AppError("device.join_revoked", {});
 
   const secret = randomBytes(32).toString("base64url");

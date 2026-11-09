@@ -37,7 +37,7 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { deviceTokenMatches, hashDeviceToken } from "@waitron/identity";
+import { deviceTokenMatches, hashDeviceToken, hashSecret } from "@waitron/identity";
 import {
   deleteDeviceProfile,
   emptyPrinterLists,
@@ -485,6 +485,20 @@ describe("readJoinStatus", () => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
     });
     const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, "wrong-token", window);
+    expect(status).toBe("not_approved");
+  });
+
+  it("is not_approved for a request still holding its token's old scrypt hash, so the device asks again", async () => {
+    const venue = await setupVenue(suite.db);
+    const window = openWindow();
+    const made = await withTransaction(suite.db, async (tx) => {
+      return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
+    });
+    await suite.db
+      .update(joinRequests)
+      .set({ tokenHash: hashSecret(made.token) })
+      .where(eq(joinRequests.id, made.joinId));
+    const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token, window);
     expect(status).toBe("not_approved");
   });
 
@@ -1382,6 +1396,21 @@ describe("a returning disabled device", () => {
     expect(await proven(`not-a-uuid.${made.token}`)).toBeNull();
   });
 
+  it("does not prove a cookie for a disabled device whose row still holds the token's old scrypt hash", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("till");
+    const made = await withTransaction(suite.db, async (tx) => {
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
+      await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { label: "Bar till", profileId });
+      return made;
+    });
+    await suite.db
+      .update(devices)
+      .set({ active: false, tokenHash: hashSecret(made.token) })
+      .where(eq(devices.id, made.joinId));
+    expect(await proven(`${made.joinId}.${made.token}`)).toBeNull();
+  });
+
   /** A till enrolled and then deleted through `deleteDevice`, with a REAL hash of its token written
    * back onto the row. The delete itself blanks the hash, which refuses every proof on its own; the
    * write puts the conditions on `deleted_at` alone between a deleted row and a match. */
@@ -1631,6 +1660,18 @@ describe("readAgentJoinStatus", () => {
     );
     expect(await readAgentJoinStatus(suite.db, cfg, made.joinId, made.token)).toBe("approved");
     expect(await readAgentJoinStatus(suite.db, cfg, randomUUID(), made.token)).toBe("not_approved");
+  });
+
+  it("is not_approved for a request still holding its token's old scrypt hash, so the agent asks again", async () => {
+    const cfg = (await setupVenue(suite.db)).cfg;
+    const made = await asApp((tx) =>
+      createJoinRequest(tx, cfg, { kind: "print_agent", label: "a" }),
+    );
+    await suite.db
+      .update(joinRequests)
+      .set({ tokenHash: hashSecret(made.token) })
+      .where(eq(joinRequests.id, made.joinId));
+    expect(await readAgentJoinStatus(suite.db, cfg, made.joinId, made.token)).toBe("not_approved");
   });
 });
 

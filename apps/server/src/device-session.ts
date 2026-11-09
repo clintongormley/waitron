@@ -42,7 +42,7 @@ export function cookieDomainFor(
 }
 
 /**
- * The value is `${deviceId}.${token}`: the row id selects, the scrypt-checked token validates. The
+ * The value is `${deviceId}.${token}`: the row id selects, the token validates. The
  * `Domain` is resolved here, as {@link clearDeviceCookie} resolves it, so both compute the SAME
  * scope — an un-enrol that cleared a differently-scoped cookie would fail to delete it.
  */
@@ -143,15 +143,9 @@ export interface DeviceProof {
 /**
  * Reads and authenticates the request's device, returning its {@link DeviceProof} or `null` at
  * EVERY miss — a missing or malformed cookie, an unknown or revoked device, or a token that does
- * not verify. The id selects the row because scrypt is per-row-salted; the token
- * validates it. Only a cookie read that verifies writes (the `last_seen_at` sighting), and only
- * when a sighting is due and the read is not passive.
- *
- * The authenticating reads and the token check run outside `withTransaction`, which is the venue's
- * write lock, so scrypt never holds up a sale; a read issued while another caller's write is open
- * sees committed rows only (`packages/store/src/connections.ts`). The sighting write re-reads the
- * row inside its transaction first, so a revocation or a new token committed while this call
- * waited for the lock refuses the request, and a new binding is what it returns.
+ * not match. The id selects the row and the token validates it. Only a cookie read that matches
+ * writes (the `last_seen_at` sighting), and only when a sighting is due and the read is not
+ * passive; that sequence is {@link signInWithToken}'s.
  */
 async function readDeviceProof(
   deps: { db: Database; devMode?: boolean },

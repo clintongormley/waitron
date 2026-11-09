@@ -7,19 +7,9 @@ import type { Database, Transaction } from "@waitron/db";
 import { SIGHTING_INTERVAL_MS, signInWithToken } from "@waitron/identity";
 
 /**
- * Resolves a bearer token `${agentId}.${secret}` to its agent id. The id selects the row (the scrypt
- * salt is per row) and the secret validates it. Every refusal is the same `agent.unauthorized`.
- *
- * The key is derived on the thread pool and the row re-read afterwards, both with no transaction
- * open, so a revoke or a re-key committed while the key was derived refuses this token. A secret
- * that passes is remembered against the row's hash, and a request whose secret and current hash
- * match what is remembered skips the derivation; the row is read on every request, so a revoke or
- * a re-key committed before that read refuses the token.
- *
- * Auth runs on every pull and report, so the sighting write is gated to one per
- * {@link SIGHTING_INTERVAL_MS}, and the venue's write lock is taken only when that write is due.
- * That write re-reads the row inside its transaction first, so a revoke or a re-key committed
- * while this call waited for the lock refuses the token too.
+ * Resolves a bearer token `${agentId}.${secret}` to its agent id. The id selects the row and the
+ * secret validates it, through {@link signInWithToken}. Every refusal is the same
+ * `agent.unauthorized`.
  */
 export async function authenticateAgent(db: Database, token: string): Promise<{ agentId: string }> {
   const dot = token.indexOf(".");

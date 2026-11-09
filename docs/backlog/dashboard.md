@@ -386,16 +386,14 @@ See [A7](#roles-the-admin-can-edit-a7) for the two implementation cuts and their
   Confirm with owner: an existing malformed number now blocks an otherwise-unrelated edit, because
   both forms re-validate the telephone field on every submit.
 
-## Secret checks and the write lock: the PIN, manager-login and profile checks moved — DONE (W1, #1117); two blocking derivations and one stale-answer window remain OPEN
+## Secret checks and the write lock: the PIN, manager-login and profile checks moved — DONE (W1, #1117); two blocking derivations remain OPEN
 
 Nothing makes a NEW route
 derive its key before the transaction opens or take turns (`docs/developers/conventions-data.md`).
-**Still open:** `hashSecret` derives with `scryptSync` (`packages/identity/src/secret-hash.ts`), so minting a token or setting a PIN or
-password stops the event loop. The `deriveKey` callers are tracked under
-[The box](box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives). Left by #912's review: the two join-status
-readers answer from a hash read just before the key is derived, so a request denied or revoked in
-that window can get one stale `pending` or `approved` (both routes return only `{ status }` and issue
-no credential; the till and print-agent clients were not traced); and `verifySecretAsync` could be
+**Still open:** `hashSecret` derives with `scryptSync` (`packages/identity/src/secret-hash.ts`), so setting a PIN or password, or
+minting the break-glass secret or first-setup key, stops the event loop; device and print-agent tokens are hashed with
+`hashDeviceToken` instead. The `deriveKey` callers are tracked under
+[The box](box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives). Left by #912's review: `verifySecretAsync` could be
 renamed `verifySecret` (optional).
 
 ## Open, and it bites this work first: two documents state the component rules and they have drifted
@@ -558,7 +556,7 @@ plans to retire the editor.
   own derivation cost; setup and certificate renewal currently pass it to the synchronous opener.
   Scope a shared limit or an isolated opener with a deadline. Raised by A852's review.
 - **Loose ends left by secret checks and the write lock (W1, #1117; #912's review).**
-  [Detail](dashboard.md#secret-checks-and-the-write-lock-the-pin-manager-login-and-profile-checks-moved--done-w1-1117-two-blocking-derivations-and-one-stale-answer-window-remain-open)
+  [Detail](dashboard.md#secret-checks-and-the-write-lock-the-pin-manager-login-and-profile-checks-moved--done-w1-1117-two-blocking-derivations-remain-open)
 - **A refused early dashboard payment authorization may become allowed before the PIN transaction —
   UNVERIFIED (A530 review).** `managerPinToCheck` (`apps/server/src/payments-api.ts`) returns no
   credential when its read refuses; `pinGated` then opens the transaction without a turn.

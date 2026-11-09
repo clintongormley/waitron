@@ -2026,11 +2026,8 @@ A secret check that derives an scrypt key should be the exception: it takes the 
 than a `tx` and derives the key with no transaction open, because `withTransaction` is the venue's
 single write lock (`packages/db/src/tenancy.ts`) and every other write would wait on scrypt. One
 that must act on the row afterwards re-reads it once the key is derived, and opens a transaction
-only for its own write. Sites that follow it include `tryReadDevice`
-(`apps/server/src/device-session.ts`), `authenticateAgent` (`packages/printing/src/agent.ts`),
-`verifyBreakGlass` (`apps/server/src/break-glass.ts`), and `readJoinStatus` and
-`readAgentJoinStatus` (`apps/server/src/join-requests.ts`), which read inside one transaction and
-verify after it closes.
+only for its own write. Sites that follow it include `verifyBreakGlass`
+(`apps/server/src/break-glass.ts`).
 
 The PIN, manager-password and own-password checks follow it in two halves (W1, #1117). The route first
 calls `checkPin` (`packages/identity/src/credential.ts`), `checkManagerPassword`
