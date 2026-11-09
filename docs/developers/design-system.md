@@ -3111,10 +3111,10 @@ and nothing guards it across screens:
 - A231q: the mail server settings form (`apps/dashboard/src/widgets/email-settings-form.ts`); the
   order detail's invoice email form (`apps/dashboard/src/widgets/invoice-email-dialog.ts`); an office
   printer's Add (`apps/dashboard/src/widgets/page-printer-add.ts`), which opens already savable when
-  discovery found a name or address; the office printers panel's
-  Rename (`apps/dashboard/src/widgets/page-printers-panel.ts`); and the
-  till's invoice email form (`apps/till/src/widgets/invoice-email-dialog.ts`). Each has a sibling
-  `*.unsaved.test.ts`;
+  discovery found a name or address; and the till's invoice email form
+  (`apps/till/src/widgets/invoice-email-dialog.ts`). Each has a sibling `*.unsaved.test.ts`. An A4
+  printer's name is edited in the printer details' Edit form (`apps/dashboard/src/screens/printers-screen.ts`,
+  A405), whose leave cases are in `printer-details-a4.unsaved.test.ts`;
 - A1088: Box status's note dialog (`apps/dashboard/src/widgets/misdated-note-dialog.ts`); Add
   note's Save follows the rule. Its leave cases are in `misdated-note-dialog.unsaved.test.ts`
   beside it;

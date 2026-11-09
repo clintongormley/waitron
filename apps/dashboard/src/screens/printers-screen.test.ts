@@ -19,6 +19,7 @@ import {
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
+import { en, es, type StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
@@ -1648,7 +1649,7 @@ describe("printers-screen", () => {
       tab: "printers",
       table: "printers-table",
       viewKey: "waitron.printers.table",
-      choices: ["agent", "pending", "status", "lastPrint"],
+      choices: ["paper", "agent", "pending", "status", "lastPrint"],
       hide: "pending",
       label: () => t("printers.pending_jobs"),
     },
@@ -2114,8 +2115,8 @@ describe("printers-screen", () => {
         expect(text(el, "[data-test=deactivate-printer-p1]")).toBe(w.disable);
         const table = q(el, '[data-test="printers-table"]')!;
         const statusOf = (id: string) =>
-          [...table.shadowRoot!.querySelectorAll(`tr[data-row-key="${id}"] td`)].map((cell) =>
-            cell.textContent?.trim(),
+          [...table.shadowRoot!.querySelectorAll(`tr[data-row-key="receipt:${id}"] td`)].map(
+            (cell) => cell.textContent?.trim(),
           );
         expect(statusOf("p1")).toContain(w.printerActive);
         expect(statusOf("p2")).toContain(w.printerDisabled);
@@ -11994,68 +11995,377 @@ describe("office printers in discovery", () => {
   });
 });
 
-describe("the A4 printers panel", () => {
+describe("one table for every printer", () => {
   beforeEach(() => {
     history.replaceState(null, "", "/");
   });
+  afterEach(() => {
+    sessionStorage.removeItem("waitron.printers.table");
+    localStorage.removeItem("waitron.printers.table:columns");
+    localStorage.removeItem("waitron.printers.table:column-order");
+  });
 
-  const pagePrinter: PagePrinterRow = {
+  const pageRow = (over: Partial<PagePrinterRow> = {}): PagePrinterRow => ({
     id: "pp1",
-    name: "Back office",
+    name: "Office",
     host: "10.0.0.56",
     port: 631,
     resourcePath: "/ipp/print",
     documentFormat: "application/pdf",
     supportedFormats: ["application/pdf"],
     media: "iso_a4_210x297mm",
-    resolutionDpi: 600,
+    resolutionDpi: 300,
     active: true,
     agentId: "a1",
-    agentName: "Cocina agent",
-  };
-  const panelOf = (el: PrintersScreen) =>
-    q(
-      el,
-      "dashboard-page-printers-panel",
-    ) as unknown as HTMLElementTagNameMap["dashboard-page-printers-panel"] & {
-      reload: () => Promise<void>;
+    agentName: "Kitchen agent",
+    ...over,
+  });
+  const PAGE_ROWS = [
+    pageRow(),
+    pageRow({ id: "pp2", name: "Back office", host: "10.0.0.57" }),
+    pageRow({
+      id: "pp3",
+      name: "Old laser",
+      host: "10.0.0.58",
+      active: false,
+      agentId: null,
+      agentName: null,
+      media: "na_letter_8.5x11in",
+    }),
+  ];
+  const narrow: Printer = { ...printers[0]!, id: "p5", name: "Barra 58", paperWidth: "58mm" };
+
+  async function mountTable(
+    overrides: Partial<DashboardApi> = {},
+    canManage = true,
+    status: "all" | "active" = "all",
+  ) {
+    const api = stubApi({
+      listPrinters: vi.fn().mockResolvedValue([...printers, narrow]),
+      listPagePrinters: vi.fn().mockResolvedValue(PAGE_ROWS),
+      updatePagePrinter: vi.fn().mockResolvedValue(undefined),
+      printPagePrinterTestPage: vi
+        .fn<(id: string) => Promise<PageTestPage>>()
+        .mockResolvedValue({ id: "tp1", status: "waiting" }),
+      ...overrides,
+    } as Partial<DashboardApi>);
+    const background = {
+      readPagePrinterTestPage: vi
+        .fn<(id: string) => Promise<PageTestPage | null>>()
+        .mockResolvedValue({ id: "tp1", status: "sent" }),
     };
-
-  it.each([true, false])(
-    "shows the watched office printers on the Printers tab, passing whether actions are allowed (%s)",
-    async (canManage) => {
-      const api = stubApi({ listPagePrinters: vi.fn().mockResolvedValue([pagePrinter]) });
-      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-        api,
-        canManage,
-      } as Partial<PrintersScreen>);
-      await flush(el);
-      await selectTab(el, "printers");
-      const panel = panelOf(el);
-      expect(panel.closest("[slot=printers]")).not.toBeNull();
-      expect(panel.rows).toEqual([pagePrinter]);
-      expect(panel.canManage).toBe(canManage);
-    },
-  );
-
-  it("reads the list again for the panel, and rejects when that read fails", async () => {
-    const listPagePrinters = vi.fn().mockResolvedValue([pagePrinter]);
-    const api = stubApi({ listPagePrinters });
+    Object.assign(api, { background });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api,
-      canManage: true,
+      canManage,
+      testPagePollMs: 1,
     } as Partial<PrintersScreen>);
     await flush(el);
     await selectTab(el, "printers");
-    const renamed = { ...pagePrinter, name: "Upstairs" };
-    listPagePrinters.mockResolvedValueOnce([renamed]);
-    await panelOf(el).reload();
+    if (status === "all") await filterPrinters(el, "all");
+    return { el, api, background };
+  }
+  type Table = HTMLElement & {
+    rows: unknown[];
+    columns: { key: string; pinned?: string; label: string }[];
+    emptyMessage: string;
+    updateComplete: Promise<unknown>;
+  };
+  const table = (el: PrintersScreen) => q(el, "[data-test=printers-table]") as unknown as Table;
+  const headers = (el: PrintersScreen) =>
+    [...table(el).shadowRoot!.querySelectorAll("thead th")].map((th) =>
+      th.textContent!.replace(/[▲▼]/g, "").trim(),
+    );
+  const textOf = (el: PrintersScreen, sel: string) =>
+    q(el, sel)?.textContent?.replace(/\s+/g, " ").trim();
+  const rowOf = (el: PrintersScreen, id: string) =>
+    q(el, `[data-test=printer-row-${id}]`)!.closest("tr")!;
+  const menuIn = (el: PrintersScreen, id: string) =>
+    rowOf(el, id).querySelector("dashboard-row-actions") as
+      (HTMLElement & { label: string }) | null;
+  const menuLabels = (el: PrintersScreen, id: string) =>
+    [...menuIn(el, id)!.querySelectorAll("wt-button")].map((b) => b.textContent!.trim());
+  const modal = (el: PrintersScreen) => q(el, "[data-test=printer-details-modal]")!;
+  const inDetails = (el: PrintersScreen, sel: string) => deepQuery(modal(el), sel);
+
+  it("lists receipt and A4 printers in one table told apart by Paper", async () => {
+    const { el } = await mountTable();
+    expect(q(el, "[data-test=page-printers-table]")).toBeNull();
+    expect(table(el).closest("[slot=printers]")).not.toBeNull();
+    for (const id of ["p1", "p2", "p3", "p5", "pp1", "pp2", "pp3"])
+      expect(q(el, `[data-test=printer-row-${id}]`), id).not.toBeNull();
+    expect(headers(el)).toContain(t("printers.invoice_printer_paper"));
+    expect(textOf(el, "[data-test=printer-paper-p1]")).toBe(t("printers.paper_roll_80"));
+    expect(textOf(el, "[data-test=printer-paper-p5]")).toBe(t("printers.paper_roll_58"));
+    expect(textOf(el, "[data-test=page-printer-paper-pp1]")).toBe(t("printers.invoice_printer_a4"));
+    expect(textOf(el, "[data-test=page-printer-paper-pp3]")).toBe(
+      t("printers.invoice_printer_letter"),
+    );
+    // Paper is the only thing that tells them apart; no heading or row names the kind.
+    const cells = table(el).shadowRoot!.textContent!;
+    for (const marker of ["Invoice printer (A4)", "Impresora de facturas (A4)"])
+      expect(cells).not.toContain(marker);
+    expect(q(el, "[data-test^=page-printer-kind-]")).toBeNull();
+    for (const title of ["A4 printers", "Impresoras A4"])
+      expect(el.shadowRoot!.textContent).not.toContain(title);
+    expect(textOf(el, "[data-test=printer-row-pp1]")).toBe("Office");
+    expect(textOf(el, "[data-test=page-printer-agent-pp1]")).toBe("Kitchen agent");
+    expect(textOf(el, "[data-test=page-printer-agent-pp3]")).toBe(
+      t("printers.invoice_printer_agent_gone"),
+    );
+    expect(textOf(el, "[data-test=page-printer-pending-pp1]")).toBe("—");
+    expect(textOf(el, "[data-test=page-printer-last-print-pp1]")).toBe("—");
+  });
+
+  it("names the Paper column and its words in English and Spanish", async () => {
+    const { el } = await mountTable();
+    const title = t("printers.invoice_printer_paper");
+    expect([en["printers.invoice_printer_paper"], es["printers.invoice_printer_paper"]]).toContain(
+      title,
+    );
+    expect(table(el).columns.find(({ key }) => key === "paper")?.label).toBe(title);
+    const words = {
+      "printers.invoice_printer_paper": ["Paper", "Papel"],
+      "printers.paper_roll_58": ["58 mm roll", "Rollo de 58 mm"],
+      "printers.paper_roll_80": ["80 mm roll", "Rollo de 80 mm"],
+      "printers.invoice_printer_a4": ["A4", "A4"],
+      "printers.invoice_printer_letter": ["Letter", "Carta"],
+      "printers.page_printer_add": ["Add as A4 printer", "Añadir como impresora A4"],
+      "printers.page_printer_added": ["Added as A4 printer", "Añadida como impresora A4"],
+      "printers.page_printer_enable_hint": ["Disabled A4 printer", "Impresora A4 deshabilitada"],
+    } as const;
+    for (const [key, [english, spanish]] of Object.entries(words)) {
+      expect(en[key as StringKey], key).toBe(english);
+      expect(es[key as StringKey], key).toBe(spanish);
+    }
+    for (const gone of [
+      "printers.invoice_printers_title",
+      "printers.invoice_printer_rename",
+      "printers.invoice_printer_rename_heading",
+    ])
+      expect(gone in en, gone).toBe(false);
+  });
+
+  it("opens the same details window from an A4 row and a receipt row", async () => {
+    const { el } = await mountTable();
+    q(el, "[data-test=printer-row-pp2]")!.click();
     await flush(el);
-    expect(panelOf(el).rows).toEqual([renamed]);
-    listPagePrinters.mockRejectedValueOnce({ code: "connection.failed" });
-    await expect(panelOf(el).reload()).rejects.toEqual({ code: "connection.failed" });
+    expect(location.pathname).toMatch(/\/printer\/pp2$/);
+    expect(detailsHeading(el)).toBe("Back office");
+    expect(inDetails(el, "[data-test=page-printer-detail-address]")?.textContent?.trim()).toBe(
+      "10.0.0.57:631/ipp/print",
+    );
+    pressCloseDetails(el);
     await flush(el);
-    expect(q(el, "[data-test=printer-refresh-error]")).toBeNull();
+    q(el, "[data-test=printer-row-p1]")!.click();
+    await flush(el);
+    expect(detailsHeading(el)).toBe("Cocina");
+    expect(q(el, "[data-test=printer-details-modal]")).toBe(modal(el));
+    expect(inDetails(el, "[data-test=printer-status]")).not.toBeNull();
+  });
+
+  it("filters receipt and A4 printers together by status", async () => {
+    const { el } = await mountTable({}, true, "active");
+    const select = table(el).shadowRoot!.querySelector<Dropdown>('[name="status-filter"]')!;
+    expect(select.value).toBe("active");
+    for (const id of ["p1", "p5", "pp1", "pp2"])
+      expect(q(el, `[data-test=printer-row-${id}]`), id).not.toBeNull();
+    for (const id of ["p2", "p3", "pp3"])
+      expect(q(el, `[data-test=printer-row-${id}]`), id).toBeNull();
+    await filterPrinters(el, "disabled");
+    for (const id of ["p2", "p3", "pp3"])
+      expect(q(el, `[data-test=printer-row-${id}]`), id).not.toBeNull();
+    for (const id of ["p1", "p5", "pp1", "pp2"])
+      expect(q(el, `[data-test=printer-row-${id}]`), id).toBeNull();
+  });
+
+  it("keeps the row menu in a pinned actions column for both kinds", async () => {
+    const { el } = await mountTable();
+    expect(table(el).columns.at(-1)).toMatchObject({ key: "actions", pinned: "end" });
+    expect(menuIn(el, "p1")).not.toBeNull();
+    expect(menuIn(el, "pp1")).not.toBeNull();
+  });
+
+  it("draws a saved column view that holds the old column keys", async () => {
+    localStorage.setItem("waitron.printers.table:columns", JSON.stringify({ pending: false }));
+    localStorage.setItem(
+      "waitron.printers.table:column-order",
+      JSON.stringify(["lastPrint", "status", "pending", "agent"]),
+    );
+    const { el } = await mountTable();
+    // Paper, which the saved order never named, goes before the first column it preceded.
+    expect(headers(el)).toEqual([
+      t("printers.name"),
+      t("printers.invoice_printer_paper"),
+      t("printers.last_print"),
+      t("printers.status"),
+      t("printers.last_seen_by"),
+      t("printers.actions"),
+    ]);
+    for (const id of ["p1", "pp1"])
+      expect(q(el, `[data-test=printer-row-${id}]`), id).not.toBeNull();
+  });
+
+  it.each([true, false])(
+    "shows the watched office printers in the table, with A4 actions only when allowed (%s)",
+    async (canManage) => {
+      const { el } = await mountTable({}, canManage);
+      expect(q(el, "[data-test=printer-row-pp1]")).not.toBeNull();
+      expect(table(el).closest("[slot=printers]")).not.toBeNull();
+      expect(menuIn(el, "pp1") !== null).toBe(canManage);
+      expect(menuIn(el, "p1")).not.toBeNull();
+    },
+  );
+
+  it("a role without hardware.manage sees A4 printers with no row menu and no Edit in their details", async () => {
+    const { el } = await mountTable({}, false);
+    for (const id of ["pp1", "pp2", "pp3"]) expect(menuIn(el, id), id).toBeNull();
+    expect(table(el).columns.map(({ key }) => key)).toContain("actions");
+    q(el, "[data-test=printer-row-pp1]")!.click();
+    await flush(el);
+    expect(inDetails(el, "[data-test=edit-page-printer-details]")).toBeNull();
+  });
+
+  it("offers a manager no choice of a printer for A4 invoices, and marks no row as it", async () => {
+    const { el } = await mountTable();
+    // The status filter is the table's one combobox.
+    expect(
+      [...table(el).shadowRoot!.querySelectorAll("wt-combobox")].map((box) =>
+        box.getAttribute("name"),
+      ),
+    ).toEqual(["status-filter"]);
+    expect(q(el, "[data-test=save-invoice-printer]")).toBeNull();
+    expect(q(el, "[data-test^=page-printer-chosen-]")).toBeNull();
+    expect(table(el).shadowRoot!.textContent).not.toContain("Printer for A4 invoices");
+    expect(table(el).shadowRoot!.textContent).not.toContain("Prints the A4 invoices");
+  });
+
+  it("says a disabled printer is enabled by finding it again, and offers no Enable", async () => {
+    const { el } = await mountTable();
+    expect(textOf(el, "[data-test=page-printer-status-pp2]")).toBe(t("printers.status_active"));
+    expect(textOf(el, "[data-test=page-printer-status-pp3]")).toContain(
+      t("printers.status_disabled"),
+    );
+    expect(textOf(el, "[data-test=page-printer-rediscover-pp3]")).toBe(
+      t("printers.invoice_printer_rediscover"),
+    );
+    expect(q(el, "[data-test=page-printer-rediscover-pp2]")).toBeNull();
+    const disable = q(
+      el,
+      "[data-test=disable-page-printer-pp3]",
+    ) as HTMLElementTagNameMap["wt-button"];
+    expect(disable.disabled).toBe(true);
+    expect(disable.variant).toBe("secondary");
+    expect(
+      (q(el, "[data-test=disable-page-printer-pp2]") as HTMLElementTagNameMap["wt-button"]).variant,
+    ).toBe("danger");
+    expect(q(el, "[data-test=enable-page-printer-pp3]")).toBeNull();
+  });
+
+  it("shows the empty message only when there are neither receipt nor A4 printers", async () => {
+    const onlyA4 = await mountTable({ listPrinters: vi.fn().mockResolvedValue([]) });
+    expect(table(onlyA4.el).rows).toHaveLength(3);
+    expect(q(onlyA4.el, "[data-test=printer-row-pp1]")).not.toBeNull();
+    expect(q(onlyA4.el, "[slot=empty-action]")).toBeNull();
+    cleanupWidgets();
+    const none = await mountTable(
+      {
+        listPrinters: vi.fn().mockResolvedValue([]),
+        listPagePrinters: vi.fn().mockResolvedValue([]),
+      },
+      true,
+      "active",
+    );
+    expect(table(none.el).rows).toHaveLength(0);
+    expect(table(none.el).emptyMessage).toBe(t("printers.no_printers"));
+    expect(q(none.el, "[slot=empty-action]")).not.toBeNull();
+  });
+
+  it("puts an A4 printer name holding a replacement pattern into its menu as written, with Edit, Print test page and Disable", async () => {
+    const name = "Office $& 2";
+    const { el } = await mountTable({
+      listPagePrinters: vi.fn().mockResolvedValue([pageRow({ name })]),
+    });
+    expect(menuIn(el, "pp1")!.label).toBe(t("printers.row_actions").split("{name}").join(name));
+    expect(menuLabels(el, "pp1")).toEqual([
+      t("action.edit"),
+      t("printers.print_test_page"),
+      t("printers.disable"),
+    ]);
+  });
+
+  it("opens an A4 printer's details in edit mode from the row menu's Edit", async () => {
+    const { el } = await mountTable();
+    q(el, "[data-test=edit-page-printer-pp2]")!.click();
+    await flush(el);
+    expect(detailsHeading(el)).toBe("Back office");
+    const field = inDetails(
+      el,
+      "wt-input[name=printer-detail-name]",
+    ) as unknown as HTMLElementTagNameMap["wt-input"];
+    expect(field.value).toBe("Back office");
+  });
+
+  it("disables an A4 printer from the row menu, then reads the list again", async () => {
+    const listPagePrinters = vi.fn().mockResolvedValue(PAGE_ROWS);
+    const { el, api } = await mountTable({ listPagePrinters });
+    const reads = listPagePrinters.mock.calls.length;
+    q(el, "[data-test=disable-page-printer-pp2]")!.click();
+    await flush(el);
+    expect(api.updatePagePrinter).toHaveBeenCalledWith("pp2", { active: false });
+    await vi.waitFor(() => expect(listPagePrinters.mock.calls.length).toBeGreaterThan(reads));
+  });
+
+  it("shows a refused row-menu Disable under the table", async () => {
+    const { el } = await mountTable({
+      updatePagePrinter: vi.fn().mockRejectedValueOnce({ code: "connection.failed" }),
+    });
+    q(el, "[data-test=disable-page-printer-pp2]")!.click();
+    await flush(el);
+    expect(textOf(el, "[data-test=page-printers-action-error]")).toBe(
+      codeMessage("connection.failed"),
+    );
+  });
+
+  it("A576 saved queues on one host display their own paths and retain independent ids", async () => {
+    const { el, api } = await mountTable({
+      listPagePrinters: vi
+        .fn()
+        .mockResolvedValue([
+          pageRow({ resourcePath: "/printers/kitchen" }),
+          pageRow({ id: "pp2", resourcePath: "/printers/reception" }),
+        ]),
+    });
+    q(el, "[data-test=printer-row-pp1]")!.click();
+    await flush(el);
+    expect(inDetails(el, "[data-test=page-printer-detail-address]")?.textContent?.trim()).toBe(
+      "10.0.0.56:631/printers/kitchen",
+    );
+    pressCloseDetails(el);
+    await flush(el);
+    q(el, "[data-test=printer-row-pp2]")!.click();
+    await flush(el);
+    expect(inDetails(el, "[data-test=page-printer-detail-address]")?.textContent?.trim()).toBe(
+      "10.0.0.56:631/printers/reception",
+    );
+    pressCloseDetails(el);
+    await flush(el);
+    q(el, "[data-test=print-test-page-pp2]")!.click();
+    await flush(el);
+    expect(api.printPagePrinterTestPage).toHaveBeenCalledWith("pp2");
+  });
+
+  it("prints an A4 test page from the row menu and shows its note under the name", async () => {
+    const { el, api } = await mountTable();
+    q(el, "[data-test=print-test-page-pp2]")!.click();
+    await flush(el);
+    expect(api.printPagePrinterTestPage).toHaveBeenCalledWith("pp2");
+    await vi.waitFor(() =>
+      expect(textOf(el, "[data-test=page-printer-test-page-pp2]")).toBe(
+        t("printers.test_page_printed"),
+      ),
+    );
+    expect(rowOf(el, "pp2").contains(q(el, "[data-test=page-printer-test-page-pp2]"))).toBe(true);
   });
 });
 
@@ -12285,10 +12595,10 @@ describe("an A4 printer's details", () => {
     expect(note.closest("[slot=footer]")).not.toBeNull();
     expect(note.closest("wt-form-actions")).toBeNull();
     expect(background.readPagePrinterTestPage).toHaveBeenCalledWith("pp1");
-    // The panel under the table follows the same page rather than reading it again.
-    const panel = q(el, "dashboard-page-printers-panel")!;
+    // The table's row follows the same page rather than reading it again.
+    const table = q(el, "[data-test=printers-table]")!;
     expect(
-      deepQuery(panel.shadowRoot!, "[data-test=page-printer-test-page-pp1]")?.textContent?.trim(),
+      deepQuery(table.shadowRoot!, "[data-test=page-printer-test-page-pp1]")?.textContent?.trim(),
     ).toBe(t("printers.test_page_printed"));
     const reads = background.readPagePrinterTestPage.mock.calls.length;
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -12309,6 +12619,39 @@ describe("an A4 printer's details", () => {
       (inDetails(el, "[data-test=print-page-test-pp1]") as HTMLElementTagNameMap["wt-button"])
         .disabled,
     ).toBe(false);
+  });
+
+  it("shows a failed test-page read in the details' test-page note", async () => {
+    const { el, background } = await openA4();
+    background.readPagePrinterTestPage.mockRejectedValue({ code: "connection.failed" });
+    inDetails(el, "[data-test=print-page-test-pp1]")!.click();
+    await flush(el);
+    await vi.waitFor(() =>
+      expect(detailText(el, "[data-test=page-printer-test-page-read-error]")).toBe(
+        `${t("printers.refresh_failed")} ${codeMessage("connection.failed")}`,
+      ),
+    );
+    const message = inDetails(el, "[data-test=page-printer-test-page-read-error]")!;
+    expect(message.getAttribute("role")).toBe("alert");
+    expect(message.closest(".test-page-note")).not.toBeNull();
+  });
+
+  it("a later list clears the load failure", async () => {
+    const listPagePrinters = vi.fn().mockImplementation(async () => [pagePrinter]);
+    const { el, background } = await openA4({ listPagePrinters });
+    // The read after the failed one stays out, so only the new list can clear the message.
+    background.readPagePrinterTestPage
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockReturnValue(new Promise(() => {}));
+    inDetails(el, "[data-test=print-page-test-pp1]")!.click();
+    await vi.waitFor(() =>
+      expect(inDetails(el, "[data-test=page-printer-test-page-read-error]")).not.toBeNull(),
+    );
+    const reads = listPagePrinters.mock.calls.length;
+    toggleSwitch(el, '[name="page-printer-detail-active"]', false);
+    await vi.waitFor(() => expect(listPagePrinters.mock.calls.length).toBeGreaterThan(reads));
+    await flush(el);
+    expect(inDetails(el, "[data-test=page-printer-test-page-read-error]")).toBeNull();
   });
 
   it("offers no A4 actions without printer.manage", async () => {

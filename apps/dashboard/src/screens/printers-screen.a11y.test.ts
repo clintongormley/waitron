@@ -9,7 +9,8 @@ import {
   detailsEditButton,
   detailsEditTest,
 } from "../widgets/test-helpers.js";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
+import type { WtRowActions } from "@waitron/ui";
 import "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
 import type {
@@ -18,6 +19,7 @@ import type {
   JoinRequestRow,
   OfficePrinterReport,
   PagePrinterRow,
+  PageTestPage,
   PrintAgentRow,
   PrintJobRow,
   Printer,
@@ -1307,6 +1309,153 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     portable.dispatchEvent(new Event("change", { bubbles: true }));
     await flush(el);
     expect(saveLook(el, "save-printer-p1")).toEqual({ variant: "primary", disabled: false });
+    await expectNoA11yViolations(host);
+  });
+});
+
+const officeRow = (over: Partial<PagePrinterRow> = {}): PagePrinterRow => ({
+  id: "pp1",
+  name: "Office",
+  host: "10.0.0.56",
+  port: 631,
+  resourcePath: "/ipp/print",
+  documentFormat: "application/pdf",
+  supportedFormats: ["application/pdf"],
+  media: "iso_a4_210x297mm",
+  resolutionDpi: 300,
+  active: true,
+  agentId: "a1",
+  agentName: "Kitchen agent",
+  ...over,
+});
+const OFFICE_ROWS = [
+  officeRow(),
+  officeRow({ id: "pp2", name: "Back office", host: "10.0.0.57" }),
+  officeRow({ id: "pp3", name: "Old laser", active: false, agentName: null }),
+];
+const a4States = [
+  "populated",
+  "without hardware.manage",
+  "test page read failed",
+  "rename open",
+  "rename refused blank",
+  "rename refused by the server",
+  "menu open at phone width",
+  "test page printing",
+  "test page held",
+  "test page printed",
+  "test page failed",
+] as const;
+type A4State = (typeof a4States)[number];
+
+describe.each(["light", "dark"] as const)("A4 printers in the printers table (%s)", (theme) => {
+  afterEach(async () => {
+    await page.viewport(1280, 900);
+  });
+
+  it.each(a4States)("renders %s accessibly", async (state: A4State) => {
+    if (state.includes("at phone width")) await page.viewport(390, 900);
+    const testPage = {
+      "test page read failed": null,
+      "test page printing": { id: "tp1", status: "printing" },
+      "test page held": { id: "tp1", status: "printing", hold: "output_full" },
+      "test page printed": { id: "tp1", status: "sent" },
+      "test page failed": { id: "tp1", status: "failed", failureCode: "printer_unreachable" },
+    }[state as string] as PageTestPage | null | undefined;
+    const api = stubApi(false, {
+      listPagePrinters: vi.fn().mockResolvedValue(OFFICE_ROWS),
+      updatePagePrinter:
+        state === "rename refused by the server"
+          ? vi.fn().mockRejectedValue({ code: "page_printer.not_found" })
+          : vi.fn().mockResolvedValue(undefined),
+      printPagePrinterTestPage: vi.fn().mockResolvedValue({ id: "tp1", status: "waiting" }),
+    } as Partial<DashboardApi>);
+    Object.assign(api, {
+      background: {
+        readPagePrinterTestPage:
+          state === "test page read failed"
+            ? vi.fn().mockRejectedValue({ code: "connection.failed" })
+            : vi.fn().mockResolvedValue(testPage ?? null),
+      },
+    });
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      {
+        api,
+        canManage: state !== "without hardware.manage",
+        testPagePollMs: 1,
+      } as Partial<PrintersScreen>,
+      theme,
+    );
+    await flush(el);
+    q(el, "wt-tabs")!
+      .shadowRoot!.querySelector<HTMLButtonElement>('[data-key="printers"]')!
+      .click();
+    await flush(el);
+    expect(q(el, "[data-test=printer-row-pp2]")).not.toBeNull();
+    if (state === "menu open at phone width") {
+      const row = q(el, "[data-test=printer-row-pp2]")!.closest("tr")!;
+      (row.querySelector("dashboard-row-actions") as unknown as WtRowActions).show();
+      await flush(el);
+    }
+    if (state.startsWith("rename") || state.startsWith("test page")) {
+      q(el, "[data-test=printer-row-pp2]")!.click();
+      await flush(el);
+    }
+    if (state.startsWith("rename")) {
+      q(el, "[data-test=edit-page-printer-details]")!.click();
+      await flush(el);
+    }
+    if (state === "rename refused blank" || state === "rename refused by the server") {
+      const input = q(el, "wt-input[name=printer-detail-name]")!.shadowRoot!.querySelector(
+        "input",
+      )!;
+      await userEvent.fill(
+        page.elementLocator(input),
+        state === "rename refused blank" ? " " : "Upstairs",
+      );
+      await flush(el);
+      q(el, "[data-test=save-printer-details]")!.click();
+      await vi.waitFor(() =>
+        expect(
+          (
+            q(el, "[data-test=save-printer-details]")!.closest("wt-form-actions") as HTMLElement & {
+              error: string;
+            }
+          ).error,
+        ).not.toBe(""),
+      );
+      await flush(el);
+    }
+    if (state.startsWith("test page")) {
+      q(el, "[data-test=print-page-test-pp2]")!.click();
+      await flush(el);
+      const modal = q(el, "[data-test=printer-details-modal]")!;
+      if (state === "test page read failed")
+        await vi.waitFor(() =>
+          expect(
+            modal.querySelector("[data-test=page-printer-test-page-read-error]"),
+          ).not.toBeNull(),
+        );
+      else
+        await vi.waitFor(() =>
+          expect(
+            modal.querySelector("[data-test=page-printer-test-page-pp2]")?.textContent?.trim(),
+          ).toBe(
+            {
+              "test page printing": t("printers.test_page_printing"),
+              "test page held": fill("printers.test_page_held", {
+                reason: t("printers.test_page_hold_output_full"),
+              }),
+              "test page printed": t("printers.test_page_printed"),
+              "test page failed": fill("printers.test_page_failed", {
+                reason: t("printers.test_page_reason_unreachable"),
+              }),
+            }[state as string],
+          ),
+        );
+      await flush(el);
+    }
     await expectNoA11yViolations(host);
   });
 });

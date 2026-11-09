@@ -5,7 +5,7 @@ import { LeaveController } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import type { DashboardApi, PagePrinterRow } from "../api/client.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
-import "./printers-screen.js";
+import { PrintersScreen } from "./printers-screen.js";
 
 const row = (over: Partial<PagePrinterRow> = {}): PagePrinterRow => ({
   id: "pp1",
@@ -167,3 +167,36 @@ it("losing hardware.manage drops an open rename from the unsaved-changes check",
   expect(editing(panel)).toBe(false);
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
+
+for (const refuses of [false, true]) {
+  it(`a departed name ${refuses ? "refusal" : "success"} leaves a reopened form alone`, async () => {
+    let finish!: () => void;
+    const { app, panel } = await mount();
+    app.api.updatePagePrinter.mockImplementationOnce(async () => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      if (refuses) throw { code: "connection.failed" };
+    });
+    await openRename(panel);
+    await type(panel, "Submitted");
+    q(panel, "[data-test=save-printer-details]")!.click();
+    await expect.poll(() => typeof finish).toBe("function");
+    panel.remove();
+    const reopened = new PrintersScreen();
+    reopened.api = app.api as unknown as DashboardApi;
+    reopened.canManage = true;
+    app.shadowRoot!.append(reopened);
+    await expect.poll(() => q(reopened, "[data-test=edit-page-printer-details]")).not.toBeNull();
+    await openRename(reopened);
+    await type(reopened, "Reopened");
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await reopened.updateComplete;
+    expect(nameField(reopened).value).toBe("Reopened");
+    expect(nameField(reopened).disabled).toBe(false);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    await type(reopened, "Back office");
+    expect(app.leave.coordinator.isDirty()).toBe(false);
+  });
+}
