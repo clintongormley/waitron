@@ -78,6 +78,24 @@ it("claims the frozen Live identity before certificate/readiness and mounts its 
   expect(requests.filter((r) => r.path.endsWith("/provision"))).toEqual([]);
   expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain(venue.admin.password);
 });
+
+it("sends the chosen working language in the real Live claim request", async () => {
+  const { app, requests } = await mount();
+  await screen(app, "mode");
+  emit(app, "setup-patch", { patch: { mode: "live", venue } });
+  emit(app, "setup-goto", { screen: "venue" });
+  const form = await screen(app, "venue");
+  const picker = form.shadowRoot!.querySelector("[data-test=staffLanguage]")!;
+  picker.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "en" }, bubbles: true, composed: true }),
+  );
+  await form.updateComplete;
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!.click();
+  await expect.poll(() => requests.filter((r) => r.path.endsWith("/claim"))).toHaveLength(1);
+  expect(requests.find((r) => r.path.endsWith("/claim"))!.body).toMatchObject({
+    venue: { staffLanguage: "en", invoiceLocales: ["es-ES"] },
+  });
+});
 it.each(["demo", "prepare"])("keeps %s free of custody claims", async (mode) => {
   const { app, requests } = await mount();
   await liveVenue(app, mode);
@@ -738,6 +756,7 @@ it("claims a staged preview's venue with only the venue fields the claim accepts
       "province",
       "rectificativeSeriesCode",
       "seriesCode",
+      "staffLanguage",
       "taxId",
       "taxpayerDomicile",
       "timeZone",

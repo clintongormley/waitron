@@ -46,6 +46,19 @@ function fullDraft(): DeepPartial<ProvisionBody> {
 
 afterEach(cleanupWidgets);
 
+it.each(["en", "es"] as const)(
+  "shows the explicit %s working language separately from receipts",
+  async (staffLanguage) => {
+    const draft = fullDraft();
+    draft.venue!.staffLanguage = staffLanguage;
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
+    expect(text(el, "[data-test=summary-staffLanguage]")).toBe(
+      t(staffLanguage === "en" ? "venue.staff_language.en" : "venue.staff_language.es"),
+    );
+    expect(text(el, "[data-test=summary-invoiceLocales]")).toBe(t("venue.locale.es_es"));
+  },
+);
+
 /** `fullDraft` with every row's value filled in, so no row shows a dash in place of a value. */
 function everyRowDraft(mode: "demo" | "live"): DeepPartial<ProvisionBody> {
   const draft = fullDraft();

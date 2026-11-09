@@ -3,6 +3,7 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./venue-screen.js";
 import type { SetupVenueScreen } from "./venue-screen.js";
+import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 
@@ -16,6 +17,23 @@ async function bottomOf(el: SetupVenueScreen): Promise<string> {
 }
 
 describe.each(["light", "dark"] as const)("setup-venue-screen a11y (%s theme)", (theme) => {
+  it("labels the working-language choice and its field refusal", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>(
+      "setup-venue-screen",
+      { invalidField: "staffLanguage" },
+      theme,
+    );
+    const picker = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      "[data-test=staffLanguage]",
+    )!;
+    expect(picker.error).toBe(t("venue.error.staff_language"));
+    await expectNoA11yViolations(host);
+    await chooseOption(picker, "en");
+    await el.updateComplete;
+    expect(picker.error).toBe("");
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations on the pristine form (every field, both selects, the locale group labelled)", async () => {
     const { host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {}, theme);
     await expectNoA11yViolations(host);

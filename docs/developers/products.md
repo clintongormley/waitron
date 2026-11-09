@@ -955,9 +955,8 @@ A Casa Delgado.
 The seed's English/Spanish language writes the single names you see for staff and kitchen
 products, menus, departments and stations. Regional wording remains in the data;
 customer content keeps Catalan/Valencian/Galician, Spanish and English. Receipt language keeps
-its separate choice. A1458's later setup slices add an explicit working-language choice; until
-then an installed demo takes the administrator's language, while a developer demo takes
-`WAITRON_SEED_LOCALE`. A country without its own demo keeps the
+its separate choice. In setup, choose English or Spanish as the working language for these
+names. A developer demo takes `WAITRON_SEED_LOCALE`. A country without its own demo keeps the
 English fallback. Madrid retains its frozen database comparison.
 
 Setup tracks whether the suggested name is automatic or has been edited.

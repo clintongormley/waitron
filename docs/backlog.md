@@ -457,11 +457,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A237. Nothing guards the hint-or-"?" rule across screens (owner 2026-10-03)** — OPEN.
 
-- **A1458. Setup asks which language the venue works in, and starts each country with its own
-  courses (owner, 2026-11-08)** (2 remaining entries, size M). Country courses seed at first
-  setup; requests can supply an English/Spanish working language for fresh starters and demos.
-  Left: the wizard's working-language picker, plus course words beyond Spanish and English
-  with C125. [Detail](backlog/setup.md#bundle-a1458-setup-asks-which-language-the-venue-works-in-and-starts-each-country-with-its-own-courses-owner-2026-11-08)
+- **Starter courses for Italy.** When its country pack is built, add the four courses and settle
+  their firing defaults. [Detail](backlog/setup.md#starter-courses-for-italy)
 
 - **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03)** — OPEN, partly designed,
   not to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.
@@ -1578,7 +1575,8 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 - **Native speaker review** (bundle of 3, size S, needs a third party). [Detail](backlog/languages.md#bundle-native-speaker-review)
 
 - **Regional languages** (bundle of 3, size L, needs the owner). C125, the staff screens in every
-  official language, is off hold (owner, 2026-11-08); A1458 depends on it. [Detail](backlog/languages.md#bundle-regional-languages)
+  official language, is off hold (owner, 2026-11-08). Extend the setup working-language choices and
+  starter translations beyond English and Spanish here. [Detail](backlog/languages.md#bundle-regional-languages)
 
 ### Alerts, logging and diagnostics
 

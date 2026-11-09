@@ -62,6 +62,7 @@ export interface VenueDraft {
   name: string;
   fiscalTerritory: string;
   invoiceLocales: string[];
+  staffLanguage?: "en" | "es";
   addressLine1: string;
   addressLine2: string | null;
   postalCode: string;

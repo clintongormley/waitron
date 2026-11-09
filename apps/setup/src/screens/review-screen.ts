@@ -1,6 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import { resolveInstalledStarterLanguages } from "@waitron/country-packs";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { errorStyles } from "../form-styles.js";
@@ -144,6 +145,12 @@ export class SetupReviewScreen extends LitElement {
 
   override render(): TemplateResult {
     const venue = this.draft.venue;
+    const { staffLanguage } = resolveInstalledStarterLanguages({
+      country: venue?.country,
+      area: venue?.province,
+      receiptLocale: venue?.invoiceLocales?.[0],
+      staffLanguage: venue?.staffLanguage,
+    });
     const certAttached = Boolean(this.draft.aeatCert?.pfxBase64);
     const accountName = [venue?.admin?.firstNames, venue?.admin?.lastNames]
       .filter(Boolean)
@@ -178,6 +185,7 @@ export class SetupReviewScreen extends LitElement {
           "venue",
           html`
             ${this.#row("review.venue_name", venue?.name, "summary-name")}
+            ${this.#row("review.staff_language", t(`venue.staff_language.${staffLanguage}`), "summary-staffLanguage")}
             ${this.#row("review.address", [venue?.addressLine1, venue?.addressLine2, venue?.postalCode, venue?.city, venue?.province].filter(Boolean).join(", ") || "—", "summary-address")}
             ${this.#row("review.invoice_locales", venue?.invoiceLocales?.map((locale) => (Object.hasOwn(RECEIPT_LANGUAGES, locale) ? t(RECEIPT_LANGUAGES[locale]!.selectionLabel) : locale)).join(", "), "summary-invoiceLocales")}
             ${this.#row("review.day_cutover", venue?.dayCutover, "summary-dayCutover")}

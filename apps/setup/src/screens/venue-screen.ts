@@ -21,7 +21,11 @@ import {
   type FiscalJurisdiction,
   type ReceiptLanguageRules,
 } from "@waitron/country";
-import { VENUE_SETUP_COUNTRY_PACKS, getVenueSetupCountryPack } from "@waitron/country-packs";
+import {
+  VENUE_SETUP_COUNTRY_PACKS,
+  getVenueSetupCountryPack,
+  resolveInstalledStarterLanguages,
+} from "@waitron/country-packs";
 import { resolveContentText } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -85,7 +89,7 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
 
 type FormField = TextField | "invoiceLocales";
 /** A value the server can refuse that this form does not hold; its refusal is shown above Next. */
-type FieldKey = FormField | "operationDescription";
+type FieldKey = FormField | "operationDescription" | "staffLanguage";
 
 /** The venue's own address, or the business's one-line registered address. */
 type AddressSearch = "address" | "domicile";
@@ -100,6 +104,7 @@ const SEARCH_FILLS: Readonly<Partial<Record<TextField, AddressSearch>>> = {
 };
 
 interface VenueForm {
+  staffLanguage?: "en" | "es";
   demoVenueNameSource: "automatic" | "custom";
   values: Record<TextField, string>;
   invoiceLocales: string[];
@@ -294,6 +299,7 @@ export class SetupVenueScreen extends LitElement {
   @state() private invoiceLocales: string[] = ["es-ES"];
 
   @state() private attempted = false;
+  @state() private staffLanguage?: "en" | "es";
 
   @state() private refusalDismissed = false;
 
@@ -323,6 +329,7 @@ export class SetupVenueScreen extends LitElement {
 
   #current(): VenueForm {
     return {
+      staffLanguage: this.staffLanguage,
       demoVenueNameSource: this.#demoVenueNameSource,
       values: this.values,
       invoiceLocales: this.invoiceLocales,
@@ -336,14 +343,18 @@ export class SetupVenueScreen extends LitElement {
 
   #comparable(
     form: VenueForm,
-  ): Record<TextField | "invoiceLocales" | "demoVenueNameSource", string | null> {
+  ): Record<TextField | "invoiceLocales" | "demoVenueNameSource" | "staffLanguage", string | null> {
     const pack = getVenueSetupCountryPack(form.values.country);
     const area = pack && findAdministrativeArea(pack, form.values.province);
     const tax = pack?.taxIdentifier?.validate(form.values.taxId);
     const postal = pack?.postalCode?.validate(form.values.postalCode);
     const rules = pack && receiptLanguageRules(pack, area?.code);
-    const values: Record<TextField | "invoiceLocales" | "demoVenueNameSource", string | null> = {
+    const values: Record<
+      TextField | "invoiceLocales" | "demoVenueNameSource" | "staffLanguage",
+      string | null
+    > = {
       ...form.values,
+      staffLanguage: form.staffLanguage ?? null,
       demoVenueNameSource: this.#demo ? form.demoVenueNameSource : null,
       taxId: tax?.valid ? tax.normalized : form.values.taxId,
       postalCode: postal?.valid ? postal.normalized : form.values.postalCode,
@@ -369,10 +380,13 @@ export class SetupVenueScreen extends LitElement {
         const left = this.#comparable(a);
         const right = this.#comparable(b);
         return (
-          Object.keys(left) as (TextField | "invoiceLocales" | "demoVenueNameSource")[]
+          Object.keys(left) as (
+            TextField | "invoiceLocales" | "demoVenueNameSource" | "staffLanguage"
+          )[]
         ).every((key) => left[key] === right[key]);
       },
       restore: (form) => {
+        this.staffLanguage = form.staffLanguage;
         this.#demoVenueNameSource = form.demoVenueNameSource;
         this.values = form.values;
         this.invoiceLocales = form.invoiceLocales;
@@ -411,7 +425,7 @@ export class SetupVenueScreen extends LitElement {
     // By its `name`, not its `data-test` hook, which is for tests.
     const field = this.shadowRoot!.querySelector<
       HTMLElement & { updateComplete?: Promise<unknown> }
-    >(`wt-input[name=${this.serverInvalid.key}]`);
+    >(`:is(wt-input,wt-combobox)[name=${this.serverInvalid.key}]`);
     if (field === null) return;
     // Wait for the `wt-input`'s own render: until then the native input its focus is delegated to
     // does not exist, and focusing the host does nothing. The screen may be gone by then.
@@ -422,6 +436,7 @@ export class SetupVenueScreen extends LitElement {
 
   #seedFromDraft(): void {
     const venue = this.draft.venue ?? {};
+    this.staffLanguage = venue.staffLanguage;
     this.values = {
       country: venue.country ?? this.values.country,
       taxId: venue.taxId ?? this.values.taxId,
@@ -454,6 +469,24 @@ export class SetupVenueScreen extends LitElement {
     if (!this.#demo || this.#demoVenueNameSource !== "automatic" || pack === undefined) return;
     const identity = resolveCountryDemoIdentity(pack, area?.code);
     if (identity !== undefined) this.values = { ...this.values, name: identity.venueName };
+  }
+
+  #workingLanguage(): "en" | "es" {
+    return resolveInstalledStarterLanguages({
+      country: this.values.country,
+      area: this.values.province,
+      receiptLocale: this.invoiceLocales[0],
+      staffLanguage: this.staffLanguage,
+    }).staffLanguage;
+  }
+
+  #onWorkingLanguage(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    const value = event.detail.value;
+    if (value !== "en" && value !== "es") return;
+    if (this.serverInvalid?.key === "staffLanguage") this.serverInvalid = undefined;
+    this.staffLanguage = value;
+    this.#scope?.changed();
   }
 
   #onField(key: TextField, event: CustomEvent<{ value: string }>): void {
@@ -599,7 +632,10 @@ export class SetupVenueScreen extends LitElement {
   }
 
   #shows(key: FieldKey): boolean {
-    return key !== "operationDescription" && !(this.#demo && DEMO_HIDDEN.has(key));
+    return (
+      key !== "operationDescription" &&
+      (key === "staffLanguage" || !(this.#demo && DEMO_HIDDEN.has(key)))
+    );
   }
 
   #invalidFields(): Set<FormField> {
@@ -706,6 +742,7 @@ export class SetupVenueScreen extends LitElement {
         name: this.values.name,
         fiscalTerritory: selectedJurisdiction.id,
         invoiceLocales: this.#receiptLanguages(this.#receiptRules(pack, area)),
+        staffLanguage: this.#workingLanguage(),
         addressLine1: this.values.addressLine1,
         addressLine2,
         postalCode: normalizedPostalCode,
@@ -850,6 +887,26 @@ export class SetupVenueScreen extends LitElement {
       ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? t("venue.label.tax_id"), "taxId")}${this.#field(t("venue.label.legal_name"), "legalName")}${this.#addressSearch("domicile", pack)}${this.#field(t("venue.label.taxpayer_domicile"), "taxpayerDomicile")}`}
       ${this.#demo ? nothing : html`<h2>${t("venue.section.venue")}</h2>`}
       ${this.#field(t("venue.label.venue_name"), "name")}
+      <wt-combobox
+        class="field"
+        label=${t("venue.label.staff_language")}
+        name="staffLanguage"
+        required
+        data-test="staffLanguage"
+        .value=${this.#workingLanguage()}
+        ?invalid=${errors.has("staffLanguage")}
+        error=${errors.get("staffLanguage") ?? ""}
+        .options=${[
+          { value: "en", label: t("venue.staff_language.en") },
+          { value: "es", label: t("venue.staff_language.es") },
+        ].sort((a, b) => a.label.localeCompare(b.label, currentLocale()))}
+        @wt-change=${this.#onWorkingLanguage}
+        ><wt-help-tooltip
+          slot="help"
+          aria-label=${format("venue.help_with_field", { field: t("venue.field.staff_language") })}
+          >${t("venue.staff_language.help")}</wt-help-tooltip
+        ></wt-combobox
+      >
       ${
         this.#demo
           ? nothing

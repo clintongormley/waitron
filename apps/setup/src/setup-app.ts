@@ -216,6 +216,7 @@ const claimVenueFieldsComplete: [
     | "fullSeriesCode"
     | "rectificativeSeriesCode"
     | "admin"
+    | "staffLanguage"
   >,
 ] extends [never]
   ? true

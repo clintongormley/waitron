@@ -14,6 +14,7 @@ const draft: DeepPartial<ProvisionBody> = {
     name: "Calle Mayor",
     fiscalTerritory: "ES-common",
     invoiceLocales: ["es-ES"],
+    staffLanguage: "en",
     seriesCode: "FA",
     rectificativeSeriesCode: "RF",
     admin: {
