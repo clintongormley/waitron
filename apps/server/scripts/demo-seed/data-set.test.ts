@@ -72,6 +72,18 @@ function customerTexts(set: DemoDataSet): [string, Text][] {
 }
 
 describe("demo data sets", () => {
+  it.each([
+    ["casa-delgado-ca", "en"],
+    ["casa-delgado-ca", "es"],
+    ["casa-delgado-valencia", "en"],
+    ["casa-delgado-valencia", "es"],
+    ["casa-delgado-gl", "en"],
+    ["casa-delgado-gl", "es"],
+  ] as const)("selects %s station text in the %s seed language", (id, locale) => {
+    const set = demoDataSet(id);
+    expect(demoPlainText(set.stations.kitchen, set, locale)).toBe(set.stations.kitchen[locale]);
+  });
+
   it("gives every country pack distinct lowercase hex colours for its top-level categories", () => {
     for (const pack of COUNTRY_PACKS.filter((pack) => pack.demo !== undefined)) {
       const set = demoDataSetFor(pack.demo!);
