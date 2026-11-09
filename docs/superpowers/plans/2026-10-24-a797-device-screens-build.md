@@ -9235,28 +9235,32 @@ switch of two buttons: **Menu** and **Order · 3**, the number counting the dish
 New order (design §3.1 Order, §6). **Menu** is today's browsing (search, menus, tiles), now with a
 number in the corner of each tile counting how many of that dish are in the New order, and **a bar
 fixed at the bottom** while the New order has anything: "New order · 3 items — 2 × Croquettes · 1 ×
-Pork shoulder" with **Send all**; tapping the words opens **Order**. **Order** is A773's order panel
-(the Sent box, then the New order with its groups, Move to… and Fire); on a handheld its foot stays
-fixed at the bottom: the bill's **Total**, **Still to pay at this table** and **Pay**, with the Send
-all bar above them while the New order has dishes. **A table opens on Menu when nothing has been
-sent on the bill on screen, and on Order once anything has.** And (backlog **A1120**) **after a send
-that empties the New order, a handheld stays on the table**, now showing Order, its bar button
-highlighted without ✎, until the person taps **Floor**; a till still returns to the Floor. From
-720 px the screen stays side by side as today and none of this is drawn (design §3.2).
+Pork shoulder" with **Send all**; tapping the words opens **Order**, and tapping **Send all** sends
+and opens **Order** as the send starts, so whatever the send leaves (what was sent, a dish it
+refused, a station warning) is on screen. **Order** is A773's order panel (the Sent box, then the
+New order with its groups, Move to… and Fire); on a handheld its foot stays fixed at the bottom: the
+bill's **Total**, **Still to pay at this table** and **Pay**, with the Send all bar above them while
+the New order has dishes; the rest of the pay section (its heading, Full invoice, the receipt
+language, the saved customer, a part-paid bill's amounts) stays in the page above the foot. **A
+table opens on Menu when nothing has been sent on the bill on screen, and on Order once anything
+has.** And (backlog **A1120**) **after a send that empties the New order, a handheld stays on the
+table**, on Order (where every send now finishes), its bar button highlighted without ✎, until the
+person taps **Floor**; a till still returns to the Floor. From 720 px the screen stays side by side
+as today and none of this is drawn (design §3.2).
 
 Worked example 1 (design §4) as this slice builds it: Ana opens T4, newly seated: it opens on
 **Menu**. She taps Croquettes twice and Pork shoulder once; the Croquettes tile shows 2, the bar at
 the bottom reads "New order · 3 items — 2 × Croquettes · 1 × Pork shoulder · Send all", and the
 switch reads "Order · 3". She taps Floor (slice 3's bar keeps ✎ T4). At T9 she adds two drinks and
-taps **Send all** on the bar: the Sent toast shows, T9 stays on screen on **Order**, its bar button
-highlighted without ✎; she taps Floor and the button goes. Back at T4 (✎ T4), the table opens on
-Menu because nothing was sent there yet; Pay in the fixed foot is quiet until she sends.
+taps **Send all** on the bar: Order shows, the Sent toast shows, T9 stays on screen on **Order**, its
+bar button highlighted without ✎; she taps Floor and the button goes. Back at T4 (✎ T4), the table
+opens on Menu because nothing was sent there yet; Pay in the fixed foot is quiet until she sends.
 
 **Review path: LIGHT.** No server read, route, schema or shared type changes: everything here is
-drawn from what the order screen already holds (`lines`, the draft store, the bills), plus one
-counter property the app hands its own screen. The changed files are under `apps/till/`, the
-guides and the docs. None of the risk triggers applies. **Migration: none.** No venue reset. If a
-task finds it needs a route or a migration, STOP.
+drawn from what the order screen already holds (`lines`, the draft store, the bills); the app's one
+change is that a handheld no longer leaves the table after a send. The changed files are under
+`apps/till/`, the guides and the docs. None of the risk triggers applies. **Migration: none.** No
+venue reset. If a task finds it needs a route or a migration, STOP.
 
 **A803's slice 3 has landed** (#2360, `e5bfb0b074`; ran: `git log --oneline -20 --
 apps/till/src/screens/till-table-order-screen.ts`), and so have A803 slices 4a (#2372) and 4c
@@ -9272,22 +9276,24 @@ ran in two throwaway worktrees (`git worktree add --detach /tmp/a797-10-probe.Cn
 `base-actionbar.txt`, `probeA.txt`, `probeA.diff`, `probeA-files.txt`, `probeA-fails.txt`,
 `probeB.txt`, `probeB.diff`, `probeB-fails.txt`, `probeCDE.txt`, `probeCDE.diff`,
 `probeCDE-fails.txt`, `cde-new.txt`, `probeC.py`, `probeD.py`). None of the probe code is in this
-branch.
+branch. The plan review's revision (2026-11-09, same base) ran no tests: its additions are read, or
+ran as `git grep`/`grep` commands, each marked.
 
 ### What landed already, and what is on `main` (read; each line opened)
 
-- **The foot's contents are built.** `#orderSummary` (`apps/till/src/screens/till-table-order-screen.ts:2996-3023`)
+- **The foot's contents are built.** `#orderSummary` (`apps/till/src/screens/till-table-order-screen.ts:2995-3022`)
   draws the finish refusal, the bill's **Total** (`data-order-total`), **Still to pay at this
   table** (`table.still_to_pay`, `data-party-outstanding`, `apps/till/src/i18n/strings.ts:1587`)
   and the pay section (`data-bill-actions`). **Quiet Pay** is A803 slice 3's (`#payQuiet`,
-  `:4815-4818`, ran: `git log -S'#payQuiet(' --
+  `:4816-4818`, ran: `git log -S'#payQuiet(' --
   apps/till/src/screens/till-table-order-screen.ts` → `e5bfb0b074`), judged by `billHasUnsent`
   (`apps/till/src/state/bill-unsent.ts:19-28`: this person's New order or another person's drafts
   drawn with their Take over), and a tap says `bill_pay.unsent` "Send or remove the unsent dishes
   before paying." (`strings.ts:1610`, es `:3538`) through `#payUnsent` (`:4840-4846`). On a
-  handheld the pay section is **one Pay button** that opens the pay sheet (`#paysOnSheet`,
-  `:4919-4925`; `#paySheetButton`, `:4926-4939`; A796, #1921). **Slice 10 builds none of this
-  again**; it only fixes the foot in place on a handheld below 720 px (D9).
+  handheld the pay section's control is **one Pay button** that opens the pay sheet
+  (`#paysOnSheet`, `:4920-4924`; `#paySheetButton`, `:4926-4939`; A796, #1921). **Slice 10 builds
+  none of this again**; on a handheld below 720 px it only moves Total, Still to pay and Pay into a
+  fixed box (D9).
 - **Send all stays on screen** (A1125, #2238): the draft bar (Move to…, Fire, Send all;
   `#draftBar`, `:4610-4640`) is `position: sticky; bottom: 0` (`:1068-1084`) and its wrappers
   `[data-round-controls]` and `.round-bar` are `display: contents` (`:1102-1110`) so it can stick
@@ -9308,8 +9314,18 @@ branch.
   (`#measure`, `:1826-1829`). `#revealFinishRefusal` (`:2433-2440`), `#openLastAdded` (`:3939-3970`)
   and `#revealTakeOver` (`:3998-4004`) open Review first.
 - **After a send that empties the New order** the app shows the Sent toast and calls
-  `#returnToFloor()` on every device (`till-app.ts:12895-12905`); `#returnToFloor`
+  `#returnToFloor()` on every device (`till-app.ts:12900-12904`); `#returnToFloor`
   (`:18317-18327`) selects the Floor tab on a handheld and pops the drill on a till.
+- **What a send can leave behind, drawn only in the order pane** (read): the screen's
+  `#submitArrangement` (`:4564-4608`) dispatches `submit-draft`; the app runs the send
+  (`#sendDraft`, `till-app.ts:12780-12905`) and answers the screen only through the store and one
+  method. A refusal for a dish that cannot be sold returns `mark-unsellable` (`:13259-13261`), and
+  the app marks the store's lines (`:12875-12877` → `#markUnsellable`, `:6222-6229`), drawn with
+  their ⚠ in the New order; a refusal for a station nobody can print to returns
+  `recheck-dead-ends` (`:13246`), and the app calls the screen's `refreshDraftRouting`
+  (`:12879-12883`; screen `:2512-2522`), whose warning is drawn under the line in the New order
+  (`#draftRoutingWarning`, `:4403-4419`). A partial send leaves the unsent dishes there too. All of
+  it is in the order pane, which is hidden on Menu.
 
 ### Every reader and writer this slice touches (ran: grep; each line read)
 
@@ -9321,25 +9337,25 @@ From `git grep -n "DRAFT_SIDE_BY_SIDE_MIN_WIDTH\|reviewing\|#openReview\|#closeR
 | Where | What it does today | In this slice |
 | --- | --- | --- |
 | `till-table-order-screen.ts:221` `DRAFT_SIDE_BY_SIDE_MIN_WIDTH` | 720; `wide` (`:1417`) set by `#measure` | unchanged; the switch, the Menu bar, tile numbers and the opening view apply only below it (D1) |
-| same file `:1419` `reviewing`; `:1425` `#browsingScroll` | the Review view is open | `view: "menu" \| "order"` replaces it; the scroll is kept as today (D2; Task 2) |
+| same file `:1419` `reviewing`; `:1425` `#browsingScroll` | the Review view is open | `view: "menu" \| "order"` replaces it; the scroll is kept as today (D2; Task 2b) |
 | same file `:1826-1829` `#measure` | widening closes Review | widening shows Menu again (D2) |
 | same file `:2250-2257` (in `willUpdate`) | a bill switch clears Review | a bill switch shows Menu (D8) |
-| same file `:2285-2289` | `revealOtherDrafts` moved by the app opens Review | the precedent for `newOrderSent` (D10) |
-| same file `:2433-2440`, `:3939-3970`, `:3998-4004` | open Review before revealing a refusal, a line, a Take over | show Order instead (Task 2) |
+| same file `:2433-2440`, `:3939-3970`, `:3998-4004` | open Review before revealing a refusal, a line, a Take over | show Order instead (Task 2b) |
 | same file `:2447-2467` `#sizeDraftBar` | measures the draft bar into `--draft-bar-size` | also reads `view`; the precedent for `--order-foot-size` (D9) |
-| same file `:2957-2994` `#ordering` | browsing, then the order pane with its Back | the switch above both; no Back (D3; Task 2) |
-| same file `:2996-3023` `#orderSummary` | finish refusal, Total, Still to pay, pay section | the last three in a `data-order-foot` box, fixed on a handheld (D9; Task 7) |
+| same file `:2957-2994` `#ordering` | browsing, then the order pane with its Back | the switch above both; no Back (D3; Task 2b) |
+| same file `:2995-3022` `#orderSummary`; `:4848-4916` `#paySection` | finish refusal, Total, Still to pay, pay section | on a handheld below 720 px with one Pay: the pay section's heading, amounts and choices in the flow, then a fixed `data-order-foot` box with Total, Still to pay, the quiet sentence and Pay (D9; Task 7a) |
 | same file `:3901-3927` `#bottomBar` | last-added strip, Review | last-added strip, then the fixed Menu bar (D5; Task 5) |
 | same file `:4005-4025` `#openReview`, `#closeReview` | open/close Review, move focus | `#showOrder`, `#showMenu`; focus stays (D3) |
+| same file `:4564-4608` `#submitArrangement` | builds the send and dispatches `submit-draft`; returns nothing | returns whether it dispatched, so the Menu bar's Send all shows Order as the send starts (D5) |
+| same file `:2512-2522` `refreshDraftRouting`; `:4403-4419` `#draftRoutingWarning` | a station warning under a New order line | unchanged; why Send all shows Order (D5) |
 | same file `:4037-4062` `#gridRegion`; `:2810-2858` `#menuBrowser` | the menu browser | hands it the tile numbers below 720 px (D7; Task 6) |
 | same file `:4064-4105` `#roundControl`; `:4610-4640` `#draftBar` | the New order, its sticky bar | on a handheld below 720 px the bar is drawn only while the New order has a dish and sticks above the foot (D9) |
 | same file `:273-275` `shownName`; `:283-287` `countsWholeUnits` | a line's name; whole units | `countsWholeUnits` moves to the new count module (D4; Task 1) |
 | `apps/till/src/state/draft-groups.ts:15-17` `itemCount` | an entry's item count | reused for every count (D4) |
-| `apps/till/src/widgets/menu-browser.ts:635-674` `#productButton`; `:225-233` `.nutrition-mark` | a product tile; the allergen mark in its top inline-end corner | gains the New order number in the top inline-start corner (D7) |
-| `apps/till/src/till-app.ts:12895-12905` (end of `#sendDraft`) | toast, then `#returnToFloor()` | a handheld stays and moves `newOrderSent` (D10; Task 8) |
-| same file `:3391` `revealOtherDrafts`; `:20587`, `:20764` its bindings; `:2778` `handheldMode` (set `:4713`); `:20597`, `:20774` `.handheld=${this.handheldMode}` | the app's counters and the handheld flag the screen gets | `newOrderSent` beside it, bound at both order-screen mounts (D10) |
-| `apps/till/src/i18n/strings.ts` en `:1354`, `:1418-1419`, `:553-556`, `:778`; es `:3292`, `:3356-3357`, `:2512-2515`, `:2726` | Send all; "Unsent order"; "Review ({n})"; item and unsent counts; the pass's "New order" | D11 |
-| `apps/till/src/state/pass-view.ts:46` | the pass card's `new_order` label key | unchanged key, new words (D11; Task 9) |
+| `apps/till/src/widgets/menu-browser.ts:632-674` `#productButton`; `:225-233` `.nutrition-mark` | a product tile; the allergen mark in its top inline-end corner | gains the New order number in the top inline-start corner (D7) |
+| `apps/till/src/till-app.ts:12900-12904` (end of `#sendDraft`) | toast, then `#returnToFloor()` | a handheld no longer calls `#returnToFloor()` (D10; Task 8) |
+| same file `:2778` `handheldMode` (set `:4713`); `:20597`, `:20774` `.handheld=${this.handheldMode}` | the handheld flag the screen gets | read at the end of `#sendDraft` (D10) |
+| `apps/till/src/i18n/strings.ts` en `:1354`, `:1418-1419`, `:553-556`; es `:3292`, `:3356-3357`, `:2512-2515` | Send all; "Unsent order"; "Review ({n})"; item and unsent counts | D11 |
 | `apps/till/src/widgets/test-helpers.ts:113` `DEFAULT_FRAME` | every till browser test starts at 414 × 896 | why most order-screen tests already run below 720 px |
 
 **Open pull requests (ran: `gh pr list --state open`, then `gh pr diff <n> --name-only`):** #2663,
@@ -9356,18 +9372,18 @@ this plan. Check again before the first commit and before `/finish-branch`.
   handheld.** The switch, the Menu bar, the tile numbers and the opening view follow the screen's
   width below 720 px on any device, because they replace Review, which did (design §2.4: "The order
   screen's layout follows its width, not the device"; `#measure`, `:1826-1829`). **The fixed foot
-  is a handheld's only** (the `handheld` property, `:1370-1372`): there its pay section is one Pay
-  button (`#paysOnSheet`, `:4919-4925`), while on a till it is the whole tender (`till-tender-pay`,
-  `:4855-4880`), which fixed at the bottom of a narrow window would cover the order. From 720 px
-  nothing in this slice is drawn: design §3.2 "From 720 px wide the order screen shows Menu and
-  Order side by side, as today; the switch goes". The counter screen is not touched (design §3:
-  "The counter till is A738–A739's").
+  is a handheld's only** (the `handheld` property, `:1370-1372`): there its pay section's control
+  is one Pay button (`#paysOnSheet`, `:4920-4924`), while on a till it is the whole tender
+  (`till-tender-pay`, `:4855-4879`), which fixed at the bottom of a narrow window would cover the
+  order. From 720 px nothing in this slice is drawn: design §3.2 "From 720 px wide the order screen
+  shows Menu and Order side by side, as today; the switch goes". The counter screen is not touched
+  (design §3: "The counter till is A738–A739's").
 - **D2. One view at a time, kept like Review's.** `@state() private view: "menu" | "order" =
   "menu"` replaces `reviewing`. Browsing is hidden, never removed, on Order (so the menu keeps its
   open section, as `#ordering`'s comment says, `:2957-2959`); Order opens scrolled to the top and
   Menu comes back to browsing's saved scroll, exactly as `#openReview`/`#closeReview` do
-  (`:4005-4025`). Widening to side by side shows Menu again, as it closes Review today
-  (`:1826-1829`), so a narrowing after it opens on Menu.
+  (`:4005-4025`). `#measure` sets `view = "menu"` whenever it finds the screen wide (today it closes
+  Review only if Review is open, `:1826-1829`), so a narrowing after it opens on Menu.
 - **D3. The switch.** Drawn at the top of `.ordering`, above browsing and the order pane, only
   below 720 px, and only where Review was: `#ordering` runs only while a New order store exists
   (`:2915-2918`), so a paid bill, which shows its Sent box and foot alone, has no switch. A `div
@@ -9379,10 +9395,10 @@ this plan. Check again before the first commit and before `/finish-branch`.
   has a dish, " · " (`aria-hidden`) and the number, so its accessible name is "Order 3", as slice
   9's column headings do ("Waiting · 2" named "Waiting 2"); with nothing in the New order it reads
   "Order" alone. **The focus stays on the button tapped**, since both stay on screen, where Review
-  moved it to Back and back (`:4012`, `:4021-4023`): changed checks 2, 14 and 15–22. **The switch is
-  not fixed at the top**: the design fixes only the Menu bar and the foot (§3.1 Order), and on
-  Menu the bar's words open Order from anywhere; going back to Menu from far down a long Order
-  takes a scroll up (**owner FYI**).
+  moved it to Back and back (`:4012`, `:4021-4023`); Review's focus checks go with it (Task 2a) and
+  Task 2b's new case 1 pins the focus staying. **The switch is not fixed at the top**: the design
+  fixes only the Menu bar and the foot (§3.1 Order), and on Menu the bar's words open Order from
+  anywhere; going back to Menu from far down a long Order takes a scroll up (**owner FYI**).
 - **D4. What the numbers count: items, as Review did.** One module,
   `apps/till/src/state/new-order-count.ts`, holds the counting so the switch, the bar and the tiles
   cannot disagree: an item is `itemCount` (`draft-groups.ts:15-17`) of a line with
@@ -9390,40 +9406,62 @@ this plan. Check again before the first commit and before `/finish-branch`.
   0.35 kg octopus counts 1, a dish no longer offered with a whole quantity by that quantity. It
   counts this person's New order only (the store's lines), as Review did; another person's draft
   for the bill is not counted (it shows in its own panel with Take over, `#otherDraftPanels`).
-  Recalled lines (A1426) are in the store and count, as they did in Review
-  (`review-acceptance.test.ts` "keeps whole, weighed and recalled families", read).
+  Recalled lines (A1426) are in the store and count like any other line, as they did in Review
+  (`review-acceptance.test.ts` "keeps whole, weighed and recalled families", read); that file goes
+  with Review (Task 2a), so Task 2b's new case 2 counts the same New order on the switch.
 - **D5. The Menu's fixed bar.** Below 720 px and while the New order has a dish
   (`draft.lineCount > 0`), a bar `data-new-order-bar` follows the last-added strip at the end of
   browsing: one `<button type="button" class="new-order-summary" data-new-order-summary>` whose text
   is "{New order} · {3 items} — {2 × Croquettes · 1 × Pork shoulder}" on one line, cut with an
-  ellipsis (`text-overflow: ellipsis`, `text-wrap: nowrap`, never `white-space`, which
-  `no-hardcoded-chrome.test.ts` reads as a colour, `packages/ui-core/src/base-styles.ts:50-52`),
-  and **Send all** (`wt-button data-menu-send-all size="lg"`), which calls the same
+  ellipsis (`overflow: hidden; text-overflow: ellipsis; white-space: nowrap`, as the till's own
+  styles write it, e.g. `till-floor-screen.ts:452`; the `no-hardcoded-chrome.test.ts` guard that
+  reads "white" as a colour reads only `packages/ui/src/components/*.ts`, its line 6, read), and
+  **Send all** (`wt-button data-menu-send-all size="lg"`), which calls the same
   `#submitArrangement(store, false)` as the draft bar's Send all and is disabled, in the quiet
   `secondary` look, by the same rule (`#draftBar`'s `button(false, …)`, `:4610-4627`). A tap on the
-  words shows Order (D2). **It is a direct child of `.browsing`**: a sticky element stops at the
-  edge of its parent box, which is why A1125 made the draft bar's wrappers `display: contents`
-  (design-system.md:1061-1062); so `#bottomBar` returns the last-added strip and the bar as
-  siblings, not inside `.bottom-bar`'s box. It is `position: sticky; bottom: 0; z-index: 1`, the
-  page's background and a line along its top, as the draft bar (`:1068-1084`). **The last-added
-  strip stays where it is**, in the flow after the menu (design-system.md:6387-6391): the design
-  does not list it among what goes (§6). No help badge: the draft bar's Send all keeps
-  `help.order.send` (`:4634`). Words: D11.
+  words shows Order (D2). **A tap on Send all shows Order as the send starts:** `#submitArrangement`
+  returns `true` when it dispatches `submit-draft` (it returns early, sending nothing, while the
+  store is sending or locked, a group command is busy, ordering is refused or nothing is sendable,
+  `:4565-4582`), and the bar's handler then sets `view = "order"`. **Why at the start, not the
+  end:** everything a send can leave is drawn only in the order pane, hidden on Menu: what was sent
+  (the Sent box), the dishes a partial send left, a dish the server refused as unsellable
+  (`mark-unsellable` → `#markUnsellable`, `till-app.ts:12875-12877`, `:6222-6229`) and a station
+  nobody can print to (`recheck-dead-ends` → `refreshDraftRouting`, `till-app.ts:12879-12883`;
+  `#draftRoutingWarning`, screen `:4403-4419`); and the screen never learns how a send ended, since
+  the app runs it (`#sendDraft`, `till-app.ts:12780-12905`) and answers only through the store and
+  `refreshDraftRouting`, so switching at the end would need a new property from the app. A person
+  who taps Menu while the send is still going stays on Menu; nothing switches them back. **The bar
+  is a direct child of `.browsing`**: a sticky element stops at the edge of its parent box, which is
+  why A1125 made the draft bar's wrappers `display: contents` (design-system.md:1061-1062); so
+  `#bottomBar` returns the last-added strip and the bar as siblings, not inside `.bottom-bar`'s
+  box. It is `position: sticky; bottom: 0; z-index: 1`, the page's background and a line along its
+  top, as the draft bar (`:1068-1084`). **The last-added strip stays where it is**, in the flow
+  after the menu (design-system.md:6387-6391): the design does not list it among what goes (§6). No
+  help badge: the draft bar's Send all keeps `help.order.send` (`:4634`). Words: D11.
 - **D6. The bar's dishes: by name, summed, first appearance first.** One entry per shown name
   (`shownName`, `:273-275`, the staff name, so a variant line reads as its variant), its items
   summed (D4), in the order the name first appears in the New order: two croquettes lines with
   different sauces read "2 × Croquettes". The entries' items add up to the bar's "3 items".
 - **D7. The tile numbers.** `till-menu-browser` gains `@property({ attribute: false }) inOrder:
   ReadonlyMap<string, number> | undefined` (product id → items in the New order); `#productButton`
-  (`menu-browser.ts:635-674`) draws, when the map gives the tile's `product.id` a number above 0, a
-  badge `<span class="in-order" data-in-order aria-hidden="true">2</span>` in the tile's top
-  inline-start corner (the allergen mark holds the top inline-end, `:225-233`) and a
-  `.visually-hidden` ", 2 unsent" inside the tile's label, so the tile's name says it
+  (`menu-browser.ts:632-674`) draws, when the map gives the tile's `product.id` a number above 0, a
+  `data-in-order` attribute on the tile, a badge `<span class="in-order" data-in-order-count
+  aria-hidden="true">2</span>` in the tile's top inline-start corner (the allergen mark holds the
+  top inline-end, `:225-233`), and a hidden ", 2 unsent" so the tile's name says it
   (`order_counts.unsent` "{n} unsent" / `order_counts.unsent_one` "1 unsent", `strings.ts:555-556`,
-  es «{n} sin enviar» `:2514-2515`; design §3.8: Unsent means "in a New order, not sent"). The
-  badge is `--wt-color-primary` with `--wt-color-on-primary` text, `--wt-radius-full`,
-  `--wt-font-size-sm` bold, so it reads the same on a painted or photo tile. **Keyed by product
-  id**: a variant line keeps its product's `id` (`productAsVariant`,
+  es «{n} sin enviar» `:2514-2515`; design §3.8: Unsent means "in a New order, not sent"). **The
+  hidden words sit beside `.name`, never inside it**: a span after `.name` in `.label`, hidden with
+  `visuallyHiddenStyles` as the file already uses it (imported `:11`, used inside a selector
+  `:159-161`), because tests find a tile by `.name`'s exact text (`till-app-drafts.test.ts:400-403`,
+  `till-table-order-screen.test-helpers.ts:154-156`, `apps/till/test/allergy-app-fixture.ts:360`;
+  ran: `git grep -n 'querySelector(".name")' -- apps/till`). **The badge keeps clear of the name
+  and the photo**, reserving room as the allergen mark does: `.tile[data-in-order] .name {
+  padding-inline-start: var(--wt-space-5) }`, the mirror of `.tile[data-nutrition] .name`'s end
+  padding (`:231-233`), and, since a photo fills the label's width at its top (`.thumb`, `:201-207`),
+  a numbered photo tile starts its photo below the badge's height; Task 6 test 3 checks the badge's
+  box overlaps neither. The badge is `--wt-color-primary` with `--wt-color-on-primary` text,
+  `--wt-radius-full`, `--wt-font-size-sm` bold, so it reads the same on a painted or photo tile.
+  **Keyed by product id**: a variant line keeps its product's `id` (`productAsVariant`,
   `apps/till/src/state/order-line.ts`, read), so a tile counts every line of its dish, whatever the
   variant, options, extras or note; a search result and a shortcut of the same dish show the same
   number (all go through `#productButton`). The screen hands the map only below 720 px; side by
@@ -9435,56 +9473,94 @@ this plan. Check again before the first commit and before `/finish-branch`.
   (`#loadTabLines`, `till-app.ts:11673-11714`), which hold only what was sent (A773-1: the New
   order is the draft store, read). **When:** in `willUpdate`, when `loading` turns false (an open
   has landed: the app ends the open only after the lines are read, `till-app.ts:11553-11560` and
-  `:11624-11648`, read) or when the screen is first drawn not loading (a handheld's held table
-  returned to from its bar button, slice 3 D9, draws a new screen with its lines already held),
-  and only below 720 px: `view = lines.length > 0 ? "order" : "menu"`. **A bill switch keeps
-  today's reset to Menu** (`:2250-2257`): on a switch the app moves `orderId` first and reads the
-  new bill's lines afterwards (`#onSwitchBill`, `till-app.ts:18334-18339`), so the lines on hand
-  at that moment are the old bill's; and + New bill opens an empty bill, where Menu is right
-  (**owner FYI**: a switch to a bill with sent dishes opens on Menu). The probe (ran,
-  `probeCDE.txt`): with the rule in place one more check changed, the handheld's Finish-table
-  refusal case, whose table has sent dishes and now opens on Order (changed check 24).
-- **D9. Order's fixed foot, on a handheld below 720 px.** `#orderSummary` draws the finish refusal
-  as today, then **one box `class="order-foot" data-order-foot`** holding Total, Still to pay and
-  the pay section (`data-bill-actions`), as a direct child of the order pane. On a handheld below
-  720 px the box is `position: sticky; bottom: 0; z-index: 1` with the pane's own colour and a line
-  along its top; its height is measured into `--order-foot-size` on the order pane, the way
-  `#sizeDraftBar` measures the draft bar (`:2447-2467`); and the draft bar there sticks at `bottom:
-  var(--order-foot-size)`, so it rides above the foot, and is drawn **only while the New order has
-  a dish** ("Send all above them while this bill has unsent dishes", design §3.1). The basket's
-  lines keep clear of both (`scroll-margin-block-end: calc(var(--draft-bar-size) +
-  var(--order-foot-size, 0px))`, today `var(--draft-bar-size)`, `:1271-1273`). **A departure**
+  `:11624-11648`, read; `loading` is bound to `tableOpening`, `:20538`, `:20715`, which only the open
+  sets and clears, `:6015`, `:6020`, ran: `grep -n 'tableOpening = '`) or when the screen is first
+  drawn not loading (a handheld's held table returned to from its bar button, slice 3 D9, draws a
+  new screen with its lines already held), and only while `!this.wide`: `view = lines.length > 0 ?
+  "order" : "menu"`. **`wide` is `false` until the screen is first measured** (`:1417`, set only by
+  `#measure`, `:1826-1829`), so on a first draw the rule cannot tell a wide screen from a narrow one
+  and sets Order on both; on a wide screen the first measure's reset to Menu (D2) undoes it, which
+  Task 4 test 4 pins. **A bill switch keeps today's reset to Menu** (`:2250-2257`): on a switch the
+  app moves `orderId` first and reads the new bill's lines afterwards (`#onSwitchBill`,
+  `till-app.ts:18334-18339`), so the lines on hand at that moment are the old bill's; and + New
+  bill opens an empty bill, where Menu is right (**owner FYI**: a switch to a bill with sent dishes
+  opens on Menu). The probe (ran, `probeCDE.txt`): with the rule in place one more check changed,
+  the handheld's Finish-table refusal case, whose table has sent dishes and now opens on Order
+  (changed check 24). **What the probe could not show:** checks 15–23 already failed in probe CDE
+  for probe B's reason, so D8's effect on them was hidden; two are known from reading: 15–22's
+  table has sent lines (`getTabLines` answers `[source, extra]`, `till-app-drafts.test.ts:11357-11359`)
+  and 23's has one (the file's default `getTabLines` answers `[tabLine]` for every bill,
+  `till-app-parties.test.ts:315`), so under D8 both open on Order (Task 4).
+- **D9. Order's fixed foot, on a handheld below 720 px: Total, Still to pay at this table and Pay;
+  the rest of the pay section in the flow above it.** The design fixes three things: "the bill's
+  total, the table's remaining total (A803) and **Pay**, with **Send all** above them while this
+  bill has unsent dishes" (§3.1 Order). A handheld's pay section today draws more than Pay (read):
+  a "Pay" heading (`table.pay_title`, `:4882`, `:4889`); on a part-paid bill, what this bill still
+  owes and what it has received (`:4887-4897`); Pay (`#paySheetButton`, `:4926-4939`); then
+  `#billChoices` (`:4943-4980`: Full invoice while full invoices are on and nothing is filed, the
+  receipt-language button when two or more languages are offered, and under them the saved
+  customer's legal name and tax number); and, after a quiet tap, the sentence (`#payUnsent`,
+  `:4840-4846`). Fixed whole, that would take far more of a 740 px window than the three things
+  (estimate below). **So, on a handheld below 720 px (`this.handheld && !this.wide`), when the pay
+  section's control is the one Pay button (`#paysOnSheet`, `:4920-4924`) or there is no pay section
+  (`this.canSettle && this.#chargeable()` false, `:3021`), `#orderSummary` draws:** the finish
+  refusal as today; then `[data-bill-actions]` holding `section.pay` with the heading, the part-paid
+  amounts (`data-bill-payments` stays on it) and `#billChoices`, in the flow; then, last in the order
+  pane, **one box `class="order-foot" data-order-foot`** holding the Total row, the Still-to-pay row
+  and a `<div class="pay foot-pay">` with the quiet sentence and Pay. The sentence goes in the box
+  so it shows inside the fixed foot, never behind it; the `pay` class keeps
+  `panel-footer.test.ts:570`'s `alert.closest(".pay")` true. **Buildable from what exists (read, not
+  run):** `#paySection` already composes separate methods (`#paySheetButton`, `#billChoices`,
+  `#payUnsent`; `:4880-4915`), so this is a second composition of the same pieces, not new logic.
+  **Everywhere else today's foot stays exactly as it is**, with no `data-order-foot`: on a till at
+  any width, side by side, and on a handheld that draws the whole tender (an unanswered whole
+  payment of a bill that is not presented: `#paysOnSheet` returns false, `:4922`), since the tender
+  fixed at the bottom would cover the order, as on a till (D1). **The box** is `position: sticky;
+  bottom: 0; z-index: 1` with the pane's own colour and a line along its top; its height is
+  measured into `--order-foot-size` on the order pane, the way `#sizeDraftBar` measures the draft
+  bar (`:2447-2467`); the draft bar there sticks at `bottom: var(--order-foot-size)`, so it rides
+  above the foot (Task 7a), and is drawn **only while the New order has a dish** ("Send all above
+  them while this bill has unsent dishes", design §3.1; Task 7b). The basket's lines keep clear of
+  both (`scroll-margin-block-end: calc(var(--draft-bar-size) + var(--order-foot-size, 0px))`, today
+  `var(--draft-bar-size)`, `:1271-1273`). **The estimate** (from the tokens,
+  `packages/ui-core/src/tokens/structure.css:2-29`, not measured): the three fixed things take about
+  150 px (two total rows of about 40 px at `--wt-font-size-xl`, Pay 44 px plus an 8 px gap, the
+  box's padding); the in-flow parts would add about 180 px more on a part-paid bill with Full
+  invoice, a language and a saved customer (the heading, two amount lines, a 44 px row of choices
+  and the customer line). Task 11b measures the real figure against a pass mark. **A departure**
   (**owner FYI**): the design puts Move to… and Fire in the New order box and only Send all above
   the foot; this slice keeps A1125's bar whole (Move to…, Fire, Send all) above the foot, because
   A1125 made the three stay on screen together after the design (#2238). Pay's quiet look, its
   sentence and "Pay shows only where the profile allows a payment" (`this.canSettle &&
-  this.#chargeable()`, `:3021`) are A803's and A796's and unchanged. On a till below 720 px the
-  foot stays in the flow and the draft bar stays as today (D1). **The probe** hid the draft bar by
-  width alone and two checks broke (`cde-new.txt`: `till-table-order-screen.test.ts:543` "disables
-  the draft's actions while the current round is empty" and `till-app-drafts.test.ts:1450` "keeps
-  unsent dishes on their original bill when a sent dish moves to a new bill"); the build hides it
-  only on a handheld, and neither case mounts one (the first mounts the screen with no `handheld`;
-  the second mounts the app with its file's default device), so both are expected to pass
-  unchanged (conditional checks 33–34).
+  this.#chargeable()`, `:3021`) are A803's and A796's and unchanged. **The probe** hid the draft bar
+  by width alone and two checks broke (`cde-new.txt`: `till-table-order-screen.test.ts:543`
+  "disables the draft's actions while the current round is empty" and
+  `till-app-drafts.test.ts:1450` "keeps unsent dishes on their original bill when a sent dish moves
+  to a new bill"); the build hides it only on a handheld, and neither case mounts one (the first
+  mounts the screen with no `handheld`; the second mounts the app with its file's default device),
+  so both are expected to pass unchanged (conditional checks 33–34). No probe ran the foot's
+  recomposition: the handheld checks that read the pay section's parts are listed under I3's run
+  (Task order).
 - **D10. A1120: a handheld stays on its table after a send that empties the New order.** At the end
-  of `#sendDraft` (`till-app.ts:12895-12905`), after the toast, a handheld (`this.handheldMode`,
-  the flag the order screen's `.handheld` already reads, `:20597`, `:20774`) moves a new
-  `@state() private newOrderSent = 0` instead of calling `#returnToFloor()`; a till calls it as
-  today. The screen gains `@property({ attribute: false }) newOrderSent = 0`, "moved on by the app
-  each time a send from this screen empties the New order", and in `willUpdate`, when it moves
-  (the `revealOtherDrafts` pattern, `:2285-2289`, so a newly drawn screen does not react to the
-  count it starts with) and the screen is below 720 px, shows Order (D2): the Sent box now holds
-  what was just sent, and Pay, no longer quiet, is in the fixed foot. A tablet handheld side by
-  side also stays; it has no view to change. The bar is unchanged: the held bill's store is empty,
-  so its button is highlighted without ✎ and goes when the person taps Floor and leaves nothing
-  unsent there (slice 3 D4, D13; `bar-tables.ts`; the slice 3 case "drops the open table's button
-  on Floor when nothing of this person's is unsent there", `till-app-bar-tables.test.ts:443`,
-  read). Design §4 example 1 and Q51 (b): "Ana sends everything at T9 while on it; its button stays
-  highlighted without ✎ until she taps Floor". **Why a till keeps returning:** §3.1 and Q51 (b)
-  are the handheld's; the counter till's flow is A738–A739's (design §3). **One case the probe
-  found** (`till-app-device-zones.test.ts:2404`, phone variant): a send that frees a waiting zone
-  narrowing which hides the table's zone now leaves the phone on that table, where ordering is
-  refused (`orderingAllowed`, slice 4 D3) until Floor is tapped (**owner FYI**; changed check 28).
+  of `#sendDraft` (`till-app.ts:12900-12904`), after the toast, a handheld (`this.handheldMode`,
+  `:2778`, set `:4713` for both handheld form factors, `phone-portrait` and `tablet-landscape`,
+  `apps/till/src/layout.ts:25-31`) no longer calls `#returnToFloor()`; a till calls it as today:
+  `if (!this.handheldMode) this.#returnToFloor();`, exactly probe D's change (`probeD.py`, ran in
+  probe CDE). **Nothing else is needed for the view:** a person's send starts either from the draft
+  bar's Send all or Fire, which are in the order pane and so on Order, or from the Menu bar's Send
+  all, which shows Order as the send starts (D5); so the phone is already on Order when the New
+  order empties, with the Sent box holding what was just sent and Pay, no longer quiet, in the fixed
+  foot. A tablet handheld side by side also stays; it has no view to change. The bar is unchanged:
+  the held bill's store is empty, so its button is highlighted without ✎ and goes when the person
+  taps Floor and leaves nothing unsent there (slice 3 D4, D13; `bar-tables.ts`; the slice 3 case
+  "drops the open table's button on Floor when nothing of this person's is unsent there",
+  `till-app-bar-tables.test.ts:443`, read). Design §4 example 1 and Q51 (b): "Ana sends everything
+  at T9 while on it; its button stays highlighted without ✎ until she taps Floor". **Why a till
+  keeps returning:** §3.1 and Q51 (b) are the handheld's; the counter till's flow is A738–A739's
+  (design §3). **One case the probe found** (`till-app-device-zones.test.ts:2404`, phone variant): a
+  send that frees a waiting zone narrowing which hides the table's zone now leaves the phone on that
+  table, where ordering is refused (`orderingAllowed`, slice 4 D3) until Floor is tapped (**owner
+  FYI**; changed check 28).
 - **D11. Words** (en and es in `apps/till/src/i18n/strings.ts` only):
   - **New:** `table.view_menu` "Menu" «Carta» (the till's word for a menu, `menu.switcher`
     `:1840`, `:3769`); `table.view_order` "Order" «Pedido» (the words of the "Order" tab slice 3
@@ -9496,34 +9572,40 @@ this plan. Check again before the first commit and before `/finish-branch`.
     `order_counts.items` / `order_counts.items_one` "{n} items" / "1 item" «{n} artículos» /
     «1 artículo» (`:553-554`, `:2512-2513`), chosen by the count as `order-counts.ts:8` does;
     `order_counts.unsent` / `_one` (D7).
-  - **Renamed, so "New order" keeps one meaning** (design §3.8 "New order | T box | this bill's
-    unsent dishes"; A773's design, `docs/superpowers/specs/2026-10-16-a773-courses-and-groups-design.md:79`;
-    Q51 (f) 6 and (g), "First order" «Primer pedido» on the pass, both approved 2026-10-24):
+  - **Renamed: the order box is "New order"** (design §3.8 "New order | T box | this bill's unsent
+    dishes"; A773's design, `docs/superpowers/specs/2026-10-16-a773-courses-and-groups-design.md:79`):
     `table.draft_title` "Unsent order" → **"New order"**, «Pedido sin enviar» → **«Nuevo pedido»**
     (unchanged since #806, ran: `git log -S'"table.draft_title": "Unsent order"'`), which the bar
-    reads as its first words; and `pass.kind.new_order` "New order" → **"First order"**, «Nuevo
-    pedido» → **«Primer pedido»** (`:778`, `:2726`; its one reader `pass-view.ts:46`), which A773-2
-    was to rename and did not (ran: `grep -rn 'First order' docs/backlog.md docs/backlog/*.md
-    apps/till/src/i18n/strings.ts` → nothing). The key keeps its name. No test spells either word
-    (ran: `git grep -n '"Unsent order"\|Pedido sin enviar\|"New order"\|Nuevo pedido' --
-    '*.test.ts'` → one unrelated store-source name, `till-app-kitchen-note.test.ts:1878`). The
-    guides already call the box **New order** in four places and **Unsent order** in one
-    (`table-service.md:304`, es `:322`), which Task 10 corrects. **Owner FYI**, since it renames a
-    pass label.
+    reads as its first words. No test spells either old word (ran: `git grep -n 'Unsent order\|Pedido
+    sin enviar' -- '*.test.ts' '*.test-helpers.ts' 'apps/till/test/*.ts'` → nothing). The guides call
+    the box **Unsent order** in one place each (`table-service.md:304`, es `:322`; ran: `git grep -n
+    'Unsent order\|Pedido sin enviar' -- apps docs/developers`), which Task 10 corrects.
+  - **The pass card keeps "New order" «Nuevo pedido» for a table's first send** (`pass.kind.new_order`,
+    `:778`, `:2726`; untouched). The design's Q51 (f) 6 and (g) had proposed "First order" «Primer
+    pedido» there (design §10, `:808-812`, `:819`), but on 2026-11-02 the owner chose to keep it: lane
+    C's questions file, "A773-2 B3 — Question 7 of 9: what the pass card calls a table's first send"
+    (`/Users/clintongormley/waitron-campaign-c/questions.md:1254-1272`), answered under "WATCHER
+    2026-11-02 ~09:40 — OWNER answered all nine A773-2 B3 questions", item 7: "(a) — «Nuevo
+    pedido»" (`:1317-1328`), whose reason was "the same name as the waiter's unsent list, because the
+    card is that same order, now sent". The box's new name follows the same reasoning: it is the
+    order before it is sent. Task 10 adds a dated pointer at the design's (f) 6.
 - **D12. The Sent toast keeps its place.** It sits over the page, `bottom: calc(var(--wt-tap-min) +
   2 * var(--wt-space-3) + …)` (`till-app.ts:2050-2055`), for 8 s (`wt-toast.ts:62`); on a phone
   that stays on its table it can cover the fixed foot's totals for that time, as it can cover the
   draft bar today ("Nothing lifts the Served toast clear of the bar", design-system.md:1065-1066).
   The LOOK records where it lands; **owner FYI**.
 - **D13. What is not touched.** No server code, route, read or migration; `till-shell.ts` and
-  `bar-tables.ts`; the counter screen; side by side at 720 px and over; the help bubbles.
-- **D14. Task order keeps every task green.** The counting first (Task 1). The switch arrives
-  carrying Review's old test hooks too (Task 2), which is exactly probe B, so the only checks that
-  change are Review's own words, size and focus; then the hooks go and the tests' selectors follow
-  in one mechanical step (Task 3, fixture-only). The opening view (Task 4), the Menu bar (Task 5),
-  the tile numbers (Task 6) and the foot (Task 7) are each additive; A1120 (Task 8) needs the view
-  (Task 2); the words (Task 9) last before the docs, so the bar's tests are written against
-  `t("table.draft_title")` from the start and pass across the rename.
+  `bar-tables.ts`; the counter screen; side by side at 720 px and over; the help bubbles; the pass
+  card's words (D11).
+- **D14. Task order keeps every task green.** The counting first (Task 1). Review's own tests are
+  deleted before Review goes (Task 2a), so the switch then arrives carrying Review's old test hooks
+  too (Task 2b), which is exactly probe B less those tests, and the only checks that change there
+  are the counts read on the switch and the tests that pass through Review; then the hooks go and
+  the tests' selectors follow in one mechanical step (Task 3, fixture-only). The opening view
+  (Task 4), the Menu bar (Task 5), the tile numbers (Task 6) and the foot (Tasks 7a, 7b) are each
+  additive; A1120 (Task 8) needs the Menu bar's Send all to show Order (Task 5); the box's words
+  (Task 9) last before the docs, so the bar's tests are written against `t("table.draft_title")`
+  from the start and pass across the rename.
 
 ### Changed test checks (from the probes; the implementer confirms each)
 
@@ -9547,128 +9629,220 @@ from `apps/till`, `pnpm exec vitest run $(cat run.txt)`; free memory 70 % (ran: 
   passed (71)`, `Tests 23 failed | 5938 passed (5961)` (`probeB-fails.txt`): checks 1–23 below,
   each on Review's words, size or focus, or on Back being visible. (Its "expected 21 to be greater
   than or equal to 44" is the probe's unstyled button; the build's `.option` is `--wt-tap-min`
-  tall, so that part of checks 3–10 stays.)
-- **Probe C+D+E, probe B plus the opening view (D8), a handheld staying after its last send (D10)
-  and the draft bar hidden while empty below 720 px** (`probeCDE.diff`): `Test Files 10 failed |
-  61 passed (71)`, `Tests 34 failed | 5927 passed (5961)`; beyond probe B's 23, eleven
-  (`cde-new.txt`): check 24 (D8), checks 25–32 (D10) and the two width-only ones of D9 (33–34,
-  expected to pass under the build's handheld-only rule).
+  tall.)
+- **Probe C+D+E, probe B plus the opening view (D8), a handheld staying after its last send (D10,
+  `probeD.py`: exactly the build's one line) and the draft bar hidden while empty below 720 px**
+  (`probeCDE.diff`): `Test Files 10 failed | 61 passed (71)`, `Tests 34 failed | 5927 passed
+  (5961)`; beyond probe B's 23, eleven (`cde-new.txt`): check 24 (D8), checks 25–32 (D10) and the
+  two width-only ones of D9 (33–34, expected to pass under the build's handheld-only rule).
 
-**The checks that change:**
+**What the probes cover, and what they do not (I3).** "The checks that change" below are the
+changes the probes saw **in those 71 files**, under the probes' arrangements. Two things are
+outside them. First, 65 more till test files name the screen and were run by no probe (ran: `git
+grep -l till-table-order-screen -- 'apps/till/**/*.test.ts'` → 123 files, 58 of them among the 71;
+the two lists together are 136 files); two of those mount a handheld and are the likeliest to be
+reached, `till-table-order-screen.bill-payments.test.ts` (its describe "Pay on a handheld (A796
+default 2)", from `:288`) by D9's foot, and `till-table-order-screen.bill-switcher.test.ts` (`:261`
+"shows on a handheld too") by D8's opening view. Second, no probe ran D9's recomposition of the
+foot, Task 5's Menu bar or Task 6's numbers. Tasks 4, 7a, 7b and 8 therefore end with the wide run
+(Task order, below), and a failure there that follows from this slice's decisions is added to this
+list in the ledger and the PR with its reason; any other is a STOP.
+
+**Deleted with Review, not rewritten (Task 2a).** The watcher's condition of 2026-11-09 21:02
+(lane C's questions file, "WATCHER 2026-11-09 21:02 — A797 slice 10: ONE pull request APPROVED,
+with conditions", item 3): tests OF the removed Review view, its Back button, its focus handling
+and its own open and close, go with it. Each with its reason:
 
 1. `apps/till/src/screens/till-table-order-screen.review.test.ts:30` "keeps browsing and the draft
-   apart below the width, and opens the whole draft on Review": the button's text
-   `t("table.review")` "Review (3)" becomes the Order switch's "Order · 3" (built from
-   `t("table.view_order")`); renamed "… and opens the whole draft on Order". Task 2.
-2. same file `:109` "moves focus to Back when Review opens, and back to Review on Back": there is no
-   Back; the focus stays on Order when it is tapped, then on Menu (D3); renamed "keeps the focus on
-   the switch button tapped". Task 2.
-3–10. `apps/till/src/screens/till-table-order-screen.review-acceptance.test.ts:19`, its eight
-   variants (`en`/`es` × `light`/`dark` × 360/390 px) "… keeps whole, weighed and recalled families
-   across Back": Review's literal "Review (6)" / «Revisar (6)», its box and the focus moving to Back
-   become the Order switch's text from `t()` ("Order · 6"), its box (still at least 44 px and
-   inside the window) and the focus staying; Back becomes Menu; renamed "… across Menu". Task 2.
+   apart below the width, and opens the whole draft on Review": Review's button, its words and its
+   opening; the switch's own case 1 (Task 2b) owns the views and the count.
+2. same file `:109` "moves focus to Back when Review opens, and back to Review on Back": Review's
+   focus handling; there is no Back, and Task 2b's case 1 pins the focus staying.
+3–10. `apps/till/src/screens/till-table-order-screen.review-acceptance.test.ts`, the whole file:
+   its one describe "phone Review counts dishes without changing their draft" with eight variants
+   (`en`/`es` × `light`/`dark` × 360/390 px) of "… keeps whole, weighed and recalled families
+   across Back": Review's button (its literal "Review (6)" / «Revisar (6)», its box), the focus
+   moving to Back and Review's open and close; the count of that same New order on the switch is
+   Task 2b's case 2, its words case 5 and its accessibility case 6.
+14. `apps/till/src/till-app-drafts.test.ts:4461` "on a 390 px phone, opens the whole draft on Review
+   and comes Back to browsing with it kept": Review's open and Back at app level; the views are
+   Task 2b's case 1, and the same describe's `:4495` "comes Back from Review to where the menu was
+   scrolled" keeps the scroll (fixture-only, Task 3).
+
+**Re-pointed: the count or the route moves to the switch (Task 2b).**
+
 11. `apps/till/src/screens/till-table-order-screen.sent.test.ts:66` "the draft already counts 330 ml
-   as one item while keeping its quantity": "Review (1)" (`:86`) → the Order switch's "Order · 1".
-   Task 2.
+   as one item while keeping its quantity": the literal "Review (1)" (`:86`) → the Order switch's
+   text built from `t("table.view_order")` and 1.
 12. `apps/till/src/screens/till-table-order-screen.split-units.test.ts:144` "A803: offers no split
-   for a 200 ml line in a measure unit with no decimals": its Review text (`:172`) → the Order
-   switch's text. Task 2.
+   for a 200 ml line in a measure unit with no decimals": the literal "Review (3)" (`:172-174`) →
+   the Order switch's text from `t()`.
 13. `apps/till/src/screens/till-table-order-screen.unavailable.test.ts:306` "shows its quantity as
    the server holds it, and counts a whole quantity on Review by its count": `t("table.review")`
-   (`:313-314`) → the Order switch's text; renamed "… on the Order switch". Task 2.
-14. `apps/till/src/till-app-drafts.test.ts:4461` "on a 390 px phone, opens the whole draft on Review
-   and comes Back to browsing with it kept": Review's text (`:4478`) and Back → the Order switch's
-   text and Menu; the focus checks follow D3; renamed "… on Order and comes back to Menu with it
-   kept". Task 2.
-15–22. same file `:11213`, the eight variants of "native app phone Review with mixed dish families"
-   (`:11209`) "… retains saved sources, placement and selection across Back": as 3–10 (`:11385-11444`);
-   renamed "… across Menu", the describe "native app phone Order view with mixed dish families".
-   Task 2.
+   (`:313-314`) → the Order switch's text; renamed "… on the Order switch".
+15–22. `apps/till/src/till-app-drafts.test.ts:11213`, the eight variants of "native app phone Review
+   with mixed dish families" (`:11209`) "… retains saved sources, placement and selection across
+   Back": what they check is the New order's saved sources, extras, places and selection across a
+   refresh; Review is the route. The route is re-pointed (Order and Menu for Review and Back) and
+   Review's own lines are deleted, not rewritten: the text "Review (6)" / «Revisar (6)», its box
+   (`expectTarget("[data-review-open]")`) and the two focus lines (`:11385-11444`). Renamed "… across
+   Menu", the describe "native app phone order view with mixed dish families".
 23. `apps/till/src/till-app-parties.test.ts:2893` "does not open Review when the screen is first
    drawn after such a refusal": it read "Back is visible" as "Review is open" (`:2909-2911`); Menu
-   is always drawn now, so it checks that `[data-view=order]` is not pressed and the order pane is
-   hidden; renamed "does not open Order …". Task 2.
+   is always drawn now, so it checks that `[data-view=order]` is not pressed; renamed "does not
+   open Order …".
+
+**The opening view (Task 4).**
+
 24. `apps/till/src/till-app-handheld-pay.test.ts:6327` "shows the refusal, its Take payment and its
    Record unpaid departure in the window at 390x844": its table has sent dishes, so it now opens on
    Order (D8); `:6350`'s "order pane hidden" becomes "order pane shown and Order pressed"; the rest
-   is unchanged. Task 4.
+   is unchanged.
+15–22 again (D8, read): their table has sent lines (`:11357-11359`), so it now opens on Order: the
+   two lines reading browsing shown and the order pane hidden before the first tap (`:11393-11394`)
+   become the reverse; the taps are unchanged.
+23 again (D8, read): its table t7 has a sent line (`till-app-parties.test.ts:315`), so under D8 it
+   opens on Order whatever the refusal does; this case gets `getTabLines` answering no lines, so the
+   check is about the refusal's count again, not the opening view.
+
+**A1120 (Task 8).**
+
 25–27. `apps/till/src/till-app-device-zones.test.ts:2076` "a send after signing in again comes back
    to the zone of the same table", `:2093` "… of a different table", `:2111` "signing in again after
    a table, with no table opened, opens on the starting zone": their shared helper `sendFromTable`
-   (`:2055-2073`) checks that the order screen goes after the send (`:2071-2072`); now it checks
-   the order screen stays with an empty New order and the Order view, then taps Floor (`tapFloor`,
-   the file's own) and waits for the Floor; every zone check is unchanged (D10). Task 8.
+   (`:2055-2073`) waits for the order screen to go after the send (`:2071-2072`); now it taps Floor
+   after the send (`tapFloor`, `:1937-1944`, hoisted to the file's top so 29–30 share it) and waits
+   for the Floor, and checks nothing else; every zone check is unchanged (D10).
 28. same file `:2404`, the `phone-portrait` variant of "the table holding back a waiting narrowing
    can send its dishes, and sending applies it with no poll and returns to the Floor (%s)": the
-   phone stays on the table after the send; it then taps Floor and checks the Floor shows only
-   Garden; the `till` variant is unchanged; renamed "… and a till returns to the Floor (%s)" (D10).
-   Task 8.
+   phone stays on the table after the send; it then taps Floor (the describe's `backToFloor`,
+   `:2358-2370`) and checks the Floor shows only Garden; the `till` variant is unchanged and owns "a
+   till returns to the Floor"; renamed "… and a till returns to the Floor (%s)" (D10).
 29–30. same file `:3041`, both variants (phone 390, tablet 1024) of "after a send the Sent toast sits
    above the Ready bar, never over it": the handheld stays on the table, so the case taps Floor
-   while the toast is up (it shows for 8 s, `wt-toast.ts:62`) and then checks as before (D10). Task 8.
+   (`tapFloor`) while the toast is up (it shows for 8 s, `wt-toast.ts:62`) and then checks as
+   before (D10).
 31. `apps/till/src/till-app-parties.test.ts:8730` "returns a handheld to its floor tab after a
    complete submission, keeping the order it showed": inverted: the shell's `activeScreen` stays
-   `"order"`, the screen shows Order with an empty New order and the toast reads "Fired: 1 group.";
-   Floor then Order still shows `wo-4`; renamed "keeps a handheld on its table after a complete
-   submission, showing Order" (D10, A1120). Task 8.
+   `"order"`, the toast reads "Fired: 1 group." and the screen's `orderId` is `wo-4`; renamed "keeps a
+   handheld on its table after a complete submission" (D10, A1120). It fires through the hidden draft
+   bar by script (`fireAll`, `:8412-8418`, clicking `[data-draft-action]` while the view may be
+   Menu), so it does not check the view: Task 8's case 1 owns "on Order".
 32. same file `:8479` "shows the notice over the floor without moving it, so a tap as it closes lands
    where it was aimed": this file's app is a handheld (the probe's failure names the `embedded`
-   order screen), so after the send the case taps Floor first, then measures as before. Task 8.
+   order screen), so after the send the case moves to the Floor first (the file's
+   `screen-select` step, as `toFloor` does, `:510-516`), then measures as before.
 
-**Conditional (D9; expected unchanged):** 33. `till-table-order-screen.test.ts:543` "disables the
-draft's actions while the current round is empty" and 34. `till-app-drafts.test.ts:1450` "keeps
-unsent dishes on their original bill when a sent dish moves to a new bill". If either fails in
-Task 7, the cause is that it reached a handheld below 720 px with an empty New order: 33 then
-checks the bar is absent there and disabled at 1280 px; 34 checks the switch, not
-`[data-draft-action]`, for "the screen still takes dishes". Any other failure is a STOP.
+**Conditional (D9, Task 7b; expected unchanged):** 33. `till-table-order-screen.test.ts:543`
+"disables the draft's actions while the current round is empty" and 34. `till-app-drafts.test.ts:1450`
+"keeps unsent dishes on their original bill when a sent dish moves to a new bill". If either fails,
+the cause is that it reached a handheld below 720 px with an empty New order: 33 then checks the bar
+is absent there and disabled at 1280 px; 34 checks the switch, not `[data-draft-action]`, for "the
+screen still takes dishes". Any other failure is a STOP.
 
 **Fixture-only** (Task 3; no check changes): every other use of `[data-review-open]` and
-`[data-review-back]` in the till's tests and `apps/till/test/*.ts`, which open or close the order
-view on the way to what they check: the 460 tests of probe A less checks 1–23, in the 47 files of
-`probeA-files.txt` (the largest: `till-app-drafts.test.ts` 74, `till-table-order-screen.test.ts`
-54, `till-table-order-screen.split-units.test.ts` 33, `till-app-parties.test.ts` 32,
-`till-app-bill-payments.test.ts` 22, `till-table-order-screen.split-authority.test.ts` 20,
-`till-app-allergy.test.ts` 18), plus the checks that the control is absent side by side
-(`review.test.ts:159`, `:173`; `till-table-order-screen.test.ts:5879`; `till-app-drafts.test.ts:4549`),
-which read the same with the new selector. The control: probe B kept the hooks and passed all 460
-but checks 1–23.
+`[data-review-back]` in the till's tests, its test helpers and `apps/till/test/*.ts`, which open or
+close the order view on the way to what they check: the 460 tests of probe A less checks 1–23, in
+the 47 files of `probeA-files.txt` (the largest: `till-app-drafts.test.ts` 74,
+`till-table-order-screen.test.ts` 54, `till-table-order-screen.split-units.test.ts` 33,
+`till-app-parties.test.ts` 32, `till-app-bill-payments.test.ts` 22,
+`till-table-order-screen.split-authority.test.ts` 20, `till-app-allergy.test.ts` 18). Among them,
+four checks read the control's presence or absence and read the same with the new selector:
+`review.test.ts:159` and `:173` and `till-app-drafts.test.ts:4540` (absent side by side, present
+again below the width), and `till-table-order-screen.test.ts:5879`, which checks that the control
+**is drawn** while service is closed and a New order is kept (read: `:5879`
+`expect(…"[data-review-open]")).not.toBeNull()`). The control: probe B kept the hooks and passed all
+460 but checks 1–23.
 
 ### Review focus (inputs the spec implies and today's tests may not pin)
 
 1. **The counts agree:** a weighed line, a dish with two sauce choices, a variant, a recalled line,
    a dish no longer offered: the switch's number, the bar's items and its dishes' sum, and the
-   tiles' numbers all match (D4, D6, D7; Tasks 1, 5, 6).
+   tiles' numbers all match (D4, D6, D7; Tasks 1, 2b, 5, 6).
 2. **The opening view:** a new table on Menu; a table with sent dishes, or only served ones, on
    Order; a bill switch on Menu; the held table's bar button returning on Order once anything is
-   sent; nothing at 720 px and over (D8; Task 4).
+   sent; nothing at 720 px and over, including a first draw on a wide screen (D8; Task 4).
 3. **The Menu bar:** absent with an empty New order; sticks at the window's foot while the menu
    scrolls and does not cover the last tile at the end; the words open Order; Send all sends what
-   the draft bar's would; a long list is cut with an ellipsis, never wraps (D5; Task 5).
-4. **The foot on a handheld:** fixed; Send all bar above it only while the New order has a dish;
-   the newest line is not hidden behind either; Pay quiet with unsent dishes and its sentence
-   inside the foot; a till below 720 px unchanged (D9; Task 7).
+   the draft bar's would and shows Order as it starts; a long list is cut with an ellipsis, never
+   wraps (D5; Task 5).
+4. **The foot on a handheld:** only Total, Still to pay and Pay fixed, the rest of the pay section
+   in the flow above it; Send all bar above the foot only while the New order has a dish; the
+   newest line not hidden behind either; Pay quiet with unsent dishes and its sentence inside the
+   foot; a till, side by side, and a handheld drawing the whole tender unchanged (D9; Tasks 7a, 7b).
 5. **A1120:** a handheld stays on Order after its last send, with the button highlighted without
-   ✎ and gone after Floor; a partial send stays as today; a till returns to the Floor; the waiting
-   narrowing case (D10; Task 8).
+   ✎; a till returns to the Floor; the waiting narrowing case (D10; Task 8); a send that a station
+   or the menu refuses leaves its warning in view (D5; Tasks 5, 11b).
 6. **Keyboard and screen readers:** the switch's buttons reachable with Tab, `aria-pressed`
-   following the view, names "Menu" and "Order 3"; a tile reads ", 2 unsent"; the focus after a tap
-   (D3, D7; Tasks 2, 6).
-7. **Words:** «Carta», «Pedido · 3», «Nuevo pedido · 3 artículos — 2 × …», «Primer pedido» on the
-   pass; no "Review" left in English or Spanish (D11; Tasks 2, 5, 9).
+   following the view, names "Menu" and "Order 3"; a tile reads ", 2 unsent" and its `.name` is the
+   dish's name alone; the focus after a tap (D3, D7; Tasks 2b, 6).
+7. **Words:** «Carta», «Pedido · 3», «Nuevo pedido · 3 artículos — 2 × …» on the bar and the box;
+   the pass card unchanged; no "Review" left in English or Spanish (D11; Tasks 2b, 5, 9).
 8. **Dark theme, Spanish, 360 and 390 px, 719 and 720 px, a 1024 px tablet** (Tasks 11a, 11b).
 
 ---
 
-**Task order and why** (D14). Each task is one implementer's (the LOOKs one subagent's each), test
-first, well under 100 tool calls, and ends green and committed.
+**Task order and why** (D14). Each task is one implementer's (`subagent_type: "implementer"`; the
+LOOKs one foreground subagent's each), test first, and ends green and committed. **Each dispatch
+stays well under 100 tool calls** (the watcher's condition 2); the estimates below are the driver's,
+and a task estimated near 70 or more is split into a and b, each ending green and committed. An
+implementer that passes about 150 calls with the task unfinished stops at a passing (or cleanly
+red) point, commits, and hands over: done, left, files, each check's state.
+
+| Task | What | Estimated tool calls |
+| --- | --- | --- |
+| 1 | the count module | 25 |
+| 2a | delete Review's own tests | 12 |
+| 2b | the Menu / Order switch | 55 |
+| 3 | the tests' selectors (fixture-only) | 20 |
+| 4 | the opening view | 45 |
+| 5 | the Menu bar, its Send all showing Order | 55 |
+| 6 | the tile numbers | 40 |
+| 7a | the fixed foot, Send all riding above it | 50 |
+| 7b | the draft bar only while the New order has a dish | 35 |
+| 8 | A1120: a handheld stays | 40 |
+| 9 | the box's words | 12 |
+| 10 | docs, guides, backlog | 40 |
+| 11a, 11b | the LOOKs | 40 each |
 
 **Dish names in new fixtures are English** (Croquettes, Pork shoulder, Octopus, Beer). **Spanish
 expectations are built from `t()` after `setLocale("es")`**, each checked to differ from its
 English, never spelt out in the test.
 
+**Shared helpers, not per-file copies** (the watcher's condition 3). Before writing a helper, search
+the till's test support: `apps/till/src/screens/till-table-order-screen.test-helpers.ts` (already
+holds `mount`, `tap`, `rows`, `resized`), `apps/till/src/widgets/test-helpers.ts`, the other
+`*.test-helpers.ts` beside the screen and `apps/till/test/*.ts` (ran: `git ls-files
+'apps/till/*test-helpers*' 'apps/till/test/*.ts'`). The screen's new cases share one pair added to
+`till-table-order-screen.test-helpers.ts` in Task 2b: `showView(el, "menu" | "order")` (taps the
+switch's button and waits for the update) and `shownView(el)` (which button is pressed). App cases
+reuse a file's own Floor helper (Task 8). The existing per-file "open Review if it is shown"
+helpers (e.g. `panel-footer.test.ts:531-538` `showFoot`) are re-pointed by Task 3's selector step,
+not merged: merging them is a test refactor this slice does not need.
+
+**Checks that something did not happen** (I5). Each waits, as its end point, for something the same
+action draws, and then reads the absence; a check that is not red before its task's change gets a
+one-time control with the rule removed, recorded in one sentence in the ledger. Where a task's new
+case is red at its Step 2 for the very reason it checks, that red run is its control. They are:
+Task 7a's quiet Pay (the end point is `[data-pay-unsent]`; control below), Task 8's stay (the end
+point is the Sent toast opening, drawn just before the call Task 8 removes, `till-app.ts:12902-12904`;
+red at Step 2), Task 4 test 4 (control below), and the absences inside new cases (no switch at 720
+px, no bar with an empty New order, no badge for 0 or without a map, no `[data-order-foot]` on a
+till), each read in the same case after the same setup drew the thing in its other half.
+
 **The till runs real headless Chromium:** check `memory_pressure | grep free` before each run and
 read the `Tests` count, never only the exit status (CLAUDE.md §4).
+
+**The 71 files** (every task): from `apps/till`, `pnpm exec vitest run $(cat
+/Users/clintongormley/waitron-campaign-c/a797-10-probe/run.txt)`, less `review-acceptance.test.ts`
+once Task 2a deletes it (`grep -v review-acceptance`). **The wide run** (Tasks 4, 7a, 7b and 8; I3):
+the 71 together with every till test file that names the screen, 136 files at `233a59cc5` (ran:
+the list, not the tests):
+`cd apps/till && pnpm exec vitest run $({ cat /Users/clintongormley/waitron-campaign-c/a797-10-probe/run.txt; git grep -l till-table-order-screen -- '*.test.ts'; } | sort -u | grep -v review-acceptance)`.
+Run it in one go only while `memory_pressure | grep free` shows more than about 15 % free; below
+that, run the 71 first and the rest after. A failure outside the changed checks above is read:
+one that follows from this slice's decisions is listed as a changed check, with its reason, in the
+ledger and the PR; any other is a STOP.
 
 ### Task 1: One module counts the New order
 
@@ -9692,83 +9866,127 @@ read the `Tests` count, never only the exit status (CLAUDE.md §4).
   new module; delete its copy at `:283-287`; `#draftEntries` unchanged otherwise)
 - Test: `apps/till/src/state/new-order-count.test.ts`
 
+What is not tested here, and why (one owner per property): how one line counts is `itemCount`'s,
+tested in `apps/till/src/state/draft-groups.test.ts:6-13` (whole, whole with decimals, weighed);
+`countsWholeUnits` only moves, and its whole-quantity case for a dish no longer offered is changed
+check 13's, through the screen; the switch's count of whole, weighed and recalled lines is Task
+2b's case 2.
+
 - [ ] **Step 1: Failing tests**, in one `describe("counting the New order")`, with lines built by
   the store (`new WorkingOrderStore()`'s `addProduct`, `apps/till/src/state/working-order.ts:517`)
   or literal `OrderLine`s:
-  1. "two whole-unit lines count by quantity" — Croquettes ×2, Pork shoulder ×1 → `newOrderItems` 3.
-  2. "a weighed line counts one" — 0.350 kg Octopus → 1; with Croquettes ×2 → 3.
-  3. "a dish no longer offered with a whole quantity counts by it" — `notOffered: true`, quantity
-     "2" → 2; "1.5" → 1.
-  4. "dishes by name, summed, first appearance first" — Croquettes (aioli) ×1, Pork shoulder ×1,
+  1. "dishes by name, summed, first appearance first" — Croquettes (aioli) ×1, Pork shoulder ×1,
      Croquettes (no sauce) ×1 → `[{ name: "Croquettes", items: 2 }, { name: "Pork shoulder",
-     items: 1 }]`; the items add up to `newOrderItems`.
-  5. "by product, whatever the variant" — Beer (Small) ×1 and Beer (Large) ×2, same `product.id`
+     items: 1 }]`; the items add up to `newOrderItems`, 3.
+  2. "by product, whatever the variant" — Beer (Small) ×1 and Beer (Large) ×2, same `product.id`
      → `Map { "beer" => 3 }`.
-  6. "an empty New order" → 0, `[]`, an empty map.
-- [ ] **Step 2: Run; expect FAIL** (the module does not exist):
-  `pnpm --filter @waitron/till exec vitest run src/state/new-order-count.test.ts`.
+  3. "an empty New order" → 0, `[]`, an empty map.
+- [ ] **Step 2: Run; expect FAIL**: `pnpm --filter @waitron/till exec vitest run src/state/new-order-count.test.ts`
+  → the file fails to load because `./new-order-count.js` does not exist, so no test runs (read the
+  error, not a count).
 - [ ] **Step 3: Implement.** `lineItems` is `itemCount({ quantity: line.quantity, wholeUnits:
   countsWholeUnits(line) })`.
-- [ ] **Step 4: Run; expect PASS** (read the `Tests` count: 6), then the screen's existing counts
-  pass unchanged: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.review.test.ts src/screens/till-table-order-screen.review-acceptance.test.ts src/screens/till-table-order-screen.sent.test.ts`.
+- [ ] **Step 4: Run; expect PASS** (read the `Tests` count: 3), then the screen's existing counts
+  pass unchanged: `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.review.test.ts src/screens/till-table-order-screen.review-acceptance.test.ts src/screens/till-table-order-screen.sent.test.ts src/screens/till-table-order-screen.unavailable.test.ts`.
 - [ ] **Step 5:** `pnpm --filter @waitron/till typecheck`; `pnpm exec eslint apps/till/src/state/new-order-count.ts apps/till/src/state/new-order-count.test.ts apps/till/src/screens/till-table-order-screen.ts`;
   `pnpm format:check`; ledger; `git commit -s -m "A797-10: one module counts the New order"`
 
-### Task 2: The Menu / Order switch replaces Review
+### Task 2a: Delete the tests of the phone's Review view
+
+The watcher's condition 3: tests OF the removed Review view are deleted with it, not rewritten.
+Deleting them first, while Review still exists, keeps every commit green.
+
+**Files:**
+- Delete: `apps/till/src/screens/till-table-order-screen.review-acceptance.test.ts` (checks 3–10)
+- Modify: `apps/till/src/screens/till-table-order-screen.review.test.ts` (delete the cases at `:30`
+  and `:109`, checks 1 and 2); `apps/till/src/till-app-drafts.test.ts` (delete the case at `:4461`,
+  check 14)
+
+- [ ] **Step 1:** Note the `Tests` count of `review.test.ts` and `till-app-drafts.test.ts` before:
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.review.test.ts src/till-app-drafts.test.ts`.
+- [ ] **Step 2:** Delete the file and the three cases, and any import or helper only they used
+  (typecheck and eslint name them), nothing else.
+- [ ] **Step 3: Run; expect PASS** the same two files, with exactly 3 fewer tests than Step 1.
+- [ ] **Step 4:** typecheck till; eslint the changed files; `pnpm format:check`; ledger, listing
+  checks 1, 2, 3–10 and 14 with their one-line reasons from "Changed test checks";
+  `git commit -s -m "A797-10: delete the tests of the phone's Review view, which the Menu / Order switch replaces"`
+
+### Task 2b: The Menu / Order switch replaces Review
 
 **Files:**
 - Modify: `apps/till/src/screens/till-table-order-screen.ts` (D2, D3: `view` for `reviewing`;
   `#showOrder` and `#showMenu` for `#openReview` and `#closeReview`, scroll kept, no focus move;
   the switch at the top of `#ordering`; no Back in `.draft-head`; no Review in `#bottomBar`; the
   callers at `:2436`, `:3948`, `:3999`, `:2453`, `:4090`, `:4298` and `#measure` read `view`;
-  the Order count from `newOrderItems`. **For this task only, the Order button also carries
-  `data-review-open` and the Menu button `data-review-back`**, so the tests that only pass through
-  Review keep working, as in probe B; Task 3 removes them.)
+  the Order count from `newOrderItems`; the `.review-open` style (`:1243-1245`) and the comments
+  naming Review (`:220`, `:1418`, `:1424`, `:1672`, `:1824`, `:2434`, `:2958`, `:3901`) follow. **For
+  this task only, the Order button also carries `data-review-open` and the Menu button
+  `data-review-back`**, so the tests that only pass through Review keep working, as in probe B;
+  Task 3 removes them.)
 - Modify: `apps/till/src/i18n/strings.ts` (add `table.view_menu`, `table.view_order` en and es;
   delete `table.review` en and es)
-- Test: changed checks 1–23; new cases in `till-table-order-screen.review.test.ts` and
-  `till-table-order-screen.a11y.test.ts`
+- Modify: `apps/till/src/screens/till-table-order-screen.test-helpers.ts` (`showView`,
+  `shownView`; Task order, "Shared helpers")
+- Test: new cases in `till-table-order-screen.review.test.ts` and
+  `till-table-order-screen.a11y.test.ts`; changed checks 11–13, 15–22 and 23
 
 - [ ] **Step 1: Failing tests** (new, in `review.test.ts`'s describe, renamed "browsing and the
   order by the screen's width"):
-  1. "below the width, Menu and Order switch the views, Order counting the New order" — at 390 px,
-     tap Beer, Beer, Flan: `[data-view=menu]` pressed, `[data-view=order]` reads "Order · 3" with
-     the " · " hidden from screen readers and the accessible name "Order 3"; tap Order: pressed,
-     the order pane shown, browsing hidden; tap Menu: back.
-  2. "an empty New order reads Order with no number".
-  3. "no switch at the width and above" — at `DRAFT_SIDE_BY_SIDE_MIN_WIDTH`: no `[data-view-switch]`.
-  4. "Spanish: Carta and Pedido · 3" — `setLocale("es")`, restored; built from `t()`.
-  5. a11y (`till-table-order-screen.a11y.test.ts`): "the switch has no violations, Menu and Order
+  1. "below the width, Menu and Order switch the views, Order counting the New order, the focus
+     staying on the button tapped" — at 390 px, tap Beer, Beer, Flan: `[data-view=menu]` pressed,
+     `[data-view=order]` reads `` `${t("table.view_order")} · 3` `` with the " · " hidden from
+     screen readers and the accessible name "Order 3"; tap Order: pressed, the order pane shown,
+     browsing hidden, the focus on Order; tap Menu: back, the focus on Menu.
+  2. "the Order count takes whole, weighed and recalled lines as items" — the New order the deleted
+     acceptance file used (Beer ×2; Flan ×1 with three sauce extras; 0.375 of Ham; a recalled dish
+     ×2.000 with `source`, `till-table-order-screen.review-acceptance.test.ts:22-39` at base): the
+     Order button reads the switch's text with 6.
+  3. "an empty New order reads Order with no number".
+  4. "the switch only below the width" — at `DRAFT_SIDE_BY_SIDE_MIN_WIDTH - 1`: `[data-view-switch]`
+     drawn; at `DRAFT_SIDE_BY_SIDE_MIN_WIDTH`: none.
+  5. "Spanish: Carta and Pedido · 3" — `setLocale("es")`, restored; built from `t()`.
+  6. a11y (`till-table-order-screen.a11y.test.ts`): "the switch has no violations, Menu and Order
      each pressed", once per theme.
-- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.review.test.ts src/screens/till-table-order-screen.a11y.test.ts`.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.review.test.ts src/screens/till-table-order-screen.a11y.test.ts`
+  → the six new cases fail because `[data-view-switch]` and `[data-view=…]` are not found (case 4
+  on its first half; its second half, nothing at the width, holds already); every existing case
+  passes.
 - [ ] **Step 3: Implement** D2, D3 and the words; `.view-switch { display: flex; gap:
-  var(--wt-space-2); }`, `.view-switch .option { flex: 1 1 0; }`. Edit changed checks 1–23 as
-  listed, and nothing else.
-- [ ] **Step 4: Run; expect PASS** the 71 files of the probe (`/Users/clintongormley/waitron-campaign-c/a797-10-probe/run.txt`,
-  paths relative to `apps/till`): `cd apps/till && pnpm exec vitest run $(cat /Users/clintongormley/waitron-campaign-c/a797-10-probe/run.txt)`
-  → every test passes; a failure other than the base's load-only one (above) is a STOP.
-- [ ] **Step 5:** `git grep -n 'table\.review\|reviewing\|#openReview\|#closeReview' -- apps/till/src ':!*.test.ts'`
-  → nothing; typecheck till; eslint the changed files; `pnpm format:check`; ledger, with checks
-  1–23 and their reasons; `git commit -s -m "A797-10: Menu and Order switch the phone's views, in place of Review"`
+  var(--wt-space-2); }`, `.view-switch .option { flex: 1 1 0; }`. Edit changed checks 11–13, 15–22
+  and 23 as listed, and nothing else.
+- [ ] **Step 4: Run; expect PASS** the 71 files (Task order) → every test passes; a failure other
+  than the base's load-only one (above) is a STOP.
+- [ ] **Step 5:** `git grep -n -E 'table\.review|reviewing|#openReview|#closeReview|review-open|\bReview\b' -- apps/till/src ':!*.test.ts' ':!*.test-helpers.ts'`
+  → nothing (at base it lists 23 lines: the screen's and `strings.ts:1419`, `:3357`; ran);
+  typecheck till; eslint the changed files; `pnpm format:check`; ledger, with checks 11–13, 15–22
+  and 23 and their reasons;
+  `git commit -s -m "A797-10: Menu and Order switch the phone's views, in place of Review"`
 
 ### Task 3: The tests reach Order and Menu by the switch's own names (fixture-only)
 
 **Files:**
 - Modify: `apps/till/src/screens/till-table-order-screen.ts` (drop the `data-review-open` and
-  `data-review-back` hooks Task 2 kept)
-- Modify: every till test and fixture naming them (ran today: 45 test files and 2 fixtures, `git
-  grep -l 'data-review-open\|data-review-back' -- 'apps/till/**/*.test.ts' 'apps/till/test/*.ts'`)
+  `data-review-back` hooks Task 2b kept)
+- Modify: every till test, test helper and fixture naming them (ran at base: `git grep -l
+  'data-review-open\|data-review-back' -- 'apps/till/**/*.test.ts' 'apps/till/**/*.test-helpers.ts'
+  'apps/till/test/*.ts'` → 46 files: 42 test files, `till-table-order-screen.test-helpers.ts`,
+  `till-table-order-screen.sent.test-helpers.ts`, `apps/till/test/allergy-app-fixture.ts` and
+  `apps/till/test/bill-pay-app.ts`; 41 test files once Task 2a has deleted
+  `review-acceptance.test.ts`)
 
-- [ ] **Step 1:** Drop the hooks; run the probe's 71 files → the failures are those of probe A less
-  checks 1–23 (they now read the switch): the tests still naming the hooks.
+- [ ] **Step 1:** Drop the hooks; run the 71 files → expect FAIL: the tests still naming the hooks
+  fail on `[data-review-open]` or `[data-review-back]` not found, about probe A's 460 less checks
+  1–23 (they no longer name them).
 - [ ] **Step 2:** Replace the selectors in one step, unquoted so they sit inside either kind of
-  quote: `git grep -l 'data-review-open\|data-review-back' -- 'apps/till/**/*.test.ts' 'apps/till/test/*.ts' | xargs sed -i '' -e 's/\[data-review-open\]/[data-view=order]/g' -e 's/\[data-review-back\]/[data-view=menu]/g'`;
-  then rename local helpers and variables called `review` where they now mean the Order button
-  (`const review = …` → `const orderView = …`), and nothing else.
+  quote: `git grep -l 'data-review-open\|data-review-back' -- 'apps/till/**/*.test.ts' 'apps/till/**/*.test-helpers.ts' 'apps/till/test/*.ts' | xargs sed -i '' -e 's/\[data-review-open\]/[data-view=order]/g' -e 's/\[data-review-back\]/[data-view=menu]/g'`.
+  Then, in the test titles and describe names this lists, and only there, "Review" becomes "Order"
+  and "Back" becomes "Menu" where they name the views: `git grep -n 'Review' -- 'apps/till/**/*.test.ts' | grep -v -i candidate | grep -E 'it\(|describe\('`
+  (22 lines at base, fewer after Tasks 2a and 2b; ran). Nothing else is renamed.
 - [ ] **Step 3: Run; expect PASS** the 71 files → every test passes;
   `git grep -n 'data-review' -- apps/till` → nothing.
 - [ ] **Step 4:** typecheck till; eslint the changed files (`git diff --name-only | grep '\.ts$' | xargs pnpm exec eslint`);
-  `pnpm format:check`; ledger (fixture-only, with the probe A count); `git commit -s -m "A797-10: the till's tests open Order and Menu by the switch"`
+  `pnpm format:check`; ledger (fixture-only, with the probe A count);
+  `git commit -s -m "A797-10: the till's tests open Order and Menu by the switch"`
 
 ### Task 4: A table opens on Menu, or on Order once anything is sent
 
@@ -9776,7 +9994,7 @@ read the `Tests` count, never only the exit status (CLAUDE.md §4).
 - Modify: `apps/till/src/screens/till-table-order-screen.ts` (D8, in `willUpdate` after the bill
   switch's reset at `:2250-2257`)
 - Test: `apps/till/src/screens/till-table-order-screen.review.test.ts`, `apps/till/src/till-app-open-table.test.ts`;
-  changed check 24
+  changed checks 24, 15–22 (opening lines) and 23 (no lines for t7)
 
 - [ ] **Step 1: Failing tests:**
   1. screen: "a screen drawn for a bill with sent lines opens on Order" — mount at 390 px with one
@@ -9785,13 +10003,21 @@ read the `Tests` count, never only the exit status (CLAUDE.md §4).
      with `loading: true`, then `loading = false` with `lines` [one]: Order; again from loading
      with `lines` []: Menu.
   3. screen: "a bill switch shows Menu" — on Order with sent lines, set a new `orderId`: Menu.
-  4. screen: "at the width and above, the opening view changes nothing" — 1280 px with sent lines:
-     no switch, browsing and the pane both shown; narrowing to 390 then shows Menu.
+  4. screen: "at the width and above, the opening view changes nothing" — first drawn at 1280 px
+     with sent lines: no switch, browsing and the pane both shown; narrowing to 390 then shows Menu
+     (D8: the first draw sets Order before the screen is measured, and the first measure's reset
+     to Menu undoes it).
   5. app (`till-app-open-table.test.ts`, phone form factor): "a handheld opens a table with only
      served dishes on Order, and a newly seated one on Menu".
-- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.review.test.ts src/till-app-open-table.test.ts`.
-- [ ] **Step 3: Implement** D8; edit changed check 24.
-- [ ] **Step 4: Run; expect PASS**, then the 71 files → every test passes.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.review.test.ts src/till-app-open-table.test.ts`
+  → 1, 2 and 5 fail because `[data-view=order]`'s `aria-pressed` reads "false" (every table opens
+  on Menu); 3 and 4 pass already (3 on the reset Task 2b kept, 4 because no opening view exists
+  yet) and stay as pins of what D8 must not change.
+- [ ] **Step 3: Implement** D8; edit changed checks 24, 15–22 and 23 as listed.
+- [ ] **Step 4: Run; expect PASS**; then the one-time control (I5): with `#measure`'s reset to Menu
+  (D2) taken out, test 4 fails on the narrowing showing Order; put it back and record that in one
+  sentence in the ledger. Then the wide run (Task order) → every test passes, or each failure is
+  read as that paragraph says.
 - [ ] **Step 5:** typecheck; eslint; `pnpm format:check`; ledger;
   `git commit -s -m "A797-10: a table opens on Menu, or on Order once anything is sent"`
 
@@ -9801,34 +10027,40 @@ read the `Tests` count, never only the exit status (CLAUDE.md §4).
 - Modify: `apps/till/src/screens/till-table-order-screen.ts` (D5, D6: `#bottomBar` returns the
   last-added strip and, below 720 px with a dish, the bar, as siblings directly in `.browsing`;
   styles; the summary built from `newOrderItems` and `newOrderDishes(lines, (line) =>
-  shownName(line.product))`)
+  shownName(line.product))`; `#submitArrangement` returns whether it dispatched, and the bar's Send
+  all shows Order when it did)
 - Modify: `apps/till/src/i18n/strings.ts` (`table.new_order_dish`, en and es)
 - Create: `apps/till/src/screens/till-table-order-screen.new-order-bar.test.ts`; a11y cases in
   `till-table-order-screen.a11y.test.ts`
 
 - [ ] **Step 1: Failing tests** (each name starts "the Menu's New order bar:"):
-  1. "absent while the New order is empty, and at the width" — 390 px, nothing added: no
-     `[data-new-order-bar]`; 1280 px with a dish: none.
+  1. "appears only while the New order has a dish, and only below the width" — 390 px, nothing
+     added: no `[data-new-order-bar]`; add a dish: there; 1280 px with a dish: none.
   2. "says what the New order holds" — Croquettes, Croquettes, Pork shoulder: the summary reads
      `` `${t("table.draft_title")} · ${items} — ${dishes}` `` with items from
      `order_counts.items` and dishes "2 × Croquettes · 1 × Pork shoulder" from
      `table.new_order_dish`; one dish reads `order_counts.items_one`.
   3. "the words open Order" — tap the summary: Order pressed, the order pane shown.
-  4. "Send all sends what the draft bar's Send all sends" — listen for `submit-draft`; tap
+  4. "Send all shows Order as the send starts" — tap `[data-menu-send-all]`: one `submit-draft`
+     event and, after the same tap's update, `[data-view=order]` pressed and the order pane shown,
+     so what the send leaves is in view (D5).
+  5. "Send all sends what the draft bar's Send all sends" — listen for `submit-draft`; tap
      `[data-menu-send-all]`: one event whose `detail.lines` equals the one a tap on
      `[data-draft-action="send-all"]` (on Order) sends for the same New order.
-  5. "Send all is quiet and disabled exactly when the draft bar's is" — with ordering refused
+  6. "Send all is quiet and disabled exactly when the draft bar's is" — with ordering refused
      (`draftActionsAllowed: false`) and while `store.sending`.
-  6. "stays at the window's foot while the menu scrolls, and leaves the last tile uncovered at the
+  7. "stays at the window's foot while the menu scrolls, and leaves the last tile uncovered at the
      end" — in a 390 × 600 scrolling host with 40 tiles (the action-bar file's stand-in,
      `orderedInWindow`): scrolled to the top, the bar's box is inside the host and its bottom at the
      host's; scrolled to the end, the last tile's bottom is at or above the bar's top.
-  7. "a long list is cut on one line" — ten different dishes: the summary's height is one line and
+  8. "a long list is cut on one line" — ten different dishes: the summary's height is one line and
      `scrollWidth > clientWidth`.
-  8. "Spanish" — `setLocale("es")`: built from `t()`, each word checked to differ from its English
+  9. "Spanish" — `setLocale("es")`: built from `t()`, each word checked to differ from its English
      except `table.new_order_dish`, which is the same in both.
-  9. a11y: "the bar has no violations", once per theme.
-- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.new-order-bar.test.ts src/screens/till-table-order-screen.a11y.test.ts`.
+  10. a11y: "the bar has no violations", once per theme.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.new-order-bar.test.ts src/screens/till-table-order-screen.a11y.test.ts`
+  → every new case fails because `[data-new-order-bar]` (or `[data-menu-send-all]`) is not found,
+  except the absent halves of case 1, whose control is its own middle step.
 - [ ] **Step 3: Implement** D5, D6.
 - [ ] **Step 4: Run; expect PASS**, then the 71 files and, from the root, `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts`
   → every test passes.
@@ -9838,8 +10070,8 @@ read the `Tests` count, never only the exit status (CLAUDE.md §4).
 ### Task 6: A tile shows how many of its dish are in the New order
 
 **Files:**
-- Modify: `apps/till/src/widgets/menu-browser.ts` (D7: the `inOrder` property, the badge and the
-  hidden words in `#productButton`, styles)
+- Modify: `apps/till/src/widgets/menu-browser.ts` (D7: the `inOrder` property; the tile's
+  `data-in-order`, the badge and the hidden words beside `.name` in `#productButton`; styles)
 - Modify: `apps/till/src/screens/till-table-order-screen.ts` (`#menuBrowser`, `:2810-2858`:
   `.inOrder=${this.wide ? undefined : newOrderByProduct(store.lines)}`, computed once per draft
   epoch, `#draftEpoch`)
@@ -9848,18 +10080,22 @@ read the `Tests` count, never only the exit status (CLAUDE.md §4).
 
 - [ ] **Step 1: Failing tests:**
   1. browser: "a tile shows the number it is given, and none for 0 or no map" — `inOrder: new
-     Map([["beer", 2]])`: Beer's `[data-in-order]` reads "2" and is `aria-hidden`; the tile's
+     Map([["beer", 2]])`: Beer's `[data-in-order-count]` reads "2" and is `aria-hidden`; the tile's
      accessible name ends ", 2 unsent" (`order_counts.unsent`), with 1 ", 1 unsent"
-     (`order_counts.unsent_one`); other tiles and an absent map: no badge.
+     (`order_counts.unsent_one`); Beer's `.name` text is "Beer" alone; other tiles, a 0 and an
+     absent map: no badge.
   2. browser: "a search result and a shortcut of the same dish show the same number".
-  3. browser: "the badge sits in the top inline-start corner and the allergen mark keeps the other"
-     — a marked product: the badge's box is left of the mark's and both inside the tile; in
-     `dir="rtl"`, mirrored.
+  3. browser: "the badge keeps clear of the name and the photo, and the allergen mark keeps the
+     other corner" — a numbered product with an allergen and a photo, and one without a photo: the
+     badge's box is inside the tile, overlaps neither `.name`'s box nor `.thumb`'s, and is left of
+     the allergen mark's.
   4. screen: "tapping a tile numbers it; a variant counts on its dish; removing the line clears it"
      — at 390 px; and at 1280 px no badge.
   5. a11y (`menu-browser.a11y.test.ts`): "a numbered tile, painted and plain, has no violations",
      once per theme.
-- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/menu-browser.test.ts src/widgets/menu-browser.a11y.test.ts src/screens/till-table-order-screen.new-order-bar.test.ts`.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/widgets/menu-browser.test.ts src/widgets/menu-browser.a11y.test.ts src/screens/till-table-order-screen.new-order-bar.test.ts`
+  → 1–4 fail because `[data-in-order-count]` is not found (the browser has no `inOrder` yet);
+  5 fails or passes vacuously, so read it again after Step 3.
 - [ ] **Step 3: Implement** D7.
 - [ ] **Step 4: Run; expect PASS**, then every `menu-browser*` test file, `till-counter-screen*`
   test files (the counter hands no map) and the 71 files → every test passes; the root token
@@ -9867,87 +10103,119 @@ read the `Tests` count, never only the exit status (CLAUDE.md §4).
 - [ ] **Step 5:** typecheck; eslint; `pnpm format:check`; ledger;
   `git commit -s -m "A797-10: a phone's menu tiles count the dishes in the New order"`
 
-### Task 7: On a handheld, Order's foot stays at the bottom with Send all above it
+### Task 7a: On a handheld, Total, Still to pay and Pay stay at the bottom of Order, with Send all above
 
 **Files:**
-- Modify: `apps/till/src/screens/till-table-order-screen.ts` (D9: the `data-order-foot` box in
-  `#orderSummary`; a `handheld-foot` class on the order pane when `this.handheld && !this.wide`;
-  the foot's measure into `--order-foot-size`, beside `#sizeDraftBar`; the draft bar drawn on a
-  handheld below 720 px only while `draft.lineCount > 0`; the sticky styles under `.handheld-foot`)
+- Modify: `apps/till/src/screens/till-table-order-screen.ts` (D9: in `#orderSummary`, on a
+  handheld below 720 px whose pay control is one Pay or absent, the pay section's heading, part-paid
+  amounts and choices in the flow, then the `data-order-foot` box with the Total row, the
+  Still-to-pay row and `div.pay.foot-pay` holding `#payUnsent()` and `#paySheetButton()`; a
+  `handheld-foot` class on the order pane then; the foot's measure into `--order-foot-size`, beside
+  `#sizeDraftBar`; the sticky styles under `.handheld-foot`, the draft bar at `bottom:
+  var(--order-foot-size)`)
 - Test: `apps/till/src/screens/till-table-order-screen.action-bar.test.ts` (new describe, with its
   `orderedInWindow` stand-in and `handheld: true`)
 
 - [ ] **Step 1: Failing tests** (each name starts "a handheld's Order foot:"):
-  1. "Total, Still to pay and Pay stay in the window over a long Order" — 390 × 700, twenty sent
-     dishes expanded and two unsent: scrolled to the top, `[data-order-foot]`'s box is inside the
-     host at its foot and holds `[data-order-total]`, `[data-party-outstanding]` and
-     `[data-pay-sheet]`.
-  2. "Send all rides just above the foot while the New order has dishes, and goes when it is
-     empty" — the draft bar's bottom equals the foot's top (±1 px); emptying the store: no
-     `[data-draft-action]` there.
-  3. "Pay is quiet and explains itself inside the foot" — with unsent dishes, tap `[data-pay-sheet]`:
-     no `pay-presented`/payment event, `[data-pay-unsent]` inside the foot reads
-     `billUnsentText(…)`; after the store empties, Pay is primary.
-  4. "the newest line is not hidden behind the bar or the foot" — add a dish at the end of a long
-     New order: its row's bottom is at or above the draft bar's top.
-  5. "a till below 720 px keeps the foot in the flow" — the same with `handheld: false`: the foot's
-     computed `position` is `static`, and the draft bar is drawn with an empty New order.
-- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.action-bar.test.ts`.
-- [ ] **Step 3: Implement** D9.
-- [ ] **Step 4: Run; expect PASS** (that file alone, for the base's load-only case), then the 71
-  files → every test passes; checks 33–34 as D9 says, else STOP.
+  1. "only Total, Still to pay and Pay stay in the window over a long Order" — 390 × 700, twenty
+     sent dishes expanded and two unsent, full invoices on, two receipt languages, a saved
+     full-invoice customer and a part-paid bill: scrolled to the top, `[data-order-foot]`'s box is
+     inside the host at its foot and holds `[data-order-total]`, `[data-party-outstanding]` and
+     `[data-pay-sheet]`, and none of `[data-choose-bill-invoice]`, `[data-choose-bill-language]`,
+     `[data-invoice-choice]`, `[data-bill-payments] > .amount`, `[data-bill-received]` or the
+     section's heading, which come before it in the flow.
+  2. "Send all rides just above the foot" — the draft bar's bottom equals the foot's top (±1 px).
+  3. "the quiet sentence shows inside the foot" — with unsent dishes, tap `[data-pay-sheet]`, wait
+     for `[data-pay-unsent]`: it is inside `[data-order-foot]` and its box inside the host's. (That
+     the quiet tap starts no payment is `panel-footer.test.ts:614` "keeps a handheld's Pay quiet",
+     which after this task runs under the fixed foot, at 390 × 844 with `handheld: true`.)
+  4. "a till below 720 px, and a handheld drawing the whole tender, keep today's foot" — the same
+     long Order with `handheld: false`, and with `handheld: true` and an unanswered whole payment
+     of an open bill (`paymentConfirmation` set): no `[data-order-foot]`, and `till-tender-pay`
+     drawn in `[data-bill-actions]`.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/screens/till-table-order-screen.action-bar.test.ts`
+  → 1–3 fail because `[data-order-foot]` is not found; 4 passes already (nothing draws the box yet;
+  its control is case 1, which finds it on a handheld after Step 3).
+- [ ] **Step 3: Implement** D9's foot.
+- [ ] **Step 4: Run; expect PASS** (that file alone, for the base's load-only case). Then the
+  one-time control (I5): with the `return` after `#payQuietTap("sheet")` in `#paySheetButton`
+  (`:4932`) taken out, so the sentence still shows and the payment still starts,
+  `panel-footer.test.ts:614` fails on its "no payment started" check (`:575`), read after it found
+  `[data-pay-unsent]` (`:563`); put it back and record that in one sentence in the ledger. Then the
+  wide run → every test passes, or each failure is read as that paragraph says (the two files named
+  under "What the probes cover" first).
 - [ ] **Step 5:** typecheck; eslint; `pnpm format:check`; ledger;
   `git commit -s -m "A797-10: on a phone, the bill's total, Still to pay and Pay stay at the bottom of Order"`
+
+### Task 7b: On a handheld, the Send all bar only while the New order has a dish
+
+**Files:**
+- Modify: `apps/till/src/screens/till-table-order-screen.ts` (D9: the draft bar drawn on a
+  handheld below 720 px only while `draft.lineCount > 0`; the basket's
+  `scroll-margin-block-end` at `:1271-1273` adds `var(--order-foot-size, 0px)`)
+- Test: `apps/till/src/screens/till-table-order-screen.action-bar.test.ts` (the 7a describe);
+  conditional checks 33–34
+
+- [ ] **Step 1: Failing tests** (same describe):
+  1. "Send all goes when the New order is empty, and a till keeps it" — handheld, 390 px: emptying
+     the store leaves no `[data-draft-action]`, the foot still drawn; the same with `handheld:
+     false`: the bar still drawn, its actions disabled.
+  2. "the newest line is not hidden behind the bar or the foot" — add a dish at the end of a long
+     New order: its row's bottom is at or above the draft bar's top.
+- [ ] **Step 2: Run; expect FAIL** the file → 1 fails because `[data-draft-action]` is still drawn
+  on the handheld with an empty New order; 2 fails because the newest row's bottom is below the
+  draft bar's top (its scroll margin leaves out the foot).
+- [ ] **Step 3: Implement**.
+- [ ] **Step 4: Run; expect PASS** (that file alone), then the wide run → every test passes;
+  checks 33–34 as D9 says, else STOP.
+- [ ] **Step 5:** typecheck; eslint; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-10: on a phone, Send all shows above the foot only while there is something to send"`
 
 ### Task 8: A handheld stays on its table after its last send (A1120)
 
 **Files:**
-- Modify: `apps/till/src/till-app.ts` (D10: `newOrderSent` beside `revealOtherDrafts` `:3391`;
-  bound beside `.revealOtherDrafts` at `:20587` and `:20764`; the end of `#sendDraft`,
-  `:12902-12904`)
-- Modify: `apps/till/src/screens/till-table-order-screen.ts` (the `newOrderSent` property and its
-  `willUpdate` reaction, beside `:2285-2289`)
-- Test: `apps/till/src/till-app-bar-tables.test.ts`, `apps/till/src/screens/till-table-order-screen.review.test.ts`;
-  changed checks 25–32
+- Modify: `apps/till/src/till-app.ts` (D10: the end of `#sendDraft`, `:12904`: `if
+  (!this.handheldMode) this.#returnToFloor();`)
+- Test: `apps/till/src/till-app-bar-tables.test.ts`; changed checks 25–32
 
-- [ ] **Step 1: Failing tests:**
-  1. app, phone (`till-app-bar-tables.test.ts`, its handheld describe, `:387`): "stays on T9 after
-     sending everything, on Order, its button highlighted without ✎, until Floor" — open T9, add a
-     dish, Send all on the Menu bar: `submitDraft` called once; the shell's `activeScreen` is still
-     the order screen; `[data-view=order]` pressed; the Sent toast open; the bar's T9 button
-     `aria-selected="true"` with no ✎ icon; tap Floor: T9's button gone.
-  2. app, phone: "a partial send stays as today" — one dish refused for its period: no
-     `newOrderSent` move, the view unchanged.
-  3. app, till (`:797` describe): "a till returns to the Floor after its last send" — unchanged
-     behaviour, pinned here beside the handheld case.
-  4. app, tablet (`tablet-landscape`, 1024 px): "a tablet stays on its table, side by side".
-  5. screen: "`newOrderSent` moving shows Order below the width, and nothing at the width; a screen
-     drawn with a count already moved does not react".
-- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/till-app-bar-tables.test.ts src/screens/till-table-order-screen.review.test.ts`.
-- [ ] **Step 3: Implement** D10; edit changed checks 25–32.
-- [ ] **Step 4: Run; expect PASS**, then the 71 files and `src/till-app-bar-tables.test.ts` →
-  every test passes.
+- [ ] **Step 1: Failing tests** (`till-app-bar-tables.test.ts`, its handheld describe, `:387`):
+  1. phone: "stays on T9 after sending everything from the Menu bar, on Order, its button
+     highlighted without ✎" — open T9, add a dish, tap `[data-menu-send-all]`; wait for the Sent
+     toast to open (the end point: it is drawn just before the call this task removes,
+     `till-app.ts:12902-12904`); then `submitDraft` was called once, the shell's `activeScreen` is
+     still the order screen, `[data-view=order]` is pressed and the bar's T9 button is
+     `aria-selected="true"` with no ✎. (Its going after Floor is the slice 3 case at `:443`; a
+     till's return is check 28's `till` variant.)
+  2. tablet (`tablet-landscape`, 1024 px): "a tablet stays on its table, side by side" — the same
+     end point; `activeScreen` still the order screen.
+- [ ] **Step 2: Run; expect FAIL** `pnpm --filter @waitron/till exec vitest run src/till-app-bar-tables.test.ts`
+  → both fail after the toast opens because the app has gone back to the Floor: `activeScreen` is
+  the Floor (and in 1, T9's button is gone, as slice 3 drops it when nothing is unsent). This red
+  run is the stay checks' control (I5).
+- [ ] **Step 3: Implement** D10; edit changed checks 25–32 (hoist `tapFloor` first; no new Floor
+  helper).
+- [ ] **Step 4: Run; expect PASS**, then the wide run and `src/till-app-bar-tables.test.ts` →
+  every test passes, or each failure is read as the wide run's paragraph says.
 - [ ] **Step 5:** typecheck; eslint; `pnpm format:check`; ledger, with checks 25–32;
   `git commit -s -m "A797-10: a phone stays on its table after sending everything, until Floor (A1120)"`
 
-### Task 9: "New order" keeps one meaning: the box is New order, the pass card First order
+### Task 9: The order box is called New order
 
 **Files:**
 - Modify: `apps/till/src/i18n/strings.ts` (D11: `table.draft_title` en "New order", es «Nuevo
-  pedido»; `pass.kind.new_order` en "First order", es «Primer pedido»)
-- Test: `apps/till/src/state/pass-view.test.ts` (or the pass board's test that reads the card's
-  kind label; ran: `git grep -ln 'pass.kind' -- 'apps/till/src/**/*.test.ts'` before writing)
+  pedido»; nothing else, and not `pass.kind.new_order`)
 
-- [ ] **Step 1: Failing tests:** "a table's first send is labelled First order on the pass" —
-  `t("pass.kind.new_order")` is "First order" in English and «Primer pedido» after
-  `setLocale("es")`; "the New order box is titled New order" — `t("table.draft_title")`; and the
-  two never equal each other in either language.
-- [ ] **Step 2: Run; expect FAIL**.
-- [ ] **Step 3: Implement** (two string pairs).
-- [ ] **Step 4: Run; expect PASS**, then every `pass*`, `expo*` and `station-queue*` till test
-  file and the 71 files → every test passes (tests read the words through `t()`, D11).
-- [ ] **Step 5:** typecheck; eslint; `pnpm format:check`; ledger;
-  `git commit -s -m "A797-10: the order box is New order and the pass's first send First order"`
+No new test: a test that spelt the words would only repeat the strings file, and this plan builds
+expectations from `t()`; the bar's and the box's tests read `t("table.draft_title")` and must pass
+across the change, and the LOOK reads the words.
+
+- [ ] **Step 1:** Change the two strings.
+- [ ] **Step 2:** `git grep -n 'Unsent order\|Pedido sin enviar' -- apps/till` → nothing; run
+  `src/screens/till-table-order-screen.new-order-bar.test.ts` and every till test file reading
+  `table.draft_title` (`git grep -l 'table.draft_title' -- 'apps/till/**/*.test.ts'`) → every test
+  passes.
+- [ ] **Step 3:** typecheck; eslint; `pnpm format:check`; ledger;
+  `git commit -s -m "A797-10: the order box is called New order, the word the bar and the design use"`
 
 ### Task 10: Docs, the user guides and the backlog follow the code
 
@@ -9956,13 +10224,12 @@ read the `Tests` count, never only the exit status (CLAUDE.md §4).
   {#phone-order}` after `{#unsent-tables}` (`:221-241`); `:304` "Unsent order" → "New order";
   `{#unsent-tables}`'s sentence about the table you are at, for A1120),
   `apps/server/src/guide/es/table-service.md` (the same, `:231` onward, `:322`),
-  `apps/server/src/guide/en/kitchen-service.md:217` and `es/kitchen-service.md:243` (the pass
-  card's **First order** «Primer pedido»), `docs/developers/design-system.md` (the A1125 paragraph,
-  `:1053-1075`: "the phone's Review view" → the Order view, with the foot; a new paragraph after
-  it on the switch, the Menu bar and the tile numbers; `:6391` "brings the existing Review into
-  view" → "opens Order"), `docs/backlog.md` (A797's entry `:1138-1143`; A1120 `:818-822`),
-  `docs/backlog/till.md` (A797's entry `:802-838`; A1120 `:4248-4256`),
-  `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (dated pointers)
+  `docs/developers/design-system.md` (the A1125 paragraph, `:1053-1075`: "the phone's Review view"
+  → the Order view, with the foot; a new paragraph after it on the switch, the Menu bar and the
+  tile numbers; `:6391` "brings the existing Review into view" → "opens Order"), `docs/backlog.md`
+  (A797's entry `:1138-1143`; A1120 `:818-822`), `docs/backlog/till.md` (A797's entry `:802-838`;
+  A1120 `:4248-4256`), `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (dated
+  pointers)
 - Test: `apps/server/src/guide-content.test.ts`, `scripts/guide-links.test.ts`
 
 - [ ] **Step 1: Guides.** English, `{#phone-order}`: on a phone the table screen shows **Menu** or
@@ -9970,22 +10237,24 @@ read the `Tests` count, never only the exit status (CLAUDE.md §4).
   table opens on **Menu** until something has been sent on its bill, then on **Order**. On
   **Menu**, a number on a dish counts how many are in your **New order**, and while it has
   anything a bar at the bottom says what (**New order · 3 items — 2 × Croquettes · 1 × Pork
-  shoulder**): tap **Send all** to send it, or the words to see it in **Order**. On **Order**,
-  **Total**, **Still to pay at this table** and **Pay** stay at the bottom, with **Send all**
-  above them while you have dishes to send. After you send everything, the phone stays on the
-  table until you tap **Floor**. On a tablet, or any screen 720 px wide or more, the menu and the
-  order sit side by side. (Write it from the code as built, never from this plan; cut any sentence
-  that does not change what staff do, CLAUDE.md §3.) In `{#unsent-tables}`: after sending
+  shoulder**): tap **Send all** to send it and see **Order**, or the words to see it in **Order**.
+  On **Order**, **Total**, **Still to pay at this table** and **Pay** stay at the bottom, with
+  **Send all** above them while you have dishes to send. After you send everything, the phone stays
+  on the table until you tap **Floor**. On a tablet, or any screen 720 px wide or more, the menu and
+  the order sit side by side. (Write it from the code as built, never from this plan; cut any
+  sentence that does not change what staff do, CLAUDE.md §3.) In `{#unsent-tables}`: after sending
   everything the table's button stays highlighted, without ✎, until you leave. Spanish the same,
   with «Carta», «Pedido · 3», «Nuevo pedido», «Enviar todo», «Pendiente de pago en la mesa»,
   «Cobrar»/«Pagar» as the till draws them (read the `es` block first); Spanish only in the Spanish
-  file. The guides' `{#…}` ids are shared.
+  file. The guides' `{#…}` ids are shared. The kitchen guides' pass card words (**New order**
+  «Nuevo pedido», `kitchen-service.md:217`, es `:243`) stay as they are (D11).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and
   `pnpm exec vitest run scripts/guide-links.test.ts`; PASS.
 - [ ] **Step 3: design-system.md**, as listed; name `view`, `newOrderItems`/`newOrderDishes`/
   `newOrderByProduct` (`apps/till/src/state/new-order-count.ts`), `inOrder`, `data-order-foot`,
-  `--order-foot-size`, `newOrderSent`; each guard named with what it does not see (the foot's
-  cases use the action-bar file's stand-in host, not `till-shell`).
+  `--order-foot-size`, and that the Menu bar's Send all shows Order as it starts; each guard named
+  with what it does not see (the foot's cases use the action-bar file's stand-in host, not
+  `till-shell`).
 - [ ] **Step 4: Backlog** (in this PR). Delete **A1120** from `docs/backlog.md` and
   `docs/backlog/till.md` (a finished entry is deleted, CLAUDE.md §6). A797's two entries: slice 10
   (on a phone, the table screen's Menu / Order switch in place of Review, a number on each tile
@@ -9997,14 +10266,19 @@ read the `Tests` count, never only the exit status (CLAUDE.md §4).
   the house does).
 - [ ] **Step 5: Design file.** After §3.1's "Two views as a switch" bullet (`:279`), its Menu bullet
   and its "Which view a table opens on" bullet (`:291`): "_2026-11-09, slice 10: the switch,
-  numbers and opening view follow the screen's width below 720 px; the fixed foot is a handheld's;
-  a table's opening view is judged on the bill on screen and a bill switch opens Menu; A1125's
-  Move to…, Fire and Send all ride above the foot; the order box is titled New order and the
-  pass's first send First order; see the build plan's slice 10, D1–D11._" In §3.1's bar bullet
-  (`:217-219`), after "staying on the table after a send is slice 10's": "(2026-11-09: built in
-  slice 10, D10.)" After §6's Review sentence (`:615-616`) and §8 item 10 (`:717`): "(2026-11-09:
-  slice 10.)" After §9's last bullet (`:743`): "(2026-11-09: settled in the build plan's slice 10,
-  D5–D8.)"
+  numbers and opening view follow the screen's width below 720 px; the fixed foot is a handheld's
+  and holds the total, the table's remaining total and Pay, the rest of the pay section scrolling
+  above it; Send all on the Menu bar opens Order as it sends; a table's opening view is judged on
+  the bill on screen and a bill switch opens Menu; A1125's Move to…, Fire and Send all ride above
+  the foot; the order box is titled New order; see the build plan's slice 10, D1–D11._" In §3.1's
+  bar bullet (`:217-219`), after "staying on the table after a send is slice 10's": "(2026-11-09:
+  built in slice 10, D10.)" After §6's Review sentence (`:615-616`) and §8 item 10 (`:717`):
+  "(2026-11-09: slice 10.)" After §9's last bullet (`:743`): "(2026-11-09: settled in the build
+  plan's slice 10, D5–D8.)" After §10's (f) 6 (`:808-812`): "_2026-11-09: not built. On 2026-11-02
+  the owner chose to keep «Nuevo pedido» / "New order" on the pass card for a table's first send,
+  "the same name as the waiter's unsent list, because the card is that same order, now sent" (lane
+  C's questions file, A773-2 B3 question 7, answer (a)); so (g)'s «Primer pedido» is not used
+  either. See the build plan's slice 10, D11._"
 - [ ] **Step 6: Check** `pnpm exec prettier --file-info docs/backlog.md` prints `"ignored": true`
   (wrap by hand); `pnpm format:check` for the guides.
 - [ ] **Step 7: Commit** `git commit -s -m "docs: A797-10 — guides, design system and backlog for the phone's order screen (A1120)"`
@@ -10016,18 +10290,20 @@ no code), as slice 9c's LOOKs were run. It writes its report to
 `/Users/clintongormley/waitron-campaign-c/a797-10-look-report.md` (section "11a"), pictures under
 `/Users/clintongormley/waitron-campaign-c/a797-10-shots/`, scripts in
 `/Users/clintongormley/waitron-campaign-c/a797-10-scripts/` (never in the worktree), each process id
-recorded.
+recorded. The watcher's condition 4 (screenshots in both themes before the PR) is met by 11a and
+11b together.
 
 - [ ] **Step 1: Start the stack** `wa-wt demo waitron-feat-a797-10-handheld-order`; `wa-wt ls` for
   the URLs. Enrol one browser context as the demo's phone (`phone-portrait`) and sign in; leave the
   stack running for Task 11b.
 - [ ] **Step 2: Look** with the workspace's Playwright Chromium at **390 × 844** and **360 × 740**,
-  **light and dark**, **English and Spanish**: a newly seated table opens on Menu; add two of one
-  dish, one of another and a weighed dish: the tiles' numbers, the switch's "Order · 4", the bar
-  ("New order · 4 items — …") at the bottom while the menu scrolls, and at the end of the menu not
-  covering the last tile; a long bar cut with an ellipsis; tap the words → Order; Menu → back to
-  the same scroll; a table with sent dishes opens on Order; at **719 and 720 px**; and on a
-  **1024 × 768** tablet (side by side, no switch, no numbers).
+  each in **light and dark** and in **English and Spanish**: a newly seated table opens on Menu;
+  add two of one dish, one of another and a weighed dish: the tiles' numbers (clear of the name and
+  of a photo), the switch's "Order · 4", the bar ("New order · 4 items — …") at the bottom while
+  the menu scrolls, and at the end of the menu not covering the last tile; a long bar cut with an
+  ellipsis; tap the words → Order; Menu → back to the same scroll; a table with sent dishes opens
+  on Order. Then the boundary: **719 and 720 px** wide (switch at 719, side by side at 720), light
+  and dark, English and Spanish; and a **1024 × 768** tablet (side by side, no switch, no numbers).
 - [ ] **Step 3: Save** each picture as `11a-<step>-<width>-<theme>-<lang>.png`, open each, and
   describe what was seen in the report and the ledger. Anything that does not match D2–D8 is a
   finding.
@@ -10036,16 +10312,28 @@ recorded.
 
 The same kind of subagent, after 11a, on the same stack; section "11b" of the same report.
 
-- [ ] **Step 1: Look** (the same sizes, themes and languages): on Order with a long Sent list and
-  unsent dishes, the foot (Total, Still to pay, Pay) at the bottom with the Send all bar above it;
-  how much of the window the two take at 360 × 740 (report the pixels); tap the quiet Pay: its
-  sentence; **Send all**: the Sent toast, where it lands over the foot (D12), the phone still on
-  the table on Order, the bar's button highlighted without ✎; Pay no longer quiet; **Floor**: the
-  button gone; a partial send; the pass screen's card reading **First order** / «Primer pedido»;
+- [ ] **Step 1: Look** at **390 × 844** and **360 × 740**, each in **light and dark** and in
+  **English and Spanish**, and at **719 and 720 px**: on Order with a long Sent list and unsent
+  dishes, the foot (Total, Still to pay, Pay) at the bottom with the Send all bar above it, and the
+  pay section's heading, Full invoice, the receipt language and the saved customer scrolling above
+  the foot; tap the quiet Pay: its sentence inside the foot; **Send all** from the Menu bar: Order
+  shows at once, the Sent toast, where it lands over the foot (D12), the phone still on the table on
+  Order, the bar's button highlighted without ✎; Pay no longer quiet; **Floor**: the button gone; a
+  partial send (Order showing the dishes left); if the demo's dashboard can close a dish's station,
+  a Send all from the Menu bar that the closed station refuses shows Order with the line's warning;
   keyboard: Tab to the switch, Enter and Space, the focus ring.
-- [ ] **Step 2: Save** as `11b-…`, open each, describe in the report, the ledger and the PR body.
+- [ ] **Step 2: The pass mark for the foot (I2).** At **360 × 740**, light, in Spanish (the longer
+  words) and in English, with full invoices on, two receipt languages offered, a saved full-invoice
+  customer on the bill, the bill part-paid and three unsent dishes, on Order with the page scrolled
+  into the Sent list: measure, with `getBoundingClientRect`, the height between the bottom of
+  whatever is fixed at the top of the window and the top of the Send all bar. **It passes at 300 px
+  or more** (about 40 % of 740; from D9's estimate, 740 px less about 150 for the foot and 60–110
+  for the Send all bar leaves room for the window's own bars above that). Report the pixels for
+  each case. **If it fails, stop and report** the figures and the pictures to the driver; change
+  nothing in the layout during the LOOK.
+- [ ] **Step 3: Save** as `11b-…`, open each, describe in the report, the ledger and the PR body.
   Put back any demo setting changed.
-- [ ] **Step 3: Stop** what you started: the script's process by its recorded id, then `wa-wt down
+- [ ] **Step 4: Stop** what you started: the script's process by its recorded id, then `wa-wt down
   waitron-feat-a797-10-handheld-order`.
 
 ### Closing slice 10
@@ -10055,19 +10343,27 @@ The same kind of subagent, after 11a, on the same stack; section "11b" of the sa
   PR green. Code this slice leaves unreached is deleted, never excluded (Global constraints).
 - `/finish-branch` with this plan named. Review path **LIGHT**: the plan-against-spec read, one
   Codex run-it review and the convention seat.
+- **Line counts, from the diff** (the watcher's condition 3), added and removed separately, with
+  `B=$(git merge-base origin/main HEAD)`:
+  product code `git diff --numstat $B HEAD -- apps ':(exclude)*.test.ts' ':(exclude)*.test-helpers.ts' ':(exclude)apps/till/test/' ':(exclude)*.md' | awk '{a+=$1; d+=$2} END {print "+"a+0, "-"d+0}'`;
+  tests `git diff --numstat $B HEAD -- 'apps/**/*.test.ts' | awk '{a+=$1; d+=$2} END {print "+"a+0, "-"d+0}'`;
+  test helpers and fixtures `git diff --numstat $B HEAD -- 'apps/**/*.test-helpers.ts' 'apps/till/test/' | awk '{a+=$1; d+=$2} END {print "+"a+0, "-"d+0}'`
+  (ran on an older range to check the commands print). The three pairs go in the PR body and the
+  ledger.
 - PR body. First line: no venue reset. Then: **What a waiter sees** (the switch, the tile numbers,
-  the Menu bar, the fixed foot on a handheld, the opening view, staying on the table after the last
-  send); **Decisions** D1–D14 in one line each; **Changed test checks** (the 32 above with their
-  reasons, 33–34 if they changed, and the fixture-only files, with the probes' receipts); **New,
-  deleted and renamed words** (D11); **LOOK**.
+  the Menu bar and its Send all opening Order, the fixed foot on a handheld, the opening view,
+  staying on the table after the last send); **Decisions** D1–D14 in one line each; **Changed test
+  checks** (deleted with Review, each with its reason; re-pointed; changed; 33–34 if they changed;
+  anything the wide run added; the fixture-only files, with the probes' receipts); **Line counts**;
+  **New, deleted and renamed words** (D11); **LOOK**, with 11b's pass-mark figures.
 - **Owner FYIs** (one line each in the PR and lane C's questions file): D3 (the switch scrolls with
   the page; it is not fixed at the top); D8 (the opening view is judged on the bill on screen, and
   a bill switch opens Menu even on a bill with sent dishes); D9 (Move to… and Fire ride above the
-  foot with Send all, as A1125 made them; the foot is fixed on a handheld only); D10 (a send that
-  frees a waiting zone narrowing leaves the phone on a table it can no longer order at, until
-  Floor); D11 (the box is renamed New order and the pass's first send First order, the approved
-  words of Q51 (f) 6, which A773-2 never built); D12 (the Sent toast can cover the foot's totals for
-  its 8 seconds).
+  foot with Send all, as A1125 made them; the foot is fixed on a handheld only, and holds only the
+  totals and Pay); D10 (a send that frees a waiting zone narrowing leaves the phone on a table it
+  can no longer order at, until Floor); D11 (the order box is renamed New order, the design's word;
+  the pass card keeps New order, as the owner chose on 2026-11-02); D12 (the Sent toast can cover
+  the foot's totals for its 8 seconds).
 - **Owner questions:** none.
 - The base's load-only failure ("keeps Send all on screen without scrolling at 1024 × 768 …",
   passes alone) is not this slice's; say so in the PR with its receipt.
