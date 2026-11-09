@@ -1,3 +1,4 @@
+import { attendanceMailRows } from "@waitron/workforce/test/fixtures.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,7 +14,6 @@ import { jobOrigin } from "@waitron/shared";
 import {
   WorkforceBackend,
   attendanceDayWork,
-  attendanceMail,
   attendanceQuestions,
   attendanceSourceState,
   readChain,
@@ -97,7 +97,7 @@ async function snapshot(db: Database) {
   return {
     chain: await readChain(db, { nodeId }),
     questions: await db.select().from(attendanceQuestions),
-    mail: await db.select().from(attendanceMail),
+    mail: await attendanceMailRows(db),
     days: await db.select().from(attendanceDayWork),
   };
 }

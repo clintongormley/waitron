@@ -271,7 +271,8 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
           })
           .where(and(eq(outgoingMail.id, row.id), eq(outgoingMail.status, row.status)))
           .returning();
-        claimed = { mail: saved!, owner, prepared: claim.prepared, delivery };
+        if (saved === undefined) return resultFor(row);
+        claimed = { mail: saved, owner, prepared: claim.prepared, delivery };
         return resultFor(row);
       }
       return changed

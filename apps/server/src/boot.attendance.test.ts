@@ -1,3 +1,4 @@
+import { attendanceMailRows } from "@waitron/workforce/test/fixtures.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -19,7 +20,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { jobOrigin } from "@waitron/shared";
 import {
   WorkforceBackend,
-  attendanceMail,
   attendanceQuestions,
   attendanceOperationFacts,
   attendanceSourceState,
@@ -36,8 +36,10 @@ import { freePorts } from "./testing/free-ports.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import * as discovery from "./attendance-discovery.js";
 import * as attendance from "./attendance-loop.js";
-import * as emailWorker from "./attendance-email-worker.js";
-import * as email from "./attendance-email.js";
+import * as mailSender from "./mail-sender.js";
+import type { MailTransport } from "./mail-sender.js";
+import { attendanceReminderMessage } from "./attendance-email.js";
+import * as smtpSend from "./smtp-send.js";
 import * as mdns from "./mdns.js";
 import * as deviceApi from "./device-api.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -111,10 +113,10 @@ for (const enabled of [true, false]) {
       async () => {
         const f = await prepared();
         let server: StartedServer | undefined;
-        const sender = vi.fn<email.AttendanceEmailSender>(async () => "sent");
-        const sendSpy = vi.spyOn(email, "createAttendanceEmailSender").mockReturnValue(sender);
+        const sender = vi.fn<MailTransport>(async () => ({ status: "sent" }));
+        const sendSpy = vi.spyOn(smtpSend, "sendSmtpMessage").mockImplementation(sender);
         const loopSpy = vi.spyOn(attendance, "runAttendanceLoop");
-        const mailSpy = vi.spyOn(emailWorker, "runAttendanceEmailLoop");
+        const mailSpy = vi.spyOn(mailSender, "startMailSender");
         const discoverSpy = vi.spyOn(discovery, "beginAttendanceDiscovery");
         const deviceSpy = vi.spyOn(deviceApi, "mountDeviceApi");
         let other: string | undefined;
@@ -170,7 +172,10 @@ for (const enabled of [true, false]) {
           server = started.server!;
           await awaitListening(httpPort());
           expect(loopSpy).toHaveBeenCalledTimes(enabled ? 1 : 0);
-          expect(mailSpy).toHaveBeenCalledTimes(enabled ? 1 : 0);
+          expect(mailSpy).toHaveBeenCalledTimes(1);
+          expect(
+            mailSpy.mock.calls[0]![0].owners.some((owner) => owner.kind === "attendance_question"),
+          ).toBe(enabled);
           expect(discoverSpy).toHaveBeenCalledTimes(enabled ? 1 : 0);
           const deviceDeps = deviceSpy.mock.calls[0]![1];
           expect(deviceDeps.attendance).toBe(enabled ? recordAttendanceFact : undefined);
@@ -195,18 +200,21 @@ for (const enabled of [true, false]) {
                     authorKind: "automatic",
                   },
                 ]);
-                expect(await suite.db.select().from(attendanceMail)).toMatchObject([
+                expect(await attendanceMailRows(suite.db)).toMatchObject([
                   { status: "sent", recipient: "missing@example.test" },
                 ]);
               },
               { timeout: 45_000, interval: 50 },
             );
             expect(sender).toHaveBeenCalledTimes(1);
-            expect(sender.mock.calls[0]![0]).toMatchObject({
-              recipient: "missing@example.test",
-              locale: "es",
-              businessDay: "2026-01-05",
-              missingKinds: ["in", "out"],
+            expect(sender.mock.calls[0]![1]).toEqual({
+              to: "missing@example.test",
+              ...attendanceReminderMessage({
+                locale: "es",
+                businessDay: "2026-01-05",
+                venueName: "Clock venue",
+                missingKinds: ["in", "out"],
+              }),
             });
             expect(
               (await suite.db.select().from(attendanceOperationFacts)).some(
@@ -310,7 +318,7 @@ for (const enabled of [true, false]) {
             );
           }
           const loopSpy = vi.spyOn(attendance, "runAttendanceLoop"),
-            mailSpy = vi.spyOn(emailWorker, "runAttendanceEmailLoop"),
+            mailSpy = vi.spyOn(mailSender, "startMailSender"),
             discoverSpy = vi.spyOn(discovery, "beginAttendanceDiscovery");
           try {
             server = await startServer(
@@ -355,9 +363,7 @@ for (const enabled of [true, false]) {
           finished.push(name);
         };
         const loopSpy = vi.spyOn(attendance, "runAttendanceLoop").mockImplementation(hold("day"));
-        const mailSpy = vi
-          .spyOn(emailWorker, "runAttendanceEmailLoop")
-          .mockImplementation(hold("mail"));
+        const mailSpy = vi.spyOn(mailSender, "startMailSender").mockImplementation(hold("mail"));
         let closing: Promise<void> | undefined;
         try {
           server = await startServer(f.env);
@@ -397,8 +403,7 @@ for (const enabled of [true, false]) {
             daySignal = deps.signal;
             await release.promise;
           });
-        const mailSpy = vi.spyOn(emailWorker, "runAttendanceEmailLoop");
-        const senderSpy = vi.spyOn(email, "createAttendanceEmailSender").mockImplementation(() => {
+        const senderSpy = vi.spyOn(mailSender, "startMailSender").mockImplementation(() => {
           created.release();
           throw new Error("creating mail sender");
         });
@@ -416,14 +421,12 @@ for (const enabled of [true, false]) {
           await created.promise;
           await vi.waitFor(() => expect(daySignal?.aborted).toBe(true));
           expect(completed).toBe(false);
-          expect(mailSpy).not.toHaveBeenCalled();
           release.release();
           expect(await starting).toMatchObject({ message: "creating mail sender" });
         } finally {
           release.release();
           await starting;
           loopSpy.mockRestore();
-          mailSpy.mockRestore();
           senderSpy.mockRestore();
           await rm(f.scratch, { recursive: true, force: true });
         }
@@ -441,9 +444,7 @@ for (const enabled of [true, false]) {
           finished.push(name);
         };
         const loopSpy = vi.spyOn(attendance, "runAttendanceLoop").mockImplementation(hold("day"));
-        const mailSpy = vi
-          .spyOn(emailWorker, "runAttendanceEmailLoop")
-          .mockImplementation(hold("mail"));
+        const mailSpy = vi.spyOn(mailSender, "startMailSender").mockImplementation(hold("mail"));
         const mdnsSpy = vi.spyOn(mdns, "startMdnsResponder").mockImplementation(() => {
           throw new Error("after attendance started");
         });

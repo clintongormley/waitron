@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import dns from "node:dns";
 import { composeAccountEmail } from "./account-email.js";
-import { createAttendanceEmailSender } from "./attendance-email.js";
+import { attendanceReminderMessage } from "./attendance-email.js";
 import { createTextEmailSender } from "./text-email.js";
 import type { Socket } from "node:net";
 import { sendSmtpMessage, statusAsBefore } from "./smtp-send.js";
@@ -555,19 +555,20 @@ it("rejects a closed-port account send so the queue can retry", async () => {
   });
 });
 
-it("keeps a closed-port attendance send unknown for the legacy caller", async () => {
+it("rejects a closed-port attendance send for retry without a server refusal", async () => {
   const rig = await smtpRig("accepted");
   await rig.close();
   expect(
-    await createAttendanceEmailSender()({
-      smtp: rig.config,
-      recipient: "admin@example.test",
-      locale: "en",
-      businessDay: "2026-11-09",
-      venueName: "Test venue",
-      missingKinds: ["in"],
+    await sendSmtpMessage(rig.config, {
+      to: "admin@example.test",
+      ...attendanceReminderMessage({
+        locale: "en",
+        businessDay: "2026-11-09",
+        venueName: "Test venue",
+        missingKinds: ["in"],
+      }),
     }),
-  ).toBe("unknown");
+  ).toEqual({ status: "rejected", serverRefused: false, reason: "email.test_connection_refused" });
 });
 
 it("keeps a closed-port text send unknown for the legacy caller", async () => {

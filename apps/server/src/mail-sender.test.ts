@@ -74,6 +74,33 @@ describe("one mail sender", () => {
   const update = async (patch: Partial<typeof outgoingMail.$inferInsert>, key = "one") => {
     await suite.db.update(outgoingMail).set(patch).where(eq(outgoingMail.dedupeKey, key));
   };
+  it("does not compose or send if storage refuses to retain the claim", async () => {
+    await queue();
+    const before = await row();
+    await suite.db.execute(sql`create trigger ignore_mail_claim before update on outgoing_mail
+      when new.status = 'sending' begin select raise(ignore); end`);
+    try {
+      await runMailPass(deps);
+    } finally {
+      await suite.db.execute(sql`drop trigger ignore_mail_claim`);
+    }
+    expect(owner.compose).not.toHaveBeenCalled();
+    expect(deps.send).not.toHaveBeenCalled();
+    expect(await row()).toEqual(before);
+  });
+  it("a saved rejected row waits fourteen minutes and is sent at fifteen", async () => {
+    await queue();
+    owner = { ...owner, longestWaitMs: 900000 };
+    deps.owners = [owner];
+    await update({ status: "rejected", attempts: 1, nextAttemptAt: "2026-11-09T12:15:00.000Z" });
+    time = new Date("2026-11-09T12:14:00.000Z");
+    expect(await runMailPass(deps)).toEqual({ processed: false });
+    expect(deps.send).not.toHaveBeenCalled();
+    time = new Date("2026-11-09T12:15:00.000Z");
+    await runMailPass(deps);
+    expect(await row()).toMatchObject({ status: "sent", attempts: 2 });
+    expect(deps.send).toHaveBeenCalledTimes(1);
+  });
   it("resolves delivery in the claim transaction and commits before sending", async () => {
     await queue();
     deps.resolveDelivery = async (tx) => {

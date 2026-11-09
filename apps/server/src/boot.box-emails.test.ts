@@ -9,7 +9,7 @@ import { persons } from "@waitron/identity";
 import type { Transaction } from "@waitron/db";
 import type { EmailDelivery } from "./email-delivery.js";
 type AccountMode = (tx: Transaction) => Promise<EmailDelivery["mode"]>;
-import type { runAttendanceEmailLoop } from "./attendance-email-worker.js";
+import type { startMailSender } from "./mail-sender.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
@@ -41,7 +41,7 @@ const holder = vi.hoisted(() => ({
   outcomes: undefined as BackupOutcomeHolder | undefined,
   managementMode: undefined as AccountMode | undefined,
   profileMode: undefined as AccountMode | undefined,
-  attendance: undefined as Parameters<typeof runAttendanceEmailLoop>[0] | undefined,
+  mail: undefined as Parameters<typeof startMailSender>[0] | undefined,
   smtp: [] as Parameters<typeof import("./smtp-send.js").sendSmtpMessage>[0][],
 }));
 
@@ -65,13 +65,13 @@ vi.mock("./me-api.js", async (load) => {
     },
   };
 });
-vi.mock("./attendance-email-worker.js", async (load) => {
-  const actual = await load<typeof import("./attendance-email-worker.js")>();
+vi.mock("./mail-sender.js", async (load) => {
+  const actual = await load<typeof import("./mail-sender.js")>();
   return {
     ...actual,
-    runAttendanceEmailLoop: (deps: Parameters<typeof actual.runAttendanceEmailLoop>[0]) => {
-      holder.attendance = deps;
-      return actual.runAttendanceEmailLoop(deps);
+    startMailSender: (deps: Parameters<typeof actual.startMailSender>[0]) => {
+      holder.mail = deps;
+      return actual.startMailSender(deps);
     },
   };
 });
@@ -193,7 +193,7 @@ async function shutDown(booted: Booted): Promise<void> {
   holder.outcomes = undefined;
   holder.managementMode = undefined;
   holder.profileMode = undefined;
-  holder.attendance = undefined;
+  holder.mail = undefined;
   holder.armed.length = 0;
   holder.sent.length = 0;
   holder.smtp.length = 0;
@@ -286,8 +286,12 @@ describe("the running server's managers' email check", () => {
           });
           expect(inbox.status).toBe(200);
           expect(await inbox.json()).toEqual({ mode: "unconfigured", count: 0, messages: [] });
-          expect(holder.attendance).toBeDefined();
-          expect(await holder.attendance!.resolveDelivery()).toEqual({ mode: "unconfigured" });
+          expect(holder.mail!.owners).toContainEqual(
+            expect.objectContaining({ kind: "attendance_question", deliveryRule: "notice" }),
+          );
+          expect(
+            await withTransaction(suite.db, (tx) => holder.mail!.resolveDelivery(tx, "notice")),
+          ).toEqual({ mode: "unconfigured" });
         }
       } finally {
         await shutDown(booted);
@@ -331,7 +335,7 @@ describe("the running server's managers' email check", () => {
       await bootServer(booted, venue, { intent: "prepare", development: false });
       await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe("smtp");
       await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe("smtp");
-      expect((await holder.attendance!.resolveDelivery()).mode).toBe("smtp");
+      expect((await withTransaction(suite.db, tx => holder.mail!.resolveDelivery(tx, "notice"))).mode).toBe("smtp");
     } finally {
       await shutDown(booted);
     }
@@ -408,7 +412,9 @@ describe("the running server's managers' email check", () => {
           delivery.smtp,
         ]);
         if (!repair) {
-          expect(await holder.attendance!.resolveDelivery()).toEqual(delivery);
+          expect(
+            await withTransaction(suite.db, (tx) => holder.mail!.resolveDelivery(tx, "notice")),
+          ).toEqual(delivery);
           expect((await holder.deps!.context()).delivery).toEqual(delivery);
           if (outcome === "captured") {
             const inbox = await fetch(`http://127.0.0.1:${httpPort()}/management-api/email`, {

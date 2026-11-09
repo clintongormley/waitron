@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 
 const files = [
@@ -8,7 +9,7 @@ const files = [
   "packages/workforce/src/attendance-response-commands.test.ts",
   "packages/workforce/src/personal-data.test.ts",
   "packages/workforce/test/attendance-fixture.ts",
-  "apps/server/src/attendance-email-worker.test.ts",
+  "apps/server/src/attendance-email.test.ts",
   "apps/server/src/attendance-obligations.test.ts",
   "apps/server/src/attendance-restore.test.ts",
   "apps/server/src/attendance-export-api.test.ts",
@@ -19,6 +20,7 @@ const files = [
   "apps/server/src/recovery-page-personal-data.test.ts",
 ];
 for (const file of files) {
+  if (!existsSync(file)) continue;
   const before = await readFile(file, "utf8");
   const after = before.replace(
     /([\w.]+)\s*\.select\(\)\s*\.from\((?:api\.)?attendanceMail\)(?!\s*\.)/g,

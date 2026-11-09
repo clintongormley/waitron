@@ -38,7 +38,6 @@ export interface BackgroundDutyHandles {
   pendingCardLoop: unknown;
   tenderRefundLoop: unknown;
   attendanceLoop: unknown;
-  attendanceEmailLoop: unknown;
   certificateReminderLoop: unknown;
   certificateDiagnosis: Stopper | undefined;
   fiscalReconciliation?: Stopper;
@@ -100,11 +99,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
     {
       name: "attendanceLoop",
       close: () => h.attendanceLoop,
-      reason: LOOP_WAIT,
-    },
-    {
-      name: "attendanceEmailLoop",
-      close: () => h.attendanceEmailLoop,
       reason: LOOP_WAIT,
     },
     {

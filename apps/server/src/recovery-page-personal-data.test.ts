@@ -1,3 +1,4 @@
+import { sendSmtpMessage } from "./smtp-send.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer, type AddressInfo, type Socket } from "node:net";
@@ -24,7 +25,7 @@ import { createErrorBoundary, MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 import { flushAccountMail } from "./testing/account-mail.js";
 import { sql } from "drizzle-orm";
-import { createAttendanceEmailSender } from "./attendance-email.js";
+import { attendanceReminderMessage } from "./attendance-email.js";
 import { PERSONAL_LOG_KEYS } from "./log-personal-data.js";
 import { createLogger, type Logger, type LogLevel } from "./logger.js";
 import { createRotatingFileSink, tee } from "./log-file.js";
@@ -857,16 +858,16 @@ describe("the recovery page, the log file and stdout carry no person's details",
           venueName: LOCATION_NAME,
           missingKinds: ["in" as const],
         };
-        // As boot.ts builds it: no onFailure.
-        const outcome = await createAttendanceEmailSender()(message);
-        const reasons: unknown[][] = [];
-        const reported = await createAttendanceEmailSender({
-          onFailure: (...args) => reasons.push(args),
-        })(message);
-
-        expect(outcome).toBe("rejected");
-        expect(reported).toBe("rejected");
-        expect(reasons).toEqual([["email.test_refused"]]);
+        const outcome = await sendSmtpMessage(message.smtp, {
+          to: message.recipient,
+          ...attendanceReminderMessage(message),
+        });
+        const reported = await sendSmtpMessage(message.smtp, {
+          to: message.recipient,
+          ...attendanceReminderMessage(message),
+        });
+        expect(outcome.status).toBe("rejected");
+        expect(reported).toMatchObject({ status: "rejected", reason: "email.test_refused" });
         expect(relay.recipients).toEqual([JORDI_EMAIL, JORDI_EMAIL]);
         expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
       } finally {

@@ -264,8 +264,7 @@ import { beginAttendanceDiscovery } from "./attendance-discovery.js";
 import { runAttendanceLoop } from "./attendance-loop.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { recoverAutomaticCardPayments, runPendingCardLoop } from "./pending-card-recovery.js";
-import { createAttendanceEmailSender } from "./attendance-email.js";
-import { runAttendanceEmailLoop } from "./attendance-email-worker.js";
+import { attendanceReminderMail } from "./attendance-email.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { createCardProviderPool } from "./card-provider-pool.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
@@ -2444,7 +2443,6 @@ async function bootServer(
   let invoiceEmailLoop: Promise<void> | undefined;
   const attendanceController = new AbortController();
   let attendanceLoop: Promise<void> | undefined;
-  let attendanceEmailLoop: Promise<void> | undefined;
   if (workforceEnabled && isSingletonPrimary) {
     await withTransaction(db, (tx) =>
       beginAttendanceDiscovery(tx, {
@@ -2465,22 +2463,6 @@ async function bootServer(
     undoOnFailure.push(async () => {
       attendanceController.abort();
       await attendanceLoop;
-    });
-    attendanceEmailLoop = runAttendanceEmailLoop({
-      db,
-      nodeId: tradingContext.nodeId,
-      holder: tradingContext.nodeId,
-      now,
-      isPrimary: () => holders.singletonRole.current === "primary",
-      signal: attendanceController.signal,
-      venueLocale: venueLocale === "es-ES" ? "es" : "en",
-      resolveDelivery: resolveAccountEmail,
-      send: createAttendanceEmailSender(),
-      onError: (error) => log("error", "attendance.email_failed", { errorCode: codeOf(error) }),
-    });
-    undoOnFailure.push(async () => {
-      attendanceController.abort();
-      await attendanceEmailLoop;
     });
   }
   let certificateReminderController: AbortController | undefined;
@@ -2531,6 +2513,14 @@ async function bootServer(
     });
     if (isSingletonPrimary) {
       const owners = [
+        ...(workforceEnabled
+          ? [
+              attendanceReminderMail({
+                nodeId: tradingContext.nodeId,
+                venueLanguage: venueLocale === "es-ES" ? "es" : "en",
+              }),
+            ]
+          : []),
         accountActionMail({
           codeKey: accountPurposeKey(accountKey, "account-action-code"),
           emailChangeUrl: `${config.managementOrigin}/`,
@@ -3897,7 +3887,6 @@ async function bootServer(
     pendingCardLoop,
     tenderRefundLoop,
     attendanceLoop,
-    attendanceEmailLoop,
     certificateReminderLoop,
     certificateDiagnosis,
     fiscalReconciliation,

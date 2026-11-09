@@ -1,3 +1,4 @@
+import { attendanceMailRows } from "@waitron/workforce/test/fixtures.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
@@ -8,7 +9,6 @@ import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
   attendanceDayWork,
-  attendanceMail,
   attendanceQuestions,
   listPendingAttendanceQuestions,
   upsertAttendanceQuestion,
@@ -110,7 +110,7 @@ describe("selected-day rota reconciliation", () => {
       inactiveReason: "rota_superseded",
       evidenceKeys: ["rota:original"],
     });
-    expect((await suite.db.select().from(attendanceMail))[0]!.status).toBe("cancelled");
+    expect((await attendanceMailRows(suite.db))[0]!.status).toBe("cancelled");
   });
   it("finishes every bootstrap source before retiring an obsolete question", async () => {
     await replace();
@@ -125,7 +125,7 @@ describe("selected-day rota reconciliation", () => {
     await drain();
     expect(await next(new Date("2026-01-06T03:59:59.999Z"))).toBeNull();
     expect((await own()).map((q) => q.id)).toEqual([questionId]);
-    expect((await suite.db.select().from(attendanceMail))[0]!.status).toBe("pending");
+    expect((await attendanceMailRows(suite.db))[0]!.status).toBe("pending");
   });
   it("rereads current assignment after source discovery rather than accepting a cached assignee", async () => {
     await drain();
@@ -141,7 +141,7 @@ describe("selected-day rota reconciliation", () => {
     await replace();
     await drain();
     const questions = await suite.db.select().from(attendanceQuestions);
-    const mail = await suite.db.select().from(attendanceMail);
+    const mail = await attendanceMailRows(suite.db);
     await expect(
       run(async (tx) => {
         await nextAttendanceDay(tx, { now });
@@ -149,6 +149,6 @@ describe("selected-day rota reconciliation", () => {
       }),
     ).rejects.toThrow("processor failed");
     expect(await suite.db.select().from(attendanceQuestions)).toEqual(questions);
-    expect(await suite.db.select().from(attendanceMail)).toEqual(mail);
+    expect(await attendanceMailRows(suite.db)).toEqual(mail);
   });
 });
