@@ -239,6 +239,55 @@ function asciiLower(name: string): string {
   return name.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
 
+function mapJsonPath(
+  value: unknown,
+  path: readonly string[],
+  map: (id: string) => string | undefined,
+  field: string,
+): unknown {
+  if (value === null) return null;
+  if (path.length === 0) {
+    if (typeof value !== "string") throw new AppError("setup.request_invalid", { field });
+    return map(value);
+  }
+  if (typeof value !== "object") return value;
+  const [step, ...rest] = path;
+  if (Array.isArray(value)) {
+    if (step !== "*") return value;
+    return value
+      .map((item) => mapJsonPath(item, rest, map, field))
+      .filter((item) => item !== undefined);
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      step === "*" || step === key ? (mapJsonPath(item, rest, map, field) ?? null) : item,
+    ]),
+  );
+}
+
+function rewriteJsonReferences(
+  row: Record<string, unknown>,
+  declaration: ConfigurationTransferTable,
+  map: (id: string, field: string) => string | undefined,
+): void {
+  for (const reference of declaration.jsonReferences ?? []) {
+    const field = `${declaration.name}.${reference.column}`;
+    const source = row[reference.column];
+    if (source === null) continue;
+    if (typeof source !== "string") throw new AppError("setup.request_invalid", { field });
+    let value: unknown;
+    try {
+      value = JSON.parse(source);
+    } catch {
+      throw new AppError("setup.request_invalid", { field });
+    }
+    for (const path of reference.paths)
+      value = mapJsonPath(value, path, (id) => map(id, field), field);
+    row[reference.column] = JSON.stringify(value);
+  }
+}
+
 /** Read the explicitly declared configuration tables (one tenant per database), less the rows a
  * table's leave-behind selector excludes and every row whose foreign key names one of them. */
 export async function exportConfigurationTables(
@@ -305,6 +354,13 @@ export async function exportConfigurationTables(
 
   const tables: ConfigurationBundle["tables"] = {};
   const reconnect: string[] = [];
+  const exportedIds = new Set<string>();
+  for (const declaration of declared) {
+    for (const row of read.get(declaration.name)!) {
+      if (!leftBehind.get(declaration.name)!.has(row[ROWID]) && typeof row.id === "string")
+        exportedIds.add(row.id);
+    }
+  }
   for (const declaration of declared) {
     const gone = leftBehind.get(declaration.name)!;
     const rows = read.get(declaration.name)!.filter((row) => !gone.has(row[ROWID]));
@@ -312,6 +368,7 @@ export async function exportConfigurationTables(
       const copy = { ...row };
       if (tracked.has(declaration.name)) delete copy[ROWID];
       for (const field of declaration.omit ?? []) delete copy[field];
+      rewriteJsonReferences(copy, declaration, (id) => (exportedIds.has(id) ? id : undefined));
       for (const [field, value] of Object.entries(copy)) {
         if (value instanceof Uint8Array) copy[field] = encodeBytes(value);
       }
@@ -735,6 +792,11 @@ export async function importConfigurationTables(
       if (declaration.name === "persons" && source.id === bundle.sourceOperatorId) continue;
       if (typeof source.person_id === "string" && sourceOperatorIds.has(source.person_id)) continue;
       const row: Record<string, unknown> = { ...source };
+      rewriteJsonReferences(row, declaration, (id, field) => {
+        const mapped = idMap.get(id);
+        if (mapped === undefined) throw new AppError("setup.request_invalid", { field });
+        return mapped;
+      });
       const blobs = blobColumns.get(declaration.name)!;
       const ids = idColumns.get(declaration.name)!;
       for (const [field, value] of Object.entries(row)) {
