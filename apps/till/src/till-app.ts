@@ -1438,7 +1438,12 @@ function lateChangeMessage(late: LateChange): string {
   const text = t(key)
     .replace("{line}", () => late.lineName)
     .replace("{table}", () => tableLabel ?? "");
-  return text.replace("{reason}", () => codeMessage(late.code ?? "server.internal"));
+  const sentDish = sentDishRefusal(late.code, late.lineName);
+  return text.replace("{reason}", () =>
+    sentDish === undefined
+      ? codeMessage(late.code ?? "server.internal")
+      : sentDishRefusalText(sentDish),
+  );
 }
 
 /** A drawer refusal the operator can act on keeps its own sentence; anything else is a retry. */
@@ -1522,7 +1527,25 @@ type CounterError =
   | { billNameTakenOver: string }
   | { partyChanged: PartyChange }
   | { billChanged: BillChange }
-  | { lateChange: LateChange; also?: StringKey };
+  | { lateChange: LateChange; also?: StringKey }
+  | { sentDishRefused: SentDishRefusal };
+
+/** A dish's change refused because the kitchen has it, said where its Sent window cannot. */
+interface SentDishRefusal {
+  key: "table.change_dish_started_void" | "table.change_dish_fired_void";
+  dish: string;
+}
+
+/** The banner's words for a refused change of a sent dish, or undefined for another refusal. */
+function sentDishRefusal(code: string | undefined, dish: string): SentDishRefusal | undefined {
+  if (code === "ticket.already_started") return { key: "table.change_dish_started_void", dish };
+  if (code === "ticket.already_fired") return { key: "table.change_dish_fired_void", dish };
+  return undefined;
+}
+
+function sentDishRefusalText({ key, dish }: SentDishRefusal): string {
+  return fill(t(key), { dish });
+}
 
 /** What a refusal as out of date found changed when the bill was read again: the dish the
  * adjustment named, gone or changed, or something else on the bill. */
@@ -1668,6 +1691,7 @@ function errorText(
       >`;
   }
   if ("overLimit" in error) return overLimitText(error.overLimit);
+  if ("sentDishRefused" in error) return sentDishRefusalText(error.sentDishRefused);
   if ("clockUnusable" in error)
     return clockUnusableText(
       error.clockUnusable.clockAt,
@@ -3366,7 +3390,8 @@ export class TillApp extends LitElement {
   @state() private revealOtherDrafts = 0;
   @state() private guestsRefusal: { value: string; message: string } | null = null;
   /** A Change dish the kitchen refused as started, which the table screen shows in its window. */
-  @state() private changeRefusal: { lineNo: number; message: string } | null = null;
+  @state() private changeRefusal: { lineNo: number; lineName: string; message: string } | null =
+    null;
   @state() private splitRefusal: SplitRefusal | null = null;
   @state() private splitRowsUnread: SplitRefusal | null = null;
   /** The panel's rows and the revision a press sends with them: one answer, written in one place,
@@ -15354,20 +15379,25 @@ export class TillApp extends LitElement {
     if (code === "ticket.already_started" && sender?.isConnected === true)
       this.changeRefusal = {
         lineNo,
+        lineName,
         message: fill(t("table.change_dish_started"), { dish: lineName }),
       };
-    else
+    else {
+      const sentDish = sentDishRefusal(code, lineName);
       this.errorKey =
-        code !== undefined && DRAFT_REFUSALS.has(code)
-          ? draftRefusalError({
-              refused: code,
-              ownerName: (outcome.error as { ownerName?: string }).ownerName,
-            })
-          : code === "working_order.out_of_date"
-            ? "held.changed_elsewhere"
-            : code === "bill.received_exceeds_total"
-              ? billWriteError(outcome.error, true)
-              : lineWriteError(outcome.error);
+        sentDish !== undefined
+          ? { sentDishRefused: sentDish }
+          : code !== undefined && DRAFT_REFUSALS.has(code)
+            ? draftRefusalError({
+                refused: code,
+                ownerName: (outcome.error as { ownerName?: string }).ownerName,
+              })
+            : code === "working_order.out_of_date"
+              ? "held.changed_elsewhere"
+              : code === "bill.received_exceeds_total"
+                ? billWriteError(outcome.error, true)
+                : lineWriteError(outcome.error);
+    }
     if (isNetworkFailure(outcome.error)) await this.#rereadAmounts(orderId, visit);
     else if (isBillMoneyRefusal(outcome.error)) await this.#loadLinesAndBills();
     else await this.#loadTabLines();
@@ -21081,9 +21111,13 @@ export class TillApp extends LitElement {
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @change-refusal-taken=${(event: CustomEvent<{ refusal: unknown; shown: boolean }>) => {
           event.stopPropagation();
-          if (event.detail.refusal !== this.changeRefusal) return;
+          const refusal = this.changeRefusal;
+          if (refusal === null || event.detail.refusal !== refusal) return;
           this.changeRefusal = null;
-          if (!event.detail.shown) this.errorKey = { code: "ticket.already_started" };
+          if (!event.detail.shown)
+            this.errorKey = {
+              sentDishRefused: sentDishRefusal("ticket.already_started", refusal.lineName)!,
+            };
         }}
         @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}
         @move-guests=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveGuests(event))}
