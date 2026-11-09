@@ -1457,9 +1457,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Theme logo** (bundle of 2, size M). [Detail](backlog/dashboard.md#bundle-theme-logo)
 
-- **A653-l — short landscape phones keep at least one whole table row (watcher, 2026-11-09; open).**
-  [Detail](backlog/dashboard.md#a653-l--short-landscape-phones-keep-a-whole-table-row)
-
 - **A657 — Cancel leaves without asking (owner, 2026-10-14; open).**
   [Detail](backlog/dashboard.md#a657--cancel-leaves-without-asking)
 

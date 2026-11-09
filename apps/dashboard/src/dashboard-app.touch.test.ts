@@ -96,12 +96,14 @@ function scrollEnd(element: HTMLElement): Promise<void> {
   );
 }
 
-it.each([
-  [375, 667, 3],
-  [390, 844, 6],
+it.each<[number, number, "capped" | "page", number]>([
+  [375, 667, "capped", 3],
+  [390, 844, "capped", 6],
+  [667, 375, "page", 0],
+  [844, 390, "page", 0],
 ])(
-  "at %i×%i native row and page-heading drags expose %i Structure rows",
-  async (width, height, wholeRows) => {
+  "at %i×%i native row and page-heading drags follow %s scrolling",
+  async (width, height, mode, wholeRows) => {
     await page.viewport(width, height);
     history.replaceState(null, "", "/manage/menus/menu/menu-lunch/view/structure");
     const products = Array.from({ length: 40 }, (_, index) => ({
@@ -197,8 +199,28 @@ it.each([
     const scroll = table.querySelector<HTMLElement>(".scroll")!;
     const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
     await expect.poll(() => table.querySelectorAll("tbody tr").length).toBe(41);
+    if (mode === "page") {
+      const row = table.querySelectorAll("tbody tr")[1]!.getBoundingClientRect();
+      const positioned = scrollEnd(main);
+      main.scrollTop += row.top - main.getBoundingClientRect().top - 80;
+      await positioned;
+    }
     const beforeRows = main.scrollTop;
     const row = table.querySelectorAll("tbody tr")[1]!.getBoundingClientRect();
+    if (mode === "page") {
+      const startY = Math.min(
+        row.bottom - 4,
+        scroll.getBoundingClientRect().bottom - 4,
+        height - 12,
+      );
+      expect(startY).toBeGreaterThan(row.top);
+      const pageStopped = scrollEnd(main);
+      await dragUp(row.left + 100, startY, 100);
+      await expect.poll(() => main.scrollTop).toBeGreaterThan(beforeRows);
+      await pageStopped;
+      expect(scroll.scrollTop).toBe(0);
+      return;
+    }
     const rowsStopped = scrollEnd(scroll);
     await dragUp(row.left + 100, Math.min(row.bottom - 4, height - 12), 100);
     await expect.poll(() => scroll.scrollTop).toBeGreaterThan(0);

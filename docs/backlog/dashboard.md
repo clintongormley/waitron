@@ -984,16 +984,6 @@ The owner reversed the disabled-zone ruling on 2026-10-08.
 
 The per-form classifications remain in the [A331 plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md).
 
-## A653-l — short landscape phones keep a whole table row
-
-A653's cap leaves no whole data row in Structure selection at 667×375 or 844×390. The driver
-measured 4px and no row space with the production page frame. The watcher approved landing A653
-with its no-minimum rule on 2026-11-09 at 23:32 and queued this separately.
-
-Write a one-page plan for the smallest shared fix at both sizes: consider letting the cap stand
-aside below a viewport height or keeping one whole row during selection. Preserve portrait/desktop
-behaviour and natural-height short tables. Measurements and the run-it are in Lane D's A653 receipts.
-
 ## A657 — Cancel leaves without asking
 
 Owner, 2026-10-14: "when you click cancel you shouldn't get the 'discard changes' warning. just
