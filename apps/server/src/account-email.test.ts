@@ -1,5 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAccountEmailSender } from "./account-email.js";
+import { composeAccountEmail, type AccountEmail } from "./account-email.js";
+
+import { sendSmtpMessage, type SmtpConnection, type SmtpTransport } from "./smtp-send.js";
+function messageSender(
+  config: SmtpConnection & { timeZone: string; privacyNoticeUrl?: string },
+  transport: SmtpTransport,
+) {
+  return (message: AccountEmail) =>
+    sendSmtpMessage(
+      config,
+      { to: message.email, ...composeAccountEmail(message, config) },
+      { transport },
+    );
+}
 
 describe("account email", () => {
   it.each([
@@ -7,7 +20,7 @@ describe("account email", () => {
     ["2026-03-29T01:30:00.000Z", "03:30 CEST"],
   ])("formats expiry %s in the venue time zone", async (expiresAt, expected) => {
     const sendMail = vi.fn().mockResolvedValue({ messageId: "m1" });
-    const sender = createAccountEmailSender(
+    const sender = messageSender(
       {
         url: "smtp://mail.example.test:587",
         from: "hello@example.test",
@@ -25,7 +38,7 @@ describe("account email", () => {
       codeExpiresAt: expiresAt,
       locale: "en-GB",
     });
-    expect(outcome).toBe("sent");
+    expect(outcome).toEqual({ status: "sent" });
     const message = sendMail.mock.calls[0]![0] as { text: string; html: string };
     expect(message.text).toContain(`link expires at 29 Mar 2026, ${expected}`);
     expect(message.text).toContain(`code expires at 29 Mar 2026, ${expected}`);
@@ -35,7 +48,7 @@ describe("account email", () => {
 
   it("sends an invitation without putting the bearer URL in the subject", async () => {
     const sendMail = vi.fn().mockResolvedValue({ messageId: "m1" });
-    const sender = createAccountEmailSender(
+    const sender = messageSender(
       {
         url: "smtp://mail.example.test:587",
         from: "Waitron <hello@example.test>",
@@ -68,7 +81,7 @@ describe("account email", () => {
 
   it("sends an invitation with no privacy notice when the settings hold no privacy page", async () => {
     const sendMail = vi.fn().mockResolvedValue({ messageId: "m1" });
-    const sender = createAccountEmailSender(
+    const sender = messageSender(
       {
         url: "smtp://mail.example.test:587",
         from: "Waitron <hello@example.test>",
@@ -94,7 +107,7 @@ describe("account email", () => {
 
   it("uses password-reset wording for a reset action", async () => {
     const sendMail = vi.fn().mockResolvedValue({ messageId: "m1" });
-    const sender = createAccountEmailSender(
+    const sender = messageSender(
       { url: "smtp://mail.example.test:587", from: "hello@example.test", timeZone: "UTC" },
       { sendMail, close() {} },
     );
@@ -115,7 +128,7 @@ describe("account email", () => {
     "omits invitation-code instructions from a %s setup link",
     async (locale) => {
       const sendMail = vi.fn().mockResolvedValue({ messageId: "m1" });
-      const sender = createAccountEmailSender(
+      const sender = messageSender(
         { url: "smtp://mail.example.test:587", from: "hello@example.test", timeZone: "UTC" },
         { sendMail, close() {} },
       );
@@ -141,7 +154,7 @@ describe("account email", () => {
 
   it("explains how to confirm a replacement email", async () => {
     const sendMail = vi.fn().mockResolvedValue({ messageId: "m1" });
-    const sender = createAccountEmailSender(
+    const sender = messageSender(
       { url: "smtp://mail.example.test:587", from: "hello@example.test", timeZone: "UTC" },
       { sendMail, close() {} },
     );
@@ -169,7 +182,7 @@ describe("account email", () => {
 
   it("localises a Spanish recipient's invitation and expiry", async () => {
     const sendMail = vi.fn().mockResolvedValue({ messageId: "m1" });
-    const sender = createAccountEmailSender(
+    const sender = messageSender(
       { url: "smtp://mail.example.test:587", from: "hello@example.test", timeZone: "UTC" },
       { sendMail, close() {} },
     );
@@ -190,7 +203,7 @@ describe("account email", () => {
 
   it("gives a Spanish recipient the code for a replacement email in Spanish", async () => {
     const sendMail = vi.fn().mockResolvedValue({ messageId: "m1" });
-    const sender = createAccountEmailSender(
+    const sender = messageSender(
       { url: "smtp://mail.example.test:587", from: "hello@example.test", timeZone: "UTC" },
       { sendMail, close() {} },
     );
@@ -213,86 +226,10 @@ describe("account email", () => {
   });
 });
 
-it("account send closes before returning at the deadline", async () => {
-  const { smtpRig } = await import("./testing/smtp-settings-fixture.js");
-  const rig = await smtpRig("silent");
-  const sender = createAccountEmailSender({ ...rig.config, timeZone: "UTC" }, undefined, {
-    timeoutMs: 50,
-  });
-  const result = sender({
-    purpose: "invitation",
-    email: "admin@example.test",
-    displayName: "Admin",
-    actionUrl: "https://venue.example.test/account?token=private-action",
-    expiresAt: "2026-10-23T12:00:00Z",
-    locale: "en-GB",
-  }).then(
-    () => "sent",
-    (error: unknown) => error,
-  );
-  let timer: ReturnType<typeof setTimeout>;
-  try {
-    const outcome = await Promise.race([
-      result,
-      new Promise((resolve) => {
-        timer = setTimeout(() => resolve("still pending"), 1000);
-      }),
-    ]);
-    expect(outcome).toMatchObject({
-      message: "email.send_timeout",
-      problem: "email.send_timeout",
-      reason: "email.test_timeout",
-      uncertain: true,
-    });
-    await rig.connectionClosed;
-    expect(rig.sockets.size).toBe(0);
-    expect(JSON.stringify(outcome)).not.toContain("private-action");
-  } finally {
-    clearTimeout(timer!);
-    await rig.close();
-    await result;
-  }
-});
-
-it.each([
-  ["data-refused", "email.send_refused", false],
-  ["lost-ack", "email.send_refused", true],
-] as const)("contains account %s in a safe typed refusal", async (reply, problem, uncertain) => {
-  const { smtpRig, smtpTestTls } = await import("./testing/smtp-settings-fixture.js");
-  const { AccountEmailFailure } = await import("./account-email.js");
-  const rig = await smtpRig(reply, true);
-  try {
-    const sender = createAccountEmailSender({ ...rig.config, timeZone: "UTC" }, undefined, {
-      ca: smtpTestTls.caCertPem,
-    });
-    const error = await sender({
-      purpose: "password_reset",
-      email: "admin@example.test",
-      displayName: "Admin",
-      actionUrl: "https://venue.example.test/?token=private-action",
-      expiresAt: "2026-10-23T12:00:00Z",
-      locale: "en-GB",
-    }).catch((error: unknown) => error);
-    expect(error).toBeInstanceOf(AccountEmailFailure);
-    expect(error).toMatchObject({
-      message: problem,
-      problem,
-      reason: "email.test_refused",
-      uncertain,
-    });
-    expect(error).not.toHaveProperty("cause");
-    expect(JSON.stringify(error)).not.toMatch(/secret-smtp-password|private-action/);
-    await rig.connectionClosed;
-    expect(rig.sockets.size).toBe(0);
-  } finally {
-    await rig.close();
-  }
-});
-
 it("preserves a structured sender name in the account envelope", async () => {
   const sendMail = vi.fn().mockResolvedValue({});
   const from = { name: "Harbour Kitchen", address: "venue@example.test" };
-  await createAccountEmailSender(
+  await messageSender(
     { url: "smtp://localhost", from, timeZone: "UTC" },
     { sendMail, close() {} },
   )({

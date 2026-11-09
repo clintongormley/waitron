@@ -51,7 +51,7 @@ import {
 import type { Logger } from "./logger.js";
 import type { TradingAdmissionView } from "./trading-admission.js";
 import type { OnboardingIntent } from "./trading-config.js";
-import { accountEmailFailure, type AccountEmailSender } from "./account-email.js";
+import type { EmailDelivery } from "./email-delivery.js";
 import { modulesNamed } from "./modules.js";
 import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { actionsPersonalData } from "./personal-data-actions.js";
@@ -69,8 +69,8 @@ export interface MeApiDeps {
   modules: string[];
   credentialKeyRing: TotpKeyRing;
   accountActionCodeKey?: Buffer;
-  accountActionBaseUrl?: string;
-  sendAccountEmail?: AccountEmailSender;
+  accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"]>;
+  assertAccountMailPrimary?: () => Promise<void>;
   now?: () => Date;
 }
 
@@ -86,6 +86,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.telephone_invalid": 400,
   "person.display_name_taken": 409,
   "profile.invalid": 400,
+  "account_mail.primary_required": 403,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
@@ -164,35 +165,33 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         locale: textField(body, "locale"),
         ...credentials(body),
       };
-      const issued = await updateProfile(
+      const { changed, mode } = await updateProfile(
         managementSessionId,
-        () => ({ ...input, emailCodeKey: accountActionCodeKey }),
-        saveOwnProfile,
+        () => input,
+        async (tx, change) => {
+          const person = await resolveManagementSession(tx, managementSessionId, { touch: false });
+          if (change.email.trim().toLowerCase() !== person.email)
+            await deps.assertAccountMailPrimary?.();
+          const mode = (await deps.accountMailMode?.(tx)) ?? "unconfigured";
+          const changed = await saveOwnProfile(tx, {
+            ...change,
+            queueEmailChange: mode !== "unconfigured",
+          });
+          return { changed, mode };
+        },
         (person) => normalizeAndValidateEmail(input.email) !== person.email,
       );
-      if (issued === null) return c.json({ emailVerificationSent: false });
-      if (deps.sendAccountEmail === undefined)
+      if (changed === null) return c.json({ emailVerificationSent: false });
+      if (mode === "unconfigured")
         return c.json({
           emailVerificationSent: false,
           problem: "email.unconfigured",
           uncertain: false,
         });
-      try {
-        const delivery = await deps.sendAccountEmail({
-          ...issued,
-          actionUrl: deps.accountActionBaseUrl ?? "/",
-          locale: issued.locale ?? deps.venueLocale,
-        });
-        return c.json({ emailVerificationSent: true, delivery });
-      } catch (error) {
-        const { problem, uncertain, reason } = accountEmailFailure(error);
-        log("error", "account_email.send_failed", {
-          purpose: issued.purpose,
-          errorCode: problem,
-          ...(reason === undefined ? {} : { reason }),
-        });
-        return c.json({ emailVerificationSent: false, problem, uncertain });
-      }
+      return c.json({
+        emailVerificationSent: true,
+        delivery: mode === "smtp" ? "queued" : "captured",
+      });
     }),
   );
   app.post("/management-api/session/me/profile/email/confirm", (c) =>

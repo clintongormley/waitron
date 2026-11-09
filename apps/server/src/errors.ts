@@ -153,6 +153,7 @@ declare module "@waitron/shared" {
     "node.not_found": { id: string };
     "node.read_only": Record<string, never>;
     "node.spare": Record<string, never>;
+    "account_mail.primary_required": { primaryDashboardUrl: string | null };
     /** A change carrying the dashboard's sign-in cookie was sent by a page other than the box's
      * own (`Origin` or `Sec-Fetch-Site`), so it was not run. */
     "management.origin_refused": Record<string, never>;

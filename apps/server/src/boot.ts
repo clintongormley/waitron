@@ -66,6 +66,7 @@ import {
   venueLocationId,
   type Database,
   type SingletonRole,
+  type Transaction,
 } from "@waitron/db";
 import {
   readHandoverRestriction,
@@ -274,11 +275,6 @@ import { mountReceiptPreviewApi } from "./receipt-preview-api.js";
 import { drawLogoRasters } from "./receipt-logo.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountConfigurationExportApi } from "./configuration-export-api.js";
-import {
-  AccountEmailFailure,
-  createAccountEmailSender,
-  type AccountEmailSender,
-} from "./account-email.js";
 import {
   resolveEmailDelivery,
   resolveInvoiceEmailDelivery,
@@ -2097,6 +2093,23 @@ async function bootServer(
   const captureOnly = !config.devMode && config.onboardingIntent === "demo";
   const resolveAccountEmail = () =>
     resolveEmailDelivery(db, ring, captureAccountEmail, captureOnly);
+  const accountMailMode = (tx: Transaction) =>
+    resolveMailDeliveryIn(tx, ring, config, "notice").then((delivery) => delivery.mode);
+  const assertAccountMailPrimary = async () => {
+    if (holders.singletonRole.current === "primary") return;
+    const primary = (await readNodeMembership(db))?.body.nodes.find(
+      (node) => node.standing === "serving-primary" && node.nodeId !== tradingContext.nodeId,
+    );
+    let primaryDashboardUrl: string | null = null;
+    try {
+      if (primary?.contactUrl) {
+        const url = new URL(primary.contactUrl);
+        if (url.protocol === "https:" || url.protocol === "http:")
+          primaryDashboardUrl = new URL("/manage/", url.origin).toString();
+      }
+    } catch {}
+    throw new AppError("account_mail.primary_required", { primaryDashboardUrl });
+  };
   // Interim: the venue row's id; removed by S18e or S28.
   const venueId = await venueLocationId(db);
   // The venue's default DISPLAY locale. The override is the RAW `tradingContext.localeOverride`, not the
@@ -2137,18 +2150,6 @@ async function bootServer(
       },
       log,
     );
-    const sendAccountEmail: NonNullable<
-      Parameters<typeof mountManagementApi>[1]["sendAccountEmail"]
-    > = async (message) => {
-      const [delivery, timeZone] = await Promise.all([
-        resolveAccountEmail(),
-        readVenueTimeZone(db),
-      ]);
-      if (delivery.mode === "unconfigured")
-        throw new AccountEmailFailure("email.unconfigured", undefined, false);
-      await createAccountEmailSender({ ...delivery.smtp, timeZone })(message);
-      return delivery.mode === "local_capture" ? "captured" : "sent";
-    };
     const management = mountManagementApi(
       app,
       {
@@ -2160,7 +2161,8 @@ async function bootServer(
         googleOidc: config.googleOidc,
         venueLocale,
         credentialKeyRing: totpKeyRing,
-        sendAccountEmail,
+        accountMailMode,
+        assertAccountMailPrimary,
       },
       log,
     );
@@ -2178,8 +2180,8 @@ async function bootServer(
         modules: setsToMigrate.map((module) => module.name),
         credentialKeyRing: totpKeyRing,
         accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
-        accountActionBaseUrl: `${config.managementOrigin}/`,
-        sendAccountEmail,
+        accountMailMode,
+        assertAccountMailPrimary,
         readTradingAdmission: () => tradingAdmission.snapshot(),
       },
       log,
@@ -2202,6 +2204,34 @@ async function bootServer(
         { root: config.dashboardAppDir, basePath: "/manage", navigationPath: "/manage" },
         log,
       );
+    const repairMailController = new AbortController();
+    let repairMail: Promise<void> | undefined;
+    const stopRepairMail = async () => {
+      repairMailController.abort();
+      await repairMail;
+    };
+    if (!fencedOrMirror && holders.singletonRole.current === "primary") {
+      const owner = accountActionMail({
+        codeKey: accountPurposeKey(accountKey, "account-action-code"),
+        emailChangeUrl: `${config.managementOrigin}/`,
+        venueLocale,
+        readTimeZone: () => readVenueTimeZone(db),
+        readPrivacyNoticeUrl: async () =>
+          (await withTransaction(db, readPrivacyContact))?.privacyNoticeUrl ?? null,
+      });
+      await withTransaction(db, (tx) => abandonMailClaims(tx, [owner], now()));
+      repairMail = startMailSender({
+        db,
+        owners: [owner],
+        now,
+        isPrimary: () => holders.singletonRole.current === "primary",
+        signal: repairMailController.signal,
+        resolveDelivery: (tx, rule) => resolveMailDeliveryIn(tx, ring, config, rule),
+        log,
+        maxTickMs: 5000,
+      });
+      undoOnFailure.push(stopRepairMail);
+    }
     const server = startTradingListener(config, app, now, log);
     undoOnFailure.push(() => closeListener(server));
     return makeStartedServer(
@@ -2209,7 +2239,7 @@ async function bootServer(
       health,
       log,
       {
-        stopWork: () => Promise.resolve(),
+        stopWork: stopRepairMail,
         settleRequests: settle,
         closePools: () => store.close(),
       },
@@ -2625,25 +2655,6 @@ async function bootServer(
       log,
     );
   }
-  // Resolved on every send, so a newly configured or rotated SMTP gateway, a changed time zone
-  // or a saved privacy page takes effect at once.
-  const sendAccountEmail: AccountEmailSender = async (message) => {
-    // Queue all three reads before an answered reset can reach shutdown's drain.
-    const [delivery, timeZone, privacy] = await Promise.all([
-      resolveAccountEmail(),
-      readVenueTimeZone(db),
-      withTransaction(db, readPrivacyContact),
-    ]);
-    if (delivery.mode === "unconfigured")
-      throw new AccountEmailFailure("email.unconfigured", undefined, false);
-    const privacyNoticeUrl = privacy?.privacyNoticeUrl ?? null;
-    await createAccountEmailSender({
-      ...delivery.smtp,
-      timeZone,
-      ...(privacyNoticeUrl === null ? {} : { privacyNoticeUrl }),
-    })(message);
-    return delivery.mode === "local_capture" ? "captured" : "sent";
-  };
   const backupDeadlines: { archive: string | null; cloud: string | null } = {
     archive: null,
     cloud: null,
@@ -2682,7 +2693,8 @@ async function bootServer(
       venueLocale,
       credentialKeyRing: totpKeyRing,
       tableRemovals,
-      sendAccountEmail,
+      accountMailMode,
+      assertAccountMailPrimary,
     },
     log,
   );
@@ -2864,8 +2876,8 @@ async function bootServer(
       modules: setsToMigrate.map((m) => m.name),
       credentialKeyRing: totpKeyRing,
       accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
-      accountActionBaseUrl: `${config.managementOrigin}/`,
-      sendAccountEmail,
+      accountMailMode,
+      assertAccountMailPrimary,
     },
     log,
   );

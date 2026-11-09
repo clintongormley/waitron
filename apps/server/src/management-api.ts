@@ -62,13 +62,13 @@ import {
   loginManager,
   loginManagerById,
   loginWithGoogle,
-  issueAccountAction,
+  queueInvitation,
   invitePerson,
   reactivatePersonForInvitation,
   readPasskeySignals,
   resetPersonLogin,
   shouldOfferPasskey,
-  requestAccountRecoveryAction,
+  queueAccountRecovery,
   readOwnProfile,
   updatePersonDetails,
   verifyOwnCredentials,
@@ -79,7 +79,6 @@ import {
   type ProfileAdmission,
   type TotpKeyRing,
 } from "@waitron/identity";
-import type { IssuedAccountAction } from "@waitron/identity";
 import {
   FORM_FACTORS,
   createDeviceProfile,
@@ -126,7 +125,7 @@ import { isUuid } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readPrivacyContact } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
-import { accountEmailFailure, type AccountEmailSender } from "./account-email.js";
+import type { EmailDelivery } from "./email-delivery.js";
 import { exchangeGoogleCode, type GoogleOidcConfig } from "./google-oidc.js";
 import {
   createAccountActionRateLimiter,
@@ -156,9 +155,8 @@ export interface ManagementApiDeps {
   origin: string;
   /** Venue default used when the recipient has not chosen their own UI language. */
   venueLocale?: string;
-  /** Outbound delivery for invitation and password-reset links. Omitted in harnesses and when an
-   * on-prem installation has not configured SMTP yet. */
-  sendAccountEmail?: AccountEmailSender;
+  accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"]>;
+  assertAccountMailPrimary?: () => Promise<void>;
   passwordThrottle?: PasswordThrottle;
   accountActionRateLimiters?: {
     passwordReset: AccountActionRateLimiter;
@@ -171,60 +169,17 @@ export interface ManagementApiDeps {
   tableRemovals?: readonly TableRemoval[];
 }
 
-async function deliverAccountAction(
+async function queueInvitationAnswer(
+  tx: Transaction,
   deps: ManagementApiDeps,
-  log: Logger,
-  issued: IssuedAccountAction,
-  origin: string,
-): Promise<{
-  invitationSent: boolean;
-  delivery?: "sent" | "captured";
-  problem?: "email.unconfigured" | "email.send_refused" | "email.send_timeout";
-  uncertain?: boolean;
-}> {
-  if (deps.sendAccountEmail === undefined)
+  input: { managementSessionId: string; personId: string; origin: string },
+) {
+  await deps.assertAccountMailPrimary?.();
+  const mode = (await deps.accountMailMode?.(tx)) ?? "unconfigured";
+  if (mode === "unconfigured")
     return { invitationSent: false, problem: "email.unconfigured", uncertain: false };
-  const actionUrl = new URL("/manage/account", origin);
-  actionUrl.searchParams.set("token", issued.token);
-  actionUrl.searchParams.set("purpose", issued.purpose);
-  // Keep the email out of the action query. The SPA reads this fragment and supplies the semantic
-  // username alongside the new-password fields for password managers.
-  actionUrl.hash = new URLSearchParams({ email: issued.email }).toString();
-  try {
-    const delivery = await deps.sendAccountEmail({
-      purpose: issued.purpose,
-      email: issued.email,
-      displayName: issued.displayName,
-      actionUrl: actionUrl.toString(),
-      code: issued.code,
-      codeExpiresAt: issued.codeExpiresAt,
-      expiresAt: issued.expiresAt,
-      locale: issued.locale ?? deps.venueLocale ?? "en-GB",
-    });
-    return { invitationSent: true, delivery };
-  } catch (error) {
-    const { problem, uncertain, reason } = accountEmailFailure(error);
-    log("error", "account_email.send_failed", {
-      purpose: issued.purpose,
-      personId: issued.personId,
-      errorCode: problem,
-      ...(reason === undefined ? {} : { reason }),
-    });
-    return { invitationSent: false, problem, uncertain };
-  }
-}
-
-async function issueRecovery(
-  email: string,
-  db: Database,
-  log: Logger,
-): Promise<IssuedAccountAction | null> {
-  try {
-    return await withTransaction(db, (tx) => requestAccountRecoveryAction(tx, { email }));
-  } catch (error) {
-    log("error", "account_action.request_failed", { errorCode: codeOf(error) });
-    return null;
-  }
+  await queueInvitation(tx, input);
+  return { invitationSent: true, delivery: mode === "smtp" ? "queued" : "captured" };
 }
 
 /**
@@ -244,6 +199,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "google.second_factor_required": 401,
   "account_action.invalid": 400,
   "account_action.rate_limited": 429,
+  "account_mail.primary_required": 403,
   // The passkey login is a credential check, so its failures are 401 like `password.invalid`; an
   // expired challenge is a retryable timing fault, not a rejected credential.
   "passkey.not_registered": 401,
@@ -956,6 +912,7 @@ export function mountManagementApi(
   // Past the rate limit, the answer is 202 whether or not the address has an account.
   app.post("/management-api/password-reset", (c) =>
     run(c, log, async () => {
+      await deps.assertAccountMailPrimary?.();
       const body = await readJsonBody<{ email?: unknown }>(c);
       passwordResetRateLimiter.check(
         typeof body.email === "string" ? body.email.trim().toLowerCase() : "invalid-email",
@@ -967,16 +924,21 @@ export function mountManagementApi(
         // Answered before the lookup, so a known address answers as fast as an unknown one.
         // Shutdown waits for the write through `settle`, not for the email.
         const email = body.email;
-        const recovery: Promise<void> = new Promise<IssuedAccountAction | null>((resolve) =>
-          setImmediate(() => resolve(issueRecovery(email, deps.db, log))),
-        )
-          .then(
-            (issued) => {
-              if (issued !== null)
-                void deliverAccountAction(deps, log, issued, passkeySite(c).origin).catch(() => {});
-            },
-            () => {},
+        const recovery: Promise<void> = new Promise<void>((resolve) => setImmediate(resolve))
+          .then(() =>
+            withTransaction(deps.db, async (tx) => {
+              const mode = (await deps.accountMailMode?.(tx)) ?? "unconfigured";
+              if (mode === "unconfigured") {
+                log("warn", "account_mail.unconfigured", {});
+                return;
+              }
+              await queueAccountRecovery(tx, { email, origin: passkeySite(c).origin });
+            }),
           )
+          .catch((error) => {
+            log("error", "account_action.request_failed", { errorCode: codeOf(error) });
+          })
+          .catch(() => {})
           .finally(() => recoveries.delete(recovery));
         recoveries.add(recovery);
       }
@@ -1117,7 +1079,7 @@ export function mountManagementApi(
     }),
   );
 
-  // Creates a pending person and issues their invitation in one transaction.
+  // The person and its queued invitation commit together.
   app.post("/management-api/staff", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1146,7 +1108,7 @@ export function mountManagementApi(
         throw new AppError("management.request_invalid", { field: "email" });
       }
       const { displayName, firstNames, lastNames, telephone = null, role, email } = body;
-      const { created, issued } = await withTransaction(deps.db, async (tx) => {
+      const { created, delivery } = await withTransaction(deps.db, async (tx) => {
         const created = await invitePerson(tx, {
           managementSessionId: sessionId,
           displayName,
@@ -1156,13 +1118,13 @@ export function mountManagementApi(
           role,
           email,
         });
-        const issued = await issueAccountAction(tx, {
+        const delivery = await queueInvitationAnswer(tx, deps, {
+          managementSessionId: sessionId,
           personId: created.id,
-          purpose: "invitation",
+          origin: passkeySite(c).origin,
         });
-        return { created, issued };
+        return { created, delivery };
       });
-      const delivery = await deliverAccountAction(deps, log, issued, passkeySite(c).origin);
       return c.json({ ...created, ...delivery }, 201);
     }),
   );
@@ -1177,14 +1139,15 @@ export function mountManagementApi(
       if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
-      const issued = await withTransaction(deps.db, async (tx) => {
+      const delivery = await withTransaction(deps.db, async (tx) => {
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
-        return issueAccountAction(tx, {
+        return queueInvitationAnswer(tx, deps, {
+          managementSessionId: sessionId,
           personId,
-          purpose: "invitation",
+          origin: passkeySite(c).origin,
         });
       });
-      return c.json(await deliverAccountAction(deps, log, issued, passkeySite(c).origin));
+      return c.json(delivery);
     }),
   );
 
@@ -1261,14 +1224,15 @@ export function mountManagementApi(
       if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
-      const issued = await withTransaction(deps.db, async (tx) => {
+      const delivery = await withTransaction(deps.db, async (tx) => {
         await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
-        return issueAccountAction(tx, {
+        return queueInvitationAnswer(tx, deps, {
+          managementSessionId: sessionId,
           personId,
-          purpose: "invitation",
+          origin: passkeySite(c).origin,
         });
       });
-      return c.json(await deliverAccountAction(deps, log, issued, passkeySite(c).origin));
+      return c.json(delivery);
     }),
   );
 
@@ -1282,14 +1246,15 @@ export function mountManagementApi(
       if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
-      const issued = await withTransaction(deps.db, async (tx) => {
+      const delivery = await withTransaction(deps.db, async (tx) => {
         await reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId });
-        return issueAccountAction(tx, {
+        return queueInvitationAnswer(tx, deps, {
+          managementSessionId: sessionId,
           personId,
-          purpose: "invitation",
+          origin: passkeySite(c).origin,
         });
       });
-      return c.json(await deliverAccountAction(deps, log, issued, passkeySite(c).origin));
+      return c.json(delivery);
     }),
   );
 

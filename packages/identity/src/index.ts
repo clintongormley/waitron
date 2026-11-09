@@ -115,7 +115,6 @@ export {
   queueAccountMail,
   queueAccountRecovery,
   queueInvitation,
-  requestAccountRecoveryAction,
 } from "./account-action.js";
 export type {
   AccountActionCompletion,

@@ -6,7 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 import { incidents, locations, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
-import type { AccountEmailSender } from "./account-email.js";
+import type { Transaction } from "@waitron/db";
+import type { EmailDelivery } from "./email-delivery.js";
+type AccountMode = (tx: Transaction) => Promise<EmailDelivery["mode"]>;
 import type { runAttendanceEmailLoop } from "./attendance-email-worker.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
@@ -37,8 +39,8 @@ const holder = vi.hoisted(() => ({
   armed: [] as (() => void)[],
   sent: [] as Parameters<TextEmailSender>[0][],
   outcomes: undefined as BackupOutcomeHolder | undefined,
-  managementSend: undefined as AccountEmailSender | undefined,
-  profileSend: undefined as AccountEmailSender | undefined,
+  managementMode: undefined as AccountMode | undefined,
+  profileMode: undefined as AccountMode | undefined,
   attendance: undefined as Parameters<typeof runAttendanceEmailLoop>[0] | undefined,
   smtp: [] as Parameters<typeof import("./smtp-send.js").sendSmtpMessage>[0][],
 }));
@@ -48,7 +50,7 @@ vi.mock("./management-api.js", async (load) => {
   return {
     ...actual,
     mountManagementApi: (...args: Parameters<typeof actual.mountManagementApi>) => {
-      holder.managementSend = args[1].sendAccountEmail;
+      holder.managementMode = args[1].accountMailMode;
       return actual.mountManagementApi(...args);
     },
   };
@@ -58,7 +60,7 @@ vi.mock("./me-api.js", async (load) => {
   return {
     ...actual,
     mountMeApi: (...args: Parameters<typeof actual.mountMeApi>) => {
-      holder.profileSend = args[1].sendAccountEmail;
+      holder.profileMode = args[1].accountMailMode;
       return actual.mountMeApi(...args);
     },
   };
@@ -189,8 +191,8 @@ async function shutDown(booted: Booted): Promise<void> {
   if (booted.server !== undefined) await booted.server.close();
   holder.deps = undefined;
   holder.outcomes = undefined;
-  holder.managementSend = undefined;
-  holder.profileSend = undefined;
+  holder.managementMode = undefined;
+  holder.profileMode = undefined;
   holder.attendance = undefined;
   holder.armed.length = 0;
   holder.sent.length = 0;
@@ -272,23 +274,12 @@ describe("the running server's managers' email check", () => {
       const booted: Booted = {};
       try {
         await bootServer(booted, venue, { intent: "prepare", development: false });
-        const message = {
-          purpose: "invitation" as const,
-          email: "invitee@example.test",
-          displayName: "Invitee",
-          actionUrl: "https://dashboard.example.test/manage/account",
-          expiresAt: "2026-11-08T12:00:00Z",
-          locale: "en-GB",
-        };
-        expect(holder.managementSend).toBeTypeOf("function");
-        expect(holder.profileSend).toBeTypeOf("function");
-        await expect(holder.managementSend!(message)).rejects.toMatchObject({
-          problem: "email.unconfigured",
-          uncertain: false,
-        });
-        await expect(
-          holder.profileSend!({ ...message, purpose: "email_change", code: "123456" }),
-        ).rejects.toMatchObject({ problem: "email.unconfigured", uncertain: false });
+        expect(holder.managementMode).toBeTypeOf("function");
+        expect(holder.profileMode).toBeTypeOf("function");
+        await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe(
+          "unconfigured",
+        );
+        await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe("unconfigured");
         if (!repair) {
           const inbox = await fetch(`http://127.0.0.1:${httpPort()}/management-api/email`, {
             headers: { cookie: venue.managerCookie },
@@ -310,18 +301,10 @@ describe("the running server's managers' email check", () => {
       const booted: Booted = {};
       try {
         await bootServer(booted, venue, { intent: "demo", development });
-        const message = {
-          purpose: "invitation" as const,
-          email: "invitee@example.test",
-          displayName: "Invitee",
-          actionUrl: "https://dashboard.example.test/manage/account",
-          expiresAt: "2026-11-08T12:00:00Z",
-          locale: "en-GB",
-        };
-        await expect(holder.managementSend!(message)).resolves.toBe("captured");
-        await expect(
-          holder.profileSend!({ ...message, purpose: "email_change", code: "123456" }),
-        ).resolves.toBe("captured");
+        await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe(
+          "local_capture",
+        );
+        await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe("local_capture");
       } finally {
         await shutDown(booted);
       }
@@ -346,18 +329,8 @@ describe("the running server's managers' email check", () => {
     const booted: Booted = {};
     try {
       await bootServer(booted, venue, { intent: "prepare", development: false });
-      const message = {
-        purpose: "invitation" as const,
-        email: "invitee@example.test",
-        displayName: "Invitee",
-        actionUrl: "https://dashboard.example.test/manage/account",
-        expiresAt: "2026-11-08T12:00:00Z",
-        locale: "en-GB",
-      };
-      await expect(holder.managementSend!(message)).resolves.toBe("sent");
-      await expect(
-        holder.profileSend!({ ...message, purpose: "email_change", code: "123456" }),
-      ).resolves.toBe("sent");
+      await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe("smtp");
+      await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe("smtp");
       expect((await holder.attendance!.resolveDelivery()).mode).toBe("smtp");
     } finally {
       await shutDown(booted);
@@ -390,20 +363,35 @@ describe("the running server's managers' email check", () => {
           .set({ timeZone: "Invalid/Zone" })
           .where(eq(locations.id, venue.cfg.locationId));
       const booted: Booted = {};
+      await suite.db
+        .insert(persons)
+        .values(
+          [1, 2].map((n) => ({
+            displayName: `Queued mail ${n}`,
+            email: `queued-${n}@example.test`,
+          })),
+        );
       try {
         await bootServer(booted, venue, { intent, development });
-        const message = {
-          purpose: "invitation" as const,
-          email: "invitee@example.test",
-          displayName: "Invitee",
-          actionUrl: "https://dashboard.example.test/manage/account",
-          expiresAt: "2026-11-08T12:00:00Z",
-          locale: "en-GB",
-        };
-        await expect(holder.managementSend!(message)).resolves.toBe(outcome);
-        await expect(
-          holder.profileSend!({ ...message, purpose: "email_change", code: "123456" }),
-        ).resolves.toBe(outcome);
+        for (const n of [1, 2]) {
+          const response = await fetch(
+            `http://127.0.0.1:${httpPort()}/management-api/password-reset`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ email: `queued-${n}@example.test` }),
+            },
+          );
+          expect(response.status).toBe(202);
+          await response.body?.cancel();
+        }
+        await expect.poll(() => holder.smtp.length, { timeout: 10000 }).toBe(2);
+        await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe(
+          outcome === "captured" ? "local_capture" : "smtp",
+        );
+        await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe(
+          outcome === "captured" ? "local_capture" : "smtp",
+        );
         const delivery =
           outcome === "captured"
             ? {
