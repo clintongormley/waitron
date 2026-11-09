@@ -1,3 +1,4 @@
+import { attendanceMailRows } from "./fixtures.js";
 import { beforeEach } from "vitest";
 import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -81,7 +82,7 @@ export function attendanceFixture() {
     entries: await entries(),
     chains: await suite.db.select().from(api.workforceChains),
     questions: await suite.db.select().from(api.attendanceQuestions),
-    mail: await suite.db.select().from(api.attendanceMail),
+    mail: await attendanceMailRows(suite.db),
     work: await suite.db.select().from(api.attendanceDayWork),
   });
   const open = async (at = "2026-01-05T09:00:00Z") => {

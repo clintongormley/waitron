@@ -23,7 +23,6 @@ const OWNED = [
   "attendance_source_state",
   "attendance_operation_facts",
   "attendance_questions",
-  "attendance_mail",
   "attendance_response_commands",
   // Staffing's tables, which live in this package's set.
   "staff_roles",

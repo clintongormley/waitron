@@ -1,101 +1,57 @@
-import { and, eq, gt, inArray, lte, or, type SQL } from "drizzle-orm";
-import { newId, type Transaction } from "@waitron/db";
-import { attendanceMail } from "./schema/attendance.js";
+import {
+  cancelMail,
+  enqueueMail,
+  MAIL_LIFETIME_MS,
+  readMail,
+  reopenMail,
+  type OutgoingMail,
+  type Transaction,
+} from "@waitron/db";
 
-type MailClaim = { id: string; token: string };
-type MailOutcome = "sent" | "rejected" | "unknown";
-
-const RETRY_MS = 15 * 60_000;
-const CLAIM_MS = 60_000;
-
-const at = (ms: number) => new Date(ms).toISOString();
-
-/** Due at its retry time, or once that lies further ahead than the retry's wait: a time stamped
- * before the clock stepped back. */
-export function attendanceMailDue(now: Date): SQL {
-  return or(
-    lte(attendanceMail.nextAttemptAt, now.toISOString()),
-    gt(attendanceMail.nextAttemptAt, at(now.getTime() + RETRY_MS)),
-  )!;
+export const attendanceMailKey = (questionId: string) => `attendance:${questionId}`;
+export async function queueAttendanceReminder(
+  tx: Transaction,
+  question: { id: string; personId: string },
+  at: Date,
+): Promise<void> {
+  await enqueueMail(tx, {
+    kind: "attendance_question",
+    dedupeKey: attendanceMailKey(question.id),
+    subjectId: question.id,
+    personId: question.personId,
+    now: at,
+    notAfter: new Date(at.getTime() + MAIL_LIFETIME_MS.attendance_question),
+  });
 }
-
 export async function cancelUnclaimedAttendanceMail(
   tx: Transaction,
   questionId: string,
 ): Promise<void> {
-  await tx
-    .update(attendanceMail)
-    .set({ status: "cancelled" })
-    .where(
-      and(
-        eq(attendanceMail.questionId, questionId),
-        inArray(attendanceMail.status, ["pending", "rejected"]),
-      ),
-    );
+  await cancelMail(tx, attendanceMailKey(questionId));
 }
-
-export async function claimAttendanceMail(
+export async function reopenAttendanceMail(
   tx: Transaction,
-  input: { id: string; holder: string; recipient: string; now: Date },
-): Promise<MailClaim | null> {
-  const token = `${input.holder}:${newId()}`;
-  const rows = await tx
-    .update(attendanceMail)
-    .set({
-      status: "sending",
-      claimToken: token,
-      claimedAt: input.now.toISOString(),
-      recipient: input.recipient,
-      outcome: null,
-    })
-    .where(
-      and(
-        eq(attendanceMail.id, input.id),
-        inArray(attendanceMail.status, ["pending", "rejected"]),
-        attendanceMailDue(input.now),
-      ),
-    )
-    .returning({ id: attendanceMail.id });
-  return rows.length === 0 ? null : { id: input.id, token };
+  questionId: string,
+  at: Date,
+): Promise<void> {
+  await reopenMail(tx, attendanceMailKey(questionId), {
+    nextAttemptAt: at,
+    notAfter: new Date(at.getTime() + MAIL_LIFETIME_MS.attendance_question),
+  });
 }
-
-export async function expireAttendanceMailClaims(tx: Transaction, now: Date): Promise<number> {
-  const rows = await tx
-    .update(attendanceMail)
-    .set({ status: "unknown", outcome: "unknown" })
-    .where(
-      and(
-        eq(attendanceMail.status, "sending"),
-        or(
-          lte(attendanceMail.claimedAt, at(now.getTime() - CLAIM_MS)),
-          gt(attendanceMail.claimedAt, at(now.getTime() + CLAIM_MS)),
-        ),
-      ),
-    )
-    .returning({ id: attendanceMail.id });
-  return rows.length;
-}
-
-export async function reportAttendanceMail(
+export async function attendanceMailAttempted(
   tx: Transaction,
-  claim: MailClaim,
-  outcome: MailOutcome,
-  now: Date,
+  questionId: string,
 ): Promise<boolean> {
-  const rows = await tx
-    .update(attendanceMail)
-    .set({
-      status: outcome,
-      outcome,
-      ...(outcome === "rejected" ? { nextAttemptAt: at(now.getTime() + RETRY_MS) } : {}),
-    })
-    .where(
-      and(
-        eq(attendanceMail.id, claim.id),
-        eq(attendanceMail.status, "sending"),
-        eq(attendanceMail.claimToken, claim.token),
-      ),
-    )
-    .returning({ id: attendanceMail.id });
-  return rows.length > 0;
+  const mail = await readMail(tx, attendanceMailKey(questionId));
+  return mail !== undefined && ["sending", "sent", "unknown"].includes(mail.status);
+}
+export function attendanceMailOutcome(
+  row: Pick<OutgoingMail, "status" | "attempts">,
+): "sent" | "rejected" | "unknown" | null {
+  if (row.status === "sent" || row.status === "unknown" || row.status === "rejected")
+    return row.status;
+  return (row.status === "cancelled" || row.status === "expired") && row.attempts > 0
+    ? "rejected"
+    : null;
 }

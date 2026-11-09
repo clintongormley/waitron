@@ -1,3 +1,4 @@
+import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
 import { beforeEach, expect, it } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -22,7 +23,7 @@ import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { WorkforceBackend } from "./clocking.js";
 import * as responses from "./attendance-responses.js";
 import { upsertAttendanceQuestion } from "./attendance-questions.js";
-import { attendanceQuestions, attendanceMail } from "./schema/attendance.js";
+import { attendanceQuestions } from "./schema/attendance.js";
 import { readRecordedEntries } from "./record-reads.js";
 import {
   mergeAttendanceQuestions,
@@ -529,21 +530,18 @@ it.each(["pending", "rejected", "sending", "sent", "unknown", "cancelled"] as co
   "an answered question preserves attempted mail and cancels only unclaimed %s",
   async (status) => {
     const questionId = await question();
-    const [mail] = await suite.db.select().from(attendanceMail);
-    await suite.db
-      .update(attendanceMail)
-      .set({
-        status,
-        claimToken: "retained-token",
-        claimedAt: now.toISOString(),
-        recipient: "worker@example.test",
-        outcome: status === "sent" || status === "unknown" ? status : null,
-      })
-      .where(eq(attendanceMail.id, mail!.id));
+    const [mail] = await attendanceMailRows(suite.db);
+    await setAttendanceMail(suite.db, mail!.questionId, {
+      status,
+      claimToken: "retained-token",
+      claimedAt: now.toISOString(),
+      recipient: "worker@example.test",
+      outcome: status === "sent" || status === "unknown" ? status : null,
+    });
     const value = pair();
     if (value.action !== "request") throw new Error("fixture requires request");
     await send(await command({ ...value, questionId }));
-    expect(await suite.db.select().from(attendanceMail)).toEqual([
+    expect(await attendanceMailRows(suite.db)).toEqual([
       {
         ...mail!,
         status: status === "pending" || status === "rejected" ? "cancelled" : status,
@@ -570,7 +568,7 @@ it("declining a paired answer reopens its missing times without rearming email",
       q.missingKinds,
     ]),
   ).toEqual([[questionId, ["in", "out"]]]);
-  expect((await suite.db.select().from(attendanceMail))[0]!.status).toBe("cancelled");
+  expect((await attendanceMailRows(suite.db))[0]!.status).toBe("cancelled");
 });
 it("a legacy partial pair decision reopens only the declined kind", async () => {
   const questionId = await question();
@@ -684,7 +682,7 @@ it("question-anchor failure rolls back human rows, receipt and reminder cancella
   if (payload.action !== "request") throw new Error("fixture requires request");
   const value = await command({ ...payload, questionId });
   const savedQuestion = await suite.db.select().from(attendanceQuestions);
-  const savedMail = await suite.db.select().from(attendanceMail);
+  const savedMail = await attendanceMailRows(suite.db);
   const before = await snapshot();
   await suite.db.execute(
     sql`create trigger refuse_question_answer before update on attendance_questions when new.resolved_by_entry_id is not null begin select raise(abort, 'question answer fault'); end`,
@@ -696,7 +694,7 @@ it("question-anchor failure rolls back human rows, receipt and reminder cancella
     });
     expect(await snapshot()).toEqual(before);
     expect(await suite.db.select().from(attendanceQuestions)).toEqual(savedQuestion);
-    expect(await suite.db.select().from(attendanceMail)).toEqual(savedMail);
+    expect(await attendanceMailRows(suite.db)).toEqual(savedMail);
   } finally {
     await suite.db.execute(sql`drop trigger refuse_question_answer`);
   }

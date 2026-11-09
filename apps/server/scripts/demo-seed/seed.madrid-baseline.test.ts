@@ -47,6 +47,7 @@ const ADDED_TABLES = [
 ];
 /** Tables dropped after the capture; the seed wrote no row to them. */
 const REMOVED_TABLES = [
+  "attendance_mail",
   "membership_clearances",
   "membership_removals",
   "adjustment_settings",

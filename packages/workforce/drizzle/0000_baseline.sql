@@ -34,24 +34,6 @@ CREATE TABLE `attendance_day_work` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `attendance_day_work_scope_uq` ON `attendance_day_work` (`location_id`,`business_day`);--> statement-breakpoint
 CREATE INDEX `attendance_day_work_due_idx` ON `attendance_day_work` (`location_id`,`next_due_at`);--> statement-breakpoint
-CREATE TABLE `attendance_mail` (
-	`id` text PRIMARY KEY NOT NULL,
-	`question_id` text NOT NULL,
-	`status` text DEFAULT 'pending' NOT NULL,
-	`claim_token` text,
-	`claimed_at` text,
-	`next_attempt_at` text NOT NULL,
-	`recipient` text,
-	`outcome` text,
-	FOREIGN KEY (`question_id`) REFERENCES `attendance_questions`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "attendance_mail_status_ck" CHECK("attendance_mail"."status" in ('pending', 'sending', 'sent', 'rejected', 'unknown', 'cancelled')),
-	CONSTRAINT "attendance_mail_outcome_ck" CHECK("attendance_mail"."outcome" in ('sent', 'rejected', 'unknown')),
-	CONSTRAINT "attendance_mail_claim_ck" CHECK(("attendance_mail"."claim_token" is null and "attendance_mail"."claimed_at" is null) or ("attendance_mail"."claim_token" is not null and "attendance_mail"."claimed_at" is not null)),
-	CONSTRAINT "attendance_mail_sending_ck" CHECK("attendance_mail"."status" <> 'sending' or ("attendance_mail"."claim_token" is not null and "attendance_mail"."recipient" is not null))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `attendance_mail_question_uq` ON `attendance_mail` (`question_id`);--> statement-breakpoint
-CREATE INDEX `attendance_mail_due_idx` ON `attendance_mail` (`status`,`next_attempt_at`,`id`);--> statement-breakpoint
 CREATE TABLE `attendance_operation_facts` (
 	`sequence` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`source` text NOT NULL,

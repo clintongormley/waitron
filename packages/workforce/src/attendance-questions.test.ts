@@ -1,6 +1,13 @@
+import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  outgoingMail,
+  cancelMail,
+  type Transaction,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
@@ -9,7 +16,6 @@ import { seedLocation } from "../test/fixtures.js";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import {
   attendanceQuestions,
-  attendanceMail,
   listPendingAttendanceQuestions,
   upsertAttendanceQuestion,
   mergeAttendanceQuestions,
@@ -66,6 +72,25 @@ async function openShift() {
 }
 
 describe("durable own attendance questions", () => {
+  it("queues a question's reminder under its key, for its person, kept seven days", async () => {
+    const id = await run((tx) => upsertAttendanceQuestion(tx, question(), now));
+    const [mail] = await suite.db.select().from(outgoingMail);
+    expect(mail).toMatchObject({
+      kind: "attendance_question",
+      dedupeKey: `attendance:${id}`,
+      subjectId: id,
+      personId,
+      queuedAt: now.toISOString(),
+      notAfter: "2026-01-15T04:01:00.000Z",
+    });
+  });
+  it("a cancelled reminder queued again for the same question stays cancelled", async () => {
+    const id = await run((tx) => upsertAttendanceQuestion(tx, question(), now));
+    expect(await run((tx) => cancelMail(tx, `attendance:${id}`, now))).toBe(true);
+    const before = await suite.db.select().from(outgoingMail);
+    await run((tx) => upsertAttendanceQuestion(tx, question(), now));
+    expect(await suite.db.select().from(outgoingMail)).toEqual(before);
+  });
   it("retains old own questions on a later day, sorted independently of insertion order", async () => {
     const tuesday = await run((tx) =>
       upsertAttendanceQuestion(
@@ -99,7 +124,7 @@ describe("durable own attendance questions", () => {
         evidenceKeys: ["order:1", "order:2"],
       },
     ]);
-    expect(await suite.db.select().from(attendanceMail)).toMatchObject([
+    expect(await attendanceMailRows(suite.db)).toMatchObject([
       { questionId: first, status: "pending", claimToken: null, recipient: null },
     ]);
   });
@@ -118,12 +143,12 @@ describe("durable own attendance questions", () => {
       evidenceKeys: ["order:2"],
     };
     const first = await run((tx) => upsertAttendanceQuestion(tx, input, now));
-    const mail = await suite.db.select().from(attendanceMail);
+    const mail = await attendanceMailRows(suite.db);
     expect(
       await run((tx) => upsertAttendanceQuestion(tx, { ...input, evidenceKeys: ["order:1"] }, now)),
     ).toBe(first);
     expect((await own())[0]!.evidenceKeys).toEqual(["order:1", "order:2"]);
-    expect(await suite.db.select().from(attendanceMail)).toEqual(mail);
+    expect(await attendanceMailRows(suite.db)).toEqual(mail);
   });
   it("missing-out becomes automatic with the same id and cancels its unclaimed reminder", async () => {
     const backend = new WorkforceBackend();
@@ -168,7 +193,7 @@ describe("durable own attendance questions", () => {
       missingKinds: [],
       evidenceKeys: ["order:1", "order:last"],
     });
-    expect((await suite.db.select().from(attendanceMail))[0]!.status).toBe("cancelled");
+    expect((await attendanceMailRows(suite.db))[0]!.status).toBe("cancelled");
     await run((tx) => upsertAttendanceQuestion(tx, input, now));
     expect((await own())[0]).toMatchObject({
       kind: "automatic-out",
@@ -204,7 +229,7 @@ describe("durable own attendance questions", () => {
         now,
       ),
     );
-    expect(await suite.db.select().from(attendanceMail)).toEqual([]);
+    expect(await attendanceMailRows(suite.db)).toEqual([]);
   });
   it.each(["sent", "unknown", "sending"] as const)(
     "automatic upgrade retains a %s reminder and its exact claim history",
@@ -217,17 +242,14 @@ describe("durable own attendance questions", () => {
         missingKinds: ["out"] as ("in" | "out")[],
       };
       const id = await run((tx) => upsertAttendanceQuestion(tx, input, now));
-      await suite.db
-        .update(attendanceMail)
-        .set({
-          status,
-          claimToken: "claim",
-          claimedAt: now.toISOString(),
-          recipient: "worker@example.test",
-          outcome: status === "sending" ? null : status,
-        })
-        .where(eq(attendanceMail.questionId, id));
-      const before = await suite.db.select().from(attendanceMail);
+      await setAttendanceMail(suite.db, id, {
+        status,
+        claimToken: "claim",
+        claimedAt: now.toISOString(),
+        recipient: "worker@example.test",
+        outcome: status === "sending" ? null : status,
+      });
+      const before = await attendanceMailRows(suite.db);
       const end = await run((tx) =>
         new WorkforceBackend().recordAutomaticClose(tx, {
           nodeId,
@@ -245,7 +267,7 @@ describe("durable own attendance questions", () => {
           now,
         ),
       );
-      expect(await suite.db.select().from(attendanceMail)).toEqual(before);
+      expect(await attendanceMailRows(suite.db)).toEqual(before);
     },
   );
   it("refuses replacing an existing automatic target and preserves both question and mail", async () => {
@@ -277,7 +299,7 @@ describe("durable own attendance questions", () => {
       run((tx) => upsertAttendanceQuestion(tx, { ...input, openEntryId: end }, now)),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
     expect(await suite.db.select().from(attendanceQuestions)).toEqual(before);
-    expect(await suite.db.select().from(attendanceMail)).toEqual([]);
+    expect(await attendanceMailRows(suite.db)).toEqual([]);
   });
   it.each([
     { personId: "" },
@@ -296,7 +318,7 @@ describe("durable own attendance questions", () => {
       ),
     ).rejects.toMatchObject({ code: "attendance.invalid" });
     expect(await suite.db.select().from(attendanceQuestions)).toEqual([]);
-    expect(await suite.db.select().from(attendanceMail)).toEqual([]);
+    expect(await attendanceMailRows(suite.db)).toEqual([]);
   });
   it("refuses a changed saved question day rather than silently moving its evidence", async () => {
     await run((tx) => upsertAttendanceQuestion(tx, question(), now));
@@ -324,10 +346,7 @@ describe("durable own attendance questions", () => {
           now,
         ),
       );
-      await suite.db
-        .update(attendanceMail)
-        .set({ status })
-        .where(eq(attendanceMail.questionId, second));
+      await setAttendanceMail(suite.db, second, { status });
       await run((tx) => mergeAttendanceQuestions(tx, first, second));
       await run((tx) => mergeAttendanceQuestions(tx, first, second));
       expect(await own()).toEqual([
@@ -346,7 +365,7 @@ describe("durable own attendance questions", () => {
             .where(eq(attendanceQuestions.id, second))
         )[0],
       ).toMatchObject({ canonicalQuestionId: first, active: false, inactiveReason: "merged" });
-      const mails = await suite.db.select().from(attendanceMail);
+      const mails = await attendanceMailRows(suite.db);
       expect(mails.find((m) => m.questionId === second)!.status).toBe(
         status === "pending" || status === "rejected" ? "cancelled" : status,
       );
@@ -398,6 +417,6 @@ describe("durable own attendance questions", () => {
       }),
     ).rejects.toThrow("after question");
     expect(await suite.db.select().from(attendanceQuestions)).toEqual([]);
-    expect(await suite.db.select().from(attendanceMail)).toEqual([]);
+    expect(await attendanceMailRows(suite.db)).toEqual([]);
   });
 });

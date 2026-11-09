@@ -3,8 +3,12 @@ import { venueLocationId, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { assertAttendanceDay } from "./attendance-state.js";
 import type { AttendanceQuestion } from "./attendance-types.js";
-import { attendanceMail, attendanceQuestions } from "./schema/attendance.js";
-import { cancelUnclaimedAttendanceMail as cancelUnclaimed } from "./attendance-mail.js";
+import { attendanceQuestions } from "./schema/attendance.js";
+import {
+  cancelUnclaimedAttendanceMail as cancelUnclaimed,
+  queueAttendanceReminder,
+  attendanceMailAttempted,
+} from "./attendance-mail.js";
 import { answerForQuestion } from "./attendance-question-responses.js";
 import { readRecordedEntries } from "./record-reads.js";
 import { attendanceResponseCommands } from "./schema/attendance-responses.js";
@@ -75,10 +79,7 @@ async function ensureReminder(tx: Transaction, row: QuestionRow, at: Date): Prom
     await cancelUnclaimed(tx, row.id);
     return;
   }
-  await tx
-    .insert(attendanceMail)
-    .values({ questionId: row.id, nextAttemptAt: at.toISOString() })
-    .onConflictDoNothing({ target: attendanceMail.questionId });
+  await queueAttendanceReminder(tx, row, at);
 }
 
 function mergedFields(row: QuestionRow, input: QuestionInput) {
@@ -212,12 +213,9 @@ export async function mergeAttendanceQuestions(
     .update(attendanceQuestions)
     .set({ canonicalQuestionId: canonical.id, active: false, inactiveReason: "merged" })
     .where(eq(attendanceQuestions.id, duplicate.id));
-  const [mail] = await tx
-    .select()
-    .from(attendanceMail)
-    .where(eq(attendanceMail.questionId, duplicate.id));
+  const attempted = await attendanceMailAttempted(tx, duplicate.id);
   await cancelUnclaimed(tx, duplicate.id);
-  if (mail && (mail.status === "sending" || mail.status === "sent" || mail.status === "unknown")) {
+  if (attempted) {
     await cancelUnclaimed(tx, canonical.id);
   }
   await ensureReminder(tx, { ...canonical, ...fields }, new Date(canonical.createdAt));

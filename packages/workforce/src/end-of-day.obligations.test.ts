@@ -1,14 +1,12 @@
+import { attendanceMailRows, setAttendanceMail } from "../test/fixtures.js";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { attendanceFixture } from "../test/attendance-fixture.js";
 import {
   appendToChain,
-  attendanceMail,
   attendanceQuestions,
   enqueueAttendanceDay,
   upsertAttendanceQuestion,
-  claimAttendanceMail,
-  reportAttendanceMail,
 } from "./index.js";
 
 const f = attendanceFixture();
@@ -30,67 +28,37 @@ describe("attendance obligations follow current clock and planning evidence", ()
     const {
       questionIds: [id],
     } = await f.process({ facts: [], planned: [morning()] });
-    const [mail] = await f.suite.db.select().from(attendanceMail);
-    const claim = (await f.run((tx) =>
-      claimAttendanceMail(tx, {
-        id: mail!.id,
-        holder: "node",
-        recipient: "worker@example.test",
-        now: at,
-      }),
-    ))!;
-    await f.run((tx) => reportAttendanceMail(tx, claim, "rejected", at));
+    await setAttendanceMail(f.suite.db, id!, {
+      status: "rejected",
+      outcome: "rejected",
+      nextAttemptAt: new Date(at.getTime() + 15 * 60_000).toISOString(),
+    });
     await f.suite.db
       .update(attendanceQuestions)
       .set({ active: false, inactiveReason: "rota_superseded" })
       .where(eq(attendanceQuestions.id, id!));
-    await f.suite.db
-      .update(attendanceMail)
-      .set({ status: "cancelled" })
-      .where(eq(attendanceMail.id, mail!.id));
-    const before = (await f.suite.db.select().from(attendanceMail))[0]!;
+    await setAttendanceMail(f.suite.db, id!, { status: "cancelled" });
+    const before = (await attendanceMailRows(f.suite.db))[0]!;
     await f.process({ facts: [], planned: [morning()], now: new Date(at.getTime() + 60_000) });
     expect(await f.questions()).toMatchObject([{ id }]);
-    expect(await f.suite.db.select().from(attendanceMail)).toEqual([
-      { ...before, status: "rejected" },
-    ]);
-    expect(
-      await f.run((tx) =>
-        claimAttendanceMail(tx, {
-          id: mail!.id,
-          holder: "node",
-          recipient: "worker@example.test",
-          now: new Date(at.getTime() + 14 * 60_000),
-        }),
-      ),
-    ).toBeNull();
-    expect(
-      await f.run((tx) =>
-        claimAttendanceMail(tx, {
-          id: mail!.id,
-          holder: "node",
-          recipient: "worker@example.test",
-          now: new Date(at.getTime() + 15 * 60_000),
-        }),
-      ),
-    ).not.toBeNull();
+    expect(await attendanceMailRows(f.suite.db)).toEqual([{ ...before, status: "rejected" }]);
+    expect((await attendanceMailRows(f.suite.db))[0]!.nextAttemptAt).toBe(
+      "2026-01-06T04:15:00.000Z",
+    );
   });
   it.each(["pending", "sending", "sent", "unknown"] as const)(
     "late clock-in upgrades a %s rota question using its original identity",
     async (status) => {
       const first = await f.process({ facts: [], planned: [morning()] });
       const id = first.questionIds[0]!;
-      await f.suite.db
-        .update(attendanceMail)
-        .set({
-          status,
-          claimToken: status === "pending" ? null : "claim",
-          claimedAt: status === "pending" ? null : "2026-01-06T04:00:00.000Z",
-          recipient: status === "pending" ? null : "worker@example.test",
-          outcome: status === "sent" || status === "unknown" ? status : null,
-        })
-        .where(eq(attendanceMail.questionId, id));
-      const before = await f.suite.db.select().from(attendanceMail);
+      await setAttendanceMail(f.suite.db, id, {
+        status,
+        claimToken: status === "pending" ? null : "claim",
+        claimedAt: status === "pending" ? null : "2026-01-06T04:00:00.000Z",
+        recipient: status === "pending" ? null : "worker@example.test",
+        outcome: status === "sent" || status === "unknown" ? status : null,
+      });
+      const before = await attendanceMailRows(f.suite.db);
       const open = await f.open();
       await f.run((tx) => enqueueAttendanceDay(tx, f.day()));
       const next = await f.process({
@@ -106,7 +74,7 @@ describe("attendance obligations follow current clock and planning evidence", ()
           automaticEntryId: next.automaticEntryIds[0],
         },
       ]);
-      const after = await f.suite.db.select().from(attendanceMail);
+      const after = await attendanceMailRows(f.suite.db);
       expect(after).toEqual(
         status === "pending" ? [{ ...before[0]!, status: "cancelled" }] : before,
       );
@@ -126,7 +94,7 @@ describe("attendance obligations follow current clock and planning evidence", ()
     expect(await f.suite.db.select().from(attendanceQuestions)).toMatchObject([
       { id: first.questionIds[0], resolvedByEntryId: end },
     ]);
-    expect(await f.suite.db.select().from(attendanceMail)).toMatchObject([{ status: "cancelled" }]);
+    expect(await attendanceMailRows(f.suite.db)).toMatchObject([{ status: "cancelled" }]);
   });
   it.each(["pending", "sent", "unknown"] as const)(
     "late publication merges an existing %s activity question without a second reminder",
@@ -134,22 +102,19 @@ describe("attendance obligations follow current clock and planning evidence", ()
       const fact = f.fact("2026-01-05T10:00:00Z", "morning");
       const first = await f.process({ facts: [fact] });
       const id = first.questionIds[0]!;
-      await f.suite.db
-        .update(attendanceMail)
-        .set({
-          status,
-          claimToken: status === "pending" ? null : "claim",
-          claimedAt: status === "pending" ? null : "2026-01-06T04:00:00.000Z",
-          recipient: status === "pending" ? null : "worker@example.test",
-          outcome: status === "pending" ? null : status,
-        })
-        .where(eq(attendanceMail.questionId, id));
+      await setAttendanceMail(f.suite.db, id, {
+        status,
+        claimToken: status === "pending" ? null : "claim",
+        claimedAt: status === "pending" ? null : "2026-01-06T04:00:00.000Z",
+        recipient: status === "pending" ? null : "worker@example.test",
+        outcome: status === "pending" ? null : status,
+      });
       await f.run((tx) => enqueueAttendanceDay(tx, f.day()));
       const next = await f.process({ facts: [fact], planned: [morning()] });
       expect(next.questionIds).toEqual([id]);
       expect(await f.questions()).toHaveLength(1);
       expect((await f.questions())[0]!.evidenceKeys).toEqual(["order:morning"]);
-      const mail = await f.suite.db.select().from(attendanceMail);
+      const mail = await attendanceMailRows(f.suite.db);
       expect(mail.find((m) => m.questionId === id)!.status).toBe(status);
       expect(mail.filter((m) => m.status === "pending")).toHaveLength(status === "pending" ? 1 : 0);
     },
@@ -162,20 +127,17 @@ describe("attendance obligations follow current clock and planning evidence", ()
       .update(attendanceQuestions)
       .set({ active: false, inactiveReason: "rota_superseded" })
       .where(eq(attendanceQuestions.id, id));
-    await f.suite.db
-      .update(attendanceMail)
-      .set({
-        status: "unknown",
-        claimToken: "claim",
-        claimedAt: "2026-01-06T04:00:00.000Z",
-        recipient: "worker@example.test",
-        outcome: "unknown",
-      })
-      .where(eq(attendanceMail.questionId, id));
-    const mail = await f.suite.db.select().from(attendanceMail);
+    await setAttendanceMail(f.suite.db, id, {
+      status: "unknown",
+      claimToken: "claim",
+      claimedAt: "2026-01-06T04:00:00.000Z",
+      recipient: "worker@example.test",
+      outcome: "unknown",
+    });
+    const mail = await attendanceMailRows(f.suite.db);
     expect((await f.process({ facts: [], planned: [morning()] })).questionIds).toEqual([id]);
     expect(await f.questions()).toMatchObject([{ id, shiftKey: "rota:morning" }]);
-    expect(await f.suite.db.select().from(attendanceMail)).toEqual(mail);
+    expect(await attendanceMailRows(f.suite.db)).toEqual(mail);
   });
   it("retains a replaced old start as missing and leaves the newer open interval unchanged", async () => {
     const old = await f.open();
@@ -263,7 +225,7 @@ describe("attendance obligations follow current clock and planning evidence", ()
       questionIds: [],
     });
     expect(await f.questions()).toEqual([]);
-    expect((await f.suite.db.select().from(attendanceMail))[0]!.status).toBe("cancelled");
+    expect((await attendanceMailRows(f.suite.db))[0]!.status).toBe("cancelled");
   });
   it.each(["sending", "sent", "unknown"] as const)(
     "retired rota work remains a current activity question without repeating a %s reminder",
@@ -275,21 +237,18 @@ describe("attendance obligations follow current clock and planning evidence", ()
         .update(attendanceQuestions)
         .set({ active: false, inactiveReason: "rota_superseded" })
         .where(eq(attendanceQuestions.id, id));
-      await f.suite.db
-        .update(attendanceMail)
-        .set({
-          status,
-          claimToken: "claim",
-          claimedAt: "2026-01-06T04:00:00.000Z",
-          recipient: "worker@example.test",
-          outcome: status === "sending" ? null : status,
-        })
-        .where(eq(attendanceMail.questionId, id));
-      const [oldMail] = await f.suite.db.select().from(attendanceMail);
+      await setAttendanceMail(f.suite.db, id, {
+        status,
+        claimToken: "claim",
+        claimedAt: "2026-01-06T04:00:00.000Z",
+        recipient: "worker@example.test",
+        outcome: status === "sending" ? null : status,
+      });
+      const [oldMail] = await attendanceMailRows(f.suite.db);
       await f.process({ facts: [f.fact("2026-01-05T10:00:00Z", "morning")] });
       expect(await f.questions()).toHaveLength(1);
       expect((await f.questions())[0]!.evidenceKeys).toEqual(["order:morning"]);
-      const mail = await f.suite.db.select().from(attendanceMail);
+      const mail = await attendanceMailRows(f.suite.db);
       expect(mail.find((m) => m.questionId === id)).toEqual(oldMail);
       expect(mail.filter((m) => m.status === "pending" || m.status === "rejected")).toEqual([]);
       expect(

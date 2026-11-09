@@ -1,8 +1,9 @@
+import { cancelUnclaimedAttendanceMail } from "./attendance-mail.js";
 import type { Transaction } from "@waitron/db";
-import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import type { AttendanceDay } from "./attendance-types.js";
 import { assertAttendanceDay } from "./attendance-state.js";
-import { attendanceMail, attendanceQuestions } from "./schema/attendance.js";
+import { attendanceQuestions } from "./schema/attendance.js";
 import { rosterVersions } from "./schema/roster-versions.js";
 import { shifts } from "./schema/shifts.js";
 
@@ -44,14 +45,6 @@ export async function retireObsoleteRotaQuestions(
       .set({ active: false, inactiveReason: "rota_superseded" })
       .where(eq(attendanceQuestions.id, id));
     // An in-flight send cannot be recalled; its outcome still belongs to the original question.
-    await tx
-      .update(attendanceMail)
-      .set({ status: "cancelled" })
-      .where(
-        and(
-          eq(attendanceMail.questionId, id),
-          inArray(attendanceMail.status, ["pending", "rejected"]),
-        ),
-      );
+    await cancelUnclaimedAttendanceMail(tx, id);
   }
 }
