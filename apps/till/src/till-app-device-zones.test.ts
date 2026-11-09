@@ -2916,6 +2916,16 @@ describe("a handheld's zones", () => {
         await el.updateComplete;
         expect(el.shadowRoot!.querySelector("till-floor-screen")).toBeNull();
 
+        const notice = el
+          .shadowRoot!.querySelector("till-table-order-screen")!
+          .shadowRoot!.querySelector("till-table-status")!
+          .shadowRoot!.querySelector("wt-toast")!;
+        await notice.updateComplete;
+        expect(notice.shadowRoot!.textContent).toContain("2 ready");
+        await userEvent.click(notice.shadowRoot!.querySelector<HTMLButtonElement>("button.close")!);
+        await notice.updateComplete;
+        expect(notice.shadowRoot!.querySelector("button.close")).toBeNull();
+
         await userEvent.click(
           [...shell(el).shadowRoot!.querySelectorAll<HTMLElement>('[role="tab"]')].find(
             (tab) => tab.textContent!.trim() === "Floor",
