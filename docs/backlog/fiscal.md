@@ -854,7 +854,7 @@ job count as a physical exactly-once printing guarantee.
   [plan](../superpowers/plans/2026-10-18-a795-aeat-certificate-after-setup.md) (§3, decision 11)
   could not answer from a source or a test server.
 - Run them with the operator harness, which opens the file and asks AEAT a read-only `consultar`
-  with the code an install runs, and files nothing. Its variables are listed in its header and in
+  with the code an install runs, and files nothing. Its variables are listed in
   `apps/server/README.md` ("Installing or replacing the AEAT certificate after setup"):
   `pnpm --filter @waitron/server test:preprod --reporter=default src/aeat-certificate-check.preprod.test.ts`
   (file `apps/server/src/aeat-certificate-check.preprod.test.ts`).

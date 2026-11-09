@@ -10,7 +10,7 @@ const suite = useVenueDb({
 });
 
 describe("the demo scripts' test venue", () => {
-  it("stores an English operation description for the Spanish practice venue", async () => {
+  it("stores an English operation description", async () => {
     await createDemoVenueProvisioner(() => suite.db, {
       nifBase: 82_000_000,
       invoiceLocale: "es-ES",

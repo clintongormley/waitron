@@ -54,10 +54,6 @@ export interface RecordSubstitutionInput {
   clock: TrustedClock;
 }
 
-/**
- * The customer already paid on the tickets, so the F3 is recorded with no tender and no settlement.
- * A failed integrity check records an incident and the F3 proceeds anyway.
- */
 export async function recordSubstitution(
   tx: Transaction,
   backend: FiscalBackend,
