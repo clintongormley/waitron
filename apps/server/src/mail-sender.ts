@@ -401,6 +401,7 @@ export async function runMailLoop(
     minTickMs: deps.minTickMs ?? 500,
     maxTickMs: deps.maxTickMs ?? 60000,
     sleep: deps.sleep ?? realSleep,
+    log: (level, event, fields) => deps.log(level, `mail.${event}`, fields),
     pass: async () => {
       const result = await runMailPass({ ...deps, resolveDelivery });
       if (!result.processed && result.emailUnconfigured) {

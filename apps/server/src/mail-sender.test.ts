@@ -481,7 +481,7 @@ describe("one mail sender", () => {
       { rule: "notice", errorCode: "credentials.key_version_unknown" },
       { rule: "invoice", errorCode: "credentials.key_version_unknown" },
     ]);
-    expect(vi.mocked(deps.log).mock.calls.some((c) => c[1] === "pass.threw")).toBe(false);
+    expect(vi.mocked(deps.log).mock.calls.some((c) => c[1] === "mail.pass.threw")).toBe(false);
     expect(JSON.stringify(vi.mocked(deps.log).mock.calls)).not.toContain("secret");
   });
   it("logs an unconfigured wait once across expiry and a later request", async () => {
@@ -503,6 +503,8 @@ describe("one mail sender", () => {
       },
     });
     expect(sleeps).toEqual([60000, 500, 60000]);
+    expect(vi.mocked(deps.log).mock.calls.map((c) => c[1])).toContain("mail.loop.sleeping");
+    expect(vi.mocked(deps.log).mock.calls.map((c) => c[1])).not.toContain("loop.sleeping");
     expect(
       vi.mocked(deps.log).mock.calls.filter((c) => c[1] === "mail.waiting_for_email_setup"),
     ).toHaveLength(1);
@@ -574,7 +576,7 @@ describe("one mail sender", () => {
         sleeping = r;
       });
       deps.log = (_level, event) => {
-        if (event === "loop.sleeping") sleeping();
+        if (event === "mail.loop.sleeping") sleeping();
       };
       const loop = startMailSender({ ...deps, bus, send: sent });
       try {
