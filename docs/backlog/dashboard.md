@@ -1229,7 +1229,7 @@ The editor repeats the list title and has no parent link above the heading
 It names "the modifier
   form's choices" as a cap and "the options list form" as a floor, but on main `c11e3572c` no
   modifier form and not `option-list-form.ts` read the token (`grep -rln wt-cell-name-max-width apps
-  packages`), while `orders-screen.ts`, `printers-screen.ts` and venue-service's
+  packages`), while `orders-screen.ts`, `page-printers-panel.ts` (folded into `printers-screen.ts` by A405) and venue-service's
   `periods-list.ts`, `routing-grid.ts` and `departments-list.ts` do and are not named. Read each
   user's rule, then rewrite the list from what they do, or describe the directions without naming
   users.
