@@ -459,13 +459,14 @@ it("prepares identical bytes under a restrictive file creation mask", async () =
   });
 });
 
-it("selects the real UI consumer when only the preparation script changes", async () => {
+it("selects both real consumers when only the preparation script changes", async () => {
   const { scopeForPaths } = await import("../changed-packages.mjs");
   const scope = scopeForPaths(["scripts/release/prepare-ui.mjs"], () => [
     { name: "@waitron/ui-core", dir: "packages/ui-core" },
+    { name: "@waitron/contract", dir: "packages/contract" },
   ]);
   expect(scope.kind).toBe("packages");
-  expect(scope.packages).toEqual(["@waitron/ui-core"]);
+  expect(scope.packages).toEqual(["@waitron/contract", "@waitron/ui-core"]);
 });
 
 it.each([[{ ".": { import: "./dist/index.js" } }, /built exports/]])(
