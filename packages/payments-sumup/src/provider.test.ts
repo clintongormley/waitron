@@ -217,20 +217,25 @@ describe("SumUpCloudProvider.collect", () => {
         );
       },
     });
-    const raised: string[] = [];
+    const raised: unknown[] = [];
     const provider = new SumUpCloudProvider({
       client,
       db: suite.db,
       captureAlerts,
       incidents: async (_tx, i) => {
-        raised.push(String(i.error.params.status));
+        raised.push(i.error.params);
         return true;
       },
     });
     const result = await provider.collect(params);
     expect(result.state).toBe(state);
     expect((await row(result.paymentRef)).state).toBe(state);
-    expect(raised).toEqual([state === "refunded" ? "refund_completed" : "partial_refund"]);
+    expect(raised).toEqual([
+      {
+        paymentRef: result.paymentRef,
+        status: state === "refunded" ? "refund_completed" : "partial_refund",
+      },
+    ]);
     expect(requests).toEqual(["POST", "GET"]);
   });
 

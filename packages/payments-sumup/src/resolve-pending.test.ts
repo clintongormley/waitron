@@ -92,7 +92,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
       const client = sumupClient({
         apiKey: "k",
         merchantCode: "M",
-        fetch: async (url, init) => {
+        fetch: async (_url, init) => {
           requests.push(init?.method ?? "GET");
           return Response.json({
             id: "txn_refunded",
