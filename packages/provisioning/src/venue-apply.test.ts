@@ -80,6 +80,51 @@ it("an English venue's default kitchen station is named in English", async () =>
   ).toEqual([{ name: "Kitchen", is_default: 1 }]);
 });
 
+it("uses the explicit English working language for module starters while keeping Spanish receipts", async () => {
+  await applyVenue(planVenue({ ...request("B10000015"), staffLanguage: "en" }, ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  expect.soft(suite.db.all(sql`select name from catalogues`)).toEqual([{ name: "Menu" }]);
+  expect
+    .soft(
+      suite.db.all(sql`select staff_name from units where seed_key is not null order by seed_key`),
+    )
+    .toEqual(
+      ["Gram", "Kilogram", "Litre", "Milligram", "Millilitre"].map((staff_name) => ({
+        staff_name,
+      })),
+    );
+  expect
+    .soft(suite.db.all(sql`select name from service_steps order by position`))
+    .toEqual(["Set up", "Take order", "Anything else?"].map((name) => ({ name })));
+  expect
+    .soft(suite.db.all(sql`select name from kitchen_courses order by display_order`))
+    .toEqual(["Sharing plates", "Starters", "Mains", "Desserts"].map((name) => ({ name })));
+  expect.soft(suite.db.all(sql`select name from floor_zones`)).toEqual([{ name: "Counter" }]);
+  expect
+    .soft(suite.db.all(sql`select name from seasons order by name`))
+    .toEqual(["Autumn", "Spring", "Summer", "Winter"].map((name) => ({ name })));
+  expect
+    .soft(suite.db.all(sql`select name from adjustment_reasons order by name`))
+    .toEqual(
+      [
+        "Complaint",
+        "Customer changed mind",
+        "Discount",
+        "Entry error",
+        "Item not available",
+        "Not served",
+        "On the house",
+        "Other",
+        "Staff meal",
+      ].map((name) => ({ name })),
+    );
+  expect(suite.db.all(sql`select invoice_locales from locations`)).toEqual([
+    { invoice_locales: '["es-ES"]' },
+  ]);
+});
+
 it("a new venue's first station starts at the default late flags and keeps a station's edit when the plan is retried", async () => {
   const plan = planVenue(request("B10000007"), ALL_MODULES);
   await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });

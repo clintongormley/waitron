@@ -375,7 +375,7 @@ export async function applyVenue(
           const input = inputs.get(action.module);
           let report: string;
           if (input === undefined) {
-            report = await seed.run(tx, node);
+            report = await seed.run(tx, node, undefined, { staffLanguage: action.staffLanguage });
           } else {
             const [operator] =
               createdAdministrator === undefined

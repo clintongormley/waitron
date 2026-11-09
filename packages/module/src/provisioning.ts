@@ -16,7 +16,12 @@ export interface NodeSeed {
   /** Runs INSIDE the caller's provisioning transaction, after the core rows exist. Returns a one-line
    * report of what it established. Re-running for an existing node is the module's call to define,
    * never an error here. */
-  run(tx: Transaction, node: ProvisionedNode, operation?: ModuleOperationInput): Promise<string>;
+  run(
+    tx: Transaction,
+    node: ProvisionedNode,
+    operation?: ModuleOperationInput,
+    options?: { readonly staffLanguage?: "en" | "es" },
+  ): Promise<string>;
   /** A filing seed may own series creation. Resolve its active references after setup and on
    * retries, without activating again; reject requested bases that differ from the allocation. */
   readonly series?: {
