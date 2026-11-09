@@ -1799,8 +1799,11 @@ describe("On the till", () => {
 });
 
 it("keeps timing choices in place and focused while a change waits", async () => {
-  const pending = Promise.withResolvers<void>();
-  const api = stubApi({ updateCourse: vi.fn(() => pending.promise) });
+  let answer!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    answer = resolve;
+  });
+  const api = stubApi({ updateCourse: vi.fn(() => pending) });
   const { el } = await mount(api);
   const control = q<WtSegmentedControl>(el, '[data-course="c1"] wt-segmented-control')!;
   expect(control).not.toBeNull();
@@ -1817,7 +1820,7 @@ it("keeps timing choices in place and focused while a change waits", async () =>
   expect(control.shadowRoot!.activeElement).toBe(radios[1]);
   expect(radios[1]!.tabIndex).toBe(0);
   expect(api.updateCourse).toHaveBeenCalledTimes(1);
-  pending.resolve();
+  answer();
   await el.settled();
 });
 
