@@ -1,3 +1,4 @@
+import { ordersWithUnfiledPayment } from "./till-sale.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -196,22 +197,6 @@ async function incidentsOf(code: string) {
   );
 }
 
-async function openMismatchIncidents() {
-  return inTx(venue, (tx) =>
-    tx
-      .select({ params: incidents.params })
-      .from(incidents)
-      .where(
-        and(
-          eq(incidents.code, "payment.bill_capture_mismatch"),
-          eq(incidents.source, "payment_check"),
-          isNull(incidents.deviceId),
-          isNull(incidents.acknowledgedAt),
-        ),
-      ),
-  );
-}
-
 /** A pending card payment whose provider row captured 30.00 against the 35.00 it was for. */
 async function mismatchedPending(billId: string, device?: { deviceId: string }): Promise<string> {
   const id = await strandedPending(billId, 3000, 500, device);
@@ -237,7 +222,9 @@ describe("recovery after a crash (design §8 test 13)", () => {
 
     const crashed = await cardContribution(billId, "35.00");
     const [payment] = await paymentRows(venue, billId);
+    expect(await ordersWithUnfiledPayment(venue.db, [billId])).toEqual(new Set([billId]));
     const first = await settle();
+    expect(await ordersWithUnfiledPayment(venue.db, [billId])).toEqual(new Set());
     const second = await settle();
 
     expect(crashed.status).toBe(500);
@@ -296,50 +283,36 @@ describe("recovery after a crash (design §8 test 13)", () => {
     expect(fiscalRecordCount(venue, billId)).toBe(0);
   });
 
-  it("files nothing for a capture of another amount, keeps it pending, and raises one alert", async () => {
+  it("records a recovered short capture once, reducing the tip before leaving bill money outstanding", async () => {
     const billId = await tabWith(venue, "Paella");
     const id = await mismatchedPending(billId);
-
-    const first = await settle();
-    const second = await settle();
-
-    expect(first).toMatchObject({ received: 0, mismatched: 1 });
-    expect(second).toMatchObject({ received: 0, mismatched: 1 });
-    expect(await stateOf(id)).toBe("pending");
-    expect(fiscalRecordCount(venue, billId)).toBe(0);
-    const raised = await openMismatchIncidents();
-    expect(raised).toHaveLength(1);
-    expect(raised[0]!.params).toMatchObject({
-      billPaymentId: id,
-      workingOrderId: billId,
-      captured: "30.00",
-      expected: "35.00",
+    expect(await settle()).toMatchObject({ received: 1 });
+    expect(await settle()).toMatchObject({ received: 0 });
+    expect(await stateOf(id)).toBe("received");
+    expect((await balance(billId)).json).toMatchObject({
+      received: "30.00",
+      tips: "0.00",
+      outstanding: "5.00",
+      reserved: "0.00",
     });
+    expect(fiscalRecordCount(venue, billId)).toBe(0);
   });
 
-  it("keeps one open alert for two captures of another amount on two bills (no sale behind either)", async () => {
-    // Earlier cases leave their own pending payments and open alerts in this shared venue.
+  it("records recovered actual money on two bills independently", async () => {
     venue.db.run(
-      sql`update bill_payments set state = 'failed', failed_at = ${new Date().toISOString()}
-          where state = 'pending'`,
+      sql`update bill_payments set state = 'failed', failed_at = ${new Date().toISOString()} where state = 'pending'`,
     );
-    await inTx(venue, (tx) =>
-      tx
-        .update(incidents)
-        .set({ acknowledgedAt: new Date().toISOString(), acknowledgedBy: venue.operatorId })
-        .where(eq(incidents.code, "payment.bill_capture_mismatch")),
-    );
-    const first = await mismatchedPending(await tabWith(venue, "Paella"));
-    const second = await mismatchedPending(await tabWith(venue, "Paella"), {
-      deviceId: venue.deviceId,
-    });
-
-    const pass = await settle();
-
-    expect(pass.mismatched).toBe(2);
-    expect([await stateOf(first), await stateOf(second)]).toEqual(["pending", "pending"]);
-    const open = await openMismatchIncidents();
-    expect(open.map((row) => row.params.billPaymentId)).toEqual([first]);
+    const bills = [await tabWith(venue, "Paella"), await tabWith(venue, "Paella")];
+    const first = await mismatchedPending(bills[0]!);
+    const second = await mismatchedPending(bills[1]!, { deviceId: venue.deviceId });
+    expect(await settle()).toMatchObject({ received: 2 });
+    expect([await stateOf(first), await stateOf(second)]).toEqual(["received", "received"]);
+    for (const bill of bills)
+      expect((await balance(bill)).json).toMatchObject({
+        received: "30.00",
+        tips: "0.00",
+        outstanding: "5.00",
+      });
   });
 });
 
@@ -821,7 +794,6 @@ describe("withPendingBillPayments", () => {
         return Promise.resolve({
           received: 1,
           failed: 2,
-          mismatched: 0,
           refundsCompleted: 0,
           refundsFailed: 0,
           refundsUnresolved: 0,
@@ -842,7 +814,6 @@ describe("withPendingBillPayments", () => {
         {
           received: 1,
           failed: 2,
-          mismatched: 0,
           refundsCompleted: 0,
           refundsFailed: 0,
           refundsUnresolved: 0,
@@ -854,7 +825,6 @@ describe("withPendingBillPayments", () => {
   const passOf = (counts: Partial<BillPaymentsPass>): BillPaymentsPass => ({
     received: 0,
     failed: 0,
-    mismatched: 0,
     refundsCompleted: 0,
     refundsFailed: 0,
     refundsUnresolved: 0,
@@ -863,12 +833,12 @@ describe("withPendingBillPayments", () => {
     ...counts,
   });
 
-  it("logs nothing for a pass that only finds a capture of another amount still unresolved", async () => {
+  it("logs nothing for a pass that only finds a pending payment", async () => {
     const lines: unknown[][] = [];
     const log: Logger = (...args) => void lines.push(args);
     const pass = withPendingBillPayments(
       () => Promise.resolve(report),
-      () => Promise.resolve(passOf({ mismatched: 1, pending: 1 })),
+      () => Promise.resolve(passOf({ pending: 1 })),
       primary,
       log,
     );
@@ -913,7 +883,6 @@ describe("withPendingBillPayments", () => {
         Promise.resolve({
           received: 0,
           failed: 0,
-          mismatched: 0,
           refundsCompleted: 0,
           refundsFailed: 0,
           refundsUnresolved: 3,

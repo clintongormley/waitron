@@ -102,7 +102,6 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 
 - [A1379. A failed setup always offers Start again](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
 - [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
-- [A1389. Refuse bad tips and compare the amount captured on the whole-order card path](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
 - [A1398. Pack the other packages' test shards by measured time](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
 - [A1400. An older copy must not undo a save](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
 
@@ -1346,7 +1345,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   Next: give the reconciler's reversal the same durable-attempt rule.
   [Detail](backlog/payments.md#the-card-refund-path-records-only-after-the-provider-call-with-a-fresh-key-each-time)
 
-- **A1389. Refuse bad tips and compare the amount captured on the whole-order card path** (bundle of 3, 3 important, size S). [Detail](backlog/payments.md#bundle-a1389-refuse-bad-tips-and-compare-the-amount-captured-on-the-whole-order-card-path)
 
 
 - **A875. Check two writes the bill payments design says a pending card refund refuses.**

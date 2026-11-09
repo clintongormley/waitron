@@ -18,13 +18,14 @@ import { clearBillRequestIfPaid } from "./bill-request.js";
 // its codes.
 import "./errors.js";
 import { replayPrepayMadeHere, storePrepayMadeHere } from "./made-here.js";
-import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
   addDecimal,
   AppError,
   centsToDecimal,
   compareDecimal,
   decimal,
+  decimalToCents,
   saleId as brandSaleId,
   subtractDecimal,
   workingOrderId as brandWorkingOrderId,
@@ -47,9 +48,15 @@ import {
   payments,
   associatePaymentWithSale,
   findCapturedPaymentForWorkingOrder,
+  findCaptureWarning,
   recordManualCardPayment,
 } from "@waitron/payments";
-import type { CapturedPaymentForOrder, PaymentProvider, PaymentResult } from "@waitron/payments";
+import type {
+  CaptureMismatch,
+  CapturedPaymentForOrder,
+  PaymentProvider,
+  PaymentResult,
+} from "@waitron/payments";
 import {
   formatInvoiceNumber,
   recordSale,
@@ -100,6 +107,7 @@ import {
   afterCardCharged,
   collectFailure,
   holdsPayment,
+  readBillBalance,
   refuseBillWithPayments,
 } from "./bill-payments.js";
 import { readIssuedSales } from "./sale-due.js";
@@ -616,11 +624,16 @@ export interface IntegratedPayRequest {
  * The outcome of an integrated pay, as DATA — a decline, stall or offline refusal is never an
  * exception (CLAUDE.md §5). Only `captured` carries a ticket.
  */
-export type IntegratedPayOutcome =
+export type IntegratedPayOutcome = (
   | { outcome: "captured"; ticket: TillSaleResult }
+  | {
+      outcome: "partial";
+      balance: import("./bill-payments.js").BillBalance;
+    }
   | { outcome: "declined"; failureReason?: string }
   | { outcome: "timeout" }
-  | { outcome: "network_unavailable" };
+  | { outcome: "network_unavailable" }
+) & { captureWarning?: CaptureMismatch };
 
 /** {@link payWorkingOrderIntegrated}'s deps: the fiscal {@link TillSaleDeps} plus the card `provider`. */
 export type IntegratedPayDeps = TillSaleDeps & {
@@ -1052,6 +1065,7 @@ async function fileImmediateSale(
       label: (await readReceiptOrder(tx, workingOrderId, { atIssuance: true })).orderLabel,
       status: "settled",
       settledAt: settledAt.toISOString(),
+      paymentAttemptAt: null,
     })
     .where(eq(workingOrders.id, workingOrderId));
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [workingOrderId]);
@@ -1084,42 +1098,14 @@ async function fileImmediateSale(
   return ticket;
 }
 
-async function readOutstandingSaleForOrder(
+export async function readOutstandingSaleForOrder(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<{ saleId: SaleId; amountDue: Decimal } | undefined> {
   return (await readIssuedSales(tx, [workingOrderId])).get(workingOrderId);
 }
 
-/**
- * Pay and settle a working order over an INTEGRATED card terminal. The network `collect` runs OUTSIDE
- * any database transaction, because an open write transaction holds the whole venue file against
- * every other writer, so this is three phases:
- *
- *  - P1 (tx A). Resolve the order and decide what to do; a bill whose amount due is exactly zero is
- *    settled here, or filed and settled here when it has no sale yet, and one below zero is refused.
- *    A WALK-UP is created `open` and COMMITTED here, because the provider's payment row carries a
- *    foreign key to `working_orders` (`payments_working_order_fk`).
- *  - P2 (no tx). Drive the reader for the amount plus tip. A non-captured result files NOTHING and is
- *    returned as data (CLAUDE.md §5).
- *  - P3 (tx B). File or settle the sale, associate the captured payment and settle the order,
- *    atomically.
- *
- * A second Pay on the same provider that arrives after this payment's charge is written and before
- * its P3 runs takes the `recover` / `recover-settle` branch and files that charge itself — which is
- * why each finalization reads the order's settled state before recording its charge.
- *
- * P1's result:
- *  - `replay` — already `settled`; return the stored ticket, file nothing.
- *  - `recover` / `recover-settle` — a captured payment with no sale (P2 committed, P3 has not run).
- *    Finish it WITHOUT charging again: file a sale, or settle the already-issued invoice when there is
- *    one, since a second `recordSale` would collide with it.
- *  - `owes-nothing` — a sale was already issued and its corrections leave nothing owed, or there is
- *    no sale and the order's total is zero: settled here, with the sale filed first when there is
- *    none, without asking the reader, as {@link collectOrder} does; below zero it is refused.
- *  - `settle` — a sale was already issued for the order: collect the amount due and SETTLE it.
- *  - `collect` — no sale yet: collect the priced total and file the sale.
- */
+/** Collection runs outside the write transaction. Recovery consumes saved money without charging again. */
 export function payWorkingOrderIntegratedOrchestration(
   deps: IntegratedPayDeps,
   cfg: DeviceRequestConfig,
@@ -1140,10 +1126,14 @@ async function runIntegratedPay(
   // This call's entry in the live map, once P1 has registered it; unregistered however the call ends.
   let held: string | null = null;
   try {
-    return await payIntegrated(deps, cfg, req, operatorId, live, admit, (entry) => {
+    const outcome = await payIntegrated(deps, cfg, req, operatorId, live, admit, (entry) => {
       held = entry;
       live.set(req.id, entry);
     });
+    const captureWarning = await withTransaction(deps.db, (tx) =>
+      findCaptureWarning(tx, { orderIds: [req.id] }),
+    );
+    return captureWarning === undefined ? outcome : { ...outcome, captureWarning };
   } finally {
     if (held !== null && live.get(req.id) === held) live.delete(req.id);
   }
@@ -1226,6 +1216,17 @@ async function payIntegrated(
     if (locked !== undefined) {
       // Before the recovery below, which would take a card bill payment's capture for this pay's
       // own and invoice the whole order from it.
+      const [short] = await tx
+        .select({ id: billPayments.id })
+        .from(billPayments)
+        .where(
+          and(
+            eq(billPayments.workingOrderId, req.id),
+            sql`${billPayments.submissionId} like 'capture:%'`,
+          ),
+        );
+      if (short !== undefined)
+        return { kind: "partial" as const, balance: await readBillBalance(tx, req.id) };
       await refuseBillWithPayments(tx, req.id);
       const outstanding = await readOutstandingSaleForOrder(tx, req.id);
 
@@ -1380,6 +1381,7 @@ async function payIntegrated(
     };
   });
 
+  if (prepared.kind === "partial") return { outcome: "partial", balance: prepared.balance };
   if (prepared.kind === "replay" || prepared.kind === "owes-nothing") {
     return { outcome: "captured", ticket: prepared.ticket };
   }
@@ -1393,7 +1395,7 @@ async function payIntegrated(
   if (prepared.kind === "recover-settle") {
     const { captured, outstanding, attendanceKey } = prepared;
     return afterCardCharged(deps, req.id, () =>
-      finalizeSettleRecovery(deps, cfg, req, captured, outstanding, attendanceKey),
+      finalizeSettleRecovery(deps, cfg, req, captured, outstanding, attendanceKey, operatorId),
     );
   }
 
@@ -1434,23 +1436,53 @@ async function payIntegrated(
         finishIntegratedAttendance(tx, deps.attendance, prepared.attendanceKey, "refused"),
       );
     }
-    // A timed-out reader leaves its payment `attempting`, which keeps the mark: the provider's
-    // sweep may still capture it.
     await releasePaymentAttempt(deps, req.id, attemptAt);
     return toPayOutcome(result, null);
   }
 
   // ---- P3 (tx B) ----
+  const short =
+    compareDecimal(result.amount, baseAmount) < 0
+      ? await afterCardCharged(deps, req.id, () =>
+          withTransaction(deps.db, async (tx) => {
+            const captured = await findCapturedPaymentForWorkingOrder(tx, {
+              provider: result.provider,
+              workingOrderId: req.id,
+            });
+            return captured === undefined
+              ? null
+              : retainShortCapture(
+                  tx,
+                  deps,
+                  cfg,
+                  req.id,
+                  captured,
+                  operatorId,
+                  prepared.attendanceKey,
+                );
+          }),
+        )
+      : null;
+  if (short !== null) return short;
   if (prepared.kind === "settle") {
     const { outstanding, attendanceKey } = prepared;
     return {
       outcome: "captured",
       ticket: await afterCardCharged(deps, req.id, () =>
-        finalizeSettle(deps, cfg, req, outstanding, tip, result, attendanceKey),
+        finalizeSettle(
+          deps,
+          cfg,
+          req,
+          outstanding,
+          subtractDecimal(result.amount, baseAmount),
+          result,
+          attendanceKey,
+        ),
       ),
     };
   }
   const { gross, identities, wasPlaced, attendanceKey } = prepared;
+  const actualTip = subtractDecimal(result.amount, baseAmount);
   const ticket = await afterCardCharged(deps, req.id, () =>
     finalizeCapture(
       deps,
@@ -1458,14 +1490,65 @@ async function payIntegrated(
       req,
       gross,
       identities,
-      tip,
+      actualTip,
       result,
       operatorId,
       wasPlaced,
       attendanceKey,
     ),
   );
-  return { outcome: "captured", ticket };
+  return {
+    outcome: "captured",
+    ticket,
+  };
+}
+
+async function retainShortCapture(
+  tx: Transaction,
+  deps: IntegratedPayDeps,
+  cfg: TradingContext,
+  orderId: string,
+  captured: CapturedPaymentForOrder,
+  operatorId: string | undefined,
+  attendanceKey?: string,
+): Promise<IntegratedPayOutcome> {
+  await requireEconomicWrite(tx, cfg, deps.admission);
+  const [payment] = await tx.select().from(payments).where(eq(payments.id, captured.id));
+  // Background recovery has no operator to attribute a contribution to. The provider row already
+  // retains the money; the next operator's Pay attaches it without charging again.
+  if (operatorId !== undefined && payment!.billPaymentId === null) {
+    const [part] = await tx
+      .insert(billPayments)
+      .values({
+        workingOrderId: orderId,
+        submissionId: `capture:${captured.id}`,
+        fingerprint: captured.id,
+        kind: "contribution",
+        method: "card",
+        applied: decimalToCents(decimal(captured.amount)),
+        tip: 0,
+        state: "received",
+        requestedBy: operatorId,
+        ...storedDeviceOrigin(payment!),
+        receivedAt: captured.settledAt!,
+      })
+      .returning({ id: billPayments.id });
+    await tx.update(payments).set({ billPaymentId: part!.id }).where(eq(payments.id, captured.id));
+    const [order] = await tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, orderId));
+    if (order!.status === "open")
+      await tx
+        .update(workingOrders)
+        .set({ paymentAttemptAt: null })
+        .where(eq(workingOrders.id, orderId));
+    await finishIntegratedAttendance(tx, deps.attendance, attendanceKey, "qualified");
+  }
+  return {
+    outcome: "partial",
+    balance: await readBillBalance(tx, orderId),
+  };
 }
 
 function tipOf(cfg: TradingContext, req: IntegratedPayRequest): Decimal {
@@ -1518,6 +1601,7 @@ export async function ordersWithUnfiledPayment(
   const rows = await tx
     .selectDistinct({ id: payments.workingOrderId })
     .from(payments)
+    .leftJoin(billPayments, eq(billPayments.id, payments.billPaymentId))
     .where(
       and(
         inArray(payments.workingOrderId, [...orderIds]),
@@ -1526,6 +1610,7 @@ export async function ordersWithUnfiledPayment(
           and(
             inArray(payments.state, ["captured", "accepted_offline", "settled"]),
             isNull(payments.saleId),
+            or(isNull(billPayments.id), ne(billPayments.state, "received")),
           ),
         ),
       ),
@@ -1735,16 +1820,6 @@ async function finalizeCapture(
   );
 }
 
-/**
- * File the sale for a captured payment that has none (P2 committed, P3 has not run) WITHOUT charging
- * again: file from the order's STORED locked lines and associate THIS captured row, in ONE
- * transaction. A concurrent recovery needs no backstop: its whole transaction runs after the winner
- * committed, reads the order `settled`, and replays.
- *
- * The charge was `total + tip`, so the tip is reconstructed as `captured.amount − priced.total`; the
- * fiscal `total` stays ex-tip. A charge below the locked total is left unassociated; this path
- * neither files nor refunds it.
- */
 async function finalizeRecovery(
   deps: IntegratedPayDeps,
   cfg: DeviceRequestConfig,
@@ -1782,9 +1857,7 @@ async function finalizeRecovery(
       const capturedAmount = decimal(captured.amount);
 
       if (compareDecimal(capturedAmount, priced.total) < 0) {
-        throw new Error(
-          `finalizeRecovery: captured ${captured.amount} is below the locked total ${priced.total} for working order ${req.id}`,
-        );
+        return retainShortCapture(tx, deps, cfg, req.id, captured, operatorId, attendanceKey);
       }
 
       const tip = subtractDecimal(capturedAmount, priced.total);
@@ -2016,16 +2089,6 @@ async function finalizeSettle(
   }
 }
 
-/**
- * The counterpart of {@link finalizeRecovery} for an order whose sale was already issued: SETTLE that
- * sale for a captured payment that has no sale link, WITHOUT charging again and never with
- * `recordSale`, which would collide with it. One transaction, so a concurrent recovery replays as in
- * `finalizeRecovery`.
- *
- * The tip is reconstructed as `captured.amount − amountDue`. A charge below the amount due settles
- * NOTHING and throws a plain `Error`, leaving the captured payment unassociated for reconciliation
- * (§5).
- */
 async function finalizeSettleRecovery(
   deps: IntegratedPayDeps,
   cfg: OriginConfig,
@@ -2033,6 +2096,7 @@ async function finalizeSettleRecovery(
   captured: CapturedPaymentForOrder,
   outstanding: { saleId: SaleId; amountDue: Decimal },
   attendanceKey?: string,
+  operatorId?: string,
 ): Promise<IntegratedPayOutcome> {
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
@@ -2053,9 +2117,7 @@ async function finalizeSettleRecovery(
     const capturedAmount = decimal(captured.amount);
 
     if (compareDecimal(capturedAmount, outstanding.amountDue) < 0) {
-      throw new Error(
-        `finalizeSettleRecovery: captured ${captured.amount} is below the amount due ${outstanding.amountDue} for working order ${req.id}`,
-      );
+      return retainShortCapture(tx, deps, cfg, req.id, captured, operatorId, attendanceKey);
     }
 
     const tip = subtractDecimal(capturedAmount, outstanding.amountDue);
@@ -2097,11 +2159,6 @@ async function finalizeSettleRecovery(
   });
 }
 
-/**
- * Map a provider result onto an {@link IntegratedPayOutcome}. `attempting` (a stall) maps to
- * `timeout`, so a stall is not mislabelled a hard decline; any other non-captured state but
- * `network_unavailable` maps to `declined`.
- */
 export function toPayOutcome(
   result: PaymentResult,
   ticket: TillSaleResult | null,

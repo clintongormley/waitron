@@ -240,6 +240,11 @@ for (const locale of ["en", "es"] as const) {
           { name: "show_non_pass_stations", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
           null,
         ],
+        [
+          "payments",
+          { name: "requested_amount", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
+          null,
+        ],
       ] as const) {
         const table = expected[phase].tables[name]!;
         table.columns.push(column);

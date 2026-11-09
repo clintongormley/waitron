@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -9,6 +10,7 @@ import {
   billPaymentRefunds,
   billPayments,
   devices,
+  incidents,
   withTransaction,
   workingOrders,
   venueLocationId,
@@ -252,6 +254,7 @@ async function setup(
 
   const client = opts.client ?? new FakeStripe();
   const provider = new StripeTerminalProvider({
+    captureAlerts,
     client,
     db: suite.db,
     poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -783,7 +786,7 @@ describe("A1381 placed whole-order payments", () => {
   it.each([
     ["requires_payment_method", 150, 200, "not_charged"],
     ["succeeded", 150, 200, "filed"],
-    ["succeeded", 100, 409, "payment.outcome_unknown"],
+    ["succeeded", 100, 200, "partial"],
   ] as const)(
     "offers a manager fallback for a placed order with Stripe status %s",
     async (status, amountReceived, http, outcome) => {
@@ -808,10 +811,22 @@ describe("A1381 placed whole-order payments", () => {
       ).toEqual([paymentId]);
       const res = await send(v, "POST", resolvePath(paymentId));
       expect(res.status).toBe(http);
-      if (http === 409) expect((await errorOf(res)).code).toBe(outcome);
-      else expect(((await res.json()) as { outcome: string }).outcome).toBe(outcome);
+      expect(((await res.json()) as { outcome: string }).outcome).toBe(outcome);
       expect((await orderOf(orderId)).status).toBe(outcome === "filed" ? "settled" : "placed");
       expect(saleIdsFor(orderId)).toHaveLength(outcome === "filed" ? 1 : 0);
+      if (outcome === "partial") {
+        const [evidence] = await suite.db
+          .select({ params: incidents.params })
+          .from(incidents)
+          .where(eq(incidents.code, "payment.capture_mismatch"));
+        expect(evidence?.params.payments).toEqual([
+          expect.objectContaining({
+            workingOrderId: orderId,
+            requestedAmount: "1.50",
+            reportedAmount: "1.00",
+          }),
+        ]);
+      }
     },
   );
 });
@@ -1274,25 +1289,37 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect(saleIdsFor(orderId)).toEqual([]);
   });
 
-  it("refuses outcome_unknown, naming Stripe's status, when Stripe's answer is ambiguous", async () => {
+  it("records a short whole-order recovery without collecting or filing the unpaid bill", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
-    // Succeeded, but for a different amount from the row's.
     const { paymentId } = await strandPayment(v, orderId, {
       status: "succeeded",
       amountReceived: 100,
     });
-
+    const collect = vi.spyOn(v.provider, "collect");
     const res = await send(v, "POST", resolvePath(paymentId));
-
-    expect(res.status).toBe(409);
-    expect(await errorOf(res)).toEqual({
-      code: "payment.outcome_unknown",
-      params: { paymentId, reason: "ambiguous", providerStatus: "succeeded" },
-    });
-    expect((await paymentRow(paymentId)).state).toBe("attempting");
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
-    expect(await resolutionsFor(paymentId)).toEqual([]);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ outcome: "partial", outstanding: "0.50" });
+    expect(
+      await suite.db
+        .select({
+          state: payments.state,
+          amount: payments.amount,
+          requestedAmount: payments.requestedAmount,
+        })
+        .from(payments)
+        .where(eq(payments.id, paymentId)),
+    ).toEqual([{ state: "captured", amount: 100, requestedAmount: 150 }]);
+    expect(await orderOf(orderId)).toEqual({ status: "open", mark: null });
+    expect(await resolutionsFor(paymentId)).toHaveLength(1);
+    expect(saleIdsFor(orderId)).toEqual([]);
+    expect(collect).not.toHaveBeenCalled();
+    expect(
+      await suite.db
+        .select({ applied: billPayments.applied })
+        .from(billPayments)
+        .where(eq(billPayments.workingOrderId, orderId)),
+    ).toEqual([{ applied: 100 }]);
   });
 
   it("(d) refuses not_stuck for an attempt still running in this process, which the list omits", async () => {
@@ -1530,7 +1557,7 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect(saleIdsFor(orderId)).toEqual([]);
   });
 
-  it("answers an error and files nothing when the captured amount is below the order's locked total, leaving the capture for recovery", async () => {
+  it("records a short capture even when it exactly matches the original request", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
     const { paymentId } = await strandPayment(
@@ -1542,11 +1569,11 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
 
     const res = await send(v, "POST", resolvePath(paymentId));
 
-    expect(res.status).toBe(500);
-    expect((await errorOf(res)).code).toBe("server.internal");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ outcome: "partial", outstanding: "0.50" });
     expect(await paymentRow(paymentId)).toMatchObject({ state: "captured", saleId: null });
     expect(saleIdsFor(orderId)).toEqual([]);
-    expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
+    expect(await orderOf(orderId)).toEqual({ status: "open", mark: null });
     expect(await resolutionsFor(paymentId)).toEqual([
       {
         personId: v.managerId,
@@ -1910,51 +1937,40 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     expect((await billPaymentOf(id)).state).toBe("pending");
   });
 
-  it("refuses outcome_unconfirmed as mismatched for a capture of another amount, filing nothing", async () => {
+  it("completes a stored short bill capture without inventing a full payment", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
     const id = await strandBillPayment(v, orderId, { kind: "captured", amount: "1.40" });
-
     const res = await send(v, "POST", billResolvePath(id));
-
-    expect(res.status).toBe(409);
-    expect(await errorOf(res)).toEqual({
-      code: "bill.payment_outcome_unconfirmed",
-      params: { paymentId: id, reason: "mismatched" },
-    });
-    expect((await billPaymentOf(id)).state).toBe("pending");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ outcome: "received" });
+    expect((await billPaymentOf(id)).state).toBe("received");
+    expect(
+      await suite.db
+        .select({ applied: billPayments.applied, tip: billPayments.tip })
+        .from(billPayments)
+        .where(eq(billPayments.id, id)),
+    ).toEqual([{ applied: 140, tip: 0 }]);
     expect(saleIdsFor(orderId)).toEqual([]);
-    // A manager acting from the dashboard: the alert names the device that started the payment.
-    const { rows } = await suite.db.execute<{
-      source: string;
-      device_id: string | null;
-      started_on: string | null;
-    }>(sql`
-      select i.source, i.device_id, p.device_id as started_on
-      from incidents i join bill_payments p on p.id = ${id}
-      where i.code = 'payment.bill_capture_mismatch'
-        and json_extract(i.params, '$.billPaymentId') = ${id}
-    `);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.started_on).not.toBeNull();
-    expect(rows[0]).toMatchObject({ source: "device", device_id: rows[0]!.started_on });
   });
 
-  it("refuses outcome_unconfirmed, naming Stripe's status, when Stripe captured another amount", async () => {
+  it("records the actual amount when a manager resolves a short bill payment", async () => {
     const v = await setup();
-    const id = await strandBillPayment(v, await openOrder(v), {
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, {
       kind: "attempting",
       intent: { status: "succeeded", amountReceived: 100 },
     });
-
     const res = await send(v, "POST", billResolvePath(id));
-
-    expect(res.status).toBe(409);
-    expect(await errorOf(res)).toEqual({
-      code: "bill.payment_outcome_unconfirmed",
-      params: { paymentId: id, reason: "ambiguous", providerStatus: "succeeded" },
-    });
-    expect((await billPaymentOf(id)).state).toBe("pending");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ outcome: "received" });
+    expect((await billPaymentOf(id)).state).toBe("received");
+    const [received] = await suite.db
+      .select({ applied: billPayments.applied, tip: billPayments.tip })
+      .from(billPayments)
+      .where(eq(billPayments.id, id));
+    expect(received).toEqual({ applied: 100, tip: 0 });
+    expect(saleIdsFor(orderId)).toEqual([]);
   });
 
   it("refuses not_stuck when a concurrent resolve settles the provider row first", async () => {

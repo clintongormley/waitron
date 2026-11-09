@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -20,6 +21,7 @@ const now = new Date("2026-10-16T18:30:00Z");
 
 function provider(client: FakeStripe): StripeTerminalProvider {
   return new StripeTerminalProvider({
+    captureAlerts,
     client,
     db: suite.db,
     poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -133,10 +135,38 @@ describe("Stripe unknown outcomes", () => {
   );
 
   it.each([
-    { status: "succeeded", received: 1210, expected: "captured", forwarded: 1, declined: 0 },
-    { status: "succeeded", received: 1209, expected: "attempting", forwarded: 0, declined: 0 },
-    { status: "canceled", received: 0, expected: "failed", forwarded: 0, declined: 1 },
-    { status: "future_status", received: 0, expected: "attempting", forwarded: 0, declined: 0 },
+    {
+      status: "succeeded",
+      received: 1210,
+      expected: "captured",
+      forwarded: 1,
+      declined: 0,
+      incidentsRaised: 0,
+    },
+    {
+      status: "succeeded",
+      received: 1209,
+      expected: "captured",
+      forwarded: 1,
+      declined: 0,
+      incidentsRaised: 1,
+    },
+    {
+      status: "canceled",
+      received: 0,
+      expected: "failed",
+      forwarded: 0,
+      declined: 1,
+      incidentsRaised: 0,
+    },
+    {
+      status: "future_status",
+      received: 0,
+      expected: "attempting",
+      forwarded: 0,
+      declined: 0,
+      incidentsRaised: 0,
+    },
   ])("sweeps $status / $received without guessing a different outcome", async (test) => {
     const client = new FakeStripe();
     const p = await params();
@@ -150,10 +180,13 @@ describe("Stripe unknown outcomes", () => {
       insertAttempting(tx, { ...p, provider: "stripe", paymentRef, externalRef: "pi_resolve" }),
     );
     expect(await provider(client).resolvePending(now, await ownsEveryPayment(suite.db))).toEqual({
-      nextDueAt: test.expected === "attempting" ? new Date(now.getTime() + 60_000) : null,
+      nextDueAt:
+        test.expected === "attempting" && test.incidentsRaised === 0
+          ? new Date(now.getTime() + 60_000)
+          : null,
       forwarded: test.forwarded,
       declined: test.declined,
-      incidentsRaised: 0,
+      incidentsRaised: test.incidentsRaised,
     });
     expect((await row(paymentRef))?.state).toBe(test.expected);
     const { rows } = await suite.db.execute(

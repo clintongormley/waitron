@@ -66,6 +66,9 @@ export function stripeClient(stripe: Stripe): StripeClient {
         status: pi.status,
         amount: pi.amount,
         amountReceived: pi.amount_received,
+        ...(pi.amount_details?.tip?.amount === undefined
+          ? {}
+          : { tipAmount: pi.amount_details.tip.amount }),
       };
     },
     async cancelPaymentIntent(paymentIntentId) {

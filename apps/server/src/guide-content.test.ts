@@ -88,6 +88,7 @@ describe("the user guides", () => {
       "sales-dated-wrongly",
       "clock-witnesses",
       "emails",
+      "card-amount-mismatch",
     ]);
   });
 

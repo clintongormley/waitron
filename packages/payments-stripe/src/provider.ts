@@ -1,5 +1,6 @@
+import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { AppError, compareDecimal, decimal, isAppError } from "@waitron/shared";
+import { AppError, compareDecimal, decimal, isAppError, subtractDecimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { UNIQUE_VIOLATION, refusalOn, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -9,6 +10,7 @@ import type {
   CollectParams,
   CollectionOwners,
   ForwardResult,
+  CaptureMismatchSink,
   PaymentProvider,
   PaymentResult,
   ProviderCapabilities,
@@ -20,6 +22,8 @@ import type {
 } from "@waitron/payments";
 import {
   captureAttempting,
+  recordCaptureMismatch,
+  payments,
   countProviderCancelledResolutions,
   failAttempting,
   getPaymentByRef,
@@ -104,6 +108,8 @@ function refundOutcomeOf(status: string): RefundOutcome {
   return "pending";
 }
 
+type Resolution = AbandonedAttemptOutcome & { incidentsRaised?: number };
+
 interface Settle {
   key: { provider: string; paymentRef: string };
   now: Date;
@@ -113,6 +119,7 @@ interface Settle {
 export interface StripeTerminalProviderOptions {
   client: StripeClient;
   db: Database;
+  captureAlerts: CaptureMismatchSink;
   poll?: { maxAttempts?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> };
 }
 
@@ -182,12 +189,13 @@ export class StripeTerminalProvider implements PaymentProvider {
     );
 
     if (outcome.kind === "unknown") {
+      const row = (await this.inTransaction((tx) => getPaymentByRef(tx, key)))!;
       return {
         provider: PROVIDER,
         paymentRef,
-        state: "attempting",
-        amount: params.amount,
-        settledAt: null,
+        state: row.state,
+        amount: decimal(row.amount),
+        settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       };
     }
 
@@ -204,23 +212,49 @@ export class StripeTerminalProvider implements PaymentProvider {
         settledAt: null,
       };
     }
-    const row =
-      outcome.kind === "captured"
-        ? await saveCharge(() =>
-            this.inTransaction((tx) =>
-              captureAttempting(tx, {
+    const save = () =>
+      this.inTransaction(async (tx) => {
+        const current = await getPaymentByRef(tx, key);
+        if (current?.state !== "attempting") return current!;
+        if (outcome.kind === "captured") {
+          if (
+            compareDecimal(outcome.amount, params.amount) !== 0 &&
+            !(
+              compareDecimal(outcome.amount, params.amount) > 0 &&
+              outcome.tipAmount !== undefined &&
+              compareDecimal(outcome.tipAmount, subtractDecimal(outcome.amount, params.amount)) ===
+                0
+            )
+          ) {
+            await recordCaptureMismatch(
+              tx,
+              this.opts.captureAlerts,
+              {
                 ...key,
-                settledAt: outcome.settledAt,
+                workingOrderId: params.workingOrderId,
                 externalRef: outcome.piId,
-              }),
-            ),
-          )
-        : await this.inTransaction((tx) => failAttempting(tx, key));
+                requestedAmount: params.amount,
+                reportedAmount: outcome.amount,
+              },
+              outcome.settledAt,
+            );
+          }
+          if (compareDecimal(outcome.amount, decimal("0")) === 0) return failAttempting(tx, key);
+          return captureAttempting(tx, {
+            ...key,
+            settledAt: outcome.settledAt,
+            externalRef: outcome.piId,
+            amount: outcome.amount,
+          });
+        }
+        return failAttempting(tx, key);
+      });
+    const row = outcome.kind === "captured" ? await saveCharge(save) : await save();
     return {
       provider: PROVIDER,
       paymentRef,
       state: row.state,
-      amount: params.amount,
+      amount: decimal(row.amount),
       settledAt: row.settledAt === null ? null : new Date(row.settledAt),
       ...(outcome.kind === "failed" &&
       row.state === "failed" &&
@@ -263,6 +297,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     let forwarded = 0;
     let declined = 0;
     let pending = false;
+    let incidentsRaised = 0;
     for (const row of rows) {
       if (signal?.aborted) {
         pending = true;
@@ -270,6 +305,7 @@ export class StripeTerminalProvider implements PaymentProvider {
       }
       try {
         const result = await this.resolveInactiveAttempt(row.paymentRef, now, null);
+        incidentsRaised += result.incidentsRaised ?? 0;
         if (result.outcome === "captured") forwarded++;
         else if (result.outcome === "failed") declined++;
         else pending = true;
@@ -281,7 +317,7 @@ export class StripeTerminalProvider implements PaymentProvider {
       nextDueAt: pending ? new Date(now.getTime() + 60_000) : null,
       forwarded,
       declined,
-      incidentsRaised: 0,
+      incidentsRaised,
     };
   }
 
@@ -291,7 +327,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     idempotencyKey: string,
     claim: (piId: string) => Promise<"stamped" | "held_elsewhere" | "not_attempting">,
   ): Promise<
-    | { kind: "captured"; settledAt: Date; piId: string }
+    | { kind: "captured"; settledAt: Date; piId: string; amount: Decimal; tipAmount?: Decimal }
     | { kind: "unknown" }
     | { kind: "failed"; failureReason?: string }
     | { kind: "unclaimed"; claim: "held_elsewhere" | "not_attempting" }
@@ -316,7 +352,18 @@ export class StripeTerminalProvider implements PaymentProvider {
       await this.opts.client.processPaymentIntent(readerId, piId);
       for (let attempt = 0; attempt < this.poll.maxAttempts; attempt++) {
         const o = await this.opts.client.readerOutcome(readerId);
-        if (o.status === "succeeded") return { kind: "captured", settledAt: new Date(), piId };
+        if (o.status === "succeeded") {
+          const intent = await this.opts.client.retrievePaymentIntent(piId);
+          if (intent.status !== "succeeded") return { kind: "unknown" };
+          return {
+            kind: "captured",
+            settledAt: new Date(),
+            piId,
+            amount: fromMinorUnits(intent.amountReceived),
+            tipAmount:
+              intent.tipAmount === undefined ? undefined : fromMinorUnits(intent.tipAmount),
+          };
+        }
         if (o.status === "failed") {
           if (o.failureCode === "connection_error") return { kind: "unknown" };
           return {
@@ -342,19 +389,21 @@ export class StripeTerminalProvider implements PaymentProvider {
     }
   }
 
-  resolveAbandonedAttempt(
+  async resolveAbandonedAttempt(
     paymentRef: string,
     now: Date,
     audit: AbandonedAttemptAudit,
   ): Promise<AbandonedAttemptOutcome> {
-    return this.resolveInactiveAttempt(paymentRef, now, audit.personId);
+    const result = await this.resolveInactiveAttempt(paymentRef, now, audit.personId);
+    delete result.incidentsRaised;
+    return result;
   }
 
   private async resolveInactiveAttempt(
     paymentRef: string,
     now: Date,
     personId: string | null,
-  ): Promise<AbandonedAttemptOutcome> {
+  ): Promise<Resolution> {
     const activity = activityOf(this.opts.db);
     if (activity.collecting.has(paymentRef) || activity.resolving.has(paymentRef)) {
       return { outcome: "unknown", reason: "ambiguous" };
@@ -371,7 +420,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     paymentRef: string,
     now: Date,
     personId: string | null,
-  ): Promise<AbandonedAttemptOutcome> {
+  ): Promise<Resolution> {
     const key = { provider: PROVIDER, paymentRef };
     const row = await this.inTransaction((tx) => getPaymentByRef(tx, key));
     if (row?.state !== "attempting") throw new AppError("payment.not_found", key);
@@ -397,7 +446,9 @@ export class StripeTerminalProvider implements PaymentProvider {
 
   private async readIntent(
     piId: string,
-  ): Promise<{ id: string; status: string; amountReceived: number } | undefined> {
+  ): Promise<
+    { id: string; status: string; amountReceived: number; tipAmount?: number } | undefined
+  > {
     try {
       return await this.opts.client.retrievePaymentIntent(piId);
     } catch {
@@ -408,22 +459,21 @@ export class StripeTerminalProvider implements PaymentProvider {
   /** A `canceled` PaymentIntent counts as cancelled at the provider whoever cancelled it: either way
    * the order's key must move on (`workingOrderIdempotencyKey`). Any status still awaiting the card
    * here is one a cancel did not move, so it stays unknown. */
-  private settleFrom(
+  private async settleFrom(
     settle: Settle,
     amount: string,
-    intent: { id: string; status: string; amountReceived: number },
-  ): Promise<AbandonedAttemptOutcome> {
+    intent: { id: string; status: string; amountReceived: number; tipAmount?: number },
+  ): Promise<Resolution> {
     if (intent.status === "succeeded") {
-      if (compareDecimal(fromMinorUnits(intent.amountReceived), decimal(amount)) !== 0) {
-        return Promise.resolve({
-          outcome: "unknown",
-          reason: "ambiguous",
-          providerStatus: intent.status,
-        });
-      }
       return this.resolveRow(
         settle,
-        { outcome: "captured", externalRef: intent.id },
+        {
+          outcome: "captured",
+          externalRef: intent.id,
+          amount: fromMinorUnits(intent.amountReceived),
+          requestedAmount: decimal(amount),
+          tipAmount: intent.tipAmount === undefined ? undefined : fromMinorUnits(intent.tipAmount),
+        },
         intent.status,
       );
     }
@@ -446,27 +496,74 @@ export class StripeTerminalProvider implements PaymentProvider {
   private async resolveRow(
     { key, now, personId }: Settle,
     resolved:
-      | { outcome: "captured"; externalRef: string }
+      | {
+          outcome: "captured";
+          externalRef: string;
+          amount: Decimal;
+          requestedAmount: Decimal;
+          tipAmount?: Decimal;
+        }
       | { outcome: "failed"; cancelledAtProvider: boolean },
     providerStatus: string | null,
-  ): Promise<AbandonedAttemptOutcome> {
-    await this.inTransaction(async (tx) => {
+  ): Promise<Resolution> {
+    return this.inTransaction(async (tx) => {
+      const row = await getPaymentByRef(tx, key);
+      if (row?.state !== "attempting") throw new AppError("payment.not_found", key);
+      let incidentsRaised = 0;
+      const captured =
+        resolved.outcome === "captured" && compareDecimal(resolved.amount, decimal("0")) > 0;
       if (resolved.outcome === "captured") {
-        await captureAttempting(tx, { ...key, settledAt: now, externalRef: resolved.externalRef });
+        const extra = subtractDecimal(resolved.amount, resolved.requestedAmount);
+        const expectedTip =
+          compareDecimal(extra, decimal("0")) > 0 &&
+          resolved.tipAmount !== undefined &&
+          compareDecimal(extra, resolved.tipAmount) === 0;
+        if (compareDecimal(resolved.amount, resolved.requestedAmount) !== 0 && !expectedTip) {
+          const [payment] = await tx
+            .select({ workingOrderId: payments.workingOrderId })
+            .from(payments)
+            .where(eq(payments.id, row.id));
+          if (
+            await recordCaptureMismatch(
+              tx,
+              this.opts.captureAlerts,
+              {
+                ...key,
+                workingOrderId: payment!.workingOrderId,
+                externalRef: resolved.externalRef,
+                requestedAmount: resolved.requestedAmount,
+                reportedAmount: resolved.amount,
+              },
+              now,
+            )
+          )
+            incidentsRaised++;
+        }
+      }
+      if (resolved.outcome === "captured" && captured) {
+        await captureAttempting(tx, {
+          ...key,
+          settledAt: now,
+          externalRef: resolved.externalRef,
+          amount: resolved.amount,
+        });
       } else {
         await failAttempting(tx, key);
       }
+      const outcome = captured ? ("captured" as const) : ("failed" as const);
+      const cancelledAtProvider = resolved.outcome === "failed" && resolved.cancelledAtProvider;
       await recordAttemptResolution(tx, key, {
         personId,
-        outcome: resolved.outcome,
-        cancelledAtProvider: resolved.outcome === "failed" && resolved.cancelledAtProvider,
+        outcome,
+        cancelledAtProvider,
         providerStatus,
         resolvedAt: now,
       });
+      return {
+        ...(outcome === "captured" ? { outcome } : { outcome, cancelledAtProvider }),
+        ...(incidentsRaised === 0 ? {} : { incidentsRaised }),
+      };
     });
-    return resolved.outcome === "captured"
-      ? { outcome: "captured" }
-      : { outcome: "failed", cancelledAtProvider: resolved.cancelledAtProvider };
   }
 
   async sendRefund(req: RefundSend): Promise<RefundAnswer> {

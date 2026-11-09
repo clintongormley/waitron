@@ -328,7 +328,11 @@ registrado, puede cobrar la tarjeta o registrar el efectivo.
 Si un pago sigue pendiente, o la tarjeta ya se ha cobrado pero el pago no se ha registrado, elige
 **Pagos con tarjeta / acceder**. No vuelvas a cobrar una tarjeta ya cobrada. Inicia sesión para
 consultar o registrar el resultado confirmado por el proveedor. Vuelve a abrir el cobro de la
-cuenta cuando esté registrado para ver el resultado.
+cuenta cuando esté registrado para ver el resultado. Si Pagos con tarjeta indica **Pago registrado.
+Queda parte de la cuenta por cobrar.**, vuelve a abrir la cuenta y cobra solo su saldo pendiente.
+
+Si el lector ha cobrado otro importe, compara en el aviso lo que se pidió y lo que se cobró.
+Comprueba el saldo de la cuenta antes de cobrar otro pago, para cobrar solo lo que quede pendiente.
 
 ## Mover platos a otra cuenta {#move-dishes}
 

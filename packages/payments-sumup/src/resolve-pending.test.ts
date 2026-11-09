@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
@@ -30,6 +31,7 @@ async function setup(incidentRecorded = true) {
     return Promise.resolve(incidentRecorded);
   };
   const provider = new SumUpCloudProvider({
+    captureAlerts,
     client: fake,
     db: suite.db,
     incidents,
@@ -142,6 +144,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
       const { fake, attempting, state } = await setup();
       await attempting("unrelated", { status: "REFUNDED" });
       const provider = new SumUpCloudProvider({
+        captureAlerts,
         client: fake,
         db: suite.db,
         incidents: () => Promise.reject(failure),

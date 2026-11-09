@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -24,6 +25,7 @@ function barrier() {
 
 function provider(client: FakeStripe) {
   return new StripeTerminalProvider({
+    captureAlerts,
     db: suite.db,
     client,
     poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -86,7 +88,11 @@ describe("Stripe resolution ownership", () => {
           amount: decimal("12.10"),
         }),
       );
-      const second = new StripeTerminalProvider({ db: otherSuite.db, client: otherClient });
+      const second = new StripeTerminalProvider({
+        captureAlerts,
+        db: otherSuite.db,
+        client: otherClient,
+      });
       expect(await second.resolveAbandonedAttempt(paymentRef, now, manager)).toEqual({
         outcome: "failed",
         cancelledAtProvider: true,

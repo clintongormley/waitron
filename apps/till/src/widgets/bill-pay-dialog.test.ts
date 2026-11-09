@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
@@ -3174,3 +3174,46 @@ describe("till-bill-pay-dialog: the buttons stay in view at the sheet's foot", (
     await expectInView(el, "[data-pay-scan-back]", false);
   });
 });
+
+it.each(
+  ["en-GB", "es-ES"].flatMap((locale) =>
+    (["light", "dark"] as const).flatMap((theme) =>
+      [390, 1280].map((width) => ({ locale, theme, width })),
+    ),
+  ),
+)(
+  "shows a recovered capture warning in $locale/$theme at $width px",
+  async ({ locale, theme, width }) => {
+    await page.viewport(width, 900);
+    setLocale(locale);
+    try {
+      const { el, host } = await mountWidget<TillBillPayDialog>(
+        "till-bill-pay-dialog",
+        {
+          handheld: width === 390,
+          balance: {
+            workingOrderId: "bill",
+            status: "open",
+            total: "120.00",
+            received: "50.00",
+            reserved: "0.00",
+            outstanding: "70.00",
+            tips: "0.00",
+            payments: [],
+            paidLines: [],
+            captureWarning: { requestedAmount: "120.00", reportedAmount: "50.00" },
+          },
+        },
+        theme,
+      );
+      const warning = el.shadowRoot!.querySelector("[data-capture-warning]");
+      expect(warning?.textContent).toContain(formatMoney("120.00", locale));
+      expect(warning?.textContent).toContain(formatMoney("50.00", locale));
+      expect(warning?.getAttribute("role")).toBe("alert");
+      await expectNoA11yViolations(host);
+    } finally {
+      setLocale("en");
+      await page.viewport(1280, 900);
+    }
+  },
+);

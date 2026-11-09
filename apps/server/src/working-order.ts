@@ -5773,13 +5773,7 @@ export async function refusePaymentInFlight(
   }
 }
 
-/**
- * Plan D22's half of {@link refusePaymentInFlight}: a payment of the whole order is between pricing
- * and filing. It reads the order's own mark, never the payments store: the simulator writes no
- * `attempting` row, and Stripe and SumUp write theirs after pricing committed. Only deciding when
- * the mark may be RELEASED reads that store (`till-sale.ts`). A payment of part of the bill checks
- * only this half: cash, or a second card, may be taken while another card is at the reader.
- */
+/** The whole-order mark also covers providers without attempt rows. */
 export async function refuseOrderPaymentMarked(
   tx: Transaction,
   orderIds: readonly string[],
@@ -7430,9 +7424,8 @@ async function cancelPlaced(
     const invoice = await readOrderInvoice(tx, id);
     if (invoice !== undefined) {
       await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
-      // Before the in-flight check, so the answer names the money already on the bill.
-      await refuseBillWithPayments(tx, id);
     }
+    await refuseBillWithPayments(tx, id);
     // A placed order's card collection writes no mark, and its provider may write no payment row
     // until the card resolves, so only this process's own record of the attempt shows it.
     if (paymentAttemptIsLive(deps.db, id) || (await ordersWithUnfiledPayment(tx, [id])).has(id)) {

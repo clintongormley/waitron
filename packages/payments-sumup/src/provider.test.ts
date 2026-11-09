@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -339,6 +340,7 @@ describe("SumUpCloudProvider default poll", () => {
   it("waits one second between polls when no poll is injected", async () => {
     const { fake, params, row } = await setup(suite, (f) => f.stallNext());
     const provider = new SumUpCloudProvider({
+      captureAlerts,
       client: fake,
       db: suite.db,
       incidents: () => Promise.resolve(true),
@@ -473,6 +475,7 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
           baseUrl: `http://127.0.0.1:${port}`,
         }),
         db: suite.db,
+        captureAlerts,
         incidents: () => Promise.resolve(true),
       });
       expect(await provider.sendRefund(request("txn_1"))).toEqual(answer);
@@ -508,6 +511,7 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
   it("answers no answer as uncertain, a timed-out one as a timeout", async () => {
     const { provider, transactionId } = await refundable();
     const timedOut = new SumUpCloudProvider({
+      captureAlerts,
       client: {
         ...({} as SumUpClient),
         sendRefund: () => Promise.reject(new DOMException("aborted", "AbortError")),
@@ -516,6 +520,7 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
       incidents: () => Promise.resolve(true),
     });
     const lost = new SumUpCloudProvider({
+      captureAlerts,
       client: {
         ...({} as SumUpClient),
         sendRefund: () => Promise.reject(new TypeError("fetch failed")),
@@ -553,6 +558,7 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
       try {
         const { port } = server.address() as AddressInfo;
         const provider = new SumUpCloudProvider({
+          captureAlerts,
           client: sumupClient({
             apiKey: "k",
             merchantCode: "MC",

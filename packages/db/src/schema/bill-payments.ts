@@ -28,9 +28,9 @@ export const billPaymentRefundState = enumType(["pending", "completed", "failed"
  * charged `applied + tip`; cash change is `tendered − applied − tip`, never stored.
  *
  * Its state moves only pending → received, pending → failed, and received → declined while no
- * tender names it; nothing else about the row ever changes, and it is never deleted. Those rules are
- * the `bill_payments_guard_update` and `bill_payments_no_delete` triggers
- * (`drizzle/0000_baseline.sql`).
+ * tender names it. Only the pending-to-received card transition can revise applied money and tip;
+ * received amounts stay fixed. `bill_payments_guard_update` and `bill_payments_no_delete` enforce
+ * these rules.
  *
  * `requested_by` and `attested_by` are plain person ids with no key.
  */

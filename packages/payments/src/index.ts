@@ -160,3 +160,10 @@ export { SCHEDULER_TABLES } from "./reconciliation-schedule/tables.js";
 export { SCHEDULER_BACKUP_VERIFICATION } from "./reconciliation-schedule/backup-verification.js";
 
 export { reversePayment } from "./reverse.js";
+
+export {
+  hasCaptureMismatch,
+  recordCaptureMismatch,
+  findCaptureWarning,
+} from "./capture-mismatch.js";
+export type { CaptureMismatch, CaptureMismatchSink } from "./capture-mismatch.js";

@@ -1143,7 +1143,18 @@ export class TillBillPayDialog extends LitElement {
 
   #body(): SheetView {
     const step = this.nextOffered ? this.#nextActions() : this.#step();
-    const body = html`${this.#balance()} ${this.#taken()}
+    const warning = this.balance?.captureWarning;
+    const body = html`${this.#balance()}
+    ${
+      warning === undefined
+        ? nothing
+        : html`<p role="alert" data-capture-warning>
+            ${t("card.capture_warning")
+              .replace("{requested}", () => this.#money(warning.requestedAmount))
+              .replace("{actual}", () => this.#money(warning.reportedAmount))}
+          </p>`
+    }
+    ${this.#taken()}
     ${
       this.refunded === null
         ? nothing

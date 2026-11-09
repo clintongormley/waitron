@@ -729,12 +729,11 @@ declare module "@waitron/shared" {
      * What became of a pending card bill payment is not confirmed, so nothing was recorded and the
      * payment stays pending. `reason`: `unreachable` (the provider could not be asked), `ambiguous`
      * (the provider's answer, or its row's state named by `providerStatus`, does not settle it),
-     * `mismatched` (the card was captured for another amount; `payment.bill_capture_mismatch` is
-     * raised), `attempting` (the provider row is still attempting, so the card may yet be charged).
+     * `attempting` (the provider row is still attempting, so the card may yet be charged).
      */
     "bill.payment_outcome_unconfirmed": {
       paymentId: string;
-      reason: "unreachable" | "ambiguous" | "mismatched" | "attempting";
+      reason: "unreachable" | "ambiguous" | "attempting";
       providerStatus?: string;
     };
     /**
@@ -791,16 +790,6 @@ declare module "@waitron/shared" {
      * refund never reached the provider).
      */
     "bill.attestation_contradicted": { id: string; evidence: "captured" | "never_sent" };
-    /**
-     * An incident: the provider captured a card bill payment for another amount than its applied
-     * money plus its tip. Nothing was filed and the payment stays pending for a manager.
-     */
-    "payment.bill_capture_mismatch": {
-      billPaymentId: string;
-      workingOrderId: string;
-      captured: string;
-      expected: string;
-    };
     /**
      * An incident: the provider captured a card bill payment for its amount, but the loop could not
      * record it received, its invoice included, so the payment stays pending and its bill locked.

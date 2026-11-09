@@ -194,6 +194,7 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
 
   build(deps: CardProviderBuildDeps): PaymentProvider {
     return new SumUpCloudProvider({
+      captureAlerts: deps.captureAlerts,
       client: deferredClient({ db: deps.db, ring: deps.ring }),
       db: deps.db,
       incidents: deps.incidents,

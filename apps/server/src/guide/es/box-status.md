@@ -579,3 +579,9 @@ sigue en la página **Avisos**, en **Resueltos**.
 
 Un equipo cuyo reloj marca una fecha anterior al 28 de octubre de 2024 normalmente no puede enviar
 su correo: con una fecha tan temprana no puede comprobar el certificado del servidor de correo.
+
+## Cuando no coincide un importe de tarjeta {#card-amount-mismatch}
+
+Si no coincide un importe de tarjeta, lee las dos cifras de la alerta antes de volver a cobrar:
+lo que solicitó Waitron y lo que indicó el proveedor de pagos. Comprueba el cobro en el panel del
+proveedor.

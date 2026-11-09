@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -104,11 +105,13 @@ describe("createCardProviderPool", () => {
       return process(reader, intent);
     });
     const pool = createCardProviderPool({
+      captureAlerts,
       providers: [
         fakeContribution(
           "stripe",
           () =>
             new StripeTerminalProvider({
+              captureAlerts,
               db: suite.db,
               client,
               poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -165,6 +168,7 @@ describe("createCardProviderPool", () => {
   it("builds once and caches: a second get returns the same instance without calling build again", async () => {
     const build = vi.fn(() => fakeProvider("sumup"));
     const pool = createCardProviderPool({
+      captureAlerts,
       providers: [fakeContribution("sumup", build)],
       db: suite.db,
       ring,
@@ -182,6 +186,7 @@ describe("createCardProviderPool", () => {
   it("rebuilds after evict — and a negative control proves eviction is what triggers it", async () => {
     const build = vi.fn(() => fakeProvider("sumup"));
     const pool = createCardProviderPool({
+      captureAlerts,
       providers: [fakeContribution("sumup", build)],
       db: suite.db,
       ring,
@@ -204,6 +209,7 @@ describe("createCardProviderPool", () => {
 
   it("throws payment.provider_unknown for an id no contribution declares", async () => {
     const pool = createCardProviderPool({
+      captureAlerts,
       providers: [fakeContribution("sumup", () => fakeProvider("sumup"))],
       db: suite.db,
       ring,
@@ -223,6 +229,7 @@ describe("createCardProviderPool", () => {
       throw new Error(`build failed (attempt ${attempts})`);
     });
     const pool = createCardProviderPool({
+      captureAlerts,
       providers: [fakeContribution("sumup", build)],
       db: suite.db,
       ring,
@@ -239,6 +246,7 @@ describe("createCardProviderPool", () => {
 
   it("wires the real SumUp seat: get returns a live SumUpCloudProvider", async () => {
     const pool = createCardProviderPool({
+      captureAlerts,
       providers: [SUMUP_CARD_PROVIDER],
       db: suite.db,
       ring,
@@ -255,6 +263,7 @@ describe("createCardProviderPool", () => {
 
   it("is a real AppError with a code, not just an object shape", async () => {
     const pool = createCardProviderPool({
+      captureAlerts,
       providers: [],
       db: suite.db,
       ring,

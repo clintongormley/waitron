@@ -438,6 +438,7 @@ import type { StoredLines } from "./widgets/basket.js";
 import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type {
+  CaptureWarning,
   DevDeviceList,
   DeviceEquipment,
   DeviceEquipmentRead,
@@ -3418,6 +3419,7 @@ export class TillApp extends LitElement {
   @state() private courses: TillCourse[] = [];
   /** The ticket's lines come from this filed result, never the client basket. */
   @state() private result?: TillSaleResult;
+  @state() private captureWarning: CaptureWarning | null = null;
   /** The current counter zone's choice; non-auto modes offer the original on completion. */
   @state() private receiptPrintMode: "auto" | "on_request" = "auto";
   /** Whether the issuance-time original action is still available for the ticket currently shown. */
@@ -3719,10 +3721,10 @@ export class TillApp extends LitElement {
   #adjustOpening = false;
   readonly #cardOutcomes = new Map<
     string,
-    { outcome: Exclude<PayOutcome, { outcome: "captured" }>; detail: CollectCardDetail }
+    { outcome: Exclude<PayOutcome, { outcome: "captured" | "partial" }>; detail: CollectCardDetail }
   >();
 
-  private get cardOutcome(): Exclude<PayOutcome, { outcome: "captured" }> | undefined {
+  private get cardOutcome(): Exclude<PayOutcome, { outcome: "captured" | "partial" }> | undefined {
     return this.#cardOutcomes.get(this.#store.id)?.outcome;
   }
 
@@ -6943,6 +6945,18 @@ export class TillApp extends LitElement {
         id,
       );
       if (session !== this.#operatorSession) return;
+      if (out.outcome === "partial") {
+        await this.#reloadCounterOrder(id, session);
+        if (this.#hasLeftCounterOrder(id, session)) return;
+        await this.#openBillPaying(
+          "contribution",
+          payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
+          out.balance.outstanding,
+          { surface: "counter", billId: id, visit: session },
+        );
+        return;
+      }
+      this.captureWarning = out.captureWarning ?? null;
       if (out.outcome === "captured") {
         this.result = out.ticket;
         if (this.#store.id === id) this.#commitBasket(payload);
@@ -18524,6 +18538,7 @@ export class TillApp extends LitElement {
     this.#dismissStationChoices();
     this.#endReloadLock();
     this.staffNotices = [];
+    this.captureWarning = null;
     this.checkTimeOffered = false;
     this.boxTimeOpen = false;
     this.#menuPoll.stop();
@@ -18843,6 +18858,14 @@ export class TillApp extends LitElement {
         billId,
       );
       if (left()) return;
+      if (out.outcome === "partial") {
+        this.#closePresented(id);
+        this.billBalance = out.balance;
+        await this.#loadPartyBills();
+        if (!left()) await this.#openBillPaying("whole", this.#payLinesOnScreen());
+        return;
+      }
+      this.captureWarning = out.captureWarning ?? null;
       if (out.outcome === "captured") {
         this.#closePresented(id);
         this.result = out.ticket;
@@ -19585,6 +19608,7 @@ export class TillApp extends LitElement {
     }
     this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog")?.paymentAccepted();
     if (result.invoice !== undefined) {
+      this.captureWarning = result.balance.captureWarning ?? null;
       await this.#showPaidTicket(open, result.invoice, result.balance.payments);
       return;
     }
@@ -21075,6 +21099,26 @@ export class TillApp extends LitElement {
         }
         ${this.clockedOut ? html`<p class="refresh-message" role="status" data-clocked-out>${t("clock.recorded_out")} · ${t("clock.logout_failed")}</p>` : nothing}
         ${this.#clockAccessLost && this.#clockMessage() ? html`<p class="refresh-message" role="status" data-clock-refusal>${this.#clockMessage()}</p>` : nothing}
+        <wt-toast
+          class="submitted-toast"
+          data-capture-warning
+          tone="error"
+          .duration=${0}
+          .open=${this.captureWarning !== null}
+          .message=${
+            this.captureWarning === null
+              ? ""
+              : t("card.capture_warning")
+                  .replace("{requested}", () =>
+                    formatMoney(this.captureWarning!.requestedAmount, currentLocale()),
+                  )
+                  .replace("{actual}", () =>
+                    formatMoney(this.captureWarning!.reportedAmount, currentLocale()),
+                  )
+          }
+          close-label=${t("equipment.close")}
+          @wt-close=${() => (this.captureWarning = null)}
+        ></wt-toast>
         <wt-toast
           class="submitted-toast"
           data-submitted-toast

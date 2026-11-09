@@ -1189,6 +1189,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         { id: stuck.workingOrderId, lines: [], expectedEdit: null },
         stuck.personId,
       );
+      if (paid.outcome === "partial")
+        return c.json({ outcome: "partial", outstanding: paid.balance.outstanding });
       /* v8 ignore start -- unreachable: every path that returns another outcome goes through
          `collect`, which `withoutCollect` makes throw. */
       if (paid.outcome !== "captured") {
@@ -1283,7 +1285,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const fromRow = async () => {
         const settled = await gated(sessionId, async (tx) => {
           await requireStuckBillPayment(tx, id);
-          return settleFromProviderRow(tx, fiscal, id, deps.clock.now().instant, "stored");
+          return settleFromProviderRow(tx, fiscal, id, deps.clock.now().instant);
         });
         switch (settled.settled) {
           case "received":
@@ -1293,11 +1295,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             });
           case "failed":
             return c.json({ outcome: "not_charged" });
-          case "mismatched":
-            throw new AppError("bill.payment_outcome_unconfirmed", {
-              paymentId: id,
-              reason: "mismatched",
-            });
           case "left":
             throw new AppError("bill.payment_outcome_unconfirmed", {
               paymentId: id,

@@ -25,9 +25,13 @@ export interface StripeClient {
   ): Promise<{ status: "in_progress" | "succeeded" | "failed"; failureCode?: string }>;
   cancelReaderAction(readerId: string): Promise<void>;
   /** Amounts are in minor units, as Stripe reports them. */
-  retrievePaymentIntent(
-    paymentIntentId: string,
-  ): Promise<{ id: string; status: string; amount: number; amountReceived: number }>;
+  retrievePaymentIntent(paymentIntentId: string): Promise<{
+    id: string;
+    status: string;
+    amount: number;
+    amountReceived: number;
+    tipAmount?: number;
+  }>;
   cancelPaymentIntent(paymentIntentId: string): Promise<{ status: string }>;
   refund(params: {
     paymentIntentId: string;

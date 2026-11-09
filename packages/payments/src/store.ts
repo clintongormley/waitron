@@ -127,7 +127,8 @@ export async function insertFailedPayment(
 
 /**
  * Refuses a payment start on `readerId` unless the origin device holds it and no other device has a
- * payment in progress on it; no reader named passes. Run in the transaction that writes the
+ * payment in progress on it.
+ * No reader named passes. Run in the transaction that writes the
  * payment's first row, so a takeover and a start cannot both commit.
  */
 export async function assertReaderStartable(
@@ -171,12 +172,13 @@ export async function insertAttempting(
 /** Matches only a row still `attempting`; otherwise throws `payment.not_found`. */
 export async function captureAttempting(
   tx: Transaction,
-  params: Key & { settledAt: Date; externalRef: string; card?: CardDetails },
+  params: Key & { settledAt: Date; externalRef: string; card?: CardDetails; amount?: Decimal },
 ): Promise<PaymentRow> {
   return resolveAttempting(tx, params, "captured", {
     settledAt: params.settledAt.toISOString(),
     externalRef: params.externalRef,
     card: params.card,
+    amount: params.amount,
   });
 }
 
@@ -189,12 +191,14 @@ async function resolveAttempting(
   tx: Transaction,
   params: Key,
   state: "captured" | "failed",
-  extra: { settledAt?: string; externalRef?: string; card?: CardDetails },
+  extra: { settledAt?: string; externalRef?: string; card?: CardDetails; amount?: Decimal },
 ): Promise<PaymentRow> {
   const [row] = await tx
     .update(payments)
     .set({
       state,
+      amount: extra.amount === undefined ? undefined : decimalToCents(extra.amount),
+      requestedAmount: sql`${payments.amount}`,
       settledAt: extra.settledAt ?? null,
       externalRef: extra.externalRef ?? null,
       cardScheme: extra.card?.scheme ?? null,
@@ -352,10 +356,6 @@ const PAYMENT_WITH_KEY_COLUMNS = {
   provider: payments.provider,
 };
 
-/** The capture-idempotency pre-check (spec §4). A `failed` or `attempting` row does not count, so
- * a declined card stays re-chargeable. At most one captured payment per working order holds by
- * construction, not by a constraint; if there are two, the most recently settled one is returned
- * rather than throwing, and of two settled at the same instant the one written last. */
 export async function findCapturedPaymentForWorkingOrder(
   tx: Transaction,
   key: { provider: string; workingOrderId: string },
@@ -706,9 +706,6 @@ export interface ReconcilableRow {
   createdAt: string;
   auditedAt: string;
   workingOrderId: string;
-  // Mirrors @waitron/db's working_order_status enum. Reconcile's orphan rule (`!== "open"`) and
-  // auto-reverse gate (`!== "abandoned"`) treat `placed` as neither; whether that is right for a
-  // placed order is not settled.
   workingOrderStatus: "open" | "placed" | "settled" | "abandoned";
   reconcileRemediatedAt: string | null;
   /** The payment has a hold, with or without an outcome. */

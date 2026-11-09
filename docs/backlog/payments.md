@@ -17,21 +17,14 @@ the request before sending, keeps `tr_<refundId>` on retry and recovers pending 
 
 ## Turn off Stripe's on-reader tip screen, or read the tip back
 
-Backlog only; SumUp is
-the go-live provider (owner, 2026-10-21). Waitron takes the tip at the
-till and adds it to the amount it charges (`tipOf`, `apps/server/src/till-sale.ts`). It creates
-no Stripe Terminal configuration and does not turn the reader's tip screen off:
-`processPaymentIntent` (`packages/payments-stripe/src/stripe-client.ts`) sends only the payment's
-id. Stripe's docs: "When you process the payment, the reader adds the selected tip. If the
-payment is successful, the amount in the `PaymentIntent` and `Charge` updates to include the tip
-amount" (https://docs.stripe.com/terminal/features/collecting-tips/on-reader), set up through "a
-Configuration object or the Dashboard". So if tipping were switched on in Stripe's Dashboard,
-every tipped reader payment would be charged more than Waitron records, the payments check would
-report each as a difference, and an orphaned one would be held. Read from the code and Stripe's
-docs while planning A846 (the fee question's table in
-[the A846 plan](../superpowers/plans/2026-10-19-a846-held-card-payments.md)); not tried against
-Stripe. **Next action:** pass `process_config[skip_tipping]=true` from `processPaymentIntent`,
-tested against Stripe's sandbox.
+SumUp remains the go-live provider (owner, 2026-10-21). A1389's 2026-11-08 cut-back reads the cloud
+reader's actual capture and reported tip; the excess becomes tip, and matching reader-tip evidence
+avoids a difference alert. The fake-client cases exercise this path; no Stripe sandbox or physical
+reader qualification has run. The on-device adapter still records the requested amount
+(`packages/payments-stripe/src/device-provider.ts`). **Next action:** qualify tipping against a real
+Stripe reader before using Stripe, and cover the on-device amount path if that adapter is needed.
+The approved implementation is in
+[the A1389 cut-back plan](../superpowers/plans/2026-11-08-a1389-actual-card-amounts.md).
 
 ## The payments check ignores the currency Stripe reports
 
@@ -272,15 +265,6 @@ provider. Left open by A260 (several card readers' status reads at once can use 
 connections to the box; W18c #1145 and W48 #1162).
 
 
-## Loose ends left by B28's review (#1005), not acted on, under service Task 17 (#991)
-
-- The reader pay's `tipOf` (`apps/server/src/till-sale.ts`) treats a `null` tip as no tip,
-  against CLAUDE.md §3's rule that a default applies only when the field is absent; it predates
-  B28, and paying a non-zero bill on the reader is believed to accept it the same way (read, not
-  run). Next: a route case sending `tip: null` to `POST /api/pay`, then decide refuse or accept.
-- After a free sale settles on the reader, a stale card-attempt mark on the order is left in
-  place; manual Pay is believed to leave it the same way (read, not run).
-
 ## A875. Check two writes the bill payments design says a pending card refund refuses
 
 The
@@ -319,29 +303,8 @@ keeping their own, chosen on a new Tips tab in Venue settings that also replaces
 `WAITRON_TILL_TIPS`; cash tips handed out at the day's close (once a close counts the drawer,
 A239, and the asesor's L6(g) allows it), card tips paid with wages; a Tips page under Team by day
 and by pay period, frozen when a pay period closes (once the product has a step that closes one).
-The first design had six build slices (its §7), the first a fix (next entry). Replaces the old "Tip-collection UI" entry: cash and
+The first design had six build slices (its §7). Replaces the old "Tip-collection UI" entry: cash and
 typed-card tips already arrived with bill payments (#956).
-
-## A whole-order card payment does not refuse a negative tip
-
-(found by A793's design, read, not
-run). With tips on, a request that did not come from the till's own form (which refuses it) can
-carry `tip: "-5.00"`: `POST /api/pay` never checks `tip` (`apps/server/src/till-api.ts:1682-1737`)
-and `decimal()` accepts it (`packages/shared/src/money.ts:14-25`), so the reader would be asked for
-the bill less €5.00 and the tender would then fail its `tip_amount >= 0` check after the card was
-charged.
-A tip with more than two decimals is not checked either; the bill payment routes refuse both
-(`apps/server/src/bill-payments-api.ts:32`). Next: a route case sending `tip: "-5.00"`, then refuse
-it before the reader is asked. A793's slice 1. Full review (money).
-
-## A whole-order payment records the amount it expected, not the amount captured
-
-(found by A793's
-design, read). A capture that differs from bill plus till tip is written as bill plus till tip
-(`apps/server/src/till-sale.ts:1647`, and `:1974` for an order already placed); only the recovery
-path reads the captured amount and calls the excess a tip. The only cause found is a reader whose
-own tip screen was switched on outside Waitron; other causes were not checked. Next: compare the captured amount at capture time, as the bill payment loop does
-(`payment.bill_capture_mismatch`).
 
 ## A payment whose read shows it settled the bill needs one press of Comprobar de nuevo to show the ticket
 
@@ -381,36 +344,15 @@ and shows a clear message.
 
 <a id="slice-2--the-handheld-nfcqr-link"></a>
 
-## Bundle A1389: Refuse bad tips and compare the amount captured on the whole-order card path
-
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Loose ends left by B28's review (#1005), not acted on, under service Task 17 (#991).**
-  Next: a route case sending `tip: null` to `POST /api/pay`, then decide refuse or accept.
-  A stale card-attempt mark after a free sale also remains unchecked (read, not run).
-  [Detail](payments.md#loose-ends-left-by-b28s-review-1005-not-acted-on-under-service-task-17-991)
-- **A whole-order card payment does not refuse a negative tip** (found by A793's design, read,
-  not run). A tip with more than two decimals is not checked either. Next: a route case sending
-  `tip: "-5.00"`, then refuse it before the reader is asked. A793's slice 1. Full review (money).
-  [Detail](payments.md#a-whole-order-card-payment-does-not-refuse-a-negative-tip)
-- **A whole-order payment records the amount it expected, not the amount captured** (found by
-  A793's design, read). Next: compare the captured amount at capture time, as the bill payment
-  loop does (`payment.bill_capture_mismatch`). A1395's review also constructed a stored €1.00
-  capture on a €3.00 placed order: Pay cannot file it, cancellation stays refused, and no second
-  charge is taken. No current public route producing this state was established. Watcher decision,
-  2026-11-06: keep that protection; add no automatic refund or manager action. Check the recovery
-  limit here, and bring any real route that produces it to the watcher.
-  [Detail](payments.md#a-whole-order-payment-records-the-amount-it-expected-not-the-amount-captured)
-
 ## Bundle: Stripe adapter upkeep
 
-6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+Remaining Stripe qualification and maintenance.
 
 - **Loose ends left by A633.**
   [Detail](payments.md#loose-ends-left-by-a633)
 - **Turn off Stripe's on-reader tip screen, or read the tip back.** Backlog only; SumUp is the
-  go-live provider (owner, 2026-10-21). Next: pass `process_config[skip_tipping]=true` from
-  `processPaymentIntent`, tested against Stripe's sandbox. Left open by A846.
+  go-live provider (owner, 2026-10-21). A1389 reads the cloud reader's actual amount and tip;
+  real-reader qualification and the on-device amount path remain.
   [Detail](payments.md#turn-off-stripes-on-reader-tip-screen-or-read-the-tip-back)
 - **The payments check ignores the currency Stripe reports.** `stripeReportClient` never reads
   `bt.currency`. Left open by A846.

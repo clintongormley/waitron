@@ -74,6 +74,7 @@ export const payments = table(
     cardEntryMode: label("card_entry_mode"),
     cardAuthCode: label("card_auth_code"),
     amount: money("amount").notNull(),
+    requestedAmount: money("requested_amount"),
     state: paymentState("state").notNull(),
     /** Set when the payment is captured or accepted offline; feeds `RecordSaleTender.settledAt`. */
     settledAt: tsString("settled_at"),

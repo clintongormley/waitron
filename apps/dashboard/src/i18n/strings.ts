@@ -2785,6 +2785,7 @@ export const en = {
   "payments.stuck.confirm_body":
     "Waitron will ask {provider} what happened to this {amount} payment ({order}). If it went through, the sale is recorded. If it did not, Waitron cancels it at {provider} where it can still be cancelled, and unlocks the order so it can be paid again, unless another card payment on the order is still unresolved.",
   "payments.stuck.confirm": "Check now",
+  "payments.stuck.partial": "Payment recorded. The rest is still due.",
   "payments.stuck.filed": "Payment went through — the sale has been recorded.",
   "payments.stuck.not_charged_unlocked":
     "Payment did not go through — nothing was charged, and the order is unlocked.",
@@ -2846,8 +2847,6 @@ export const en = {
     "Waitron could not reach the card provider. The bill stays locked; reconnect the provider and try again.",
   "payments.bill.payment_ambiguous":
     "The provider's answer does not settle this payment. Check its transaction or ask provider support before recording an outcome.",
-  "payments.bill.payment_mismatched":
-    "The provider shows a charge for a different amount. The bill stays locked; check the provider transaction before recording an outcome.",
   "payments.bill.refund_pending":
     "The provider has not finished this refund. The bill stays locked; check again after it completes.",
   "payments.bill.refund_not_found":
@@ -6670,6 +6669,7 @@ export const es: Record<StringKey, string> = {
   "payments.stuck.confirm_body":
     "Waitron preguntará a {provider} qué pasó con este cobro de {amount} ({order}). Si se completó, se registra la venta. Si no, Waitron lo cancela en {provider} si todavía se puede cancelar, y desbloquea el pedido para poder cobrarlo de nuevo, salvo que otro pago con tarjeta del pedido siga sin resolver.",
   "payments.stuck.confirm": "Consultar ahora",
+  "payments.stuck.partial": "Pago registrado. Queda parte de la cuenta por cobrar.",
   "payments.stuck.filed": "El pago se completó: la venta ha quedado registrada.",
   "payments.stuck.not_charged_unlocked":
     "El pago no se completó: no se ha cobrado nada y el pedido está desbloqueado.",
@@ -6731,8 +6731,6 @@ export const es: Record<StringKey, string> = {
     "Waitron no pudo contactar con el proveedor de tarjetas. La cuenta sigue bloqueada; vuelve a conectar el proveedor e inténtalo de nuevo.",
   "payments.bill.payment_ambiguous":
     "La respuesta del proveedor no resuelve este pago. Revisa la operación o consulta con el soporte del proveedor antes de registrar un resultado.",
-  "payments.bill.payment_mismatched":
-    "El proveedor muestra un cobro de otro importe. La cuenta sigue bloqueada; revisa la operación del proveedor antes de registrar un resultado.",
   "payments.bill.refund_pending":
     "El proveedor aún no ha completado esta devolución. La cuenta sigue bloqueada; vuelve a consultarla cuando termine.",
   "payments.bill.refund_not_found":

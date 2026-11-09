@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -60,6 +61,7 @@ function providerFor(client: StripeClient): StripeTerminalProvider {
   return new StripeTerminalProvider({
     client,
     db: suite.db,
+    captureAlerts,
     poll: { maxAttempts: 3, intervalMs: 0, sleep: noSleep },
   });
 }
@@ -312,9 +314,17 @@ describe("StripeTerminalProvider.collect", () => {
       cancelReaderAction: () => Promise.resolve(),
       refund: () => Promise.resolve({ id: "re_x", status: "succeeded" }),
       ...UNUSED_CALLS,
+      retrievePaymentIntent: () =>
+        Promise.resolve({
+          id: "pi_default_sleep",
+          status: "succeeded",
+          amount: 1210,
+          amountReceived: 1210,
+        }),
     };
     const p = await collectParams();
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       client,
       db: suite.db,
       poll: { maxAttempts: 3, intervalMs: 0 },
@@ -542,6 +552,7 @@ describe("reverseViaStripe's processor-ref resolution", () => {
 describe("StripeTerminalProvider.forward", () => {
   it("forward is a no-op for the server-driven provider (no device-local offline queue)", async () => {
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       client: new FakeStripe(),
       db: suite.db,
     });
@@ -557,6 +568,7 @@ describe("StripeTerminalProvider.forward", () => {
 describe("StripeTerminalProvider.resolvePending", () => {
   it("resolvePending is all-zeros when no row needs checking", async () => {
     const provider = new StripeTerminalProvider({
+      captureAlerts,
       client: new FakeStripe(),
       db: suite.db,
     });
@@ -650,6 +662,7 @@ describe("StripeTerminalProvider.collect stamps the PaymentIntent before the rea
       cancelReaderAction: (r) => fake.cancelReaderAction(r),
       refund: (params) => fake.refund(params),
       ...UNUSED_CALLS,
+      retrievePaymentIntent: (id) => fake.retrievePaymentIntent(id),
     };
     const result = await providerFor(client).collect(p);
     expect(seen).toHaveLength(1);
@@ -800,16 +813,14 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     expect(row?.externalRef).toBe("pi_paid");
   });
 
-  it("succeeded for a different amount: unknown/ambiguous, the row untouched", async () => {
+  it("succeeded for a different amount: captured at the actual amount", async () => {
     const fake = new FakeStripe();
     fake.setIntent("pi_short", { status: "succeeded", amount: 1210, amountReceived: 1000 });
     const { paymentRef } = await abandonedRow("pi_short");
     expect(await providerFor(fake).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
-      outcome: "unknown",
-      reason: "ambiguous",
-      providerStatus: "succeeded",
+      outcome: "captured",
     });
-    expect((await rowFor(paymentRef))?.state).toBe("attempting");
+    expect(await rowFor(paymentRef)).toMatchObject({ state: "captured", amount: "10.00" });
   });
 
   it("already canceled at Stripe: failed, and the PaymentIntent counts as cancelled at the provider", async () => {
@@ -902,7 +913,7 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     expect((await rowFor(paymentRef))?.state).toBe("failed");
   });
 
-  it("after the cancel the re-read shows it succeeded for a different amount: unknown/ambiguous", async () => {
+  it("after the cancel the re-read shows it succeeded for a different amount: captured at the actual amount", async () => {
     const client = scripted(
       [
         () => Promise.resolve({ status: "processing" }),
@@ -912,11 +923,9 @@ describe("StripeTerminalProvider.resolveAbandonedAttempt", () => {
     );
     const { paymentRef } = await abandonedRow("pi_part");
     expect(await providerFor(client).resolveAbandonedAttempt(paymentRef, NOW, AUDIT)).toEqual({
-      outcome: "unknown",
-      reason: "ambiguous",
-      providerStatus: "succeeded",
+      outcome: "captured",
     });
-    expect((await rowFor(paymentRef))?.state).toBe("attempting");
+    expect(await rowFor(paymentRef)).toMatchObject({ state: "captured", amount: "5.00" });
   });
 
   it("the cancel is refused and the re-read still shows processing: unknown/ambiguous with that status", async () => {

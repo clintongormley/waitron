@@ -789,11 +789,11 @@ The ones worth grepping for:
   process-liveness signal; it does not flip `/health`.
 - **`resolve_pending.complete`** (`info`) — `{ captured, failed, incidentsRaised, nextDueAt }`. The
   summary of this node's card sweep: rows it captured, rows it resolved `failed`, and any
-  `payment.pending_outcome_unactionable` incidents raised for a human.
+  `payment.pending_outcome_unactionable` or `payment.capture_mismatch` incidents raised for a human.
 - **`payment_attempt.released`** (`info`) — `{ released }`. After a pass, the loop cleared the "a
   card is paying this order" mark on that many open orders: each one's card attempt is not running
   in this process, and the order has no payment still `attempting`, nor a `captured` or
-  `accepted_offline` one no sale records (`releaseStalePaymentAttempts`, `src/till-sale.ts`, run by
+  `accepted_offline` one without a sale or received bill contribution (`releaseStalePaymentAttempts`, `src/till-sale.ts`, run by
   `withStalePaymentRelease`, `src/boot.ts`). The loop's first pass runs at start, before any sleep;
   after that, its independent card loop sleeps at most 60 seconds between passes. Until its mark is cleared,
   the server refuses changes to that order with `order.payment_in_flight`, except marking its lines

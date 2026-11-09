@@ -537,3 +537,8 @@ restart before the email is sent loses it. The alert itself stays on the **Alert
 
 A box whose clock reads before 28 October 2024 usually cannot send its email: with a date that
 early it cannot check the mail server's certificate.
+
+## When a card amount differs {#card-amount-mismatch}
+
+If a card amount differs, read the alert's two figures before taking any more money: what Waitron
+requested and what the card provider reported. Check the charge in the provider's dashboard.

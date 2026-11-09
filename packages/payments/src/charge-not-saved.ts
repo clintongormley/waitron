@@ -3,8 +3,8 @@ import { diskFullIn } from "@waitron/shared";
 /**
  * Thrown by `collect` when the processor reported the card charged and saving that outcome failed
  * for a full disk. Its `cause` is the full-disk error, so a caller that does not look for this
- * class answers it as any other full disk; the provider's row is left as it was before the save,
- * for `resolvePending` to capture.
+ * class answers it as any other full disk. The attempt stays unresolved when the charge or its
+ * mismatch evidence could not be saved.
  */
 export class ChargeNotSavedError extends Error {
   constructor(cause: unknown) {

@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -208,6 +209,7 @@ describe("SUMUP_CARD_PROVIDER.build", () => {
       ring,
       environment: "preproduction",
       incidents,
+      captureAlerts,
     });
     expect(provider.provider).toBe("sumup");
   });

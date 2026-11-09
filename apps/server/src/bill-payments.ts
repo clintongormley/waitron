@@ -48,6 +48,8 @@ import {
   associatePaymentWithSale,
   ChargeNotSavedError,
   findPaymentsByBillPayments,
+  findPaymentByBillPayment,
+  findCaptureWarning,
   MANUAL_PROVIDER,
   recordManualCardPayment,
 } from "@waitron/payments";
@@ -92,13 +94,13 @@ import {
   fireDishesAtPayment,
   readBillTenderLines,
   readSettledTicket,
+  readOutstandingSaleForOrder,
   readTenderBlock,
   receiptQr,
 } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { fingerprint } from "./parties.js";
 import {
-  priceStoredOrder,
   priceStoredOrderForIssuance,
   readInvoiceNumber,
   refuseOrderPaymentMarked,
@@ -125,12 +127,6 @@ export type BillPaymentDeps = TillSaleDeps & {
    */
   disk?: DiskFullState;
 };
-
-/**
- * Payments taken against a bill before its invoice exists (bill payments design): the balance they
- * leave, the rules every write to a bill keeps while it holds them, and the invoice issued by the
- * write that leaves the bill fully paid.
- */
 
 /** What a payment request asks for, before the operator has seen an allocation. */
 export interface BillPaymentAsk {
@@ -202,6 +198,7 @@ export interface BillPaymentView {
 }
 
 export interface BillBalance {
+  captureWarning?: import("@waitron/payments").CaptureMismatch;
   workingOrderId: string;
   status: "open" | "placed" | "settled" | "abandoned";
   total: Decimal;
@@ -218,7 +215,7 @@ export interface BillBalance {
 }
 
 export interface BillPaymentResult {
-  /** The payment's state; a reader card's own answer is `declined`, `timeout` (still pending) or
+  /** The payment's state; a reader card's own answer is `declined`, `timeout` (still pending),
    * `network_unavailable` (failed, nothing charged). A retry whose own sign-in is open on an active
    * till (the first sign-in or a later one) answers the state it finds. */
   outcome: "received" | "pending" | "failed" | "declined" | "timeout" | "network_unavailable";
@@ -456,7 +453,7 @@ export async function assertBillInvariant(
   for (const workingOrderId of workingOrderIds) {
     const held = payments.filter(({ row }) => row.workingOrderId === workingOrderId);
     if (held.length === 0) continue;
-    const funds = fundsOf(workingOrderId, await storedOrderTotal(tx, workingOrderId), held);
+    const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId), held);
     const excess = subtractDecimal(addDecimal(funds.received, funds.reserved), funds.total);
     if (compareDecimal(excess, ZERO) > 0) {
       throw new AppError("bill.received_exceeds_total", { workingOrderId, excess: money(excess) });
@@ -612,6 +609,18 @@ async function manualCardsOf(tx: Transaction, rows: readonly PaymentRow[]): Prom
   );
 }
 
+async function billPaymentTotal(
+  tx: Transaction,
+  id: string,
+  pricedTotal?: Decimal,
+): Promise<Decimal> {
+  return (
+    (await readOutstandingSaleForOrder(tx, id))?.amountDue ??
+    pricedTotal ??
+    (await storedOrderTotal(tx, id))
+  );
+}
+
 /**
  * The bill's balance and its payments; `working_order.not_found` for an unknown bill. `total` is
  * the bill's total when the caller has priced its current lines in this transaction already.
@@ -633,13 +642,11 @@ export async function readBillBalance(
   const lines = await readPaymentLines(tx, held);
   const lineNos = await readLineNos(tx, workingOrderId);
   const manualCards = await manualCardsOf(tx, rows);
-  const funds = fundsOf(
-    workingOrderId,
-    total ?? (lineNos.size === 0 ? ZERO : (await priceStoredOrder(tx, workingOrderId)).total),
-    held,
-  );
+  const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId, total), held);
   const outstanding = subtractDecimal(subtractDecimal(funds.total, funds.received), funds.reserved);
+  const captureWarning = await findCaptureWarning(tx, { orderIds: [workingOrderId] });
   return {
+    ...(captureWarning === undefined ? {} : { captureWarning }),
     workingOrderId,
     status: order.status,
     total: money(funds.total),
@@ -687,7 +694,7 @@ async function issueWhenFullyPaid(
     })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
-  if (order?.status !== "open") return notYet;
+  if (order?.status !== "open" && order?.status !== "placed") return notYet;
   const { rows, refunds } = await readPaymentsAndRefunds(tx, workingOrderId);
   const received = rows.filter((row) => row.state === "received");
   if (received.length === 0 || rows.some((row) => row.state === "pending")) return notYet;
@@ -697,7 +704,7 @@ async function issueWhenFullyPaid(
   if (options.moneyMoved !== true && (await readBillUnsent(tx, workingOrderId)).length > 0)
     return notYet;
   const held = moneyOf(rows, refunds);
-  const total = options.total ?? (await storedOrderTotal(tx, workingOrderId));
+  const total = await billPaymentTotal(tx, workingOrderId, options.total);
   if (compareDecimal(total, ZERO) === 0) return { invoice: null, total };
   if (compareDecimal(fundsOf(workingOrderId, total, held).received, total) !== 0) {
     return { invoice: null, total };
@@ -736,26 +743,33 @@ async function issueWhenFullyPaid(
     kind: "order",
     orderId: workingOrderId,
   });
-  const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-    origin: cfg.origin,
-    nodeId: cfg.nodeId,
-    ...selected.sale,
-    operationDescription,
-    workingOrderId: brandWorkingOrderId(workingOrderId),
-    ...language,
-    total: priced.total,
-    lines: withReceiptListPrices(priced.lines, stored.identities),
-    vatBreakdown: priced.vatBreakdown,
-    clock,
-    operatorId,
-    settlement: { kind: "deferred" },
-  });
-  await linkSalePortions(tx, saleId, stored.identities);
-  await recordSaleReceiptFacts(
-    tx,
-    { saleId, workingOrderId, counterparty: selected.sale.counterparty },
-    options.guestCount,
-  );
+  const outstanding = await readOutstandingSaleForOrder(tx, workingOrderId);
+  const recorded =
+    outstanding === undefined
+      ? await recordSale(tx, deps.backend, {
+          origin: cfg.origin,
+          nodeId: cfg.nodeId,
+          ...selected.sale,
+          operationDescription,
+          workingOrderId: brandWorkingOrderId(workingOrderId),
+          ...language,
+          total: priced.total,
+          lines: withReceiptListPrices(priced.lines, stored.identities),
+          vatBreakdown: priced.vatBreakdown,
+          clock,
+          operatorId,
+          settlement: { kind: "deferred" },
+        })
+      : { saleId: outstanding.saleId, fiscal: undefined };
+  const { saleId, fiscal } = recorded;
+  if (fiscal !== undefined) {
+    await linkSalePortions(tx, saleId, stored.identities);
+    await recordSaleReceiptFacts(
+      tx,
+      { saleId, workingOrderId, counterparty: selected.sale.counterparty },
+      options.guestCount,
+    );
+  }
   await settleSale(tx, { saleId, tenders: tendersOfBill });
 
   const provided = await findPaymentsByBillPayments(
@@ -797,6 +811,11 @@ async function issueWhenFullyPaid(
     );
   }
 
+  if (fiscal === undefined) {
+    const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
+    await enqueueSaleReceipt(tx, cfg, ticket, saleId, options.printers);
+    return { invoice: ticket, total };
+  }
   const ticket = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
     ...(await readReceiptPresentation(tx, saleId, language.locale)),
@@ -962,6 +981,24 @@ export async function requireOpenBill(tx: Transaction, workingOrderId: string): 
   }
 }
 
+async function requirePayableBill(tx: Transaction, workingOrderId: string): Promise<void> {
+  const [order] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, workingOrderId));
+  if (order?.status === "placed") {
+    const [part] = await tx
+      .select({ id: billPayments.id })
+      .from(billPayments)
+      .where(
+        and(eq(billPayments.workingOrderId, workingOrderId), eq(billPayments.state, "received")),
+      )
+      .limit(1);
+    if (part !== undefined) return;
+  }
+  await requireOpenBill(tx, workingOrderId);
+}
+
 /** Design §3.6: what a payment of the bill would be, writing nothing. */
 export async function previewBillPayment(
   deps: TillSaleDeps,
@@ -971,7 +1008,7 @@ export async function previewBillPayment(
   operatorId: string | undefined,
 ): Promise<AllocationPreview> {
   return withTransaction(deps.db, async (tx) => {
-    await requireOpenBill(tx, workingOrderId);
+    await requirePayableBill(tx, workingOrderId);
     await requireOrderBillEditor(tx, workingOrderId, {
       operatorId,
       expectedEdit: ask.expectedEdit,
@@ -979,7 +1016,7 @@ export async function previewBillPayment(
     await assertBillHasNoUnsent(tx, workingOrderId);
     const held = await readPaymentMoney(tx, [workingOrderId]);
     const { request } = await allocationRequestFor(tx, workingOrderId, ask, held);
-    const funds = fundsOf(workingOrderId, await storedOrderTotal(tx, workingOrderId), held);
+    const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId), held);
     return previewAllocation(funds, request, { tipsEnabled: cfg.tipsEnabled });
   });
 }
@@ -1104,7 +1141,7 @@ async function beginBillPayment(
   await deps.backend.refuseWhileClockBehind(tx, reading);
   await deps.backend.refuseNewIssuance(tx, cfg.nodeId);
 
-  await requireOpenBill(tx, workingOrderId);
+  await requirePayableBill(tx, workingOrderId);
   await requireOrderBillEditor(tx, workingOrderId, {
     operatorId: operator.personId,
     expectedEdit: req.expectedEdit,
@@ -1114,7 +1151,7 @@ async function beginBillPayment(
   await refuseOrderPaymentMarked(tx, [workingOrderId]);
   const held = await readPaymentMoney(tx, [workingOrderId]);
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
-  const total = await storedOrderTotal(tx, workingOrderId);
+  const total = await billPaymentTotal(tx, workingOrderId);
   deps.backend.assertRecordableAt(reading);
   if (refusals.diskFull()) refuseForDiskStop(refusals.log, workingOrderId);
   await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, total);
@@ -1368,9 +1405,21 @@ export async function completeBillPayment(
   guestCount?: GuestCountChoice,
 ): Promise<{ payment: PaymentRow; invoice: TillSaleResult | null; total?: Decimal }> {
   await requireEconomicWrite(tx, cfg, deps.admission);
+  const [pending] = await tx
+    .select({ applied: billPayments.applied })
+    .from(billPayments)
+    .where(eq(billPayments.id, billPaymentId));
+  const provided = await findPaymentByBillPayment(tx, billPaymentId);
+  const actual =
+    provided !== undefined && ["captured", "accepted_offline", "settled"].includes(provided.state)
+      ? decimalToCents(decimal(provided.amount))
+      : undefined;
+  const applied = actual === undefined ? undefined : Math.min(pending!.applied, actual);
   const [payment] = await tx
     .update(billPayments)
     .set({
+      applied,
+      tip: actual === undefined ? undefined : actual - applied!,
       state: "received",
       receivedAt: receivedAt.toISOString(),
       ...attestationColumns(attestation),
@@ -1546,7 +1595,8 @@ export async function takeReaderBillPayment(
     return await withTransaction(deps.db, async (tx) => {
       await requireEconomicWrite(tx, cfg, deps.admission);
       if (!NOT_CHARGED.has(result.state)) {
-        return { ...(await resultOf(tx, deps, cfg, payment, null)), outcome: "timeout" };
+        const answer = await resultOf(tx, deps, cfg, payment, null);
+        return { ...answer, outcome: "timeout" };
       }
       const failed = await failBillPayment(
         tx,

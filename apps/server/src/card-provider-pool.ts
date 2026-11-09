@@ -4,6 +4,7 @@ import {
   cardProviderById,
   type CardProviderContribution,
   type IncidentSink,
+  type CaptureMismatchSink,
   type PaymentProvider,
 } from "@waitron/payments";
 import type { DeploymentEnvironment } from "./config.js";
@@ -27,6 +28,7 @@ export function createCardProviderPool(deps: {
   ring: KeyRing;
   environment: DeploymentEnvironment;
   incidents: IncidentSink;
+  captureAlerts: CaptureMismatchSink;
 }): CardProviderPool {
   const cache = new Map<string, PaymentProvider>();
 
@@ -42,6 +44,7 @@ export function createCardProviderPool(deps: {
         ring: deps.ring,
         environment: deps.environment,
         incidents: deps.incidents,
+        captureAlerts: deps.captureAlerts,
       });
       cache.set(providerId, provider);
       return provider;

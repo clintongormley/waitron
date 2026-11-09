@@ -74,6 +74,7 @@ function stuckRefusalText(error: unknown): string {
 }
 
 function stuckOutcomeText(resolution: StuckPaymentResolution): string | null {
+  if (resolution.outcome === "partial") return t("payments.stuck.partial");
   if (resolution.outcome === "filed") return t("payments.stuck.filed");
   if (resolution.outcome === "not_charged") {
     return t(
@@ -106,7 +107,6 @@ function billRefusalText(error: unknown): string {
     if (reason === "attempting") return t("payments.bill.payment_attempting");
     if (reason === "unreachable") return t("payments.bill.payment_unreachable");
     if (reason === "ambiguous") return t("payments.bill.payment_ambiguous");
-    if (reason === "mismatched") return t("payments.bill.payment_mismatched");
   }
   if (code === "bill.refund_outcome_unconfirmed") {
     if (reason === "pending") return t("payments.bill.refund_pending");

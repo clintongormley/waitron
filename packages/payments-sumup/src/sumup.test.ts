@@ -1,3 +1,4 @@
+import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -15,6 +16,7 @@ describe("the sumup cloud adapter's reader requirement", () => {
     // decline. Thrown before any DB write or network call — no attempting row.
     const t = await seedWorkingOrder(suite.db, freshNif());
     const provider = new SumUpCloudProvider({
+      captureAlerts,
       client: new FakeSumUp(),
       db: suite.db,
       incidents: () => Promise.resolve(true),

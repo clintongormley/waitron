@@ -16,6 +16,7 @@ export const ALERT_MESSAGES: Readonly<
   Record<
     string,
     Words & {
+      readonly items?: Words & { readonly param: string };
       readonly one?: Words & { readonly param: string };
       readonly variants?: Readonly<Record<string, Words & { readonly mode: "replace" | "append" }>>;
     }
@@ -333,13 +334,18 @@ export const ALERT_MESSAGES: Readonly<
     en: "A card payment of {amount:money} taken while offline was declined when it was sent on (reference {paymentRef}). Collect the money another way.",
     es: "Un pago con tarjeta de {amount:money} cobrado sin conexión se rechazó al enviarlo (referencia {paymentRef}). Cobra el importe de otra forma.",
   },
+  "payment.capture_mismatch": {
+    en: "The card amount differs. Check the charge in the card provider's dashboard.",
+    es: "El importe de la tarjeta no coincide. Comprueba el cobro en el panel del proveedor de pagos.",
+    items: {
+      param: "payments",
+      en: "Order {orderNumber}, {provider:card_provider} {externalRef} (Waitron {paymentRef}): Waitron requested {requestedAmount:money}; the card provider reported {reportedAmount:money}.",
+      es: "Pedido {orderNumber}, {provider:card_provider} {externalRef} (Waitron {paymentRef}): Waitron solicitó {requestedAmount:money}; el proveedor de pagos indicó {reportedAmount:money}.",
+    },
+  },
   "payment.pending_outcome_unactionable": {
     en: "Waitron could not tell what happened to card payment {paymentRef}: the card provider reported {status}, and money may have moved without reaching a sale. Waitron has marked the payment as failed. Check it in the provider's own dashboard.",
     es: "Waitron no ha podido saber qué pasó con el pago con tarjeta {paymentRef}: el proveedor de pagos indicó {status}, y puede que se haya movido dinero sin llegar a una venta. Waitron ha marcado el pago como fallido. Compruébalo en el panel del proveedor.",
-  },
-  "payment.bill_capture_mismatch": {
-    en: `The card provider charged {captured:money} for a payment towards a bill that should have been {expected:money}. Waitron has not counted it, and the bill cannot be changed or invoiced until a manager records what happened. Check the charge in the card provider's own dashboard.${MORE_EN}`,
-    es: `El proveedor de pagos cobró {captured:money} por un pago a cuenta de una cuenta que debía ser de {expected:money}. Waitron no lo ha contado, y la cuenta no se puede modificar ni facturar hasta que un responsable registre lo ocurrido. Comprueba el cobro en el panel del proveedor de pagos.${MORE_ES}`,
   },
   "payment.bill_settle_failed": {
     en: `A card payment of {amount:money} towards a bill was charged, but Waitron could not record it or issue the bill's invoice. The bill cannot be changed or invoiced until it is recorded. Contact support.${MORE_EN}`,
@@ -461,6 +467,10 @@ export const ALERT_WORDS: Readonly<
     }
   >
 > = {
+  card_provider: {
+    words: { stripe: { en: "Stripe", es: "Stripe" }, sumup: { en: "SumUp", es: "SumUp" } },
+    otherwise: { en: "Card provider", es: "Proveedor de pagos" },
+  },
   // What an office printer holding a job needs, by the hold code an alert's `hold` param carries
   // (`a4HoldCodes`, `@waitron/db`). The server shows these alerts with `report.view`, which a
   // supervisor holds without `hardware.manage`, so each asks only for something done at the printer.

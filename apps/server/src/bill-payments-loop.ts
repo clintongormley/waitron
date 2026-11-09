@@ -7,14 +7,13 @@ import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import { codeOf } from "@waitron/server-kit";
 import { findPaymentByBillPayment, paymentResolutions } from "@waitron/payments";
-import { AppError, centsToDecimal, compareDecimal, decimal, jobOrigin } from "@waitron/shared";
+import { AppError, jobOrigin } from "@waitron/shared";
 import { raiseRefundUnresolved } from "./bill-refund-alerts.js";
 import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
 import type { BillPaymentDeps } from "./bill-payments.js";
 import { resumeCardRefund } from "./bill-refunds.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
 import { perDatabase } from "./live-in-process.js";
-import { alertOrigin, type AlertOrigin } from "./request-config.js";
 import type { TradingContext } from "./trading-context.js";
 import type { TillSaleResult } from "./till-sale.js";
 import "./errors.js";
@@ -56,8 +55,6 @@ export interface BillPaymentsLoopDeps extends BillPaymentDeps {
 export interface BillPaymentsPass {
   received: number;
   failed: number;
-  /** Captured for another amount than the payment's, left pending (counted on every pass). */
-  mismatched: number;
   refundsCompleted: number;
   refundsFailed: number;
   /** Refunds pending over an hour, counted on every pass. */
@@ -80,20 +77,17 @@ export const CHARGED = new Set(["captured", "accepted_offline", "settled"]);
 export type SettledFromRow =
   | { settled: "received"; invoice: TillSaleResult | null }
   | { settled: "failed" }
-  | { settled: "mismatched" }
   | { settled: "left"; providerState: string };
 
 /**
  * Settle one pending card bill payment nothing in this process drives, from its provider's row
- * alone (design §5.4), in the caller's transaction. Shared by the loop and the manager's resolve;
- * `raisedBy` is who a mismatch alert names.
+ * alone (design §5.4), in the caller's transaction. Shared by the loop and the manager's resolve.
  */
 export async function settleFromProviderRow(
   tx: Transaction,
   deps: BillPaymentsLoopDeps,
   billPaymentId: string,
   now: Date,
-  raisedBy: AlertOrigin,
 ): Promise<SettledFromRow> {
   await requireEconomicWrite(tx, deps.cfg, deps.admission);
   const [payment] = await tx.select().from(billPayments).where(eq(billPayments.id, billPaymentId));
@@ -129,21 +123,6 @@ export async function settleFromProviderRow(
   }
   // An unaudited failure can be an uncertain charge (SumUp's not-found checkout).
   if (!CHARGED.has(provided.state)) return { settled: "left", providerState: provided.state };
-  const expected = centsToDecimal(payment.applied + payment.tip);
-  if (compareDecimal(decimal(provided.amount), expected) !== 0) {
-    await recordIncidentOnce(tx, {
-      origin: alertOrigin(raisedBy, payment),
-      error: new AppError("payment.bill_capture_mismatch", {
-        billPaymentId,
-        workingOrderId: payment.workingOrderId,
-        captured: provided.amount,
-        expected,
-      }),
-      severity: "error",
-      detectedAt: now,
-    });
-    return { settled: "mismatched" };
-  }
   const done = await completeBillPayment(
     tx,
     deps,
@@ -156,9 +135,9 @@ export async function settleFromProviderRow(
 
 /**
  * One pass: a pending card payment not live in this process whose provider row is charged for its
- * amount is completed as the live attempt's P3 would have (the invoice included); one with no
- * provider row or with an automatic confirmed noncharge is failed; one charged for another amount raises `payment.bill_capture_mismatch`
- * and stays pending; any other stays pending for a manager. Each payment in its own transaction.
+ * actual amount is completed as the live attempt's P3 would have (the invoice included); one with no
+ * provider row or with an automatic confirmed noncharge is failed; any other stays pending for a
+ * manager. Each payment has its own transaction.
  * Once `stopSignal` is aborted no further refund is looked up; each one not reached stays pending.
  */
 export async function settlePendingBillPayments(
@@ -176,7 +155,6 @@ export async function settlePendingBillPayments(
   const pass: BillPaymentsPass = {
     received: 0,
     failed: 0,
-    mismatched: 0,
     refundsCompleted: 0,
     refundsFailed: 0,
     refundsUnresolved: 0,
@@ -188,7 +166,7 @@ export async function settlePendingBillPayments(
     try {
       const { settled } = await withIssuanceTransaction(
         deps.db,
-        (tx) => settleFromProviderRow(tx, deps, id, now, PAYMENT_CHECK),
+        (tx) => settleFromProviderRow(tx, deps, id, now),
         deps.log,
       );
       if (settled !== "left") pass[settled] += 1;

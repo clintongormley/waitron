@@ -646,13 +646,6 @@ Open:
   credit note reaches it today (read, not run). **Next action:** decide whether those read
   `amountDue` too, which W26 (#1136) left out because other screens and the floor read
   `outstanding`.
-- **Left by B28's review (#1005), neither acted on.** (1) The reader pay's `tipOf`
-  (`apps/server/src/till-sale.ts`) treats a `null` tip as no tip, against CLAUDE.md §3's rule
-  that a default applies only when the field is absent; it predates B28, and paying a non-zero
-  bill on the reader is believed to accept it the same way (read, not run). Next: a route case
-  sending `tip: null` to `POST /api/pay`, then decide refuse or accept. (2) After a free sale
-  settles on the reader, a stale card-attempt mark on the order is left in place; manual Pay is
-  believed to leave it the same way (read, not run).
 - **A bill presented without an invoice keeps the label it was placed with when the departure
   invoices it.** Every other path that invoices such a bill saves the receipt label in the
   update that settles it; the departure leaves the bill placed, and the placed-to-placed clause
