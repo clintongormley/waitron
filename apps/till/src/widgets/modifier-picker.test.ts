@@ -1,4 +1,4 @@
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatMoney, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
@@ -1290,6 +1290,24 @@ describe("till-modifier-picker", () => {
       expect(field.error).toBe(t("line.quantity_invalid"));
       expect(seen.at(-1)).toMatchObject({ changed: true, savable: false, fixFields: true });
     });
+  });
+
+  it("moves focus to a refused quantity when Save is pressed in its window", async () => {
+    const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+      product: burger,
+      quantity: "2",
+      lineDetails: true,
+      initialSelections: { options: [{ listId: "list-cooked", labelId: "label-medium" }] },
+    });
+    const field = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      'wt-input[name="quantity"]',
+    )!;
+    field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "0" } }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.activeElement).not.toBe(field);
+    await userEvent.click(addButton(el));
+    await expect.poll(() => field.error).toBe(t("line.quantity_invalid"));
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(field);
   });
 
   it("offers no extras list on a dish weighed on a scale or sold in a unit with decimals", async () => {

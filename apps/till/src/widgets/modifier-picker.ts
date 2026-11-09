@@ -3,7 +3,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { trackDialog } from "./track-dialog.js";
-import { baseStyles, draftScopeFor, saveActionState } from "@waitron/ui";
+import { baseStyles, draftScopeFor, focusFirstInvalid, saveActionState } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type {
@@ -589,7 +589,10 @@ export class TillModifierPicker extends LitElement {
     if (!this.isConnected || !this.active || this.disabled || this.readOnly) return;
     if (this.#saveAction().unchanged) return;
     this.attempted = true;
-    if (this.lineDetails && this.#quantityInvalid()) return;
+    if (this.lineDetails && this.#quantityInvalid()) {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      return;
+    }
     if (!this.#satisfied(this.#stalePicks(), this.#listTotals())) return;
     const submitted = this.#draft();
     const detail = this.#detail();

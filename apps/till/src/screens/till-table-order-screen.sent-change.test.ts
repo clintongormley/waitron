@@ -1104,3 +1104,12 @@ it("keeps a staged change through an update that leaves its dish as it was", asy
   await pressChange(el);
   expect(seen).toMatchObject([{ revision: 10, patch: { note: "warm", quantity: "3" } }]);
 });
+
+it("moves focus to the count when Change dish is pressed with a lower one", async () => {
+  const el = await openRow({ lines: [line()] });
+  await setQuantity(el, "1");
+  await pressChange(el);
+  const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
+  const field = picker.shadowRoot!.querySelector('[name="quantity"]');
+  await expect.poll(() => picker.shadowRoot!.activeElement).toBe(field);
+});
