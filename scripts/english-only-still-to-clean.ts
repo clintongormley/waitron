@@ -1,8 +1,10 @@
 /**
  * Files that held non-English text on 2026-11-09 and that nobody has yet cleaned or judged to need
- * it. Delete a path when its file is clean: `scripts/english-only.test.ts` fails until you do. Never
- * add one; clean the file instead. A file judged to need its text moves to `KEEPS_NON_ENGLISH` in
- * `packages/db/src/english-only.ts`, with its reason.
+ * it. Delete a path when its file is clean: `scripts/english-only.test.ts` fails until you do, and
+ * until `STILL_TO_CLEAN_COUNT` there is lowered to match. Never add one; clean the file instead. The
+ * count stops the list growing, not a swap of one entry for another. A renamed or moved file's entry
+ * follows it. A translation file is cleaned by moving it into an `i18n` folder. A file judged to need its text moves to `KEEPS_NON_ENGLISH` in
+ * `packages/db/src/english-only.ts`, with its reason and its number of findings.
  */
 export const STILL_TO_CLEAN: readonly string[] = [
   "apps/dashboard/src/api/client-routes.test.ts",
@@ -325,6 +327,7 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/server/src/conflict-issuance.test.ts",
   "apps/server/src/conflict-payment-recovery.test.ts",
   "apps/server/src/connection-bootstrap-page.test.ts",
+  "apps/server/src/connection-bootstrap-strings.ts",
   "apps/server/src/content-translations-api.test.ts",
   "apps/server/src/counter-handover.test.ts",
   "apps/server/src/current-orders.test.ts",
@@ -746,6 +749,8 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/setup/src/screens/email-screen.test.ts",
   "apps/setup/src/screens/fiscal-test-screen.a11y.test.ts",
   "apps/setup/src/screens/fiscal-test-screen.test.ts",
+  "apps/setup/src/screens/initial-owner-strings.ts",
+  "apps/setup/src/screens/initial-setup-strings.ts",
   "apps/setup/src/screens/live-source-screen.test.ts",
   "apps/setup/src/screens/mode-screen.test.ts",
   "apps/setup/src/screens/old-box-question.test.ts",

@@ -347,10 +347,6 @@ export { CORE_MIGRATIONS } from "./migrations.js";
 export { captureError, driverErrorCode, engineErrorMessage } from "./testing/errors.js";
 export { refusalError, type Refusal, type RefusalError } from "./testing/refusals.js";
 
-// english-only.ts is deliberately NOT re-exported here. It computes `PACKAGES_ROOT` from
-// `import.meta.dirname` at MODULE LOAD TIME, and `drizzle-kit generate` loads this barrel
-// transitively through its own CJS-transformed loader, where `import.meta.dirname` is `undefined`
-// and the top-level `join` throws.
 export { installChangeFeed, removeChangeFeed } from "./change-feed.js";
 export { CORE_CHANGE_SOURCES } from "./classification.js";
 // The in-process change feed. Only the subscribe half is public: draining the log and handing the

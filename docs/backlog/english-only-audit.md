@@ -5,6 +5,8 @@
 > `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../packages/reporting/examples/modelo-303.md)
 > carries the reporting example. References below describe the earlier scripts.
 
+_2026-11-09, A977: the guard now reads every tracked text file under `apps/` and `packages/` outside its homes and refuses accented letters; items 1 and 3, and item 4's last two exemptions, of "What the English-only guard misses, and a proposal" describe the earlier guard. Its current limits are in [conventions-data.md](../developers/conventions-data.md#spanish-domain-terms-are-deliberate-and-a-module-declares-its-own)._
+
 _2026-11-05, A404: the sample receipt's character-probe footer is gone; its accented letters now come from per-language sample dishes in `country-es`._
 
 _2026-11-03, A968: the guide frame's words and the recovery page's words now live in `apps/server/src/i18n/guide-pages.ts` and `apps/server/src/i18n/recovery-page.ts`; the two rows below record their earlier location._

@@ -1,8 +1,7 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 // The SumUp panel's OWN i18n surface: the connect-form and add-reader UI strings, English the source
-// of truth. This is browser UI (out of the english-only guard's scope), so the Spanish is user-facing
-// translation, not schema vocabulary. The module registers its catalogue at load — before any t()
+// of truth. The module registers its catalogue at load — before any t()
 // runs — so importing this module's `t` is enough to make the strings resolve; the panel also declares
 // these strings so the screen registers them on mount.
 

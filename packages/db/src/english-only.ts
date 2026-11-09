@@ -15,7 +15,7 @@ const WORD_LISTS: ReadonlySet<string> = new Set([
 
 /**
  * Places whose job is non-English text, never scanned: the packages written for Spain (CLAUDE.md
- * §3), translation files (an `i18n` folder, or a file name ending `strings.ts`), the guide in every
+ * §3), translation files (anything in an `i18n` folder, or a file named `strings.ts`), the guide in every
  * language but English, a package's starter-content translations (A918), and the two files that
  * exist to list forbidden words. Takes a repo-relative path with `/` separators.
  */
@@ -25,26 +25,45 @@ export function isHome(path: string): boolean {
   return (
     (segments[0] === "packages" && SPAIN_PACKAGES.has(segments[1]!)) ||
     segments.slice(0, -1).includes("i18n") ||
-    name.endsWith("strings.ts") ||
+    name === "strings.ts" ||
     /^apps\/server\/src\/guide\/(?!en\/)[^/]+\//.test(path) ||
     /^packages\/[^/]+\/src\/starter-content\.ts$/.test(path) ||
     WORD_LISTS.has(path)
   );
 }
 
+export interface Keep {
+  reason: string;
+  /** How many findings the file holds today; one more, or one fewer, fails the suite. */
+  findings: number;
+}
+
 /**
- * Files outside the homes whose job needs non-English text, with why. Each must still hold some,
- * or the suite asks for it to be removed from here.
+ * Files outside the homes whose job needs non-English text, with why. Each is held to its number of
+ * findings, not to which lines hold them.
  */
-export const KEEPS_NON_ENGLISH: Readonly<Record<string, string>> = {
-  "packages/shared/src/locales.ts": "a language's own name in the language picker",
-  "packages/identity/src/passkey-providers.ts": "a passkey provider's own product name",
-  "packages/migrations/migrations.manifest.json":
-    "names the Veri*Factu tables, whose Spanish names cannot change",
-  "packages/db/src/immutability.sql.md":
-    "names the Veri*Factu tables, whose Spanish names cannot change",
-  "apps/server/src/log-personal-data.ts": "AEAT's wire field name `idEmisorFactura`",
-  "apps/server/scripts/receipt-look.ts": "AEAT's QR address parameters",
+export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
+  "packages/shared/src/locales.ts": {
+    reason: "a language's own name in the language picker",
+    findings: 1,
+  },
+  "packages/identity/src/passkey-providers.ts": {
+    reason: "a passkey provider's own product name",
+    findings: 1,
+  },
+  "packages/migrations/migrations.manifest.json": {
+    reason: "names the Veri*Factu tables, whose Spanish names cannot change",
+    findings: 2,
+  },
+  "packages/db/src/immutability.sql.md": {
+    reason: "names the Veri*Factu tables, whose Spanish names cannot change",
+    findings: 2,
+  },
+  "apps/server/src/log-personal-data.ts": {
+    reason: "AEAT's wire field name `idEmisorFactura`",
+    findings: 2,
+  },
+  "apps/server/scripts/receipt-look.ts": { reason: "AEAT's QR address parameters", findings: 2 },
 };
 
 /** There is deliberately no list of forgiven words: if a column's name needs one, rename the column. */

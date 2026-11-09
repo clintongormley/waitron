@@ -122,9 +122,8 @@ CASILLA_RE = re.compile(r"\[(\d+)\]")
 
 def classify(n, typ, desc, content):
     """Return (role, value, casilla, decimals). role drives serialization; value is the constant
-    literal when role == 'constant'. Roles are ENGLISH (the repo's english-only guard scans
-    identifiers AND string literals in packages/reporting): year/period/amount/declarationType, not
-    the Spanish AEAT terms — those live in the // comment above each field, which the guard excludes.
+    literal when role == 'constant'. Roles are ENGLISH: year/period/amount/declarationType, not
+    the Spanish AEAT terms — those live in the // comment above each field.
     Kept conservative and explicit; the .ts is eyeballed and the contiguity + fixture tests bite on
     any drift."""
     casillas = CASILLA_RE.findall(desc)

@@ -1,8 +1,7 @@
 import type { AllergenCode } from "@waitron/shared";
 import { pickLocale } from "./t.js";
 
-// Display names for the 14 EU allergens (Regulation (EU) No 1169/2011, Annex II). They live in
-// `apps/till`, not `@waitron/catalogue`, because the Spanish names are user-facing translation.
+// Display names for the 14 EU allergens (Regulation (EU) No 1169/2011, Annex II).
 //
 // The `es` names are the opening words of each item in the Annex's official Spanish text (Diario
 // Oficial de la Unión Europea, L 304/43, 22.11.2011), except `gluten`, which shortens "Cereales

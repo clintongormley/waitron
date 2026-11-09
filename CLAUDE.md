@@ -423,9 +423,9 @@ called weaker than its name, the topic file lists what it does not see.
   non-English screen tests read expected strings. Domain terms
   have one declaring module vocabulary; fiscal terms never enter the base.
   Guard: `scripts/english-only.test.ts` over `apps/` and `packages/` outside the homes, weaker than its
-  name: listed words and accented letters only, and files on its shrink-only
-  `scripts/english-only-still-to-clean.ts` or its keeps list are not read line by line; review greps
-  the diff. [Limits](docs/developers/conventions-data.md#spanish-domain-terms-are-deliberate-and-a-module-declares-its-own).
+  name: listed words and accented letters only; files on `scripts/english-only-still-to-clean.ts`
+  are not read line by line, its length is pinned, so replacing one entry with another still passes, and keeps are held to a count;
+  review greps the diff. [Limits](docs/developers/conventions-data.md#spanish-domain-terms-are-deliberate-and-a-module-declares-its-own).
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`,

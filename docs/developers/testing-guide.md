@@ -2380,9 +2380,7 @@ the frames.
 Vitest stores failure screenshots in directories named `*.test.ts`; treating those directories as
 TypeScript files made the vocabulary guard throw `EISDIR` after browser failures. A failing browser
 test creates a screenshot directory named after its test file, and the vocabulary guard tried to
-read that directory and failed with `EISDIR` after an intentional TDD failure. `sourceFilesIn` now
-checks `isFile()`, keeping real nested source files in scope, with a fixture preserving an actual
-nested source file. The vocabulary guard now takes its files from `git ls-files`, which lists no
+read that directory and failed with `EISDIR` after an intentional TDD failure. The vocabulary guard now takes its files from `git ls-files`, which lists no
 directory; regression: `scripts/english-only.test.ts`, "reads tracked text files only…".
 
 *(This heading merges two copies of the same rule that appeared separately in section 4 of

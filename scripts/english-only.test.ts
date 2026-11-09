@@ -7,6 +7,8 @@
  * its descriptor's `vocabulary` seat. `english-only.ts` lives under `packages/db/src` so that
  * package's `typecheck` covers it; the root config measures its coverage and `packages/db`'s config
  * excludes it.
+ *
+ * Weaker than its name: see conventions-data.md → "What the guard does not see".
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -31,8 +33,11 @@ const FORBIDDEN = forbiddenVocabulary(SPANISH_WORDS, ALL_MODULES);
 
 const repoRoot = join(import.meta.dirname, "..");
 
-/** The list may only shrink: lower this when entries are deleted, never raise it. */
-const STILL_TO_CLEAN_CEILING = 1228;
+/**
+ * `STILL_TO_CLEAN`'s length, pinned equal so a change in either direction fails: deleting entries
+ * lowers this in the same change, and adding one has to raise it where the diff shows it.
+ */
+const STILL_TO_CLEAN_COUNT = 1231;
 
 // A per-call kill timeout for a hung `git` (Vitest's timer cannot interrupt a blocking child), and
 // a per-test bound above it for the case that builds a repository.
@@ -86,7 +91,7 @@ function findings(source: string): Violation[] {
 
 const TRACKED = trackedFiles(repoRoot);
 const SCANNED = scannedTexts(repoRoot);
-const LISTED = new Set([...STILL_TO_CLEAN, ...Object.keys(KEEPS_NON_ENGLISH)]);
+const STILL_LISTED: ReadonlySet<string> = new Set(STILL_TO_CLEAN);
 
 /** The tokeniser's own tests run against a FIXED set, so a change to a module's declaration
  * cannot redden a test that is about tokenising. Assembly is tested separately. */
@@ -178,8 +183,8 @@ describe("configuration", () => {
       "packages/payments-stripe/src/dashboard/strings.test.ts",
     ],
     [
+      "packages/payments-sumup/src/dashboard/strings.ts",
       "packages/dashboard-kit/src/table-strings.ts",
-      "packages/dashboard-kit/src/dashboard/panel.ts",
     ],
     ["apps/server/src/guide/es/orders.md", "apps/server/src/guide/en/orders.md"],
     ["apps/server/src/guide/ca/orders.md", "apps/server/src/guide/es.ts"],
@@ -278,7 +283,10 @@ describe("the lists", () => {
       "packages/migrations/migrations.manifest.json",
       "packages/shared/src/locales.ts",
     ]);
-    for (const reason of Object.values(KEEPS_NON_ENGLISH)) expect(reason).toMatch(/^[^\n]{10,}$/);
+    for (const [path, keep] of Object.entries(KEEPS_NON_ENGLISH)) {
+      expect(keep.reason, path).toMatch(/^[^\n]{10,}$/);
+      expect(Number.isInteger(keep.findings) && keep.findings >= 1, path).toBe(true);
+    }
   });
 
   it("keeps the still-to-clean list sorted and free of duplicates", () => {
@@ -293,8 +301,13 @@ describe("the lists", () => {
     expect(STILL_TO_CLEAN.filter((p) => p in KEEPS_NON_ENGLISH)).toEqual([]);
   });
 
-  it("never grows the still-to-clean list", () => {
-    expect(STILL_TO_CLEAN.length).toBeLessThanOrEqual(STILL_TO_CLEAN_CEILING);
+  it("holds the still-to-clean list at its pinned count", () => {
+    expect(
+      STILL_TO_CLEAN.length,
+      "STILL_TO_CLEAN_COUNT must equal the list's length. After deleting cleaned entries, lower it " +
+        "to match. Do not add a file to the list: clean the file instead. An addition only passes by " +
+        "raising the count, which the diff shows.",
+    ).toBe(STILL_TO_CLEAN_COUNT);
   });
 });
 
@@ -718,7 +731,15 @@ describe("findAccented", () => {
 });
 
 describe.each([...SCANNED])("%s", (path, source) => {
-  if (LISTED.has(path)) {
+  const keep = KEEPS_NON_ENGLISH[path];
+  if (keep !== undefined) {
+    it("holds exactly its kept number of findings", () => {
+      expect(
+        findings(source).map((v) => `${v.line}: ${v.word} — ${v.text}`),
+        "a kept file's findings changed: clean any new text, or set `findings` to the new count (delete the keep when none are left)",
+      ).toHaveLength(keep.findings);
+    });
+  } else if (STILL_LISTED.has(path)) {
     it("still holds non-English text, so it stays listed", () => {
       expect(
         findings(source).length,
