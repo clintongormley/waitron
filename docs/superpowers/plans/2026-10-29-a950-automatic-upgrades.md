@@ -1,4 +1,4 @@
-> **2026-11-09:** The owner adopted a shorter route, including a real test sale on a disposable copy. The [new eight-step plan](2026-11-09-a950-shorter-upgrades.md) supersedes this twelve-cut route and awaits owner approval before any build. This page retains the earlier decisions and receipts; it supplies no current build authority or runtime qualification.
+> **2026-11-09:** The owner adopted a shorter route, including a real test sale on a disposable copy. The [new eight-step plan](2026-11-09-a950-shorter-upgrades.md) supersedes this twelve-cut route and was approved at 22:04 for Lane F after A739 and A840/A842/A848. This page retains the earlier decisions and receipts; it supplies no current build authority or runtime qualification.
 
 > 2026-10-29, A1206: the start-again note and its floor are retired, so the note-floor overlay this plan builds (`floor.mjs`, `upgrade-floor-entry.ts`) must be re-planned before anyone builds it.
 
