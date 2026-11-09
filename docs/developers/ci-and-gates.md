@@ -177,14 +177,14 @@ and their current-attempt jobs. Jobs with nonempty labels that do not include
 The controller publishes `DISPOSABLE_TESTS_CAPACITY`: observed time, usable server slots,
 occupied slots and waiting jobs, plus hosted counts. Preparation and manual work occupy slots;
 quarantined slots and retained runners are excluded, and admitted jobs are not counted twice.
-A failed health check publishes zero usable slots. The router refreshes hosted counts through
+A failed free-slot health check publishes zero slots; a full pool uses its recorded capacity. The router refreshes hosted counts through
 its existing read-only API scan and compares `(running + waiting) / slots` with the server
 snapshot, using the owner's stipulated 20 hosted slots. Ties select the server; zero server
 slots select hosted. Unknown inputs retain the existing server preference and readable-stall checks.
 The summary prints both counts, snapshot age and the chosen side, including in hosted mode. This repository snapshot reserves no capacity;
 simultaneous decisions can choose the same side. The run's own `changes` job counts while running.
-Repository-variable arrival and actual route/labels still need qualification before activation;
-there is no new snapshot expiry rule. The decision routes a whole run.
+Before activation, verify repository-variable arrival in an ordinary run and check its route and labels.
+The snapshot has no expiry rule, so inspect the printed age; the decision routes a whole run.
 `scripts/ci-hosted-route.test.mjs` exercises these decisions with controlled API replies,
 including pagination and incomplete inventories; it does not measure live capacity.
 
