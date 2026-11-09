@@ -109,7 +109,7 @@ the cause was not found.
 
 Owner20:34 on 9 November 2026: “Drop it, small slices”. The
 [current proposed till slice](../superpowers/plans/2026-11-09-a790-till-document-printer.md)
-needs the normal Claude read and watcher approval before implementation. The folded Invoice
+has had its Claude read and needs watcher approval before implementation. The folded Invoice
 printer chooser is already on main (#2640); extend it rather than rebuild it.
 
 Next, use one Print/Reprint entry on the till ticket view: choose the recorded Receipt or Invoice,

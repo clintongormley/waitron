@@ -1,7 +1,7 @@
 > **Supersession, 9 November 2026, owner20:34:** “Drop it, small slices” drops G4,
-> the recovery-origin file, browser operation journal and two-stage prepare/accept exchange
+> the recovery-origin file, browser operation journal, two-stage prepare/accept exchange and all-writer revisions
 > entirely for remaining A790. Nothing waits on A947. The [current proposed slice plan](2026-11-09-a790-till-document-printer.md)
-> awaits the normal Claude read and watcher approval before implementation. Already landed
+> has had its Claude read and awaits watcher approval before implementation. Already landed
 > foundations are not cleanup authority. The historical contents below are preserved.
 
 # A790 Cut B: folded Invoice printer row
