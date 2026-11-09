@@ -56,9 +56,9 @@ async function ticketPng(bytes: Uint8Array, file: string): Promise<void> {
     .toFile(join(out, file));
 }
 
-const line = (quantity: string, name: string, gross: string, unit = "item") => ({
+const line = (quantity: string, name: string, gross: string, unit = "ea") => ({
   descriptions: { "es-ES": name },
-  unitName: { es: unit },
+  unitName: { en: unit },
   quantity,
   gross,
 });
@@ -115,7 +115,7 @@ FULL.result.vatBreakdown = [
   { rate: "21.00", base: "9.00", tax: "1.89" },
   { rate: "10.00", base: "8.00", tax: "0.80" },
 ];
-for (const filed of FULL.result.lines) filed.unitName = { es: "item" };
+for (const filed of FULL.result.lines) filed.unitName = { en: "ea" };
 
 type SaleLine = ReceiptDocumentInput["result"]["lines"][number];
 const filed = (
@@ -124,7 +124,7 @@ const filed = (
   gross: string,
   net: { unitPrice: string; base: string; tax: string; rate: string; priceQuantity?: string },
   extra: Partial<SaleLine> = {},
-  unit = "item",
+  unit?: string,
 ): SaleLine => ({
   ...line(quantity, name, gross, unit),
   net: { priceQuantity: "1.000", ...net },

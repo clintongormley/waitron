@@ -35,7 +35,7 @@ describe("the operator scripts' shared test venue", () => {
     ]);
   });
 
-  it("stores an English administrator name with the script login intact", () => {
+  it("stores an English administrator name, email and role", () => {
     expect(
       suite.db.all(sql`
       select display_name, email, role from persons
