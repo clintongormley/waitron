@@ -25,6 +25,7 @@ import {
   MAX_NODES,
   signDocumentBody,
   verifyBytes,
+  verifyEndorsement,
   verifyMembershipDocument,
   type MembershipDocumentBody,
   type MembershipNode,
@@ -435,7 +436,14 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(after?.body.nodes).toContainEqual(node);
     }
     expect(after?.signerNodeId).toBe(designated.nodeId);
-    expect(after?.endorsements).toEqual([]);
+    expect(after?.endorsements).toEqual([
+      expect.objectContaining({
+        nodeId: standbyNodeId,
+        publicKey: STANDBY_PUB,
+        endorsedBy: designated.nodeId,
+      }),
+    ]);
+    expect(verifyEndorsement(after!.endorsements[0]!, primaryPublicKey)).toBe(true);
     expect(verifyMembershipDocument(after!, { [designated.nodeId]: primaryPublicKey }).valid).toBe(
       true,
     );
@@ -452,6 +460,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
     const afterReadopt = await readNodeMembership(db);
     expect(afterReadopt?.body.term).toBe(after!.body.term + 1);
+    expect(afterReadopt?.endorsements).toEqual(after!.endorsements);
     expect(afterReadopt?.body.nodes.filter((n) => n.nodeId === standbyNodeId)).toEqual([
       {
         nodeId: standbyNodeId,
@@ -487,7 +496,10 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(res.status).toBe(200);
 
     const after = (await readNodeMembership(db))!;
-    expect(after.endorsements).toEqual([endorsement]);
+    expect(after.endorsements).toEqual([
+      expect.objectContaining({ publicKey: STANDBY_PUB, endorsedBy: designated.nodeId }),
+      endorsement,
+    ]);
     const byEndorser = verifyMembershipDocument(after, { [endorserNodeId]: endorser.publicKey });
     expect(byEndorser.valid ? "valid" : byEndorser.reason).toBe("valid");
     const direct = verifyMembershipDocument(after, { [designated.nodeId]: primaryPublicKey });
@@ -557,7 +569,10 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
     const after = (await readNodeMembership(db))!;
     expect(after.body.term).toBe(seedTerm + 1);
-    expect(after.endorsements).toEqual([newEndorsement]);
+    expect(after.endorsements).toEqual([
+      expect.objectContaining({ publicKey: STANDBY_PUB, endorsedBy: designated.nodeId }),
+      newEndorsement,
+    ]);
     const byNewEndorser = verifyMembershipDocument(after, {
       [newEndorserNodeId]: newEndorser.publicKey,
     });

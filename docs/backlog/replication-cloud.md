@@ -507,6 +507,10 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 
 ## A box the chart no longer names main keeps filing its earlier records
 
+Enrollment prerequisite (2026-11-09): new enrollment retains this box’s signed spare endorsement in
+its held chart, and later charts retain its own verified endorsements of listed, non-evicted nodes.
+Earlier enrollments are not backfilled. Bucket checks and the stop remain in A1342’s next part.
+
 A1342. The owner chose on 2026-11-05: settle it before A947 3b lands, and a box that sees another
 main box stops selling. Left open by A1018 Slice 5 (Ruling R42). `apps/server/src/node-membership-api.ts` and
 `apps/server/src/boot-peer-check.ts` stop a box only when the chart fences it (`isFencedStanding`),
