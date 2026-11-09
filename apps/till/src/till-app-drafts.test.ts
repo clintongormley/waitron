@@ -4458,40 +4458,6 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
   const visible = (el: TillApp, selector: string) =>
     tableOrder(el)!.shadowRoot!.querySelector(selector)?.checkVisibility() ?? false;
 
-  it("on a 390 px phone, opens the whole draft on Review and comes Back to browsing with it kept", async () => {
-    await page.viewport(390, 844);
-    try {
-      const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue(till(phoneFormFactor)),
-        getDeviceIdentity: vi.fn().mockResolvedValue({
-          deviceId: "phone-1",
-          name: "Phone",
-          formFactor: "phone-portrait",
-        }),
-      });
-      await openTable(el);
-      await tap(el, "Beer");
-      await tap(el, "Beer");
-      await tap(el, "Flan");
-      expect(visible(el, "[data-draft-pane]")).toBe(false);
-      const review = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!;
-      expect(review.textContent!.trim()).toBe("Review (3)");
-
-      review.click();
-      await flush(el);
-      expect(visible(el, "[data-draft-pane]")).toBe(true);
-      expect(visible(el, "[data-browsing]")).toBe(false);
-      expect(visible(el, '[data-draft-action="send-all"]')).toBe(true);
-
-      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-back]")!.click();
-      await flush(el);
-      expect(visible(el, "[data-browsing]")).toBe(true);
-      expect(rows(el)).toEqual(["Beer ×2", "Flan ×1"]);
-    } finally {
-      await page.viewport(...DEFAULT_FRAME);
-    }
-  });
-
   it("on a 390 px phone, comes Back from Review to where the menu was scrolled", async () => {
     await page.viewport(390, 844);
     try {

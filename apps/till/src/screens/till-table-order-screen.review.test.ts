@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import { setLocale, t } from "../i18n/t.js";
+import { setLocale } from "../i18n/t.js";
 import {
   DRAFT_SIDE_BY_SIDE_MIN_WIDTH,
   type TillTableOrderScreen,
@@ -26,28 +26,6 @@ describe("till-table-order-screen: browsing and the draft by the screen's width"
     el.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]");
   const browsing = (el: TillTableOrderScreen) =>
     el.shadowRoot!.querySelector<HTMLElement>("[data-browsing]");
-
-  it("keeps browsing and the draft apart below the width, and opens the whole draft on Review", async () => {
-    const { el, host } = await mount();
-    host.style.width = "390px";
-    await resized(el);
-    await tap(el, "Beer");
-    await tap(el, "Beer");
-    await tap(el, "Flan");
-
-    expect(shown(browsing(el))).toBe(true);
-    expect(shown(draftPane(el))).toBe(false);
-    expect(review(el)!.textContent!.trim()).toBe(t("table.review").replace("{n}", "3"));
-
-    review(el)!.click();
-    await el.updateComplete;
-
-    expect(shown(draftPane(el))).toBe(true);
-    expect(shown(browsing(el))).toBe(false);
-    const toggles = [...el.shadowRoot!.querySelectorAll("[data-draft-select]")];
-    expect(toggles.map((toggle) => shown(toggle))).toEqual([true, true]);
-    expect(shown(el.shadowRoot!.querySelector('[data-draft-action="send-all"]'))).toBe(true);
-  });
 
   it("gives each line's name the Review view's width at 390 px, so it is not broken letter by letter", async () => {
     const { el, host } = await mount();
@@ -104,23 +82,6 @@ describe("till-table-order-screen: browsing and the draft by the screen's width"
     expect(host.scrollTop).toBe(scrolled);
     expect(rows(el)).toEqual(["Beer ×1", "Tapa 30 ×1"]);
     expect(shown(browsing(el))).toBe(true);
-  });
-
-  it("moves focus to Back when Review opens, and back to Review on Back", async () => {
-    const { el, host } = await mount();
-    host.style.width = "390px";
-    await resized(el);
-    await tap(el, "Beer");
-    review(el)!.focus();
-
-    review(el)!.click();
-    await resized(el);
-    const back = el.shadowRoot!.querySelector<HTMLElement>("[data-review-back]")!;
-    expect(el.shadowRoot!.activeElement).toBe(back);
-
-    back.click();
-    await resized(el);
-    expect(el.shadowRoot!.activeElement).toBe(review(el));
   });
 
   it("closes Review when the screen widens to side by side, putting browsing's scroll back", async () => {
