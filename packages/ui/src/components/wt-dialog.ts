@@ -85,7 +85,7 @@ export class WtDialog extends LitElement {
         padding: var(--wt-space-5);
         min-height: 0;
         overflow: auto;
-        overscroll-behavior-x: contain;
+        overscroll-behavior: contain;
         flex-shrink: 1000000;
       }
 
@@ -198,7 +198,7 @@ export class WtDialog extends LitElement {
     return false;
   }
 
-  /** This opening's place among all openings: later is higher. */
+  /** This opening's place among all openings: later is higher, 0 until shown. */
   private openedAt = 0;
   /** Where focus last was inside this dialog. The browser has already moved it by
    * `disconnectedCallback`, so it cannot be read on leaving. */
@@ -428,7 +428,7 @@ export class WtDialog extends LitElement {
   private onClose(): void {
     // Native reports arrive later; a reopened dialog owns its new opening, and a closed opening
     // reports once even if an earlier opening's native event also reaches this handler.
-    if (this.dialog.open) return;
+    if (this.dialog.open || (this.open && this.openedAt === 0)) return;
     if (this.open && (!this.dismissible || this.beforeClose)) {
       this.dialog.showModal();
       return;

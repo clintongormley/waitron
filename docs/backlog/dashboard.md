@@ -539,11 +539,41 @@ plans to retire the editor.
   it is a behaviour change on the restore path and needs its own tests. Left open by A938.
   [Detail](box.md#a-restore-from-a-backup-file-derives-the-archives-key-at-least-three-times)
 
+## A keydown guard that cancels Escape while a save runs did not keep one dialog open
+
+Five standalone dashboard forms still close on the second real Escape while busy:
+`option-label-form`, `add-to-menus`, `section-details-form`, `category-color-form` and
+`include-folder-form`, under `apps/dashboard/src/widgets/`. On 2026-11-09, the focused native
+control kept each dialog open after Escape one and closed it after Escape two. The same probe
+on base `5e61e90deb` gave the same results; a busy variant-form stayed open twice and a nonbusy
+option-label-form dismissed normally. These controls focus the modal body before making the
+form busy, and await native close delivery after each key. Command:
+`pnpm --filter @waitron/dashboard exec vitest run src/widgets/wt-dialog-sibling-control.test.ts --maxWorkers=1`
+in the disposable review checkout: 5 failing behavior assertions, 2 passing controls. Probe
+source and both logs remain in Lane D's `wt-dialog-sibling-*-20261109` receipts.
+
+The three approved option-list, extras-list and Add content language fixes do not settle these
+siblings. Next: add each modal's busy `dismissible` binding test-first. The menu/modifier delete
+flows and media save/delete flows still need the same repeated-key check; their earlier single-key
+probes do not settle it. This stays inside the existing bundle rather than becoming new items.
+
 ## Bundle: Wt dialog lifecycle
 
 - **Dashboard leftovers from the coverage branch**: the login-purpose check and unreachable
   fallbacks remain outside the dialog work.
   [Detail](dashboard.md#dashboard-leftovers-from-the-coverage-branch)
+- **Five sibling busy forms still close on a second Escape.**
+  [Detail](dashboard.md#a-keydown-guard-that-cancels-escape-while-a-save-runs-did-not-keep-one-dialog-open)
+- **Home/End caret behavior remains unresolved.** In macOS Chromium, End in an overflowing dialog
+  left text selected and scrolled the body. Removing vertical containment let short-body tests
+  pass but introduced underlying-page scrolling. In the 390×844 compact-modal control, End kept
+  selection `[0,6]` and moved page scrollTop `800→4156` without containment, versus `800→800` with
+  it. The earlier touch-emulation control kept the page at 800 past both body ends with no
+  overscroll events, so that touch result did not cover the keyboard path. Receipts:
+  `wt-dialog-key-page-control-20261109.log`, `wt-dialog-touch-probe-20261109.log`, and the
+  634-second run-it review (which measured a 4104px page movement in its own viewport).
+  Watcher 2026-11-09 19:15 kept containment and deferred this partial fix. Next: establish the
+  intended native key behavior and a discriminating long-form/page-scroll check before changing it.
 - **The till's modifier picker still recreates its modal when put back.** A738 added that because
   `wt-dialog` lost modality there. Check whether the recreation is still needed after lane C's
   #2642 lands; preserve the picker's draft and dismissal protections.
@@ -558,8 +588,8 @@ plans to retire the editor.
   `wt-dialog-native-close-before-control-20261109.log` in Lane D's receipts observed: with
   `closedby=closerequest`, Escape closes the reattached lower dialog; `none`, `auto`, or no
   attribute swallow Escape for the upper dialog and a native popover opened before reinsertion.
-  A popover opened after reinsertion still closes. The fix needs explicit Escape routing for
-  the upper dialog and its open popovers; watcher 2026-11-09 18:51 deferred that mechanism.
+  A popover opened after reinsertion still closes in that controlled setup. The fix needs explicit
+  Escape routing for the upper dialog and its open popovers; watcher 2026-11-09 18:51 deferred that mechanism.
   Next: name a production trigger and obtain approval for that routing before changing restoration.
 
 ## Bundle: Wt popups

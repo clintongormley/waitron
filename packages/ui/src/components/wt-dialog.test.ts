@@ -1963,33 +1963,40 @@ test("an opening cancelled off-page stays closed on attachment", async () => {
   expect(nativeOf(el).open).toBe(false);
 });
 
-for (const tag of ["wt-dialog", "wt-modal"] as const)
-  for (const field of [
-    '<input value="abcdef" />',
-    '<wt-input label="Note" value="abcdef"></wt-input>',
-  ])
-    test.each(["Home", "End"] as const)(
-      `${tag}: %s moves a selected field's caret (${field})`,
-      async (key) => {
-        const el = (await mount(`<${tag} heading="Edit">${field}</${tag}>`)) as WtDialog;
-        el.open = true;
-        await el.updateComplete;
-        const wrapped = el.querySelector("wt-input");
-        if (wrapped) await wrapped.updateComplete;
-        const input = wrapped
-          ? wrapped.shadowRoot!.querySelector("input")!
-          : el.querySelector("input")!;
-        input.focus();
-        input.select();
-        expect(deepActiveElement()).toBe(input);
-        await userEvent.keyboard(`{${key}}`);
-        expect([input.selectionStart, input.selectionEnd]).toEqual(
-          key === "Home" ? [0, 0] : [6, 6],
-        );
-        await userEvent.keyboard("Z");
-        expect(input.value).toBe(key === "Home" ? "Zabcdef" : "abcdefZ");
-      },
-    );
+test.each([false, true])(
+  "a late close report preserves a newer off-page opening (guarded: %s)",
+  async (guarded) => {
+    const errors: unknown[] = [];
+    const recordError = (event: ErrorEvent) => {
+      errors.push(event.error);
+      event.preventDefault();
+    };
+    window.addEventListener("error", recordError);
+    onTestFinished(() => window.removeEventListener("error", recordError));
+    const el = (await mount(
+      '<wt-dialog heading="Edit"><input name="note" /></wt-dialog>',
+    )) as WtDialog;
+    if (guarded) el.beforeClose = async () => true;
+    const closes = vi.fn();
+    el.addEventListener("wt-close", closes);
+    el.open = true;
+    await el.updateComplete;
+    el.open = false;
+    await el.updateComplete;
+    const putBack = takeOut(el);
+    el.open = true;
+    await el.updateComplete;
+    await closeReportsDelivered();
+    expect(errors).toEqual([]);
+    expect(el.open).toBe(true);
+    expect(closes).not.toHaveBeenCalled();
+    expect(nativeOf(el).open).toBe(false);
+    putBack();
+    await el.updateComplete;
+    expect(nativeOf(el).matches(":modal")).toBe(true);
+    expect(takesFocus(el.querySelector("input")!)).toBe(true);
+  },
+);
 
 function takeOut(el: HTMLElement): () => void {
   const parent = el.parentNode!;

@@ -2189,8 +2189,8 @@ turns `wt-close` into a Cancel checks that it is still meant to be open, as
 off whose `open` is still true: `wt-dialog` shows it again and sends no `wt-close`.
 
 You can set `open` while the component is detached; it opens after attachment. Cancelling that
-opening before attachment leaves it closed. Home and End keep their native text-field behavior
-inside both dialog primitives.
+opening before attachment leaves it closed. A late native close report from an earlier opening
+does not cancel that new opening.
 
 Set `open` to show or close the modal. Handle button clicks in your form and listen for `wt-close`
 to handle dismissal, including Escape. The native dialog keeps focus inside while open. In Chromium,
