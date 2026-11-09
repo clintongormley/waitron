@@ -95,19 +95,15 @@ export function allocateCorrectionAmounts(
     const prior = history.consumed.filter(
       (allocation) => compareDecimal(allocation.rate, rate) === 0,
     );
-    const priorGross = sumDecimals(prior.map((allocation) => allocation.gross));
-    const priorBase = sumDecimals(prior.map((allocation) => allocation.base));
-    const cumulativeGross = addDecimal(priorGross, gross);
-    let cumulativeBase = divideDecimal(
-      cumulativeGross,
-      addDecimal(decimal("1"), divideDecimal(rate, decimal("100"), 4)),
-      2,
+    const base = correctionBaseAtRate(
+      rate,
+      original,
+      {
+        gross: sumDecimals(prior.map((allocation) => allocation.gross)),
+        base: sumDecimals(prior.map((allocation) => allocation.base)),
+      },
+      gross,
     );
-    // Stored line rounding sets the rate's total budgets, including before its final return.
-    const minimumBase = subtractDecimal(cumulativeGross, original.tax);
-    if (compareDecimal(cumulativeBase, original.base) > 0) cumulativeBase = original.base;
-    if (compareDecimal(cumulativeBase, minimumBase) < 0) cumulativeBase = minimumBase;
-    const base = subtractDecimal(cumulativeBase, priorBase);
     const tax = subtractDecimal(gross, base);
     if (!isMoney(base) || !isMoney(tax)) unusable();
     const bases = apportionCorrectionCents(
@@ -121,6 +117,29 @@ export function allocateCorrectionAmounts(
     vatBreakdown.push({ rate, base: toScale(base, 2), tax: toScale(tax, 2) });
   }
   return { gross: toScale(amount, 2), allocations, vatBreakdown };
+}
+
+/**
+ * The base, at one rate, of a correction taking `gross` after earlier corrections took `prior`:
+ * all amounts positive. Shared by the calculator and the correction writer's check.
+ */
+export function correctionBaseAtRate(
+  rate: Decimal,
+  original: { base: Decimal; tax: Decimal },
+  prior: { gross: Decimal; base: Decimal },
+  gross: Decimal,
+): Decimal {
+  const cumulativeGross = addDecimal(prior.gross, gross);
+  let cumulativeBase = divideDecimal(
+    cumulativeGross,
+    addDecimal(decimal("1"), divideDecimal(rate, decimal("100"), 4)),
+    2,
+  );
+  // Stored line rounding sets the rate's total budgets, including before its final return.
+  const minimumBase = subtractDecimal(cumulativeGross, original.tax);
+  if (compareDecimal(cumulativeBase, original.base) > 0) cumulativeBase = original.base;
+  if (compareDecimal(cumulativeBase, minimumBase) < 0) cumulativeBase = minimumBase;
+  return subtractDecimal(cumulativeBase, prior.base);
 }
 
 function unusable(): never {
