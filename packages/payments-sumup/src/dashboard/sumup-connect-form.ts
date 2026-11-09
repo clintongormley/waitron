@@ -7,7 +7,6 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { codeMessage, codeOf, type DashboardRequest } from "@waitron/dashboard-kit";
 import { t } from "./strings.js";
 import {
@@ -38,19 +37,6 @@ export class SumUpConnectForm extends LitElement {
         display: block;
         margin-bottom: var(--wt-space-4);
       }
-      .affiliate-label {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-        margin-bottom: var(--wt-space-2);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
-      /* The help badge hangs over this box's top trailing corner. */
-      .affiliate-heading {
-        position: relative;
-        display: inline-block;
-      }
       .confirm {
         color: var(--wt-color-success, var(--wt-color-text));
       }
@@ -67,8 +53,6 @@ export class SumUpConnectForm extends LitElement {
   @property({ attribute: false }) onConnected: () => void = () => {};
 
   @state() private apiKey = "";
-  @state() private affiliateAppId = "";
-  @state() private affiliateKey = "";
   @state() private merchants: AmbiguousMerchant[] | null = null;
   @state() private merchantCode = "";
   @state() private attempted = false;
@@ -87,8 +71,6 @@ export class SumUpConnectForm extends LitElement {
   #value(): Required<SumUpConnectPayload> {
     return {
       apiKey: this.apiKey,
-      affiliateAppId: this.affiliateAppId,
-      affiliateKey: this.affiliateKey,
       merchantCode: this.merchantCode,
     };
   }
@@ -101,16 +83,9 @@ export class SumUpConnectForm extends LitElement {
       parent: (this.getRootNode() as ShadowRoot).host,
       current: () => this.#value(),
       snapshot: (value) => ({ ...value }),
-      equal: (a, b) =>
-        this.busy ||
-        (a.apiKey === b.apiKey &&
-          a.affiliateAppId === b.affiliateAppId &&
-          a.affiliateKey === b.affiliateKey &&
-          a.merchantCode === b.merchantCode),
+      equal: (a, b) => this.busy || (a.apiKey === b.apiKey && a.merchantCode === b.merchantCode),
       restore: (value) => {
         this.apiKey = value.apiKey;
-        this.affiliateAppId = value.affiliateAppId;
-        this.affiliateKey = value.affiliateKey;
         this.merchantCode = value.merchantCode;
       },
     });
@@ -122,8 +97,6 @@ export class SumUpConnectForm extends LitElement {
     this.#scope?.dispose();
     this.#scope = undefined;
     this.apiKey = "";
-    this.affiliateAppId = "";
-    this.affiliateKey = "";
     this.merchantCode = "";
     this.attempted = false;
     this.refusal = "";
@@ -133,11 +106,7 @@ export class SumUpConnectForm extends LitElement {
     super.disconnectedCallback();
   }
 
-  #onField(
-    event: CustomEvent<{ value: string }>,
-    field: "apiKey" | "affiliateAppId" | "affiliateKey",
-    opening: object,
-  ): void {
+  #onField(event: CustomEvent<{ value: string }>, field: "apiKey", opening: object): void {
     event.stopPropagation();
     if (!this.isConnected || opening !== this.#opening) return;
     this[field] = event.detail.value;
@@ -186,8 +155,6 @@ export class SumUpConnectForm extends LitElement {
     try {
       const result = await this.#client().connect({
         apiKey: submitted.apiKey,
-        ...(submitted.affiliateAppId !== "" ? { affiliateAppId: submitted.affiliateAppId } : {}),
-        ...(submitted.affiliateKey !== "" ? { affiliateKey: submitted.affiliateKey } : {}),
         ...(submitted.merchantCode !== "" ? { merchantCode: submitted.merchantCode } : {}),
       });
       if (!this.isConnected || opening !== this.#opening) return;
@@ -197,8 +164,6 @@ export class SumUpConnectForm extends LitElement {
       scope?.dispose();
       this.#scope = undefined;
       this.apiKey = "";
-      this.affiliateAppId = "";
-      this.affiliateKey = "";
       this.merchantCode = "";
       this.connectedName = result.merchantName;
       this.onConnected();
@@ -245,39 +210,6 @@ export class SumUpConnectForm extends LitElement {
         error=${errors.apiKey}
         .value=${this.apiKey}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "apiKey", opening)}
-      ></wt-input>
-
-      <div class="affiliate-label">
-        <span class="affiliate-heading">
-          <span
-            >${t("payments.sumup.affiliate_app_id")} / ${t("payments.sumup.affiliate_key")}</span
-          >
-          <wt-help-tooltip
-            mode="help-mode"
-            aria-label=${t("payments.sumup.affiliate_help_label")}
-            data-test="affiliate-help"
-          >
-            ${t("payments.sumup.affiliate_help")}
-          </wt-help-tooltip>
-        </span>
-      </div>
-      <wt-input
-        class="field"
-        type="password"
-        name="affiliateAppId"
-        data-test="affiliate-app-id"
-        label=${t("payments.sumup.affiliate_app_id")}
-        .value=${this.affiliateAppId}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "affiliateAppId", opening)}
-      ></wt-input>
-      <wt-input
-        class="field"
-        type="password"
-        name="affiliateKey"
-        data-test="affiliate-key"
-        label=${t("payments.sumup.affiliate_key")}
-        .value=${this.affiliateKey}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "affiliateKey", opening)}
       ></wt-input>
 
       ${

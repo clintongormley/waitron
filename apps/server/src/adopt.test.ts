@@ -667,8 +667,6 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         value: {
           apiKey: "sup_sk_x",
           merchantCode: "MABC123",
-          affiliateAppId: "-",
-          affiliateKey: "-",
         },
       }),
     );

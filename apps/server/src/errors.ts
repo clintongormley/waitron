@@ -445,7 +445,12 @@ declare module "@waitron/shared" {
     "sale.empty_basket": Record<string, never>;
     "sale.charged_not_recorded": {
       workingOrderId: string;
-      reason: "disk_full" | "clock_behind_chain" | "clock_unusable" | "issuance_refused";
+      reason:
+        | "disk_full"
+        | "clock_behind_chain"
+        | "clock_unusable"
+        | "issuance_refused"
+        | "partial_refund";
       recoveryUrl?: string;
     };
     /**

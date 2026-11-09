@@ -891,8 +891,6 @@ describe("ongoing alert sources through the route", () => {
         value: {
           apiKey: "sup_sk_x",
           merchantCode: "MABC123",
-          affiliateAppId: "-",
-          affiliateKey: "-",
         },
       }),
     );

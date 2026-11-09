@@ -25,10 +25,6 @@ describe.each(["light", "dark"] as const)("SumUp connect form accessibility (%s)
       theme,
     )) as SumUpConnectForm;
     await el.updateComplete;
-    const help = el.shadowRoot!.querySelector("[data-test=affiliate-help]") as HTMLElement & {
-      updateComplete: Promise<unknown>;
-    };
-    await help.updateComplete;
     await expectNoA11yViolations(host, { enable: ["target-size"] });
   });
 });

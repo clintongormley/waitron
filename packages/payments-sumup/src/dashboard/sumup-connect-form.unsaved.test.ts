@@ -61,7 +61,7 @@ function pending<T>() {
   return { promise, resolve, reject };
 }
 
-for (const name of ["api-key", "affiliate-app-id", "affiliate-key"]) {
+for (const name of ["api-key"]) {
   it(`protects exact ${name} through Keep and Discard and skips a reverted value`, async () => {
     const form = await mount();
     const proceed = vi.fn();

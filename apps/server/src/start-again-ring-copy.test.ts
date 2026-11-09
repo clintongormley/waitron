@@ -49,8 +49,6 @@ const PRIMARY_KEYS = generateNodeKeyPair();
 const SUMUP = {
   apiKey: "sup_sk_moved",
   merchantCode: "MABC123",
-  affiliateAppId: "-",
-  affiliateKey: "-",
 };
 const BUNDLE: Omit<MirrorBundle, "reservedIdentity"> = {
   designated: { nodeId: PRIMARY_NODE_ID },

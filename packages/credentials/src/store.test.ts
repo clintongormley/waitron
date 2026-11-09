@@ -77,7 +77,7 @@ describe("the seal binds each credential to its purpose", () => {
     // purpose is handed another purpose's material. Same key, intact ciphertext and tag — only the
     // purpose differs, so only the authenticated data can refuse it. Both purposes share the
     // `payments.` prefix, so a binding to that prefix alone would also open the row.
-    const sumup = { apiKey: "sup_x", merchantCode: "M1", affiliateAppId: "-", affiliateKey: "-" };
+    const sumup = { apiKey: "sup_x", merchantCode: "M1" };
     await withTransaction(suite.db, async (tx) => {
       await putCredential(tx, RING_V1, { purpose: "payments.sumup", value: sumup });
       await tx.execute(sql`

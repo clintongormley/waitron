@@ -22,7 +22,7 @@ const stripe = {
   successUrl: "https://example.test/success?session={CHECKOUT_SESSION_ID}",
   cancelUrl: "http://localhost:3000/cancel",
 };
-const sumup = { apiKey: "synthetic", merchantCode: "M1", affiliateAppId: "-", affiliateKey: "-" };
+const sumup = { apiKey: "synthetic", merchantCode: "M1" };
 const passed = {
   status: "passed",
   checks: [
@@ -393,7 +393,7 @@ it.each(["secrets/secrets.env", "secrets/trading.env"])(
   },
 );
 it("uses captured file precedence, including the optional backup override", async () => {
-  await credential("payments.sumup", { ...sumup, affiliateAppId: "app", affiliateKey: "secret" });
+  await credential("payments.sumup", sumup);
   const wrong = `WAITRON_CREDENTIALS_KEY=${Buffer.alloc(32, 8).toString("base64")}\nWAITRON_CREDENTIALS_KEY_VERSION=1`;
   expect(
     await run({ secrets: wrong, trading: wrong, backup: `WAITRON_CREDENTIALS_KEY=${key}` }),

@@ -160,23 +160,27 @@ projection omitted ids; it is not evidence for a parser change. A first missing 
 license another charge; ambiguous matches stay visible. No reconciler was built. Its design may
 continue against [the 9 November cross-account session](../research/2026-09-10-sumup-solo-experiments.md#11-a949-cross-account-session-2026-11-09).
 The A1308 table-work hold was lifted on 7 November; any new schema work regenerates on the
-current main baseline. The owner decided on 9 November that every reader checkout carries
-Waitron's affiliate block and each venue's own credential. Revise the plan and obtain approval
-before building; signature handling remains independently open.
+current main baseline. The first A949 slice uses `WAITRON_SUMUP_AFFILIATE` in
+`packages/payments-sumup/src/affiliate.ts` for the app ID and public partner key together.
+To change them, edit that one value and ship a box update. The venue supplies only its own API
+key and merchant selection. One retry without partner metadata follows only a documented
+HTTP 400 invalid-affiliate-key refusal and raises `payment.affiliate_rejected`; acceptance of
+that fallback is not live-qualified. A lost fallback reply has no supplied reference to recover.
 
-Settlement-report audit and orphan self-heal. `resolvePending` is the interim backstop; without
-an affiliate key a create whose response is lost resolves `failed` and raises
-`payment.pending_outcome_unactionable` for a human. Note: a SumUp refund appears both as a
-`REFUND` event inside the original transaction (`events` and `transaction_events`, which the
-refund lookup reads) and as its own item of `type: REFUND` in the transaction history listing;
-the original's `status` stays `SUCCESSFUL` (read on 2026-09-27 from three refunded
-transactions).
+Recovery records the gross capture and identified completed refunds together. Uncertain refund
+evidence stays attempting for another check; a failed refund alone leaves the charge. A partly
+refunded unfiled charge keeps the order held and needs review in SumUp's dashboard before another
+charge. Report audit, orphan self-heal, durable reversal attempts and all three backup-machine
+cases remain open, along with signature handling.
+
+Settlement-report audit and orphan self-heal remain to build. The original transaction can stay
+`SUCCESSFUL` while identified `REFUND` events in `events` and `transaction_events` show money
+returned; its status alone cannot establish what remains collected.
 
 ## What M7b2 left open (a manager clearing a stuck card payment, #702)
 
 - SumUp has no permanent lock: its sweep resolves every `attempting` row this box owns against
-  SumUp, and fails one SumUp has never heard of after 15 minutes, with an incident. It leaves a row
-  only while SumUp keeps answering PENDING. The manager action refuses a SumUp payment
+  SumUp, and fails one SumUp has never heard of after 15 minutes, with an incident. It also leaves uncertain refund evidence attempting for another check. The manager action refuses a SumUp payment
   (`payment.resolve_unsupported`).
 - The add-reader dismissal tests (`packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts`
   and its Stripe twin, `stripe-add-reader.test.ts`) have not been re-measured since #721 made

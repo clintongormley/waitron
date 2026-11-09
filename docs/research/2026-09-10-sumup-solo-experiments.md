@@ -1430,3 +1430,20 @@ measured. Waitron's commercial revenue share still needs its agreement. Signatur
 declines, a positive completed payout, statement fees, connection/termination probes and a second
 standalone machine's matching sample remain open. No additional paid request is authorised
 unattended. Revise the reconciler proposal against this evidence before building it.
+
+### 11.5 First recovery slice, 9 November 2026
+
+The owner permitted public distribution of the Waitron partner key (watcher 18:48/18:49).
+`WAITRON_SUMUP_AFFILIATE` in `packages/payments-sumup/src/affiliate.ts` is its single source;
+venue credentials hold only the API key and merchant code. A documented HTTP 400
+`INVALID_AFFILIATE_KEY` or its problem URI permits one retry without the affiliate block,
+with an alert. No timeout, server error or unrelated refusal permits that retry. The
+[checkout endpoint](https://developer.sumup.com/api/readers/create-checkout/) says
+“Optionally include an `affiliate` object”; the [Cloud guide](https://developer.sumup.com/terminal-payments/cloud-api/)
+says it “requires this key in checkout requests”. This is an evidence-limited fallback policy,
+not a measured fallback checkout. A lost fallback reply lacks our reference.
+
+Recovery now checks both refund arrays, records identified completed events with the gross
+capture, and leaves uncertain evidence for another pass. The first slice does not perform
+settlement audit, orphan reconciliation or a provider refund. The hands-on qualifications
+still open in §11 remain open; no additional provider call was made for this slice.

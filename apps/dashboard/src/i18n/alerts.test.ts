@@ -790,3 +790,17 @@ describe("the box's time service not keeping its clock right", () => {
     );
   });
 });
+
+it.each(["en", "es"])("explains affiliate rejection and refund uncertainty in %s", (locale) => {
+  expect(hasAlertMessage("payment.affiliate_rejected")).toBe(true);
+  const fallback = alertMessage("payment.affiliate_rejected", { paymentRef: "ref-key" }, locale);
+  expect(fallback).toContain("ref-key");
+  const refund = alertMessage(
+    "payment.pending_outcome_unactionable",
+    { paymentRef: "ref-refund", status: "refund_pending" },
+    locale,
+  );
+  expect(refund).toContain("refund_pending");
+  expect(refund).toContain("ref-refund");
+  expect(refund).not.toMatch(/marked the payment as failed|marcado el pago como fallido/);
+});

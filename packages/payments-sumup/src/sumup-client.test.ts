@@ -942,3 +942,42 @@ describe("legacy refund uncertain HTTP status", () => {
     },
   );
 });
+
+describe("SumUp refund evidence", () => {
+  it("reads both refund arrays even when the first contains only a payout", async () => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "M",
+      fetch: async () =>
+        Response.json({
+          id: "txn",
+          status: "SUCCESSFUL",
+          amount: 1,
+          transaction_events: [{ event_type: "PAYOUT", id: 2, amount: 0.98 }],
+          events: [
+            {
+              type: "REFUND",
+              id: 3,
+              status: "REFUNDED",
+              amount: 0.4,
+              timestamp: "2026-11-09T10:00:00Z",
+            },
+          ],
+        }),
+    });
+    expect((await client.findTransaction({ id: "txn" }))?.refundEvents).toEqual([
+      { id: "3", status: "REFUNDED", amount: decimal("0.40"), timestamp: "2026-11-09T10:00:00Z" },
+    ]);
+  });
+  it.each([null, "unknown", [{ type: "REFUND", id: "", amount: 0.4, timestamp: "bad" }]])(
+    "retains malformed refund evidence (%s) instead of silently dropping it",
+    async (events) => {
+      const client = sumupClient({
+        apiKey: "k",
+        merchantCode: "M",
+        fetch: async () => Response.json({ id: "txn", status: "SUCCESSFUL", amount: 1, events }),
+      });
+      expect((await client.findTransaction({ id: "txn" }))?.refundEvidenceInvalid).toBe(true);
+    },
+  );
+});

@@ -33,3 +33,7 @@
 Backlog names the constant; runbook gets a dated pointer and provenance. Report audit, orphan recovery, durable reversal and all three backup-machine cases stay open, without approved deferral. No completed-payout prerequisite; SCHEDULED is not settlement. No schema, fiscal chain/hash, invoice allocation, alta/registerSif/restoreFiscal/golden changes.
 
 **Watcher question:** approve the evidence-limited fallback and the 60-line consumer correction (15 code, 45 tests), within this 896-line slice? No build before that answer.
+
+**Implementation authority, 9 November 19:04:** the watcher approved plan `6c496e3f77`,
+including the evidence-limited fallback and partial-charge hold, with one whole-branch
+Claude run-it review and one push. This resolves the question above; no third plan read.

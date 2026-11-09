@@ -1,3 +1,5 @@
+import { loadKeyRing } from "@waitron/credentials";
+import { deferredClient } from "./card-provider.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -7,7 +9,7 @@ import { CORE_MIGRATIONS, deviceProfiles, devices } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, diskFullIn } from "@waitron/shared";
-import { ChargeNotSavedError, PAYMENTS_MIGRATIONS } from "@waitron/payments";
+import { ChargeNotSavedError, PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import {
   billPaymentOfRow,
   ownsEveryPayment,
@@ -104,6 +106,162 @@ describe("SumUpCloudProvider.collect", () => {
     expect(r.state).toBe("captured");
     expect(r.externalRef).toMatch(/^txn_/); // the REFUNDABLE id, not the ctx_ poll key
   });
+
+  it.each([
+    { refusal: { errors: { type: "INVALID_AFFILIATE_KEY" } }, status: 400, retries: 1 },
+    {
+      refusal: { type: "https://developer.sumup.com/problem/invalid-affiliate-key" },
+      status: 400,
+      retries: 1,
+    },
+    { refusal: { errors: { type: "INVALID_AFFILIATE_KEY" } }, status: 403, retries: 0 },
+    { refusal: { errors: { type: "OTHER" } }, status: 400, retries: 0 },
+    { refusal: { errors: "INVALID_AFFILIATE_KEY" }, status: 400, retries: 0 },
+    { refusal: { errors: { type: "INVALID_AFFILIATE_KEY" } }, status: 503, retries: 0 },
+  ])(
+    "affiliate refusal $status/$refusal retries only documented key rejection",
+    async ({ refusal, status, retries }) => {
+      const { params, row } = await setup(suite);
+      const bodies: Record<string, unknown>[] = [];
+      const raised: string[] = [];
+      const client = sumupClient({
+        apiKey: "k",
+        merchantCode: "M",
+        fetch: async (_url, init) => {
+          if (init?.method === "GET")
+            return Response.json({ id: "txn_fallback", status: "SUCCESSFUL", amount: 12.5 });
+          bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+          return bodies.length === 1
+            ? Response.json(refusal, { status })
+            : Response.json(
+                { data: { checkout_id: "co", client_transaction_id: "ctx_fallback" } },
+                { status: 201 },
+              );
+        },
+      });
+      const provider = new SumUpCloudProvider({
+        client,
+        db: suite.db,
+        captureAlerts,
+        incidents: async (_tx, incident) => {
+          raised.push(incident.error.code);
+          return true;
+        },
+        poll: { maxAttempts: 1, intervalMs: 0 },
+      });
+      const result = await provider.collect(params);
+      expect(result.state).toBe(retries ? "captured" : status === 503 ? "attempting" : "failed");
+      expect(bodies).toHaveLength(1 + retries);
+      expect(bodies[0]!.affiliate).toMatchObject({
+        app_id: "io.waitron.pos",
+        key: expect.any(String),
+        foreign_transaction_id: result.paymentRef,
+      });
+      if (retries) expect(bodies[1]).not.toHaveProperty("affiliate");
+      expect(raised).toEqual(retries ? ["payment.affiliate_rejected"] : []);
+      expect((await row(result.paymentRef)).state).toBe(result.state);
+    },
+  );
+
+  it("refuses missing credentials before writing an attempt", async () => {
+    const { params } = await setup(suite);
+    const provider = new SumUpCloudProvider({
+      client: deferredClient({
+        db: suite.db,
+        ring: loadKeyRing({
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        }),
+      }),
+      db: suite.db,
+      captureAlerts,
+      incidents: async () => true,
+    });
+    await expect(provider.collect(params)).rejects.toMatchObject({ code: "credentials.missing" });
+    expect(
+      await suite.db
+        .select()
+        .from(payments)
+        .where(eq(payments.workingOrderId, params.workingOrderId)),
+    ).toEqual([]);
+  });
+
+  it.each([
+    { refund: 12.5, state: "refunded" },
+    { refund: 0.4, state: "partially_refunded" },
+  ])("collect records a $state charge instead of a fresh capture", async ({ refund, state }) => {
+    const { params, row } = await setup(suite);
+    const requests: string[] = [];
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "M",
+      fetch: async (_url, init) => {
+        requests.push(init?.method ?? "GET");
+        return Response.json(
+          init?.method === "POST"
+            ? { data: { checkout_id: "co", client_transaction_id: "ctx" } }
+            : {
+                id: "txn",
+                status: "SUCCESSFUL",
+                amount: 12.5,
+                events: [
+                  {
+                    type: "REFUND",
+                    id: 1,
+                    status: "REFUNDED",
+                    amount: refund,
+                    timestamp: new Date().toISOString(),
+                  },
+                ],
+              },
+        );
+      },
+    });
+    const raised: string[] = [];
+    const provider = new SumUpCloudProvider({
+      client,
+      db: suite.db,
+      captureAlerts,
+      incidents: async (_tx, i) => {
+        raised.push(String(i.error.params.status));
+        return true;
+      },
+    });
+    const result = await provider.collect(params);
+    expect(result.state).toBe(state);
+    expect((await row(result.paymentRef)).state).toBe(state);
+    expect(raised).toEqual([state === "refunded" ? "refund_completed" : "partial_refund"]);
+    expect(requests).toEqual(["POST", "GET"]);
+  });
+
+  it.each(["lost", "rejected"])(
+    "does not retry a fallback whose response was %s",
+    async (reply) => {
+      const { params, row } = await setup(suite);
+      let creates = 0;
+      const client = sumupClient({
+        apiKey: "k",
+        merchantCode: "M",
+        fetch: async () => {
+          creates++;
+          if (creates === 1)
+            return Response.json({ errors: { type: "INVALID_AFFILIATE_KEY" } }, { status: 400 });
+          if (reply === "lost") throw new Error("reply lost");
+          return Response.json({ errors: { type: "INVALID_AFFILIATE_KEY" } }, { status: 400 });
+        },
+      });
+      const provider = new SumUpCloudProvider({
+        client,
+        db: suite.db,
+        captureAlerts,
+        incidents: async () => true,
+      });
+      const result = await provider.collect(params);
+      expect(creates).toBe(2);
+      expect(result.state).toBe(reply === "lost" ? "attempting" : "failed");
+      expect((await row(result.paymentRef)).externalRef).toBeNull();
+    },
+  );
 
   it("a declined card resolves failed with settledAt null", async () => {
     const { provider, params, row } = await setup(suite, (f) => f.declineNext());

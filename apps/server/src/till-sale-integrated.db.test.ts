@@ -1,3 +1,4 @@
+import { settleFromProviderRow } from "./bill-payments-loop.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
@@ -30,6 +31,7 @@ import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
   allocateInvoiceNumber,
+  billPayments,
   drawerOpens,
   invoiceSeries,
   parties,
@@ -56,6 +58,7 @@ import {
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
+  recordRefund,
   SimulatorPaymentProvider,
 } from "@waitron/payments";
 import type { PaymentProvider, PaymentResult, PaymentResultState } from "@waitron/payments";
@@ -3110,6 +3113,116 @@ describe("an order being paid by card cannot be changed from another device (pla
         ),
       ).toEqual([{ quantity: 3000 }]);
     });
+  });
+
+  it.each(["open", "placed"] as const)(
+    "retains a partially refunded unfiled %s charge without issuing or charging again",
+    async (status) => {
+      const { cfg, coffee } = await modeVenue("ticket_then_pay");
+      const id = randomUUID();
+      await parkOrder({ db: suite.db }, cfg, {
+        id,
+        zoneId: coffee.zoneId,
+        lines: [{ menuItemId: coffee.menuItemId, quantity: "1" }],
+      });
+      if (status === "placed")
+        await placeOrder(
+          { admission: testTradingAdmission(), db: suite.db, backend, clock },
+          cfg,
+          id,
+          OPERATOR,
+        );
+      let calls = 0;
+      class RefundedSimulator extends SimulatorPaymentProvider {
+        override async collect(
+          params: Parameters<PaymentProvider["collect"]>[0],
+        ): Promise<PaymentResult> {
+          calls++;
+          const result = await super.collect(params);
+          await withTransaction(suite.db, (tx) =>
+            recordRefund(tx, {
+              provider: result.provider,
+              paymentRef: result.paymentRef,
+              amount: decimal("0.40"),
+              providerRefundRef: "observed-refund",
+            }),
+          );
+          return { ...result, state: "partially_refunded" };
+        }
+      }
+      const provider = new RefundedSimulator(suite.db);
+      const deps = { admission: testTradingAdmission(), db: suite.db, backend, clock, provider };
+      await expect(
+        payWorkingOrderIntegrated(deps, cfg, { id, lines: [], simulationOutcome: "captured" }),
+      ).rejects.toMatchObject({
+        code: "sale.charged_not_recorded",
+        params: { reason: "partial_refund" },
+      });
+      await releaseLoopPass();
+      expect(await orderState(id)).toEqual({ status, settledAtSet: false });
+      expect(suite.db.all(sql`select id from sales where working_order_id = ${id}`)).toEqual([]);
+      if (status === "open") expect(await markOf(id)).not.toBeNull();
+      await expect(
+        payWorkingOrderIntegrated(deps, cfg, { id, lines: [], simulationOutcome: "captured" }),
+      ).rejects.toMatchObject({ code: "order.payment_in_flight" });
+      expect(calls).toBe(1);
+      expect(await tendersFor(id)).toEqual([]);
+    },
+  );
+
+  it("keeps a partially refunded pending bill payment held without allocating or issuing", async () => {
+    const t = await twoTabs();
+    const ref = randomUUID();
+    const billId = await withTransaction(suite.db, async (tx) => {
+      const [bill] = await tx
+        .insert(billPayments)
+        .values({
+          workingOrderId: t.tabId,
+          submissionId: randomUUID(),
+          fingerprint: "pending",
+          kind: "contribution",
+          method: "card",
+          applied: 150,
+          state: "pending",
+          requestedBy: OPERATOR,
+          source: "device",
+          deviceId: t.cfg.origin.deviceId,
+        })
+        .returning({ id: billPayments.id });
+      await insertCapturedPayment(tx, {
+        origin: t.cfg.origin,
+        workingOrderId: t.tabId,
+        nodeId: t.cfg.nodeId,
+        provider: "sumup",
+        paymentRef: ref,
+        amount: decimal("1.50"),
+        settledAt: clock.now().instant,
+        billPaymentId: bill!.id,
+      });
+      await recordRefund(tx, {
+        provider: "sumup",
+        paymentRef: ref,
+        amount: decimal("0.40"),
+        providerRefundRef: "partial",
+      });
+      return bill!.id;
+    });
+    const result = await withTransaction(suite.db, (tx) =>
+      settleFromProviderRow(
+        tx,
+        { admission: testTradingAdmission(), db: suite.db, backend, clock, cfg: t.cfg },
+        billId,
+        clock.now().instant,
+      ),
+    );
+    expect(result).toEqual({ settled: "left", providerState: "partially_refunded" });
+    const [bill] = await suite.db
+      .select({ state: billPayments.state })
+      .from(billPayments)
+      .where(eq(billPayments.id, billId));
+    expect(bill?.state).toBe("pending");
+    expect(suite.db.all(sql`select id from sales where working_order_id = ${t.tabId}`)).toEqual([]);
+    expect(await tendersFor(t.tabId)).toEqual([]);
   });
 
   it("the loop releases a mark no attempt in this process and no unfiled payment stands behind, on open orders only", async () => {
