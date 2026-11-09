@@ -571,6 +571,20 @@ interface LinesIndex {
   extraForbidsChange: Set<number>;
 }
 
+function findSlice(
+  slices: readonly SentSlice[],
+  kind: SentSlice["kind"],
+  workingOrderId: string,
+  lineId: string,
+): SentSlice | undefined {
+  return slices.find(
+    (slice) =>
+      slice.kind === kind &&
+      slice.row.lineId === lineId &&
+      slice.row.workingOrderId === workingOrderId,
+  );
+}
+
 function stationAllowsChange(row: TabLine): boolean {
   return (
     row.changesAfterSending === null ||
@@ -3151,6 +3165,12 @@ export class TillTableOrderScreen extends LitElement {
     return this.#sentLineMembers()?.[0];
   }
 
+  /** Every row Sent lists now, as its own slice. */
+  #sentSlices(orders: CurrentOrders): SentSlice[] {
+    const model = sentPanel(orders, this.orderId ?? "", this.now ?? Date.now());
+    return [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)];
+  }
+
   /** The portions the open sheet speaks for, by line number: the row's one slice, or every member
    * of a grouped row while they all still show as that one row. */
   #sentLineMembers(): SentSlice[] | undefined {
@@ -3165,16 +3185,10 @@ export class TillTableOrderScreen extends LitElement {
       pending.visit !== this.serviceVisit
     )
       return;
-    const model = sentPanel(this.currentOrders, this.orderId ?? "", this.now ?? Date.now());
-    const slices = [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)];
+    const slices = this.#sentSlices(this.currentOrders);
     const members: SentSlice[] = [];
     for (const lineId of pending.info.lineIds ?? [pending.info.lineId]) {
-      const member = slices.find(
-        (slice) =>
-          slice.row.lineId === lineId &&
-          slice.kind === pending.info.kind &&
-          slice.row.workingOrderId === pending.info.workingOrderId,
-      );
+      const member = findSlice(slices, pending.info.kind, pending.info.workingOrderId, lineId);
       if (member === undefined) return;
       members.push(member);
     }
@@ -5144,23 +5158,16 @@ export class TillTableOrderScreen extends LitElement {
   #requestServe(row: CurrentOrderRow, undo: boolean, members?: readonly CurrentOrderRow[]): void {
     if (!this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread) return;
     if (undo && !this.#sentBillOpen(row)) return;
-    this.#serveAuthority = {
-      api: this.api,
-      partyId: this.party?.id ?? null,
-      billId: this.orderId,
-      visit: this.serviceVisit,
-    };
+    this.#takeServeAuthority();
     const most =
       members === undefined ? this.#mostToServe(row, undo) : decimal(String(members.length));
     if (row.unitPrecision === 0 && compareDecimal(most, decimal("1")) > 0) {
-      this.#serveOpening++;
-      this.#serveScope?.dispose();
-      this.#serveScope = undefined;
-      this.#serveBaseline = most;
-      this.servePending = { row, undo, count: most, ...(members === undefined ? {} : { members }) };
-      this.#watchServe();
-      const dialog = this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]");
-      if (dialog) dialog.open = true;
+      this.#openServeDialog({
+        row,
+        undo,
+        count: most,
+        ...(members === undefined ? {} : { members }),
+      });
       return;
     }
     this.#sendServe(row, undo, most);
@@ -5168,24 +5175,51 @@ export class TillTableOrderScreen extends LitElement {
 
   #requestRecall(members: readonly SentSlice[]): void {
     if (!this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread) return;
+    this.#takeServeAuthority();
+    this.#openServeDialog({
+      row: members[0]!.row,
+      undo: false,
+      count: decimal(String(members.length)),
+      members: members.map((member) => member.row),
+      recall: members,
+    });
+  }
+
+  /** Remembers what the count dialog's answer may act on: this api, party, bill and visit. */
+  #takeServeAuthority(): void {
     this.#serveAuthority = {
       api: this.api,
       partyId: this.party?.id ?? null,
       billId: this.orderId,
       visit: this.serviceVisit,
     };
-    const most = decimal(String(members.length));
+  }
+
+  /** Spends what {@link #takeServeAuthority} remembered: true when the screen may still act on it
+   * now. */
+  #spendServeAuthority(): boolean {
+    const authority = this.#serveAuthority;
+    this.#serveAuthority = undefined;
+    return (
+      authority !== undefined &&
+      this.isConnected &&
+      !this.busy &&
+      !this.groupCommandBusy &&
+      !this.currentOrdersUnread &&
+      authority.api === this.api &&
+      authority.partyId === (this.party?.id ?? null) &&
+      authority.billId === this.orderId &&
+      authority.visit === this.serviceVisit
+    );
+  }
+
+  /** Opens the count dialog on `pending`, whose count is also what the dialog counts as unchanged. */
+  #openServeDialog(pending: NonNullable<typeof this.servePending>): void {
     this.#serveOpening++;
     this.#serveScope?.dispose();
     this.#serveScope = undefined;
-    this.#serveBaseline = most;
-    this.servePending = {
-      row: members[0]!.row,
-      undo: false,
-      count: most,
-      members: members.map((member) => member.row),
-      recall: members,
-    };
+    this.#serveBaseline = pending.count;
+    this.servePending = pending;
     this.#watchServe();
     const dialog = this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]");
     if (dialog) dialog.open = true;
@@ -5193,30 +5227,10 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Recalls the first `count` portions, only while every portion can still be recalled. */
   #sendRecall(members: readonly SentSlice[], count: Decimal): void {
-    const authority = this.#serveAuthority;
-    this.#serveAuthority = undefined;
-    if (
-      authority === undefined ||
-      !this.isConnected ||
-      this.busy ||
-      this.groupCommandBusy ||
-      this.currentOrdersUnread ||
-      this.currentOrders === null ||
-      authority.api !== this.api ||
-      authority.partyId !== (this.party?.id ?? null) ||
-      authority.billId !== this.orderId ||
-      authority.visit !== this.serviceVisit
-    )
-      return;
-    const model = sentPanel(this.currentOrders, this.orderId ?? "", this.now ?? Date.now());
-    const slices = [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)];
+    if (!this.#spendServeAuthority() || this.currentOrders === null) return;
+    const slices = this.#sentSlices(this.currentOrders);
     const found = members.map((member) =>
-      slices.find(
-        (slice) =>
-          slice.kind === member.kind &&
-          slice.row.lineId === member.row.lineId &&
-          slice.row.workingOrderId === member.row.workingOrderId,
-      ),
+      findSlice(slices, member.kind, member.row.workingOrderId, member.row.lineId),
     );
     const n = Number.parseInt(trimQuantity(count), 10);
     if (
@@ -5234,23 +5248,7 @@ export class TillTableOrderScreen extends LitElement {
     quantity: Decimal,
     members?: readonly CurrentOrderRow[],
   ): void {
-    const authority = this.#serveAuthority;
-    this.#serveAuthority = undefined;
-    if (
-      authority === undefined ||
-      !this.isConnected ||
-      this.busy ||
-      this.groupCommandBusy ||
-      this.currentOrdersUnread
-    )
-      return;
-    if (
-      authority.api !== this.api ||
-      authority.partyId !== (this.party?.id ?? null) ||
-      authority.billId !== this.orderId ||
-      authority.visit !== this.serviceVisit
-    )
-      return;
+    if (!this.#spendServeAuthority()) return;
     const rows =
       this.currentOrders === null
         ? []
