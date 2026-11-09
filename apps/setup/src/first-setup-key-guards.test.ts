@@ -38,7 +38,7 @@ it.each([
   "{broken-json",
   JSON.stringify({
     version: 1,
-    clientClaimNonce: "B".repeat(43),
+    tabLockId: "B".repeat(43),
     claimPending: false,
     owner: { attemptId: initial.attemptId, revision: 1, ownerGeneration: 1, capability: "invalid" },
   }),

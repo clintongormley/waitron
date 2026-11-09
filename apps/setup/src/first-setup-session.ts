@@ -11,7 +11,7 @@ export const FIRST_SETUP_SESSION_KEY = "waitron:first-setup:v1";
 type SessionStorage = Pick<Storage, "getItem" | "setItem">;
 interface SavedOwner {
   version: 1;
-  clientClaimNonce: string;
+  tabLockId: string;
   claimPending: boolean;
   owner?: FirstSetupOwner;
 }
@@ -94,10 +94,10 @@ function readSaved(text: string): SavedOwner {
   if (
     !object(value) ||
     value.version !== 1 ||
-    !token(value.clientClaimNonce) ||
+    !token(value.tabLockId) ||
     typeof value.claimPending !== "boolean" ||
     Object.keys(value).some(
-      (key) => !["version", "clientClaimNonce", "claimPending", "owner"].includes(key),
+      (key) => !["version", "tabLockId", "claimPending", "owner"].includes(key),
     )
   )
     failure("setup.attempt_invalid");
@@ -115,7 +115,7 @@ function readSaved(text: string): SavedOwner {
     failure("setup.attempt_invalid");
   return value as unknown as SavedOwner;
 }
-function nonce(): string {
+function randomId(): string {
   return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
     .replaceAll("+", "-")
     .replaceAll("/", "_")
@@ -132,7 +132,6 @@ export class FirstSetupSession {
   #disposed = false;
   #busy = false;
   #generation = 0;
-  #proofRequired = false;
   #needsRefresh = false;
   #keyRefused = false;
   #repairPage = false;
@@ -158,7 +157,7 @@ export class FirstSetupSession {
     return this.#repairPage;
   }
   get recoveryRequired(): boolean {
-    return this.#proofRequired || this.#needsRefresh || this.#saved?.claimPending === true;
+    return this.#needsRefresh || this.#saved?.claimPending === true;
   }
   async open(): Promise<void> {
     if (this.#disposed || this.#opened || this.#busy) failure("setup.attempt_conflict");
@@ -168,12 +167,11 @@ export class FirstSetupSession {
       const text = this.#storage.getItem(FIRST_SETUP_SESSION_KEY);
       this.#saved =
         text === null
-          ? { version: 1, clientClaimNonce: nonce(), claimPending: false }
+          ? { version: 1, tabLockId: randomId(), claimPending: false }
           : readSaved(text);
       this.#storage.setItem(FIRST_SETUP_SESSION_KEY, JSON.stringify(this.#saved));
-      this.#proofRequired = this.#saved.claimPending;
       if (!this.#locks) failure("setup.owner_required");
-      await this.#takeLock(`waitron:first-setup:nonce:${this.#saved.clientClaimNonce}`, generation);
+      await this.#takeLock(`waitron:first-setup:tab:${this.#saved.tabLockId}`, generation);
       if (this.#saved.owner) await this.#holdAttempt(this.#saved.owner.attemptId, generation);
       this.#opened = true;
     } catch (error) {
@@ -288,7 +286,6 @@ export class FirstSetupSession {
       },
     };
     this.#save();
-    this.#proofRequired = false;
     this.#needsRefresh = false;
   }
   async #claim(
@@ -326,11 +323,10 @@ export class FirstSetupSession {
       if (this.#state?.status !== "abandoned") failure("setup.attempt_conflict");
       this.#saved = {
         version: 1,
-        clientClaimNonce: this.#saved!.clientClaimNonce,
+        tabLockId: this.#saved!.tabLockId,
         claimPending: false,
       };
       this.#state = undefined;
-      this.#proofRequired = false;
       this.#needsRefresh = false;
       this.#save();
       this.#attemptLock = undefined;
@@ -340,7 +336,7 @@ export class FirstSetupSession {
   #forgetOwner(): void {
     this.#saved = {
       version: 1,
-      clientClaimNonce: this.#saved!.clientClaimNonce,
+      tabLockId: this.#saved!.tabLockId,
       claimPending: true,
     };
     this.#state = undefined;
@@ -380,7 +376,6 @@ export class FirstSetupSession {
       this.#repairPage = result.resolution === true;
       if (typeof result.claimed !== "boolean" || result.conflict || result.state !== undefined)
         failure("setup.attempt_conflict");
-      this.#proofRequired = result.claimed;
       this.#saved!.claimPending = result.claimed;
       if (!result.claimed) {
         this.#needsRefresh = false;

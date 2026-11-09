@@ -57,7 +57,7 @@ export const initialOwnerStrings = {
     abandon: "Abandon this attempt",
     replace: "Enter new setup details",
     retired: "This attempt is abandoned. Its history is retained.",
-    consumed: "This assignment may have been used. Keep it consumed.",
+    consumed: "This setup may already have used its invoice series. Keep it consumed.",
     complete: "Setup is complete. Reconnect to the box.",
     reconnect: "Reconnect",
     secureConnection: "Set up secure connection",
@@ -129,7 +129,8 @@ export const initialOwnerStrings = {
     abandon: "Abandonar este intento",
     replace: "Introducir nuevos datos",
     retired: "Intento abandonado. Su historial se conserva.",
-    consumed: "Esta asignación puede haberse usado. Consérvala como consumida.",
+    consumed:
+      "Puede que esta configuración ya haya usado su serie de facturas. Consérvala como consumida.",
     complete: "Configuración completa. Reconecta con el equipo.",
     reconnect: "Reconectar",
     secureConnection: "Configurar conexión segura",

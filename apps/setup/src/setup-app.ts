@@ -2284,13 +2284,7 @@ export class SetupApp extends LitElement {
       insecure: t.wipeInsecure,
       unavailable: t.wipeUnavailable,
     }[refused ?? "unavailable"];
-    const terminal =
-      state?.status === "complete" ||
-      state?.status === "abandoned" ||
-      state?.status === "uncertain" ||
-      state?.status === "activation-started" ||
-      state?.status === "committed" ||
-      state?.status === "publication";
+    const terminal = pastActivation(state) || notCarriedOn(state) || state?.status === "complete";
     const heldError =
       (!terminal || this.#firstSession?.recoveryRequired) &&
       !missing &&

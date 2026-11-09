@@ -357,7 +357,7 @@ function saveHeldKey(claimPending = false) {
     FIRST_SETUP_SESSION_KEY,
     JSON.stringify({
       version: 1,
-      clientClaimNonce: "N".repeat(43),
+      tabLockId: "N".repeat(43),
       claimPending,
       owner: {
         attemptId: initial.attemptId,
@@ -513,7 +513,7 @@ it.each([
           : status === "abandoned"
             ? "attempt is abandoned"
             : status === "uncertain"
-              ? "may have been used"
+              ? initialOwnerStrings.en.consumed
               : initialOwnerStrings.en.interrupted,
       );
     expect(q(app, "screen-cert")).toBeNull();
@@ -1524,7 +1524,7 @@ const stopRequests = <R extends { path: string }>(requests: R[]) =>
 function saveLostClaim() {
   sessionStorage.setItem(
     FIRST_SETUP_SESSION_KEY,
-    JSON.stringify({ version: 1, clientClaimNonce: "N".repeat(43), claimPending: true }),
+    JSON.stringify({ version: 1, tabLockId: "N".repeat(43), claimPending: true }),
   );
 }
 

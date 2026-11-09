@@ -153,13 +153,13 @@ describe("first setup tab ownership", () => {
     expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner.revision).toBe(1);
   });
 
-  it("also locks the frozen attempt when a second tab presents a different local nonce", async () => {
+  it("also locks the frozen attempt when a second tab presents a different tab lock id", async () => {
     const { session } = create(claim);
     await session.open();
     await session.claim(venue);
     let retained = JSON.stringify({
       ...JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!),
-      clientClaimNonce: "D".repeat(43),
+      tabLockId: "D".repeat(43),
     });
     const storage = {
       getItem: () => retained,
@@ -207,7 +207,7 @@ describe("first setup tab ownership", () => {
     { status: "unknown" },
     { environment: "dev" },
     { modules: null },
-  ])("leaves a resumable nonce when the first claim reply is malformed: %j", async (change) => {
+  ])("leaves the claim pending when the first claim reply is malformed: %j", async (change) => {
     const { session } = create(() =>
       json({ state: { ...initial, ...change }, capability: "A".repeat(43), ownerGeneration: 1 }),
     );
@@ -312,16 +312,16 @@ describe("first setup tab ownership", () => {
     });
   });
 
-  it("persists the random client nonce before sending a claim, with only owner credentials retained afterwards", async () => {
+  it("persists the random tab lock id before sending a claim, with only owner credentials retained afterwards", async () => {
     let sent: Record<string, unknown> | undefined;
-    let storedNonce: unknown;
+    let storedLockId: unknown;
     const { session, requests } = create((_path, body) => {
       sent = body as Record<string, unknown>;
       const stored = JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!);
-      storedNonce = stored.clientClaimNonce;
+      storedLockId = stored.tabLockId;
       expect(stored).toEqual({
         version: 1,
-        clientClaimNonce: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+        tabLockId: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
         claimPending: true,
       });
       return claim();
@@ -332,7 +332,7 @@ describe("first setup tab ownership", () => {
     expect(requests[0]!.headers.get("accept-language")).toBe("es");
     expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!)).toEqual({
       version: 1,
-      clientClaimNonce: storedNonce,
+      tabLockId: storedLockId,
       claimPending: false,
       owner: {
         attemptId: initial.attemptId,
@@ -372,7 +372,7 @@ describe("first setup tab ownership", () => {
     expect(next.requests[1]!.headers.get("X-Waitron-Setup-Owner")).toBe("A".repeat(43));
     expect(next.requests[1]!.headers.get("x-waitron-setup-revision")).toBe("2");
     const saved = JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!);
-    expect(saved.clientClaimNonce).toBe(stored.clientClaimNonce);
+    expect(saved.tabLockId).toBe(stored.tabLockId);
     expect(saved.owner.capability).toBe("A".repeat(43));
     expect(saved.owner.revision).toBe(3);
   });
@@ -578,13 +578,11 @@ describe("first setup tab ownership", () => {
   });
 
   it("rejects corrupt retained session data instead of silently starting a new event", async () => {
-    sessionStorage.setItem(FIRST_SETUP_SESSION_KEY, '{"version":2,"clientClaimNonce":"bad"}');
+    sessionStorage.setItem(FIRST_SETUP_SESSION_KEY, '{"version":2,"tabLockId":"bad"}');
     const { session, requests } = create(claim);
     await expect(session.open()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
     expect(requests).toEqual([]);
-    expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).toBe(
-      '{"version":2,"clientClaimNonce":"bad"}',
-    );
+    expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).toBe('{"version":2,"tabLockId":"bad"}');
   });
 
   it("never calls the server if durable tab storage is unavailable", async () => {
@@ -791,7 +789,7 @@ describe("first setup tab ownership", () => {
 });
 
 describe("explicit replacement after abandonment", () => {
-  it("starts a new event only after the server reports unconsumed abandonment, keeping the same nonce", async () => {
+  it("starts a new event only after the server reports unconsumed abandonment, keeping the same tab lock id", async () => {
     let claims = 0;
     const next = {
       ...initial,
@@ -811,9 +809,7 @@ describe("explicit replacement after abandonment", () => {
     });
     await session.open();
     await session.claim(venue);
-    const firstNonce = JSON.parse(
-      sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!,
-    ).clientClaimNonce;
+    const firstLockId = JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).tabLockId;
     await session.abandon();
     await session.replaceAbandoned(venue);
     expect(session.state?.attemptId).toBe(next.attemptId);
@@ -822,8 +818,8 @@ describe("explicit replacement after abandonment", () => {
       { venue },
       { venue },
     ]);
-    expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).clientClaimNonce).toBe(
-      firstNonce,
+    expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).tabLockId).toBe(
+      firstLockId,
     );
     expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner.attemptId).toBe(
       next.attemptId,
@@ -867,13 +863,13 @@ it("passes import intent only in the owner claim without persisting the wizard d
   expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain("configurationImport");
 });
 
-it("releases a real nonce lock granted after the session was disposed without opening it", async () => {
+it("releases a real tab lock granted after the session was disposed without opening it", async () => {
   const granted = deferred<void>();
   const gate = deferred<void>();
   const locks = {
     request: ((name: string, options: LockOptions, callback: LockGrantedCallback<unknown>) =>
       navigator.locks.request(name, options, async (lock) => {
-        if (!lock) throw new Error("expected a real unique nonce grant");
+        if (!lock) throw new Error("expected a real unique tab lock grant");
         granted.resolve();
         await gate.promise;
         return callback(lock);
@@ -891,7 +887,7 @@ it("releases a real nonce lock granted after the session was disposed without op
     (error) => ({ opened: false, code: error.code }),
   );
   await granted.promise;
-  const name = `waitron:first-setup:nonce:${JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).clientClaimNonce}`;
+  const name = `waitron:first-setup:tab:${JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).tabLockId}`;
   const disposing = session.dispose();
   gate.resolve();
   try {

@@ -25,7 +25,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
             FIRST_SETUP_SESSION_KEY,
             JSON.stringify({
               version: 1,
-              clientClaimNonce: "N".repeat(43),
+              tabLockId: "N".repeat(43),
               claimPending: false,
               owner: {
                 attemptId: initial.attemptId,

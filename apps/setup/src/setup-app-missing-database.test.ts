@@ -55,7 +55,7 @@ it("a tab holding the setup's key, with the box on its repair page and the datab
     FIRST_SETUP_SESSION_KEY,
     JSON.stringify({
       version: 1,
-      clientClaimNonce: "N".repeat(43),
+      tabLockId: "N".repeat(43),
       claimPending: false,
       owner: {
         attemptId: initial.attemptId,

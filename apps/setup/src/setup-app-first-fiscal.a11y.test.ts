@@ -20,7 +20,7 @@ for (const theme of ["light", "dark"] as const)
           FIRST_SETUP_SESSION_KEY,
           JSON.stringify({
             version: 1,
-            clientClaimNonce: "C".repeat(43),
+            tabLockId: "C".repeat(43),
             claimPending: false,
             owner: {
               attemptId: initial.attemptId,
