@@ -399,7 +399,7 @@ describe("split a bill", () => {
     const { partyId, tabId } = await seat(v, await v.table("Table 11"));
     await order(v, tabId, "Burger", "Vino");
     const stale = await commandFor(v, partyId);
-    await nameParty(v, partyId, "Ana");
+    await nameParty(v, partyId, "Ann");
     const before = await snapshot(partyId, [tabId]);
 
     const error = await captureError(() =>

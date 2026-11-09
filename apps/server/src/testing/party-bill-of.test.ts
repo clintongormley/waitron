@@ -41,7 +41,7 @@ async function openBillOf(partyId: string): Promise<string | null> {
 
 describe("A803 fixtures: firstOpenBillOf", () => {
   it("names the lowest-numbered open bill, skipping paid and presented ones", async () => {
-    const { partyId, tabId: bill1 } = await seat(v, await v.table("Mesa 61"));
+    const { partyId, tabId: bill1 } = await seat(v, await v.table("Table 61"));
     const bill2 = await newBill(partyId);
     const bill3 = await newBill(partyId);
     const bill4 = await newBill(partyId);
@@ -59,8 +59,8 @@ describe("A803 fixtures: firstOpenBillOf", () => {
   });
 
   it("names none for a party whose bills are all paid", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 62"));
-    const other = await seat(v, await v.table("Mesa 64"));
+    const { partyId, tabId } = await seat(v, await v.table("Table 62"));
+    const other = await seat(v, await v.table("Table 64"));
     await order(v, tabId, "Burger");
     await pay(v, tabId, "12.00");
     expect(await openBillOf(other.partyId)).toBe(other.tabId);
@@ -69,7 +69,7 @@ describe("A803 fixtures: firstOpenBillOf", () => {
   });
 
   it("names Bill 1 over an older-opened Bill 2", async () => {
-    const { partyId, tabId: bill1 } = await seat(v, await v.table("Mesa 63"));
+    const { partyId, tabId: bill1 } = await seat(v, await v.table("Table 63"));
     const bill2 = await newBill(partyId);
     await inTx(v, (tx) =>
       tx
@@ -86,7 +86,7 @@ describe("A803 fixtures: firstOpenBillOf", () => {
   });
 
   it("names a numbered open bill over an unnumbered one", async () => {
-    const { partyId, tabId: unnumbered } = await seat(v, await v.table("Mesa 65"));
+    const { partyId, tabId: unnumbered } = await seat(v, await v.table("Table 65"));
     const bill2 = await newBill(partyId);
     await inTx(v, (tx) =>
       tx.delete(billIdentities).where(eq(billIdentities.workingOrderId, unnumbered)),
@@ -99,7 +99,7 @@ describe("A803 fixtures: firstOpenBillOf", () => {
 
 describe("A803 fixtures: a send with no bill", () => {
   it("lands on the party's open bill and leaves the party's revision alone", async () => {
-    const { partyId, tabId } = await seatWithNoAllergies(v, await v.table("Mesa 66"));
+    const { partyId, tabId } = await seatWithNoAllergies(v, await v.table("Table 66"));
     const revisionBefore = await revisionOf(v, partyId);
 
     const { tabId: landed, revision } = await orderForParty(v, partyId, ["Agua"]);

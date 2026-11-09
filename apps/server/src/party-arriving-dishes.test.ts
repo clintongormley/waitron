@@ -82,7 +82,7 @@ useVenueDb({
     ticketThenPayZone = await inTx(v, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: v.cfg.locationId, name: "Barra factura" })
+        .values({ locationId: v.cfg.locationId, name: "Invoice counter" })
         .returning({ id: floorZones.id });
       return (
         await offerProducts(tx, v.cfg, {
@@ -92,9 +92,9 @@ useVenueDb({
       ).zoneId;
     });
     [starterCourseId, mainCourseId, dessertCourseId] = await inTx(v, async (tx) => [
-      (await createCourse(tx, { name: "Entrantes", displayOrder: 1 })).id,
-      (await createCourse(tx, { name: "Principales", displayOrder: 2 })).id,
-      (await createCourse(tx, { name: "Postres", displayOrder: 3 })).id,
+      (await createCourse(tx, { name: "Starters", displayOrder: 1 })).id,
+      (await createCourse(tx, { name: "Mains", displayOrder: 2 })).id,
+      (await createCourse(tx, { name: "Desserts", displayOrder: 3 })).id,
     ]);
   },
 });
@@ -210,7 +210,7 @@ async function coursedBill(label: string) {
 
 describe("dishes arriving in a party (A96, P16)", () => {
   it("puts a moved bill's sent dishes in one new fired group, after the receiving party's last group", async () => {
-    const [table4, table7] = [await v.table("Mesa 4"), await v.table("Mesa 7")];
+    const [table4, table7] = [await v.table("Table 4"), await v.table("Table 7")];
     const originalParty = await seat(v, table4);
     const receivingParty = await seat(v, table7);
     await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
@@ -242,7 +242,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("dates a moved bill's fired group from its earliest kitchen firing and names whoever fired that dish's group in the party it left", async () => {
-    const [table4, table7] = [await v.table("Hora 4"), await v.table("Hora 7")];
+    const [table4, table7] = [await v.table("Time 4"), await v.table("Time 7")];
     const originalParty = await seat(v, table4);
     const receivingParty = await seat(v, table7);
     await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
@@ -286,8 +286,8 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("dates an arriving fired group from a dish's sent time where the dish has no kitchen item, and names the mover when that dish records no firer", async () => {
-    const originalParty = await seat(v, await v.table("Hora 5"));
-    const receivingParty = await seat(v, await v.table("Hora 8"));
+    const originalParty = await seat(v, await v.table("Time 5"));
+    const receivingParty = await seat(v, await v.table("Time 8"));
     await order(v, originalParty.tabId, "Burger");
     const [burger] = await lineRows(originalParty.tabId);
     const sent = minutesAgo(30);
@@ -339,8 +339,8 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("puts sent dishes in a fired group and a dish waiting for its course in a held group, which the waiter then releases", async () => {
-    const originalParty = await coursedBill("Curso 1");
-    const targetTable = await v.table("Curso 2");
+    const originalParty = await coursedBill("Course 1");
+    const targetTable = await v.table("Course 2");
     const receivingParty = await seat(v, targetTable);
     const [burger, custardLine] = await lineRows(originalParty.tabId);
     expect(await firedTicketsOf(originalParty.tabId)).toEqual([
@@ -373,7 +373,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("holds a moved bill's waiting dishes course by course, so firing one held group sends none of a later one", async () => {
-    const originalParty = await seat(v, await v.table("Cursos 1"));
+    const originalParty = await seat(v, await v.table("Courses 1"));
     await inTx(v, (tx) =>
       addTabRound(tx, v.cfg, originalParty.tabId, [
         { menuItemId: v.item("Burger"), quantity: "1", courseId: starterCourseId },
@@ -381,7 +381,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
         { menuItemId: v.item("Tarta"), quantity: "1", courseId: mainCourseId },
       ]),
     );
-    const targetTable = await v.table("Cursos 2");
+    const targetTable = await v.table("Courses 2");
     const receivingParty = await seat(v, targetTable);
     const [burger, custardLine, cakeLine] = await lineRows(originalParty.tabId);
     expect(await firedTicketsOf(originalParty.tabId)).toEqual([
@@ -422,7 +422,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("fires a moved no-course dish while leaving live held courses separate", async () => {
-    const originalParty = await seat(v, await v.table("Sin curso 1"));
+    const originalParty = await seat(v, await v.table("No course 1"));
     await inTx(v, (tx) =>
       addTabRound(tx, v.cfg, originalParty.tabId, [
         { menuItemId: v.item("Burger"), quantity: "1", courseId: starterCourseId },
@@ -431,7 +431,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
         { menuItemId: v.item("Tarta"), quantity: "1", courseId: mainCourseId },
       ]),
     );
-    const targetTable = await v.table("Sin curso 2");
+    const targetTable = await v.table("No course 2");
     const receivingParty = await seat(v, targetTable);
     const [burger, custardLine, loose, cakeLine] = await lineRows(originalParty.tabId);
     expect([loose!.courseId, loose!.sentAt]).toEqual([null, null]);
@@ -470,7 +470,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("fires every moved no-course dish when no live held course remains", async () => {
-    const originalParty = await seat(v, await v.table("Sin curso 3"));
+    const originalParty = await seat(v, await v.table("No course 3"));
     await inTx(v, (tx) =>
       addTabRound(tx, v.cfg, originalParty.tabId, [
         { menuItemId: v.item("Burger"), quantity: "1", courseId: starterCourseId },
@@ -478,7 +478,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
         { menuItemId: v.item("Flan"), quantity: "1", hold: true },
       ]),
     );
-    const targetTable = await v.table("Sin curso 4");
+    const targetTable = await v.table("No course 4");
     const receivingParty = await seat(v, targetTable);
     const [burger, loose, custardLine] = await lineRows(originalParty.tabId);
 
@@ -496,9 +496,9 @@ describe("dishes arriving in a party (A96, P16)", () => {
   it("fires moved inactive and no-course dishes while keeping an active held course held", async () => {
     const retired = await inTx(
       v,
-      async (tx) => (await createCourse(tx, { name: "Segundos", displayOrder: 2 })).id,
+      async (tx) => (await createCourse(tx, { name: "Second course", displayOrder: 2 })).id,
     );
-    const originalParty = await seat(v, await v.table("Sin curso 5"));
+    const originalParty = await seat(v, await v.table("No course 5"));
     try {
       await inTx(v, (tx) =>
         addTabRound(tx, v.cfg, originalParty.tabId, [
@@ -512,7 +512,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
       // The venue is shared by the whole file.
       await inTx(v, (tx) => deleteCourse(tx, retired));
     }
-    const targetTable = await v.table("Sin curso 6");
+    const targetTable = await v.table("No course 6");
     const receivingParty = await seat(v, targetTable);
     const [burger, cakeLine, custardLine, loose] = await lineRows(originalParty.tabId);
 
@@ -543,10 +543,10 @@ describe("dishes arriving in a party (A96, P16)", () => {
 
   it("fires all moved inactive courses and no-course dishes without creating held groups", async () => {
     const [thirdCourseId, fourthCourseId] = await inTx(v, async (tx) => [
-      (await createCourse(tx, { name: "Terceros", displayOrder: 2 })).id,
-      (await createCourse(tx, { name: "Cuartos", displayOrder: 4 })).id,
+      (await createCourse(tx, { name: "Third course", displayOrder: 2 })).id,
+      (await createCourse(tx, { name: "Fourth course", displayOrder: 4 })).id,
     ]);
-    const originalParty = await seat(v, await v.table("Sin curso 7"));
+    const originalParty = await seat(v, await v.table("No course 7"));
     try {
       await inTx(v, (tx) =>
         addTabRound(tx, v.cfg, originalParty.tabId, [
@@ -563,7 +563,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
         await deleteCourse(tx, fourthCourseId);
       });
     }
-    const targetTable = await v.table("Sin curso 8");
+    const targetTable = await v.table("No course 8");
     const receivingParty = await seat(v, targetTable);
     const [burger, cakeLine, custardLine, loose] = await lineRows(originalParty.tabId);
 
@@ -581,7 +581,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("puts an open counter order's dishes, sent to the kitchen at the move, in one new fired group", async () => {
-    const targetTable = await v.table("Mostrador 1");
+    const targetTable = await v.table("Counter 1");
     const receivingParty = await seat(v, targetTable);
     const counter = await counterOrder(v, "Caña", "Tarta");
     expect(await firedTicketsOf(counter)).toEqual([]);
@@ -596,7 +596,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("gives a placed counter order moved into a party one fired group, leaving it placed and every other line value as it was", async () => {
-    const targetTable = await v.table("Factura 1");
+    const targetTable = await v.table("Invoice 1");
     const receivingParty = await seat(v, targetTable);
     const id = randomUUID();
     const deps = { db: v.db, backend: v.backend, clock: v.clock };
@@ -620,8 +620,8 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("gives a bill moved to a free table its new party's first group", async () => {
-    const originalParty = await coursedBill("Libre 1");
-    const freeTable = await v.table("Libre 2");
+    const originalParty = await coursedBill("Free 1");
+    const freeTable = await v.table("Free 2");
     await orderForParty(v, originalParty.partyId, ["Agua"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [1]);
 
@@ -633,8 +633,8 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("names whoever fired a dish's group in the party it left, not the mover, when its bill moves to a free table", async () => {
-    const originalParty = await seat(v, await v.table("Libre 3"));
-    const freeTable = await v.table("Libre 4");
+    const originalParty = await seat(v, await v.table("Free 3"));
+    const freeTable = await v.table("Free 4");
     await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
     const [wineLine] = await lineRows(b2);
@@ -650,8 +650,8 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("names the kitchen display that fired a dish's group in the party it left, not the mover, when its bill moves", async () => {
-    const originalParty = await seat(v, await v.table("Libre 5"));
-    const freeTable = await v.table("Libre 6");
+    const originalParty = await seat(v, await v.table("Free 5"));
+    const freeTable = await v.table("Free 6");
     await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
     const [wineLine] = await lineRows(b2);
@@ -682,7 +682,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("names the kitchen display that fired a dish's group when Split a table takes its bill", async () => {
-    const [table4, table5] = [await v.table("Separar 6"), await v.table("Separar 7")];
+    const [table4, table5] = [await v.table("Split 6"), await v.table("Split 7")];
     const originalParty = await seat(v, table4);
     await nextMillisecond();
     const joining = { ...(await commandFor(v, originalParty.partyId)) };
@@ -713,7 +713,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("puts the chosen bill's sent dishes in ONE fired group at position 1 of the party Split a table starts, fired by whoever fired their group", async () => {
-    const [table4, table5] = [await v.table("Separar 4"), await v.table("Separar 5")];
+    const [table4, table5] = [await v.table("Split 4"), await v.table("Split 5")];
     const originalParty = await seat(v, table4);
     await nextMillisecond();
     const joining = { ...(await commandFor(v, originalParty.partyId)) };
@@ -734,7 +734,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("groups a counter order moved onto a seated table as a bill of its own, and leaves the party's first bill's lines as they were", async () => {
-    const targetTable = await v.table("Fusion 1");
+    const targetTable = await v.table("Merge 1");
     const receivingParty = await seat(v, targetTable);
     await orderForParty(v, receivingParty.partyId, ["Burger"]);
     await order(v, receivingParty.tabId, "Vino");
@@ -762,8 +762,8 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("lets a dish's kitchen item decide whether it arrived released, and its sent time decide only for a dish with none", async () => {
-    const originalParty = await seat(v, await v.table("Enviado 1"));
-    const targetTable = await v.table("Enviado 2");
+    const originalParty = await seat(v, await v.table("Sent 1"));
+    const targetTable = await v.table("Sent 2");
     const receivingParty = await seat(v, targetTable);
     await order(v, originalParty.tabId, "Burger");
     const [burger] = await lineRows(originalParty.tabId);
@@ -839,7 +839,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("makes no group, records nothing and leaves the revision for a bill whose every dish already has one", async () => {
-    const originalParty = await seat(v, await v.table("Nada 1"));
+    const originalParty = await seat(v, await v.table("Nothing 1"));
     await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
     const groupsBefore = await groupsOf(originalParty.partyId);
     const linesBefore = await lineRows(originalParty.tabId);
@@ -871,7 +871,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("gives a bill leaving for the counter no group", async () => {
-    const originalParty = await coursedBill("Barra 1");
+    const originalParty = await coursedBill("Bar 1");
     await orderForParty(v, originalParty.partyId, ["Agua"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [1]);
 
@@ -916,7 +916,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
       const station = await defaultStation();
       printerId = await inTx(v, async (tx) => {
         const { id } = await createPrinter(tx, {
-          name: "Cocina",
+          name: "Kitchen printer",
           transport: "cloud_poll",
           pollId: `poll-${randomUUID()}`,
         });
@@ -963,15 +963,15 @@ describe("an arriving held group's advance HOLD ticket", () => {
 
   it("with Print held groups in advance on, a moved bill's waiting dish prints a HOLD ticket at the move and a FIRE slip when its group is fired", async () => {
     await printHeldWork(true);
-    const originalParty = await coursedBill("Aviso 1");
-    const targetTable = await v.table("Aviso 2");
+    const originalParty = await coursedBill("Notice 1");
+    const targetTable = await v.table("Notice 2");
     const receivingParty = await seat(v, targetTable);
     const before = (await jobs()).length;
 
     await move(originalParty.tabId, { tableId: targetTable });
 
     const held = await heldGroupOf(receivingParty.partyId);
-    const header = await head("Aviso 2", originalParty.tabId);
+    const header = await head("Notice 2", originalParty.tabId);
     const atMove = (await jobs()).slice(before);
     expect(
       atMove.filter((job) => job.lines[0] === `*** ${kitchenTicketWords("es").hold} ***`),
@@ -981,7 +981,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
         lines: [
           `*** ${kitchenTicketWords("es").hold} ***`,
           ...header,
-          `${kitchenTicketWords("es").group} 2 · POSTRES`,
+          `${kitchenTicketWords("es").group} 2 · DESSERTS`,
           "1 x FLAN",
         ],
       },
@@ -998,7 +998,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
         lines: [
           `*** ${kitchenTicketWords("es").fire} ***`,
           ...header,
-          `${kitchenTicketWords("es").group} 2 · POSTRES`,
+          `${kitchenTicketWords("es").group} 2 · DESSERTS`,
           "1 x FLAN",
         ],
       },
@@ -1007,8 +1007,8 @@ describe("an arriving held group's advance HOLD ticket", () => {
 
   it("names on the HOLD ticket the moved bill itself, kept apart from the destination's bill", async () => {
     await printHeldWork(true);
-    const originalParty = await coursedBill("Aviso 7");
-    const targetTable = await v.table("Aviso 8");
+    const originalParty = await coursedBill("Notice 7");
+    const targetTable = await v.table("Notice 8");
     const receivingParty = await seat(v, targetTable);
     const before = (await jobs()).length;
 
@@ -1023,8 +1023,8 @@ describe("an arriving held group's advance HOLD ticket", () => {
         kind: "document",
         lines: [
           `*** ${kitchenTicketWords("es").hold} ***`,
-          ...(await head("Aviso 8", originalParty.tabId)),
-          `${kitchenTicketWords("es").group} 2 · POSTRES`,
+          ...(await head("Notice 8", originalParty.tabId)),
+          `${kitchenTicketWords("es").group} 2 · DESSERTS`,
           "1 x FLAN",
         ],
       },
@@ -1032,8 +1032,8 @@ describe("an arriving held group's advance HOLD ticket", () => {
   });
 
   it("with Print held groups in advance off, a moved bill's waiting dish prints nothing at the move and an ordinary ticket when its group is fired", async () => {
-    const originalParty = await coursedBill("Aviso 3");
-    const targetTable = await v.table("Aviso 4");
+    const originalParty = await coursedBill("Notice 3");
+    const targetTable = await v.table("Notice 4");
     const receivingParty = await seat(v, targetTable);
     const before = (await jobs()).length;
 
@@ -1056,7 +1056,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
 
   it("with Print held groups in advance on, a waiting dish on the bill Split a table takes prints a HOLD ticket", async () => {
     await printHeldWork(true);
-    const [table4, table5] = [await v.table("Aviso 5"), await v.table("Aviso 6")];
+    const [table4, table5] = [await v.table("Notice 5"), await v.table("Notice 6")];
     const originalParty = await seat(v, table4);
     await nextMillisecond();
     const joining = { ...(await commandFor(v, originalParty.partyId)) };
@@ -1086,8 +1086,8 @@ describe("an arriving held group's advance HOLD ticket", () => {
         kind: "document",
         lines: [
           `*** ${kitchenTicketWords("es").hold} ***`,
-          ...(await head("Aviso 6", b2)),
-          `${kitchenTicketWords("es").group} 2 · POSTRES`,
+          ...(await head("Notice 6", b2)),
+          `${kitchenTicketWords("es").group} 2 · DESSERTS`,
           "1 x FLAN",
         ],
       },
@@ -1147,7 +1147,7 @@ describe("A773 requested lifecycle: arrival", () => {
 
   it("moves a Requested dish alone in a course held until fired into one fired group dated by its request, printing nothing", async () => {
     await everyStationWaiting(async (jobCount) => {
-      const originalParty = await seat(v, await v.table("Pedido solo 1"));
+      const originalParty = await seat(v, await v.table("Single order 1"));
       await inTx(v, (tx) =>
         addTabRound(tx, v.cfg, originalParty.tabId, [
           { menuItemId: v.item("Flan"), quantity: "1", courseId: dessertCourseId },
@@ -1160,7 +1160,7 @@ describe("A773 requested lifecycle: arrival", () => {
         firedAt: null,
         passControlled: true,
       });
-      const targetTable = await v.table("Pedido solo 2");
+      const targetTable = await v.table("Single order 2");
       const receivingParty = await seat(v, targetTable);
       await nextMillisecond();
       const jobsBefore = await jobCount();
@@ -1179,7 +1179,7 @@ describe("A773 requested lifecycle: arrival", () => {
   });
 
   it("lets Split a table take a Requested dish alone in a course held until fired into one fired group, printing nothing", async () => {
-    const [table4, table5] = [await v.table("Pedido separar 1"), await v.table("Pedido separar 2")];
+    const [table4, table5] = [await v.table("Split order 1"), await v.table("Split order 2")];
     const originalParty = await seat(v, table4);
     await nextMillisecond();
     const joining = await commandFor(v, originalParty.partyId);
@@ -1232,7 +1232,7 @@ describe("A773 requested lifecycle: arrival", () => {
   });
 
   it("moves a Requested dish beside an earlier released one into one fired group dated by the released dish", async () => {
-    const originalParty = await coursedBill("Pedido junto 1");
+    const originalParty = await coursedBill("Joined order 1");
     const [burger, custardLine] = await lineRows(originalParty.tabId);
     const burgerItem = await itemOf(burger!.id);
     expect(burgerItem.firedAt).not.toBeNull();
@@ -1242,7 +1242,7 @@ describe("A773 requested lifecycle: arrival", () => {
       const custardItem = await itemOf(custardLine!.id);
       expect(custardItem).toMatchObject({ firedAt: null, passControlled: true });
       expect(custardItem.requestedAt! > burgerItem.firedAt!).toBe(true);
-      const targetTable = await v.table("Pedido junto 2");
+      const targetTable = await v.table("Joined order 2");
       const receivingParty = await seat(v, targetTable);
 
       await move(originalParty.tabId, { tableId: targetTable });

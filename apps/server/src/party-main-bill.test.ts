@@ -75,7 +75,7 @@ async function abandon(billId: string): Promise<void> {
 
 describe("the bill a table opens on", () => {
   it("is the tab seating opens, and a round with no bill named lands on it", async () => {
-    const table4 = await v.table("Mesa 4");
+    const table4 = await v.table("Table 4");
     const { partyId, tabId } = await seat(v, table4);
     expect((await floorRow(v, table4)).party!.openingBillId).toBe(tabId);
 
@@ -86,7 +86,7 @@ describe("the bill a table opens on", () => {
   });
 
   it("stays the paid bill once it is paid, and moves to the new, empty bill the next order starts on the party", async () => {
-    const table4 = await v.table("Mesa 4b");
+    const table4 = await v.table("Table 4b");
     const { partyId, tabId } = await seat(v, table4);
     await order(v, tabId, "Burger");
     await pay(v, tabId, "12.00");
@@ -105,7 +105,7 @@ describe("the bill a table opens on", () => {
   });
 
   it("stays the presented bill, still owing, when the next order starts a new one while the presented bill stays as it was", async () => {
-    const table6 = await v.table("Mesa 6");
+    const table6 = await v.table("Table 6");
     const { partyId, tabId } = await seat(v, table6);
     await order(v, tabId, "Paella");
     await placeByHand(v, tabId);
@@ -130,12 +130,12 @@ describe("the bill a table opens on", () => {
     ["a presented bill", "bill.presented"],
     ["another party's open bill", "bill.other_party"],
   ])("refuses an order naming %s, writing nothing", async (kind, code) => {
-    const diningTable = await v.table(`Mesa main ${kind}`);
+    const diningTable = await v.table(`Table main ${kind}`);
     const { partyId, tabId } = await seat(v, diningTable);
     await order(v, tabId, "Burger");
     let target = tabId;
     if (kind === "a presented bill") await placeByHand(v, tabId);
-    else target = (await seat(v, await v.table(`Mesa main other ${kind}`))).tabId;
+    else target = (await seat(v, await v.table(`Table main other ${kind}`))).tabId;
     const linesBefore = await linesOf(v, target);
     const billsBefore = await billsOfParty(v, partyId);
     const revisionBefore = await revisionOf(v, partyId);
@@ -216,7 +216,7 @@ describe("the bill a table opens on", () => {
   });
 
   it("is none when the party's only bill is abandoned", async () => {
-    const table8 = await v.table("Mesa 8");
+    const table8 = await v.table("Table 8");
     const { tabId } = await seat(v, table8);
     await abandon(tabId);
     expect((await floorRow(v, table8)).party!.openingBillId).toBeNull();
@@ -231,7 +231,7 @@ describe("a party service zone", () => {
 
 describe("an order sent to a named bill", () => {
   it("lands on another open bill of the party, and the table still opens on Bill 1", async () => {
-    const table9 = await v.table("Mesa 9");
+    const table9 = await v.table("Table 9");
     const { partyId, tabId } = await seat(v, table9);
     await order(v, tabId, "Burger", "Vino");
     const checkId = await split(v, partyId, tabId, [2]);
@@ -253,7 +253,7 @@ describe("an order sent to a named bill", () => {
     ["another party's bill", "bill.other_party"],
     ["a bill that does not exist", "tab.not_open"],
   ])("refuses %s with its own code, writing no line", async (kind, code) => {
-    const diningTable = await v.table(`Mesa ${kind}`);
+    const diningTable = await v.table(`Table ${kind}`);
     const { partyId, tabId } = await seat(v, diningTable);
     await order(v, tabId, "Tarta");
     let target = tabId;
@@ -261,7 +261,7 @@ describe("an order sent to a named bill", () => {
     if (kind === "a paid bill") await pay(v, tabId, "15.00");
     if (kind === "an abandoned bill") await abandon(tabId);
     if (kind === "another party's bill") {
-      target = (await seat(v, await v.table(`Mesa other ${kind}`))).tabId;
+      target = (await seat(v, await v.table(`Table other ${kind}`))).tabId;
     }
     if (kind === "a bill that does not exist") target = randomUUID();
     const linesBefore = await linesOf(v, target);
@@ -285,7 +285,7 @@ describe("an order sent to a named bill", () => {
 
 describe("a split bill is a bill like any other", () => {
   it("can have a line voided", async () => {
-    const table10 = await v.table("Mesa 10");
+    const table10 = await v.table("Table 10");
     const { partyId, tabId } = await seat(v, table10);
     await order(v, tabId, "Burger", "Vino");
     const checkId = await split(v, partyId, tabId, [2]);
@@ -298,19 +298,19 @@ describe("a split bill is a bill like any other", () => {
 
 describe("the party's name", () => {
   it("is shown instead of its tables, trimmed, and cleared by an empty name", async () => {
-    const table12 = await v.table("Mesa 12");
+    const table12 = await v.table("Table 12");
     const { partyId, revision } = await seat(v, table12);
 
     const named = await inTx(v, (tx) =>
-      setPartyName(tx, { partyId, name: "  Ana ", expectedPartyRevision: revision }),
+      setPartyName(tx, { partyId, name: "  Ann ", expectedPartyRevision: revision }),
     );
     const floor = await inTx(v, (tx) => listTablesWithState(tx));
 
-    expect(named).toEqual({ revision: revision + 1, name: "Ana" });
-    expect((await partyRow(v, partyId)).name).toBe("Ana");
+    expect(named).toEqual({ revision: revision + 1, name: "Ann" });
+    expect((await partyRow(v, partyId)).name).toBe("Ann");
     expect(floor.find((t) => t.id === table12)!.party).toMatchObject({
-      name: "Ana",
-      displayName: "Ana",
+      name: "Ann",
+      displayName: "Ann",
     });
 
     await inTx(v, (tx) =>
@@ -319,16 +319,16 @@ describe("the party's name", () => {
     const after = await inTx(v, (tx) => listTablesWithState(tx));
     expect(after.find((t) => t.id === table12)!.party).toMatchObject({
       name: null,
-      displayName: "Mesa 12",
+      displayName: "Table 12",
     });
   });
 
   it("is refused with a stale revision, changing nothing", async () => {
-    const table13 = await v.table("Mesa 13");
+    const table13 = await v.table("Table 13");
     const { partyId, revision } = await seat(v, table13);
     const error = await captureError(() =>
       inTx(v, (tx) =>
-        setPartyName(tx, { partyId, name: "Ana", expectedPartyRevision: revision - 1 }),
+        setPartyName(tx, { partyId, name: "Ann", expectedPartyRevision: revision - 1 }),
       ),
     );
     expect(error).toMatchObject({ code: "party.out_of_date" });
@@ -339,7 +339,7 @@ describe("the party's name", () => {
 
 describe("pay, then order dessert", () => {
   it("a round naming no bill lands on the next bill the test helper makes, on the same party, and leaves the earlier sale untouched", async () => {
-    const table20 = await v.table("Mesa 20");
+    const table20 = await v.table("Table 20");
     const { partyId, tabId } = await seat(v, table20, 2);
     await order(v, tabId, "Burger", "Vino");
     const checkId = await split(v, partyId, tabId, [2]);
@@ -379,7 +379,7 @@ describe("pay, then order dessert", () => {
   });
 
   it("shows the table held with no bill open, opening on the paid bill", async () => {
-    const table21 = await v.table("Mesa 21");
+    const table21 = await v.table("Table 21");
     const { partyId, tabId } = await seat(v, table21, 2);
     await order(v, tabId, "Burger");
     await pay(v, tabId, "12.00");
@@ -395,7 +395,7 @@ describe("pay, then order dessert", () => {
       guestCount: 2,
       state: "open",
       name: null,
-      displayName: "Mesa 21",
+      displayName: "Table 21",
       openingBillId: tabId,
       outstanding: "0.00",
       billCount: 1,
@@ -406,7 +406,7 @@ describe("pay, then order dessert", () => {
   });
 
   it("refuses a round sent to a settled tab the party has already moved on from, or to a settled check", async () => {
-    const table22 = await v.table("Mesa 22");
+    const table22 = await v.table("Table 22");
     const { partyId, tabId } = await seat(v, table22);
     await order(v, tabId, "Burger", "Vino");
     const checkId = await split(v, partyId, tabId, [2]);
@@ -429,7 +429,7 @@ describe("pay, then order dessert", () => {
   it("refuses a round for a finished party", async () => {
     await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     try {
-      const table23 = await v.table("Mesa 23");
+      const table23 = await v.table("Table 23");
       const { partyId, tabId } = await seat(v, table23);
       await order(v, tabId, "Burger");
       await pay(v, tabId, "12.00");
@@ -448,7 +448,7 @@ describe("pay, then order dessert", () => {
   });
 
   it("keeps the party seated when its tab is abandoned, and the next round lands on the next bill the test helper makes", async () => {
-    const table24 = await v.table("Mesa 24");
+    const table24 = await v.table("Table 24");
     const { partyId, tabId } = await seat(v, table24);
     await order(v, tabId, "Burger");
 

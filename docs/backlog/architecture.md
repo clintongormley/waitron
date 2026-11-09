@@ -403,6 +403,8 @@ until A977).
   choices carrying such a code before changing it. Its reachability through an installed pack
   has not been established. `git blame` attributes the selection expression to `082553a65`.
 - **A976 — remaining test-venue defaults.** Menu-period rule samples use English names.
+  The nine local party suites use English table, party, course and printer samples; shared
+  party-venue defaults, dish selectors and till-API samples remain.
   The filing and adjustment order-portion suites still have Spanish dish samples; the adjustment
   suite has Spanish dish words in test descriptions. Shared helpers' dish names and selectors
   remain, including those read by the working-order, receipt-print and counter-portion suites.
@@ -837,10 +839,11 @@ product failures.
 
 ## A976. Finish the server's English test-venue defaults.
 
-- **A976. Finish the server's English test-venue defaults.** Spanish dish samples remain in
-  `party-bill-actions.test.ts`. Spanish display samples remain in
-  `party-move-bill.test.ts`, `party-arriving-dishes.test.ts`,
-  `receipt-guests.test.ts`, `order-portions.filing.test.ts`, `order-portions.adjustments.test.ts`,
+- **A976. Finish the server's English test-venue defaults.** Local party-suite table, party,
+  course and printer samples use English. Shared dish samples remain in their helpers and
+  consumers, including `party-bill-actions.test.ts`, `party-move-bill.test.ts`,
+  `party-arriving-dishes.test.ts` and `receipt-guests.test.ts`. Spanish display samples remain in
+  `order-portions.filing.test.ts`, `order-portions.adjustments.test.ts`,
   `till-api.move-bill.test.ts`, `till-api.groups.test.ts` and `till-api.fiscal-sale-paths.test.ts`;
   shared helper samples and their consumers' dish selectors also remain. These belong to
   A976 rather than the private-name work in A974. The `made-here.routes.test.ts` venue
