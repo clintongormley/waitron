@@ -100,7 +100,7 @@ describe("server-first workflow routing", () => {
       expect(route(job.route, { health: "hosted" }), job.id).toBe("ubuntu-latest");
     }
   });
-  it("passes the routing decision into the reusable image workflow", () => {
+  it("retains the declared image routing input without using it for placement", () => {
     const image = yaml.match(/^ {2}image:\n([\s\S]*?)(?=^ {2}[\w-]+:)/m)[1];
     const input = image.match(/^ {6}server_route: (.+)$/m)?.[1];
     expect(input).toBeDefined();

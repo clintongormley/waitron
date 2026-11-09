@@ -737,7 +737,7 @@ A1424's live qualification was added on 7 November 2026.
   The [routing comparison](../superpowers/plans/2026-11-08-a1440-capacity-routing.md) is an
   illustrative replay, not measured alternate outcomes. Its fit-only rules leave more modeled
   capacity idle; no snapshot-freshness limit was validated. Keep the deployed controller,
-  report existing-record observations on 15 November. **2026-11-09:** the watcher
+  advance A1454 and A1461, and report existing-record observations on 15 November. **2026-11-09:** the watcher
   parked A1454 and retained six slots after its measurement-only cut; A1461 reduces run sizes. No new
   collector, workflow, reservation service or credential carrier is approved.
 

@@ -141,7 +141,7 @@ External provenance, read 2026-11-06:
 
 Set `DISPOSABLE_TESTS_MODE=server` to route CI jobs to Lane I's disposable Linux
 runners. Same-repository pull requests, main pushes, tags, schedules, manual runs and
-ordinary reruns use the server route. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, image smoke, final `ci` summary and `publish` jobs stay on
+ordinary reruns use the server route. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
 GitHub so routing, recovery and the required result can still run when server assignment
 stops (watcher, 2026-11-08 16:00). Image smoke always uses `ubuntu-latest` until a
 disposable guest is qualified (watcher, 2026-11-09 08:20). CI still passes
