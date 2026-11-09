@@ -1,5 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { SetupApi } from "../api/client.js";
+import type { SetupHandoverScreen } from "./handover-screen.js";
+import "./handover-screen.js";
 
 const status = {
   operationId: "move one",
@@ -53,7 +55,6 @@ it("posts the selected operation and sign-in separately from the clock proposal"
 });
 
 it("does not expose clock selection until the final copy is actually placed", async () => {
-  const { SetupHandoverScreen } = await import("./handover-screen.js");
   const { mountWidget, cleanupWidgets } = await import("../widgets/test-helpers.js");
   const api = new SetupApi(
     "",
@@ -61,10 +62,10 @@ it("does not expose clock selection until the final copy is actually placed", as
       async () => new Response(JSON.stringify({ body: { ...status, copyPlaced: undefined } })),
     ),
   );
-  const { el } = await mountWidget<InstanceType<typeof SetupHandoverScreen>>(
-    "setup-handover-screen",
-    { api, operationId: "move one" },
-  );
+  const { el } = await mountWidget<SetupHandoverScreen>("setup-handover-screen", {
+    api,
+    operationId: "move one",
+  });
   try {
     await vi.waitFor(() =>
       expect(el.shadowRoot!.textContent).toContain("Preparing the final copy"),
@@ -77,7 +78,6 @@ it("does not expose clock selection until the final copy is actually placed", as
 });
 
 it("cancels a pending read on disconnect and ignores its late answer on reopening", async () => {
-  const { SetupHandoverScreen } = await import("./handover-screen.js");
   const { mountWidget, cleanupWidgets } = await import("../widgets/test-helpers.js");
   let release!: (value: Response) => void;
   const fetcher = vi
@@ -89,10 +89,10 @@ it("cancels a pending read on disconnect and ignores its late answer on reopenin
         }),
     )
     .mockResolvedValue(new Response(JSON.stringify({ body: { ...status, state: "activated" } })));
-  const { el, host } = await mountWidget<InstanceType<typeof SetupHandoverScreen>>(
-    "setup-handover-screen",
-    { api: new SetupApi("", fetcher), operationId: "move one" },
-  );
+  const { el, host } = await mountWidget<SetupHandoverScreen>("setup-handover-screen", {
+    api: new SetupApi("", fetcher),
+    operationId: "move one",
+  });
   try {
     el.remove();
     expect((fetcher.mock.calls[0]![1]!.signal as AbortSignal).aborted).toBe(true);
