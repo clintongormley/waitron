@@ -2362,3 +2362,18 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   Manual open needs an active device/session plus `cash.drawer` or the PIN of someone holding it and uses that same
   drawer; dashboard calibration is the exception. Never manually resend drawer jobs.
   Guards, weaker than the rule: named drawer/cash/refund/calibration/resend suites only; new routes unguarded. [Detail](conventions-ui.md).
+
+## Root receipts moved on 2026-11-09
+
+These supporting fragments are from `CLAUDE.md` at
+`c7ca274eeb1426f64a825164ee3411630545efcd`. The headings identify their unchanged root entries.
+
+### Native form field guard
+
+> , and holds
+> the files it allows by name only to a line count.
+
+### Device profile guard
+
+> , not every action
+> label or zone check. The zone map remains a comment.

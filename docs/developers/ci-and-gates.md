@@ -4999,3 +4999,22 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
   rule: that script only; `scripts/ci-diff-paths.sh` never looks for `gnutimeout` (backlog).
   [Receipt](ci-and-gates.md#every-pnpm-setup-is-bounded).
+
+## Root receipts moved on 2026-11-09
+
+These supporting fragments are from `CLAUDE.md` at
+`c7ca274eeb1426f64a825164ee3411630545efcd`. The headings identify their unchanged root entries.
+
+### Shell command exit status
+
+> A shell sequence separated by newlines reports only its
+> LAST command's status.
+
+### Bundle smoke coverage
+
+> A blank dashboard or till still passes, and setup's server routes are not tested.
+
+### Workflow job time limits
+
+> , does not judge the limit
+> or read an external called workflow.

@@ -3899,3 +3899,23 @@ mailbox and clock preview with `expect.poll`, retaining the exact deadline and
 email-time assertions. Run `pnpm --filter @waitron/server exec vitest run
 src/boot.venue-details.test.ts`. This reproduces the clock-advance mechanism; the
 failed run did not retain which earlier read first crossed a polling interval.
+
+## Root receipts moved on 2026-11-09
+
+These supporting fragments are from `CLAUDE.md` at
+`c7ca274eeb1426f64a825164ee3411630545efcd`. The headings identify their unchanged root entries.
+
+### Floor-test day changes
+
+> , or a run across the venue's day change can be refused
+> `floor_today.out_of_date`.
+
+### Test project order
+
+> : Vitest 4 runs a `groupOrder: 0` project that runs one isolated worker AFTER every other
+> group.
+
+### Database helper mutation cost
+
+> : that check's mutants change nothing, and on CI's runners some ran to Stryker's
+> per-mutant timeout.

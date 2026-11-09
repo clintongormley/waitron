@@ -6182,3 +6182,21 @@ and a different module's accepting control.
 TypeScript run during migration or start. The pinned-CHECK case in `packages/db/src/settings.test.ts`
 reads the built table's text and checks the four shared constraints, not what each enforces.
 Nothing checks that documents hold no row ids or that a module declares its document in its seat.
+
+## Root receipts moved on 2026-11-09
+
+These supporting fragments are from `CLAUDE.md` at
+`c7ca274eeb1426f64a825164ee3411630545efcd`. The headings identify their unchanged root entries.
+
+### Till person-header guard
+
+> , statuses rather than bodies, and a text check for the
+> cookie.
+
+### Module migration-set guard
+
+> , never whether a module can be switched off.
+
+### Schema constraint guard
+
+> , never offending writes; matches unique indexes by name.

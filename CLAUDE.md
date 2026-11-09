@@ -106,8 +106,8 @@ hook, or how tests are scheduled:
 - **`prettier --check` on an IGNORED path prints the same line as a clean one.** `docs/` is ignored
   whole, so `pnpm exec prettier --file-info <file>` is the one that discriminates — it prints
   `"ignored": true`.
-- **Check every command's exit status.** A shell sequence separated by newlines reports only its
-  LAST command's status. Use `&&` for dependent validation steps, or capture each status separately.
+- **Check every command's exit status.** Use `&&` for dependent validation steps, or capture each
+  status separately.
 - **PR CI runs scoped package tests without package-wide coverage; ordinary main pushes run no
   package tests in `ci.yml`; nightly, manual and release runs enforce `98/98/98/95` coverage.**
   A PR tests only the changed packages, not their dependents (owner, 2026-11-08, A1461); those are
@@ -139,11 +139,11 @@ hook, or how tests are scheduled:
   and `packages` name code changes. PR evidence is not reused. Container publication, including `:main`, follows
   full scheduled/manual main verification or a fully checked release tag, never an ordinary main
   push. [Modes and limits](docs/developers/ci-and-gates.md#scoped-tests-and-full-verification).
-- **`bundle-smoke` builds dashboard, setup and till but opens only setup in Chromium with server reads
-  intercepted**; PRs whose scope is `documentation` or `root` skip it.
-  A blank dashboard or till still passes, and setup's server routes are not tested. Guard:
+- **`bundle-smoke` builds dashboard, setup and till but opens only setup in Chromium with server
+  reads intercepted**; PRs whose scope is `documentation` or `root` skip it. Guard:
   `scripts/bundle-smoke.test.mjs`, weaker than its name: reads workflow steps and real build-script
-  declarations, not the builds or browser check. [Detail](docs/developers/ci-and-gates.md#built-applications-in-bundle-smoke).
+  declarations, not the builds or browser check.
+  [Detail](docs/developers/ci-and-gates.md#built-applications-in-bundle-smoke).
 - **Every Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out; the box image
   copies sharp into `/app/node_modules`.** Guards: `scripts/deploy-image-env.test.ts` and bundle-smoke
   (weaker than their names: read text; bundle-smoke reads only `dist/server.js`), and image-smoke's sharp step.
@@ -156,8 +156,7 @@ hook, or how tests are scheduled:
 - **The GHA cache is a shared per-repository budget, evicted least-recently-used.** Name the entries
   a new exporter would compete with before adding it.
 - **Every workflow job carries `timeout-minutes`; a reusable workflow's called jobs carry it.**
-  Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads text, does not judge the limit
-  or read an external called workflow.
+  Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads text.
 - **An apt-get in a workflow, `deploy/Dockerfile`, `deploy/waitron.sh` or the bench's CA probe image
   runs under an outer `timeout` and retries stalls and failures; so does `playwright install --with-deps`,
   and every `curl` in `deploy/Dockerfile` carries `--retry`, `--connect-timeout` and `--max-time`.**
@@ -251,8 +250,7 @@ called weaker than its name, the topic file lists what it does not see.
   [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A screen does not draw its own form field**: a `<select>`, a `<textarea>` or a text `<input>`
   comes from a field primitive; where none fits, add to one or add one (owner, 2026-10-01). Guard:
-  `scripts/native-form-fields.test.ts`, weaker than its name — it reads string literals, and holds
-  the files it allows by name only to a line count.
+  `scripts/native-form-fields.test.ts`, weaker than its name — it reads string literals.
 - **A form that asks for a postal address puts `wt-address-lookup` above its address fields**
   (the owner's ask, 2026-10-28, A1171); it stays hidden until the form is handed an address
   provider. Guard: `scripts/address-lookup-forms.test.ts`, weaker than its name: reads text, not
@@ -310,7 +308,7 @@ called weaker than its name, the topic file lists what it does not see.
 - **Every staff-notice code a source sends is worded by the till's `staffNoticeText`**; a code it
   does not name is drawn as "The server needs attention". Guard:
   `scripts/staff-notice-codes.test.ts`, weaker than its name — it reads `code: "…"` literals as
-  text, in source files it lists by hand. See [conventions-ui.md](docs/developers/conventions-ui.md).
+  text. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;
   automatic pairing renewal uses its own authenticated route.
 - **Dashboard subscription names travel with their server sources.** Guard: `scripts/live-subscriptions.test.ts` — it catches unknown names, NOT missing SQL dependencies or disabled-module combinations. [Detail](docs/developers/conventions-ui.md).
@@ -338,8 +336,7 @@ called weaker than its name, the topic file lists what it does not see.
   service and its admission list bounds sign-in.** Preserve the stated action exceptions. New routes
   add refusing cases and inventory rows to `apps/server/src/till-api.profile-actions.test.ts` and
   zone rows to `apps/server/src/till-api.profile-zones.test.ts`. The inventory guard is weaker than
-  its name: only its till/device/schedule mounts, and device-proof refusals, not every action
-  label or zone check. The zone map remains a comment.
+  its name: only its till/device/schedule mounts, and device-proof refusals.
   [Limits](docs/developers/conventions-ui.md#a-devices-profile-and-the-signed-in-person-must-both-allow-what-the-device-does).
 - **A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`** (owner, A155).
   Guard: `scripts/pinned-actions-column.test.ts`, weaker than its name: identifies menus only by that
@@ -600,9 +597,9 @@ called weaker than its name, the topic file lists what it does not see.
 - **A till request that needs a signed-in person is checked against the `x-waitron-person` header
   inside `requireSession`, `signedInPersonOn` and sign-out; read the session's person only through
   them.** Guard: `apps/server/src/till-api.session-person.test.ts`, weaker than its name: only the
-  till, device and schedule mounts' routes, statuses rather than bodies, and a text check for the
-  cookie. A new route the walk sees answered as with nobody signed in goes in its `BLIND` list, and
-  one that needs a body in `BODIES`. [Receipt](docs/developers/conventions-data.md#a-till-requests-person-is-checked-where-the-sign-in-is-read).
+  till, device and schedule mounts' routes. A new route the walk sees answered as with nobody signed
+  in goes in its `BLIND` list, and one that needs a body in `BODIES`.
+  [Receipt](docs/developers/conventions-data.md#a-till-requests-person-is-checked-where-the-sign-in-is-read).
 - **A module with a migration set names in `requires` every other set its SQL references, puts a
   trigger on, names in a trigger body or writes at top level.** Guard: `scripts/module-graph-honesty.test.ts`,
   weaker than its name: text scan recognising fixed SQL shapes.
@@ -618,10 +615,10 @@ called weaker than its name, the topic file lists what it does not see.
   with its tables in workforce's set, and `node`, whose set is applied to `node.db`. Append-only
   classification travels with the set. Guard: the eight-sets cases in
   `packages/composition/src/composition.test.ts`, weaker than the rule: they pin today's sets and
-  hosted modules, never whether a module can be switched off.
-- **Declare every foreign key and unique index in the TypeScript schema.** If impossible, say at
-  the column what it cost and where the refusal moved. Guard: `scripts/schema-constraints.test.ts`,
-  weaker than its name: reads built schema, never offending writes; matches unique indexes by name.
+  hosted modules.
+- **Declare every foreign key and unique index in the TypeScript schema.** If impossible, say at the
+  column what it cost and where the refusal moved. Guard: `scripts/schema-constraints.test.ts`,
+  weaker than its name: reads built schema.
 - **A schema change rebuilds the set's one starting migration, never a new migration or a hand edit:**
   change the TypeScript schema (hand-written SQL only in `<package>/triggers/<set>.sql`) and run
   `migration-baseline rebuild --set <name>`; on a rebase conflict take main's copy
@@ -722,9 +719,9 @@ passed while proving nothing.
   `startServer` or after `close()`**. Guard: `apps/server/src/boot.backup-network.test.ts`'s
   `beforeServerStarts`, weaker than the rule — it covers the file's two write helpers only. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down).
-- **A test child process that freezes `Date` freezes `performance.now` with it**, or the hour clock
-  refuses it only on a slow runner. Guard: the one-time 1.1-second holds in the hour test children,
-  weaker than the rule: those children only. [Receipt and paths](docs/developers/testing-guide.md#root-receipts-moved-on-2026-10-31).
+- **A test child process that freezes `Date` freezes `performance.now` with it**. Guard: the
+  one-time 1.1-second holds in the hour test children, weaker than the rule: those children only.
+  [Receipt and paths](docs/developers/testing-guide.md#root-receipts-moved-on-2026-10-31).
 - **Draw every port a test needs in one `freePorts(n)` call, before binding any of them**
   (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound. Nothing
   guards it.
@@ -735,8 +732,7 @@ passed while proving nothing.
   In a shared database, every write and helper takes its clock from the latest record time;
   otherwise give the case its own database. Nothing guards it.
 - **A suite that sends a room's revision to a today's-floor write route pins the API's clock at its
-  own fixed time and seeds at that time**, or a run across the venue's day change can be refused
-  `floor_today.out_of_date`. Nothing guards it. Receipt:
+  own fixed time and seeds at that time**. Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change).
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
   `pnpm reap` sweeps these, scoped by ppid 1 AND the shapes vitest leaves in `ps`, never a bare `vitest` match.
@@ -758,8 +754,7 @@ passed while proving nothing.
   `scripts/fiscal-test-budget.test.ts`, weaker than its name — it pins one arrangement, not how
   Vitest resolves the limit.
 - **A package that pins one worker inside one of several projects numbers its `groupOrder`s from 1,
-  never 0**: Vitest 4 runs a `groupOrder: 0` project that runs one isolated worker AFTER every other
-  group. Guard: `scripts/bookings-test-budget.test.ts` — which pins bookings alone.
+  never 0**. Guard: `scripts/bookings-test-budget.test.ts` — which pins bookings alone.
 - **A test's timeout must exceed the SUM of its waits plus untimed work.** Guard:
   `scripts/spawn-timeout-budget.test.ts`, weaker than its name: text scan of `scripts/` only,
   checks only the largest single wait; packages/apps unguarded.
@@ -841,8 +836,7 @@ passed while proving nothing.
   pages have no harness: write the rendered string to a file and open it with the workspace's
   playwright Chromium.
 - **Code every database test runs — `useVenueDb`'s hooks — never checks something already
-  guaranteed**: that check's mutants change nothing, and on CI's runners some ran to Stryker's
-  per-mutant timeout. Nothing guards it.
+  guaranteed**. Nothing guards it.
   [Receipt](docs/developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).
 - **In `packages/db`, import inside a case only to assert what a source module builds on load;
   otherwise import at the top.** Its Stryker config uses `ignoreStatic`; nothing guards this.
