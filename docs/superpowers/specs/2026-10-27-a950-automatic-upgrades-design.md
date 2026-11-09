@@ -1,3 +1,5 @@
+> **2026-11-09:** The owner adopted the [shorter eight-step route](../plans/2026-11-09-a950-shorter-upgrades.md), including a real test sale on a disposable copy. It supersedes this design's delivery route and awaits owner approval before any build. This page retains historical decisions and receipts; the Cloud hold check, password-checked manual go-back, proof-of-close and backup-stream handoff are later work. No current runtime qualification is claimed.
+
 > 2026-10-29, A1206: the start-again note is retired; §"The start-again floor must survive a rollback" no longer applies.
 
 > **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
