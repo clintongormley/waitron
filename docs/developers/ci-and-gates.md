@@ -197,7 +197,9 @@ External provenance, read 2026-11-09:
 | --- | --- | --- |
 | The repository run list uses the existing read permission | [GitHub workflow runs](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository): “Anyone with read access to the repository can use this endpoint” | Routing reads this repository without another credential. |
 
-The existing health check reads CI's queued and running workflows. If a server job has waited five minutes and no server job is
+The existing health check reads CI's queued and running workflows. A job's wait is dated from its own
+`started_at`, or its own `created_at` when no start is reported; neither available means its age is unknown.
+If a server job has waited five minutes and no server job is
 assigned or running, and no assigned job in those runs started or finished within five
 minutes, this run uses GitHub and records the reason in its summary. An unverifiable
 inventory makes routing continue with the other readable runs and choose the server unless
@@ -227,7 +229,10 @@ finished within five minutes. It also checks the latest 100 completed CI runs fo
 work finished within five minutes, skipping job reads for runs whose `updated_at` is over
 five minutes old; missing or invalid update times still get job reads. It selects only the
 oldest stuck run, repeats the global
-active-work check, force-cancels that run, waits for cancellation to complete, then reruns
+active-work check, then reads that attempt's complete job inventory immediately before cancellation.
+A running or runner-assigned job in either pool prevents cancellation, except the exact
+`server-queue-watchdog` control job. The watchdog is allowed so its recovery request can finish.
+It force-cancels an eligible run, waits for cancellation to complete, then reruns
 the whole workflow so routing runs again. Other candidates wait for the next invocation.
 It reports the affected run ID in its summary. A refused force-cancel names that run for
 intervention; until it is resolved, younger candidates wait. A changed run identity or an incomplete

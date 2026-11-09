@@ -79,8 +79,7 @@ async function serverJobs(options, run, attempt = run.run_attempt) {
 }
 const assigned = (job) =>
   job.status !== "completed" && (job.status === "in_progress" || job.runner_id > 0);
-const old = (job, run, now) =>
-  now - Date.parse(job.started_at || run.run_started_at || run.created_at) >= 300_000;
+const old = (job, now) => now - Date.parse(job.started_at || job.created_at) >= 300_000;
 
 async function readInventory(read, unavailable) {
   try {
@@ -127,7 +126,7 @@ export async function serverHealth(options, unavailable) {
         assigned(job) ||
         (job.runner_id > 0 && now - Date.parse(job.completed_at) < 300_000),
     );
-    if (jobs.some((job) => job.status === "queued" && !job.runner_id && old(job, run, now)))
+    if (jobs.some((job) => job.status === "queued" && !job.runner_id && old(job, now)))
       stuck.push(run);
   }
   return { stuck: running || progressing ? [] : stuck, running, recent };
@@ -183,7 +182,7 @@ export async function serverRoute(options) {
           job.status === "completed" &&
           job.conclusion === "cancelled" &&
           !job.runner_id &&
-          old(job, run, Date.parse(job.completed_at)),
+          old(job, Date.parse(job.completed_at)),
       );
     }, unavailable);
     if (cancelled.length) {
@@ -260,6 +259,8 @@ export async function recoverServer(options) {
       current.status === "completed"
     )
       continue;
+    const jobs = await runJobs(options, current);
+    if (jobs.some((job) => job.name !== "server-queue-watchdog" && assigned(job))) continue;
     try {
       await request(path + "/force-cancel", { method: "POST" });
     } catch (error) {

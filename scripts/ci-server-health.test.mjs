@@ -81,6 +81,86 @@ function fixture() {
 }
 
 describe("server health recovery", () => {
+  it.each(["in_progress", "queued"])(
+    "preserves a hosted sibling with an assigned runner while it is %s",
+    async (status) => {
+      const f = fixture(),
+        request = f.request;
+      const sibling = {
+        ...f.job,
+        id: 124,
+        name: "bundle-smoke",
+        labels: ["ubuntu-latest"],
+        status,
+        runner_id: 7,
+      };
+      f.options.request = async (path, options) =>
+        path.includes("/runs/12/attempts/1/jobs?")
+          ? { total_count: 2, jobs: [f.job, sibling] }
+          : request(path, options);
+      expect((await health.recoverServer(f.options)).retried).toEqual([]);
+      expect(f.calls.some(([, options]) => options.method)).toBe(false);
+    },
+  );
+
+  it.each(["server-queue-watchdog", "server-queue-watchdog-copy"])(
+    "exempts only the exact recovery control job: %s",
+    async (name) => {
+      const f = fixture(),
+        request = f.request;
+      const watchdog = {
+        ...f.job,
+        id: 124,
+        name,
+        labels: ["ubuntu-latest"],
+        status: "in_progress",
+        runner_id: 7,
+      };
+      f.options.request = async (path, options) =>
+        path.includes("/runs/12/attempts/1/jobs?")
+          ? { total_count: 2, jobs: [f.job, watchdog] }
+          : request(path, options);
+      expect((await health.recoverServer(f.options)).retried).toEqual(
+        name === "server-queue-watchdog" ? [12] : [],
+      );
+    },
+  );
+
+  it("preserves a hosted assignment appearing in the final cancellation inventory", async () => {
+    const f = fixture(),
+      request = f.request;
+    let reads = 0;
+    f.options.request = async (path, options) => {
+      if (path.includes("/runs/12/attempts/1/jobs?") && ++reads >= 3)
+        return {
+          total_count: 2,
+          jobs: [
+            f.job,
+            { ...f.job, id: 124, labels: ["ubuntu-latest"], status: "queued", runner_id: 9 },
+          ],
+        };
+      return request(path, options);
+    };
+    expect((await health.recoverServer(f.options)).retried).toEqual([]);
+    expect(f.calls.some(([, options]) => options.method)).toBe(false);
+  });
+
+  it.each([date(1), undefined])(
+    "does not date an unstarted job from an old workflow when created_at is %s",
+    async (created_at) => {
+      const f = fixture();
+      Object.assign(f.job, { started_at: null, created_at });
+      expect((await health.recoverServer(f.options)).retried).toEqual([]);
+      expect(f.calls.some(([, options]) => options.method)).toBe(false);
+    },
+  );
+
+  it("recovers an unstarted job whose own creation was more than five minutes ago", async () => {
+    const f = fixture();
+    Object.assign(f.job, { started_at: null, created_at: date(6) });
+    expect((await health.recoverServer(f.options)).retried).toEqual([12]);
+  });
+
   it.each(["started_at", "completed_at"])(
     "preserves queued work after recent server %s activity",
     async (field) => {
