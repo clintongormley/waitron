@@ -3827,6 +3827,9 @@ index by NAME, so an index whose columns changed under a kept name passes.
 
 ## Editing a shipped migration file, even a comment, needs a venue reset
 
+2026-11-09: `scripts/starting-migrations.test.ts` replaces migrations-match-schema. The historical
+receipts below refer to the guard available when those experiments ran.
+
 Drizzle records a hash of each migration file's whole text in the database's journal table, and
 `assertNotAhead` (`packages/provisioning/src/schema-ahead.ts`) refuses the start with
 `provisioning.database_ahead` when the journal records a hash the image does not ship.
@@ -3848,7 +3851,8 @@ one migrated with the edited files was accepted. A rebuild from the bucket runs 
 (`apps/server/src/restore-stream.ts` calls `assertNotAhead`), so a copy streamed before the edit
 carries the old hashes too, and so does an archive taken before it: a cold restore runs no ahead
 check of its own, and the start after it does (`apps/server/src/node-entry.ts`). Nothing guards
-against such an edit: the 2026-10-02 one passed `scripts/migrations-match-schema.test.ts`,
+against such an edit: the 2026-10-02 one passed the old guard
+(`git show dd329e28eb:scripts/migrations-match-schema.test.ts`),
 `scripts/migration-upgrade.test.ts`, `scripts/schema-constraints.test.ts`,
 `scripts/behavioural-triggers.test.ts`, `scripts/append-only-triggers.test.ts` and
 `packages/migrations`'s suite.
