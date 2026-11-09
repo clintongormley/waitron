@@ -425,7 +425,7 @@ import { readVenueContentLanguageRules, readVenueLocale } from "./venue-locale.j
 import { readVenueTimeZone } from "./venue-time-zone.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
 import { buildServeOptions, watchTlsFiles } from "./tls.js";
-import { StreamHost, type StreamHostDeps } from "./stream-host.js";
+import { readNewerBucketMain, StreamHost, type StreamHostDeps } from "./stream-host.js";
 import { mountStreamApi } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
 import { writeRecoveryKey } from "./backup-env-writer.js";
@@ -971,7 +971,7 @@ function makeStartedServer(
 
 /** Test seams; production leaves them unset. */
 export interface StartServerSeams {
-  stream?: Pick<StreamHostDeps, "walLimitBytes" | "spawn" | "store">;
+  stream?: Pick<StreamHostDeps, "walLimitBytes" | "spawn" | "store" | "mainCheckIntervalMs">;
   appendOnlyWatch?: { intervalMs?: number };
   /** The spare file's size; defaults to SPARE_SPACE_BYTES. */
   spareBytes?: number;
@@ -1833,6 +1833,7 @@ async function bootServer(
     await closeSupersededOperation({ node: store.node, nodeId: config.node.nodeId }, log);
     return restrictedStart();
   }
+  let carriedOnWithoutPeer = false;
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
   // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
   const initialAxes = await readNodeMode(store.node, config.node.nodeId);
@@ -1867,6 +1868,14 @@ async function bootServer(
         carryOn: {
           db,
           credentialKeyRing: totpKeyRing,
+          readNewerMain: () =>
+            readNewerBucketMain({
+              db,
+              node: store.node,
+              ring,
+              nodeId: node.nodeId,
+              store: seams.stream?.store,
+            }),
           ...(seams.waitingStart?.secure === undefined
             ? {}
             : { secure: seams.waitingStart.secure }),
@@ -1920,6 +1929,7 @@ async function bootServer(
       announceWaiting(waitingStart.server);
       const end = await waitingStart.ended;
       if (end.kind === "stopped") return waitingStart.server;
+      carriedOnWithoutPeer = end.kind === "carried-on";
       outcome = end.kind === "checked" ? end.outcome : { result: "proceed", successorNodeId: null };
     }
     if (outcome.result === "superseded" && outcome.successorNodeId !== null) {
@@ -3956,5 +3966,13 @@ async function bootServer(
     log,
   };
   stepDownHere = (request) => stepDown(stepDownDeps, request);
+  if (carriedOnWithoutPeer)
+    streamHost.observeNewerMain((evidence) =>
+      stepDownHere({
+        kind: "superseded",
+        successorNodeId: evidence.successorNodeId,
+        membershipTerm: evidence.membershipTerm,
+      }),
+    );
   return started;
 }

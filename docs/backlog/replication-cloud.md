@@ -505,18 +505,27 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 - `scripts/handover-manifest-complete.test.ts` has no reverse check: a manifest row naming a table
   or file that no longer exists still passes.
 
+## A1342: return a stopped box's records before reset
+
+Owner 2026-11-09 18:59 replaces the withdrawn restricted-filing proposal: transfer only fiscal
+records absent from the bucket copy to the new main over the existing signed connection. The new
+main preserves original chain/node identity, skips records already held, and files/corrects through
+its normal outbox/remedy path. Do not sync other domain tables. The old page says safe to reset only
+after the new main confirms it holds every record. One-page plan and approval are pending; the
+bucket stop does not provide this transfer. Reset-to-clean-setup is qualified; completed current
+contract rejoin remains with A9473b6, as watcher18:51accepted.
+
 ## A box the chart no longer names main keeps filing its earlier records
 
 Enrollment prerequisite (2026-11-09): new enrollment retains this box’s signed spare endorsement in
 its held chart, and later charts retain its own verified endorsements of listed, non-evicted nodes.
-Earlier enrollments are not backfilled. Bucket checks and the stop remain in A1342’s next part.
+Earlier enrollments are not backfilled. Records-return recovery remains separate from the bucket stop.
 
-A1342. The owner chose on 2026-11-05: settle it before A947 3b lands, and a box that sees another
-main box stops selling. Left open by A1018 Slice 5 (Ruling R42). `apps/server/src/node-membership-api.ts` and
-`apps/server/src/boot-peer-check.ts` stop a box only when the chart fences it (`isFencedStanding`),
-and a third box's promotion leaves a box `serving-secondary`, which does not fence. Run through real
-starts on the Slice 5 branch; on main since #2436. It needs a third box promoted over a running main
-box, so no real venue reaches it before 3b.
+The third-box admission cases below remain separate work.
+
+Remaining third-box cases from A1342. Owner 2026-11-09 17:04 accepted the two-box bucket-evidence
+stop as clearing the before-A947-3b-6 gate; it does not close these third-box cases. The older
+receipts below describe those cases, rather than the returned-main T versus T+1 incident.
 
 Since A1425 the Veri\*Factu backend's `refuseNewIssuance` and `appendToChain` refuse a box the held
 chart does not name `serving-primary` (`fiscal.chain_handed_over`), so such a box writes no new record

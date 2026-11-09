@@ -234,10 +234,6 @@ async function sendChartToSource(deps: ChartPostDeps, stopping: AbortSignal): Pr
  * later. Nothing waits for it, and a failure is only logged, so an old box that is switched off or
  * stalled costs this start nothing.
  *
- * Run with two boxes only (`handover-chart-post.test.ts`, `boot.handover-destination.test.ts`). With
- * a healthy third box in the chart, this box's start waits before it gets here: the chart it minted
- * carries only its own endorsement and `peerKeyOf` does not read `nodes`, so that box's answer is
- * `not_verified` (`boot-peer-check.ts:395`).
  */
 export function postChartToSource(deps: ChartPostDeps): ChartPost {
   const stopping = new AbortController();

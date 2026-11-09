@@ -4,6 +4,7 @@ import type { Database, NodeDatabase } from "@waitron/db";
 import type { TotpKeyRing } from "@waitron/identity";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { codeOf } from "@waitron/server-kit";
+import type { NewerBucketMain } from "./stream-host.js";
 import type { StartedServer } from "./boot.js";
 import { mountCarryOn, type CarryOnTurn } from "./carry-on.js";
 import type { DeploymentEnvironment } from "./config.js";
@@ -47,6 +48,7 @@ export interface WaitingStartDeps {
   carryOn?: {
     db: Database;
     credentialKeyRing: TotpKeyRing;
+    readNewerMain?: () => Promise<NewerBucketMain | null>;
     /** Whether a request reached the box over HTTPS from the page; tests replace it. */
     secure?: (c: Context) => boolean;
   };

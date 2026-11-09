@@ -1,6 +1,7 @@
+import { isDeepStrictEqual } from "node:util";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { tryGetCredential, type KeyRing } from "@waitron/credentials";
+import { nodeSigningPublicKey, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import {
   readNodeMembership,
   withTransaction,
@@ -8,12 +9,15 @@ import {
   type NodeDatabase,
   type Transaction,
 } from "@waitron/db";
-import { signBytes } from "@waitron/membership";
+import { signBytes, verifyEndorsement } from "@waitron/membership";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { VENUE_FILE, WAL_SUFFIX } from "@waitron/store";
 import {
   DEFAULT_WAL_LIMIT_BYTES,
+  createS3ObjectStore,
+  readPointer,
+  verifyPointer,
   SentPointers,
   StreamSupervisor,
   type BucketConfig,
@@ -22,6 +26,7 @@ import {
   type StreamNotStarted,
   type StreamView,
 } from "@waitron/stream";
+import { boundObjectStore } from "./bounded-store.js";
 import type { Logger } from "./logger.js";
 import { credentialField } from "./credentials.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -90,6 +95,54 @@ export async function readStreamSettingsIn(
   };
 }
 
+export interface NewerBucketMain {
+  successorNodeId: string;
+  membershipTerm: number;
+  contactUrl: string;
+}
+
+export async function readNewerBucketMain(
+  deps: Pick<StreamHostDeps, "db" | "node" | "ring" | "nodeId" | "store">,
+  signal?: AbortSignal,
+  openStore: typeof createS3ObjectStore = createS3ObjectStore,
+): Promise<NewerBucketMain | null> {
+  try {
+    const settings = await readStreamSettings(deps.db, deps.ring);
+    if (settings === null) return null;
+    const stored = await readPointer(
+      boundObjectStore(deps.store ?? openStore(settings.bucket), 15_000),
+      settings.venueId,
+      { signal },
+    );
+    if (stored === null) return null;
+    const { pointer } = stored;
+    const held = await readNodeMembership(deps.db);
+    if (held === null) return null;
+    if (pointer.body.nodeId === deps.nodeId || pointer.body.term <= held.body.term) return null;
+    const member = held.body.nodes.find(
+      (n) => n.nodeId === pointer.body.nodeId && n.standing !== "evicted",
+    );
+    if (member === undefined) return null;
+    const own = nodeSigningPublicKey(await readNodeIdentityKey(deps.node, deps.ring, deps.nodeId));
+    const endorsed = held.endorsements.find(
+      (e) =>
+        e.nodeId === member.nodeId &&
+        e.endorsedBy === deps.nodeId &&
+        verifyEndorsement(e, own) &&
+        verifyPointer(pointer, e.publicKey),
+    );
+    if (endorsed === undefined) return null;
+    return {
+      successorNodeId: member.nodeId,
+      membershipTerm: pointer.body.term,
+      contactUrl: member.contactUrl,
+    };
+  } catch {
+    // An unavailable or unverified bucket cannot establish that another main exists.
+    return null;
+  }
+}
+
 export interface StreamHostDeps {
   db: Database;
   node: NodeDatabase;
@@ -111,13 +164,13 @@ export interface StreamHostDeps {
   spawn?: SpawnFn;
   store?: ObjectStore;
   walLimitBytes?: number;
+  mainCheckIntervalMs?: number;
 }
 
 /**
  * The one owner of the live copy's supervisor in this process. `start()` and `reload()` never throw
- * for a bucket or vault problem: a copy that cannot start is logged and reads off, and the till is
- * untouched. At most one supervisor runs, and the old one's `stop()` has resolved before the next
- * starts.
+ * for a bucket or vault problem: a copy that cannot start is logged and reads off. The old
+ * supervisor stops before the next starts.
  */
 export class StreamHost {
   readonly #deps: StreamHostDeps;
@@ -127,12 +180,55 @@ export class StreamHost {
   #reloading = false;
   #reloadCount = 0;
   #stopped = false;
+  #observerAbort: AbortController | undefined;
+  #observer: Promise<void> | undefined;
+  #pointerStore: { bucket: BucketConfig; store: ObjectStore } | undefined;
   #retiring: Promise<void> = Promise.resolve();
   /** A stopped supervisor's pointer write can still land after the next one reads the pointer. */
   readonly #sentPointers = new SentPointers();
 
   constructor(deps: StreamHostDeps) {
     this.#deps = deps;
+  }
+
+  observeNewerMain(
+    stop: (evidence: NewerBucketMain) => Promise<unknown>,
+    intervalMs = this.#deps.mainCheckIntervalMs ?? 15_000,
+  ): void {
+    if (this.#stopped || this.#observer !== undefined) return;
+    const abort = new AbortController();
+    this.#observerAbort = abort;
+    this.#observer = (async () => {
+      while (!abort.signal.aborted) {
+        const evidence = await readNewerBucketMain(this.#deps, abort.signal, (bucket) => {
+          if (
+            this.#pointerStore === undefined ||
+            !isDeepStrictEqual(this.#pointerStore.bucket, bucket)
+          )
+            this.#pointerStore = { bucket, store: createS3ObjectStore(bucket) };
+          return this.#pointerStore.store;
+        });
+        if (abort.signal.aborted) return;
+        if (evidence !== null) {
+          try {
+            await stop(evidence);
+            return;
+          } catch (error) {
+            if (codeOf(error) === "handover.restriction_conflict") return;
+            this.#deps.log("error", "stream.main_stop_failed", { errorCode: codeOf(error) });
+          }
+        }
+        await new Promise<void>((resolve) => {
+          const done = () => {
+            clearTimeout(timer);
+            abort.signal.removeEventListener("abort", done);
+            resolve();
+          };
+          const timer = setTimeout(done, intervalMs);
+          abort.signal.addEventListener("abort", done, { once: true });
+        });
+      }
+    })();
   }
 
   async start(): Promise<void> {
@@ -221,6 +317,8 @@ export class StreamHost {
    */
   async stop(): Promise<void> {
     this.#stopped = true;
+    this.#observerAbort?.abort();
+    await this.#observer;
     await this.#retire();
     this.#deps.log("info", "stream.stopped", {});
   }

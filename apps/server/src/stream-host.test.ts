@@ -12,25 +12,29 @@ import {
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import {
   CORE_MIGRATIONS,
+  readNodeMembership,
   withNodeTransaction,
   withTransaction,
   writeNodeMembership,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { buildNextMembershipDocument, generateNodeKeyPair } from "@waitron/membership";
+import { buildNextMembershipDocument, generateNodeKeyPair, endorseKey } from "@waitron/membership";
 import {
   pointerKey,
+  signPointer,
   readPointer,
   venuePrefix,
   verifyPointer,
   type SpawnFn,
   type StreamStatus,
 } from "@waitron/stream";
+import * as stream from "@waitron/stream";
 import { FakeLitestream, type FakeChild } from "@waitron/stream/testing/fake-litestream.js";
 import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import {
   readStreamSettings,
+  readNewerBucketMain,
   STREAM_PURPOSE,
   StreamHost,
   streamSettingsPayload,
@@ -99,6 +103,267 @@ describe("the live copy's wiring", () => {
 
   afterAll(async () => {
     if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
+  });
+
+  describe("evidence from the backup pointer", () => {
+    const spareKeys = generateNodeKeyPair();
+    const store = () => new SwitchableStore(() => AT);
+    const deps = (bucket: SwitchableStore) => ({
+      db,
+      node: suite.node,
+      ring: RING,
+      nodeId: NODE_ID,
+      store: bucket,
+    });
+    async function configure(
+      options: {
+        term?: number;
+        standing?: "serving-secondary" | "evicted";
+        endorsement?: "missing" | "forged";
+      } = {},
+    ) {
+      await withTransaction(db, (tx) =>
+        putCredential(tx, RING, { purpose: STREAM_PURPOSE, value: SETTINGS }),
+      );
+      const endorsement = endorseKey(
+        "node-b",
+        spareKeys.publicKey,
+        NODE_ID,
+        options.endorsement === "forged" ? spareKeys.privateKey : keys.privateKey,
+      );
+      await writeNodeMembership(
+        db,
+        buildNextMembershipDocument({
+          heldDocument: null,
+          minTerm: options.term ?? 1,
+          nodes: [
+            { nodeId: NODE_ID, contactUrl: "https://old.example", standing: "serving-primary" },
+            {
+              nodeId: "node-b",
+              contactUrl: "https://new.example",
+              standing: options.standing ?? "serving-secondary",
+            },
+          ],
+          signerNodeId: NODE_ID,
+          signerPrivateKey: keys.privateKey,
+          endorsements: options.endorsement === "missing" ? [] : [endorsement],
+        }),
+      );
+    }
+    async function publish(
+      bucket: SwitchableStore,
+      term = 2,
+      nodeId = "node-b",
+      privateKey = spareKeys.privateKey,
+    ) {
+      const pointer = signPointer(
+        {
+          venueId: "venue-1",
+          nodeId,
+          term,
+          generation: `gen-${term}-${nodeId}-20260915T110000Z`,
+          writtenAt: AT.toISOString(),
+        },
+        privateKey,
+      );
+      await bucket.put(pointerKey("venue-1"), new TextEncoder().encode(JSON.stringify(pointer)));
+    }
+    it("recognises only another enrolled box's newer signed pointer", async () => {
+      await configure();
+      const bucket = store();
+      await publish(bucket);
+      expect(await readNewerBucketMain(deps(bucket))).toEqual({
+        successorNodeId: "node-b",
+        membershipTerm: 2,
+        contactUrl: "https://new.example",
+      });
+      await configure({ endorsement: "forged" });
+      expect(await readNewerBucketMain(deps(bucket))).toBeNull();
+    });
+    it.each([
+      "equal",
+      "older",
+      "self",
+      "unknown",
+      "bad-signature",
+      "evicted",
+      "missing-endorsement",
+      "missing-pointer",
+      "malformed",
+      "unavailable",
+      "unconfigured",
+    ])("does not stop on %s evidence", async (kind) => {
+      await configure({
+        standing: kind === "evicted" ? "evicted" : undefined,
+        endorsement: kind === "missing-endorsement" ? "missing" : undefined,
+      });
+      const bucket = store();
+      if (kind === "self") {
+        const chart = (await readNodeMembership(db))!;
+        await writeNodeMembership(db, {
+          ...chart,
+          endorsements: [
+            ...chart.endorsements,
+            endorseKey(NODE_ID, keys.publicKey, NODE_ID, keys.privateKey),
+          ],
+        });
+      }
+      if (kind !== "missing-pointer")
+        await publish(
+          bucket,
+          kind === "equal" ? 1 : kind === "older" ? 0 : 2,
+          kind === "self" ? NODE_ID : kind === "unknown" ? "stranger" : "node-b",
+          kind === "bad-signature" || kind === "self" ? keys.privateKey : spareKeys.privateKey,
+        );
+      if (kind === "malformed")
+        await bucket.put(pointerKey("venue-1"), new TextEncoder().encode("{}"));
+      if (kind === "unavailable") bucket.down = true;
+      if (kind === "unconfigured")
+        await withTransaction(db, (tx) => tx.run(sql`delete from tenant_credentials`));
+      expect(await readNewerBucketMain(deps(bucket))).toBeNull();
+    });
+    it("retries a failed stop instead of leaving the old main trading", async () => {
+      await configure();
+      const bucket = store();
+      await publish(bucket);
+      let attempts = 0;
+      const rt = runtime({ store: bucket });
+      try {
+        rt.observeNewerMain(async () => {
+          if (++attempts === 1) throw new Error("node read failed");
+        }, 5);
+        await vi.waitFor(() => expect(attempts).toBe(2));
+      } finally {
+        await rt.stop();
+      }
+    });
+    it("reuses its bucket client until saved settings change", async () => {
+      await configure();
+      const bucket = store();
+      const opened = vi.spyOn(stream, "createS3ObjectStore").mockReturnValue(bucket);
+      const reads = vi.spyOn(bucket, "get");
+      const rt = runtime();
+      try {
+        rt.observeNewerMain(async () => {}, 5);
+        await vi.waitFor(() => expect(reads.mock.calls.length).toBeGreaterThanOrEqual(3));
+        expect(opened).toHaveBeenCalledTimes(1);
+        await withTransaction(db, (tx) =>
+          putCredential(tx, RING, {
+            purpose: STREAM_PURPOSE,
+            value: { ...SETTINGS, secretAccessKey: "replacement-secret" },
+          }),
+        );
+        await vi.waitFor(() => expect(opened).toHaveBeenCalledTimes(2));
+        expect(opened.mock.calls[1]![0].secretAccessKey).toBe("replacement-secret");
+      } finally {
+        await rt.stop();
+        opened.mockRestore();
+      }
+    });
+    it("checks the current chart after a slow bucket answer", async () => {
+      await configure();
+      const bucket = store();
+      await publish(bucket);
+      const get = bucket.get.bind(bucket);
+      let release!: () => void;
+      const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const entered = vi.fn();
+      vi.spyOn(bucket, "get").mockImplementation(async (...args) => {
+        entered();
+        await hold;
+        return get(...args);
+      });
+      const reading = readNewerBucketMain(deps(bucket));
+      await vi.waitFor(() => expect(entered).toHaveBeenCalledOnce());
+      await configure({ term: 3 });
+      release();
+      expect(await reading).toBeNull();
+    });
+    it("aborts and settles an observer waiting on a silent bucket during shutdown", async () => {
+      await configure();
+      const bucket = store();
+      bucket.hang = true;
+      const reading = vi.spyOn(bucket, "get");
+      const stopped = vi.fn(async () => {});
+      const rt = runtime({ store: bucket });
+      rt.observeNewerMain(stopped, 5);
+      await vi.waitFor(() => expect(reading).toHaveBeenCalledOnce());
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const prompt = await Promise.race([
+          rt.stop().then(() => true),
+          new Promise<boolean>((done) => {
+            timer = setTimeout(() => done(false), 5_000);
+          }),
+        ]);
+        expect(prompt).toBe(true);
+        expect(stopped).not.toHaveBeenCalled();
+      } finally {
+        clearTimeout(timer);
+        await rt.stop();
+      }
+    });
+    it("settles an in-flight read before shutdown and ignores its late evidence", async () => {
+      await configure();
+      const bucket = store();
+      await publish(bucket);
+      const get = bucket.get.bind(bucket);
+      let release!: () => void;
+      let entered!: () => void;
+      const held = new Promise<void>((done) => {
+        release = done;
+      });
+      const reading = new Promise<void>((done) => {
+        entered = done;
+      });
+      vi.spyOn(bucket, "get").mockImplementation(async (key) => {
+        entered();
+        await held;
+        return get(key);
+      });
+      const stop = vi.fn(async () => {});
+      const rt = runtime({ store: bucket });
+      let settled = false;
+      try {
+        rt.observeNewerMain(stop, 5);
+        await reading;
+        const closing = rt.stop().then(() => {
+          settled = true;
+        });
+        await new Promise<void>((done) => setImmediate(done));
+        expect(settled).toBe(false);
+        release();
+        await closing;
+        expect(stop).not.toHaveBeenCalled();
+      } finally {
+        release();
+        await rt.stop();
+      }
+    });
+    it("observes later evidence even while copying is off, and stops observing on shutdown", async () => {
+      await configure();
+      const bucket = store();
+      const stopped = vi.fn(async () => {});
+      const rt = runtime({ store: bucket, isPrimary: () => false });
+      await rt.start();
+      const duplicate = vi.fn(async () => {});
+      rt.observeNewerMain(stopped, 5);
+      rt.observeNewerMain(duplicate, 5);
+      await publish(bucket);
+      await vi.waitFor(() =>
+        expect(stopped).toHaveBeenCalledWith({
+          successorNodeId: "node-b",
+          membershipTerm: 2,
+          contactUrl: "https://new.example",
+        }),
+      );
+      await rt.stop();
+      expect(stopped).toHaveBeenCalledTimes(1);
+      expect(duplicate).not.toHaveBeenCalled();
+      expect(rt.status()).toEqual({ state: "off" });
+    });
   });
 
   it("reads no settings, and starts nothing, when no bucket is stored", async () => {

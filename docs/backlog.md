@@ -1976,15 +1976,14 @@ Not in any track until the standalone primary is done.
   plan yet builds its path, including whose invoice series the new main box takes. A947 3b's table
   expects Slice 5 to reach these venues. Left open by A1018 Slice 5 (Ruling P9).
 
-- **A1342. Before A947 3b lands: a selling box that takes a newer chart naming another main box
-  must stop selling.** The owner chose this on 2026-11-05. Since A1425, on a Veri\*Factu venue, once its held chart does
-  not name it main, it writes no new fiscal record, and refuses sales and bill payments before any
-  money moves (`fiscal.chain_handed_over`); refunds are not refused. It still sends AEAT the
-  records it wrote before: the filing loop does not read the chart, and a third box's promotion can
-  leave it `serving-secondary`, which does not fence it.
-  Enrollment now retains this box’s signed spare endorsement; the bucket stop remains to build.
-  Left open by A1018 Slice 5 (Ruling R42).
-  [Detail](backlog/replication-cloud.md#a-box-the-chart-no-longer-names-main-keeps-filing-its-earlier-records)
+- **A1342 recovery: return a stopped box’s fiscal records to the new main before reset.** Owner
+  2026-11-09 18:59 replaces old-box filing with records-only transfer and confirmation; no other
+  tables are synced. The new main files/corrects them under their original chain and node id.
+  [Detail](backlog/replication-cloud.md#a1342-return-a-stopped-boxs-records-before-reset)
+
+- **A third box's chart can leave another box serving-secondary and filing.** The remaining
+  third-box cases from A1342 need their own approved scope; the owner accepted the two-box bucket
+  stop as clearing A947 3b-6 on 2026-11-09. [Detail](backlog/replication-cloud.md#a-box-the-chart-no-longer-names-main-keeps-filing-its-earlier-records)
 
 - **Series and module-preparation gaps at handover** (bundle of 3, 2 go-live, 1 important, size M, waits for another entry). [Detail](backlog/replication-cloud.md#bundle-series-and-module-preparation-gaps-at-handover)
 

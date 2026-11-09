@@ -39,6 +39,14 @@ a preguntar al otro equipo.
 Si el otro equipo responde antes, manda su respuesta. Un equipo que ya ha pasado el local no puede
 seguir; su página lo indica en lugar de mostrar el formulario.
 
+Si la copia de seguridad confirma que otro equipo ha pasado a llevar el local, este equipo se
+niega a seguir como principal. Abre el otro equipo con el enlace. Si esa información aparece después
+de continuar, este equipo deja de aceptar ventas. Usa el nuevo equipo principal. Los equipos antiguos
+pueden compartir dirección: comprueba qué equipo has abierto.
+
+Conserva los datos de este equipo hasta que el nuevo principal confirme que tiene todos los registros
+de facturación. El envío de esos registros aún no está disponible: no restablezcas este equipo todavía.
+
 ## Activar o desactivar el acceso remoto del personal {#remote-access}
 
 Para impedir que el personal abra el panel desde fuera del local, abre **Servicios Cloud** en **Ajustes**
