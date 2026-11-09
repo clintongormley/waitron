@@ -193,10 +193,13 @@ External provenance, read 2026-11-09:
 The existing health check reads CI's queued and running workflows. If a server job has waited five minutes and no server job is
 assigned or running, and no assigned job in those runs started or finished within five
 minutes, this run uses GitHub and records the reason in its summary. An unverifiable
-inventory also chooses GitHub; a timed-out routing step leaves an empty result, which
+inventory makes routing continue with the other readable runs and choose the server unless
+readable work shows the stalled queue above (watcher, 2026-11-09 10:34). The summary
+names the uncertainty rather than presenting partial hosted counts as complete. A timed-out routing step leaves an empty result, which
 every routed job treats as hosted. This does not change the human routing switch.
-A retry reads the previous attempt: an unassigned server job cancelled after that wait
-keeps the retry hosted even after the old queue has disappeared.
+When the retry record and previous attempt can be read, an unassigned server job cancelled
+after that wait keeps the retry hosted even after the old queue has disappeared. An unreadable
+retry record or previous attempt is uncertainty: routing still checks other readable runs for stalls.
 
 The hosted queue watchdog reads its configured families in pages of 30, allowing ten
 seconds for each complete read. It waits up to five minutes, with at most ten polls and
@@ -222,9 +225,19 @@ the whole workflow so routing runs again. Other candidates wait for the next inv
 It reports the affected run ID in its summary. A refused force-cancel names that run for
 intervention; until it is resolved, younger candidates wait. A changed run identity or an incomplete
 inventory refuses recovery. Short non-final pages continue until the advertised count; an
-early empty page, duplicate ID or changed count stops the read. Recovery and probing report
-that the inventory is unavailable and make no change; the command passes so an uncertain
-read does not itself become a stuck-server alarm. Routing chooses GitHub on an uncertain read.
+early empty page, duplicate ID or changed count stops the read. For these incomplete inventories,
+recovery and probing report that the inventory is unavailable and make no change; the command passes.
+API failures remain visible command failures. Routing chooses the server on an uncertain read;
+recovery and probing still require complete inventories.
+An unreadable run can therefore conceal server activity or a stall from routing. The existing
+controller admission remains necessary; recovery cannot act while its required inventory is unavailable.
+This policy does not promise an immediate start.
+
+The health reader requests job inventories in pages of 30 and run inventories in pages of 100.
+On 9 November, the attempt-job endpoints for runs `42580703144` (84 jobs) and `42584158356`
+(87 jobs) returned HTTP 502 with 100-record pages and returned 30 records with 30-record pages.
+The reader keeps its complete-count, unique-ID and run/attempt/head checks across those pages.
+Routing stops before the hosted-capacity scan if its health scan was already uncertain.
 The completed-history filter assumes GitHub updates a completed run no earlier than its
 last job finishes. A 2026-11-08 read of 15 completed CI runs and all 855 of their jobs found
 no job completion later than its run's `updated_at`. This observation is not an API

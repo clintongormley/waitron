@@ -6,12 +6,12 @@ import { setTimeout as delay } from "node:timers/promises";
 
 class InventoryUnavailable extends Error {}
 
-async function inventory(request, path, key, limit) {
+async function inventory(request, path, key, limit, pageSize = 100) {
   const entries = [];
   let total;
   for (let page = 1; ; page++) {
     const answer = await request(
-      `${path}${path.includes("?") ? "&" : "?"}per_page=100&page=${page}`,
+      `${path}${path.includes("?") ? "&" : "?"}per_page=${pageSize}&page=${page}`,
     );
     total ??= answer.total_count;
     assert.ok(
@@ -51,6 +51,8 @@ async function runJobs(options, run, attempt = run.run_attempt) {
     request,
     `/repos/${repository}/actions/runs/${run.id}/attempts/${attempt}/jobs`,
     "jobs",
+    undefined,
+    30,
   );
   assert.ok(
     jobs.every(
@@ -79,15 +81,29 @@ const assigned = (job) =>
 const old = (job, run, now) =>
   now - Date.parse(job.started_at || run.run_started_at || run.created_at) >= 300_000;
 
-export async function serverHealth(options) {
+async function readInventory(read, unavailable) {
+  try {
+    return await read();
+  } catch (error) {
+    if (!unavailable) throw error;
+    unavailable.push(error.message);
+    return [];
+  }
+}
+
+export async function serverHealth(options, unavailable) {
   const { request, repository, repositoryId, now = Date.now() } = options;
   assert.match(repository, /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/);
   const runs = new Map();
   for (const status of ["queued", "in_progress"]) {
-    for (const run of await inventory(
-      request,
-      `/repos/${repository}/actions/workflows/ci.yml/runs?status=${status}`,
-      "workflow_runs",
+    for (const run of await readInventory(
+      () =>
+        inventory(
+          request,
+          `/repos/${repository}/actions/workflows/ci.yml/runs?status=${status}`,
+          "workflow_runs",
+        ),
+      unavailable,
     )) {
       if (owned(run, repositoryId)) runs.set(run.id, run);
     }
@@ -97,7 +113,7 @@ export async function serverHealth(options) {
     progressing = false,
     recent = false;
   for (const run of runs.values()) {
-    const jobs = await serverJobs(options, run);
+    const jobs = await readInventory(() => serverJobs(options, run), unavailable);
     running += jobs.filter(assigned).length;
     progressing ||= jobs.some(
       (job) =>
@@ -118,30 +134,37 @@ export async function serverHealth(options) {
 
 export async function serverRoute(options) {
   const { runId, attempt = 1, request, repository, repositoryId } = options;
+  const unavailable = [];
   if (attempt > 1) {
-    const run = await request(`/repos/${repository}/actions/runs/${runId}`);
-    assert.ok(run.id === runId && owned(run, repositoryId), "Foreign retry run");
-    const jobs = await serverJobs(options, run, attempt - 1);
-    if (
-      jobs.some(
+    const cancelled = await readInventory(async () => {
+      const run = await request(`/repos/${repository}/actions/runs/${runId}`);
+      assert.ok(run.id === runId && owned(run, repositoryId), "Foreign retry run");
+      const jobs = await serverJobs(options, run, attempt - 1);
+      return jobs.filter(
         (job) =>
           job.status === "completed" &&
           job.conclusion === "cancelled" &&
           !job.runner_id &&
           old(job, run, Date.parse(job.completed_at)),
-      )
-    ) {
+      );
+    }, unavailable);
+    if (cancelled.length) {
       return {
         route: "hosted",
         reason: "A previous attempt waited for the server and was cancelled.",
       };
     }
   }
-  const state = await serverHealth(options);
+  const state = await serverHealth(options, unavailable);
   if (state.stuck.length)
     return {
       route: "hosted",
-      reason: `No server jobs are running; server work has waited five minutes in runs ${state.stuck.map((run) => run.id).join(", ")}.`,
+      reason: `No running or recently progressing server work was observed in readable runs; server work has waited five minutes in runs ${state.stuck.map((run) => run.id).join(", ")}.${unavailable.length ? ` Other CI inventory could not be verified: ${unavailable.join("; ")}` : ""}`,
+    };
+  if (unavailable.length)
+    return {
+      route: "server",
+      reason: `CI inventory could not be verified; using the server: ${unavailable.join("; ")}`,
     };
   const runs = new Map();
   for (const status of ["queued", "in_progress"]) {
@@ -254,8 +277,8 @@ export async function healthCommand(command, options, { report, output }) {
         answer = await serverRoute(options);
       } catch (error) {
         answer = {
-          route: "hosted",
-          reason: `Server queue could not be verified: ${error.message}`,
+          route: "server",
+          reason: `CI inventory could not be verified; using the server: ${error.message}`,
         };
       }
       output(`server_route=${answer.route}`);

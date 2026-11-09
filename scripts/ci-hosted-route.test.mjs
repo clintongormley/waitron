@@ -35,8 +35,10 @@ function fixture(running = 0, queued = 0) {
           workflow_runs: path.includes("status=in_progress") ? [run] : [],
         };
       if (path.includes("/runs/50/attempts/2/jobs?")) {
-        const page = Number(new URL("https://fixture.test" + path).searchParams.get("page"));
-        return { total_count: jobs.length, jobs: jobs.slice((page - 1) * 100, page * 100) };
+        const params = new URL("https://fixture.test" + path).searchParams;
+        const page = Number(params.get("page")),
+          size = Number(params.get("per_page"));
+        return { total_count: jobs.length, jobs: jobs.slice((page - 1) * size, page * size) };
       }
       throw new Error("Unexpected request " + path);
     },
@@ -59,6 +61,34 @@ describe("GitHub-first routing", () => {
     expect(answer.reason).toContain(`${running} running`);
     expect(answer.reason).toContain(`${queued} queued`);
     expect(f.calls.every(([, options]) => !options?.method)).toBe(true);
+  });
+
+  it("counts all hosted jobs when GitHub refuses job pages over 30 records", async () => {
+    const f = fixture(61),
+      request = f.options.request;
+    f.options.request = async (path, options) => {
+      if (
+        path.includes("/jobs?") &&
+        Number(new URL("https://fixture.test" + path).searchParams.get("per_page")) > 30
+      )
+        throw new Error("HTTP 502 oversized job page");
+      return request(path, options);
+    };
+    const answer = await serverRoute(f.options);
+    expect(answer.route).toBe("server");
+    expect(answer.reason).toContain("61 running, 0 queued");
+    expect(f.calls.filter(([path]) => path.includes("/jobs?"))).toHaveLength(3);
+  });
+
+  it("skips the hosted capacity scan after health inventory becomes uncertain", async () => {
+    const f = fixture(),
+      request = f.options.request;
+    f.options.request = async (path, options) => {
+      if (path.includes("/workflows/ci.yml/runs?")) throw new Error("HTTP 502 health inventory");
+      return request(path, options);
+    };
+    expect((await serverRoute(f.options)).route).toBe("server");
+    expect(f.calls.filter(([path]) => path.includes("/actions/runs?"))).toHaveLength(0);
   });
 
   it("counts hosted work in a run visible only in the queued run list", async () => {
@@ -86,7 +116,7 @@ describe("GitHub-first routing", () => {
     expect(answer.reason).toContain("19 running, 0 queued");
   });
 
-  it("defaults to hosted when the run inventory names a different repository", async () => {
+  it("uses the server when hosted capacity names a different repository", async () => {
     const f = fixture(20),
       outputs = [],
       reports = [];
@@ -95,7 +125,7 @@ describe("GitHub-first routing", () => {
       output: (line) => outputs.push(line),
       report: (line) => reports.push(line),
     });
-    expect(outputs).toEqual(["server_route=hosted"]);
+    expect(outputs).toEqual(["server_route=server"]);
     expect(reports[0]).toContain("Foreign hosted run inventory");
   });
 
@@ -136,8 +166,127 @@ describe("GitHub-first routing", () => {
     expect((await serverRoute(f.options)).route).toBe("server");
   });
 
+  it.each(["HTTP 502", "empty page"])(
+    "isolates one run's %s and still checks readable server work",
+    async (fault) => {
+      const f = fixture(),
+        request = f.options.request;
+      f.run.head_repository.id = 42;
+      const readable = { ...f.run, id: 60, run_attempt: 1 };
+      let stalled = false;
+      f.options.request = async (path, options) => {
+        if (path.includes("/workflows/ci.yml/runs?"))
+          return {
+            total_count: path.includes("status=in_progress") ? 2 : 0,
+            workflow_runs: path.includes("status=in_progress") ? [f.run, readable] : [],
+          };
+        if (path.includes("/runs/50/attempts/2/jobs?")) {
+          if (fault === "HTTP 502") throw new Error(fault);
+          return { total_count: 1, jobs: [] };
+        }
+        if (path.includes("/runs/60/attempts/1/jobs?")) {
+          f.calls.push([path, options]);
+          return {
+            total_count: stalled ? 1 : 0,
+            jobs: stalled
+              ? [
+                  {
+                    id: 600,
+                    run_id: 60,
+                    run_attempt: 1,
+                    head_sha: readable.head_sha,
+                    status: "queued",
+                    runner_id: 0,
+                    labels: ["self-hosted", "dt-42-60-1-lint-1"],
+                    started_at: "2026-01-01T00:00:00Z",
+                  },
+                ]
+              : [],
+          };
+        }
+        return request(path, options);
+      };
+      const answer = await serverRoute(f.options);
+      expect(answer.route).toBe("server");
+      expect(answer.reason).toMatch(/could not be verified|unavailable/i);
+      expect(f.calls.some(([path]) => path.includes("/runs/60/attempts/1/jobs?"))).toBe(true);
+      stalled = true;
+      const knownStall = await serverRoute(f.options);
+      expect(knownStall.route).toBe("hosted");
+      expect(knownStall.reason).toContain("could not be verified");
+      expect(f.calls.every(([, options]) => !options?.method)).toBe(true);
+    },
+  );
+
+  it.each(["own run", "previous attempt"])(
+    "still checks readable stalls after a retry's %s read fails",
+    async (fault) => {
+      const f = fixture(),
+        request = f.options.request;
+      f.run.head_repository.id = 42;
+      let stalled = false;
+      f.options.runId = 50;
+      f.options.attempt = 3;
+      f.options.request = async (path, options) => {
+        if (path.endsWith("/runs/50")) {
+          if (fault === "own run") throw new Error("HTTP 502 own run");
+          return f.run;
+        }
+        if (path.includes("/runs/50/attempts/2/jobs?"))
+          throw new Error("HTTP 502 previous attempt");
+        if (path.includes("/workflows/ci.yml/runs?"))
+          return {
+            total_count: path.includes("status=in_progress") ? 1 : 0,
+            workflow_runs: path.includes("status=in_progress")
+              ? [{ ...f.run, id: 60, run_attempt: 1 }]
+              : [],
+          };
+        if (path.includes("/runs/60/attempts/1/jobs?"))
+          return {
+            total_count: stalled ? 1 : 0,
+            jobs: stalled
+              ? [
+                  {
+                    id: 600,
+                    run_id: 60,
+                    run_attempt: 1,
+                    head_sha: f.run.head_sha,
+                    status: "queued",
+                    runner_id: 0,
+                    labels: ["self-hosted", "dt-42-60-1-lint-1"],
+                    started_at: "2026-01-01T00:00:00Z",
+                  },
+                ]
+              : [],
+          };
+        return request(path, options);
+      };
+      for (const expected of ["server", "hosted"]) {
+        const outputs = [],
+          reports = [];
+        await healthCommand("route", f.options, {
+          output: (line) => outputs.push(line),
+          report: (line) => reports.push(line),
+        });
+        expect(outputs).toEqual([`server_route=${expected}`]);
+        expect(reports[0]).toContain("could not be verified");
+        stalled = true;
+      }
+    },
+  );
+
+  it("uses the server when the active run list shrinks between pages", async () => {
+    const f = fixture(),
+      request = f.options.request;
+    f.options.request = async (path, options) =>
+      path.includes("/workflows/ci.yml/runs?") && path.includes("status=queued")
+        ? { total_count: 1, workflow_runs: [] }
+        : request(path, options);
+    expect((await serverRoute(f.options)).route).toBe("server");
+  });
+
   it.each(["unavailable", "duplicate", "foreign"])(
-    "defaults to hosted on %s capacity inventory",
+    "uses the server on %s unreadable capacity inventory",
     async (fault) => {
       const f = fixture(20),
         request = f.options.request,
@@ -155,7 +304,7 @@ describe("GitHub-first routing", () => {
         output: (line) => outputs.push(line),
         report: (line) => reports.push(line),
       });
-      expect(outputs).toEqual(["server_route=hosted"]);
+      expect(outputs).toEqual(["server_route=server"]);
       expect(reports[0]).toContain("could not be verified");
     },
   );

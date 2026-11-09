@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { URL } from "node:url";
 import * as health from "./ci-server-health.mjs";
 
 const now = Date.parse("2026-11-08T17:00:00Z");
@@ -149,7 +150,7 @@ describe("server health recovery", () => {
     expect(health.githubRequest("/repos/o/r", undefined, () => '{"id":42}')).toEqual({ id: 42 });
   }, 20_000);
 
-  it("routes to GitHub when the health read fails and never changes shared settings", async () => {
+  it("uses the server when the health read fails and never changes shared settings", async () => {
     const outputs = [],
       reports = [];
     await health.healthCommand(
@@ -162,7 +163,7 @@ describe("server health recovery", () => {
       },
       { report: (line) => reports.push(line), output: (line) => outputs.push(line) },
     );
-    expect(outputs).toEqual(["server_route=hosted"]);
+    expect(outputs).toEqual(["server_route=server"]);
     expect(reports[0]).toContain("could not be verified");
   });
 
@@ -582,6 +583,28 @@ describe("server health recovery", () => {
             },
           ],
         };
+      return request(path, options);
+    };
+    expect((await health.recoverServer(f.options)).retried).toEqual([]);
+    expect(f.calls.some(([, options]) => options.method)).toBe(false);
+  });
+
+  it("reads the later assigned job through small pages before allowing recovery", async () => {
+    const f = fixture(),
+      request = f.request;
+    const jobs = Array.from({ length: 31 }, (_, index) => ({
+      ...f.job,
+      id: 1000 + index,
+      runner_id: index === 30 ? 7 : 0,
+    }));
+    f.options.request = async (path, options) => {
+      if (path.includes("/jobs?")) {
+        const params = new URL("https://fixture.test" + path).searchParams;
+        const size = Number(params.get("per_page")),
+          page = Number(params.get("page"));
+        if (size > 30) throw new Error("HTTP 502 oversized job page");
+        return { total_count: jobs.length, jobs: jobs.slice((page - 1) * size, page * size) };
+      }
       return request(path, options);
     };
     expect((await health.recoverServer(f.options)).retried).toEqual([]);
