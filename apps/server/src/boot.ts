@@ -2204,7 +2204,12 @@ async function bootServer(
     {
       db,
       bus: liveEvents,
-      resourceTypes: liveResourceTypes(changeSources),
+      resourceTypes: liveResourceTypes(
+        changeSources,
+        setsToMigrate.flatMap((module) =>
+          (module.settings ?? []).map((document) => document.module),
+        ),
+      ),
     },
     log,
   );

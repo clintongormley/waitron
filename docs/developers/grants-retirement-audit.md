@@ -50,7 +50,7 @@ or every enabled-module combination. The disabled-module protection issue remain
 
 _2026-11-01: A947 slice 3a removed `node_roles` and `mirror_config` and the file named for
 `mirror_config` below; the guard's current table set is `scripts/write-path-tables.json`, and
-[conventions-data.md](conventions-data.md#the-tables-scriptswrite-path-tablesjson-lists-are-read-only-to-the-application-and-one-guard-is-the-whole-of-the-enforcement)
+[conventions-data.md](conventions-data.md#a-write-of-a-table-scriptswrite-path-tablesjson-lists-lives-only-in-the-files-it-names)
 says what it holds now. The table below records 2026-10-19._
 
 The guard checks source text against the allowed files. It does not make the database refuse a

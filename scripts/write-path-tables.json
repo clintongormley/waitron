@@ -13,6 +13,7 @@
     "packages/db/src/reserved-identity.ts",
     "packages/provisioning/src/venue-apply.ts"
   ],
+  "settings": ["packages/db/src/settings.ts"],
   "tenants": [
     "packages/provisioning/src/privacy-contact.ts",
     "packages/provisioning/src/taxpayer-name.ts",

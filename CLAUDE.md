@@ -467,11 +467,17 @@ called weaker than its name, the topic file lists what it does not see.
 - **Resolve shared catalogue data once before a basket's line loop.** Never await a zone, product or
   variant read per line. Guard: `apps/server/src/working-order.test.ts` (one zone snapshot, no
   per-line resolver).
-- **The tables `scripts/write-path-tables.json` lists request code may read and never write, and
-  the database does not refuse the write.** A write of one of them lives only in the files that
-  JSON names. Guard: `scripts/write-path-tables.test.ts` is the whole of the enforcement, and
-  weaker than its name — it reads TEXT and judges a FILE, not a call chain. Receipt:
-  [conventions-data.md](docs/developers/conventions-data.md#the-tables-scriptswrite-path-tablesjson-lists-are-read-only-to-the-application-and-one-guard-is-the-whole-of-the-enforcement).
+- **A write of a table `scripts/write-path-tables.json` lists lives only in the files that
+  JSON names; the database refuses no write elsewhere.** Guard: `scripts/write-path-tables.test.ts`
+  is the whole of the enforcement, weaker than its name: it reads TEXT and judges a FILE, not a call
+  chain. Receipt: [conventions-data.md](docs/developers/conventions-data.md#a-write-of-a-table-scriptswrite-path-tablesjson-lists-lives-only-in-the-files-it-names).
+- **A module's configuration is one document in the shared `settings` table, declared with
+  `defineSettingsDocument` and saved only through `saveSettings`; its shape changes on read, never
+  in a migration (and not at all before go-live), and a per-module database rule is a trigger on
+  `settings`, never a CHECK.** Guards: `scripts/settings-not-migrated.test.ts` (weaker than the rule:
+  reads SQL text, not TypeScript run at migration or start) and the pinned-CHECK case in
+  `packages/db/src/settings.test.ts` (reads the built table's text, not what each check does).
+  [Detail](docs/developers/conventions-data.md#a-modules-settings-are-one-document-in-the-shared-settings-table).
 - **Multi-table writes share ONE transaction: `withTransaction`.** Write-path functions take `tx: Transaction`, never open their own; handlers open one per request. Secret checks take `Database` and derive outside it,
   taking turns through `inTurn`. **Splitting one logical change across transactions is a commented
   decision, never a default.** **Await queries on one transaction in turn, never `Promise.all`.**

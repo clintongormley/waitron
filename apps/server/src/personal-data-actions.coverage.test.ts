@@ -70,6 +70,7 @@ const NOT_YET: Record<string, string> = Object.fromEntries(
     "recovery_packs.made_by",
     "sales.authorized_by",
     "sales.operator_id",
+    "settings.updated_by",
     "ticket_item_moves.moved_by_person_id",
     "unpaid_departures.authorized_by",
     "unpaid_departures.recorded_by",

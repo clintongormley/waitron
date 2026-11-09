@@ -178,6 +178,7 @@ export { PERSON_HEADER } from "./person-header.js";
 export { quoteLiteral } from "./sql-literal.js";
 export { blankComments, blankCommentsAndLiterals, mapComments } from "./source-comments.js";
 export type { ResourceIdentity, ResourceChange, ChangeSource } from "./live-updates.js";
+export { SETTINGS_CHANGE_TYPE, settingsChangeType } from "./live-updates.js";
 
 export type { OptionSelection, OptionSnapshot } from "./option-selection.js";
 export type { ExtraSelection } from "./extra-selection.js";

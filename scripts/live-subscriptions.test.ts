@@ -9,7 +9,12 @@ import { liveResourceTypes } from "../apps/server/src/live-resources.js";
 
 it("every shipped dashboard query subscribes only to a declared server resource", async () => {
   const root = join(import.meta.dirname, "..");
-  const allowed = new Set(liveResourceTypes(ALL_MODULES.flatMap((module) => module.changes ?? [])));
+  const allowed = new Set(
+    liveResourceTypes(
+      ALL_MODULES.flatMap((module) => module.changes ?? []),
+      ALL_MODULES.flatMap((module) => (module.settings ?? []).map((document) => document.module)),
+    ),
+  );
   const groups: { source: string; queries: Record<string, readonly string[]> }[] = [
     { source: "apps/dashboard", queries: QUERY_DEPENDENCIES },
   ];

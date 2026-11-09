@@ -43,6 +43,14 @@ describe("CORE_CLASSIFICATION", () => {
 });
 
 describe("CORE_CHANGE_SOURCES", () => {
+  it("declares settings changes by module", () => {
+    expect(CORE_CHANGE_SOURCES).toContainEqual({
+      table: "settings",
+      type: "settings",
+      typeSuffixColumn: "module",
+      related: [],
+    });
+  });
   it("is not a change source for the table it writes into", () => {
     // `change_log` is classified like every other core table, so the completeness check above
     // passes — but a change trigger on it would insert a row for every row it writes, and that row

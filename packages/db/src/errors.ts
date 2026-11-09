@@ -8,6 +8,10 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    /** A save named a revision that is no longer current. */
+    "settings.out_of_date": { module: string; revision: number };
+    /** A stored or offered settings document fails its definition. */
+    "settings.invalid": { module: string; field: string; version?: number };
     /**
      * No such dining table. It lives here rather than in a verb package because it has throwers in
      * more than one package, and only their common dependency — this package — can hold the one

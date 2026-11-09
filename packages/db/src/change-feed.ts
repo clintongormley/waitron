@@ -41,8 +41,15 @@ const NEW_ID_SQL =
  * Every id is cast to text, because `ResourceIdentity.id` is a string and an integer column (a
  * one-row settings table's `id`) would otherwise land in the JSON as a number.
  */
-function identitySql(row: "new" | "old", type: string, hasId: boolean): string {
+function identitySql(
+  row: "new" | "old",
+  type: string,
+  hasId: boolean,
+  suffixColumn?: string,
+): string {
   const literal = quoteLiteral(type);
+  if (suffixColumn !== undefined)
+    return `json_object('type', ${literal} || '.' || ${row}."${suffixColumn}")`;
   if (!hasId) return `json_object('type', ${literal})`;
   return (
     `case when ${row}."id" is null then json_object('type', ${literal}) ` +
@@ -67,7 +74,7 @@ function resourcesSql(row: "new" | "old", source: ChangeSource, hasId: boolean):
       `'id', cast(${row}."${column}" as text))`;
     return ` || case when ${row}."${column}" is not null then ',' || ${object} else '' end`;
   });
-  return `json('[' || ${identitySql(row, source.type, hasId)}${related.join("")} || ']')`;
+  return `json('[' || ${identitySql(row, source.type, hasId, source.typeSuffixColumn)}${related.join("")} || ']')`;
 }
 
 /** One change row, written into the caller's own transaction. */
@@ -106,12 +113,20 @@ export async function installChangeFeed(
 ): Promise<void> {
   for (const source of sources) {
     const table = plainName("table", source.table);
-    const columns = db
-      .execute<{ name: string }>(sql.raw(`pragma table_info("${table}")`))
-      .rows.map((column) => plainName("column", column.name));
+    const info = db.execute<{ name: string; notnull: number }>(
+      sql.raw(`pragma table_info("${table}")`),
+    ).rows;
+    const columns = info.map((column) => plainName("column", column.name));
     // A source naming a table that does not exist yet would otherwise install three triggers that
     // each fail at prepare, one boot later and with nothing naming the source.
     if (columns.length === 0) throw new Error(`change feed: no table named ${table}`);
+    if (source.typeSuffixColumn !== undefined) {
+      const suffix = plainName("column", source.typeSuffixColumn);
+      const column = info.find((column) => column.name === suffix);
+      if (column === undefined)
+        throw new Error(`change feed: no column named ${suffix} on ${table}`);
+      if (!column.notnull) throw new Error(`change feed: ${table}.${suffix} may be null`);
+    }
     const hasId = columns.includes("id");
     const changed = columns.map((column) => `new."${column}" is not old."${column}"`).join(" or ");
     const bodies = {
