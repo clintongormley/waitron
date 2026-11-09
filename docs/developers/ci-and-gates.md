@@ -228,13 +228,13 @@ server work is assigned or running, and no assigned job in active CI runs starte
 finished within five minutes. It also checks the latest 100 completed CI runs for server
 work finished within five minutes, skipping job reads for runs whose `updated_at` is over
 five minutes old; missing or invalid update times still get job reads. It selects only the
-oldest stuck run, repeats the global
+oldest eligible stuck run, repeats the global
 active-work check, then reads that attempt's complete job inventory immediately before cancellation.
 A running or runner-assigned job in either pool prevents cancellation, except the exact
 `server-queue-watchdog` control job. The watchdog is allowed so its recovery request can finish.
-It force-cancels an eligible run, waits for cancellation to complete, then reruns
-the whole workflow so routing runs again. Other candidates wait for the next invocation.
-It reports the affected run ID in its summary. A refused force-cancel names that run for
+It reports preserved run IDs and considers younger candidates, then force-cancels at most one
+eligible run, waits for cancellation to complete, and reruns the whole workflow so routing runs again.
+Remaining candidates wait for the next invocation. It reports the retried run ID in its summary. A refused force-cancel names that run for
 intervention; until it is resolved, younger candidates wait. A changed run identity or an incomplete
 inventory refuses recovery. Short non-final pages continue until the advertised count; an
 early empty page, duplicate ID or changed count stops the read. For these incomplete inventories,

@@ -237,13 +237,14 @@ export async function serverRoute(options) {
 export async function recoverServer(options) {
   const { request, repository, wait = delay } = options;
   const retried = [],
+    preserved = [],
     state = await serverHealth(options);
   if (state.stuck.length && (await completedServerTraffic(options))) return { retried };
   const oldest = state.stuck.sort(
     (a, b) =>
       Date.parse(a.run_started_at || a.created_at) - Date.parse(b.run_started_at || b.created_at),
   );
-  for (const run of oldest.slice(0, 1)) {
+  for (const run of oldest) {
     if (
       !(await serverHealth(options)).stuck.some(
         (current) => current.id === run.id && current.run_attempt === run.run_attempt,
@@ -260,7 +261,10 @@ export async function recoverServer(options) {
     )
       continue;
     const jobs = await runJobs(options, current);
-    if (jobs.some((job) => job.name !== "server-queue-watchdog" && assigned(job))) continue;
+    if (jobs.some((job) => job.name !== "server-queue-watchdog" && assigned(job))) {
+      preserved.push(run.id);
+      continue;
+    }
     try {
       await request(path + "/force-cancel", { method: "POST" });
     } catch (error) {
@@ -285,8 +289,9 @@ export async function recoverServer(options) {
       await request(path + "/rerun", { method: "POST" });
       retried.push(run.id);
     }
+    break;
   }
-  return { retried };
+  return { retried, ...(preserved.length ? { preserved } : {}) };
 }
 
 async function completedServerTraffic(options) {
@@ -328,12 +333,17 @@ export async function healthCommand(command, options, { report, output }) {
       output(`server_route=${answer.route}`);
       report(answer.reason);
     } else if (command === "recover") {
-      const { retried } = await recoverServer(options);
-      report(
-        retried.length
-          ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned or recently progressing server work.`
-          : "No stalled server run needed recovery.",
-      );
+      const { retried, preserved = [] } = await recoverServer(options);
+      if (preserved.length)
+        report(
+          `Preserved runs ${preserved.join(", ")} because a sibling job is running or assigned.`,
+        );
+      if (retried.length || !preserved.length)
+        report(
+          retried.length
+            ? `SERVER STUCK: cancelled and retried runs ${retried.join(", ")} after five minutes without assigned or recently progressing server work.`
+            : "No stalled server run needed recovery.",
+        );
     } else {
       assert.equal(command, "probe", "Unknown server health command");
       if (await needsServerProbe(options)) {

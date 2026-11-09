@@ -81,6 +81,151 @@ function fixture() {
 }
 
 describe("server health recovery", () => {
+  it.each(["server", "hosted", "finished"])(
+    "checks a %s sibling in the final inventory",
+    async (pool) => {
+      const f = fixture(),
+        request = f.request;
+      let reads = 0;
+      f.options.request = async (path, options) => {
+        if (path.includes("/runs/12/attempts/1/jobs?") && ++reads >= 3)
+          return {
+            total_count: 2,
+            jobs: [
+              f.job,
+              {
+                ...f.job,
+                id: 124,
+                labels: pool === "hosted" ? ["ubuntu-latest"] : f.job.labels,
+                status: pool === "finished" ? "completed" : "in_progress",
+                runner_id: pool === "hosted" ? 0 : 7,
+                completed_at: date(10),
+              },
+            ],
+          };
+        return request(path, options);
+      };
+      expect((await health.recoverServer(f.options)).retried).toEqual(
+        pool === "finished" ? [12] : [],
+      );
+    },
+  );
+
+  it.each(["run_id", "run_attempt", "head_sha"])(
+    "rejects a foreign %s at the final read",
+    async (field) => {
+      const f = fixture(),
+        request = f.request;
+      let reads = 0;
+      f.options.request = async (path, options) =>
+        path.includes("/runs/12/attempts/1/jobs?") && ++reads >= 3
+          ? {
+              total_count: 1,
+              jobs: [{ ...f.job, [field]: field === "head_sha" ? "b".repeat(40) : 99 }],
+            }
+          : request(path, options);
+      await expect(health.recoverServer(f.options)).rejects.toThrow(/Foreign.*inventory/);
+      expect(f.calls.some(([, options]) => options.method)).toBe(false);
+    },
+  );
+
+  it.each([false, true])(
+    "requires all final inventory pages when the last page is empty: %s",
+    async (empty) => {
+      const f = fixture(),
+        request = f.request;
+      let reads = 0;
+      const jobs = Array.from({ length: 31 }, (_, i) => ({
+        ...f.job,
+        id: 1000 + i,
+        labels: ["ubuntu-latest"],
+        status: i === 30 ? "in_progress" : "completed",
+        runner_id: i === 30 ? 7 : 0,
+      }));
+      f.options.request = async (path, options) => {
+        if (path.includes("/runs/12/attempts/1/jobs?") && ++reads >= 3) {
+          const page = Number(new URL("https://fixture.test" + path).searchParams.get("page"));
+          return {
+            total_count: 31,
+            jobs: page === 1 ? jobs.slice(0, 30) : empty ? [] : jobs.slice(30),
+          };
+        }
+        return request(path, options);
+      };
+      if (empty) await expect(health.recoverServer(f.options)).rejects.toThrow(/Incomplete.*empty/);
+      else expect((await health.recoverServer(f.options)).retried).toEqual([]);
+      expect(f.calls.some(([, options]) => options.method)).toBe(false);
+    },
+  );
+
+  it("keeps an unstarted job's creation time when selecting a cancelled retry", async () => {
+    const f = fixture();
+    Object.assign(f.run, { status: "completed", conclusion: "cancelled" });
+    Object.assign(f.job, {
+      status: "completed",
+      conclusion: "cancelled",
+      started_at: null,
+      created_at: date(6),
+      completed_at: date(0.5),
+    });
+    expect((await health.serverRoute({ ...f.options, runId: 12, attempt: 2 })).route).toBe(
+      "hosted",
+    );
+  });
+
+  it("reports the run kept for a hosted sibling", async () => {
+    const f = fixture(),
+      request = f.request,
+      reports = [];
+    f.options.request = async (path, options) =>
+      path.includes("/runs/12/attempts/1/jobs?")
+        ? {
+            total_count: 2,
+            jobs: [
+              f.job,
+              { ...f.job, id: 124, labels: ["ubuntu-latest"], status: "in_progress", runner_id: 7 },
+            ],
+          }
+        : request(path, options);
+    await health.healthCommand("recover", f.options, {
+      report: (message) => reports.push(message),
+    });
+    expect(reports).toEqual(["Preserved runs 12 because a sibling job is running or assigned."]);
+    expect(f.calls.some(([, options]) => options.method)).toBe(false);
+  });
+
+  it("recovers a younger drained run while the oldest has a hosted sibling", async () => {
+    const f = fixture(),
+      request = f.request;
+    const younger = { ...f.run, id: 13, created_at: date(5.5), run_started_at: date(5.5) };
+    f.options.request = async (path, options) => {
+      if (path.includes("/workflows/ci.yml/runs?status=in_progress"))
+        return { total_count: 2, workflow_runs: [f.run, younger] };
+      if (path.includes("/runs/12/attempts/1/jobs?"))
+        return {
+          total_count: 2,
+          jobs: [
+            f.job,
+            { ...f.job, id: 124, labels: ["ubuntu-latest"], status: "in_progress", runner_id: 7 },
+          ],
+        };
+      if (path.includes("/runs/13/attempts/1/jobs?"))
+        return {
+          total_count: 1,
+          jobs: [{ ...f.job, id: 125, run_id: 13, labels: ["self-hosted", "dt-42-13-1-lint-1"] }],
+        };
+      if (path.endsWith("/runs/13")) return { ...younger };
+      if (path.endsWith("/runs/13/force-cancel")) {
+        younger.status = "completed";
+        younger.conclusion = "cancelled";
+        return null;
+      }
+      if (path.endsWith("/runs/13/rerun")) return null;
+      return request(path, options);
+    };
+    expect((await health.recoverServer(f.options)).retried).toEqual([13]);
+  });
+
   it.each(["in_progress", "queued"])(
     "preserves a hosted sibling with an assigned runner while it is %s",
     async (status) => {
