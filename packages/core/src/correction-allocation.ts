@@ -99,7 +99,7 @@ export function allocateCorrectionAmounts(
     const priorBase = sumDecimals(prior.map((allocation) => allocation.base));
     const cumulativeGross = addDecimal(priorGross, gross);
     // The last allocation takes the stored remainder; rounding a fresh percentage can lose it.
-    const cumulativeBase =
+    let cumulativeBase =
       compareDecimal(cumulativeGross, addDecimal(original.base, original.tax)) === 0
         ? original.base
         : divideDecimal(
@@ -107,6 +107,10 @@ export function allocateCorrectionAmounts(
             addDecimal(decimal("1"), divideDecimal(rate, decimal("100"), 4)),
             2,
           );
+    // Stored line rounding sets the rate's total budgets, including before its final return.
+    const minimumBase = subtractDecimal(cumulativeGross, original.tax);
+    if (compareDecimal(cumulativeBase, original.base) > 0) cumulativeBase = original.base;
+    if (compareDecimal(cumulativeBase, minimumBase) < 0) cumulativeBase = minimumBase;
     const base = subtractDecimal(cumulativeBase, priorBase);
     const tax = subtractDecimal(gross, base);
     if (
