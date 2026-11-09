@@ -3366,13 +3366,25 @@ manifest list compared with a descriptor list printed `EQUAL`.
 ### The A760 baseline tools
 
 A760 replaces each migration set's history with one generated starting migration (a baseline).
-Three commands in `apps/server/scripts/migration-baseline/` support it. They run from `apps/server`
+Four command groups in `apps/server/scripts/migration-baseline/` support it. Run them from `apps/server`
 as `pnpm migration-baseline <command>` and refuse a relative path. `controls` and `copies` exit 0
 when all is well, 1 when they find a difference and 2 when they refuse the command. `preserve` exits
 0 when it rewrites the baseline or finds nothing to change, and 2 on any difference, because it
 refuses every difference it finds. (2 was seen through plain `pnpm`; through `pnpm -s` read the
-report as well, as above.) None runs in CI; their unit tests run in `apps/server`'s suite.
+report as well, as above.) The root guard runs `rebuild-check` for every set in CI; the other
+commands do not run there. Their tests run in `apps/server`'s suite, including one real drizzle-kit
+determinism case.
 
+- **`rebuild --set <name> [--fold-generated <tag>]`** generates into a temporary folder, appends
+  `<package>/triggers/<set>.sql`, replaces the starting SQL, snapshot and journal, and updates the
+  epoch's date and hash. It refuses extra migration files before generation; `--fold-generated`
+  permits a named generated chain only when its snapshots change the schema and its SQL creates
+  no trigger. A refusal leaves the set and epoch untouched. The new journal date is at least one
+  millisecond after every old entry, or the generation time if later. A second run changes no byte.
+  **`rebuild-check --set <name>`** compares without writing the set or epoch. `rebuild` exits 0
+  on success and 2 on refusal; `rebuild-check` exits 0 unchanged, 1 if it would change anything,
+  and 2 on refusal. `scripts/starting-migrations.test.ts` checks every set and refuses a second
+  migration. Until go-live, rebuild instead of adding migrations.
 - **`preserve --reference <list dir> --set <name> --from <old set,old set,...>`** rewrites the one
   generated SQL file of the manifest set `<name>`. The reference is a `protection-list list` folder
   built from the old history, and only its `sql-only` phase is read, so triggers the installers add
