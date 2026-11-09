@@ -5,7 +5,12 @@
 The same note parks A1454 with six slots retained. Claude read the initial plan
 in 216 seconds; findings and triage are in
 `~/waitron-campaign-i/receipts/a1440-hosted-image-20261109/`.
-Build waits for watcher approval, explicitly including the routing guard changes.
+**Build approval:** watcher, Lane I questions.md, 2026-11-09 08:52:
+“Approved as planned: the six files, the stricter hosted checks replacing image's
+server-label checks, the exact-candidate manual image run before landing, and the
+dated A1454 backlog line. … Build, finish, land”. The watcher's 08:53 follow-up
+requires the manual main run immediately after landing and says to report any
+unrelated failure without rerunning it.
 
 **Outcome:** retain every image check, run it on GitHub, and stop assigning it to
 unqualified guests. Retained logs for nightly42550200310 and PR2543/run42525659420

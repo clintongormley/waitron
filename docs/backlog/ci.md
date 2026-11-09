@@ -568,7 +568,10 @@ A1424's live qualification was added on 7 November 2026.
 
 - **A1424 / A1440: finish qualifying server routing and recovery on real workloads.**
   CI routes ordinary same-repository jobs through the measured global pool; family caps
-  have been removed, and routing, recovery, the final aggregate and publication stay hosted.
+  have been removed, and routing, recovery, image smoke, the final aggregate and publication stay hosted.
+  Image smoke remains hosted until a disposable guest is qualified (watcher, 2026-11-09 08:20);
+  both retained failures, runs 42550200310 and 42525659420, stop at the Bluetooth check
+  with `dbus_unreachable`. Guest diagnosis remains open.
   The health check chooses hosted while the server queue is stuck, and the independent
   watchdog cancels and reruns one oldest stuck workflow per invocation. Trusted-main
   health run 42509853431 cancelled and retried the deliberately unassignable probe
@@ -578,7 +581,8 @@ A1424's live qualification was added on 7 November 2026.
   `TMPDIR=/dev/shm`; this is that job’s receipt, not a full guest qualification.
   Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
   drills. Keep the corrected v40 controller without a new whole-run capacity gate, as the
-  watcher approved on 8 November. A1454 adds capacity and A1461 reduces run sizes; per-job
+  watcher approved on 8 November. A1454 is parked with six slots retained (watcher,
+  2026-11-09 08:20); A1461 reduces run sizes. Per-job
   overflow, the remaining workflows, second-host registration and queue measurements remain open. Lane I reports
   existing-record observations on 15 November; episodic status reads cannot prove the full-day
   no-avoidable-wait target. Never drain other lanes' work for a drill.
@@ -733,7 +737,8 @@ A1424's live qualification was added on 7 November 2026.
   The [routing comparison](../superpowers/plans/2026-11-08-a1440-capacity-routing.md) is an
   illustrative replay, not measured alternate outcomes. Its fit-only rules leave more modeled
   capacity idle; no snapshot-freshness limit was validated. Keep the deployed controller,
-  advance A1454 and A1461, and report existing-record observations on 15 November. No new
+  report existing-record observations on 15 November. **2026-11-09:** the watcher
+  parked A1454 and retained six slots after its measurement-only cut; A1461 reduces run sizes. No new
   collector, workflow, reservation service or credential carrier is approved.
 
 - **A1459: measured shared startup, with child internals still unknown (2026-11-08).**

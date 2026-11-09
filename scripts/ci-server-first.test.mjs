@@ -66,6 +66,9 @@ function route(
     : expression;
 }
 describe("server-first workflow routing", () => {
+  it("keeps image smoke on GitHub until disposable guests are qualified", () => {
+    expect(jobs.find((job) => job.id === "image-smoke").route).toBe("ubuntu-latest");
+  });
   it("runs only an explicitly dispatched probe and gives its retry a hosted route", () => {
     const body = yaml.match(/^ {2}server-probe:\n([\s\S]*?)(?=^ {2}[\w-]+:)/m)[1];
     const condition = body.match(/^ {4}if: (.+)$/m)[1];
@@ -115,7 +118,9 @@ describe("server-first workflow routing", () => {
       for (const attempt of [1, 2, 7])
         for (const job of jobs) {
           const selected = route(job.route, { event, attempt });
-          if (["changes", "server-queue-watchdog", "publish", "ci"].includes(job.id)) {
+          if (
+            ["changes", "server-queue-watchdog", "publish", "ci", "image-smoke"].includes(job.id)
+          ) {
             expect(selected).toBe("ubuntu-latest");
             continue;
           }
@@ -128,7 +133,8 @@ describe("server-first workflow routing", () => {
   );
   it("keeps an explicitly selected overflow attempt hosted while ordinary reruns remain server-first", () => {
     for (const job of jobs.filter(
-      (job) => !["changes", "server-queue-watchdog", "publish", "ci"].includes(job.id),
+      (job) =>
+        !["changes", "server-queue-watchdog", "publish", "ci", "image-smoke"].includes(job.id),
     )) {
       expect(route(job.route, { attempt: 2, hosted: '{"1234":2}' }), job.id).toBe("ubuntu-latest");
       expect(route(job.route, { attempt: 3, hosted: '{"1234":2}' }), job.id).toEqual([
