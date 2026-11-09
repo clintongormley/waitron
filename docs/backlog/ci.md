@@ -1611,7 +1611,7 @@ Use the [qualified public-connection wording receipt](self-service-refusals.md#t
 without treating browser refusal checks as certificate-recovery qualification.
 Check the later regional demo guides’ photo-library name claims against image metadata and the
 screen’s content-language selection.
-Retain the shared port fixture’s multiple-listener limit under the landing-port entry. Keep the IPP clock-driver limit explicit when
+Keep the IPP clock-driver limit explicit when
 changing the polling continuation, and check that a failed fixture’s print call settles after
 teardown. Align the archive-settings inline instruction with its available action.
 [Inline advice](#archive-settings-inline-advice-must-name-its-available-action).

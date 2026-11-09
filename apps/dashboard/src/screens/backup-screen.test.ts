@@ -2136,7 +2136,7 @@ describe("A1089 unreadable archive settings choices", () => {
           expect(message).not.toContain("contact support");
         } else {
           expect(message).toContain("sal sin aplicarlos para conservarlos");
-          expect(message).not.toMatch(/instal|soporte|encargad|gerente/i);
+          expect(message).not.toMatch(/instal|soporte|encargad|gerente|responsable/i);
         }
         expect(q(el, "[data-test=load-failed]")!.textContent).toContain(
           codeMessage("backup.archive_settings_invalid"),

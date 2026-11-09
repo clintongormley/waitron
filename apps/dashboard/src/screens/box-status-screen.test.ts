@@ -192,7 +192,7 @@ describe("dashboard-box-status-screen", () => {
         expect(guidance).toContain(
           "Conserva la base de datos, las claves de recuperación y las copias guardadas",
         );
-        expect(guidance).not.toMatch(/instal|soporte|encargad|gerente/i);
+        expect(guidance).not.toMatch(/instal|soporte|encargad|gerente|responsable/i);
       }
       cleanupWidgets();
       expect(api.freeBoxSpace).not.toHaveBeenCalled();
