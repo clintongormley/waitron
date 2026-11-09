@@ -113,6 +113,8 @@ export {
   issueAccountAction,
   issueQueuedAccountAction,
   queueAccountMail,
+  queueAccountRecovery,
+  queueInvitation,
   requestAccountRecoveryAction,
 } from "./account-action.js";
 export type {

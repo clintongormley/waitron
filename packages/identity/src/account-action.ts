@@ -10,6 +10,7 @@ import {
 import { and, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import {
   enqueueMail,
+  outgoingMail,
   indexViolated,
   type Transaction,
   managementAccountActions,
@@ -18,6 +19,7 @@ import {
   persons,
 } from "@waitron/db";
 import { AppError, isAppError } from "@waitron/shared";
+import { authorizeManager } from "./manager-login.js";
 import { normalizeEmail, isValidEmail } from "./email.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
 import { assertPinLength, hashPin } from "./verify-pin.js";
@@ -476,6 +478,48 @@ export async function queueAccountMail(
     notAfter: new Date(now.getTime() + ACCOUNT_ACTION_TTL_MS[input.purpose]),
   });
 }
+export async function queueAccountRecovery(
+  tx: Transaction,
+  input: { email: string; origin: string; now?: Date },
+): Promise<void> {
+  const email = normalizeEmail(input.email);
+  if (!isValidEmail(email)) return;
+  const [person] = await tx
+    .select({ id: persons.id, status: persons.status })
+    .from(persons)
+    .where(
+      and(
+        eq(loginEmailKey(), foldForUniqueness(email)),
+        inArray(persons.status, ["active", "pending"]),
+      ),
+    );
+  if (person === undefined) {
+    // The unknown address writes and removes one mail under deferred foreign keys. Its two
+    // change-feed rows differ from the known address's single row; the answer has already gone.
+    const personId = randomUUID();
+    await tx.execute(sql`pragma defer_foreign_keys = on`);
+    await queueAccountMail(tx, { ...input, personId, purpose: "password_reset" });
+    await tx.delete(outgoingMail).where(eq(outgoingMail.personId, personId));
+    return;
+  }
+  await queueAccountMail(tx, {
+    ...input,
+    personId: person.id,
+    purpose: person.status === "pending" ? "invitation" : "password_reset",
+  });
+}
+
+export async function queueInvitation(
+  tx: Transaction,
+  input: { managementSessionId: string; personId: string; origin: string; now?: Date },
+): Promise<void> {
+  const { authorizedBy } = await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "person.manage",
+  });
+  await queueAccountMail(tx, { ...input, purpose: "invitation", requestedBy: authorizedBy });
+}
+
 export async function issueQueuedAccountAction(
   tx: Transaction,
   mail: { personId: string; params: AccountMailParams },

@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import {
   CORE_MIGRATIONS,
+  outgoingMail,
   captureError,
   engineErrorMessage,
   triggerRaised,
@@ -20,7 +21,9 @@ import {
   issueAccountAction,
   queueAccountMail,
   issueQueuedAccountAction,
-  requestAccountRecoveryAction,
+  queueAccountRecovery,
+  queueInvitation,
+  type AccountMailParams,
 } from "./account-action.js";
 import { loginManager } from "./manager-login.js";
 import { updatePersonDetails } from "./staff.js";
@@ -37,6 +40,22 @@ const suite = useVenueDb({
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, fn);
+}
+
+async function queuedRecoveryAction(tx: Transaction, input: { email: string; now?: Date }) {
+  const before = new Set(
+    (await tx.select({ id: outgoingMail.id }).from(outgoingMail)).map((row) => row.id),
+  );
+  await queueAccountRecovery(tx, { ...input, origin: "https://entry.test" });
+  const rows = await tx.select().from(outgoingMail);
+  const queued = rows.find((row) => !before.has(row.id));
+  return queued === undefined
+    ? null
+    : issueQueuedAccountAction(
+        tx,
+        { personId: queued.personId!, params: queued.params as AccountMailParams },
+        { now: input.now ?? new Date() },
+      );
 }
 
 async function makePending(personId: string): Promise<void> {
@@ -285,14 +304,72 @@ describe("management account actions", () => {
     ).resolves.toMatchObject({ personId });
   });
 
+  it("queues recovery without making a link, and leaves no mail for an unknown address", async () => {
+    const personId = await seedManager(suite.db, { email: "queue-known@x.com" });
+    const now = new Date("2026-11-09T12:00:00.000Z");
+    await run((tx) =>
+      queueAccountRecovery(tx, { email: " QUEUE-KNOWN@X.COM ", origin: "https://entry.test", now }),
+    );
+    const rows = suite.db.all(
+      sql`select person_id, params, queued_at, not_after from outgoing_mail where person_id=${personId}`,
+    );
+    expect(rows).toEqual([
+      {
+        person_id: personId,
+        params: JSON.stringify({ purpose: "password_reset", origin: "https://entry.test" }),
+        queued_at: now.toISOString(),
+        not_after: "2026-11-09T12:30:00.000Z",
+      },
+    ]);
+    expect(
+      suite.db.all(sql`select id from management_account_actions where person_id=${personId}`),
+    ).toEqual([]);
+    const before = suite.db.all(sql`select id from outgoing_mail`);
+    await run((tx) =>
+      queueAccountRecovery(tx, { email: "queue-unknown@x.com", origin: "https://entry.test", now }),
+    );
+    expect(suite.db.all(sql`select id from outgoing_mail`)).toEqual(before);
+  });
+
+  it("records the session's person as requested_by on an invitation", async () => {
+    const inviter = await seedManager(suite.db, { email: "queue-inviter@x.com" });
+    const personId = await seedManager(suite.db, { email: "queue-invited@x.com" });
+    await makePending(personId);
+    const session = await run((tx) =>
+      loginManager(tx, {
+        email: "queue-inviter@x.com",
+        password: "correct horse",
+        totpKeyRing: TOTP_KEY_RING,
+      }),
+    );
+    await run((tx) =>
+      queueInvitation(tx, {
+        managementSessionId: session.token,
+        personId,
+        origin: "https://staff.test",
+      }),
+    );
+    expect(
+      suite.db.all(sql`select requested_by, params from outgoing_mail where person_id=${personId}`),
+    ).toEqual([
+      {
+        requested_by: inviter,
+        params: JSON.stringify({ purpose: "invitation", origin: "https://staff.test" }),
+      },
+    ]);
+    expect(
+      suite.db.all(sql`select id from management_account_actions where person_id=${personId}`),
+    ).toEqual([]);
+  });
+
   it("finds password-reset accounts by normalized email without revealing unknown addresses", async () => {
     const personId = await seedManager(suite.db, { email: "known@x.com" });
     await suite.db.execute(sql`update persons set email = 'Known@X.com' where id = ${personId}`);
     await expect(
-      run((tx) => requestAccountRecoveryAction(tx, { email: "  KNOWN@X.COM  " })),
+      run((tx) => queuedRecoveryAction(tx, { email: "  KNOWN@X.COM  " })),
     ).resolves.toMatchObject({ personId, email: "Known@X.com", purpose: "password_reset" });
     await expect(
-      run((tx) => requestAccountRecoveryAction(tx, { email: "unknown@x.com" })),
+      run((tx) => queuedRecoveryAction(tx, { email: "unknown@x.com" })),
     ).resolves.toBeNull();
   });
 
@@ -301,7 +378,7 @@ describe("management account actions", () => {
     await makePending(personId);
     const now = new Date("2026-09-11T12:00:00Z");
     const issued = await run((tx) =>
-      requestAccountRecoveryAction(tx, { email: " RECOVERY-PENDING@X.COM ", now }),
+      queuedRecoveryAction(tx, { email: " RECOVERY-PENDING@X.COM ", now }),
     );
     expect(issued).toMatchObject({ personId, purpose: "invitation" });
     expect(issued?.code).toBeUndefined();
@@ -332,36 +409,36 @@ describe("management account actions", () => {
   it("writes and then removes one reset row, for a person nobody has, when the address has no account", async () => {
     try {
       await suite.db.execute(
-        sql`create table tmp_recovery_writes (op text not null, person_id text not null, token_hash text not null)`,
+        sql`create table tmp_recovery_writes (op text not null, person_id text not null, mail_id text not null)`,
       );
       await suite.db
-        .execute(sql`create trigger tmp_recovery_writes_insert after insert on management_account_actions
-        begin insert into tmp_recovery_writes values ('insert', new.person_id, new.token_hash); end`);
+        .execute(sql`create trigger tmp_recovery_writes_insert after insert on outgoing_mail
+        begin insert into tmp_recovery_writes values ('insert', new.person_id, new.id); end`);
       await suite.db
-        .execute(sql`create trigger tmp_recovery_writes_delete after delete on management_account_actions
-        begin insert into tmp_recovery_writes values ('delete', old.person_id, old.token_hash); end`);
+        .execute(sql`create trigger tmp_recovery_writes_delete after delete on outgoing_mail
+        begin insert into tmp_recovery_writes values ('delete', old.person_id, old.id); end`);
       const known = await seedManager(suite.db, { email: "decoy-known@x.com" });
       await expect(
-        run((tx) => requestAccountRecoveryAction(tx, { email: "decoy-unknown@x.com" })),
+        run((tx) => queuedRecoveryAction(tx, { email: "decoy-unknown@x.com" })),
       ).resolves.toBeNull();
       const writes = (
-        await suite.db.execute<{ op: string; person_id: string; token_hash: string }>(
-          sql`select op, person_id, token_hash from tmp_recovery_writes order by rowid`,
+        await suite.db.execute<{ op: string; person_id: string; mail_id: string }>(
+          sql`select op, person_id, mail_id from tmp_recovery_writes order by rowid`,
         )
       ).rows;
       expect(writes.map((w) => w.op)).toEqual(["insert", "delete"]);
       expect(writes[1]).toMatchObject({
         person_id: writes[0]!.person_id,
-        token_hash: writes[0]!.token_hash,
+        mail_id: writes[0]!.mail_id,
       });
       const owner = await suite.db.execute(
         sql`select id from persons where id = ${writes[0]!.person_id}`,
       );
       expect(owner.rows).toEqual([]);
 
-      // A known address with no earlier links writes its link and removes nothing.
+      // A known address queues one mail and removes nothing.
       await suite.db.execute(sql`delete from tmp_recovery_writes`);
-      await run((tx) => requestAccountRecoveryAction(tx, { email: "decoy-known@x.com" }));
+      await run((tx) => queuedRecoveryAction(tx, { email: "decoy-known@x.com" }));
       const knownWrites = (
         await suite.db.execute<{ op: string; person_id: string }>(
           sql`select op, person_id from tmp_recovery_writes order by rowid`,
@@ -384,7 +461,7 @@ describe("management account actions", () => {
       ).rows[0]!.n;
     const before = await count();
     await expect(
-      run((tx) => requestAccountRecoveryAction(tx, { email: "nobody-at-all@x.com" })),
+      run((tx) => queuedRecoveryAction(tx, { email: "nobody-at-all@x.com" })),
     ).resolves.toBeNull();
     expect(await count()).toBe(before);
     // Refused at the statement, not deferred to commit: the deferral ended with the decoy's
@@ -407,7 +484,7 @@ describe("management account actions", () => {
     const personId = await seedManager(suite.db, { email: "recovery-suspended@x.com" });
     await suite.db.execute(sql`update persons set status = 'suspended' where id = ${personId}`);
     for (const email of ["recovery-suspended@x.com", "malformed"]) {
-      await expect(run((tx) => requestAccountRecoveryAction(tx, { email }))).resolves.toBeNull();
+      await expect(run((tx) => queuedRecoveryAction(tx, { email }))).resolves.toBeNull();
     }
   });
 
@@ -593,7 +670,7 @@ describe("issuing an account action keeps a person's history of that purpose bou
     }
     expect(await actionsOf(personId, "password_reset")).toHaveLength(50);
     const issued = await run((tx) =>
-      requestAccountRecoveryAction(tx, { email: "history-pruned@x.com", now: NOW }),
+      queuedRecoveryAction(tx, { email: "history-pruned@x.com", now: NOW }),
     );
     expect(await actionsOf(personId, "password_reset")).toEqual([
       { id: issued!.id, used_at: null },

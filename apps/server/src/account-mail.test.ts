@@ -1,12 +1,24 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, persons, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { completeAccountAction, queueAccountMail } from "@waitron/identity";
+import {
+  completeAccountAction,
+  queueAccountMail,
+  saveOwnProfile,
+  startManagementSession,
+  confirmOwnEmailChange,
+  hashPassword,
+} from "@waitron/identity";
 import { ACCOUNT_EMAIL_WORDS } from "./i18n/account-email.js";
 import { accountActionMail } from "./account-mail.js";
 import { runMailPass, type MailSenderDeps } from "./mail-sender.js";
+
+vi.mock("node:crypto", async (original) => ({
+  ...(await original<typeof import("node:crypto")>()),
+  randomInt: vi.fn((await original<typeof import("node:crypto")>()).randomInt),
+}));
 
 describe("account mail owner", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -87,6 +99,62 @@ describe("account mail owner", () => {
       link.searchParams.get("token"),
     );
   });
+  it("sends an email change to the newest pending address only", async () => {
+    const codeKey = Buffer.alloc(32, 7);
+    vi.mocked(randomInt)
+      .mockReturnValueOnce(111111 as never)
+      .mockReturnValueOnce(222222 as never);
+    await suite.db.run(
+      sql`update persons set password_hash=${hashPassword("correct horse")} where id=${personId}`,
+    );
+    const session = await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { personId }),
+    );
+    const keyRing = { current: { version: 1, key: Buffer.alloc(32, 5) } };
+    for (const email of ["first@example.test", "second@example.test"]) {
+      await withTransaction(suite.db, (tx) =>
+        saveOwnProfile(tx, {
+          managementSessionId: session.token,
+          displayName: "Recipient",
+          email,
+          locale: "en-GB",
+          currentPassword: "correct horse",
+          keyRing,
+          queueEmailChange: true,
+        }),
+      );
+    }
+    deps.owners = [
+      accountActionMail({
+        codeKey,
+        emailChangeUrl: "https://box.test/",
+        venueLocale: "en-GB",
+        readTimeZone: async () => "Europe/Madrid",
+        readPrivacyNoticeUrl: async () => null,
+      }),
+    ];
+    time = new Date();
+    await runMailPass(deps);
+    await runMailPass(deps);
+    expect(suite.db.all(sql`select recipient, status from outgoing_mail order by seq`)).toEqual([
+      { recipient: "second@example.test", status: "sent" },
+      { recipient: "second@example.test", status: "sent" },
+    ]);
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toContain("111111");
+    expect(messages[1]).toContain("222222");
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        confirmOwnEmailChange(tx, { managementSessionId: session.token, code: "111111", codeKey }),
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        confirmOwnEmailChange(tx, { managementSessionId: session.token, code: "222222", codeKey }),
+      ),
+    ).resolves.toBe("second@example.test");
+  });
+
   it("cancels a reset suspended after queuing", async () => {
     await queue();
     await suite.db.run(sql`update persons set status='suspended' where id=${personId}`);
