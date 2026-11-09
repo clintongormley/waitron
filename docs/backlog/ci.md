@@ -1736,6 +1736,6 @@ the slow work before changing the fixture or its deadline. A790's campaign recei
 ## Till logo retry missing request
 
 A790's 4 November CI runs 41879243123 and 41886182380 counted one request instead of two.
-The observation mechanism was reproduced and corrected by A1332 (#2474); see
+The observation mechanism was reproduced and corrected by A1332 (#2458); see
 [Count image requests as they are delivered](../developers/testing-guide.md#count-image-requests-as-they-are-delivered).
 The shared-logo and deadline qualifications remain in the logo retry bundle above.

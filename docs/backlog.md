@@ -1306,7 +1306,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   unmounted offers and browser recovery foundation. Qualify the live node/restore origin before
   enabling its request services; then connect Orders, till history and Equipment. A739's payment
   window follows the complete live routing cut; Cut C verifies that integration.
-  Before landing Cut A, show the new core tables in `apps/server`’s `pnpm protection-list`; a retired migration folder creates nothing.
   [Detail](backlog/printers.md#a790-document-and-printer-routing-plan)
 
 - **Loose ends left by A661 (#1745).**
