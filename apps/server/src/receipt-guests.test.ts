@@ -103,14 +103,14 @@ async function joinOther(
 
 describe("the default guests (readReceiptGuests)", () => {
   it("prints a party's count on its one bill", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Invitados 1"), 4);
+    const { partyId, tabId } = await seat(v, await v.table("Guests 1"), 4);
     await orderForParty(v, partyId, ["Burger"], tabId);
 
     expect(await guestsOnPaying(tabId, "12.00")).toBe(4);
   });
 
   it("prints nothing for a party seated with no count", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Invitados 2"));
+    const { partyId, tabId } = await seat(v, await v.table("Guests 2"));
     await orderForParty(v, partyId, ["Burger"], tabId);
 
     expect(await guestsOnPaying(tabId, "12.00")).toBeUndefined();
@@ -123,7 +123,7 @@ describe("the default guests (readReceiptGuests)", () => {
   });
 
   it("prints nothing on either bill of a party that split a dish onto a second bill", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Invitados 4"), 4);
+    const { partyId, tabId } = await seat(v, await v.table("Guests 4"), 4);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const second = await split(v, partyId, tabId, [2]);
 
@@ -132,7 +132,7 @@ describe("the default guests (readReceiptGuests)", () => {
   });
 
   it("prints the count again once the split bill is merged back", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Invitados 5"), 4);
+    const { partyId, tabId } = await seat(v, await v.table("Guests 5"), 4);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const second = await split(v, partyId, tabId, [2]);
     const command = await commandFor(v, partyId);
@@ -142,8 +142,8 @@ describe("the default guests (readReceiptGuests)", () => {
   });
 
   it("prints the sum on joined tables whose bills were merged", async () => {
-    const table4 = await v.table("Invitados 6a 4");
-    const table5 = await v.table("Invitados 6a 5");
+    const table4 = await v.table("Guests 6a 4");
+    const table5 = await v.table("Guests 6a 5");
     const four = await seat(v, table4, 2);
     const five = await seat(v, table5, 3);
     await orderForParty(v, four.partyId, ["Burger"], four.tabId);
@@ -157,8 +157,8 @@ describe("the default guests (readReceiptGuests)", () => {
   });
 
   it("prints nothing on joined tables, each keeping its bill", async () => {
-    const table4 = await v.table("Invitados 6b 4");
-    const table5 = await v.table("Invitados 6b 5");
+    const table4 = await v.table("Guests 6b 4");
+    const table5 = await v.table("Guests 6b 5");
     const four = await seat(v, table4, 2);
     const five = await seat(v, table5, 3);
     await orderForParty(v, four.partyId, ["Burger"], four.tabId);
@@ -170,11 +170,11 @@ describe("the default guests (readReceiptGuests)", () => {
   });
 
   it("prints nothing on a bill paid by a party afterwards merged into another", async () => {
-    const xTable = await v.table("Invitados 7 X");
+    const xTable = await v.table("Guests 7 X");
     const x = await seat(v, xTable, 2);
     await orderForParty(v, x.partyId, ["Burger"], x.tabId);
     await pay(v, x.tabId, "12.00");
-    const y = await seat(v, await v.table("Invitados 7 Y"), 3);
+    const y = await seat(v, await v.table("Guests 7 Y"), 3);
     await joinOther(y.partyId, xTable, x.partyId);
 
     expect((await partyRow(v, x.partyId)).mergedIntoPartyId).toBe(y.partyId);
@@ -185,7 +185,7 @@ describe("the default guests (readReceiptGuests)", () => {
   });
 
   it("prints a count changed after seating", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Invitados 8"), 4);
+    const { partyId, tabId } = await seat(v, await v.table("Guests 8"), 4);
     await orderForParty(v, partyId, ["Burger"], tabId);
     const expectedPartyRevision = await revisionOf(v, partyId);
     await inTx(v, (tx) => setPartyGuests(tx, { partyId, guestCount: 6, expectedPartyRevision }));
@@ -194,11 +194,11 @@ describe("the default guests (readReceiptGuests)", () => {
   });
 
   it("prints nothing for a party that joined a table whose party had already paid", async () => {
-    const xTable = await v.table("Invitados 9 X");
+    const xTable = await v.table("Guests 9 X");
     const x = await seat(v, xTable, 2);
     await orderForParty(v, x.partyId, ["Burger"], x.tabId);
     await pay(v, x.tabId, "12.00");
-    const y = await seat(v, await v.table("Invitados 9 Y"), 3);
+    const y = await seat(v, await v.table("Guests 9 Y"), 3);
     await orderForParty(v, y.partyId, ["Paella"], y.tabId);
     await joinOther(y.partyId, xTable, x.partyId);
 
@@ -207,8 +207,8 @@ describe("the default guests (readReceiptGuests)", () => {
   });
 
   it("prints each side's count after Split a table", async () => {
-    const table4 = await v.table("Invitados 10 4");
-    const table5 = await v.table("Invitados 10 5");
+    const table4 = await v.table("Guests 10 4");
+    const table5 = await v.table("Guests 10 5");
     const { partyId, tabId } = await seat(v, table4, 4);
     await join(v, partyId, table5);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
@@ -226,7 +226,7 @@ describe("the default guests (readReceiptGuests)", () => {
   });
 
   it("prints nothing while an emptied split bill stays open", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Invitados 11"), 4);
+    const { partyId, tabId } = await seat(v, await v.table("Guests 11"), 4);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const second = await split(v, partyId, tabId, [2]);
     const [moved] = await linesOf(v, second);
@@ -387,25 +387,25 @@ describe("a payment request's guests", () => {
 
 describe("the guests row written beside a recorded sale", () => {
   it("writes the count the request chose", async () => {
-    const { tabId, saleId } = await paidPartyOfFour("Fila 1");
+    const { tabId, saleId } = await paidPartyOfFour("Row 1");
     await inTx(v, (tx) => recordReceiptGuests(tx, simplifiedSale(saleId, tabId), 5));
     expect(await storedRows(saleId)).toEqual([{ guests: 5 }]);
   });
 
   it("writes no line when the request chose none", async () => {
-    const { tabId, saleId } = await paidPartyOfFour("Fila 2");
+    const { tabId, saleId } = await paidPartyOfFour("Row 2");
     await inTx(v, (tx) => recordReceiptGuests(tx, simplifiedSale(saleId, tabId), null));
     expect(await storedRows(saleId)).toEqual([{ guests: null }]);
   });
 
   it("writes the party's count when the request sent none", async () => {
-    const { tabId, saleId } = await paidPartyOfFour("Fila 3");
+    const { tabId, saleId } = await paidPartyOfFour("Row 3");
     await inTx(v, (tx) => recordReceiptGuests(tx, simplifiedSale(saleId, tabId), undefined));
     expect(await storedRows(saleId)).toEqual([{ guests: 4 }]);
   });
 
   it("writes no line when the request sent none and the party's count is above 999", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Fila 1000"), 1000);
+    const { partyId, tabId } = await seat(v, await v.table("Row 1000"), 1000);
     await orderForParty(v, partyId, ["Burger"], tabId);
     const saleId = await saleWithNoRow(tabId);
     await inTx(v, (tx) => recordReceiptGuests(tx, simplifiedSale(saleId, tabId), undefined));
@@ -413,7 +413,7 @@ describe("the guests row written beside a recorded sale", () => {
   });
 
   it("writes no line by default for a party that split a dish onto a second bill", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Fila 4"), 4);
+    const { partyId, tabId } = await seat(v, await v.table("Row 4"), 4);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const second = await split(v, partyId, tabId, [2]);
     const saleId = await saleWithNoRow(second, { name: "Vino", price: "30.00", vatRate: "21.00" });
@@ -429,7 +429,7 @@ describe("the guests row written beside a recorded sale", () => {
   });
 
   it("never clamps a sent count: 1000 is refused by the table's rule and writes nothing", async () => {
-    const { partyId, tabId } = await seat(v, await v.table("Fila 1001"), 4);
+    const { partyId, tabId } = await seat(v, await v.table("Row 1001"), 4);
     await orderForParty(v, partyId, ["Burger"], tabId);
     const saleId = await saleWithNoRow(tabId);
     await expect(
@@ -439,7 +439,7 @@ describe("the guests row written beside a recorded sale", () => {
   });
 
   it("writes nothing for a full invoice", async () => {
-    const { billId, saleId } = await fullInvoiceOfFour("Fila 6");
+    const { billId, saleId } = await fullInvoiceOfFour("Row 6");
     const counterparty = { taxId: "B12345674", legalName: "Client SL", countryCode: "ES" };
     await inTx(v, (tx) =>
       recordReceiptGuests(tx, { saleId, workingOrderId: billId, counterparty }, 5),
@@ -450,24 +450,24 @@ describe("the guests row written beside a recorded sale", () => {
 
 describe("the guests a paper receipt of a sale prints", () => {
   it("prints the party's count for a sale with no row", async () => {
-    const { saleId } = await paidPartyOfFour("Papel 1");
+    const { saleId } = await paidPartyOfFour("Paper 1");
     expect(await printed(saleId)).toBe(4);
   });
 
   it("prints the stored count", async () => {
-    const { saleId } = await paidPartyOfFour("Papel 2");
+    const { saleId } = await paidPartyOfFour("Paper 2");
     await storeRow(saleId, 5);
     expect(await printed(saleId)).toBe(5);
   });
 
   it("prints no line when the row says none", async () => {
-    const { saleId } = await paidPartyOfFour("Papel 3");
+    const { saleId } = await paidPartyOfFour("Paper 3");
     await storeRow(saleId, null);
     expect(await printed(saleId)).toBeUndefined();
   });
 
   it("keeps the stored count after the party's count changes", async () => {
-    const { partyId, saleId } = await paidPartyOfFour("Papel 4");
+    const { partyId, saleId } = await paidPartyOfFour("Paper 4");
     await storeRow(saleId, 5);
     const expectedPartyRevision = await revisionOf(v, partyId);
     await inTx(v, (tx) => setPartyGuests(tx, { partyId, guestCount: 6, expectedPartyRevision }));
@@ -484,7 +484,7 @@ describe("the guests a paper receipt of a sale prints", () => {
 
   // A probe of the read: no product path writes a row for a full invoice.
   it("prints a full invoice's party count even beside a row", async () => {
-    const { saleId } = await fullInvoiceOfFour("Papel 6");
+    const { saleId } = await fullInvoiceOfFour("Paper 6");
     await storeRow(saleId, 5);
     expect(await printed(saleId)).toBe(4);
   });

@@ -97,7 +97,7 @@ it.each(["en", "es"] as const)(
     const p = await seat(v, await v.table("Table 4"));
     await order(v, p.tabId, "Burger", "Burger");
     const second = await split(v, p.partyId, p.tabId, [2]);
-    const out = await rename(p.partyId, "Ana");
+    const out = await rename(p.partyId, "Ann");
     expect(out.map((job) => job.printerId).sort()).toEqual([narrow, wide].sort());
     const words = kitchenTicketWords(language);
     for (const job of out) {
@@ -109,17 +109,17 @@ it.each(["en", "es"] as const)(
         `${words.orders} ${await numbers([p.tabId, second])}`,
         "14:30",
         `${words.was}: ${words.unnamed}`,
-        `${words.now}: Ana`,
+        `${words.now}: Ann`,
         "",
       ]);
     }
   },
 );
 
-it.each(["Bea", ""])("renames Ana to '%s' without repeating cooking work", async (name) => {
+it.each(["Bea", ""])("renames Ann to '%s' without repeating cooking work", async (name) => {
   await printer();
   const p = await seat(v, await v.table("Table 4"));
-  await nameParty(v, p.partyId, "Ana");
+  await nameParty(v, p.partyId, "Ann");
   await order(v, p.tabId, "Burger");
   const before = await v.db.select().from(ticketItems);
   const out = await rename(p.partyId, name);
@@ -131,7 +131,7 @@ it.each(["Bea", ""])("renames Ana to '%s' without repeating cooking work", async
     "Table 4",
     `${words.order} ${await numbers([p.tabId])}`,
     "14:30",
-    `${words.was}: Ana`,
+    `${words.was}: Ann`,
     `${words.now}: ${name || words.unnamed}`,
     "",
   ]);
@@ -141,9 +141,9 @@ it.each(["Bea", ""])("renames Ana to '%s' without repeating cooking work", async
 it("does not print an unchanged normalized name", async () => {
   await printer();
   const p = await seat(v, await v.table("Table 4"));
-  await nameParty(v, p.partyId, "Ana");
+  await nameParty(v, p.partyId, "Ann");
   await order(v, p.tabId, "Burger");
-  expect(await rename(p.partyId, " Ana ")).toEqual([]);
+  expect(await rename(p.partyId, " Ann ")).toEqual([]);
 });
 
 it.each(["none", "served", "made-here", "collected", "abandoned"] as const)(
@@ -174,7 +174,7 @@ it.each(["none", "served", "made-here", "collected", "abandoned"] as const)(
           .set({ status: "abandoned" })
           .where(eq(workingOrders.id, p.tabId));
     });
-    expect(await rename(p.partyId, "Ana")).toEqual([]);
+    expect(await rename(p.partyId, "Ann")).toEqual([]);
   },
 );
 
@@ -190,7 +190,7 @@ it.each([true, false])(
         groups: [{ release: "hold", lines: [{ menuItemId: v.item("Burger"), quantity: "1" }] }],
       }),
     );
-    expect(await rename(p.partyId, "Ana")).toHaveLength(recorded ? 1 : 0);
+    expect(await rename(p.partyId, "Ann")).toHaveLength(recorded ? 1 : 0);
   },
 );
 
@@ -200,7 +200,7 @@ it("names paid but unserved work in the current saved venue zone", async () => {
   await order(v, p.tabId, "Burger");
   await pay(v, p.tabId, "12.00");
   await inTx(v, (tx) => tx.update(locations).set({ timeZone: "Asia/Tokyo" }));
-  const out = await rename(p.partyId, "Ana");
+  const out = await rename(p.partyId, "Ann");
   expect(out).toHaveLength(1);
   expect(printedLines(out[0]!.payload)).toContain("21:30");
 });
@@ -215,7 +215,7 @@ it("lists only the bills represented at each printer and excludes an inactive pr
   await order(v, p.tabId, "Burger", "Agua");
   const second = await split(v, p.partyId, p.tabId, [2]);
   await inTx(v, (tx) => tx.update(printers).set({ active: false }).where(eq(printers.id, off)));
-  const out = await rename(p.partyId, "Ana");
+  const out = await rename(p.partyId, "Ann");
   expect(out).toHaveLength(2);
   const words = kitchenTicketWords("es");
   expect(printedLines(out.find((job) => job.printerId === shared)!.payload)).toContain(
@@ -233,7 +233,7 @@ it("renames retained paid work under the surviving party after a merge", async (
   await order(v, source.tabId, "Burger");
   await pay(v, source.tabId, "12.00");
   const target = await seat(v, await v.table("Table 5"));
-  await nameParty(v, target.partyId, "Ana");
+  await nameParty(v, target.partyId, "Ann");
   const expected = await commandFor(v, target.partyId);
   const expectedOtherPartyRevision = await revisionOf(v, source.partyId);
   await inTx(v, (tx) =>
@@ -249,7 +249,7 @@ it("renames retained paid work under the surviving party after a merge", async (
   expect(printedLines(out[0]!.payload)).toContain(
     `${words.order} ${await numbers([source.tabId])}`,
   );
-  expect(printedLines(out[0]!.payload)).toContain(`${words.was}: Ana`);
+  expect(printedLines(out[0]!.payload)).toContain(`${words.was}: Ann`);
   expect(printedLines(out[0]!.payload)).toContain(`${words.now}: Bea`);
 });
 
@@ -260,7 +260,7 @@ it("rolls back the name and revision when the paper cannot be queued", async () 
   const before = await v.db.select().from(parties);
   const paper = await jobs();
   vi.spyOn(printing, "enqueuePrintJob").mockRejectedValueOnce(new Error("name paper refused"));
-  await expect(nameParty(v, p.partyId, "Ana")).rejects.toThrow("name paper refused");
+  await expect(nameParty(v, p.partyId, "Ann")).rejects.toThrow("name paper refused");
   expect(await v.db.select().from(parties)).toEqual(before);
   expect(await jobs()).toEqual(paper);
 });
@@ -283,7 +283,7 @@ it("renames only the station whose HOLD paper was recorded", async () => {
       ],
     }),
   );
-  const out = await rename(p.partyId, "Ana");
+  const out = await rename(p.partyId, "Ann");
   expect(out).toHaveLength(1);
   expect(out[0]!.printerId).not.toBe(barOnly);
 });
@@ -310,9 +310,9 @@ it.each([true, false])(
     const [work] = await v.db.select().from(ticketItems);
     expect(work!.requestedAt).not.toBeNull();
     expect(work!.firedAt).toBeNull();
-    const out = await rename(p.partyId, "Ana");
+    const out = await rename(p.partyId, "Ann");
     expect(out).toHaveLength(recorded ? 1 : 0);
     if (recorded)
-      expect(printedLines(out[0]!.payload)).toContain(`${kitchenTicketWords("es").now}: Ana`);
+      expect(printedLines(out[0]!.payload)).toContain(`${kitchenTicketWords("es").now}: Ann`);
   },
 );

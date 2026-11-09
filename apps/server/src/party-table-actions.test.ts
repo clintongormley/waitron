@@ -161,7 +161,7 @@ useVenueDb({
     terraceZone = await inTx(v, async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: v.cfg.locationId, name: "Terraza" })
+        .values({ locationId: v.cfg.locationId, name: "Terrace" })
         .returning({ id: floorZones.id });
       return (await offerProducts(tx, v.cfg, { zone: { zoneId: zone!.id }, orderStart: "table" }))
         .zoneId;
@@ -343,7 +343,7 @@ function noticesOn(billIds: string[]) {
 describe("move guests", () => {
   it("moves the party off all its tables to a free one, and the tables left behind need clearing", async () => {
     await withClearing(async () => {
-      const [m4, m5, m9] = await tables("Mesa", 4, 5, 9);
+      const [m4, m5, m9] = await tables("Table", 4, 5, 9);
       const ana = await seat(v, m4);
       await joinFree(ana.partyId, m5);
 
@@ -369,7 +369,7 @@ describe("move guests", () => {
   });
 
   it("leaves the tables behind free when their department has Needs clearing off", async () => {
-    const [m4, m9] = await tables("Libre", 4, 9);
+    const [m4, m9] = await tables("Free", 4, 9);
     const ana = await seat(v, m4);
 
     const moving = await opts(ana.partyId);
@@ -381,8 +381,8 @@ describe("move guests", () => {
   });
 
   it("gives the party's open and presented bills a free table's zone when it is in another zone", async () => {
-    const [m4] = await tables("Zona", 4);
-    const terrace = await v.table("Zona T1", terraceZone);
+    const [m4] = await tables("Zone", 4);
+    const terrace = await v.table("Zone T1", terraceZone);
     const ana = await seat(v, m4);
     await order(v, ana.tabId, "Burger");
     const second = await splitOff(ana.partyId, ana.tabId, [1]);
@@ -397,13 +397,13 @@ describe("move guests", () => {
   });
 
   it("combines the party into the party at a held table, which keeps its name and its Bill 1, and every bill stays its own", async () => {
-    const [m4, m7] = await tables("Uno", 4, 7);
+    const [m4, m7] = await tables("One", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await act((tx) =>
       setPartyName(tx, {
         partyId: luis.partyId,
-        name: "Luis",
+        name: "Louis",
         expectedPartyRevision: luis.revision,
       }),
     );
@@ -428,7 +428,7 @@ describe("move guests", () => {
     });
     expect(await openingBillOfParty(v, luis.partyId)).toBe(luis.tabId);
     expect(await partyRow(v, luis.partyId)).toMatchObject({
-      name: "Luis",
+      name: "Louis",
       revision: moving.expectedOtherPartyRevision! + 1,
     });
     expect(await activeTablesOf(v, luis.partyId)).toEqual([m7]);
@@ -436,7 +436,7 @@ describe("move guests", () => {
   });
 
   it("keeps both first bills, and the table opens on the receiving one's", async () => {
-    const [m4, m7] = await tables("Dos", 4, 7);
+    const [m4, m7] = await tables("Two", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger");
@@ -453,7 +453,7 @@ describe("move guests", () => {
   });
 
   it("keeps the first bills separate when the moving one has been paid towards", async () => {
-    const [m4, m7] = await tables("Tres", 4, 7);
+    const [m4, m7] = await tables("Three", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger");
@@ -470,7 +470,7 @@ describe("move guests", () => {
   });
 
   it("keeps the first bills separate when their service modes differ, though both are untouched", async () => {
-    const [m4, m7] = await tables("Modos", 4, 7);
+    const [m4, m7] = await tables("Modes", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger");
@@ -507,7 +507,7 @@ describe("move guests", () => {
 
   it("moves to one of the party's own tables while it holds two: the other leaves and needs clearing", async () => {
     await withClearing(async () => {
-      const [m4, m5] = await tables("Propia", 4, 5);
+      const [m4, m5] = await tables("Own", 4, 5);
       const ana = await seat(v, m4);
       await joinFree(ana.partyId, m5);
 
@@ -523,7 +523,7 @@ describe("move guests", () => {
 
   describe("what it refuses, changing nothing", () => {
     it("refuses a table that needs clearing", async () => {
-      const [m4, dirty] = await tables("Sucia", 4, 9);
+      const [m4, dirty] = await tables("Dirty", 4, 9);
       const ana = await seat(v, m4);
       await needsClearing(dirty);
       const moving = await opts(ana.partyId);
@@ -548,7 +548,7 @@ describe("move guests", () => {
     });
 
     it("refuses the party's own only table", async () => {
-      const [m4] = await tables("Sola", 4);
+      const [m4] = await tables("Alone", 4);
       const ana = await seat(v, m4);
       const moving = await opts(ana.partyId);
 
@@ -560,7 +560,7 @@ describe("move guests", () => {
     });
 
     it("refuses a table taken out of use, and one that does not exist", async () => {
-      const [m4, retired] = await tables("Retirada", 4, 9);
+      const [m4, retired] = await tables("Retired", 4, 9);
       const ana = await seat(v, m4);
       await switchOff(v, retired);
       const missing = randomUUID();
@@ -578,8 +578,8 @@ describe("move guests", () => {
     });
 
     it("refuses a free table in a zone that seats no one, as seating does", async () => {
-      const [m4] = await tables("Barra", 4);
-      const counterTable = await v.table("Barra B9", v.counter.zoneId);
+      const [m4] = await tables("Bar", 4);
+      const counterTable = await v.table("Bar B9", v.counter.zoneId);
       const ana = await seat(v, m4);
       const moving = await opts(ana.partyId);
 
@@ -595,14 +595,14 @@ describe("move guests", () => {
     });
 
     it("refuses a stale revision of the party at the table", async () => {
-      const [m4, m7] = await tables("Vieja", 4, 7);
+      const [m4, m7] = await tables("Old", 4, 7);
       const ana = await seat(v, m4);
       const luis = await seat(v, m7);
       const moving = await opts(ana.partyId, luis.partyId);
       await act((tx) =>
         setPartyName(tx, {
           partyId: luis.partyId,
-          name: "Luis",
+          name: "Louis",
           expectedPartyRevision: moving.expectedOtherPartyRevision!,
         }),
       );
@@ -621,7 +621,7 @@ describe("move guests", () => {
     });
 
     it("refuses a table another party holds when the request carries no revision for it", async () => {
-      const [m4, m7] = await tables("Sin", 4, 7);
+      const [m4, m7] = await tables("Without", 4, 7);
       const ana = await seat(v, m4);
       const luis = await seat(v, m7);
       const moving = await opts(ana.partyId);
@@ -655,7 +655,7 @@ async function floorFigures(tableId: string) {
 
 describe("the floor reads the bills of the party holding the table", () => {
   it("shows a table the party has left free, with no bill, and the table it moved to with its bill", async () => {
-    const [m4, m9] = await tables("Suelo dejada", 4, 9);
+    const [m4, m9] = await tables("Floor abandoned", 4, 9);
     const ana = await seat(v, m4);
     await order(v, ana.tabId, "Burger");
     const moving = await opts(ana.partyId);
@@ -680,7 +680,7 @@ describe("the floor reads the bills of the party holding the table", () => {
   });
 
   it("counts a presented bill's dishes still to serve, but not toward the open bill, its lines or its total", async () => {
-    const [m4] = await tables("Suelo presentada", 4);
+    const [m4] = await tables("Floor presented", 4);
     const ana = await seat(v, m4);
     await order(v, ana.tabId, "Burger", "Vino");
     const presented = await splitOff(ana.partyId, ana.tabId, [2]);
@@ -707,7 +707,7 @@ describe("the floor reads the bills of the party holding the table", () => {
   });
 
   it("adds a party's open bills together, and shows every table of the party the same figures", async () => {
-    const [m4, m5] = await tables("Suelo suma", 4, 5);
+    const [m4, m5] = await tables("Floor sum", 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
     await order(v, ana.tabId, "Burger", "Vino");
@@ -728,7 +728,7 @@ describe("the floor reads the bills of the party holding the table", () => {
 
 describe("the bills when parties combine", () => {
   it("keeps the incoming open bill as the receiving party's Bill 2, and the table opens on the presented Bill 1, when the receiving one is presented", async () => {
-    const [m4, m7] = await tables("Principal", 4, 7);
+    const [m4, m7] = await tables("Main", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger");
@@ -750,7 +750,7 @@ describe("the bills when parties combine", () => {
 
   for (const receiving of ["presented", "paid"] as const) {
     it(`opens the combined party on its lowest-numbered owing bill, and the bill the test helper makes for the next order is Bill 3, when the receiving one is ${receiving} and the incoming one presented`, async () => {
-      const [m4, m7] = await tables(`Ninguna ${receiving}`, 4, 7);
+      const [m4, m7] = await tables(`None ${receiving}`, 4, 7);
       const ana = await seat(v, m4);
       const luis = await seat(v, m7);
       await order(v, ana.tabId, "Burger");
@@ -785,7 +785,7 @@ describe("the bills when parties combine", () => {
 
 describe("a paid bill stays on its original party", () => {
   it("while the open one moves, and the combined party finishes only once that is paid", async () => {
-    const [m4, m7] = await tables("Pagada", 4, 7);
+    const [m4, m7] = await tables("Paid", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger", "Vino");
@@ -802,8 +802,8 @@ describe("a paid bill stays on its original party", () => {
     });
     expect(noticesOn([ana.tabId, second])).toEqual([
       ...before,
-      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "Pagada 7" },
-      { working_order_id: second, kind: "moved", line_name: "TINTO", moved_to: "Pagada 7" },
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "Paid 7" },
+      { working_order_id: second, kind: "moved", line_name: "TINTO", moved_to: "Paid 7" },
     ]);
     expect(await billRow(v, second)).toMatchObject({ status: "open", partyId: luis.partyId });
     const bills = await act((tx) => readPartyBills(tx, luis.partyId));
@@ -840,7 +840,6 @@ describe("A803 a paid bill kept on a party combined away is one of the table's b
       .map((bill) => ({ id: bill.workingOrderId, status: bill.status }));
   }
 
-  /** Ana at `<prefix> 4` pays her only bill; Luis at `<prefix> 7` joins her table. */
   async function luisJoinsPaidAna(prefix: string) {
     const [m4, m7] = await tables(prefix, 4, 7);
     const ana = await seat(v, m4);
@@ -960,30 +959,34 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
   }
 
   it("tells the kitchen where a paid bill's sent dish went when its guests move to a held table", async () => {
-    const [m4, m7] = await tables("PagoM", 4, 7);
+    const [m4, m7] = await tables("PaymentM", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger");
     await pay(v, ana.tabId, "12.00");
     const paid = await paidBill(ana.tabId);
-    expect(paid.row).toMatchObject({ status: "settled", partyId: ana.partyId, label: "PagoM 4" });
+    expect(paid.row).toMatchObject({
+      status: "settled",
+      partyId: ana.partyId,
+      label: "PaymentM 4",
+    });
 
     const moving = await opts(ana.partyId, luis.partyId);
     await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
 
     expect((await partyRow(v, ana.partyId)).mergedIntoPartyId).toBe(luis.partyId);
     expect(noticesOn([ana.tabId])).toEqual([
-      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoM 7" },
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PaymentM 7" },
     ]);
     const onPass = boardCards(await act((tx) => readScopedPassBoard(tx, EVERY)))
       .flatMap((card) => card.orders)
       .find((entry) => entry.orderId === ana.tabId);
-    expect(onPass?.tableLabel).toBe("PagoM 7");
+    expect(onPass?.tableLabel).toBe("PaymentM 7");
     expect(await paidBill(ana.tabId)).toEqual(paid);
   });
 
   it("tells the kitchen nothing of a paid bill's sent dish when its table joins another party: it keeps its table and the name", async () => {
-    const [m4, m7] = await tables("PagoJ", 4, 7);
+    const [m4, m7] = await tables("PaymentJ", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger");
@@ -1000,7 +1003,7 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
   });
 
   it("names the tables the guests went to, not the label the bill was paid under", async () => {
-    const [m4, m5, m7] = await tables("PagoE", 4, 5, 7);
+    const [m4, m5, m7] = await tables("PaymentE", 4, 5, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger");
@@ -1010,20 +1013,20 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
     const earlier = noticesOn([ana.tabId]);
     const paid = await paidBill(ana.tabId);
     // The bill still carries the label it was paid under, though its guests now sit at 5.
-    expect(paid.row.label).toBe("PagoE 4");
+    expect(paid.row.label).toBe("PaymentE 4");
 
     const moving = await opts(ana.partyId, luis.partyId);
     await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
 
     expect(noticesOn([ana.tabId])).toEqual([
       ...earlier,
-      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoE 7" },
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PaymentE 7" },
     ]);
     expect(await paidBill(ana.tabId)).toEqual(paid);
   });
 
   it("tells the kitchen again when the party that took the guests moves on", async () => {
-    const [m4, m7, m9] = await tables("PagoL", 4, 7, 9);
+    const [m4, m7, m9] = await tables("PaymentL", 4, 7, 9);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger");
@@ -1038,13 +1041,13 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
 
     expect(noticesOn([ana.tabId])).toEqual([
       ...earlier,
-      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoL 9" },
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PaymentL 9" },
     ]);
     expect(await paidBill(ana.tabId)).toEqual(paid);
   });
 
   it("tells the kitchen nothing of the paid bill when the party that took the guests splits off a table it joined", async () => {
-    const [m4, m7, m9] = await tables("PagoS", 4, 7, 9);
+    const [m4, m7, m9] = await tables("PaymentS", 4, 7, 9);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger");
@@ -1063,7 +1066,7 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
   });
 
   it("follows two merges to the party still seated", async () => {
-    const [m3, m4, m7, m9] = await tables("PagoC", 3, 4, 7, 9);
+    const [m3, m4, m7, m9] = await tables("PaymentC", 3, 4, 7, 9);
     const eva = await seat(v, m3);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
@@ -1080,12 +1083,12 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
     await act((tx) => moveGuests(tx, v.cfg, luis.partyId, m9, onward));
 
     expect(earlier).toEqual([
-      { working_order_id: eva.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoC 4" },
-      { working_order_id: eva.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoC 7" },
+      { working_order_id: eva.tabId, kind: "moved", line_name: "BURG", moved_to: "PaymentC 4" },
+      { working_order_id: eva.tabId, kind: "moved", line_name: "BURG", moved_to: "PaymentC 7" },
     ]);
     expect(noticesOn([eva.tabId])).toEqual([
       ...earlier,
-      { working_order_id: eva.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoC 9" },
+      { working_order_id: eva.tabId, kind: "moved", line_name: "BURG", moved_to: "PaymentC 9" },
     ]);
     expect((await paidBill(eva.tabId)).row.partyId).toBe(eva.partyId);
     expect(await paidBill(eva.tabId)).toEqual(paid);
@@ -1094,7 +1097,7 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
 
 describe("kitchen groups when parties combine", () => {
   it("gives the incoming party's groups, held and fired, to the receiving party after its last, in their own order and state", async () => {
-    const [m4, m7] = await tables("Grupos", 4, 7);
+    const [m4, m7] = await tables("Groups", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await sendGroups(luis.partyId, [{ names: ["Agua"], release: "fire" }]);
@@ -1124,7 +1127,7 @@ describe("kitchen groups when parties combine", () => {
 
 describe("drafts when parties combine", () => {
   it("keeps the operator's draft on each bill, both now on the receiving party", async () => {
-    const [m4, m7] = await tables("Borrador", 4, 7);
+    const [m4, m7] = await tables("Draft", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     for (const [partyId, billId, dish] of [
@@ -1165,7 +1168,7 @@ describe("drafts when parties combine", () => {
 
 describe("join tables", () => {
   it("joins a free table: both tables stay", async () => {
-    const [m4, m5] = await tables("Junta", 4, 5);
+    const [m4, m5] = await tables("Join", 4, 5);
     const ana = await seat(v, m4);
     await nextMillisecond();
 
@@ -1178,7 +1181,7 @@ describe("join tables", () => {
   });
 
   it("gives the tables it brings in join times in the order they joined the other party", async () => {
-    const [m4, m7, m8, m9] = await tables("Orden", 4, 7, 8, 9);
+    const [m4, m7, m8, m9] = await tables("Order", 4, 7, 8, 9);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await joinFree(luis.partyId, m8);
@@ -1203,7 +1206,7 @@ describe("join tables", () => {
   });
 
   it("combines the party at a held table into this one, with all of its tables, and every bill stays its own", async () => {
-    const [m4, m7, m8] = await tables("Juntar", 4, 7, 8);
+    const [m4, m7, m8] = await tables("Joining", 4, 7, 8);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await joinFree(luis.partyId, m8);
@@ -1235,7 +1238,7 @@ describe("join tables", () => {
   });
 
   it("keeps the bills separate", async () => {
-    const [m4, m7] = await tables("Aparte", 4, 7);
+    const [m4, m7] = await tables("Apart", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger");
@@ -1251,9 +1254,9 @@ describe("join tables", () => {
 
   describe("what it refuses, changing nothing", () => {
     it("refuses a table in another zone", async () => {
-      const [m4] = await tables("Otra zona", 4);
-      const terrace = await v.table("Otra zona T5", terraceZone);
-      const held = await v.table("Otra zona T6", terraceZone);
+      const [m4] = await tables("Other zone", 4);
+      const terrace = await v.table("Other zone T5", terraceZone);
+      const held = await v.table("Other zone T6", terraceZone);
       const ana = await seat(v, m4);
       const luis = await seat(v, held);
       const joiningFree = await opts(ana.partyId);
@@ -1281,7 +1284,7 @@ describe("join tables", () => {
     });
 
     it("refuses a table the party holds", async () => {
-      const [m4, m5] = await tables("Tiene", 4, 5);
+      const [m4, m5] = await tables("Holds", 4, 5);
       const ana = await seat(v, m4);
       await joinFree(ana.partyId, m5);
       const joining = await opts(ana.partyId);
@@ -1294,7 +1297,7 @@ describe("join tables", () => {
     });
 
     it("refuses a table that needs clearing", async () => {
-      const [m4, dirty] = await tables("Recoger", 4, 5);
+      const [m4, dirty] = await tables("Clearing", 4, 5);
       const ana = await seat(v, m4);
       await needsClearing(dirty);
       const joining = await opts(ana.partyId);
@@ -1321,7 +1324,6 @@ describe("join tables", () => {
 });
 
 describe("split a table", () => {
-  /** Ana at `<prefix> 4` and `<prefix> 5`, her Bill 1 (Burger) and a split bill B2 (Vino). */
   async function anaAtTwo(prefix: string) {
     const [m4, m5] = await tables(prefix, 4, 5);
     const ana = await seat(v, m4);
@@ -1332,7 +1334,7 @@ describe("split a table", () => {
   }
 
   it("starts a new unnamed party on the table with the chosen bill as its Bill 1", async () => {
-    const { ana, m4, m5, b2 } = await anaAtTwo("Separa");
+    const { ana, m4, m5, b2 } = await anaAtTwo("Split");
 
     const splitting = await cmd(ana.partyId);
     const result = await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
@@ -1356,7 +1358,7 @@ describe("split a table", () => {
   });
 
   it("gives the new party a new, empty Bill 1 at once when no bill is chosen", async () => {
-    const { ana, m5 } = await anaAtTwo("Vacia");
+    const { ana, m5 } = await anaAtTwo("Vacant");
 
     const splitting = await cmd(ana.partyId);
     const result = await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, null, splitting));
@@ -1371,7 +1373,7 @@ describe("split a table", () => {
   });
 
   it("moves a presented bill, still placed with its lines unchanged but for their group, and the new party opens on it", async () => {
-    const [m4, m5] = await tables("Presentada", 4, 5);
+    const [m4, m5] = await tables("Presented", 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
     await sendGroups(ana.partyId, [{ names: ["Burger", "Vino", "Flan"], release: "fire" }]);
@@ -1400,7 +1402,7 @@ describe("split a table", () => {
   });
 
   it("takes the party's first bill, once refused as its main, like any other: Bill 1 at the new party", async () => {
-    const { ana, m4, m5, b2 } = await anaAtTwo("Principal S");
+    const { ana, m4, m5, b2 } = await anaAtTwo("Main S");
     const splitting = await cmd(ana.partyId);
 
     const result = await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, ana.tabId, splitting));
@@ -1414,7 +1416,7 @@ describe("split a table", () => {
   });
 
   it("takes sent dishes out of their group into one of the new party's, keeping their ticket state", async () => {
-    const [m4, m5] = await tables("Enviada", 4, 5);
+    const [m4, m5] = await tables("Sent", 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
     await sendGroups(ana.partyId, [{ names: ["Burger", "Vino"], release: "fire" }]);
@@ -1434,7 +1436,7 @@ describe("split a table", () => {
 
   describe("what it refuses, changing nothing", () => {
     it("refuses the party's only table", async () => {
-      const [m4] = await tables("Unica", 4);
+      const [m4] = await tables("Only", 4);
       const ana = await seat(v, m4);
       const splitting = await cmd(ana.partyId);
 
@@ -1449,8 +1451,8 @@ describe("split a table", () => {
     });
 
     it("refuses a table not in the party", async () => {
-      const { ana, m4, m5, b2 } = await anaAtTwo("Fuera");
-      const [elsewhere] = await tables("Fuera otra", 9);
+      const { ana, m4, m5, b2 } = await anaAtTwo("Elsewhere");
+      const [elsewhere] = await tables("Elsewhere other", 9);
       const splitting = await cmd(ana.partyId);
 
       const error = await refused([ana.partyId], [ana.tabId, b2], [m4, m5, elsewhere], () =>
@@ -1464,7 +1466,7 @@ describe("split a table", () => {
     });
 
     it("refuses a paid bill", async () => {
-      const { ana, m4, m5, b2 } = await anaAtTwo("Cobrada");
+      const { ana, m4, m5, b2 } = await anaAtTwo("Settled");
       await pay(v, b2, "30.00");
       const splitting = await cmd(ana.partyId);
 
@@ -1476,8 +1478,8 @@ describe("split a table", () => {
     });
 
     it("refuses another party's bill", async () => {
-      const { ana, m4, m5, b2 } = await anaAtTwo("Ajena");
-      const [m7] = await tables("Ajena otra", 7);
+      const { ana, m4, m5, b2 } = await anaAtTwo("Foreign");
+      const [m7] = await tables("Foreign other", 7);
       const luis = await seat(v, m7);
       const splitting = await cmd(ana.partyId);
 
@@ -1495,7 +1497,7 @@ describe("split a table", () => {
     });
 
     it("refuses an abandoned bill, and one that does not exist, as not open", async () => {
-      const { ana, m4, m5, b2 } = await anaAtTwo("Abandonada");
+      const { ana, m4, m5, b2 } = await anaAtTwo("Abandoned");
       const b3 = await splitOff(ana.partyId, ana.tabId, [1]);
       v.db.run(sql`update working_orders set status = 'abandoned' where id = ${b3}`);
       const missing = randomUUID();
@@ -1514,7 +1516,7 @@ describe("split a table", () => {
   });
 
   it("A803 waiting copy: Split a table takes a bill holding a dish held for the kitchen, and the new party holds its own copy of the group", async () => {
-    const { ana, m5, b2 } = await anaAtTwo("Retenida");
+    const { ana, m5, b2 } = await anaAtTwo("Held");
     await sendGroups(ana.partyId, [{ names: ["Flan"], release: "hold" }], b2);
     const flanBefore = (await lineRows(b2)).find((line) => line.lineNo === 2)!;
     const source = flanBefore.groupId!;
@@ -1555,7 +1557,7 @@ describe("split a table", () => {
 
 describe("MOVED notices after a table action", () => {
   it("tells the kitchen nothing of a party that joins a free table, nor of another party's", async () => {
-    const [m4, m5, m7] = await tables("AvisoJ", 4, 5, 7);
+    const [m4, m5, m7] = await tables("NoticeJ", 4, 5, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Paella", "Burger");
@@ -1571,7 +1573,7 @@ describe("MOVED notices after a table action", () => {
   });
 
   it("tells the kitchen of the split bill's dishes at the split table, and nothing of the dishes that stayed", async () => {
-    const [m4, m5] = await tables("AvisoS", 4, 5);
+    const [m4, m5] = await tables("NoticeS", 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
     await order(v, ana.tabId, "Paella", "Burger");
@@ -1583,12 +1585,12 @@ describe("MOVED notices after a table action", () => {
 
     expect(noticesOn([ana.tabId, b2])).toEqual([
       ...earlier,
-      { working_order_id: b2, kind: "moved", line_name: "BURG", moved_to: "AvisoS 5" },
+      { working_order_id: b2, kind: "moved", line_name: "BURG", moved_to: "NoticeS 5" },
     ]);
   });
 
   it("tells the kitchen once of a sent dish when parties combine, on the bill it stays on", async () => {
-    const [m4, m7] = await tables("AvisoM", 4, 7);
+    const [m4, m7] = await tables("NoticeM", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger");
@@ -1602,7 +1604,7 @@ describe("MOVED notices after a table action", () => {
     expect(await billRow(v, ana.tabId)).toMatchObject({ status: "open", partyId: luis.partyId });
     expect(noticesOn([ana.tabId, luis.tabId])).toEqual([
       ...luisNotices,
-      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "AvisoM 7" },
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "NoticeM 7" },
     ]);
   });
 });
@@ -1610,7 +1612,7 @@ describe("MOVED notices after a table action", () => {
 describe("two tills at once", () => {
   for (const first of ["move", "join"] as const) {
     it(`refuses the second of a move and a join of one party (${first} first)`, async () => {
-      const [m4, m6, m9] = await tables(`Dos tills ${first}`, 4, 6, 9);
+      const [m4, m6, m9] = await tables(`Two tills ${first}`, 4, 6, 9);
       const ana = await seat(v, m4);
       const read = await opts(ana.partyId);
       await nextMillisecond();
@@ -1631,7 +1633,7 @@ describe("two tills at once", () => {
 
   for (const first of ["move", "split"] as const) {
     it(`refuses the second of a move into a party and a split of that party's table (${first} first)`, async () => {
-      const [m4, m7, m8] = await tables(`Dos parties ${first}`, 4, 7, 8);
+      const [m4, m7, m8] = await tables(`Two parties ${first}`, 4, 7, 8);
       const ana = await seat(v, m4);
       const luis = await seat(v, m7);
       await joinFree(luis.partyId, m8);
@@ -1663,7 +1665,7 @@ describe("a request read against a party that has since left the target table", 
     ["join tables", joinTables],
   ] as const) {
     it(`${name}: refuses it when another party now holds the table, though its revision matches`, async () => {
-      const [m4, m7, m9] = await tables(`Extraña ${name}`, 4, 7, 9);
+      const [m4, m7, m9] = await tables(`Stranger ${name}`, 4, 7, 9);
       const source = await seat(v, m4);
       const target = await seat(v, m7);
       await order(v, source.tabId, "Burger");
@@ -1690,7 +1692,7 @@ describe("a request read against a party that has since left the target table", 
     });
 
     it(`${name}: refuses it when the table is now free`, async () => {
-      const [m4, m7, m9] = await tables(`Vacía ${name}`, 4, 7, 9);
+      const [m4, m7, m9] = await tables(`Emptied ${name}`, 4, 7, 9);
       const source = await seat(v, m4);
       const target = await seat(v, m7);
       const stale = await opts(source.partyId, target.partyId);
@@ -1712,7 +1714,7 @@ describe("a request read against a party that has since left the target table", 
     });
 
     it(`${name}: refuses another party's revision sent without naming that party`, async () => {
-      const [m4, m7] = await tables(`Sin nombre ${name}`, 4, 7);
+      const [m4, m7] = await tables(`Unnamed ${name}`, 4, 7);
       const source = await seat(v, m4);
       const target = await seat(v, m7);
       const { otherPartyId, ...unnamed } = await opts(source.partyId, target.partyId);
@@ -1732,7 +1734,7 @@ describe("a request read against a party that has since left the target table", 
     });
 
     it(`${name}: refuses a table read free that a party now holds, as out of date for that party`, async () => {
-      const [m4, m7] = await tables(`Leída libre ${name}`, 4, 7);
+      const [m4, m7] = await tables(`Read free ${name}`, 4, 7);
       const source = await seat(v, m4);
       const target = await seat(v, m7);
       const readFree = { ...(await opts(source.partyId)), otherPartyId: null };
@@ -1751,7 +1753,7 @@ describe("a request read against a party that has since left the target table", 
     });
 
     it(`${name}: refuses a table read free sent with another party's revision`, async () => {
-      const [m4, m7] = await tables(`Libre con revisión ${name}`, 4, 7);
+      const [m4, m7] = await tables(`Free with revision ${name}`, 4, 7);
       const source = await seat(v, m4);
       const contradictory = {
         ...(await opts(source.partyId)),
@@ -1773,7 +1775,7 @@ describe("a request read against a party that has since left the target table", 
 
 describe("a party combined into another (Review Focus 3)", () => {
   it("refuses every action on it as not open, even one sent with a stale revision", async () => {
-    const [m4, m7, m8, m9] = await tables("Cerrada", 4, 7, 8, 9);
+    const [m4, m7, m8, m9] = await tables("Closed", 4, 7, 8, 9);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     const stale = await opts(ana.partyId);
@@ -1790,7 +1792,7 @@ describe("a party combined into another (Review Focus 3)", () => {
           act((tx) =>
             setPartyName(tx, {
               partyId: ana.partyId,
-              name: "Ana",
+              name: "Ann",
               expectedPartyRevision: sent.expectedPartyRevision,
             }),
           ),
@@ -1810,7 +1812,7 @@ describe("a party combined into another (Review Focus 3)", () => {
 
 describe("combineParties", () => {
   it("answers no bill merged away: every bill stays its own", async () => {
-    const [m4, m7] = await tables("Combina", 4, 7);
+    const [m4, m7] = await tables("Combine", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await nextMillisecond();
@@ -1839,7 +1841,7 @@ describe("guest counts when parties combine", () => {
   it.each(["merge", "separate"] as const)(
     "a join adds the joined party's guests to the receiving party's (%s row: both rows send the same request now that no bill choice exists)",
     async (bills) => {
-      const [m4, m7] = await tables(`Comensales juntar ${bills}`, 4, 7);
+      const [m4, m7] = await tables(`Guests joining ${bills}`, 4, 7);
       const ana = await seat(v, m4, 3);
       const luis = await seat(v, m7, 2);
 
@@ -1854,7 +1856,7 @@ describe("guest counts when parties combine", () => {
   it.each(["merge", "separate"] as const)(
     "moving guests onto a seated table adds them to its party's (%s row: both rows send the same request now that no bill choice exists)",
     async (bills) => {
-      const [m4, m7] = await tables(`Comensales mover ${bills}`, 4, 7);
+      const [m4, m7] = await tables(`Guests moving ${bills}`, 4, 7);
       const ana = await seat(v, m4, 2);
       const luis = await seat(v, m7, 3);
 
@@ -1873,7 +1875,7 @@ describe("guest counts when parties combine", () => {
     [999, 999],
     [500, 500],
   ])("from %j into %j leaves the receiving party with no count", async (fromCount, intoCount) => {
-    const [m4, m7] = await tables(`Comensales ${fromCount} ${intoCount}`, 4, 7);
+    const [m4, m7] = await tables(`Guests ${fromCount} ${intoCount}`, 4, 7);
     const from = await seat(v, m4, fromCount);
     const into = await seat(v, m7, intoCount);
 
@@ -1891,7 +1893,7 @@ describe("guest counts when parties combine", () => {
   });
 
   it("keeps a sum of exactly the largest count", async () => {
-    const [m4, m7] = await tables("Comensales tope", 4, 7);
+    const [m4, m7] = await tables("Guests limit", 4, 7);
     const from = await seat(v, m4, 499);
     const into = await seat(v, m7, 500);
 
@@ -1910,7 +1912,7 @@ describe("guest counts when parties combine", () => {
 
 describe("A803 no main bill (join)", () => {
   it("joining a seated table whose party has an untouched bill of the same mode keeps both parties' bills, each with its own number and lines", async () => {
-    const [m4, m7] = await tables("A803 Junta", 4, 7);
+    const [m4, m7] = await tables("A803 Join", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger");
@@ -1941,7 +1943,7 @@ describe("A803 no main bill (join)", () => {
   });
 
   it("Move guests onto a seated table keeps every bill and every payment on its own bill", async () => {
-    const [m4, m7] = await tables("A803 Mover", 4, 7);
+    const [m4, m7] = await tables("A803 Move", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger", "Vino");
@@ -1979,7 +1981,7 @@ describe("A803 no main bill (join)", () => {
   });
 
   it("the kitchen hears only that dishes moved table, never a merge", async () => {
-    const [m4, m7] = await tables("A803 Aviso", 4, 7);
+    const [m4, m7] = await tables("A803 Notice", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await order(v, ana.tabId, "Burger");
@@ -1992,7 +1994,7 @@ describe("A803 no main bill (join)", () => {
     expect((await billRow(v, ana.tabId)).status).toBe("open");
     expect(noticesOn([ana.tabId, luis.tabId])).toEqual([
       ...before,
-      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "A803 Aviso 7" },
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "A803 Notice 7" },
     ]);
   });
 
@@ -2021,7 +2023,6 @@ describe("A803 no main bill (join)", () => {
 describe("A803 split", () => {
   const whole = (...wholeBillIds: string[]) => ({ wholeBillIds, loose: [] });
 
-  /** Ana at `<prefix> 4` and `<prefix> 5`: Bill 1 Burger, Bill 2 Vino, Bill 3 Flan. */
   async function threeBills(prefix: string) {
     const [m4, m5] = await tables(prefix, 4, 5);
     const ana = await seat(v, m4);
@@ -2750,7 +2751,6 @@ describe("A803 split", () => {
       );
     }
 
-    /** Ana on `<prefix> 4` and `<prefix> 5` with Bill 1 holding `names`, sent. */
     async function tableFor(prefix: string, ...names: string[]) {
       const [m4, m5] = await tables(prefix, 4, 5);
       const ana = await seat(v, m4);
