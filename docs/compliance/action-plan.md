@@ -3,6 +3,14 @@
 Written **2026-07-26**. Plain action list; the reasoning and sources are in
 [getting-to-production.md](getting-to-production.md).
 
+> **Advisers, the plan from 2026-11-09 (owner).** The tax adviser has questions the owner already
+> sent and is answering them. When his answers arrive: go through them together, see which of the
+> [6 November list](2026-11-06-adviser-questions.md) are still needed, meet him, and add those then.
+> The labour and privacy questions (L1–L7, P1 and their confirmations) need a different adviser,
+> not yet found. Until then A664 (retention, Q48) stays parked. Two outside answers on L1 (tips) and L2 (overtime) were checked against
+> the statute text on 2026-11-09 and change neither question; see
+> [the labour research](research/2026-11-06-adviser-labour.md#checked-2026-11-09-two-outside-answers-on-l1-and-l2).
+
 > **Recovery questions updated, 2026-10-04 (W41s).** Review
 > [Q5(f) and Q33–Q41](asesor-questions.md) before an adviser engagement on recovery. They cover
 > offline restoration, independent paper or optional cloud allocations, missing issued invoices

@@ -767,6 +767,43 @@ None applied here.
 - **"No rule found"** for rotas, absences and who lifts a hold means none in the texts read.
 - **The six-month against one-year dispute** on small businesses is press only.
 
+## Checked 2026-11-09: two outside answers on L1 and L2
+
+The owner asked another AI assistant (Gemini) both questions. Its answers were checked against the
+consolidated texts downloaded from the BOE on 2026-11-09: the Estatuto de los Trabajadores
+(BOE-A-2015-11430) and the LGSS (BOE-A-2015-11724). Neither changes L1 or L2.
+
+**L1, contributions on tips.** It said card tips paid through payroll are generally outside the
+contribution base, citing ET art. 26 and LGSS art. 147.
+
+- ET art. 26 does not say so. The word "propina" appears nowhere in the Statute, and art. 26.2's
+  list of what is not salary is «indemnizaciones o suplidos por los gastos realizados»,
+  «las prestaciones e indemnizaciones de la Seguridad Social» and the indemnities for
+  «traslados, suspensiones o despidos».
+- LGSS art. 147 says the opposite of its reading. Art. 147.1 builds the base from «la remuneración
+  total, cualquiera que sea su forma o denominación», and art. 147.2 opens «Únicamente no se
+  computarán en la base de cotización los siguientes conceptos». Tips are not on that list, and
+  "propina" appears nowhere in the LGSS.
+- It also said a collective agreement can decide the question. Art. 147 mentions an agreement only
+  for capping indemnities; this is our reading of the text, not a ruling.
+- It cited no ruling or TGSS statement for a restaurant. The parts that agree with §5 are the IRPF
+  withholding (L6.1) and the guaranteed casino pay of STS 692/2021.
+
+**L2, overtime under a yearly total.** It called the proposal sound but said paying overtime and
+resting it were confused, and that hours over the published calendar are overtime.
+
+- The proposal already reads "on that month's payroll **or** into rest within four months". Its
+  80-hour point matches ET art. 35.2: «no se computarán las horas extraordinarias que hayan sido
+  compensadas mediante descanso dentro de los cuatro meses siguientes a su realización».
+- ET art. 35.1 defines overtime as hours worked «sobre la duración máxima de la jornada ordinaria
+  de trabajo, fijada de acuerdo con el artículo anterior». Art. 34 sets that maximum at forty hours
+  a week averaged over the year (34.1) and nine ordinary hours a day unless the agreement says
+  otherwise (34.3), and lets hours be spread unevenly across the year, balanced within twelve
+  months (34.2). The statute does not name the published calendar, so counting hours over it as
+  overtime stays the judgement L2 asks for.
+- ET art. 35.1 also gives the default when nothing is agreed: overtime «deberán ser compensadas
+  mediante descanso dentro de los cuatro meses siguientes» (row L2.7 already has this).
+
 ## Source register
 
 Retrieved 2026-11-06. BOE consolidated texts show their "last update".
