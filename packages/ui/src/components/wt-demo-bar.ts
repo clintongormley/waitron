@@ -24,9 +24,12 @@ export class WtDemoBar extends LitElement {
         display: flex;
         align-items: center;
         overflow-x: auto;
-        white-space: nowrap;
         gap: var(--wt-space-2) var(--wt-space-4);
         padding: var(--wt-space-2) var(--wt-space-3);
+      }
+
+      nav > * {
+        flex: 0 0 auto;
       }
 
       strong {
