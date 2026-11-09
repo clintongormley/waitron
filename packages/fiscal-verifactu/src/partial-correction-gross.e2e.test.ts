@@ -5,8 +5,11 @@ import { invoiceSeries, newId, nowIso, saleLines, sales, withTransaction } from 
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import {
+  basisPointsToDecimal,
+  centsToDecimal,
   decimal,
   deviceOrigin,
+  stringToCents,
   seriesId as brandSeriesId,
   type DeviceId,
   type NodeId,
@@ -76,8 +79,7 @@ async function snapshot(saleId: SaleId) {
 async function seedOriginal(lines: Line[]) {
   const rates = [...new Set(lines.map(([rate]) => rate))];
   const sum = (values: string[]) =>
-    values.reduce((cents, value) => cents + Math.round(Number(value) * 100), 0);
-  const money = (cents: number) => (cents / 100).toFixed(2);
+    values.reduce((cents, value) => cents + stringToCents(value), 0);
   const totalCents = sum(lines.map(([, , gross]) => gross));
   const { saleId } = await withTransaction(suite.db, (tx) =>
     recordSale(
@@ -86,7 +88,7 @@ async function seedOriginal(lines: Line[]) {
       saleInput({
         nodeId,
         seriesId,
-        total: money(totalCents),
+        total: centsToDecimal(totalCents),
         lines: lines.map(([vatRate, base, gross], index) => ({
           lineNo: index + 1,
           name: `Dish ${index + 1}`,
@@ -103,8 +105,8 @@ async function seedOriginal(lines: Line[]) {
           const gross = sum(atRate.map(([, , lineGross]) => lineGross));
           return {
             rate: decimal(rate),
-            base: decimal(money(base)),
-            tax: decimal(money(gross - base)),
+            base: centsToDecimal(base),
+            tax: centsToDecimal(gross - base),
           };
         }),
         settlement: {
@@ -112,7 +114,7 @@ async function seedOriginal(lines: Line[]) {
           tenders: [
             {
               method: "cash",
-              amount: money(totalCents),
+              amount: centsToDecimal(totalCents),
               tipAmount: "0",
               settledAt: steadyClock.now().instant,
             },
@@ -138,8 +140,8 @@ async function correct(
       name: source.name,
       descriptions: source.descriptions,
       quantity: "-1",
-      unitPrice: (source.unitPrice / 100).toFixed(2),
-      vatRate: (source.vatRate / 100).toFixed(2),
+      unitPrice: centsToDecimal(source.unitPrice),
+      vatRate: basisPointsToDecimal(source.vatRate),
       lineTotal: base,
       lineGross: gross,
       correctsLineId: source.id,
