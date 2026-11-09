@@ -122,6 +122,28 @@ describe("setup venue unsaved changes", () => {
     expect(assembleBody((el as unknown as State).draft).venue.staffLanguage).toBe("en");
   });
 
+  it("returns to the saved working language after discarding a different choice", async () => {
+    const savedVenue = { ...initialVenue, staffLanguage: "en" as const };
+    const { el, venue } = await mount({ mode: "prepare", venue: savedVenue });
+    await edit(venue, "staffLanguage", "es");
+    back(venue);
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "discard");
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    el.shadowRoot!.querySelector("setup-admin-screen")!.dispatchEvent(
+      new CustomEvent("setup-goto", {
+        detail: { screen: "venue" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await expect.poll(() => (el as unknown as State).screen).toBe("venue");
+    const returned = el.shadowRoot!.querySelector<SetupVenueScreen>("setup-venue-screen")!;
+    await returned.updateComplete;
+    expect(field(returned, "staffLanguage").value).toBe("en");
+    expect((el as unknown as State).draft.venue).toEqual(savedVenue);
+  });
+
   it("a seeded demo stays clean until a shown field changes", async () => {
     const { el, venue } = await mount({ mode: "demo", venue: structuredClone(initialVenue) });
     expect(unload()).toBe(false);

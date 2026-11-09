@@ -901,7 +901,9 @@ export class SetupVenueScreen extends LitElement {
           { value: "es", label: t("venue.staff_language.es") },
         ].sort((a, b) => a.label.localeCompare(b.label, currentLocale()))}
         @wt-change=${this.#onWorkingLanguage}
-        ><wt-help-tooltip slot="help" aria-label=${t("venue.label.staff_language")}
+        ><wt-help-tooltip
+          slot="help"
+          aria-label=${format("venue.help_with_field", { field: t("venue.field.staff_language") })}
           >${t("venue.staff_language.help")}</wt-help-tooltip
         ></wt-combobox
       >

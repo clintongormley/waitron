@@ -137,6 +137,18 @@ afterEach(cleanupWidgets);
 describe("working language", () => {
   afterEach(() => setLocale("en-GB"));
 
+  it.each([
+    ["en-GB", "Help with working language"],
+    ["es-ES", "Ayuda sobre el idioma de trabajo"],
+  ])("distinguishes the help button from the language choice in %s", async (locale, label) => {
+    setLocale(locale);
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "prepare", venue: EXPECTED_VENUE },
+    });
+    const help = q(el, "[data-test=staffLanguage] wt-help-tooltip")!;
+    expect(help.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe(label);
+  });
+
   it.each(["demo", "prepare", "live"] as const)(
     "offers English and Spanish with the derived default in %s",
     async (mode) => {
@@ -171,6 +183,9 @@ describe("working language", () => {
     });
     const picker = q(el, "[data-test=staffLanguage]") as Dropdown;
     expect(picker.error).toBe(t("venue.error.staff_language"));
+    expect(picker.hasAttribute("invalid")).toBe(true);
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(picker);
+    expect(picker.shadowRoot!.activeElement?.tagName).toBe("BUTTON");
     expect(await bottomOf(el)).toBe(t("venue.fix_fields"));
     await type(el, "staffLanguage", "en");
     expect(picker.error).toBe("");
