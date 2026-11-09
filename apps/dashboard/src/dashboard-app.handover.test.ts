@@ -53,7 +53,9 @@ it.each([true, false])(
     history.replaceState(null, "", "/manage/servers");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api,
-      request: vi.fn(async () => ({})),
+      request: vi.fn(async () => {
+        throw new Error("Unexpected module request");
+      }),
     });
     let screen: ServersScreen;
     await vi.waitFor(() => {
