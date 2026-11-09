@@ -148,36 +148,14 @@ Left open:
   The folder photo's own lookup has an index (`section_members_folder_image_idx`). Its own item: a
   performance fix with a media migration.
 
-## Products table toolbar and headings stay in view (W80, #1187): left open
+## Products table scrolling (W80, #1187)
 
-**Products table toolbar and headings stay in view — DONE (W80, #1187, owner 2026-10-04); left
-open:** `wt-data-table`'s opt-in `stickyHeader` is set only by the Products screen.
-At every width the table's box is at least three tap targets tall. The dashboard shell
-test, with a stub catalogue of 40 uncategorised products, no category open and no message above the
-list, finds only the rows scrolling at 390×844 and 375×667, with about 27px to spare at 375×667
-before W83 (a temporary test, not kept, measured 83px after it on 2026-10-04;
-`docs/developers/design-system.md`, `stickyHeader`), so longer toolbar labels, a wrapped banner or a
-message can still make the content column scroll. Not covered: in Select and move mode the toolbar wraps
-taller and the content column overflows at 375×667 (figures below).
-Other long tables (Orders, Staff, Payments and
-the rest) keep scrolling with the content column until someone decides they should opt in too; each
-would need its screen to give the table a bounded height, as the Products screen does.
-Still open: at 375×667 the box gave few rows, short of the item's "enough rows to remain usable",
-and a larger minimum does not fit that screen without the toolbar scrolling away. W83 (below)
-shortened the toolbar. Measured on 2026-10-04 with a temporary test in the shell test's 375×667
-setup (not kept), reading the rows' box below its headings: before W83, 117.5px of row area, which
-held the All products row and no whole product row (rows are 69px); after it, 173.5px, which holds
-the All products row and one whole product row. At 390×844 the whole rows, the All products row included, went from four to five.
-In Select and move mode at 375×667 the content column overflows: by 129px before W83 and 25px after, in the
-same temporary test; no kept test covers Select and move mode there. Whether
-that is enough rows is the owner's call.
-
-_2026-10-06, A303: Select now has its own action bar below Search, and grips occupy a separate
-leading column. The W80/W83 measurements above describe the earlier layout; the 375×667
-selection measurement has not been retaken._
-
-_2026-10-14: both open points here — few rows at 375×667, and `stickyHeader` set only by Products —
-are now part of A653 ([dashboard.md](dashboard.md#a653--every-long-dashboard-table-scrolls-the-same-way-with-less-above-it))._
+_2026-11-09, A653: the shared dashboard cap replaces Products' opt-in fill chain. The phone-space
+slice landed in #2667. With 40 products in Preparation, the final English screenshots at 375×667
+and 390×844 show 3/5 whole Products data rows plus the root. Structure shows 1/4 initially and 3/6
+after moving the page heading away; selection shows 1/4 plus the root after that move. Native touch
+cases record the row and content-column offsets separately. The cap, held headings and isolation
+contract are in [design-system.md](../developers/design-system.md)._
 
 ## Products: Filters and Select at the start of the table's toolbar (W83, #1193): left open
 

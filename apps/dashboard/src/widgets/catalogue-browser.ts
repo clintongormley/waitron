@@ -54,11 +54,6 @@ export class CatalogueBrowser extends LitElement {
         min-width: 0;
         container-type: inline-size;
       }
-      :host([sticky-header]) {
-        display: flex;
-        flex: 1 1 0;
-        flex-direction: column;
-      }
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -111,8 +106,6 @@ export class CatalogueBrowser extends LitElement {
   /** The category the address names; the browser opens it, and every category above it, once. */
   @property({ attribute: false }) categoryId: string | null = null;
   @property({ type: Boolean }) canAddProduct = false;
-  /** Fills a bounded flex column, with the Products table's rows scrolling under its headings. */
-  @property({ type: Boolean, reflect: true, attribute: "sticky-header" }) stickyHeader = false;
   @property({ type: Boolean }) loaded = false;
   @property({ attribute: false }) defaultColor: string | null = null;
   @state() private search = "";
@@ -884,7 +877,6 @@ export class CatalogueBrowser extends LitElement {
           event.stopPropagation();
           void this.#drop(event.detail.keys, event.detail.folderId);
         }}
-        .stickyHeader=${this.stickyHeader}
         .selecting=${this.selecting}
         .reordering=${this.selecting}
         .selected=${this.selected}

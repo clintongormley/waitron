@@ -914,7 +914,7 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     }));
     el.rowKey = (row) => row.id;
     el.sortKey = "name";
-    el.stickyHeader = true;
+    el.style.setProperty("--wt-table-max", "400px");
     await el.updateComplete;
     const scroll = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
     scroll.scrollTop = 200;

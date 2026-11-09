@@ -623,6 +623,9 @@ export class DashboardApp extends LitElement {
          shorter sidebar looking cut off next to a taller .main). Positioned so a visually hidden
          field hint is placed inside this scroll box, not against .layout, where it grows the page. */
       .main {
+        container-type: size;
+        --wt-table-body-gutter: var(--wt-space-4);
+        --wt-table-max: calc(100cqb - 2 * var(--wt-table-body-gutter));
         position: relative;
         flex: 1 1 auto;
         min-width: 0;
@@ -749,14 +752,7 @@ export class DashboardApp extends LitElement {
       }
 
       .body {
-        padding: var(--wt-space-4);
-      }
-
-      /* A screen that fills .main, so its table's own box scrolls the rows while .main has room for the box's minimum. */
-      .body.fill {
-        display: flex;
-        flex: 1 1 0;
-        flex-direction: column;
+        padding: var(--wt-table-body-gutter);
       }
 
       /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER inside the
@@ -1935,7 +1931,7 @@ export class DashboardApp extends LitElement {
                 ></div>`
               : nothing
           }
-          <div class="main">
+          <main class="main" tabindex="0">
             ${
               this.contentLanguageError
                 ? html`<div role="alert" data-test="content-language-error">
@@ -1951,10 +1947,7 @@ export class DashboardApp extends LitElement {
                   </div>`
                 : nothing
             }
-            <div
-              class=${classMap({ body: true, fill: this.screen === "catalogue" })}
-              @wt-edit-product=${this.#onEditProduct}
-            >
+            <div class="body" @wt-edit-product=${this.#onEditProduct}>
               ${
                 this.contentLanguagesReady
                   ? keyed(`${currentLocale()}/${this.#screenAccountEpoch}`, this.#renderScreen())
@@ -1965,7 +1958,7 @@ export class DashboardApp extends LitElement {
                     : nothing
               }
             </div>
-          </div>
+          </main>
         </div>
         ${this.#renderProfileModal()}
       </div>
@@ -2967,10 +2960,7 @@ export class DashboardApp extends LitElement {
           .reportLateSave=${this.#lateSaveReporter("menus.schedule_not_saved")}
         ></dashboard-menus-screen>`;
       case "catalogue":
-        return html`<dashboard-catalogue-screen
-          .api=${this.api}
-          sticky-header
-        ></dashboard-catalogue-screen>`;
+        return html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`;
       case "units":
         return html`<dashboard-units-screen .api=${this.api}></dashboard-units-screen>`;
       case "courses":

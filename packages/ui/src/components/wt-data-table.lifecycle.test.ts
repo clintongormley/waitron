@@ -87,7 +87,6 @@ test("a fresh table with filters and choosable columns starts with Filters and C
   const el = await itemTable();
   expect(part(el, ".filters-trigger").getAttribute("aria-expanded")).toBe("false");
   expect(part(el, ".columns-trigger").getAttribute("aria-expanded")).toBe("false");
-  expect(el.hasAttribute("sticky-header")).toBe(false);
   await userEvent.click(part(el, ".columns-trigger"));
   await el.updateComplete;
   expect(part(el, ".column-move-status").textContent!.trim()).toBe("");
@@ -170,8 +169,8 @@ test("removing the table mid column drag gives the page its cursor back", async 
 });
 
 async function stickyTable(): Promise<{ el: WtDataTable<Item>; scroll: HTMLElement }> {
-  const el = await itemTable({ columns: [nameColumn], stickyHeader: true });
-  el.style.height = "400px";
+  const el = await itemTable({ columns: [nameColumn] });
+  el.style.setProperty("--wt-table-max", "400px");
   await frames();
   return { el, scroll: part(el, ".scroll") };
 }
@@ -197,6 +196,20 @@ test("a sticky table moved in the page still follows its headings as they grow",
   await frames();
   expect(headHeight(el)).not.toBe(before);
   expect(scroll.style.scrollPaddingBlockStart).toBe(headHeight(el));
+});
+
+test("a loading replacement keeps following its new headings without revealing a row", async () => {
+  const { el } = await stickyTable();
+  const before = part(el, "thead");
+  el.loading = true;
+  await el.updateComplete;
+  el.loading = false;
+  await el.updateComplete;
+  expect(part(el, "thead")).not.toBe(before);
+  await frames();
+  el.style.setProperty("--wt-space-3", "40px");
+  await frames();
+  expect(part(el, ".scroll").style.scrollPaddingBlockStart).toBe(headHeight(el));
 });
 
 class ForwardingSearch extends HTMLElement {

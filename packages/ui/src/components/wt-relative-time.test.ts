@@ -38,7 +38,7 @@ const words = (el: WtRelativeTime) => parts(el).time.textContent!.trim();
 /** A table whose rows scroll inside its own box, in its shadow root, each row's last cell a time. */
 async function timesInTable(): Promise<{ el: WtRelativeTime; scroll: HTMLElement }> {
   const table = (await mount(
-    '<wt-data-table aria-label="Devices" sticky-header style="height: 240px"></wt-data-table>',
+    '<wt-data-table aria-label="Devices" style="--wt-table-max: 240px"></wt-data-table>',
   )) as HTMLElement & {
     rows: unknown[];
     columns: unknown[];

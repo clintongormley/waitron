@@ -394,3 +394,34 @@ test("wrapToFit wraps headings and text at spaces to fit the box, keeps a no-wra
   expect(tooNarrow.overflow).toBeGreaterThan(50);
   expect(tooNarrow).toMatchObject({ wholeLines: 1, cellsHoldTheirContent: true });
 });
+
+test("a capped table holds grouped, wrapped headings together and reveals rows below both", async () => {
+  const el = await table({
+    rows: Array.from({ length: 40 }, (_, index) => ({
+      id: `r${index}`,
+      parent: null,
+      name: `Product ${index}`,
+      status: "active",
+    })),
+    columns: [
+      { ...nameColumn, group: "Kitchen", label: "Product name used by staff" },
+      { ...statusColumn, group: "Kitchen", label: "Availability for ordering" },
+    ],
+    wrapToFit: true,
+  });
+  el.style.width = "300px";
+  el.style.setProperty("--wt-table-max", "240px");
+  const root = el.shadowRoot!;
+  const scroll = root.querySelector<HTMLElement>(".scroll")!;
+  scroll.scrollTop = scroll.scrollHeight;
+  await new Promise(requestAnimationFrame);
+  expect(scroll.scrollTop).toBeGreaterThan(0);
+  const group = root.querySelector('th[scope="colgroup"]')!.getBoundingClientRect();
+  const heading = root.querySelector('th[scope="col"]')!.getBoundingClientRect();
+  expect(group.bottom).toBeLessThanOrEqual(heading.top + 0.5);
+  await el.revealRow("r0");
+  const row = root.querySelector('tr[data-row-key="r0"]')!.getBoundingClientRect();
+  expect(row.top).toBeGreaterThanOrEqual(
+    root.querySelector('th[scope="col"]')!.getBoundingClientRect().bottom - 0.5,
+  );
+});

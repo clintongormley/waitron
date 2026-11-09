@@ -1931,14 +1931,12 @@ describe("the product list at phone width", () => {
     }
   }
 
-  /** The tree as the only thing in a 600 px column with sticky headings, as the Products screen
-   * bounds it, so the table's own box keeps its size while its rows change. */
   async function mountBoundedTree() {
-    const tree = await mountTree({ stickyHeader: true });
+    const tree = await mountTree();
     const host = tree.el.parentElement!;
     host.style.display = "flex";
     host.style.flexDirection = "column";
-    host.style.height = "600px";
+    host.style.setProperty("--wt-table-max", "600px");
     await new Promise(requestAnimationFrame);
     return tree;
   }
@@ -2231,13 +2229,12 @@ describe("the product list at phone width", () => {
       categories: [longCategory],
       products: [longProduct()],
       unroutedFolderIds: ["long"],
-      stickyHeader: bounded,
       ...props,
     });
     if (bounded) {
       host.style.display = "flex";
       host.style.flexDirection = "column";
-      host.style.height = "600px";
+      host.style.setProperty("--wt-table-max", "600px");
     }
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
@@ -3725,7 +3722,6 @@ describe("the product list with sticky headings", () => {
   ];
   const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 
-  /** Mounts the list as the only thing in a 600 px column, the way the Products screen bounds it. */
   async function mountBounded(props: Partial<ProductList> = {}) {
     const { el, host } = await mountWidget<ProductList>("dashboard-product-list", {
       categories: [drinks, food],
@@ -3734,7 +3730,7 @@ describe("the product list with sticky headings", () => {
     });
     host.style.display = "flex";
     host.style.flexDirection = "column";
-    host.style.height = "600px";
+    host.style.setProperty("--wt-table-max", "600px");
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
     await el.revealProduct("f-11");
@@ -3743,20 +3739,17 @@ describe("the product list with sticky headings", () => {
     return { el, host, table, root, scroll: root.querySelector<HTMLElement>(".scroll")! };
   }
 
-  it("is off unless the screen asks for it", async () => {
-    const { el, table, scroll } = await mountBounded();
-    expect(el.stickyHeader).toBe(false);
-    expect(table.stickyHeader).toBe(false);
+  it("grows with the rows without a cap", async () => {
+    const { el, scroll } = await mountBounded();
+    el.parentElement!.style.removeProperty("--wt-table-max");
+    await frame();
     expect(scroll.scrollHeight).toBe(scroll.clientHeight);
   });
 
-  it("fills its column and keeps the table's toolbar and headings in place while the rows scroll", async () => {
-    const { el, host, table, root, scroll } = await mountBounded({ stickyHeader: true });
-    expect(el.hasAttribute("sticky-header")).toBe(true);
-    expect(table.stickyHeader).toBe(true);
-    expect(el.getBoundingClientRect().bottom).toBeCloseTo(host.getBoundingClientRect().bottom, 0);
+  it("uses the inherited cap and keeps the toolbar and headings in place while the rows scroll", async () => {
+    const { table, root, scroll } = await mountBounded();
     expect(scroll.getBoundingClientRect().bottom).toBeCloseTo(
-      host.getBoundingClientRect().bottom,
+      table.getBoundingClientRect().bottom,
       0,
     );
     expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
@@ -3773,7 +3766,7 @@ describe("the product list with sticky headings", () => {
   });
 
   it("reveals a product below the headings, not under them", async () => {
-    const { el, root, scroll } = await mountBounded({ stickyHeader: true });
+    const { el, root, scroll } = await mountBounded();
     scroll.scrollTop = scroll.scrollHeight;
     await frame();
     await el.revealProduct("d-0");

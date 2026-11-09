@@ -65,11 +65,6 @@ export class CatalogueScreen extends LitElement {
       :host {
         display: block;
       }
-      :host([sticky-header]) {
-        display: flex;
-        flex: 1 1 0;
-        flex-direction: column;
-      }
       .header {
         display: flex;
         flex-wrap: wrap;
@@ -93,8 +88,6 @@ export class CatalogueScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  /** Fills a bounded flex column, with the Products table's rows scrolling under its headings. */
-  @property({ type: Boolean, reflect: true, attribute: "sticky-header" }) stickyHeader = false;
   @state() private catalogueSettings: CatalogueSettings | null = null;
   @state() private contentLanguages: ContentLanguages | null = null;
   @state() private catalogues: CatalogueSummary[] = [];
@@ -722,7 +715,6 @@ export class CatalogueScreen extends LitElement {
         this.catalogues.length
           ? html`<dashboard-catalogue-browser
               .api=${this.api}
-              .stickyHeader=${this.stickyHeader}
               .categoryId=${this.categoryId}
               @open-category=${(event: CustomEvent<{ categoryId: string | null }>) => {
                 event.stopPropagation();

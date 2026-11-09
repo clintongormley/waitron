@@ -3545,7 +3545,7 @@ it("keeps a field scrolled into view clear of the outcome message, which paints 
   expect(crossed).toBeDefined();
   expect(paintsTopmost(toast, crossed.getBoundingClientRect().left + 4, y)).toBe(true);
   // And where it crosses a sticky header's heading.
-  table(el).setAttribute("sticky-header", "");
+  table(el).style.setProperty("--wt-table-max", "600px");
   host.scrollTop = 0;
   const heading = [...table(el).shadowRoot.querySelectorAll<HTMLElement>("thead th")].find((th) => {
     const x = th.getBoundingClientRect().left + 4;

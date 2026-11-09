@@ -169,8 +169,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
         ${visuallyHiddenStyles}
       }
       :host {
-        display: block;
+        display: flex;
+        flex: none;
+        flex-direction: column;
         min-width: 0;
+        max-block-size: var(--wt-table-max);
       }
 
       .pagination {
@@ -209,30 +212,25 @@ export class WtDataTable<Row = unknown> extends LitElement {
         border-radius: var(--wt-radius-md);
       }
 
-      :host([sticky-header]) {
-        display: flex;
-        flex: 1 1 0;
-        flex-direction: column;
+      .scroll {
+        flex: 1 1 auto;
+        min-block-size: 0;
       }
 
-      /* A zero basis lets the box fill a bounded container and still report only its minimum to
-         the containers above it, so below that minimum an outer container scrolls rather than the
-         rows being squeezed. */
-      :host([sticky-header]) .scroll {
-        flex: 1 1 0;
-        min-block-size: calc(var(--wt-tap-min) * 3);
-      }
-
-      :host([sticky-header]) thead th {
+      thead {
         position: sticky;
         inset-block-start: 0;
         z-index: 3;
         background: var(--wt-color-surface);
       }
 
-      /* The collapsed border stays where the heading sits unscrolled, so the line under a held
-         heading is drawn by the heading itself. */
-      :host([sticky-header]) thead th::after {
+      thead th {
+        border-block-end: 0;
+        position: relative;
+        background: var(--wt-color-surface);
+      }
+
+      thead th::after {
         content: "";
         position: absolute;
         inset-inline: 0;
@@ -573,19 +571,15 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
       .table-body {
         display: flex;
-        align-items: flex-start;
+        align-items: stretch;
+        flex: 1 1 auto;
+        min-block-size: 0;
         gap: var(--wt-space-3);
       }
 
       .table-body > :is(.scroll, .empty) {
         flex: 1 1 0;
         min-width: 0;
-      }
-
-      :host([sticky-header]) .table-body {
-        flex: 1 1 0;
-        align-items: stretch;
-        min-block-size: calc(var(--wt-tap-min) * 3);
       }
 
       .filters-panel[data-side] {
@@ -986,10 +980,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   @state() private searchExpanded = new Set<string>();
   #searchExpansionQuery = "";
-  /** Rows scroll inside the table's own box, under headings held at its top, while the toolbar
-   * stays above it. The box fills the block size a bounded flex container gives the table, but is
-   * never shorter than its minimum; given no such container, it is that minimum. */
-  @property({ type: Boolean, reflect: true, attribute: "sticky-header" }) stickyHeader = false;
   /** Starts every body cell's content at the cell's top rather than lining cells up by their
    * first line's baseline. */
   @property({ type: Boolean, reflect: true, attribute: "top-aligned" }) topAligned = false;
@@ -1137,13 +1127,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   #padScroll(): void {
     const scroll = this.renderRoot.querySelector<HTMLElement>(".scroll");
-    const head = this.stickyHeader ? this.renderRoot.querySelector("thead") : null;
+    const head = this.renderRoot.querySelector("thead");
     if (scroll)
       scroll.style.scrollPaddingBlockStart = head ? `${head.getBoundingClientRect().height}px` : "";
   }
 
   #observeHead(): void {
-    const head = this.stickyHeader ? this.renderRoot.querySelector("thead") : null;
+    const head = this.renderRoot.querySelector("thead");
     if (head === this.#observedHead) return;
     this.#headObserver.disconnect();
     if (head) this.#headObserver.observe(head);

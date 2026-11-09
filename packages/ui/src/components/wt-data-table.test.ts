@@ -6082,7 +6082,7 @@ test("a focused row activator whose row leaves the table takes the focus nowhere
 });
 
 test.each([
-  { box: "the table's own sticky-header box", sticky: true },
+  { box: "the table's own capped box", sticky: true },
   { box: "a fixed-height container around the table", sticky: false },
 ])(
   "a focused row activator scrolled out of view inside $box stays out of view when a render keeps it in place",
@@ -6092,10 +6092,10 @@ test.each([
       name: `Row ${i}`,
       count: i,
     }));
-    const el = await table({ rows: many, rowClick: () => undefined, stickyHeader: sticky });
+    const el = await table({ rows: many, rowClick: () => undefined });
     let box = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
     if (sticky) {
-      el.style.height = "300px";
+      el.style.setProperty("--wt-table-max", "300px");
     } else {
       const outer = document.createElement("div");
       outer.style.cssText = "height: 300px; overflow-y: auto";
@@ -7203,14 +7203,13 @@ async function stickyTable(
     '<wt-data-table aria-label="Products"></wt-data-table>',
   )) as WtDataTable<StickyRow>;
   el.style.width = "320px";
-  el.style.height = "560px";
+  el.style.setProperty("--wt-table-max", "560px");
   Object.assign(el, {
     rows: stickyRows,
     columns: stickyColumns,
     rowKey: (r: StickyRow) => r.id,
     rowParent: (r: StickyRow) => r.parent,
     searchable: true,
-    stickyHeader: true,
     ...props,
   });
   await el.updateComplete;
@@ -7237,9 +7236,8 @@ function headingPoint(el: WtDataTable<StickyRow>, scroll: HTMLElement, heading: 
   return [(left + right) / 2, box.y + box.height / 2] as const;
 }
 
-test("a sticky-header table scrolls its rows inside its own box, under headings and a toolbar that stay put", async () => {
+test("a capped table scrolls its rows inside its own box, under headings and a toolbar that stay put", async () => {
   const { el, scroll } = await stickyTable();
-  expect(el.hasAttribute("sticky-header")).toBe(true);
   expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
   expect(scroll.getBoundingClientRect().bottom).toBeCloseTo(el.getBoundingClientRect().bottom, 0);
   const toolbar = () =>
@@ -7432,16 +7430,16 @@ test("revealRow straight after a sticky table first draws lands the row below th
   await revealFromEnd(el, scroll);
 });
 
-test("revealRow straight after stickyHeader is turned on lands the row below the headings", async () => {
-  const { el, scroll } = await stickyTable({ stickyHeader: false });
-  el.stickyHeader = true;
+test("revealRow straight after a cap is applied lands the row below the headings", async () => {
+  const { el, scroll } = await stickyTable();
+  el.style.setProperty("--wt-table-max", "480px");
   await el.updateComplete;
   await revealFromEnd(el, scroll);
 });
 
 test("a sticky table's scroll padding is set as soon as its headings are drawn, before a frame", async () => {
-  const { el, scroll } = await stickyTable({ stickyHeader: false });
-  el.stickyHeader = true;
+  const { el, scroll } = await stickyTable();
+  el.style.setProperty("--wt-table-max", "480px");
   await el.updateComplete;
   const headHeight = el.shadowRoot!.querySelector("thead")!.getBoundingClientRect().height;
   expect(scroll.style.scrollPaddingBlockStart).toBe(`${headHeight}px`);
@@ -7586,7 +7584,9 @@ test("a sticky table's headings are opaque and draw their own lower line from to
   await settle();
   for (const heading of stickyHeadings(el)) {
     expect(getComputedStyle(heading).backgroundColor, heading.textContent!).toBe("rgb(7, 8, 9)");
+    expect(getComputedStyle(heading).borderBottomWidth).toBe("0px");
     const line = getComputedStyle(heading, "::after");
+    expect(line.borderBottomWidth).toBe("1px");
     expect(line.borderBottomStyle, heading.textContent!).toBe("solid");
     expect(line.borderBottomColor, heading.textContent!).toBe("rgb(1, 2, 3)");
   }
@@ -7613,46 +7613,12 @@ test("a filtered sticky heading keeps its filtered line and its sort marker show
   expect(hit !== null && marker.closest("th")!.contains(hit)).toBe(true);
 });
 
-test("without stickyHeader the table's box grows with its rows and its headings are not sticky", async () => {
-  const { el, scroll } = await stickyTable({ stickyHeader: false });
-  expect(el.hasAttribute("sticky-header")).toBe(false);
-  expect(scroll.scrollHeight).toBe(scroll.clientHeight);
-  expect(scroll.getBoundingClientRect().bottom).toBeGreaterThan(el.getBoundingClientRect().bottom);
-  for (const heading of stickyHeadings(el)) {
-    if (heading.dataset.pinned) continue;
-    expect(getComputedStyle(heading).position).toBe("static");
-  }
-});
-
-test("a sticky table with no bounded container is its minimum height and scrolls its rows inside", async () => {
+test("without a cap the table grows with its rows", async () => {
   const { el, scroll } = await stickyTable();
-  el.style.height = "";
+  el.style.removeProperty("--wt-table-max");
   await settle();
-  expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
-  host.style.setProperty("--wt-tap-min", "50px");
-  await settle();
-  expect(scroll.getBoundingClientRect().height).toBeCloseTo(150, 0);
-});
-
-test("turning stickyHeader off releases the box and its scroll padding, and on again restores both", async () => {
-  const { el, scroll } = await stickyTable();
-  const headHeight = el.shadowRoot!.querySelector("thead")!.getBoundingClientRect().height;
-  // The padding is set when the headings attach; a resize observer follows later size changes.
-  await vi.waitFor(() => expect(scroll.style.scrollPaddingBlockStart).toBe(`${headHeight}px`));
-  el.stickyHeader = false;
-  await el.updateComplete;
-  expect(scroll.style.scrollPaddingBlockStart).toBe("");
   expect(scroll.scrollHeight).toBe(scroll.clientHeight);
-  el.loading = true;
-  await el.updateComplete;
-  el.stickyHeader = true;
-  await el.updateComplete;
-  el.loading = false;
-  await el.updateComplete;
-  const again = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
-  expect(again).not.toBe(scroll);
-  await vi.waitFor(() => expect(again.style.scrollPaddingBlockStart).toBe(`${headHeight}px`));
-  expect(again.scrollHeight).toBeGreaterThan(again.clientHeight);
+  expect(scroll.getBoundingClientRect().bottom).toBeCloseTo(el.getBoundingClientRect().bottom, 0);
 });
 
 /** An actions column whose one item reports the row it was drawn for, so a menu that ends up in
@@ -7779,7 +7745,6 @@ const stickyTree = {
   columns: stickyColumns,
   rowKey: (r: StickyRow) => r.id,
   rowParent: (r: StickyRow) => r.parent,
-  stickyHeader: true,
   expandAllLabel: "Expand all",
   collapseAllLabel: "Collapse all",
 } satisfies Partial<WtDataTable<StickyRow>>;
@@ -7907,7 +7872,7 @@ test("the Filters button's tooltip shows on hover and on keyboard focus, over th
       ...stickyTree,
       filtersLabel: "Show only some rows",
     });
-    el.style.height = "560px";
+    el.style.setProperty("--wt-table-max", "560px");
     const scroll = root.querySelector<HTMLElement>(".scroll")!;
     scroll.scrollTop = 200;
     await settle();
@@ -7954,7 +7919,7 @@ test("the Filters button's tooltip shows on hover and on keyboard focus, over th
 test("a click on the Filters button's tooltip, where it lies over the headings, leaves Filters closed; a click on its icon opens it", async () => {
   await inWindow(1280, 900, async () => {
     const { el, root, trigger } = await filteredTable<StickyRow>(900, stickyTree);
-    el.style.height = "560px";
+    el.style.setProperty("--wt-table-max", "560px");
     await settle();
     const tooltip = trigger.querySelector<HTMLElement>(".icon-tooltip")!;
     await userEvent.hover(trigger);
@@ -7973,7 +7938,7 @@ test("a click on the Filters button's tooltip, where it lies over the headings, 
 test("a wide Filters panel opens in the flow at the rows' leading side, with the rows visible beside it, and closing gives the rows back the width", async () => {
   await inWindow(1280, 900, async () => {
     const { el, root, trigger, panel } = await filteredTable<StickyRow>(900, stickyTree);
-    el.style.height = "560px";
+    el.style.setProperty("--wt-table-max", "560px");
     await settle();
     const scroll = root.querySelector<HTMLElement>(".scroll")!;
     const full = scroll.getBoundingClientRect().width;
@@ -8143,10 +8108,10 @@ test("when the filters hide every row, the side panel stays open beside the no-m
   });
 });
 
-test("under stickyHeader the side panel fills the rows' height and it and its trigger stay put while the rows scroll", async () => {
+test("in a capped table the side panel fills the rows' height and it and its trigger stay put while the rows scroll", async () => {
   await inWindow(1280, 900, async () => {
     const { el, root, trigger, panel } = await filteredTable<StickyRow>(900, stickyTree);
-    el.style.height = "560px";
+    el.style.setProperty("--wt-table-max", "560px");
     await userEvent.click(trigger);
     await el.updateComplete;
     await settle();
