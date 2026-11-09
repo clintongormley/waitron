@@ -18,6 +18,8 @@ import {
   confirmEmailChangeByCode,
   inspectAccountAction,
   issueAccountAction,
+  queueAccountMail,
+  issueQueuedAccountAction,
   requestAccountRecoveryAction,
 } from "./account-action.js";
 import { loginManager } from "./manager-login.js";
@@ -1111,5 +1113,57 @@ describe("an account action issued before a backward clock step", () => {
     );
     expect(rows.rows.map((row) => row.id)).toEqual([next.id]);
     expect(rows.rows.map((row) => row.id)).not.toContain(issued.id);
+  });
+});
+
+describe("queued account actions", () => {
+  const now = new Date("2026-11-09T12:00:00.000Z");
+  it.each(["suspended", "accepted", "no-pending"])("issues nothing for %s", async (state) => {
+    const personId = await seedManager(suite.db, { email: `queue-${state}@x.com` });
+    if (state === "suspended")
+      await suite.db.execute(sql`update persons set status = 'suspended' where id = ${personId}`);
+    expect(
+      await run((tx) =>
+        issueQueuedAccountAction(
+          tx,
+          {
+            personId,
+            params: {
+              purpose:
+                state === "accepted"
+                  ? "invitation"
+                  : state === "no-pending"
+                    ? "email_change"
+                    : "password_reset",
+            },
+          },
+          { now },
+        ),
+      ),
+    ).toBeNull();
+  });
+  it("reads the email change address at claim and stores no queued login", async () => {
+    const personId = await seedManager(suite.db, { email: "queue-change@x.com" });
+    await run((tx) => queueAccountMail(tx, { personId, purpose: "email_change", now }));
+    const queued = await suite.db.execute<{
+      params: string;
+      recipient: string | null;
+      not_after: string;
+    }>(sql`select params,recipient,not_after from outgoing_mail where person_id=${personId}`);
+    expect(queued.rows).toEqual([
+      {
+        params: JSON.stringify({ purpose: "email_change" }),
+        recipient: null,
+        not_after: "2026-11-09T12:30:00.000Z",
+      },
+    ]);
+    await suite.db.execute(
+      sql`update persons set pending_email = 'new-address@x.com' where id = ${personId}`,
+    );
+    expect(
+      await run((tx) =>
+        issueQueuedAccountAction(tx, { personId, params: { purpose: "email_change" } }, { now }),
+      ),
+    ).toMatchObject({ email: "new-address@x.com", purpose: "email_change" });
   });
 });

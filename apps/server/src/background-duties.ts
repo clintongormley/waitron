@@ -31,6 +31,7 @@ export interface BackgroundDutyHandles {
   pendingCardController: Aborter;
   cloudController: Aborter;
   invoiceEmailController: Aborter;
+  mailController: Aborter;
   attendanceController: Aborter;
   certificateReminderController: Aborter | undefined;
   tenderRefundController: Aborter;
@@ -42,6 +43,7 @@ export interface BackgroundDutyHandles {
   certificateDiagnosis: Stopper | undefined;
   fiscalReconciliation?: Stopper;
   invoiceEmailLoop: unknown;
+  mailLoop: unknown;
   cloudWorker: unknown;
   cloudSnapshots: unknown;
   suggestionLoop: unknown;
@@ -114,6 +116,11 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
     {
       name: "invoiceEmailLoop",
       close: () => h.invoiceEmailLoop,
+      reason: LOOP_WAIT,
+    },
+    {
+      name: "mailLoop",
+      close: () => h.mailLoop,
       reason: LOOP_WAIT,
     },
     {
@@ -213,6 +220,7 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       { name: "pendingCardController", abort: () => h.pendingCardController.abort() },
       { name: "cloudController", abort: () => h.cloudController.abort() },
       { name: "invoiceEmailController", abort: () => h.invoiceEmailController.abort() },
+      { name: "mailController", abort: () => h.mailController.abort() },
       { name: "attendanceController", abort: () => h.attendanceController.abort() },
       {
         name: "certificateReminderController",

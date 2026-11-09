@@ -39,6 +39,7 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { readZoneContext, validateRetainedZoneClock } from "./venue-zone-context.js";
 import { runAttendanceLoop } from "./attendance-loop.js";
 import { runAttendanceEmailLoop } from "./attendance-email-worker.js";
+import { startMailSender } from "./mail-sender.js";
 import { runInvoiceEmailLoop } from "./invoice-email-worker.js";
 import { runPendingCardLoop } from "./pending-card-recovery.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
@@ -87,6 +88,10 @@ vi.mock("./attendance-email-worker.js", async (load) => {
   const a = await load<typeof import("./attendance-email-worker.js")>();
   return { ...a, runAttendanceEmailLoop: vi.fn(a.runAttendanceEmailLoop) };
 });
+vi.mock("./mail-sender.js", async (load) => {
+  const a = await load<typeof import("./mail-sender.js")>();
+  return { ...a, startMailSender: vi.fn(a.startMailSender) };
+});
 vi.mock("./invoice-email-worker.js", async (load) => {
   const a = await load<typeof import("./invoice-email-worker.js")>();
   return { ...a, runInvoiceEmailLoop: vi.fn(a.runInvoiceEmailLoop) };
@@ -115,6 +120,7 @@ const duties = [
   runAttendanceLoop,
   runAttendanceEmailLoop,
   runInvoiceEmailLoop,
+  startMailSender,
   runPendingCardLoop,
   runTenderRefundRecoveryLoop,
   startMenuActivation,
@@ -326,6 +332,7 @@ describe("startup zone admission", () => {
     expect((await (await request("/api/node")).json()).acceptingSales).toBe(true);
     expect(runAttendanceLoop).toHaveBeenCalledOnce();
     expect(runInvoiceEmailLoop).toHaveBeenCalledOnce();
+    expect(startMailSender).toHaveBeenCalledOnce();
   });
   it.each(["", "Invalid/Zone?secret=must-not-escape", " Europe/Madrid", "Europe/Madrid "])(
     "boots %j into narrow authentication without ordinary loaders or duties",

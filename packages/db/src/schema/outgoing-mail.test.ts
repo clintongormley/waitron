@@ -48,7 +48,17 @@ describe("outgoing mail database protections", () => {
     insert({ seq: 2, kind: "invoice", person_id: null });
     insert({ seq: 3, status: "rejected" });
     insert({ seq: 4, status: "rejected", finished_at: "2026-11-09T12:01:00.000Z" });
-    expect(suite.db.get<{ n: number }>(sql`select count(*) as n from outgoing_mail`)?.n).toBe(4);
+    for (const [seq, status] of ["sending", "sent", "unknown", "expired", "cancelled"].entries()) {
+      insert({
+        seq: seq + 5,
+        status,
+        claim_token: "token",
+        claimed_at: "2026-11-09T12:00:00.000Z",
+        recipient: "person@example.test",
+        ...(status === "sending" ? {} : { finished_at: "2026-11-09T12:01:00.000Z" }),
+      });
+    }
+    expect(suite.db.get<{ n: number }>(sql`select count(*) as n from outgoing_mail`)?.n).toBe(9);
   });
   it.each([
     ["kind", { kind: "bad" }],

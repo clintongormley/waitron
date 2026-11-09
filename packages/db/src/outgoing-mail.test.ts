@@ -74,6 +74,16 @@ describe("mail queue API", () => {
         })
         .where(eq(outgoingMail.id, next.id));
       expect(await cancelMail(tx, "invoice:two", now)).toBe(false);
+      for (const status of ["sent", "rejected"] as const) {
+        await tx
+          .update(outgoingMail)
+          .set({ status, finishedAt: now.toISOString() })
+          .where(eq(outgoingMail.id, next.id));
+        expect(await cancelMail(tx, "invoice:two", now)).toBe(false);
+      }
+      const pending = await enqueueMail(tx, request("invoice:pending"));
+      expect(await cancelMail(tx, "invoice:pending", now)).toBe(true);
+      expect((await readMail(tx, "invoice:pending"))?.id).toBe(pending.id);
     });
   });
 });
