@@ -3111,10 +3111,10 @@ and nothing guards it across screens:
 - A231q: the mail server settings form (`apps/dashboard/src/widgets/email-settings-form.ts`); the
   order detail's invoice email form (`apps/dashboard/src/widgets/invoice-email-dialog.ts`); an office
   printer's Add (`apps/dashboard/src/widgets/page-printer-add.ts`), which opens already savable when
-  discovery found a name or address; the office printers panel's
-  Rename (`apps/dashboard/src/widgets/page-printers-panel.ts`); and the
-  till's invoice email form (`apps/till/src/widgets/invoice-email-dialog.ts`). Each has a sibling
-  `*.unsaved.test.ts`;
+  discovery found a name or address; and the till's invoice email form
+  (`apps/till/src/widgets/invoice-email-dialog.ts`). Each has a sibling `*.unsaved.test.ts`. An A4
+  printer's name is edited in the printer details' Edit form (`apps/dashboard/src/screens/printers-screen.ts`,
+  A405), whose leave cases are in `printer-details-a4.unsaved.test.ts`;
 - A1088: Box status's note dialog (`apps/dashboard/src/widgets/misdated-note-dialog.ts`); Add
   note's Save follows the rule. Its leave cases are in `misdated-note-dialog.unsaved.test.ts`
   beside it;
@@ -4277,10 +4277,12 @@ in groups under Status, Connection, Paper and drawer, and Used by (`settingsRows
 only outside Edit. The Active switch sits
 once, under Status, and acts at once. The view footer reads Close and Delete at the start,
 Calibrate printer and Edit at the end. Edit turns the modal into one form of the name and, for a
-network printer, its host and port; that form has no Close button, its footer reads Cancel and Save
+network receipt printer, its host and port; that form has no Close button, its footer reads Cancel and Save
 with the one bottom message, Cancel returns to the details, and Escape closes the window. The
 list's Edit opens the details in edit mode with the name focused. A dirty form asks before Cancel,
-Escape or leaving the page discards it.
+Escape or leaving the page discards it. An A4 printer opens the same modal with a Paper group and no
+Delete or Calibrate; Print test page and Edit sit in its footer only when the screen's `canManage`
+is set. Its Active switch only switches off, and its Edit form holds the name alone.
 
 **A screen that isn't itself a navigable destination is the whole page in a modal, not just its
 edits.** `dashboard-profile-screen` (Your profile) has no sidebar entry and is reached from the

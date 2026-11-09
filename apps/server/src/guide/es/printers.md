@@ -31,7 +31,10 @@ impresora** en los detalles de la impresora la repite.
 
 Elige el nombre de una impresora en la pestaña **Impresoras** o en la **Cola de impresión** para
 abrir sus detalles. **Activa** la enciende o la apaga al momento. **Editar** cambia su nombre y, si
-es de red, su dirección. **Calibrar impresora** repite la calibración.
+es una impresora de recibos de red, su dirección. **Calibrar impresora** repite la calibración.
+Los detalles de una impresora A4 no tienen calibración;
+**Imprimir página de prueba** la comprueba. Para volver a activarla, búscala de nuevo con
+**Añadir impresora**.
 
 ## Cola de impresión {#print-queue}
 

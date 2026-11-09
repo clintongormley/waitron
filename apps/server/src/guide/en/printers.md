@@ -30,7 +30,9 @@ on the printer's details runs it again.
 
 Choose a printer's name in the **Printers** tab or the **Print Queue** to open its details.
 **Active** switches the printer on or off at once. **Edit** changes its name and, for a network
-printer, its address. **Calibrate printer** runs calibration again.
+receipt printer, its address. **Calibrate printer** runs calibration again. An A4 printer's
+details have no calibration; **Print test page** checks one. To switch one back on, find it again
+with **Add a printer**.
 
 ## Print Queue {#print-queue}
 

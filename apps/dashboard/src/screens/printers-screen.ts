@@ -35,7 +35,7 @@ import type { DeleteImpact } from "@waitron/shared";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
 import "../widgets/page-printer-add.js";
-import "../widgets/page-printers-panel.js";
+import { PageTestPages } from "../widgets/page-test-pages.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
 import "../widgets/equipment-label.js";
 import { holderText } from "../i18n/equipment.js";
@@ -84,8 +84,19 @@ interface DetailEditValues {
 
 type DetailEditErrors = Record<keyof DetailEditValues, string>;
 
+/** One row of the printers table: a receipt printer or an A4 printer, stored apart. */
+type PrinterTableRow = { kind: "receipt"; printer: Printer } | { kind: "a4"; row: PagePrinterRow };
+
 function hasErrors(errors: DetailEditErrors): boolean {
   return Object.values(errors).some((error) => error !== "");
+}
+
+function pageSize(media: PagePrinterRow["media"]): string {
+  return t(
+    media === "iso_a4_210x297mm"
+      ? "printers.invoice_printer_a4"
+      : "printers.invoice_printer_letter",
+  );
 }
 
 function detailsSection(section: {
@@ -275,6 +286,18 @@ export class PrintersScreen extends LitElement {
         overflow-wrap: anywhere;
         --wt-color-text: var(--wt-color-primary-text);
       }
+      wt-data-table::part(page-printer-hint) {
+        display: block;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      wt-data-table::part(page-printer-test-page) {
+        display: block;
+        padding-inline-start: var(--wt-space-4);
+        font-size: var(--wt-font-size-sm);
+        max-width: calc(2 * var(--wt-cell-name-max-width));
+        white-space: normal;
+      }
       /* The table is never narrower than its content (min-width: max-content, wt-data-table.ts),
          so a long reason gets a width cap to make it wrap. */
       wt-data-table::part(job-reason) {
@@ -394,6 +417,18 @@ export class PrintersScreen extends LitElement {
       }
       .footer-start {
         flex-wrap: wrap;
+      }
+      /* The test page's note sits under the buttons, across the footer's width. */
+      .a4-footer {
+        flex: 1;
+        display: grid;
+        gap: var(--wt-space-2);
+      }
+      .test-page-note {
+        font-size: var(--wt-font-size-sm);
+      }
+      .test-page-note p {
+        margin: 0;
       }
       /* A row of fields is one line of the form: in a modal it takes a field's width, so the button
          beside a field stays beside it instead of at the modal's far edge. */
@@ -593,10 +628,16 @@ export class PrintersScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  /** The session holds `hardware.manage`: the A4 printers panel offers its actions. */
+  /** The session holds `hardware.manage`: A4 printers offer their actions. */
   @property({ type: Boolean }) canManage = false;
   /** Whether the person may open a dashboard screen; a Used by name links only to one they may. */
   @property({ attribute: false }) canOpen: (screen: string) => boolean = () => false;
+  /** How long to wait between reads of an A4 test page that is still out. */
+  @property({ attribute: false }) testPagePollMs = 2_000;
+  readonly #testPages = new PageTestPages(this, {
+    api: () => this.api,
+    pollMs: () => this.testPagePollMs,
+  });
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -774,6 +815,8 @@ export class PrintersScreen extends LitElement {
     port: string;
     saving: boolean;
     error: string | null;
+    /** A refusal the server tied to the name field, shown under it until the name changes. */
+    nameRefusal: string | null;
   } | null = null;
   #detailEditScope?: DraftScope<DetailEditValues>;
   /** What the form opened with, or last saved. */
@@ -1017,6 +1060,14 @@ export class PrintersScreen extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues): void {
+    // A new A4 list supersedes a failed test-page read's message, as a fresh read of the rows.
+    if (changed.has("pagePrinters")) this.#testPages.readError = null;
+    if (
+      changed.has("canManage") &&
+      !this.canManage &&
+      this.pagePrinters.some(({ id }) => id === this.detailEdit?.id)
+    )
+      this.#disposeDetailDrafts();
     if (changed.has("commands") || changed.has("printers")) {
       const forgets = new Map<string, [string, TrackedCommand]>();
       for (const entry of Object.entries(this.commands))
@@ -1529,8 +1580,6 @@ export class PrintersScreen extends LitElement {
       this.refreshErrorKey = codeOf(error);
     }
   }
-
-  readonly #rereadPagePrinters = (): Promise<void> => this.#readPagePrinters();
 
   async #readPagePrinters(): Promise<void> {
     const started = ++this.#pagePrinterReads;
@@ -2567,7 +2616,7 @@ export class PrintersScreen extends LitElement {
         @click=${(event: Event) => {
           const button = event.currentTarget as HTMLElement;
           this.#showPrinterStatus(p.id, this.#rowMenuButton(button) ?? button);
-          this.#openDetailEdit(p);
+          this.#openDetailEdit(p.id, this.#savedEditValues(p));
         }}
         >${t("action.edit")}</wt-button
       >
@@ -2668,14 +2717,9 @@ export class PrintersScreen extends LitElement {
     };
   }
 
-  #openDetailEdit(printer: Printer): void {
+  #openDetailEdit(id: string, saved: DetailEditValues): void {
     this.#detailEditScope?.dispose();
-    this.detailEdit = {
-      id: printer.id,
-      ...this.#savedEditValues(printer),
-      saving: false,
-      error: null,
-    };
+    this.detailEdit = { id, ...saved, saving: false, error: null, nameRefusal: null };
     this.#detailEditBaseline = this.#detailEditValues();
     this.#detailEditScope = draftScopeFor<DetailEditValues>(this, {
       id: {},
@@ -2683,11 +2727,11 @@ export class PrintersScreen extends LitElement {
       snapshot: (value) => ({ ...value }),
       equal: (a, b) => a.name === b.name && a.host === b.host && a.port === b.port,
       restore: (value) => {
-        this.detailEdit = { ...this.detailEdit!, ...value, error: null };
+        this.detailEdit = { ...this.detailEdit!, ...value, error: null, nameRefusal: null };
       },
     }).scope;
     void this.updateComplete.then(() => {
-      if (this.detailEdit?.id === printer.id)
+      if (this.detailEdit?.id === id)
         this.renderRoot.querySelector<HTMLElement>('[name="printer-detail-name"]')?.focus();
     });
   }
@@ -2698,7 +2742,11 @@ export class PrintersScreen extends LitElement {
       if (scope !== this.#detailEditScope) return;
       this.#disposeDetailDrafts();
       void this.updateComplete.then(() => {
-        this.renderRoot.querySelector<HTMLElement>("[data-test=edit-printer-details]")?.focus();
+        this.renderRoot
+          .querySelector<HTMLElement>(
+            "[data-test=edit-printer-details], [data-test=edit-page-printer-details]",
+          )
+          ?.focus();
       });
     };
     const coordinator = leaveCoordinatorFor(this);
@@ -2707,13 +2755,13 @@ export class PrintersScreen extends LitElement {
     else proceed();
   }
 
-  #detailEditErrors(printer: Printer): DetailEditErrors {
+  /** Only a network receipt printer has an address and port to check. */
+  #detailEditErrors(id: string, network: boolean): DetailEditErrors {
     const draft = this.detailEdit;
-    if (draft?.id !== printer.id) return { name: "", host: "", port: "" };
+    if (draft?.id !== id) return { name: "", host: "", port: "" };
     const port = draft.port.trim();
-    const network = printer.transport === "network_tcp";
     return {
-      name: draft.name.trim() ? "" : t("form.name_required"),
+      name: draft.name.trim() ? (draft.nameRefusal ?? "") : t("form.name_required"),
       host: network && !draft.host.trim() ? t("printers.host_required") : "",
       port:
         network && port && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
@@ -2727,7 +2775,7 @@ export class PrintersScreen extends LitElement {
     if (!scope || saveActionState(scope).unchanged) return;
     const draft = this.detailEdit;
     if (draft?.id !== printer.id || draft.saving) return;
-    if (hasErrors(this.#detailEditErrors(printer))) return;
+    if (hasErrors(this.#detailEditErrors(printer.id, printer.transport === "network_tcp"))) return;
     const values = this.#detailEditValues();
     const baseline = this.#detailEditBaseline!;
     const saved = this.#savedEditValues(printer);
@@ -2750,35 +2798,87 @@ export class PrintersScreen extends LitElement {
       this.detailEdit = { ...this.detailEdit!, saving: false, error: codeMessage(codeOf(error)) };
       return;
     }
+    await this.#afterDetailSave(scope, values, () => this.#load());
+  }
+
+  /** The form stays open while this person typed more during the save. */
+  async #afterDetailSave(
+    scope: DraftScope<DetailEditValues>,
+    values: DetailEditValues,
+    reload: () => Promise<void>,
+  ): Promise<void> {
     if (!this.isConnected || scope !== this.#detailEditScope) return;
     scope.commit(values);
     this.#detailEditBaseline = values;
     if (scope.isDirty()) this.detailEdit = { ...this.detailEdit!, saving: false, error: null };
     else this.#disposeDetailDrafts();
-    await this.#load();
+    await reload();
   }
 
-  async #setDetailActive(printer: Printer, active: boolean): Promise<void> {
+  /** The details' Active switch, for either kind: a refusal puts the switch back and shows under it. */
+  async #setDetailActive(
+    printer: { id: string; active: boolean },
+    active: boolean,
+    how: { switchName: string; write: () => Promise<unknown>; reload: () => Promise<void> },
+  ): Promise<void> {
     if (this.detailActiveSavingIds.has(printer.id) || active === printer.active) return;
-    this.detailActiveSavingIds = new Set([...this.detailActiveSavingIds, printer.id]);
     this.detailActiveError = null;
+    const written = await this.#writeActive(printer.id, how.write, (code) => {
+      if (this.selectedPrinterId !== printer.id) return;
+      this.detailActiveError = code;
+      const toggle = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+        `[name="${how.switchName}"]`,
+      );
+      if (toggle) toggle.checked = printer.active;
+    });
+    if (written) await how.reload();
+  }
+
+  /** Writes a printer's Active state while it counts as saving; false when it was refused. */
+  async #writeActive(
+    id: string,
+    write: () => Promise<unknown>,
+    refused: (code: string) => void,
+  ): Promise<boolean> {
+    this.detailActiveSavingIds = new Set([...this.detailActiveSavingIds, id]);
     try {
-      await this.api.updatePrinter(printer.id, { active });
+      await write();
+      return true;
     } catch (error) {
-      if (this.selectedPrinterId === printer.id) {
-        this.detailActiveError = codeOf(error);
-        const toggle = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-switch"]>(
-          '[name="printer-detail-active"]',
-        );
-        if (toggle) toggle.checked = printer.active;
-      }
-      return;
+      refused(codeOf(error));
+      return false;
     } finally {
       this.detailActiveSavingIds = new Set(
-        [...this.detailActiveSavingIds].filter((id) => id !== printer.id),
+        [...this.detailActiveSavingIds].filter((saving) => saving !== id),
       );
     }
-    await this.#load();
+  }
+
+  async #savePagePrinterEdit(row: PagePrinterRow): Promise<void> {
+    const scope = this.#detailEditScope;
+    if (!scope || saveActionState(scope).unchanged) return;
+    const draft = this.detailEdit;
+    if (draft?.id !== row.id || draft.saving || !this.canManage) return;
+    if (hasErrors(this.#detailEditErrors(row.id, false))) return;
+    const values = this.#detailEditValues();
+    this.detailEdit = { ...draft, saving: true, error: null, nameRefusal: null };
+    this.detailActiveError = null;
+    try {
+      await this.api.updatePagePrinter(row.id, { name: values.name });
+    } catch (error) {
+      if (!this.isConnected || scope !== this.#detailEditScope) return;
+      const code = codeOf(error);
+      const field = (error as { params?: { field?: unknown } }).params?.field;
+      const onName = code === "management.request_invalid" && field === "name";
+      this.detailEdit = {
+        ...this.detailEdit!,
+        saving: false,
+        error: onName ? null : codeMessage(code),
+        nameRefusal: onName ? codeMessage(code) : null,
+      };
+      return;
+    }
+    await this.#afterDetailSave(scope, values, () => this.#refreshPagePrinters());
   }
 
   /** Closing the details asks first when a detail draft is dirty, through the address change. */
@@ -2795,13 +2895,20 @@ export class PrintersScreen extends LitElement {
 
   #renderPrinterDetails(): TemplateResult {
     const p = this.printers.find(({ id }) => id === this.selectedPrinterId);
+    const a4 = p ? undefined : this.pagePrinters.find(({ id }) => id === this.selectedPrinterId);
     const editing = p !== undefined && this.detailEdit?.id === p.id;
-    const errors = editing ? this.#detailEditErrors(p) : undefined;
+    const errors = editing
+      ? this.#detailEditErrors(p.id, p.transport === "network_tcp")
+      : undefined;
+    const a4Errors =
+      a4 && this.canManage && this.detailEdit?.id === a4.id
+        ? this.#detailEditErrors(a4.id, false)
+        : undefined;
     return html`<wt-modal
       size="standard"
       data-test="printer-details-modal"
-      heading=${p?.name ?? nothing}
-      aria-label=${p ? nothing : t("printers.list_title")}
+      heading=${p?.name ?? a4?.name ?? nothing}
+      aria-label=${p || a4 ? nothing : t("printers.list_title")}
       .open=${this.selectedPrinterId !== null}
       .opener=${this.#detailsOpener}
       .beforeClose=${this.#beforeDetailsClose}
@@ -2828,26 +2935,175 @@ export class PrintersScreen extends LitElement {
             ? nothing
             : p
               ? errors
-                ? this.#renderDetailEditForm(p, errors)
+                ? this.#renderDetailEditForm(p.id, p.transport === "network_tcp", errors)
                 : this.#renderPrinterStatus(p)
-              : html`<p role="status">
-                  ${this.loading ? t("printers.table_loading") : codeMessage("printer.not_found")}
-                </p>`
+              : a4
+                ? a4Errors
+                  ? this.#renderDetailEditForm(a4.id, false, a4Errors)
+                  : this.#renderPagePrinterDetails(a4)
+                : html`<p role="status">
+                    ${this.loading ? t("printers.table_loading") : codeMessage("printer.not_found")}
+                  </p>`
         }
       </div>
-      ${p && errors ? this.#renderDetailEditActions(p, errors) : this.#renderDetailViewActions(p)}
+      ${
+        p && errors
+          ? this.#renderDetailEditActions(errors, () => void this.#saveDetailEdit(p))
+          : a4 && a4Errors
+            ? this.#renderDetailEditActions(a4Errors, () => void this.#savePagePrinterEdit(a4))
+            : a4
+              ? this.#renderPagePrinterActions(a4)
+              : this.#renderDetailViewActions(p)
+      }
     </wt-modal>`;
+  }
+
+  #closeDetailsButton(): TemplateResult {
+    return html`<wt-button
+      data-test="printer-details-close"
+      @click=${(event: Event) =>
+        void (event.currentTarget as HTMLElement).closest("wt-modal")?.requestClose("cancel")}
+      >${t("action.close")}</wt-button
+    >`;
+  }
+
+  /** An A4 printer offers Print test page and Edit; it has no calibration and no delete. */
+  #renderPagePrinterActions(row: PagePrinterRow): TemplateResult {
+    const pages = this.#testPages;
+    const refused = pages.actionErrorFrom === row.id ? pages.actionError : null;
+    const note = pages.noteFor(row);
+    const readError = pages.readError;
+    return html`<div slot="footer" class="a4-footer">
+      <wt-form-actions>
+        <div slot="cancel" class="footer-start">${this.#closeDetailsButton()}</div>
+        ${
+          this.canManage
+            ? html`<wt-button
+                  slot="secondary"
+                  data-test=${`print-page-test-${row.id}`}
+                  ?disabled=${pages.unavailable(row)}
+                  ?loading=${pages.sending.has(row.id)}
+                  @click=${() => void pages.print(row)}
+                  >${t("printers.print_test_page")}</wt-button
+                ><wt-button
+                  data-test="edit-page-printer-details"
+                  @click=${() => {
+                    this.#openDetailEdit(row.id, { name: row.name, host: "", port: "" });
+                  }}
+                  >${t("action.edit")}</wt-button
+                >`
+            : nothing
+        }
+      </wt-form-actions>
+      ${
+        note === nothing && refused === null && readError === null
+          ? nothing
+          : html`<div class="test-page-note">
+              ${
+                refused === null
+                  ? nothing
+                  : html`<p role="alert" data-test="page-printer-test-page-error">
+                      ${codeMessage(refused)}
+                    </p>`
+              }
+              ${
+                readError === null
+                  ? nothing
+                  : html`<p role="alert" data-test="page-printer-test-page-read-error">
+                      ${t("printers.refresh_failed")} ${codeMessage(readError)}
+                    </p>`
+              }
+              ${note}
+            </div>`
+      }
+    </div>`;
+  }
+
+  #renderPagePrinterDetails(row: PagePrinterRow): TemplateResult {
+    const saving = this.detailActiveSavingIds.has(row.id);
+    return html`<section data-test="page-printer-status">
+      <div class="status-grid">
+        ${detailsSection({
+          id: "printer-details-status",
+          heading: t("printers.status"),
+          dataTest: "printer-section-status",
+          before: html`<div class="status-actions">
+              <wt-switch
+                name="page-printer-detail-active"
+                label=${t("printers.status_active")}
+                .checked=${live(row.active)}
+                ?disabled=${!row.active || !this.canManage || saving}
+                @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+                  event.stopPropagation();
+                  // The server refuses switching an A4 printer back on; Add a printer does that.
+                  if (event.detail.checked || !this.canManage) return;
+                  void this.#setDetailActive(row, false, {
+                    switchName: "page-printer-detail-active",
+                    write: () => this.api.updatePagePrinter(row.id, { active: false }),
+                    reload: () => this.#refreshPagePrinters(),
+                  });
+                }}
+              ></wt-switch>
+            </div>
+            ${
+              row.active
+                ? nothing
+                : html`<p data-test="page-printer-detail-rediscover">
+                    ${t("printers.invoice_printer_rediscover")}
+                  </p>`
+            }
+            ${
+              this.detailActiveError
+                ? html`<p role="alert" data-test="printer-detail-active-error">
+                    ${codeMessage(this.detailActiveError)}
+                  </p>`
+                : nothing
+            }`,
+          rows: [],
+        })}
+        ${detailsSection({
+          id: "printer-details-connection",
+          heading: t("printers.connection"),
+          dataTest: "printer-section-connection",
+          rows: [
+            {
+              label: t("printers.invoice_printer_agent"),
+              value: row.agentName ?? t("printers.invoice_printer_agent_gone"),
+              dataTest: "page-printer-detail-agent",
+            },
+            {
+              label: t("printers.address"),
+              value: `${row.host}:${row.port}${row.resourcePath}`,
+              dataTest: "page-printer-detail-address",
+            },
+          ],
+        })}
+        ${detailsSection({
+          id: "printer-details-paper",
+          heading: t("printers.invoice_printer_paper"),
+          dataTest: "printer-section-paper",
+          rows: [
+            {
+              label: t("printers.invoice_printer_paper"),
+              value: pageSize(row.media),
+              dataTest: "page-printer-detail-paper",
+            },
+          ],
+        })}
+        ${this.#renderUsedBy(
+          this.printerProfiles
+            .filter((offer) => offer.pagePrinterId === row.id && offer.roles.includes("invoice"))
+            .map((offer) => ({ ...offer, roles: ["invoice"] })),
+          [],
+        )}
+      </div>
+    </section>`;
   }
 
   #renderDetailViewActions(p: Printer | undefined): TemplateResult {
     return html`<wt-form-actions slot="footer">
       <div slot="cancel" class="footer-start">
-        <wt-button
-          data-test="printer-details-close"
-          @click=${(event: Event) =>
-            void (event.currentTarget as HTMLElement).closest("wt-modal")?.requestClose("cancel")}
-          >${t("action.close")}</wt-button
-        >
+        ${this.#closeDetailsButton()}
         ${
           p
             ? html`<wt-button
@@ -2873,7 +3129,7 @@ export class PrintersScreen extends LitElement {
               ><wt-button
                 data-test="edit-printer-details"
                 @click=${() => {
-                  this.#openDetailEdit(p);
+                  this.#openDetailEdit(p.id, this.#savedEditValues(p));
                 }}
                 >${t("action.edit")}</wt-button
               >`
@@ -2882,13 +3138,18 @@ export class PrintersScreen extends LitElement {
     </wt-form-actions>`;
   }
 
-  #renderDetailEditForm(p: Printer, errors: DetailEditErrors): TemplateResult {
+  #renderDetailEditForm(id: string, network: boolean, errors: DetailEditErrors): TemplateResult {
     const draft = this.detailEdit!;
     const change = (field: keyof DetailEditValues) => (event: CustomEvent<{ value: string }>) => {
       if (!(event.currentTarget as HTMLElement).isConnected) return;
       event.stopPropagation();
-      if (this.detailEdit?.id !== p.id) return;
-      this.detailEdit = { ...this.detailEdit, [field]: event.detail.value, error: null };
+      if (this.detailEdit?.id !== id) return;
+      this.detailEdit = {
+        ...this.detailEdit,
+        [field]: event.detail.value,
+        error: null,
+        ...(field === "name" ? { nameRefusal: null } : {}),
+      };
       this.#detailEditScope?.changed();
     };
     return html`<div
@@ -2908,7 +3169,7 @@ export class PrintersScreen extends LitElement {
         @wt-change=${change("name")}
       ></wt-input>
       ${
-        p.transport === "network_tcp"
+        network
           ? html`<wt-input
                 name="printer-detail-host"
                 label=${t("printers.host")}
@@ -2934,10 +3195,10 @@ export class PrintersScreen extends LitElement {
     </div>`;
   }
 
-  #renderDetailEditActions(p: Printer, errors: DetailEditErrors): TemplateResult {
+  #renderDetailEditActions(errors: DetailEditErrors, save: () => void): TemplateResult {
     const draft = this.detailEdit!;
     const invalid = hasErrors(errors);
-    const save = saveActionState(this.#detailEditScope);
+    const action = saveActionState(this.#detailEditScope);
     return html`<wt-form-actions
       slot="footer"
       .error=${bottomMessage(draft.error, invalid ? t("form.fix_fields") : null)}
@@ -2950,10 +3211,10 @@ export class PrintersScreen extends LitElement {
         >${t("action.cancel")}</wt-button
       >
       <wt-button
-        variant=${save.variant}
+        variant=${action.variant}
         data-test="save-printer-details"
-        ?disabled=${save.unchanged || draft.saving || invalid}
-        @click=${() => void this.#saveDetailEdit(p)}
+        ?disabled=${action.unchanged || draft.saving || invalid}
+        @click=${save}
         >${t("action.save")}</wt-button
       >
     </wt-form-actions>`;
@@ -3053,7 +3314,12 @@ export class PrintersScreen extends LitElement {
                 ?disabled=${this.detailActiveSavingIds.has(p.id)}
                 @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
                   event.stopPropagation();
-                  void this.#setDetailActive(p, event.detail.checked);
+                  const active = event.detail.checked;
+                  void this.#setDetailActive(p, active, {
+                    switchName: "printer-detail-active",
+                    write: () => this.api.updatePrinter(p.id, { active }),
+                    reload: () => this.#load(),
+                  });
                 }}
               ></wt-switch>
             </div>
@@ -3103,20 +3369,22 @@ export class PrintersScreen extends LitElement {
               </div>`
             : nothing,
         })}
-        ${this.#renderUsedBy(p)}
+        ${this.#renderUsedBy(
+          this.printerProfiles.filter((offer) => offer.printerId === p.id),
+          this.printerStations.filter((station) => station.printerId === p.id),
+        )}
       </div>
     </section>`;
   }
 
-  #renderUsedBy(p: Printer): TemplateResult {
+  /** The profiles, their departments and the prep stations that use one printer. */
+  #renderUsedBy(profiles: PrinterProfileOffer[], stations: PrinterStationName[]): TemplateResult {
     const link = (screen: string, href: string, name: string) =>
       this.canOpen(screen) ? html`<a href=${href}>${name}</a>` : name;
-    const profiles = this.printerProfiles.filter((offer) => offer.printerId === p.id);
     const departments = new Map<string, string>();
     for (const { departmentId, departmentName } of profiles)
       if (departmentId !== null && departmentName !== null)
         departments.set(departmentId, departmentName);
-    const stations = this.printerStations.filter((station) => station.printerId === p.id);
     const rows: SettingsRow[] = [];
     if (profiles.length > 0)
       rows.push({
@@ -3187,56 +3455,103 @@ export class PrintersScreen extends LitElement {
 
   #renderPrintersSection(): TemplateResult {
     const seen = new Map(this.printers.map((p) => [p.id, this.#printerObservation(p)]));
-    const columns: DataTableColumn<Printer>[] = [
+    const pages = this.#testPages;
+    const rows: PrinterTableRow[] = [
+      ...this.printers.map((printer) => ({ kind: "receipt" as const, printer })),
+      ...this.pagePrinters.map((row) => ({ kind: "a4" as const, row })),
+    ];
+    const idOf = (r: PrinterTableRow) => (r.kind === "receipt" ? r.printer.id : r.row.id);
+    const nameOf = (r: PrinterTableRow) => (r.kind === "receipt" ? r.printer.name : r.row.name);
+    const activeOf = (r: PrinterTableRow) =>
+      r.kind === "receipt" ? r.printer.active : r.row.active;
+    const columns: DataTableColumn<PrinterTableRow>[] = [
       {
         key: "name",
         label: t("printers.name"),
-        sortValue: (p) => p.name,
-        cell: (p) =>
+        sortValue: nameOf,
+        cell: (r) =>
           html`<wt-button
-            variant="ghost"
-            part="printer-name"
-            data-test=${`printer-row-${p.id}`}
-            @click=${(event: Event) =>
-              this.#showPrinterStatus(p.id, event.currentTarget as HTMLElement)}
-            >${p.name}</wt-button
-          >`,
+              variant="ghost"
+              part="printer-name"
+              data-test=${`printer-row-${idOf(r)}`}
+              @click=${(event: Event) =>
+                this.#showPrinterStatus(idOf(r), event.currentTarget as HTMLElement)}
+              >${nameOf(r)}</wt-button
+            >${r.kind === "a4" ? pages.noteFor(r.row) : nothing}`,
+      },
+      {
+        key: "paper",
+        choosable: "shown",
+        label: t("printers.invoice_printer_paper"),
+        cell: (r) =>
+          r.kind === "receipt"
+            ? html`<span data-test=${`printer-paper-${r.printer.id}`}
+                >${t(
+                  r.printer.paperWidth === "58mm"
+                    ? "printers.paper_roll_58"
+                    : "printers.paper_roll_80",
+                )}</span
+              >`
+            : html`<span data-test=${`page-printer-paper-${r.row.id}`}
+                >${pageSize(r.row.media)}</span
+              >`,
       },
       {
         key: "agent",
         choosable: "shown",
         label: t("printers.last_seen_by"),
-        cell: (p) =>
-          html`<span data-test=${`printer-agent-${p.id}`}>
+        cell: (r) => {
+          if (r.kind === "a4")
+            return html`<span data-test=${`page-printer-agent-${r.row.id}`}
+              >${r.row.agentName ?? t("printers.invoice_printer_agent_gone")}</span
+            >`;
+          const p = r.printer;
+          return html`<span data-test=${`printer-agent-${p.id}`}>
               ${p.transport === "cloud_poll" ? "—" : (seen.get(p.id)?.agentName ?? t("printers.agent_unknown"))} </span
-            >${this.#seenStatus(p.id, seen.get(p.id))}`,
+            >${this.#seenStatus(p.id, seen.get(p.id))}`;
+        },
       },
       {
         key: "pending",
         choosable: "shown",
         label: t("printers.pending_jobs"),
-        sortValue: (p) => p.pendingJobs,
-        cell: (p) => p.pendingJobs,
+        sortValue: (r) => (r.kind === "receipt" ? r.printer.pendingJobs : null),
+        cell: (r) =>
+          r.kind === "receipt"
+            ? r.printer.pendingJobs
+            : html`<span data-test=${`page-printer-pending-${r.row.id}`}>—</span>`,
       },
       {
         key: "status",
         choosable: "shown",
         label: t("printers.status"),
-        cell: (p) => {
-          const status = p.active ? t("printers.status_active") : t("printers.status_disabled");
-          const command = this.#printerCommands.get(p.id);
+        cell: (r) => {
+          const status = activeOf(r) ? t("printers.status_active") : t("printers.status_disabled");
+          if (r.kind === "a4")
+            return html`<span data-test=${`page-printer-status-${r.row.id}`}
+              >${status}${
+                r.row.active
+                  ? nothing
+                  : html`<span
+                      part="page-printer-hint"
+                      data-test=${`page-printer-rediscover-${r.row.id}`}
+                      >${t("printers.invoice_printer_rediscover")}</span
+                    >`
+              }</span
+            >`;
+          const command = this.#printerCommands.get(r.printer.id);
           return command === undefined
             ? status
             : html`${status}
                 <div part="bluetooth-actions">
-                  ${this.#renderCommand(command[0], command[1], `printer-command-${p.id}`)}
+                  ${this.#renderCommand(command[0], command[1], `printer-command-${r.printer.id}`)}
                 </div>`;
         },
         filter: {
           label: t("printers.status"),
           allLabel: t("printers.filter_all"),
           initial: "active",
-          value: (p) => (p.active ? "active" : "disabled"),
+          value: (r) => (activeOf(r) ? "active" : "disabled"),
           options: [
             { value: "active", label: t("printers.status_active") },
             { value: "disabled", label: t("printers.status_disabled") },
@@ -3247,14 +3562,22 @@ export class PrintersScreen extends LitElement {
         key: "lastPrint",
         choosable: "shown",
         label: t("printers.last_print"),
-        sortValue: (p) => p.lastPrintAt,
-        cell: (p) => this.#timestamp(p.lastPrintAt),
+        sortValue: (r) => (r.kind === "receipt" ? r.printer.lastPrintAt : null),
+        cell: (r) =>
+          r.kind === "receipt"
+            ? this.#timestamp(r.printer.lastPrintAt)
+            : html`<span data-test=${`page-printer-last-print-${r.row.id}`}>—</span>`,
       },
       {
         key: "actions",
         label: t("printers.actions"),
         pinned: "end",
-        cell: (p) => this.#printerActions(p),
+        cell: (r) =>
+          r.kind === "receipt"
+            ? this.#printerActions(r.printer)
+            : this.canManage
+              ? this.#pagePrinterRowActions(r.row)
+              : nothing,
       },
     ];
     return html`<section>
@@ -3279,21 +3602,71 @@ export class PrintersScreen extends LitElement {
         filtersClearAllLabel=${t("table.filters_clear_all")}
         filtersCloseLabel=${t("table.filters_close")}
         aria-label=${t("printers.list_title")}
-        .rows=${this.printers}
+        .rows=${rows}
         .columns=${columns}
-        .rowKey=${(p: Printer) => p.id}
+        .rowKey=${(r: PrinterTableRow) => `${r.kind}:${idOf(r)}`}
         .loading=${this.loading}
         .loadingMessage=${t("printers.table_loading")}
         .emptyMessage=${t("printers.no_printers")}
-        >${this.printers.length === 0 ? this.#renderAddPrinter("empty-action") : nothing}</wt-data-table
+        >${rows.length === 0 ? this.#renderAddPrinter("empty-action") : nothing}</wt-data-table
       >
-      <dashboard-page-printers-panel
-        .api=${this.api}
-        .rows=${this.pagePrinters}
-        .canManage=${this.canManage}
-        .reload=${this.#rereadPagePrinters}
-      ></dashboard-page-printers-panel>
+      ${
+        pages.actionError === null
+          ? nothing
+          : html`<p class="error" role="alert" data-test="page-printers-action-error">
+              ${codeMessage(pages.actionError)}
+            </p>`
+      }
+      ${
+        pages.readError === null
+          ? nothing
+          : html`<p class="error" role="alert" data-test="page-printers-read-error">
+              ${t("printers.refresh_failed")} ${codeMessage(pages.readError)}
+            </p>`
+      }
     </section>`;
+  }
+
+  /** An A4 printer's row menu: Edit, Print test page and Disable; it has no delete or calibration. */
+  #pagePrinterRowActions(row: PagePrinterRow): TemplateResult {
+    const pages = this.#testPages;
+    return html`<dashboard-row-actions .label=${fill("printers.row_actions", { name: row.name })}>
+      <wt-button
+        data-test=${`edit-page-printer-${row.id}`}
+        @click=${(event: Event) => {
+          const button = event.currentTarget as HTMLElement;
+          this.#showPrinterStatus(row.id, this.#rowMenuButton(button) ?? button);
+          this.#openDetailEdit(row.id, { name: row.name, host: "", port: "" });
+        }}
+        >${t("action.edit")}</wt-button
+      >
+      <wt-button
+        data-test=${`print-test-page-${row.id}`}
+        ?disabled=${pages.unavailable(row)}
+        ?loading=${pages.sending.has(row.id)}
+        @click=${() => void pages.print(row)}
+        >${t("printers.print_test_page")}</wt-button
+      >
+      <wt-button
+        variant=${row.active ? "danger" : "secondary"}
+        data-test=${`disable-page-printer-${row.id}`}
+        ?disabled=${!row.active || this.detailActiveSavingIds.has(row.id)}
+        @click=${() => void this.#disablePagePrinterFromRow(row)}
+        >${t("printers.disable")}</wt-button
+      >
+    </dashboard-row-actions>`;
+  }
+
+  /** The row menu's Disable: a refusal shows under the table, where the menu was. */
+  async #disablePagePrinterFromRow(row: PagePrinterRow): Promise<void> {
+    if (!row.active || this.detailActiveSavingIds.has(row.id) || !this.canManage) return;
+    this.#testPages.setActionError(null);
+    const written = await this.#writeActive(
+      row.id,
+      () => this.api.updatePagePrinter(row.id, { active: false }),
+      (code) => this.#testPages.setActionError(code),
+    );
+    if (written) await this.#refreshPagePrinters();
   }
 
   #renderTabActions(): TemplateResult {

@@ -335,7 +335,7 @@ checked on the box).
 
 ## A405 — printer details and the print queue
 
-- **A405 — printer details and the print queue (owner, 2026-10-08; open; lane B: PR 1, details in a window, landed #2492; PR 2, Used by, landed #2511; PRs 3–4 to come).** A modal means the printer page is no longer a sub-page, so the owner
+- **A405 — printer details and the print queue (owner, 2026-10-08; open; lane B: PR 1, details in a window, landed #2492; PR 2, Used by, landed #2511; PR 3, one table, landed #2661; PR 4 to come).** A modal means the printer page is no longer a sub-page, so the owner
   dropped lane B's A398 redraw of the printer page's heading (2026-10-08).
   3. **No way to pair a Bluetooth printer again after Unpair.** A succeeded Unpair switches the
      printer off (C109, #960), and the only way back is adding it again as a new printer. Offer
@@ -370,12 +370,6 @@ checked on the box).
      number. A job whose version the running code cannot read falls back to today's behaviour
      (its own printer, or one of the same paper width), so an upgrade never needs conversion code
      and can only narrow the printers offered for older jobs.
-  6. **One table for every printer** (owner, 2026-10-14). The Printers tab draws A4 printers in a
-     second table under "A4 printers", with other columns and its own indentation. They
-     are stored apart (`page_printers`, `packages/db/src/schema/page-printers.ts`) and drawn by their
-     own panel (`apps/dashboard/src/widgets/page-printers-panel.ts`), but the screen need not follow
-     that: one table, told apart by a Paper column ("80 mm roll", "A4"), every row opening the same
-     details modal. An A4 printer's details differ (no calibration; a test page; A4 or Letter).
 
 ## A Used by link to a prep station opens the Stations tab, not the station
 
