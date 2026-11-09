@@ -9723,7 +9723,17 @@ export class TillApp extends LitElement {
     this.invoicePrinterReadFailed = !answered;
     if (answered && pick === this.#invoicePrinterPick) {
       this.invoiceEquipment = this.deviceEquipment?.roles.find((role) => role.role === "invoice");
-      if (!this.invoicePrinterBlocked) this.invoicePrinterValue = undefined;
+      if (!this.invoicePrinterBlocked) {
+        this.invoicePrinterValue = undefined;
+        if (
+          this.invoiceEquipment?.resolved?.id !==
+          this.invoiceDeliveries?.actions.print?.printers[0]?.id
+        ) {
+          this.#invoicePrinterSaved = true;
+          this.invoicePrinterBlocked = true;
+          await this.#readInvoiceDeliveries(id, session, visit);
+        }
+      }
     }
   }
 

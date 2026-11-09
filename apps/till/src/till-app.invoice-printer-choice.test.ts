@@ -355,15 +355,22 @@ it("explains a deleted printer even when folded, and refreshes the row's choices
 });
 
 it("reopening shows the saved choice after Equipment changed elsewhere", async () => {
+  let selected = office;
   const { el } = await sold({
-    setDeviceEquipment: vi.fn().mockResolvedValue(equipment(bar)),
-    getInvoiceDeliveries: vi.fn().mockResolvedValue(delivery(bar)),
+    setDeviceEquipment: vi.fn(async () => {
+      selected = bar;
+      return equipment(bar);
+    }),
+    getDeviceEquipment: vi.fn(async () => equipment(selected)),
+    getInvoiceDeliveries: vi.fn(async () => delivery(selected)),
   });
   await choose(el, bar.id);
   await userEvent.click(part(el, "invoice-printer-toggle")!);
+  selected = office;
   await userEvent.click(part(el, "invoice-printer-toggle")!);
   await flush(el);
   expect(ticket(el).shadowRoot!.querySelector("wt-combobox")!.value).toBe("office");
+  expect(part(el, "print-invoice")!.textContent!.trim()).toBe("Print on Office");
 });
 
 it("an Equipment dialog choice updates the invoice row and its Print destination", async () => {
