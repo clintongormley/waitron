@@ -4280,9 +4280,9 @@ Calibrate printer and Edit at the end. Edit turns the modal into one form of the
 network receipt printer, its host and port; that form has no Close button, its footer reads Cancel and Save
 with the one bottom message, Cancel returns to the details, and Escape closes the window. The
 list's Edit opens the details in edit mode with the name focused. A dirty form asks before Cancel,
-Escape or leaving the page discards it. An A4 printer opens the same modal with a Paper group, Print
-test page and Edit in its footer and no Delete or Calibrate; its Active switch only switches off,
-and its Edit form holds the name alone.
+Escape or leaving the page discards it. An A4 printer opens the same modal with a Paper group and no
+Delete or Calibrate; Print test page and Edit sit in its footer only when the screen's `canManage`
+is set. Its Active switch only switches off, and its Edit form holds the name alone.
 
 **A screen that isn't itself a navigable destination is the whole page in a modal, not just its
 edits.** `dashboard-profile-screen` (Your profile) has no sidebar entry and is reached from the
