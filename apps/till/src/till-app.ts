@@ -9411,7 +9411,6 @@ export class TillApp extends LitElement {
    * another, which the counter store cannot identify.
    */
   async #onReprint(): Promise<void> {
-    if (this.#invoicePrinterChoice?.role === "receipt" && this.invoicePrinterBlocked) return;
     if (this.historicalReceipt?.kind === "refund") {
       if (this.refundPrintBusy || this.findBillBusy || this.reprintAsking !== null) return;
       if (this.receiptLanguages.length > 1)
@@ -9728,11 +9727,7 @@ export class TillApp extends LitElement {
       if (!this.#ticketIsCurrent(id, session, visit) || read !== this.#invoiceDeliveryReads) return;
       this.invoiceDeliveries = status;
       this.invoiceDeliveriesReadFailed = false;
-      if (
-        this.invoicePrinterBlocked &&
-        this.#invoicePrinterSaved &&
-        this.#invoicePrinterChoice?.role !== "receipt"
-      ) {
+      if (this.invoicePrinterBlocked && this.#invoicePrinterSaved) {
         const offered = status?.actions.print?.printers[0];
         const confirmed =
           status != null &&
@@ -9743,11 +9738,7 @@ export class TillApp extends LitElement {
     } catch {
       if (!this.#ticketIsCurrent(id, session, visit) || read !== this.#invoiceDeliveryReads) return;
       this.invoiceDeliveriesReadFailed = true;
-      if (
-        this.invoicePrinterBlocked &&
-        this.#invoicePrinterSaved &&
-        this.#invoicePrinterChoice?.role !== "receipt"
-      )
+      if (this.invoicePrinterBlocked && this.#invoicePrinterSaved)
         this.invoicePrinterError = t("invoice.delivery_read_failed");
     }
     this.#scheduleDeliveryReread(id, session, visit);
@@ -9799,8 +9790,7 @@ export class TillApp extends LitElement {
       id === undefined ||
       this.deviceId === undefined ||
       !this.capabilities.includes("print-receipt") ||
-      (change.role !== "invoice" && change.role !== "receipt") ||
-      (change.role === "invoice" && this.result?.invoiceType !== "F1")
+      (change.role !== "invoice" && change.role !== "receipt")
     )
       return;
     const session = this.#operatorSession;
@@ -9975,13 +9965,7 @@ export class TillApp extends LitElement {
 
   async #onPrintReceipt(retry = false): Promise<void> {
     const id = this.ticketWorkingOrderId;
-    if (
-      id === undefined ||
-      this.originalReceiptBusy ||
-      this.invoiceDeliveryBusy ||
-      (!retry && this.#invoicePrinterChoice?.role === "receipt" && this.invoicePrinterBlocked)
-    )
-      return;
+    if (id === undefined || this.originalReceiptBusy || this.invoiceDeliveryBusy) return;
     const session = this.#operatorSession;
     const visit = this.#receiptPrintVisit;
     const full = this.result?.invoiceType === "F1";

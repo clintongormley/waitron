@@ -6,7 +6,6 @@ import { TillTicketView } from "./screens/till-ticket-view.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
-import { codeMessage } from "./i18n/codes.js";
 import {
   emit,
   flush,
@@ -170,8 +169,14 @@ it("Equipment's Receipt save updates the open document row", async () => {
 it.each([false, true])(
   "F1 Receipt copy refreshes both statuses and shows its domain refusal, history=%s",
   async (historical) => {
-    const refusal = { code: "invoice.delivery_in_progress", status: 409 };
+    const refusal = { code: "invoice_delivery.active", status: 409 };
     const { el, api, id } = await sold("F1", {
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        deviceId: "dev-1",
+        receiptLanguages: ["en-GB", "es-ES"],
+        capabilities: ["take-orders", "take-cash", "print-receipt"],
+      }),
       getInvoiceDeliveries: vi.fn().mockResolvedValue(delivered),
       reprint: vi.fn().mockRejectedValue(refusal),
       reprintTransaction: vi.fn().mockRejectedValue(refusal),
@@ -197,13 +202,19 @@ it.each([false, true])(
     const receiptReads = vi.mocked(api.getReceiptPrintStatus).mock.calls.length;
     const deliveryReads = vi.mocked(api.getInvoiceDeliveries).mock.calls.length;
     await press(el, "reprint");
+    const language = el.shadowRoot!.querySelector("till-reprint-language-dialog")!;
+    expect(language).not.toBeNull();
+    emit(language, "reprint-language-confirm", { language: "es-ES" });
+    await flush(el);
     expect(historical ? api.reprintTransaction : api.reprint).toHaveBeenCalledWith(
       historical ? "sale-history" : id,
-      ...(historical ? [undefined] : []),
+      "es-ES",
     );
     expect(api.getReceiptPrintStatus).toHaveBeenCalledTimes(receiptReads + 1);
     expect(api.getInvoiceDeliveries).toHaveBeenCalledTimes(deliveryReads + 1);
-    expect(part(el, "delivery-refused").textContent).toContain(codeMessage(refusal.code));
+    expect(part(el, "delivery-refused").textContent).toContain(
+      "This invoice is already waiting for delivery. Check its status before trying again.",
+    );
   },
 );
 
@@ -246,19 +257,17 @@ it("Back from a refused Receipt choice lets staff use the saved Invoice printer"
   const { el } = await sold("F1", {
     getDeviceEquipment: vi.fn().mockResolvedValue(all),
     setDeviceEquipment: vi.fn().mockRejectedValue({ status: 400, code: "printer.not_found" }),
-    getInvoiceDeliveries: vi
-      .fn()
-      .mockResolvedValue({
-        ...delivered,
-        originalCompleted: false,
-        actions: {
-          ...delivered.actions,
-          print: {
-            printers: [{ id: "office", name: "Office", kind: "a4" }],
-            designation: "original",
-          },
+    getInvoiceDeliveries: vi.fn().mockResolvedValue({
+      ...delivered,
+      originalCompleted: false,
+      actions: {
+        ...delivered.actions,
+        print: {
+          printers: [{ id: "office", name: "Office", kind: "a4" }],
+          designation: "original",
         },
-      }),
+      },
+    }),
   });
   ticket(el)
     .shadowRoot!.querySelector("wt-combobox")!
@@ -271,4 +280,28 @@ it("Back from a refused Receipt choice lets staff use the saved Invoice printer"
   await press(el, "document-invoice");
   expect(ticket(el).shadowRoot!.querySelector("wt-combobox")!.value).toBe("office");
   expect(part(el, "print-invoice").hasAttribute("disabled")).toBe(false);
+});
+
+it("Receipt opens without waiting for a changed Invoice printer's offer", async () => {
+  const office = equipmentItem("office", "Office", { kind: "a4" });
+  const getInvoiceDeliveries = vi.fn().mockResolvedValue({
+    ...delivered,
+    originalCompleted: false,
+    actions: {
+      ...delivered.actions,
+      print: {
+        printers: [{ id: "earlier", name: "Earlier office", kind: "a4" }],
+        designation: "original",
+      },
+    },
+  });
+  const { el } = await sold("F1", {
+    getInvoiceDeliveries,
+    getDeviceEquipment: vi
+      .fn()
+      .mockResolvedValue({ roles: [...equipment().roles, roleOf("invoice", office, [office])] }),
+  });
+  expect(part(el, "print-receipt").hasAttribute("disabled")).toBe(false);
+  expect(part(el, "print-receipt").textContent!.trim()).toBe("Print on Bar");
+  expect(getInvoiceDeliveries).toHaveBeenCalledOnce();
 });

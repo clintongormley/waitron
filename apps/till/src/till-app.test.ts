@@ -5521,11 +5521,9 @@ describe("till-app", () => {
       );
       const printReceipt = vi.fn().mockResolvedValue(undefined);
       const { el } = await soldF1({
-        getDeviceEquipment: vi
-          .fn()
-          .mockResolvedValue({
-            roles: [roleOf("receipt", equipmentItem("bar", "Bar", { kind: "receipt" }), [])],
-          }),
+        getDeviceEquipment: vi.fn().mockResolvedValue({
+          roles: [roleOf("receipt", equipmentItem("bar", "Bar", { kind: "receipt" }), [])],
+        }),
         getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, { print: a4Offer })),
         requestPrintDelivery,
         printReceipt,

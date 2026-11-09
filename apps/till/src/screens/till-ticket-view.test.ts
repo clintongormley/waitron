@@ -2032,6 +2032,10 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     await userEvent.click(button(el, "document-invoice")!);
     const field = el.shadowRoot!.querySelector("wt-combobox")!;
     expect(field).not.toBeNull();
+    expect(field.options.map((item) => [item.value, item.label])).toEqual([
+      ["", "Use default: Office"],
+      ["p2", "Bar · receipt paper"],
+    ]);
     expect(field.closest('[role="status"]')).toBeNull();
     field.dispatchEvent(
       new CustomEvent("wt-change", {
@@ -2974,7 +2978,7 @@ describe("till-ticket-view: identical dishes (A803)", () => {
 describe("A790 recorded document then printer", () => {
   const bar = equipmentItem("bar", "Bar", { kind: "receipt" });
   const office = equipmentItem("office", "Office", { kind: "a4" });
-  const mountChoice = (props: Record<string, unknown> = {}, invoiceType = "F1") =>
+  const mountChoice = (props: Record<string, unknown> = {}, invoiceType: "F1" | "F2" = "F1") =>
     mountWidget<TillTicketView>("till-ticket-view", {
       issuer,
       result: { ...result, invoiceType },
@@ -3093,15 +3097,16 @@ describe("A790 recorded document then printer", () => {
     el.addEventListener("equipment-change", (event) => changes.push((event as CustomEvent).detail));
     await press(el, "document-print-toggle");
     await press(el, "document-receipt");
-    const pick = () =>
-      el.shadowRoot!.querySelector("wt-combobox")!.dispatchEvent(
-        new CustomEvent("wt-change", {
-          detail: { value: "belt" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    pick();
+    const field = el.shadowRoot!.querySelector("wt-combobox")!;
+    const pick = async () => {
+      await userEvent.click(field.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+      await field.updateComplete;
+      const option = [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (row) => row.textContent!.includes("Belt"),
+      )!;
+      await userEvent.click(option);
+    };
+    await pick();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-equipment-confirm]")!.textContent).toContain(
       "Patio",
@@ -3110,7 +3115,9 @@ describe("A790 recorded document then printer", () => {
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-equipment-cancel]")!);
     await el.updateComplete;
     expect(changes).toEqual([]);
-    pick();
+    expect(field.value).toBe("bar");
+    expect(part(el, "print-receipt")!.textContent).toContain("Bar");
+    await pick();
     await el.updateComplete;
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-equipment-take]")!);
     expect(changes).toEqual([

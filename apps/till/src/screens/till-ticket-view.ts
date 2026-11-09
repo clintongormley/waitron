@@ -3,6 +3,7 @@ import { optionAnswers } from "../widgets/option-snapshot.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
+import { live } from "lit/directives/live.js";
 import { baseStyles } from "@waitron/ui";
 import {
   addDecimal,
@@ -809,7 +810,7 @@ export class TillTicketView extends LitElement {
                           placeholder=${t("equipment.use_default").replace("{name}", () => role.default?.name ?? t("equipment.none"))}
                           searchPlaceholder=${t("form.combobox_search")}
                           noResultsLabel=${t("form.combobox_no_results")}
-                          .value=${this.invoicePrinterValue ?? (role.selection === "default" ? "" : (role.chosenId ?? ""))}
+                          .value=${live(this.invoicePrinterValue ?? (role.selection === "default" ? "" : (role.chosenId ?? "")))}
                           .options=${[
                             {
                               value: "",
@@ -1277,7 +1278,6 @@ export class TillTicketView extends LitElement {
           this.canPrintReceipt
             ? this.invoicePrintersEnabled
               ? r.invoiceType === "F1" &&
-                failedReceipt &&
                 this.originalReceiptPrint?.status === "failed" &&
                 this.originalReceiptPrint.canRetry &&
                 !this.originalReceiptPrint.printerWithdrawn &&
@@ -1285,6 +1285,7 @@ export class TillTicketView extends LitElement {
                 ? html`<wt-button
                     variant="secondary"
                     data-test="retry-receipt"
+                    size="lg"
                     ?disabled=${receiptBusy}
                     @click=${() => this.dispatchEvent(new CustomEvent("retry-receipt", { bubbles: true, composed: true }))}
                     >${t("invoice.retry_original")}</wt-button
