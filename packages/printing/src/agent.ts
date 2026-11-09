@@ -4,10 +4,11 @@ import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { AppError, diskFullIn, isUuid } from "@waitron/shared";
 import { nowIso, printAgents, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { createVerifiedTokenMemory, verifySecretAsync } from "@waitron/identity";
-
-/** How stale a recorded sighting has to be before auth writes a fresh one. */
-const SIGHTING_INTERVAL_MS = 60_000;
+import {
+  SIGHTING_INTERVAL_MS,
+  createVerifiedTokenMemory,
+  verifySecretAsync,
+} from "@waitron/identity";
 
 export const VERIFIED_AGENTS_LIMIT = 256;
 const verifiedAgents = createVerifiedTokenMemory(VERIFIED_AGENTS_LIMIT);

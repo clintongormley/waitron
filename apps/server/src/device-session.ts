@@ -6,15 +6,17 @@ import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { profileAllows } from "@waitron/layouts";
 import type { CapabilityFlag, FormFactor, ProfileAction } from "@waitron/layouts";
-import { createVerifiedTokenMemory, verifySecretAsync } from "@waitron/identity";
+import {
+  SIGHTING_INTERVAL_MS,
+  createVerifiedTokenMemory,
+  sightingDue,
+  verifySecretAsync,
+} from "@waitron/identity";
 // Side-effect only: keeps `device.unauthorized` (errors.ts) reachable from the file that throws it.
 import "./errors.js";
 
 /** The trusted-device cookie: a long-lived DEVICE identity, unlike the session cookies. */
 export const DEVICE_COOKIE = "waitron_device";
-
-/** How stale a recorded sighting has to be before an authenticated read writes a fresh one. */
-const SIGHTING_INTERVAL_MS = 60_000;
 
 /**
  * DEV-ONLY: in `devMode`, a request carrying this header is authenticated AS the named device
@@ -250,13 +252,7 @@ async function readDeviceProof(
 const staleBefore = (seenAt: string): string =>
   new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
 
-/**
- * Whether nothing is stored yet, or what is stored at `lastSeenAt` is more than a minute older than
- * `seenAt`.
- */
-export function sightingDue(lastSeenAt: string | null, seenAt: string): boolean {
-  return lastSeenAt === null || lastSeenAt < staleBefore(seenAt);
-}
+export { sightingDue };
 
 /**
  * Records that `deviceId` was seen at `seenAt`, unless a sighting inside the last minute is already
