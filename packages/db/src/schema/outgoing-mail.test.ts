@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { engineErrorMessage } from "../testing/errors.js";
+import { getTableConfig } from "drizzle-orm/sqlite-core";
+import { outgoingMail } from "./outgoing-mail.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -43,6 +45,19 @@ describe("outgoing mail database protections", () => {
     }
     throw new Error("Expected database refusal");
   };
+  it("declares both person keys in the schema the rebuild reads", () => {
+    expect(
+      getTableConfig(outgoingMail)
+        .foreignKeys.map((key) => key.reference())
+        .map((ref) => ({
+          columns: ref.columns.map((c) => c.name),
+          target: ref.foreignColumns.map((c) => c.name),
+        })),
+    ).toEqual([
+      { columns: ["person_id"], target: ["id"] },
+      { columns: ["requested_by"], target: ["id"] },
+    ]);
+  });
   it("accepts a pending row, an invoice without a person, and waiting and finished rejections", () => {
     insert();
     insert({ seq: 2, kind: "invoice", person_id: null });

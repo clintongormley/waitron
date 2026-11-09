@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -12,6 +12,9 @@ import {
   subscribeToChanges,
   withTransaction,
 } from "@waitron/db";
+import { seedVenue } from "@waitron/db/testing/seed.js";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { resolveMailDeliveryIn } from "./email-delivery.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { changeSubscriber, LiveEvents } from "./live-api.js";
 import {
@@ -228,6 +231,8 @@ describe("one mail sender", () => {
   });
   it("abandons owned claims at startup and tells their owner without prepared data", async () => {
     await queue();
+    await queue("waiting");
+    const waitingBefore = await row("waiting");
     await update({
       status: "sending",
       claimToken: "token",
@@ -236,12 +241,30 @@ describe("one mail sender", () => {
     });
     expect(await withTransaction(suite.db, (tx) => abandonMailClaims(tx, [owner], time))).toBe(1);
     expect((await row())?.status).toBe("unknown");
+    expect(await row("waiting")).toEqual(waitingBefore);
     expect(owner.settle).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       { status: "unknown", failureCode: "mail.claim_abandoned" },
       time,
     );
+  });
+  it("expires a restored backlog in batches and never sends the old rows beyond that batch", async () => {
+    for (let n = 0; n < 25; n++) await queue(`old${n}`, { notAfter: new Date(time.getTime() + 1) });
+    time = new Date(time.getTime() + 2);
+    await queue("good");
+    await runMailPass(deps);
+    expect(deps.send).toHaveBeenCalledTimes(1);
+    expect((await row("good"))?.status).toBe("sent");
+    expect((await row("old20"))?.status).toBe("pending");
+    expect(
+      vi.mocked(owner.settle).mock.calls.filter((c) => c[2].status === "expired"),
+    ).toHaveLength(20);
+    await runMailPass(deps);
+    expect(deps.send).toHaveBeenCalledTimes(1);
+    expect(
+      vi.mocked(owner.settle).mock.calls.filter((c) => c[2].status === "expired"),
+    ).toHaveLength(25);
   });
   it.each([0, 1])(
     "expires at the boundary and sends one millisecond inside (%s)",
@@ -276,6 +299,10 @@ describe("one mail sender", () => {
     await update({ id: "z" }, "A");
     await update({ id: "a" }, "B");
     await update({ id: "m" }, "C");
+    await update({ status: "rejected" }, "B");
+    const restored = await suite.db.select().from(outgoingMail);
+    await suite.db.delete(outgoingMail);
+    await suite.db.insert(outgoingMail).values(restored.reverse());
     const sent: string[] = [];
     owner.compose = async (_, mail) => {
       sent.push(mail.dedupeKey);
@@ -404,6 +431,59 @@ describe("one mail sender", () => {
       await writer;
     }
   });
+  it("an unreadable SMTP credential waits quietly while expired mail leaves pending, then recovers", async () => {
+    await seedVenue(suite.db);
+    const ring = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    });
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, ring, {
+        purpose: "email.smtp",
+        value: { url: "smtp://user:secret@mail.test", from: "from@example.test" },
+      }),
+    );
+    const version = async (keyVersion: number) =>
+      suite.db.run(
+        sql`update tenant_credentials set key_version=${keyVersion} where purpose='email.smtp'`,
+      );
+    await version(99);
+    await queue("expired", { notAfter: new Date(time.getTime() + 1) });
+    await queue("waiting");
+    time = new Date(time.getTime() + 2);
+    deps.owners = [owner, { ...owner, kind: "invoice", deliveryRule: "invoice" }];
+    deps.resolveDelivery = (tx, rule) =>
+      resolveMailDeliveryIn(tx, ring, { devMode: false, onboardingIntent: undefined }, rule);
+    const sleeps: number[] = [];
+    let expiredAtFirstSleep: string | undefined;
+    await runMailLoop({
+      ...deps,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+        if (sleeps.length === 1) expiredAtFirstSleep = (await row("expired"))?.status;
+        if (sleeps.length === 2) await version(1);
+        if (sleeps.length === 4) {
+          await version(99);
+          await queue("later");
+        }
+        if (sleeps.length === 5) controller.abort();
+      },
+    });
+    expect(expiredAtFirstSleep).toBe("expired");
+    expect(sleeps).toEqual([500, 60000, 500, 60000, 60000]);
+    expect((await row("waiting"))?.status).toBe("sent");
+    const failures = vi
+      .mocked(deps.log)
+      .mock.calls.filter((c) => c[1] === "mail.delivery_unavailable");
+    expect(failures.map((c) => c[2])).toEqual([
+      { rule: "notice", errorCode: "credentials.key_version_unknown" },
+      { rule: "invoice", errorCode: "credentials.key_version_unknown" },
+      { rule: "notice", errorCode: "credentials.key_version_unknown" },
+      { rule: "invoice", errorCode: "credentials.key_version_unknown" },
+    ]);
+    expect(vi.mocked(deps.log).mock.calls.some((c) => c[1] === "pass.threw")).toBe(false);
+    expect(JSON.stringify(vi.mocked(deps.log).mock.calls)).not.toContain("secret");
+  });
   it("logs an unconfigured wait once across expiry and a later request", async () => {
     await queue();
     deps.resolveDelivery = async () => ({ mode: "unconfigured" });
@@ -429,17 +509,17 @@ describe("one mail sender", () => {
   });
   it("sleeps until a scheduled row or an active claim is due", async () => {
     await queue("scheduled", { nextAttemptAt: new Date(time.getTime() + 10000) });
-    let sleeps = 0;
+    const sleeps: number[] = [];
     await runMailLoop({
       ...deps,
       sleep: async (ms) => {
-        expect(ms).toBe(sleeps++ === 0 ? 10000 : 60000);
-        if (sleeps === 1)
+        sleeps.push(ms);
+        if (sleeps.length === 1)
           await update(
             {
               status: "sending",
               claimToken: "token",
-              claimedAt: time.toISOString(),
+              claimedAt: new Date(time.getTime() - 15000).toISOString(),
               recipient: "private@example.test",
             },
             "scheduled",
@@ -447,6 +527,7 @@ describe("one mail sender", () => {
         else controller.abort();
       },
     });
+    expect(sleeps).toEqual([10000, 45000]);
   });
   it("resolves notice and invoice rules separately so an unconfigured kind blocks no other kind", async () => {
     await queue();

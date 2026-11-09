@@ -9,6 +9,7 @@ import {
   type OutgoingMailKind,
   type OutgoingMailFailureCode,
 } from "@waitron/db";
+import { codeOf } from "@waitron/server-kit";
 import type { SendMailOptions } from "nodemailer";
 import type { EmailDelivery, MailDeliveryRule } from "./email-delivery.js";
 import { sendSmtpMessage, type SmtpConnection, type SmtpSendOutcome } from "./smtp-send.js";
@@ -46,12 +47,14 @@ export interface MailKindOwner<Prepared = unknown> {
   readonly deliveryRule: MailDeliveryRule;
   readonly retryDelaysMs: readonly number[];
   readonly longestWaitMs: number;
+  /** A released claim may run again; its writes must be safe to repeat. */
   claim(
     tx: Transaction,
     mail: ClaimedMail,
     now: Date,
   ): Promise<{ recipient: string; prepared: Prepared } | null>;
   compose(prepared: Prepared, mail: ClaimedMail): Promise<MailMessage>;
+  /** A throw rolls back queue and owner writes together and propagates, including at start. */
   settle(
     tx: Transaction,
     mail: ClaimedMail,
@@ -189,6 +192,7 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
     | undefined;
   let result: MailPassResult;
   try {
+    // The claim commits before SMTP, so an external wait never holds the venue write lock.
     result = await withTransaction(deps.db, async (tx) => {
       if (!allowed()) return { processed: false } as MailPassResult;
       const now = deps.now();
@@ -269,6 +273,7 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
     if (failed === undefined) throw error;
     const mail = failed;
     const owner = owners.get(mail.kind)!;
+    // The owner’s writes rolled back; a fresh transaction retains only the failed attempt’s back-off.
     await withTransaction(deps.db, (tx) =>
       tx
         .update(outgoingMail)
@@ -378,13 +383,26 @@ export async function runMailLoop(
   },
 ): Promise<void> {
   let waitingForSetup = false;
+  const unavailable = new Set<MailDeliveryRule>();
+  const resolveDelivery: MailSenderDeps["resolveDelivery"] = async (tx, rule) => {
+    try {
+      const delivery = await deps.resolveDelivery(tx, rule);
+      unavailable.delete(rule);
+      return delivery;
+    } catch (error) {
+      if (!unavailable.has(rule))
+        deps.log("error", "mail.delivery_unavailable", { rule, errorCode: codeOf(error) });
+      unavailable.add(rule);
+      return { mode: "unconfigured" };
+    }
+  };
   await runLoop({
     ...deps,
     minTickMs: deps.minTickMs ?? 500,
     maxTickMs: deps.maxTickMs ?? 60000,
     sleep: deps.sleep ?? realSleep,
     pass: async () => {
-      const result = await runMailPass(deps);
+      const result = await runMailPass({ ...deps, resolveDelivery });
       if (!result.processed && result.emailUnconfigured) {
         if (!waitingForSetup) deps.log("info", "mail.waiting_for_email_setup");
         waitingForSetup = true;

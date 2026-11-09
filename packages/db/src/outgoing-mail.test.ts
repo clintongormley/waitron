@@ -35,6 +35,20 @@ describe("mail queue API", () => {
       expect(MAIL_LIFETIME_MS.box_alert).toBe(86400000);
     });
   });
+  it("dates an ordinary request from the current clock when no queue time is supplied", async () => {
+    const before = Date.now();
+    await withTransaction(suite.db, (tx) =>
+      enqueueMail(tx, {
+        kind: "invoice",
+        dedupeKey: "ordinary",
+        notAfter: new Date(before + 3600000),
+      }),
+    );
+    const saved = await readMail(suite.db, "ordinary");
+    expect(Date.parse(saved!.queuedAt)).toBeGreaterThanOrEqual(before);
+    expect(Date.parse(saved!.queuedAt)).toBeLessThanOrEqual(Date.now());
+    expect(saved!.nextAttemptAt).toBe(saved!.queuedAt);
+  });
   it("returns the existing id for a repeated key even when finished", async () => {
     await withTransaction(suite.db, async (tx) => {
       const first = await enqueueMail(tx, request());

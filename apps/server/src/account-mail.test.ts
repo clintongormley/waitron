@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, persons, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { completeAccountAction, queueAccountMail } from "@waitron/identity";
+import { ACCOUNT_EMAIL_WORDS } from "./i18n/account-email.js";
 import { accountActionMail } from "./account-mail.js";
 import { runMailPass, type MailSenderDeps } from "./mail-sender.js";
 
@@ -12,9 +13,11 @@ describe("account mail owner", () => {
   const personId = randomUUID();
   let time: Date, deps: MailSenderDeps;
   let messages: string[];
+  let connections: string[];
   beforeEach(async () => {
     time = new Date("2026-11-09T12:00:00.000Z");
     messages = [];
+    connections = [];
     await suite.db
       .insert(persons)
       .values({ id: personId, displayName: "Recipient", email: "person@example.test" });
@@ -32,11 +35,15 @@ describe("account mail owner", () => {
           readPrivacyNoticeUrl: async () => null,
         }),
       ],
-      resolveDelivery: async () => ({
+      resolveDelivery: async (_, rule) => ({
         mode: "smtp",
-        smtp: { url: "smtp://mail.test", from: "sender" },
+        smtp: {
+          url: rule === "notice" ? "smtp://mail.test" : "smtp://wrong-invoice.test",
+          from: "sender",
+        },
       }),
-      send: async (_, message) => {
+      send: async (smtp, message) => {
+        connections.push(smtp.url);
         messages.push(message.text as string);
         return { status: "sent" };
       },
@@ -49,17 +56,22 @@ describe("account mail owner", () => {
       queueAccountMail(tx, {
         personId,
         purpose,
-        ...(purpose === "invitation" ? {} : { origin: "https://box.test" }),
+        ...(purpose === "invitation" ? {} : { origin: "https://entry.test:8443" }),
         now: time,
       }),
     );
   it("makes a working reset link at send and never stores it in the queue", async () => {
     await queue();
     expect(suite.db.all(sql`select * from management_account_actions`)).toEqual([]);
+    await suite.db.run(
+      sql`update outgoing_mail set next_attempt_at = '2026-11-09T12:15:00.001Z' where person_id=${personId}`,
+    );
     time = new Date("2026-11-09T12:05:00.000Z");
     await runMailPass(deps);
+    expect(connections).toEqual(["smtp://mail.test"]);
     const link = new URL(messages[0]!.split("\n").find((line) => line.startsWith("https://"))!);
     expect(link.pathname).toBe("/manage/account");
+    expect(link.origin).toBe("https://entry.test:8443");
     expect(new URLSearchParams(link.hash.slice(1)).get("email")).toBe("person@example.test");
     expect(
       await withTransaction(suite.db, (tx) =>
@@ -91,7 +103,7 @@ describe("account mail owner", () => {
       tries.push(time.toISOString());
       return { status: "rejected", reason: "email.test_refused", serverRefused: true };
     };
-    for (const minute of [0, 1, 3, 7, 17, 18, 30, 31]) {
+    for (let minute = 0; minute <= 31; minute++) {
       time = new Date(Date.parse("2026-11-09T12:00:00.000Z") + minute * 60000);
       await runMailPass(deps);
     }
@@ -124,9 +136,13 @@ describe("account mail owner", () => {
       ];
       await queue(purpose);
       await runMailPass(deps);
+      expect(connections).toEqual(["smtp://mail.test"]);
       expect(messages).toHaveLength(1);
       expect(messages[0]).toContain("https://box.test/privacy");
-      if (purpose === "email_change") expect(messages[0]).toContain("https://box.test/");
+      expect(messages[0]).toContain(ACCOUNT_EMAIL_WORDS.es.hello("Recipient"));
+      const action = messages[0]!.split("\n").find((line) => line.startsWith("https://"));
+      if (purpose === "email_change") expect(action).toBe("https://box.test/");
+      else expect(new URL(action!).pathname).toBe("/manage/account");
       expect(
         suite.db.get<{ recipient: string }>(sql`select recipient from outgoing_mail`)?.recipient,
       ).toBe(purpose === "email_change" ? "changed@example.test" : "person@example.test");
