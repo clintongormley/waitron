@@ -462,7 +462,7 @@ disponible su traducción de cocina. Sin un idioma del contenido guardado, el pa
 El panel y los recibos tienen sus propias opciones de idioma.
 
 El siguiente ticket, corrección o reimpresión de cocina usa el predeterminado guardado al momento.
-Cambiarlo no imprime nada por sí solo. Reenviar un trabajo fallido conserva su papel original.
+Cambiarlo no imprime nada por sí solo. Reenviar un trabajo fallido conserva su texto original.
 Los nombres de platos y mesas y tus notas siguen como se registraron. Una reimpresión conserva las
 instrucciones originales sobre alergias y elige su texto guardado en inglés o español para que
 coincida con las cabeceras.

@@ -1898,7 +1898,7 @@ for notice folding. The collection path reads after its policy and printer gates
 They need no browser refresh or server restart. A language save enqueues nothing.
 
 New reprints use current frame words and the matching frozen allergy translation while keeping
-recorded names and instructions. Outbox resends reuse the saved payload. Unit-map selection keeps
+recorded names and instructions. Outbox resends to the job's own printer reuse the saved payload; on another printer a kitchen ticket keeps its words and is only centred. Unit-map selection keeps
 `cfg.locale`, the venue's display language (`readVenueLocale`); card-slip words, dates and amounts use the saved sale's receipt language. Boundary
 checks live in `kitchen-print.language.test.ts` and `kitchen-language.boundaries.test.ts`.
 
@@ -2123,10 +2123,15 @@ jobs. When the receipt helper resolves no printer, it adds no job. Deleting an o
 retains that original's history; an explicit reprint can send a marked copy to its replacement.
 A completed original and its failed predecessors cannot be resent through the printer-job action.
 An original with an active retry blocks another retry as well. Exhausted attempts without one of
-those reservations may retry on their retained printer, keeping their bytes.
+those reservations may retry on their retained printer, keeping their bytes, or on another active
+printer, laid out again from the sale and still unmarked (`reprintJobOn`,
+`apps/server/src/print-job-reprint.ts`). An original still waiting on a disabled printer, or on one
+no agent sees, may be moved to another printer the same way; the move ends it on its own printer
+in the transaction that queues the reprint.
 
-The dashboard's offered action combines `canResendPrintJob` with a sale-wide reservation read in
-`print-api.ts`; the helper alone does not read sibling jobs. The open physical-delivery limit is in
+The dashboard's offered action combines `canResendPrintJob`, or a waiting job's `stuck`, with a
+sale-wide reservation read in `print-api.ts` that skips the job itself; the helper alone does not
+read sibling jobs. The open physical-delivery limit is in
 [the fiscal backlog](../backlog/fiscal.md#uncertain-receipt-delivery).
 
 | Source, checked 2026-10-22 | Source words | Applied here |

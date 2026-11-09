@@ -43,10 +43,6 @@ declare module "@waitron/shared" {
     "invoice_delivery.claim_lost": Record<string, never>;
     /** No page printer with that id, or no discovery entry an agent reported
      * recently enough for the discovered list to show it. */
-    /** Only a receipt, full invoice, kitchen ticket or refund receipt reprints on another printer. */
-    "print_job.own_printer_only": { id: string };
-    /** The reprint's printer is disabled, deleted or narrower than the printout. */
-    "print_job.printer_unsuitable": { id: string; printerId: string };
     "page_printer.not_found": Record<string, never>;
     /** The discovery entry carries no office report, or one whose printer cannot print an A4 invoice. */
     "page_printer.not_printable": Record<string, never>;
@@ -95,6 +91,10 @@ declare module "@waitron/shared" {
     "cloud.replacement_state_invalid": Record<string, never>;
     "cloud.replacement_refused": Record<string, never>;
 
+    /** Only a receipt, full invoice, kitchen ticket or refund receipt reprints on another printer. */
+    "print_job.own_printer_only": { id: string };
+    /** The reprint's printer is disabled, deleted or narrower than the printout. */
+    "print_job.printer_unsuitable": { id: string; printerId: string };
     /** This server owns the transient printer-discovery queue; the printing module owns persisted printers.
      * No free probe slot; retry after a request expires. */
     "printer.probe_busy": Record<string, never>;
