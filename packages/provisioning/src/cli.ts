@@ -194,6 +194,8 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
 
   try {
     const venueDir = await resolveVenueDir(values["venue-dir"], deps);
+    const runtime = deps.configureFirstSetup?.(venueDir);
+    if (runtime !== undefined) await refuseRetainedSetup(runtime, deps.io);
     const country = assertCountry(
       await resolveOption(values.country, "country (ISO-3166 alpha-2, e.g. ES): ", deps),
     );
@@ -285,7 +287,6 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         email: adminEmail,
       },
     };
-    const runtime = deps.configureFirstSetup?.(venueDir);
     const installed = runtime?.modules ?? deps.configureVenueModules?.(venueDir) ?? deps.modules;
     const selection = venueFiscalSelection(installed, request.fiscalTerritory);
     const fiscalConfig = selection.config;
@@ -309,25 +310,6 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     if (owned) {
       if (deps.initialVenue !== undefined || deps.env.WAITRON_INITIAL_VENUE_INPUT?.trim())
         throw new AppError("provisioning.initial_input_invalid", {});
-      const retained = await runtime.store.readForRepair();
-      if (retained !== null) {
-        const { status } = retained.state;
-        if (status === "complete") throw new AppError("setup.attempt_uncertain", {});
-        deps.io.stderr(
-          status === "uncertain"
-            ? "This setup stopped during activation, and the box could not tell whether activation finished, so the command will not carry on with it. Nothing was changed."
-            : status === "abandoned"
-              ? "This setup was stopped on the box's setup page, so the command will not carry on with it. Nothing was changed."
-              : "This setup stopped part way, so the command will not carry on with it. Nothing was changed.",
-        );
-        deps.io.stderr(
-          "Open the box's setup page in a browser and choose Start again. It deletes what this setup entered; if the setup already recorded something that must be kept, such as an invoice, or the box cannot confirm that deleting it is safe, it deletes nothing and the page says why. Then run the command again.",
-        );
-        throw new AppError(
-          status === "uncertain" ? "setup.attempt_uncertain" : "setup.attempt_conflict",
-          {},
-        );
-      }
       if (values["recovery-pdf"] !== undefined)
         await runtime.commandDelivery.checkDestination(values["recovery-pdf"], deps.io);
     }
@@ -467,6 +449,32 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
   } catch (error) {
     return reportFailure(error, deps);
   }
+}
+
+/** Runs before any question or secret is asked for, so a person is not walked through a setup the
+ * command will then refuse. */
+async function refuseRetainedSetup(
+  runtime: ReturnType<typeof createFirstSetupRuntime>,
+  io: ProvisioningIo,
+): Promise<void> {
+  const retained = await runtime.store.readForRepair();
+  if (retained === null) return;
+  const { status } = retained.state;
+  if (status === "complete") throw new AppError("setup.attempt_uncertain", {});
+  io.stderr(
+    status === "uncertain"
+      ? "This setup stopped during activation, and the box could not tell whether activation finished, so the command will not carry on with it. Nothing was changed."
+      : status === "abandoned"
+        ? "This setup was stopped on the box's setup page, so the command will not carry on with it. Nothing was changed."
+        : "This setup stopped part way, so the command will not carry on with it. Nothing was changed.",
+  );
+  io.stderr(
+    "Open the box's setup page in a browser and choose Start again. It deletes what this setup entered; if the setup already recorded something that must be kept, such as an invoice, or the box cannot confirm that deleting it is safe, it deletes nothing and the page says why. Then run the command again.",
+  );
+  throw new AppError(
+    status === "uncertain" ? "setup.attempt_uncertain" : "setup.attempt_conflict",
+    {},
+  );
 }
 
 /**

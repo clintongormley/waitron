@@ -1,4 +1,4 @@
-import { constants } from "node:fs";
+import { constants, type Stats } from "node:fs";
 import { access, open, realpath, rm, lstat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -42,6 +42,23 @@ const leftBehind = (path: string) =>
   `The setup could not write the recovery pack to ${path}, and an incomplete file is left there. Name a different file when you run the command again.`;
 const alreadyThere = (path: string) =>
   `A file already exists at ${path}, and the setup never writes over one: it may be an earlier setup's recovery pack, the only copy of that setup's keys. Name a file that does not exist yet, or move the existing file to another folder first.`;
+
+/** True when no file this write created is left at `output`. Another file found there is never
+ * removed; a swap between the `lstat` and the `rm` is not caught. */
+async function removePartial(output: string, created: Stats | undefined): Promise<boolean> {
+  let found: Stats;
+  try {
+    found = await lstat(output);
+  } catch (error) {
+    return missing(error);
+  }
+  if (created === undefined) return false;
+  if (found.dev !== created.dev || found.ino !== created.ino) return true;
+  return rm(output).then(
+    () => true,
+    () => false,
+  );
+}
 
 function stop(io: ProvisioningIo, line: string, after: string): never {
   io.stderr(line);
@@ -194,19 +211,21 @@ export function createFirstSetupCommandDelivery(options: {
         if (hasCode(error, "EEXIST")) stop(io, alreadyThere(path), stopped);
         stop(io, cannotWrite(path), stopped);
       }
+      let created: Stats | undefined;
       try {
         try {
+          created = await file.stat();
           await file.writeFile(document.bytes);
           await file.sync();
         } finally {
           await file.close();
         }
       } catch {
-        const removed = await rm(output).then(
-          () => true,
-          () => false,
+        stop(
+          io,
+          (await removePartial(output, created)) ? cannotWrite(path) : leftBehind(path),
+          stopped,
         );
-        stop(io, removed ? cannotWrite(path) : leftBehind(path), stopped);
       }
       const reference = {
         module,

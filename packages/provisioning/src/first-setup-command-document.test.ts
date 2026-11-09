@@ -1,5 +1,15 @@
 import { createHash } from "node:crypto";
-import { chmod, mkdtemp, readFile, rm, stat, writeFile, mkdir, symlink } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+  mkdir,
+  symlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -15,7 +25,7 @@ const NOW = Date.parse("2026-10-16T11:40:00Z");
 const asRoot = process.getuid?.() === 0;
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
 const packWrite = vi.hoisted(() => ({
-  failing: undefined as undefined | "writeFile" | "sync",
+  failing: undefined as undefined | "stat" | "writeFile" | "sync",
   beforeFailing: async () => {},
 }));
 vi.mock("node:fs/promises", async (original) => {
@@ -36,6 +46,7 @@ vi.mock("node:fs/promises", async (original) => {
         if (step === "writeFile") await fail();
       };
       if (step === "sync") file.sync = fail;
+      if (step === "stat") file.stat = fail;
       return file;
     },
   };
@@ -306,6 +317,40 @@ it.each(["writeFile", "sync"] as const)(
     });
   },
 );
+
+it.each(["writeFile", "sync"] as const)(
+  "a failed %s leaves alone another file put at the path in place of the partial one",
+  async (step) => {
+    const f = await fixture();
+    const movedAside = join(f.root, "moved-aside.pdf");
+    packWrite.failing = step;
+    packWrite.beforeFailing = async () => {
+      await rename(f.path, movedAside);
+      await writeFile(f.path, "another setup's recovery pack");
+    };
+    f.output.length = 0;
+    await expect(
+      f.runtime.commandDelivery.deliver(f.owner, f.io, f.path, "en"),
+    ).rejects.toMatchObject({ code: "setup.not_ready" });
+    expect(await readFile(f.path, "utf8")).toBe("another setup's recovery pack");
+    expect((await stat(movedAside)).size).toBe(16);
+    expect(f.output).toEqual([cannotWrite(f.path), STOPPED]);
+  },
+);
+
+it("a partial file it cannot identify as its own is left in place, and says so", async () => {
+  const f = await fixture();
+  packWrite.failing = "stat";
+  f.output.length = 0;
+  await expect(
+    f.runtime.commandDelivery.deliver(f.owner, f.io, f.path, "en"),
+  ).rejects.toMatchObject({ code: "setup.not_ready" });
+  expect(f.output).toEqual([
+    `The setup could not write the recovery pack to ${f.path}, and an incomplete file is left there. Name a different file when you run the command again.`,
+    STOPPED,
+  ]);
+  expect((await stat(f.path)).size).toBe(0);
+});
 
 it.skipIf(asRoot)("a folder made read-only during the password prompt gets words", async () => {
   const f = await fixture();

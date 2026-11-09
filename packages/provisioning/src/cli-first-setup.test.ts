@@ -410,6 +410,67 @@ it.each([
   },
 );
 
+it.each([
+  ["claimed", "venue details", STOPPED],
+  ["claimed", "secrets", STOPPED],
+  [
+    "abandoned",
+    "venue details",
+    [
+      "This setup was stopped on the box's setup page, so the command will not carry on with it. Nothing was changed.",
+      START_AGAIN,
+      "setup.attempt_conflict {}",
+    ],
+  ],
+  [
+    "uncertain",
+    "secrets",
+    [
+      "This setup stopped during activation, and the box could not tell whether activation finished, so the command will not carry on with it. Nothing was changed.",
+      START_AGAIN,
+      "setup.attempt_uncertain {}",
+    ],
+  ],
+] as const)(
+  "a retained setup (%s) is refused before asking for omitted %s",
+  async (status, omitted, words) => {
+    const f = await activationFixture();
+    await retainAt(f, status);
+    const before = {
+      state: await folderSnapshot(join(f.root, "state")),
+      venue: await folderSnapshot(join(f.root, "venue")),
+    };
+    f.deps.configureFirstSetup = () =>
+      createFirstSetupRuntime({
+        stateDir: join(f.root, "state"),
+        venueDir: join(f.root, "venue"),
+        environment: {},
+        modules: ALL_MODULES,
+        database: () => venue.db,
+      });
+    const args =
+      omitted === "venue details" ? ["venue", "--venue-dir", join(f.root, "venue")] : f.args;
+    if (omitted === "secrets") f.deps.env = {};
+    f.deps.io.prompt = async (question) => {
+      f.prompts.push(question);
+      return "";
+    };
+    f.prompts.length = 0;
+    f.output.length = 0;
+    f.calls.length = 0;
+    vi.mocked(f.deps.openVenue).mockClear();
+    expect(await runCliPastWait(args, f.deps)).toBe(1);
+    expect(f.prompts).toEqual([]);
+    expect(f.output).toEqual(words);
+    expect(f.calls).toEqual([]);
+    expect(f.deps.openVenue).not.toHaveBeenCalled();
+    expect({
+      state: await folderSnapshot(join(f.root, "state")),
+      venue: await folderSnapshot(join(f.root, "venue")),
+    }).toEqual(before);
+  },
+);
+
 it("JSON activation input cannot become owned preparation authority", async () => {
   const f = await fixture("no");
   f.deps.env.WAITRON_INITIAL_VENUE_INPUT = join(f.root, "unread-input.json");
