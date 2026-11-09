@@ -112,6 +112,7 @@ describe("server-first workflow routing", () => {
   it("keeps a timed-out route read from failing changes and defaults every job to hosted", () => {
     const step = yaml.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {6}- )/)[1];
     expect(step).toMatch(/^ {8}continue-on-error: true$/m);
+    expect(step).toMatch(/^ {8}timeout-minutes: 2$/m);
     for (const job of jobs) expect(route(job.route, { health: "" }), job.id).toBe("ubuntu-latest");
   });
   it.each(["pull_request", "push", "schedule", "workflow_dispatch"])(
@@ -154,46 +155,62 @@ describe("server-first workflow routing", () => {
   });
 });
 
-it("runs the workflow's router beside an older candidate checkout", () => {
-  const root = mkdtempSync(join(tmpdir(), "workflow-router-"));
-  try {
-    mkdirSync(join(root, "scripts"));
-    writeFileSync(
-      join(root, "scripts/ci-server-health.mjs"),
-      'console.log("old candidate router");',
-    );
-    const fresh = join(root, "workflow.mjs");
-    writeFileSync(fresh, 'console.log("workflow router", process.argv[2], process.env.CAPACITY);');
-    writeFileSync(
-      join(root, "gh"),
-      `#!/bin/sh
+it.each([false, true])(
+  "keeps the workflow router beside an old checkout (fetch refused: %s)",
+  (refused) => {
+    const root = mkdtempSync(join(tmpdir(), "workflow-router-"));
+    try {
+      mkdirSync(join(root, "scripts"));
+      writeFileSync(
+        join(root, "scripts/ci-server-health.mjs"),
+        'console.log("old candidate router");',
+      );
+      const fresh = join(root, "workflow.mjs");
+      writeFileSync(
+        fresh,
+        'console.log("workflow router", process.argv[2], process.env.CAPACITY);',
+      );
+      writeFileSync(
+        join(root, "gh"),
+        `#!/bin/sh
 [ "$1" = api ] && [ "$2" = 'repos/fixture/waitron/contents/scripts/ci-server-health.mjs?ref=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' ] || exit 41
 [ "$3" = -H ] && [ "$4" = 'Accept: application/vnd.github.raw+json' ] || exit 42
+[ "$GH_TOKEN" = fixture ] || exit 43
+if [ "$FETCH_REFUSED" = true ]; then echo "HTTP 502" >&2; exit 22; fi
 cat "$FIXTURE_ROUTER"
 `,
-      { mode: 0o755 },
-    );
-    const step = yaml.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {6}(?:- |#))/)[1];
-    const body =
-      step.match(/^ {8}run: \|\n([\s\S]*)$/m)?.[1].replace(/^ {10}/gm, "") ??
-      step.match(/^ {8}run: (.+)$/m)[1];
-    const result = spawnSync("bash", ["-e", "-c", body], {
-      cwd: root,
-      encoding: "utf8",
-      timeout: 5000,
-      env: {
-        ...process.env,
-        PATH: root + ":" + process.env.PATH,
-        RUNNER_TEMP: root,
-        GITHUB_REPOSITORY: "fixture/waitron",
-        GITHUB_WORKFLOW_SHA: "b".repeat(40),
-        FIXTURE_ROUTER: fresh,
-        CAPACITY: '{"slots":6}',
-      },
-    });
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout.trim()).toBe('workflow router route {"slots":6}');
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
+        { mode: 0o755 },
+      );
+      const step = yaml.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {6}(?:- |#))/)[1];
+      const token = step.match(/^ {10}GH_TOKEN: \$\{\{ (.+) \}\}$/m)?.[1];
+      expect(token).toBeDefined();
+      const body =
+        step.match(/^ {8}run: \|\n([\s\S]*)$/m)?.[1].replace(/^ {10}/gm, "") ??
+        step.match(/^ {8}run: (.+)$/m)[1];
+      const result = spawnSync("bash", ["-e", "-c", body], {
+        cwd: root,
+        encoding: "utf8",
+        timeout: 5000,
+        env: {
+          ...process.env,
+          PATH: root + ":" + process.env.PATH,
+          RUNNER_TEMP: root,
+          GITHUB_OUTPUT: join(root, "outputs"),
+          GITHUB_STEP_SUMMARY: join(root, "summary"),
+          GH_TOKEN: runInNewContext(token, { github: { token: "fixture" } }),
+          FETCH_REFUSED: String(refused),
+          GITHUB_REPOSITORY: "fixture/waitron",
+          GITHUB_WORKFLOW_SHA: "b".repeat(40),
+          FIXTURE_ROUTER: fresh,
+          CAPACITY: '{"slots":6}',
+        },
+      });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout.trim()).toBe(refused ? "" : 'workflow router route {"slots":6}');
+      if (refused)
+        expect(readFileSync(join(root, "outputs"), "utf8")).toBe("server_route=server\n");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);

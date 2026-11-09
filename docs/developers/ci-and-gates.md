@@ -192,7 +192,7 @@ External provenance, read 2026-11-09:
 
 | Claim | Source's words | Application here |
 | --- | --- | --- |
-| The routing script uses its workflow commit | [GitHub variables](https://docs.github.com/en/actions/reference/workflows-and-actions/variables): “The commit SHA for the workflow file.” | Read the routing module at `GITHUB_WORKFLOW_SHA`, so an older candidate checkout cannot supply a different input contract. |
+| The routing script uses its workflow commit | [GitHub contexts](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#github-context): “The commit SHA for the workflow file.” | Read the routing module at `GITHUB_WORKFLOW_SHA`, so an older candidate checkout cannot supply a different input contract. |
 | The repository run list uses the existing read permission | [GitHub workflow runs](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository): “Anyone with read access to the repository can use this endpoint” | Routing reads this repository without another credential. |
 
 The existing health check reads CI's queued and running workflows. A job's wait is dated from its own

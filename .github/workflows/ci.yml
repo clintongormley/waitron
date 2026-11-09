@@ -304,9 +304,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
         run: |
-          gh api "repos/$GITHUB_REPOSITORY/contents/scripts/ci-server-health.mjs?ref=$GITHUB_WORKFLOW_SHA" \
-            -H "Accept: application/vnd.github.raw+json" > "$RUNNER_TEMP/ci-server-health.mjs"
-          node "$RUNNER_TEMP/ci-server-health.mjs" route
+          if gh api "repos/$GITHUB_REPOSITORY/contents/scripts/ci-server-health.mjs?ref=$GITHUB_WORKFLOW_SHA" \
+            -H "Accept: application/vnd.github.raw+json" > "$RUNNER_TEMP/ci-server-health.mjs"; then
+            node "$RUNNER_TEMP/ci-server-health.mjs" route
+          else
+            echo "server_route=server" >> "$GITHUB_OUTPUT"
+            echo "CI routing script could not be read; using the server." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # These two stay last so the outputs are set even when one fails: `lint`, `root-guards` and
       # `server-queue-watchdog` still run then and read them. Set outputs no longer show a failure,
