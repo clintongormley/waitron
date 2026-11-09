@@ -142,6 +142,12 @@ describe("every id-holding column of a transferred table is rewritten or left ou
     ]);
   });
 
+  it("permits omitting a JSON column from the export", () => {
+    const schema = () => ({ columns: ["views"], foreignKeys: [], jsonColumns: ["views"] });
+    expect(unrewrittenIdColumns([{ name: "t", omit: ["views"] }], schema, {})).toEqual([]);
+    expect(unrewrittenIdColumns([{ name: "t" }], schema, {})).toEqual(["t.views"]);
+  });
+
   it("permits JSON without ids only with its own reason", () => {
     const schema = () => ({ columns: ["doc"], foreignKeys: [], jsonColumns: ["doc"] });
     expect(
