@@ -260,25 +260,34 @@ small dialog with the original printer chosen.
   The owner accepts a QR code slightly outside 30–40 mm on such a copy (Orden HAC/1177/2024 art.
   21.1 was put to him), but no job this PR copies draws one: `grep -ci qr` on
   `kitchen-ticket.ts` and `tender-refund-receipt.ts` finds none, and receipts are laid out again.
-- **A limit: a printout stuck waiting gets no Reprint button, so most "out of service" cases are
-  not covered** (said in Point 4, the guide and the PR description; open question 3 has the
-  option). Reprint is offered only for a job that printed, or failed with its delivery attempts
-  used up (`canResendPrintJob`, `outbox.ts:85-86`; five attempts, `runtime.ts:8`). A print agent
-  collects jobs only for an active, not-deleted printer, and for USB or Bluetooth only one it can
-  see (`packages/printing/src/runtime.ts:107-110`, `:135-136`). So:
+- **Stuck printouts (approved 2026-11-09 22:14; Task 17c).** Reprint is offered today only for a
+  job that printed, or failed with its delivery attempts used up (`canResendPrintJob`,
+  `outbox.ts:85-86`; five attempts, `runtime.ts:8`). A print agent collects jobs only for an
+  active, not-deleted printer, and for USB or Bluetooth only one it can see
+  (`packages/printing/src/runtime.ts:107-110`, `:135-136`). So without Task 17c:
   - a USB or Bluetooth printer that is unplugged, off or out of range: its jobs stay **Queued**, no
     attempt is used, no Reprint (the queue shows "not visible", `print-api.ts:1515-1525`);
-  - a printer switched off in Waitron: its jobs stay **Queued**, no Reprint — except full invoices
-    on a receipt printer, which switching off ends as failed with attempts used
+  - a printer disabled in Waitron: its jobs stay **Queued**, no Reprint — except full invoices on a
+    receipt printer, which disabling ends as failed with attempts used
     (`endDeactivatedInvoicePrintDeliveries`, `apps/server/src/invoice-print.ts:151-172`, called at
-    `print-api.ts:1216`, `:1229`), and so can be reprinted elsewhere;
-  - a deleted printer: its jobs end with `printer.deleted` (`packages/printing/src/printer-delete-jobs.ts`),
-    which Reprint refuses (`outbox.ts:84`, `:102`; the list's `printerDeletedAt === null`,
-    `print-api.ts:1528`);
+    `print-api.ts:1216`, `:1229`);
   - a network printer that is off: the agent keeps trying; after the fifth failed attempt the job
     is **Failed** and Reprint can move it;
   - a Bluetooth printer unpaired by Unpair: its jobs end failed with attempts used
     (`endUnpairedPrinterJobs`, `runtime.ts:176-194`), so Reprint can move them.
+  Task 17c covers the first two: a Queued job (or Failed with attempts left) on a disabled or
+  unseen printer can be reprinted on another printer, and the same transaction ends it where it was
+  stuck — `failed`, attempts at the cap, `last_error` `print_job.moved` — so it never prints there
+  when the printer comes back: an agent collects only a job that is Queued, Failed with attempts
+  left, or Printing past its lease (`due`, `runtime.ts:60-66`, used at `:141`). A full invoice's
+  queued delivery ends with it (`endInvoicePrintDeliveries`, `invoice-print.ts:128-149`) and the
+  reprint reserves a new one; an original receipt, once ended, passes the one-live-original check
+  (`outbox.ts:104-121`) and is reprinted as the original. A **Printing** job is never moved: an
+  agent holds it and may be sending it. **Still not covered** (said in the PR): a deleted printer's
+  jobs end with `printer.deleted` (`packages/printing/src/printer-delete-jobs.ts`), which Reprint
+  refuses (`outbox.ts:84`, `:102`; `print-api.ts:1528`), as today; and a network printer whose
+  print agent is offline leaves its jobs Queued with no Reprint, since nothing marks that printer
+  unseen.
 - **Everything else reprints only on its own printer**: test pages, calibration samples, equipment
   labels, report pages, payment slips, the collection-number slip, the unlinked kitchen slips, and a
   kitchen ticket or refund receipt whose bytes the walk does not recognise. That keeps the spec's
@@ -410,6 +419,9 @@ replaces (no `resend_of`, `outbox.ts:27-32`), and always marked as a copy
 So the only difference from the ruling's words: an original that failed and is reprinted elsewhere
 prints as the original, not marked as a copy. A copy stays a copy.
 
+**Answered by the owner, 2026-11-09 22:22: "original"** (`questions.md`, "## WATCHER 2026-11-09
+22:22") — a receipt reprinted on another printer keeps its own marking, as above.
+
 ## Open questions for the owner (each with the default this plan builds)
 
 1. **Reprint elsewhere: same paper width only, or same paper width and resolution?** The plan's
@@ -425,34 +437,12 @@ prints as the original, not marked as a copy. A copy stays a copy.
    press than today's one-press Reprint. **Answered by the owner, 2026-11-09: the default stands**
    — the dialog for every job, so a job whose own printer is switched off says so instead of "That
    printer no longer exists".
-3. **OPEN QUESTION — not built in PR 4: "end the stuck printout, then reprint it elsewhere".**
-   Today a printout stuck waiting on a printer that is switched off in Waitron, or a USB or
-   Bluetooth printer no agent can see, has no Reprint (Point 4's limit). **Default: not built;
-   the guide and the PR say so.** The option, read from the code, not built:
-   - **Which printouts:** a document job still **Queued**, or **Failed** with attempts left, whose
-     printer is switched off, or is USB or Bluetooth and reported not visible (the list's
-     `printer.not_visible`, `print-api.ts:1515-1525`). Never one **Printing** (an agent holds it and
-     may be sending it), never a drawer job, never one on an active printer the agent can see.
-   - **Ending the original so it never prints twice:** in the same transaction as the reprint, set
-     it `failed`, with its attempts used up and a new `last_error` such as `print_job.moved`, as
-     `endDeletedPrinterJobs` and `endUnpairedPrinterJobs` already end jobs
-     (`printer-delete-jobs.ts`, `runtime.ts:176-194`), only while it is still Queued or Failed with
-     attempts left (checked in the update itself). An agent collects only a job that is Queued, Failed
-     with attempts left, or Printing past its lease (`due`, `runtime.ts:60-66`, used at `:141`), so
-     when the printer comes back the ended job is never sent.
-   - **An original receipt:** once ended, the reprint passes today's one-live-original check
-     (`outbox.ts:104-121`), keeps its marking, and the till sees the new job.
-   - **A full invoice:** its queued invoice delivery ends with it (`endInvoicePrintDeliveries`,
-     `invoice-print.ts:128-149`), and the reprint reserves a new one as today
-     (`invoice-print.ts:40-45`).
-   - **Kitchen tickets:** the reprint names the ended job in `resend_of`, so its trouble clears
-     once the reprint prints (`print-job-trouble.ts:57-61`).
-   - **Files:** `packages/printing/src/outbox.ts` (end the original, the new code),
-     `apps/server/src/print-job-reprint.ts` (which printouts, visibility from the agents' reports),
-     `apps/server/src/print-api.ts` (the list's `canResend`), `apps/server/src/invoice-print.ts`,
-     the dialog (the stuck printer not offered; a line saying it will not print there),
-     `strings.ts` and `codes.ts` (the new `last_error`'s words), and their tests.
-   - **Rough size:** about 120 production lines and 250 test lines.
+3. **A printout stuck waiting: "end the stuck printout, then reprint it elsewhere"?** **Approved by
+   the watcher, 2026-11-09 22:14** (`questions.md`, "## WATCHER 2026-11-09 22:14"): built in this PR
+   as Task 17c, about 120 production and 250 test lines, tested at one layer. Point 4's "Stuck
+   printouts" bullet says what it does and what it still leaves out.
+4. **Marking of a receipt reprinted elsewhere** — answered by the owner, 2026-11-09 22:22:
+   "original" (see "Why a reprint keeps its own marking").
 
 ## What goes beyond the spec
 
@@ -469,7 +459,7 @@ prints as the original, not marked as a copy. A copy stays a copy.
 
 ## PR split and review weight
 
-Twenty-four tasks, four PRs, in order; each later PR is branched from `main` after the earlier one lands
+Twenty-five tasks, four PRs, in order; each later PR is branched from `main` after the earlier one lands
 (`python3 ~/workspace/tools/worktree.py new waitron <branch> --headless`, after syncing `main`),
 because all four change `printers-screen.ts` and `strings.ts`.
 
@@ -493,7 +483,7 @@ because all four change `printers-screen.ts` and `strings.ts`.
   and cannot be switched back on or re-addressed there (refused by design).
 - **PR 4 — "Pair again, and reprint to another printer"** (`feat/a405-pair-again-reprint`,
   `/Users/clintongormley/workspace/worktrees/waitron-feat-a405-pair-again-reprint`): Tasks 15–20
-  (Task 17 in three parts: 17a, 17b-1, 17b-2), points 3 and 4. No table, column or migration.
+  (Task 17 in four parts: 17a, 17b-1, 17b-2, 17c), points 3 and 4. No table, column or migration.
   **Risk triggers:
   cross-package contract** (`resendPrintJob` in `@waitron/printing` takes a target printer and
   payload, and the package exports two new helpers; `resendInvoicePrintJob`, `PrintApiDeps`, the
@@ -503,12 +493,13 @@ because all four change `printers-screen.ts` and `strings.ts`.
   receipt or full invoice laid out again for another printer must be the same receipt — invoice
   number, lines, QR text — keep its original or duplicate marking, and reserve the full invoice's
   delivery as a same-printer reprint does). Full path; two Codex run-it reviews. Size, estimated:
-  about 600 production lines (about a third the Pair again window, a third the Reprint dialog) and
-  about 900 test lines, plus one line in each of the eleven test files that mount the print API.
+  about 720 production lines (about a quarter the Pair again window, a quarter the Reprint dialog,
+  about 120 the stuck-printout move) and about 1,150 test lines, plus one line in each of the eleven
+  test files that mount the print API.
   The PR description says the centring was proven on paper by the owner, or that it was not
-  (Task 20 Step 3); states the limit that a printout stuck waiting on a switched-off or unseen
-  printer gets no Reprint (Point 4), with open question 3's option; and gives "Why a reprint keeps
-  its own marking".
+  (Task 20 Step 3); says a printout stuck on a disabled or unseen printer can now be moved and is
+  ended there, and what is still not covered (Point 4's "Stuck printouts"); and gives "Why a
+  reprint keeps its own marking" with the owner's answer.
 
 ## Overlap with open branches (none is a reason to wait)
 
@@ -545,7 +536,9 @@ The inputs most likely to bite that no step would otherwise test; each has its t
    job); a receipt copy reprinted elsewhere (still marked a copy); a full invoice whose original
    failed, reprinted elsewhere (its delivery reserved for the new job); a kitchen ticket whose
    printer was recalibrated after it printed (its width read from the job) — each refused or
-   accepted server-side, whatever the dashboard offered (Task 17b-1).
+   accepted server-side, whatever the dashboard offered (Task 17b-1); and a Queued job on a disabled
+   printer, a Queued full invoice on an unseen USB printer, a Printing job, and a stuck kitchen ticket
+   refused for a narrower printer (left Queued) (Task 17c).
 
 ## Words for the owner
 
@@ -658,6 +651,7 @@ lista. Sus detalles no tienen calibración; **Imprimir página de prueba** la co
 | `printers.reprint_own_only` | new | This printout reprints only on its own printer. | Esta impresión solo se reimprime en su propia impresora. |
 | `printers.reprint_original_off` | new (Spanish reworded 2026-11-09) | {printer} is disabled. Switch it on in its details, then reprint. | {printer} está deshabilitada. Actívala en sus detalles y reimprime. |
 | `printers.reprint_none` | new (reworded 2026-11-09) | No other active printer can take this printout. Switch {printer} on in its details, then reprint. | Ninguna otra impresora activa sirve para esta impresión. Activa {printer} en sus detalles y reimprime. |
+| `printers.reprint_stuck` | new (2026-11-09, Task 17c) | {printer} has not printed this. Reprinting it elsewhere cancels it there. | {printer} aún no la ha impreso. Si la reimprimes en otra, se cancela allí. |
 | `printers.reprint_sent` | new | Reprint sent to {printer} | Reimpresión enviada a {printer} |
 
 A receipt or full invoice, which any receipt printer can take, shows no hint: every active receipt
@@ -669,6 +663,7 @@ and button, `action.cancel`, the Pair dialog's existing words.
 | Code | English | Spanish |
 | --- | --- | --- |
 | `print_job.own_printer_only` | This printout can only be reprinted on its own printer. Choose that printer. | Esta impresión solo se puede reimprimir en su propia impresora. Elige esa impresora. |
+| `print_job.moved` (new, Task 17c: a `last_error`, shown as the job's reason) | Reprinted on another printer, so this job will not be retried. | Se reimprimió en otra impresora, así que este trabajo no se volverá a intentar. |
 | `print_job.printer_unsuitable` (reworded 2026-11-09) | That printer is disabled, deleted or narrower than this printout. Choose another printer. | Esa impresora está deshabilitada, eliminada o es más estrecha que esta impresión. Elige otra impresora. |
 
 The till reprints through its own routes (`till-api.ts:2496` calls `resendInvoicePrintJob` with no
@@ -683,13 +678,11 @@ Appended to the existing **Print Queue** section (`{#print-queue}`,
 `apps/server/src/guide/en/printers.md:37`), English:
 
 ```markdown
-**Reprint** sends a printout again once it has printed or has stopped trying. It can go to another
-printer: a receipt or invoice to any receipt printer, a kitchen ticket or refund receipt to one at
-least as wide. Other printouts reprint only on their own printer.
+**Reprint** sends a printout again, on its own printer or another: a receipt or invoice on any
+receipt printer, a kitchen ticket or refund receipt on one at least as wide. A printout waiting on a
+printer that is disabled or out of reach can be moved the same way, and is cancelled there. Other
+printouts reprint only on their own printer.
 ```
-
-It does not promise a way round a printer that is out of service: a printout still waiting there
-has no Reprint (Point 4's limit).
 
 Appended to Printer details: "A Bluetooth printer you unpaired is disabled. To use it again, put it
 in pairing mode, open its details and choose **Pair again**."
@@ -697,10 +690,10 @@ in pairing mode, open its details and choose **Pair again**."
 Spanish, appended to **Cola de impresión** (`apps/server/src/guide/es/printers.md:39`):
 
 ```markdown
-**Reimprimir** vuelve a enviar una impresión cuando ya se imprimió o dejó de intentarlo. Puede ir a
-otra impresora: un ticket o una factura, a cualquier impresora de tickets; una comanda de cocina o
-un ticket de devolución, a una al menos igual de ancha. Las demás impresiones solo se reimprimen en
-su propia impresora.
+**Reimprimir** vuelve a enviar una impresión, a su impresora o a otra: un ticket o una factura, a
+cualquier impresora de tickets; una comanda de cocina o un ticket de devolución, a una al menos
+igual de ancha. Una impresión que espera en una impresora deshabilitada o fuera de alcance se puede
+mover igual, y allí se cancela. Las demás impresiones solo se reimprimen en su propia impresora.
 ```
 
 Appended to Detalles de la impresora: "Una impresora Bluetooth que desvinculaste queda
@@ -846,7 +839,10 @@ PR 4:
   the queue reloads after. "shows a localized resend failure and permits another attempt" (`:5347`)
   → the refusal shows at the dialog's bottom and its Reprint is usable again. "labels Reprint and
   separates it visibly from View printout" (`:5304`) is unchanged.
-- The `PrintJobRow` fixtures in `printers-screen.test.ts` gain `reprintRule` and
+- Any existing case asserting `canResend: false` for a Queued job on a disabled or unseen printer
+  (Task 17c Step 4 finds them) → `canResend: true` when another printer can take it: the
+  approved stuck-printout move changes what it checks.
+- The `PrintJobRow` fixtures in `printers-screen.test.ts` gain `reprintRule`, `stuck` and
   `reprintPrinterIds`, and the eleven test files that mount the print API
   (`grep -rln "mountPrintApi(" apps/server/src`, `b58e87c79f`) gain `layOutSaleReceipt` in their
   deps — data, not assertions.
@@ -1639,6 +1635,77 @@ The decision and its tests, called directly; no route change yet.
   `@waitron/server` and `@waitron/dashboard` — pass.
 - [ ] **Step 5: Commit** — `git commit -s -m "The print queue's resend takes a printer, and each printout says which printers it may go to (A405 point 4)"`.
 
+### Task 17c: A printout stuck on a disabled or unseen printer can be moved, and is ended there
+
+Approved by the watcher, 2026-11-09 22:14 (`questions.md`, "## WATCHER 2026-11-09 22:14"): build
+it in this PR, tested at one layer, with no repeated per-route cases. Point 4's "Stuck printouts"
+bullet has the code it rests on.
+
+**Stuck**, for this task: a document job **Queued**, or **Failed** with attempts left — never
+**Printing** (an agent holds it and may be sending it), never a drawer job — whose printer is not
+deleted and is either switched off in Waitron, or is an active USB or Bluetooth printer that no
+agent has reported seeing recently (the list's `printer.not_visible` test, `print-api.ts:1497-1502`
+and `:1515-1525`, minus Printing).
+
+**Files:**
+- Modify: `packages/printing/src/outbox.ts` (exported from `src/index.ts`) —
+  `PRINT_JOB_MOVED = "print_job.moved"` and `endMovedPrintJob(tx, jobId): Promise<boolean>`: one
+  `update print_jobs set status = 'failed', attempts = MAX_DELIVERY_ATTEMPTS, last_error =
+  PRINT_JOB_MOVED where id = ? and kind = 'document' and (status = 'queued' or (status = 'failed'
+  and attempts < MAX_DELIVERY_ATTEMPTS)) returning id`, as `endDeletedPrinterJobs` ends jobs
+  (`printer-delete-jobs.ts`); `true` when it ended the job. The state test sits in the update, so a
+  job an agent claimed meanwhile is left alone.
+- Modify: `apps/server/src/print-job-reprint.ts` — `reprintJobOn` takes
+  `{ ownPrinterUnseen: boolean }` from the route. At step 3, a job `canResendPrintJob` refuses goes
+  on only when it is stuck (its printer read in the same step: active, deleted, transport) and the
+  target is another printer; otherwise `print_job.not_resendable` as before. Steps 4–7 run as for
+  any job. Then, for a stuck job: `endMovedPrintJob` (`false` → `print_job.not_resendable`), and
+  `endInvoicePrintDeliveries(tx, [jobId])` (`invoice-print.ts:128-149`) so a full invoice's queued
+  delivery ends with it; then step 8 as for any job. Everything runs in the route's one
+  transaction, so a refusal after the end leaves the original as it was. What follows is today's
+  code: the ended job no longer counts as a live original (`outbox.ts:104-121`) or an active
+  delivery (`invoice-delivery.ts`), so the reprint keeps its marking and reserves a new delivery;
+  its `resend_of` clears the original's trouble once it prints (`print-job-trouble.ts:57-61`).
+- Modify: `apps/server/src/print-api.ts` — one local `seen(printer)` over `discovered` and
+  `isFresh`, used by the list (replacing the `visible` set's inline use, `:1497-1502`) and by the
+  route, which passes `ownPrinterUnseen` to `reprintJobOn`. The list's rows gain `stuck: boolean`,
+  and `canResend` is also true for a stuck job whose `reprintPrinterIds` is not empty (a stuck job
+  with nowhere else to go keeps no Reprint, as today).
+- Modify: `apps/dashboard/src/api/client.ts` — `PrintJobRow.stuck`.
+- Modify: `apps/dashboard/src/i18n/codes.ts` — `print_job.moved`'s words (a `last_error`, shown in
+  the queue's reason line).
+- Test: `packages/printing/src/outbox.test.ts`, `packages/printing/src/runtime.eligibility.test.ts`, `apps/server/src/print-job-reprint.test.ts`,
+  `apps/server/src/print-api.printer-wiring.test.ts`.
+
+- [ ] **Step 1: Write the failing tests**, each property once, at its owner.
+  - `outbox.test.ts`: `endMovedPrintJob` ends a Queued job and a Failed one with attempts left
+    (`failed`, attempts at the cap, `print_job.moved`, `true`); it leaves a Printing job, a Done
+    job, a job with its attempts used and a drawer job as they were and returns `false`.
+  - `runtime.eligibility.test.ts`: `it("never hands out a moved job when its printer is back")` — a moved
+    job on an active, visible printer is not claimed.
+  - `print-job-reprint.test.ts`: a Queued original receipt on a disabled printer, reprinted
+    elsewhere: the original is `print_job.moved`, the new job is on the target, still the original
+    (`receiptCopy` false), and `readOriginalReceiptPrint` names it; a Queued full invoice on an
+    active USB printer with `ownPrinterUnseen: true`: its old delivery `failed`, a new delivery
+    reserved for the new job; the same job with `ownPrinterUnseen: false` →
+    `print_job.not_resendable` and nothing changed; a Printing job on a disabled printer →
+    `print_job.not_resendable`; a stuck kitchen ticket to a narrower printer →
+    `print_job.printer_unsuitable` with the original still Queued.
+  - `print-api.printer-wiring.test.ts`, extending 17b-2's list case: a Queued job on a disabled
+    printer and one on an unseen Bluetooth printer list `stuck: true` and `canResend: true`; a
+    Queued job on an active, seen printer lists `stuck: false`, `canResend: false`; one route case
+    moves the unseen Bluetooth printer's job (202), which is the only test of the route's
+    `ownPrinterUnseen` wiring.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/printing exec vitest run src/outbox.test.ts src/runtime.eligibility.test.ts`
+  and `pnpm --filter @waitron/server exec vitest run src/print-job-reprint.test.ts src/print-api.printer-wiring.test.ts -t "moved|stuck|unseen|disabled printer"`
+  — the new cases FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the four files whole, `src/alert-sources.test.ts`, and `tsc --noEmit` for
+  `@waitron/printing`, `@waitron/server` and `@waitron/dashboard` — pass. An existing case that
+  asserts `canResend: false` for a Queued job on a disabled or unseen printer changes, because the
+  owner's approval changes what it checks: list it in the PR as a changed assertion.
+- [ ] **Step 5: Commit** — `git commit -s -m "A printout stuck on a disabled or unseen printer can be reprinted elsewhere, and is ended where it was stuck (A405 point 4)"`.
+
 ### Task 18: The Reprint dialog
 
 **Files:**
@@ -1657,7 +1724,12 @@ holds, by name. The hint follows `reprintRule`: `any` (a receipt or full invoice
 else) `printers.reprint_own_only`. A disabled original is not offered and nothing is chosen;
 Reprint stays quiet and disabled until a printer is. With no other offer the combobox is replaced
 by `printers.reprint_original_off` (`own`) or `printers.reprint_none` (`any`, `wide_enough`), and
-Reprint stays disabled. A refusal shows at the bottom through `codeMessage`, Reprint usable again.
+Reprint stays disabled. A **stuck** job (`row.stuck`, Task 17c; the list offers Reprint for one only when another printer
+can take it) does not offer its own printer, chooses nothing, and shows
+`printers.reprint_stuck` above the combobox; Reprint stays quiet and disabled until a printer is
+chosen. The queue's reason line words `print_job.moved` through `codeMessage`: add it to
+`ENDED_BY_SERVER` (`printers-screen.ts:154`), which also shows "—" for its attempts.
+A refusal shows at the bottom through `codeMessage`, Reprint usable again.
 A success closes the dialog and shows `printers.reprint_sent` as the screen's `wt-notice`.
 
 **No draft scope, deliberately:** the dialog's only input is a preselected printer, as in the
@@ -1674,8 +1746,10 @@ staged-input rule.
   is chosen; a disabled original with none shows `printers.reprint_original_off` (`own`) or
   `printers.reprint_none` (`wide_enough`) with Reprint disabled; Reprint sends
   `resendPrintJob(id, chosen)` once while pending; a refusal shows
-  `codeMessage("print_job.printer_unsuitable")` at the bottom; in `printers-screen.test.ts`, the
-  changed `:5318` and `:5347` cases.
+  `codeMessage("print_job.printer_unsuitable")` at the bottom; a stuck job offers only the other
+  printers, chooses nothing and shows `printers.reprint_stuck`; in `printers-screen.test.ts`, a
+  moved job's reason reads `codeMessage("print_job.moved")` with "—" for attempts, and the changed
+  `:5318` and `:5347` cases.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/dashboard exec vitest run src/widgets/print-job-reprint-dialog.test.ts`
   and `src/screens/printers-screen.test.ts -t "resend|Reprint"` — FAIL.
 - [ ] **Step 3: Implement.** The a11y suite gains the dialog in both themes
@@ -1721,7 +1795,7 @@ staged-input rule.
   station-link entry from Task 11.
 - [ ] **Step 2: Look** as in Task 6 Step 2: the Pair again window in its looking, not-found and
   found states, the Reprint dialog for a receipt (every printer, no hint), a kitchen ticket (wide
-  enough, with its hint), an own-only printout and a disabled original, both themes, desktop and
+  enough, with its hint), an own-only printout, a disabled original and a stuck printout, both themes, desktop and
   phone, both languages; render the guide page.
 - [ ] **Step 3: A test print on the owner's 80 mm printer** (Epson TM-T88III, raw ESC/POS at
   `192.168.10.81`, port 9100). The runner cannot see paper; this step sends and records, and the
@@ -1751,7 +1825,6 @@ staged-input rule.
   Then `/finish-branch` with PR 4's worktree, naming this plan (full path: two Codex run-it
   reviews). The PR description lists the changed assertions, the words, the held remainder, the
   owner's answers to open questions 1 and 2, "Why a reprint keeps its own marking" (a failed
-  original reprinted elsewhere stays an original), the limit that a printout stuck waiting on a
-  switched-off printer, or a USB or Bluetooth printer no agent sees, gets no Reprint (Point 4), with
-  open question 3's option for the owner to choose, the two layout limits (today's trim and logo;
+  original reprinted elsewhere stays an original), the stuck-printout move (Task 17c) and what it still
+  leaves out (a deleted printer's jobs; a network printer whose agent is offline), the two layout limits (today's trim and logo;
   the sale's own language), and the test print's outcome.
