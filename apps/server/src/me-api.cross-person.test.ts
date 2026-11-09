@@ -125,7 +125,7 @@ async function setupVenue(): Promise<VenueResult> {
         country: "ES",
         taxId: "74000001K",
         legalName: "Deli Test SL",
-        name: "Sala principal",
+        name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
         operationDescription: "Venta en establecimiento",

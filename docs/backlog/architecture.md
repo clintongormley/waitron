@@ -836,7 +836,11 @@ product failures.
 
 ## A976. Finish the server's English test-venue defaults.
 
-- **A976. Finish the server's English test-venue defaults.** Local party-suite table, party,
+- **A976. Finish the server's English test-venue defaults.** `setupVenue` and
+  `provisionVenueBody` use `Main room`, with the venue-details readbacks and eight local
+  route/command seeds. Other suites' own venue seeds, the stream-loop/pause helpers and the boot
+  helper's raw `Barra` location seeds remain.
+  Local party-suite table, party,
   course and printer samples use English. Shared dish samples remain in their helpers and
   consumers, including `party-bill-actions.test.ts`, `party-move-bill.test.ts`,
   `party-arriving-dishes.test.ts` and `receipt-guests.test.ts`. Spanish display samples remain in

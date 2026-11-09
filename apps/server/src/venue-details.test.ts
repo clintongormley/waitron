@@ -243,7 +243,7 @@ describe("venue detail edits", () => {
   it("reads the deployed address, issuer and history independently", async () => {
     const model = await read();
     expect(model.details).toEqual({
-      name: "Sala principal",
+      name: "Main room",
       addressLine1: "Calle Mayor 1",
       addressLine2: null,
       postalCode: "28013",
@@ -335,13 +335,10 @@ describe("venue detail edits", () => {
   });
   it("serves empty and canonical equivalent patches without rewriting stored bytes", async () => {
     await suite.db.execute(
-      sql`update locations set name = '  Sala principal  ', province = 'Madrid', time_zone = 'Europe/Madrid', day_cutover = '05:00:00' where id = ${venue.cfg.locationId}`,
+      sql`update locations set name = '  Main room  ', province = 'Madrid', time_zone = 'Europe/Madrid', day_cutover = '05:00:00' where id = ${venue.cfg.locationId}`,
     );
     const initial = await read();
-    for (const changes of [
-      {},
-      { name: "Sala principal", province: "28", dayCutover: "05:00:00" },
-    ]) {
+    for (const changes of [{}, { name: "Main room", province: "28", dayCutover: "05:00:00" }]) {
       expect(
         (
           await withTransaction(suite.db, (tx) =>
@@ -350,7 +347,7 @@ describe("venue detail edits", () => {
         ).changed,
       ).toBe(false);
     }
-    expect((await read()).details.name).toBe("  Sala principal  ");
+    expect((await read()).details.name).toBe("  Main room  ");
   });
   it.each(["country", "legalName", "taxId", "fiscalTerritory"])(
     "refuses read-only %s even with a matching value",
@@ -672,10 +669,7 @@ describe("crafted detail bodies and legacy values", () => {
       sql`create trigger detail_probe_no_update before update on locations begin select raise(abort, 'detail probe update'); end`,
     );
     try {
-      for (const changes of [
-        {},
-        { name: " Sala principal ", province: "28", dayCutover: "05:00:00" },
-      ]) {
+      for (const changes of [{}, { name: " Main room ", province: "28", dayCutover: "05:00:00" }]) {
         expect(
           (
             await withTransaction(suite.db, (tx) =>
@@ -1666,7 +1660,7 @@ describe("reviewed legacy geography and clock repairs", () => {
         code: "venue.detail_locked",
         params: { field: "postalCode", reason: "geography_context" },
       });
-      expect((await read()).details.name).toBe("Sala principal");
+      expect((await read()).details.name).toBe("Main room");
       const saved = await withTransaction(suite.db, (tx) =>
         writeVenueDetails(tx, {
           expected: model.details,
