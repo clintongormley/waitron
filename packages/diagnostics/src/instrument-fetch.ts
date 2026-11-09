@@ -1,13 +1,27 @@
 import type { DiagnosticsLog } from "./log.js";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { PATH_PATTERNS } from "./path-patterns.js";
 
-/** Replace dynamic path segments (uuids, all-numeric ids) with `:id` so the trail records a stable
- * pattern, never a concrete id or PII in a path segment. */
 export function maskPath(path: string): string {
-  return path
-    .split("/")
-    .map((seg) => (seg !== "" && (UUID.test(seg) || /^\d+$/.test(seg)) ? ":id" : seg))
+  if (path === ":unparseable") return path;
+  let segments: string[];
+  try {
+    segments = new URL(path, "http://local").pathname.split("/");
+  } catch {
+    return ":unparseable";
+  }
+  for (const pattern of PATH_PATTERNS) {
+    const parts = pattern.split("/");
+    if (parts.length !== segments.length) continue;
+    if (parts.every((part, i) => (part === ":id" ? segments[i] !== "" : part === segments[i]))) {
+      return pattern;
+    }
+  }
+  return segments
+    .map((segment, i) => {
+      if (segment === "") return "";
+      return i === 1 && (segment === "api" || segment === "management-api") ? segment : ":id";
+    })
     .join("/");
 }
 
@@ -29,11 +43,11 @@ export function createInstrumentedFetch(
         : input instanceof URL
           ? input.href
           : (req?.url ?? String(input));
-    let path = urlStr;
+    let path: string;
     try {
       path = maskPath(new URL(urlStr, opts.baseUrl ?? "http://local").pathname);
     } catch {
-      /* keep raw */
+      path = ":unparseable";
     }
     const headers = new Headers(req?.headers);
     if (init?.headers) for (const [k, v] of new Headers(init.headers)) headers.set(k, v);

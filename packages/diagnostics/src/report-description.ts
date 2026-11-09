@@ -1,3 +1,10 @@
 export function reportDescriptionValid(value: string): boolean {
-  return [...value].length <= 2000 && !/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/u.test(value);
+  const characters = [...value];
+  return (
+    characters.length <= 2000 &&
+    characters.every((character) => {
+      const code = character.charCodeAt(0);
+      return code === 9 || code === 10 || (code >= 32 && (code < 127 || code > 159));
+    })
+  );
 }
