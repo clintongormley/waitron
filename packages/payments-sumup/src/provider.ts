@@ -16,7 +16,6 @@ import type {
   RefundAnswer,
   RefundLookup,
   RefundLookupQuery,
-  RefundOutcome,
   RefundRefusalReason,
   RefundSend,
 } from "@waitron/payments";
@@ -33,7 +32,7 @@ import {
   stampAttemptingRef,
 } from "@waitron/payments";
 import type { SumUpClient, SumUpTransaction, SumUpRefundEvent } from "./client.js";
-import { DOCUMENTED_REFUND_REFUSALS, SUMUP_PROVIDER } from "./client.js";
+import { DOCUMENTED_REFUND_REFUSALS, SUMUP_PROVIDER, refundOutcomeOf } from "./client.js";
 import { reverseViaSumUp } from "./reverse.js";
 import "./errors.js";
 
@@ -56,16 +55,6 @@ export const NOT_FOUND_GRACE_MS = 15 * 60_000;
  * the send (`refsBeforeSend`) does.
  */
 const CLOCK_ALLOWANCE_MS = 2 * 60_000;
-
-/** SumUp's event statuses: "`REFUNDED`: A refund event has been accepted and recorded in the refund
- * flow", "`SUCCESSFUL`: The event completed successfully", "`FAILED`: The event could not be
- * completed" and "`PENDING`: … whose final outcome is not known yet"
- * (https://developer.sumup.com/api/transactions). A status it adds later is `pending`. */
-function refundOutcomeOf(status: string): RefundOutcome {
-  if (status === "REFUNDED" || status === "SUCCESSFUL") return "completed";
-  if (status === "FAILED") return "failed";
-  return "pending";
-}
 
 export interface SumUpCloudProviderOptions {
   client: SumUpClient;
@@ -292,9 +281,9 @@ export class SumUpCloudProvider implements PaymentProvider {
         const prior = events.get(event.id);
         if (
           prior !== undefined &&
-          (prior.status !== event.status ||
+          (refundOutcomeOf(prior.status) !== refundOutcomeOf(event.status) ||
             compareDecimal(prior.amount, event.amount) !== 0 ||
-            prior.timestamp !== event.timestamp)
+            Date.parse(prior.timestamp) !== Date.parse(event.timestamp))
         )
           return { kind: "pending", refundUncertain: true };
         events.set(event.id, event);

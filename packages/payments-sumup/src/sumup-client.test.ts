@@ -969,15 +969,17 @@ describe("SumUp refund evidence", () => {
       { id: "3", status: "REFUNDED", amount: decimal("0.40"), timestamp: "2026-11-09T10:00:00Z" },
     ]);
   });
-  it.each([null, "unknown", [{ type: "REFUND", id: "", amount: 0.4, timestamp: "bad" }]])(
-    "retains malformed refund evidence (%s) instead of silently dropping it",
-    async (events) => {
-      const client = sumupClient({
-        apiKey: "k",
-        merchantCode: "M",
-        fetch: async () => Response.json({ id: "txn", status: "SUCCESSFUL", amount: 1, events }),
-      });
-      expect((await client.findTransaction({ id: "txn" }))?.refundEvidenceInvalid).toBe(true);
-    },
-  );
+  it.each([
+    null,
+    "unknown",
+    [{ id: 1, amount: 0.4, timestamp: "2026-11-09T10:00:00Z" }],
+    [{ type: "REFUND", id: "", amount: 0.4, timestamp: "bad" }],
+  ])("retains malformed refund evidence (%s) instead of silently dropping it", async (events) => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "M",
+      fetch: async () => Response.json({ id: "txn", status: "SUCCESSFUL", amount: 1, events }),
+    });
+    expect((await client.findTransaction({ id: "txn" }))?.refundEvidenceInvalid).toBe(true);
+  });
 });

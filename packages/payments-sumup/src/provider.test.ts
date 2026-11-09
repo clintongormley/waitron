@@ -807,6 +807,51 @@ describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
     });
   });
 
+  it.each(["identical", "equivalent"])(
+    "matches a single refund repeated in both real HTTP event arrays (%s)",
+    async (variant) => {
+      const event = {
+        id: 501,
+        status: "REFUNDED",
+        amount: 4,
+        timestamp: "2026-09-27T10:00:03.000Z",
+      };
+      const client = sumupClient({
+        apiKey: "k",
+        merchantCode: "M",
+        fetch: async () =>
+          Response.json({
+            id: "txn",
+            status: "SUCCESSFUL",
+            amount: 4,
+            events: [
+              {
+                ...event,
+                type: "REFUND",
+                ...(variant === "equivalent"
+                  ? { status: "SUCCESSFUL", timestamp: "2026-09-27T10:00:03+00:00" }
+                  : {}),
+              },
+            ],
+            transaction_events: [{ ...event, event_type: "REFUND" }],
+          }),
+      });
+      const provider = new SumUpCloudProvider({
+        client,
+        db: suite.db,
+        captureAlerts,
+        incidents: async () => true,
+      });
+      expect(await provider.lookupRefund(query("txn"))).toEqual({
+        kind: "match",
+        providerRefundRef: "501",
+        outcome: "completed",
+        providerStatus: "REFUNDED",
+      });
+      expect(await provider.existingRefundRefs("txn")).toEqual(["501"]);
+    },
+  );
+
   it("reads the ids of every refund event of the transaction, of any status and amount", async () => {
     const { fake, provider, transactionId } = await refundable();
     REFUNDED_AT(fake, transactionId)("2026-09-27T09:00:00.000Z", "701", "1.00");

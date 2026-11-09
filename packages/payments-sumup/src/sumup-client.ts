@@ -8,6 +8,7 @@ import "@waitron/payments";
 import {
   DOCUMENTED_REFUND_REFUSALS,
   fromMajorUnits,
+  refundOutcomeOf,
   SUMUP_PROVIDER,
   toMinorUnits,
 } from "./client.js";
@@ -75,7 +76,12 @@ function refundEventsOf(t: {
         refundEvidenceInvalid = true;
         continue;
       }
-      if ((e.event_type ?? e.type) !== "REFUND") continue;
+      const kind = e.event_type ?? e.type;
+      if (typeof kind !== "string" || kind === "") {
+        refundEvidenceInvalid = true;
+        continue;
+      }
+      if (kind !== "REFUND") continue;
       if (
         (typeof e.id !== "number" && typeof e.id !== "string") ||
         String(e.id) === "" ||
@@ -87,12 +93,22 @@ function refundEventsOf(t: {
         refundEvidenceInvalid = true;
         continue;
       }
-      refundEvents.push({
+      const event = {
         id: String(e.id),
         status: e.status ?? "",
         amount: fromMajorUnits(e.amount),
         timestamp: e.timestamp,
-      });
+      };
+      if (
+        !refundEvents.some(
+          (prior) =>
+            prior.id === event.id &&
+            refundOutcomeOf(prior.status) === refundOutcomeOf(event.status) &&
+            prior.amount === event.amount &&
+            Date.parse(prior.timestamp) === Date.parse(event.timestamp),
+        )
+      )
+        refundEvents.push(event);
     }
   }
   return { refundEvents, ...(refundEvidenceInvalid ? { refundEvidenceInvalid: true } : {}) };

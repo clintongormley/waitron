@@ -1,4 +1,4 @@
-import type { ReaderStatus, RefundRefusalReason } from "@waitron/payments";
+import type { ReaderStatus, RefundRefusalReason, RefundOutcome } from "@waitron/payments";
 import { decimal, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 
@@ -19,6 +19,12 @@ export interface SumUpRefundEvent {
   amount: Decimal;
   /** SumUp's clock, ISO 8601. */
   timestamp: string;
+}
+
+export function refundOutcomeOf(status: string): RefundOutcome {
+  if (status === "REFUNDED" || status === "SUCCESSFUL") return "completed";
+  if (status === "FAILED") return "failed";
+  return "pending";
 }
 
 export interface SumUpTransaction {
