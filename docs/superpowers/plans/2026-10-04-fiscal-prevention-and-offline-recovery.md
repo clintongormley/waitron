@@ -615,6 +615,11 @@ rename the original sale or replace its stored payload.
 
 ## Task 10: outside evidence, deployment checks and clock warnings
 
+**9 November 2026, W41s-10b retired:** the third bullet below (signed witnesses and fencing) is
+not built here. A1342 (#2654) stops a returning old main box on signed newer evidence in the
+backup bucket; A1418 part 1 and A1425 cover a one-box venue restored from its backup. The
+history-before-the-oldest-month point moves to Task 11. Receipt: the lane L re-map of 9 November.
+
 **4 November 2026, W41s-10a landed:** #2449 (`1b0d8c7655854dbb5959432964ebafa92080dbd3`)
 completes the first two implementation bullets below. Keep the
 [remaining qualification work](../../backlog/fiscal.md#qualify-reconciliation-against-live-aeat)
@@ -682,6 +687,9 @@ adviser questions as actual answers arrive, and W41s in the backlog.
 - [ ] Reconnect the original box in the supported fencing scenario and later recover its history.
   Confirm the stated limit where only manual offline assurance was available. Exercise queue
   restart after a lost response and the approved remedies with synthetic records.
+- [ ] Account for history before the oldest month W41s-10a looks up: name the evidence needed
+  before claiming the history is complete. Later months and retained receipt observations do not
+  settle an earlier missing period, and the backup bucket records no invoice range.
 - [ ] Write the printable procedure: isolate the old machine, obtain/consume allocation, retain
   paper evidence, activate, resume, investigate missing history and reconnect. Include recovery
   with no subscription, allocation exhaustion and a lost pack. Keep secret handling separate

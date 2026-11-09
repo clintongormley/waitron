@@ -366,16 +366,18 @@ file's edit scope is authorised. The live procedure is documented in
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
-Filing investigation (W41s-9), signed witnesses and fencing (W41s-10b), and the complete
-old-backup/new-hardware exercise (W41s-11) remain queued. Keep their authority, recovery and
+Filing investigation (W41s-9) and the complete old-backup/new-hardware exercise (W41s-11)
+remain queued. Signed witnesses and fencing (W41s-10b) were retired on 9 November 2026: A1342
+(#2654) stops a returning old main box on signed newer evidence in the backup bucket, and A1418
+with A1425 cover a one-box venue restored from its backup. Keep their authority, recovery and
 public fiscal-enablement gates. W41s-10a's remaining qualification work follows.
 
 ### Qualify reconciliation against live AEAT
 
 Exercise the startup/daily lookup through the real AEAT service. Retain the taxpayer, node and
 environment scope; incomplete or failed lookup remains unknown. Do not treat a lookup result as
-freshness, allocation authority or evidence that an old writer stopped. W41s-10b owns signed
-witnesses and fencing.
+freshness, allocation authority or evidence that an old writer stopped. Signed witnesses and
+fencing belong to A1342 (landed) and A1418.
 
 ### Qualify offline recovery through production TLS
 
@@ -394,7 +396,8 @@ an unlisted invoice number is not proof that a number was unused.
 ### Account for history before the oldest known month
 
 W41s-10a's monthly starting point can omit a wholly missing earlier period. Carry that uncertainty
-into W41s-10b's evidence/fencing design and W41s-11's exercise. Name the evidence required before
+into W41s-11's exercise. The backup bucket records no invoice range, so no signed witness settles
+it. Name the evidence required before
 claiming completeness; querying later months or showing retained receipt observations alone does
 not resolve earlier missing history.
 

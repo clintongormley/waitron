@@ -1749,6 +1749,9 @@ W41s-10b ("Signed stream witnesses and fencing", lane E) designs a signed witnes
 This design uses the pointer in the spare's store as the main box's outside witness on the LAN, and
 adopts W41s-10b's format when it lands rather than inventing one.
 
+**9 November 2026:** W41s-10b was retired. The format is the signed pointer in
+`packages/stream/src/pointer.ts`, with A1418's signed generation claims.
+
 ## 11. Build order: slices 3–5, as pull requests
 
 > **A1018, 2026-11-02:** 4e, 5a, 5b, 5c and 5d are mapped to A1018's build slices — see the dated A1018 block at the top.

@@ -297,9 +297,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   The precise H2 writer approval, released clock/Pay contracts and separate F1/delivery/physical gates remain.
   [Design](superpowers/specs/2026-10-22-a275-final-transfer-close-design.md), [detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17).
 
-- **W41s. Fiscal prevention and offline recovery.** Filing investigation (W41s-9), signed
-  witnesses and fencing (W41s-10b), and the complete old-backup/new-hardware exercise (W41s-11)
-  remain queued. Qualify live AEAT reconciliation, production TLS, a till payment through a booted
+- **W41s. Fiscal prevention and offline recovery.** Filing investigation (W41s-9) and the complete
+  old-backup/new-hardware exercise (W41s-11) remain queued. Signed witnesses and fencing (W41s-10b)
+  were retired on 9 November 2026: A1342 (#2654) and A1418 with A1425 cover them. Qualify live AEAT reconciliation, production TLS, a till payment through a booted
   restored server, and history before the oldest known month. Task 8's disputed production remedies
   remain disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision. Once its original's
   correction is accepted, on any issuing chain, an administrator may release a held cancellation

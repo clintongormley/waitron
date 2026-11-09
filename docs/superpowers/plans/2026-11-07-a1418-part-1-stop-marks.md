@@ -19,6 +19,7 @@
 - The wait after a start with no mark is at most `START_ANSWER_WAIT_MS = 60_000` from its first ask, ends as soon as the bucket answers, and no single ask runs past it.
 - A box with no bucket settings (`readStreamSettings` returns `null`) has nobody to ask and does not wait.
 - "Replaced" (Decision 1) = a pointer or a claim that verifies against the signer's key in this box's trust set and names a term higher than this box's held chart term. One that does not verify is no answer.
+- **9 November 2026, before building Tasks 4–5:** A1342 (#2654) landed after this plan with its own pointer check, `readNewerBucketMain` in `apps/server/src/stream-host.ts`, which trusts only a key this box itself vouched for. This plan's Task 5 trusts any key in the trust set. Settle one rule and use it in both places; do not ship two readers with different trust.
 - A restored box skips the replaced check while `REBUILD_MARKER` (`rebuild-first-start.json`) is in its state folder, and takes a term above the highest term any pointer or generation in its bucket names (Task 6).
 - Claim signatures use the purpose string `"waitron.stream.claim.v1"`, as the pointer uses `"waitron.stream.pointer.v1"`.
 - Three incident codes, each with an area claim, English and Spanish dashboard words and email words: `start.unplanned_stop`, `start.selling_unconfirmed`, `start.replaced`. Recorded only on a box that is not a mirror and not fenced (a mirror's `venue.db` is a copy).
