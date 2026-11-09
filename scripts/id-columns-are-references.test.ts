@@ -15,7 +15,7 @@ import { scratchParent } from "./scratch-dir.mjs";
  * (`importConfigurationTables`, `packages/provisioning/src/configuration-transfer.ts`), and the
  * export leaves out `omit` columns. Any other column the export carries that holds a row's id keeps
  * the EXPORTING venue's id. This guard fails when a column of a transferred table looks like it
- * holds an id and is none of `id`, a foreign key, a `references` or `omit` entry, or a column
+ * holds an id and is none of `id`, a foreign key, a `references`, `jsonReferences` or `omit` entry, or a column
  * `NOT_REFERENCES` lists below.
  *
  * Weaker than its name. It knows an id column only by its NAME — ending `_id` or `_ids` — so a

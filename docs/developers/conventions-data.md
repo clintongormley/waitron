@@ -1859,11 +1859,12 @@ the server's shape.
 
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry or left out of the export
 
-A configuration import gives every row whose `id` is text a new one, and rewrites a value to the new
-id only in a table's `id` column, its foreign-key columns, and the columns its module lists as
+A configuration import gives every row whose `id` is text a new one, and rewrites a whole value to the new
+id in a table's `id` column, its foreign-key columns, and the columns its module lists as
 `references` (`importConfigurationTables`, `packages/provisioning/src/configuration-transfer.ts`,
 which reads `pragma_foreign_key_list` for the keys), and the export leaves out the columns a table
-lists in `omit`. Until `locations` is dropped, a column whose foreign key points at it is set to the
+lists in `omit`. Declared `jsonReferences` paths rewrite ids inside JSON as described below.
+Until `locations` is dropped, a column whose foreign key points at it is set to the
 importing venue's row (`venueLocationId`), whatever the export carried. Any other column the export
 carries that holds a row's id arrives holding the EXPORTING venue's id. Before W72a (#1230) the
 import replaced any text equal to a bundle id in every column, so a product named like an id arrived
