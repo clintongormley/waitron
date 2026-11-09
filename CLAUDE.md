@@ -600,9 +600,11 @@ called weaker than its name, the topic file lists what it does not see.
   weaker than its name: text scan recognising fixed SQL shapes.
 - **A column of a transferred table that holds another row's id is a foreign key, a declared
   `references` entry or left out of the export** (`omit`); any other column the export carries
-  arrives holding the exporting venue's id. Guard:
+  arrives holding the exporting venue's id. A short id list kept as JSON (design R4) declares
+  `jsonReferences`: export prunes it, import rewrites it, and deletion clears it with
+  `removeIdFromJson`. Guard:
   `scripts/id-columns-are-references.test.ts`, weaker than its name — it knows an id column only by
-  a name ending `_id` or `_ids`.
+  a name ending `_id` or `_ids`, and a JSON column only by a `json_valid` CHECK naming it.
 - **A module that can be switched off or swapped keeps a migration set of its own; any other adds
   its tables to core's set, and the commit says which.** Stated exceptions: staffing, switchable
   with its tables in workforce's set, and `node`, whose set is applied to `node.db`. Append-only

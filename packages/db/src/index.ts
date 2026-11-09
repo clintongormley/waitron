@@ -73,6 +73,7 @@ export {
 } from "./schema/columns.js";
 export * from "./schema/tenants.js";
 export { readTenant } from "./read-tenant.js";
+export { withoutId, removeIdFromJson } from "./json-id-lists.js";
 export type { Tenant } from "./read-tenant.js";
 export {
   readVenue,
