@@ -3275,7 +3275,7 @@ describe("till-table-order-screen", () => {
       expect(changeDish(el)).not.toBeNull();
     });
 
-    it("offers Change dish on recalled and no-route sent rows, whether or not released", async () => {
+    it("offers Change dish on held-again and no-route sent rows, whether or not released", async () => {
       const { el } = await mountLines([recalledLine, noRouteLine, unreleasedNoRouteLine]);
       for (const lineNo of [6, 7, 8]) {
         await recallControl(el, lineNo);
@@ -3283,7 +3283,7 @@ describe("till-table-order-screen", () => {
       }
     });
 
-    it("offers Void in Sent on a recalled line", async () => {
+    it("offers Void in Sent on a held-again line", async () => {
       const { el } = await mountLines([recalledLine]);
       expect(await voidControl(el, 6)).not.toBeNull();
     });
@@ -3313,7 +3313,7 @@ describe("till-table-order-screen", () => {
       expect(await recallControl(el, 5)).not.toBeNull();
       expect(changeDish(el)).toBeNull();
       await recallControl(el, 6);
-      expect(changeDish(el)).toBeNull();
+      expect(changeDish(el), "line 6").toBeNull();
     });
 
     it("at a Not allowed station, Sent offers Void and neither Change nor Recall", async () => {
@@ -3329,7 +3329,7 @@ describe("till-table-order-screen", () => {
         expect(el.shadowRoot!.querySelector("[data-sent-line-void]")).not.toBeNull();
       }
       await recallControl(el, 7);
-      expect(changeDish(el)).toBeNull();
+      expect(changeDish(el), "line 7").toBeNull();
     });
 
     it("opens the note editor on a dish with no choices; saving updates the source-backed New order", async () => {

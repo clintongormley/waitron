@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { PartyBill, TabLine, TillCourse } from "../api/client.js";
+import type { TabLine, TillCourse } from "../api/client.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
@@ -12,7 +12,7 @@ import {
 import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { openSentDish } from "./till-table-order-screen.sent.test-helpers.js";
 import { flan, mount } from "./till-table-order-screen.test-helpers.js";
-import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openTableMenu, partyBill } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const course: TillCourse = {
   id: "dessert",
@@ -27,21 +27,7 @@ afterEach(() => {
   setLocale("en");
 });
 
-const openBill: PartyBill = {
-  workingOrderId: "wo-4",
-  revision: 0,
-  invoiceType: "F2",
-  recipient: null,
-  partyId: "v1",
-  label: null,
-  billNumber: 1,
-  billName: null,
-  status: "open",
-  total: "2.00",
-  outstanding: "2.00",
-  hasPayments: false,
-  receiptAvailable: false,
-};
+const openBill = partyBill("wo-4", 1, "2.00");
 
 /** The bill line behind the Sent row "dish", sold as the till's Flan, so its window can change it. */
 function dishLine(kind: "held" | "fired" | "served"): TabLine {

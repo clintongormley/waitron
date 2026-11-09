@@ -405,12 +405,13 @@ it("opens a fresh, unchanged window for another row", async () => {
 
 class SentChangeLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
+  lines: TabLine[] = [line()];
   override render() {
     return html`<till-table-order-screen
         .orderId=${"wo-4"}
         .products=${products}
         .menus=${menuOf(products)}
-        .lines=${[line()]}
+        .lines=${this.lines}
         .bills=${[bill("open")]}
         .groups=${groups}
         .currentOrders=${current()}
@@ -422,16 +423,24 @@ class SentChangeLeaveApp extends LitElement {
 }
 customElements.define("sent-change-leave-test-app", SentChangeLeaveApp);
 
-async function openInApp() {
-  const { el: app } = await mountWidget<SentChangeLeaveApp>("sent-change-leave-test-app", {});
+/** Opens the Sent window of the held Flan, or of the fired Coffee when `lines` hold it. */
+async function openInApp(lines?: TabLine[], lineId = "l-flan") {
+  const { el: app } = await mountWidget<SentChangeLeaveApp>(
+    "sent-change-leave-test-app",
+    lines === undefined ? {} : { lines },
+  );
   const el = app.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
   el.style.width = "1280px";
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
-  await panel.updateComplete;
-  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="l-flan"]')!);
+  if (lineId === "l-flan") {
+    await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
+    await panel.updateComplete;
+  }
+  await userEvent.click(
+    panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${lineId}"]`)!,
+  );
   await el.updateComplete;
   const coordinator = app.leave.coordinator;
   const request = coordinator.request.bind(coordinator);
@@ -502,6 +511,23 @@ it.each([
     expect(asked.count).toBe(2);
   },
 );
+
+it("asks before Serve throws a change away, and serves only on Discard", async () => {
+  const { el, asked, answer, dialog } = await openInApp([coffee()], "l-coffee");
+  const serves: unknown[] = [];
+  el.addEventListener("serve-lines", (event) => serves.push((event as CustomEvent).detail));
+  await editNote(el, "warm, no cream");
+  q(el, "[data-sent-line-serve]")!.click();
+  await answer("keep");
+  expect(serves).toEqual([]);
+  expect(dialog.open).toBe(true);
+  expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(false);
+  q(el, "[data-sent-line-serve]")!.click();
+  await answer("discard");
+  await expect.poll(() => serves).toHaveLength(1);
+  await expect.poll(() => dialog.open).toBe(false);
+  expect(asked.count).toBe(2);
+});
 
 const billEdit: BillEditExpected = {
   billId: "wo-4",
@@ -756,6 +782,15 @@ it("refuses a lower total at its field, with Void… beside it, which asks befor
   expect(seen).toEqual([]);
 });
 
+it("refuses a fraction below the lowest total as a quantity the dish cannot take, with no Void… beside it", async () => {
+  const el = await openRow({ lines: [line()] });
+  const seen = changes(el);
+  await setQuantity(el, "1.5");
+  await pressChange(el);
+  expect(seen).toEqual([]);
+  expect(quantityField(el)).toEqual({ error: t("line.quantity_invalid"), voidShown: false });
+});
+
 it("sends a whole total typed with a decimal place as digits only", async () => {
   const el = await openRow({ lines: [line()], revision: 9, billEdit });
   const seen = changes(el);
@@ -837,6 +872,30 @@ it("reopens the window as it was left when the kitchen had started the dish, the
   expect(seen).toHaveLength(2);
   expect(seen[1]!.patch).toEqual(seen[0]!.patch);
 });
+
+it.each([
+  ["Sent no longer shows the dish", { currentOrders: current({ groups: [] }) }],
+  ["Sent's list is not read yet", { currentOrdersUnread: true }],
+] as const)(
+  "tells the app it did not show a refusal when %s, opening no window",
+  async (_case, over: Partial<TillTableOrderScreen>) => {
+    const el = await openRow({ lines: [line()] });
+    const taken: { shown: boolean }[] = [];
+    el.addEventListener("change-refusal-taken", (event) =>
+      taken.push((event as CustomEvent<{ shown: boolean }>).detail),
+    );
+    const seen = changes(el);
+    await editNote(el, "warm, no cream");
+    await pressChange(el);
+    expect(seen).toHaveLength(1);
+    Object.assign(el, over);
+    await el.updateComplete;
+    el.changeRefusal = { lineNo: 1, message: startedFlan };
+    await el.updateComplete;
+    expect(taken).toMatchObject([{ shown: false }]);
+    expect(q<WtDialog>(el, "[data-sent-line-dialog]")!.open).toBe(false);
+  },
+);
 
 it("ignores a refusal no Change dish asked for, and a refusal for another dish", async () => {
   const el = await openRow({ lines: [line()] });

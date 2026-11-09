@@ -2507,14 +2507,19 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
+  #extraForbidsChange?: { lines: readonly TabLine[]; parents: Set<number> };
+
   #stationsAllowChange(line: TabLine): boolean {
     const stationAllows = (row: TabLine) =>
       row.changesAfterSending === null ||
       allowsChangeAfterSending(row.changesAfterSending, row.firedAt !== null);
-    return (
-      stationAllows(line) &&
-      this.lines.every((extra) => extra.parentLineNo !== line.lineNo || stationAllows(extra))
-    );
+    if (this.#extraForbidsChange?.lines !== this.lines) {
+      const parents = new Set<number>();
+      for (const row of this.lines)
+        if (row.parentLineNo != null && !stationAllows(row)) parents.add(row.parentLineNo);
+      this.#extraForbidsChange = { lines: this.lines, parents };
+    }
+    return stationAllows(line) && !this.#extraForbidsChange.parents.has(line.lineNo);
   }
 
   #productIndex?: {
@@ -3179,18 +3184,26 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Reopens the window of the Change dish the app says was refused, and tells the app whether it
-   * did: while another window is open, or the change was not sent from here, the app's banner says
-   * it instead. Either way the app then drops it, so a screen drawn afresh never says it again. */
+   * did: while another window is open, the change was not sent from here, or Sent does not show the
+   * dish, the app's banner says it instead. Either way the app then drops it, so a screen drawn
+   * afresh never says it again. */
   #reopenRefusedChange(): void {
     const refusal = this.changeRefusal;
     if (refusal === null) return;
     const attempt = this.#sentChangeAttempts.get(refusal.lineNo);
     this.#sentChangeAttempts.delete(refusal.lineNo);
-    const shown = attempt !== undefined && this.sentLinePending === null;
-    if (shown) {
+    let shown = false;
+    if (attempt !== undefined && this.sentLinePending === null) {
       const pending = { ...attempt.pending };
       this.sentLinePending = pending;
-      this.sentChangeRefused = { pending, message: refusal.message, selection: attempt.selection };
+      shown = this.#sentLine() !== undefined;
+      if (shown)
+        this.sentChangeRefused = {
+          pending,
+          message: refusal.message,
+          selection: attempt.selection,
+        };
+      else this.sentLinePending = null;
     }
     this.#dispatch("change-refusal-taken", { refusal, shown });
   }

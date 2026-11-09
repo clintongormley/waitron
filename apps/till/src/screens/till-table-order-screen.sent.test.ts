@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { setLocale } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import type { PartyBill, TabLine } from "../api/client.js";
+import type { TabLine } from "../api/client.js";
 import { beer, flan, mount, resized } from "./till-table-order-screen.test-helpers.js";
 import {
   current,
@@ -13,7 +13,7 @@ import {
   row,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import { switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -372,22 +372,7 @@ it("opens sent information as read-only recorded dish, extra and note prices at 
     stationId: null,
     movable: false,
   };
-  const openBill: PartyBill = {
-    workingOrderId: "wo-4",
-    revision: 0,
-    invoiceType: "F2",
-    recipient: null,
-    partyId: "v1",
-    label: null,
-    billNumber: 1,
-    billName: null,
-    status: "open",
-    total: "10.00",
-    outstanding: "10.00",
-    hasPayments: false,
-    receiptAvailable: false,
-  };
-  const { el } = await sent({ lines: [flanLine], bills: [openBill] });
+  const { el } = await sent({ lines: [flanLine], bills: [partyBill("wo-4", 1, "10.00")] });
   const events = collect(el, "serve-lines");
   await click(el, "[data-held-toggle]");
   await click(el, '[data-sent-info="l-flan"]');
