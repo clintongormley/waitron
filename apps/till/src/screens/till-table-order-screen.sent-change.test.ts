@@ -1136,7 +1136,7 @@ it.each<[string, TabLine[], TabLine[], Partial<TillTableOrderScreen>, number?]>(
     2,
   ],
 ])(
-  "throws a staged change away and says so when another device changes %s, so the newer one is never overwritten",
+  "throws a staged change away and says so when another device changes %s",
   async (_, lines, newer, over, picked) => {
     const el = await openRow({ lines, revision: 9, billEdit, ...over });
     const seen = changes(el);

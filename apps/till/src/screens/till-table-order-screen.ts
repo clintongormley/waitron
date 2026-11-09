@@ -568,7 +568,6 @@ type SentChangeSeed<Pending> = {
 interface LinesIndex {
   lines: readonly TabLine[];
   byNo: Map<number, TabLine>;
-  /** Each dish's extras rows, by the dish's line number. */
   children: Map<number, TabLine[]>;
   /** The dishes an extra's station keeps from changing. */
   extraForbidsChange: Set<number>;
