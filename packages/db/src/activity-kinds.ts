@@ -1,5 +1,5 @@
 /**
- * Data holds no person's name, email, telephone, tax number or guest health detail: A980 erases
+ * Data holds no person's name, email, telephone, tax number or guest health detail: A980's design erases
  * people by anonymising persons, while these rows cannot change. Readers resolve names now.
  * People appear as the actor, a person subject, or an id in a declared personFields entry (dv17).
  * The taxpayer's legal name is the sole exception (vb2): it is already kept in fiscal records

@@ -1,5 +1,8 @@
+import { openVenueDatabase, readActivityForSubject, withTransaction } from "@waitron/db";
+import { importSettingsDocuments } from "../../../packages/provisioning/src/settings-transfer.js";
 import {
   holdingsRead,
+  askStartAgain,
   expectRefused,
   keptRecordsLogReason,
   notReadyBecause,
@@ -252,4 +255,28 @@ it("a held setup whose database the inspection shows empty refuses the summary s
     },
   } as Held["host"];
   await expectRefused(f, notReadyBecause("may-have-filed"), { host });
+});
+
+it("imported settings history does not block Start again for a held setup", async () => {
+  const f = await heldSetup();
+  const held = await openVenueDatabase(f.roots.venueDir);
+  try {
+    await withTransaction(held.venue, (tx) =>
+      importSettingsDocuments(
+        tx,
+        { adjustments: { version: 1, doc: { maxBillComp: 4000, billApproverRoles: ["manager"] } } },
+        f.host.modules,
+      ),
+    );
+    expect(
+      (await readActivityForSubject(held.venue, { kind: "settings", id: "adjustments" })).map(
+        ({ personId, data }) => ({ personId, data }),
+      ),
+    ).toEqual([{ personId: null, data: { revision: 1 } }]);
+  } finally {
+    await held.close();
+  }
+  const attempt = await askStartAgain(f);
+  await expect(attempt.run()).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f.roots);
 });

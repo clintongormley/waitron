@@ -6224,8 +6224,11 @@ Data keys use camelCase. These rules override the appendices' `authorized_by` / 
 spellings and tables-devices' suggestion to copy people's names: A980 anonymises `persons`, while
 activity rows cannot change. Labels of things, such as menus and roles, may still be copied.
 
-The typed writer fixes the subject kind and checks data at compile time; there is no CHECK listing
-kinds, subjects or data shapes. Actor and device keys refuse deletion of their referenced rows.
+The writer fixes the subject kind. With a literal kind and data object, TypeScript checks the
+declared fields; variables, spreads and union kinds can bypass that check, so review still checks
+what each caller records. There is no CHECK listing kinds, subjects or data shapes. For an unfinished first
+setup, core lists `activity_log` in `startAgainDeletable`, so import history cannot block Start
+again; invoice and accepted-record refusals still apply. Actor and device keys refuse deletion of their referenced rows.
 The source guard `scripts/write-path-tables.test.ts` restricts writes to the writer's file; it reads
 text, judges files rather than call chains, and misses the spellings and paths its header lists.
 It does not validate runtime data or guard reads. See

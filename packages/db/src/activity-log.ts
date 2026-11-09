@@ -69,6 +69,7 @@ async function readEntries(
   if (options.kinds?.length === 0) return [];
   const actor = alias(persons, "activity_actor");
   const subject = alias(persons, "activity_subject");
+  // Keep a kind filter from replacing the subject/person lookup with the kind-wide index.
   const rows = await db
     .select({
       id: activityLog.id,
@@ -91,7 +92,9 @@ async function readEntries(
     .where(
       and(
         predicate,
-        options.kinds === undefined ? undefined : inArray(activityLog.kind, [...options.kinds]),
+        options.kinds === undefined
+          ? undefined
+          : inArray(sql`+${activityLog.kind}`, [...options.kinds]),
       ),
     )
     .orderBy(activityLog.at, sql`${activityLog}.rowid`);

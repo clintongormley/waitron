@@ -9,6 +9,7 @@ import { persons } from "./schema/identity/persons.js";
 import { activityLog } from "./schema/activity-log.js";
 import { withTransaction } from "./tenancy.js";
 import type { Transaction } from "./client.js";
+import { seedDevice, seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
 async function plans(read: () => Promise<unknown>) {
@@ -51,39 +52,39 @@ async function plans(read: () => Promise<unknown>) {
 }
 
 function typeCases(tx: Transaction) {
-  // @ts-expect-error settings history carries no document value
   void recordActivity(tx, {
     kind: "settings.saved",
     subjectId: "probe",
     personId: null,
+    // @ts-expect-error settings history carries no document value
     data: { revision: 1, doc: {} },
   });
-  // @ts-expect-error unknown kind
   void recordActivity(tx, {
+    // @ts-expect-error unknown kind
     kind: "membership.node_renamed",
     subjectId: "node",
     personId: null,
     data: { term: 3 },
   });
-  // @ts-expect-error term is required
   void recordActivity(tx, {
     kind: "membership.node_cleared",
     subjectId: "node",
     personId: null,
+    // @ts-expect-error term is required
     data: {},
   });
-  // @ts-expect-error clearance carries no contact URL
   void recordActivity(tx, {
     kind: "membership.node_cleared",
     subjectId: "node",
     personId: null,
+    // @ts-expect-error clearance carries no contact URL
     data: { term: 3, contactUrl: "https://a.example" },
   });
-  // @ts-expect-error term is numeric
   void recordActivity(tx, {
     kind: "membership.node_cleared",
     subjectId: "node",
     personId: null,
+    // @ts-expect-error term is numeric
     data: { term: "3" },
   });
   // @ts-expect-error the actor must be stated
@@ -143,6 +144,29 @@ describe("activity log", () => {
       },
     ]);
   });
+  it("forwards the requesting device to the stored entry", async () => {
+    await seedVenue(suite.db, {
+      name: "Venue",
+      invoiceLocales: ["en"],
+      operationDescription: "Sale on premises",
+    });
+    const { deviceId } = await seedDevice(suite.db);
+    const entry = await withTransaction(suite.db, (tx) =>
+      recordActivity(tx, {
+        kind: "membership.node_cleared",
+        subjectId: "node",
+        personId: actor,
+        deviceId,
+        data: { term: 3 },
+      }),
+    );
+    expect(
+      await suite.db
+        .select({ deviceId: activityLog.deviceId })
+        .from(activityLog)
+        .where(eq(activityLog.id, entry.id)),
+    ).toEqual([{ deviceId }]);
+  });
   it("records the time it is given", async () => {
     const time = new Date("2026-01-01T00:00:00.000Z");
     const entry = await add("node", time);
@@ -168,16 +192,14 @@ describe("activity log", () => {
     const second = await add();
     const earlier = await add("node", new Date("2026-01-01T00:00:00.000Z"));
     await add("other-node");
-    await suite.db
-      .insert(activityLog)
-      .values({
-        at,
-        kind: "membership.node_cleared",
-        subjectKind: "other",
-        subjectId: "node",
-        personId: actor,
-        data: { term: 3 },
-      });
+    await suite.db.insert(activityLog).values({
+      at,
+      kind: "membership.node_cleared",
+      subjectKind: "other",
+      subjectId: "node",
+      personId: actor,
+      data: { term: 3 },
+    });
     const entries = await readActivityForSubject(suite.db, { kind: "node", id: "node" });
     expect(entries.map((entry) => entry.id)).toEqual([earlier.id, first.id, second.id]);
     expect(entries.map((entry) => [entry.personName, entry.subjectPersonName])).toEqual([
@@ -194,15 +216,13 @@ describe("activity log", () => {
   });
   it("filters subject kinds and returns nothing for an empty kind list", async () => {
     const cleared = await add();
-    await suite.db
-      .insert(activityLog)
-      .values({
-        at,
-        kind: "membership.node_removed",
-        subjectKind: "node",
-        subjectId: "node",
-        data: { contactUrl: "https://a.example", term: 3 },
-      });
+    await suite.db.insert(activityLog).values({
+      at,
+      kind: "membership.node_removed",
+      subjectKind: "node",
+      subjectId: "node",
+      data: { contactUrl: "https://a.example", term: 3 },
+    });
     expect(
       (
         await readActivityForSubject(
@@ -262,6 +282,21 @@ describe("activity log", () => {
     expect(person).toContain("activity_log_person_at_idx");
     expect(person).toContain("activity_log_subject_idx");
     expect(person).not.toContain("SCAN activity_log");
+    const filteredSubject = await plans(() =>
+      readActivityForSubject(
+        suite.db,
+        { kind: "node", id: "node" },
+        { kinds: ["membership.node_cleared"] },
+      ),
+    );
+    expect(filteredSubject).toContain("activity_log_subject_idx");
+    expect(filteredSubject).not.toContain("activity_log_kind_at_idx");
+    const filteredPerson = await plans(() =>
+      readActivityForPerson(suite.db, actor, { kinds: ["membership.node_cleared"] }),
+    );
+    expect(filteredPerson).toContain("activity_log_person_at_idx");
+    expect(filteredPerson).toContain("activity_log_subject_idx");
+    expect(filteredPerson).not.toContain("activity_log_kind_at_idx");
   });
   it("is a live-update source", () => {
     expect(CORE_CHANGE_SOURCES).toContainEqual({
