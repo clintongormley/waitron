@@ -564,6 +564,20 @@ type SentChangeSeed<Pending> = {
   selection: LineSelection;
 };
 
+interface LinesIndex {
+  lines: readonly TabLine[];
+  byNo: Map<number, TabLine>;
+  /** The dishes an extra's station keeps from changing. */
+  extraForbidsChange: Set<number>;
+}
+
+function stationAllowsChange(row: TabLine): boolean {
+  return (
+    row.changesAfterSending === null ||
+    allowsChangeAfterSending(row.changesAfterSending, row.firedAt !== null)
+  );
+}
+
 /** Whether two seeds of one Sent window describe the same stored dish. */
 function sameSentFacts<P>(a: SentChangeSeed<P>, b: SentChangeSeed<P>): boolean {
   return (
@@ -2173,7 +2187,6 @@ export class TillTableOrderScreen extends LitElement {
   /** Built with {@link groups}: every group, and the held ones, in position order. */
   #groupsInOrder: OrderGroup[] = [];
   #heldInOrder: OrderGroup[] = [];
-  #lineByNo = new Map<number, TabLine>();
 
   constructor() {
     super();
@@ -2226,7 +2239,6 @@ export class TillTableOrderScreen extends LitElement {
         billGross(this.lines, (line) => this.#lineGross(line)),
         this.lines.length,
       );
-      this.#lineByNo = new Map(this.lines.map((line) => [line.lineNo, line]));
     }
     this.#tidyMovePicks();
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
@@ -2549,19 +2561,27 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #extraForbidsChange?: { lines: readonly TabLine[]; parents: Set<number> };
+  /** Built from {@link lines} as they are when read, not at the last redraw: a press can land
+   * between a new `lines` and the redraw that shows it. */
+  #linesIndexed?: LinesIndex;
+
+  #linesIndex(): LinesIndex {
+    if (this.#linesIndexed?.lines !== this.lines) {
+      const extraForbidsChange = new Set<number>();
+      for (const row of this.lines)
+        if (row.parentLineNo != null && !stationAllowsChange(row))
+          extraForbidsChange.add(row.parentLineNo);
+      this.#linesIndexed = {
+        lines: this.lines,
+        byNo: new Map(this.lines.map((line) => [line.lineNo, line])),
+        extraForbidsChange,
+      };
+    }
+    return this.#linesIndexed;
+  }
 
   #stationsAllowChange(line: TabLine): boolean {
-    const stationAllows = (row: TabLine) =>
-      row.changesAfterSending === null ||
-      allowsChangeAfterSending(row.changesAfterSending, row.firedAt !== null);
-    if (this.#extraForbidsChange?.lines !== this.lines) {
-      const parents = new Set<number>();
-      for (const row of this.lines)
-        if (row.parentLineNo != null && !stationAllows(row)) parents.add(row.parentLineNo);
-      this.#extraForbidsChange = { lines: this.lines, parents };
-    }
-    return stationAllows(line) && !this.#extraForbidsChange.parents.has(line.lineNo);
+    return stationAllowsChange(line) && !this.#linesIndex().extraForbidsChange.has(line.lineNo);
   }
 
   #productIndex?: {
@@ -2589,6 +2609,24 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
+  #paidIndexed?: { lines: readonly TabLine[]; balance: BillBalance | null; dishes: Set<number> };
+
+  /** Each dish the shown bill's balance has paid any of, by line number: a dish counts as paid
+   * when it or any of its extras is. */
+  #paidDishes(): Set<number> {
+    const balance = this.#balanceShown();
+    const indexed = this.#paidIndexed;
+    if (indexed?.lines === this.lines && indexed.balance === balance) return indexed.dishes;
+    const paid = balance === null ? undefined : paidQuantities(balance);
+    const zero = decimal("0");
+    const dishes = new Set<number>();
+    for (const row of this.lines)
+      if (compareDecimal(decimal(paid?.get(row.lineNo) ?? "0"), zero) > 0)
+        dishes.add(row.parentLineNo ?? row.lineNo);
+    this.#paidIndexed = { lines: this.lines, balance, dishes };
+    return dishes;
+  }
+
   /** The dish line of each member a Sent window can change, or undefined when it is read-only. */
   #sentChangeLines(members: readonly SentSlice[]): TabLine[] | undefined {
     const zero = decimal("0");
@@ -2602,13 +2640,7 @@ export class TillTableOrderScreen extends LitElement {
       return;
     const lines = members.map((member) => this.#sentOrderLine(member));
     if (lines.some((line) => line === undefined)) return;
-    const balance = this.#balanceShown();
-    const paid = balance === null ? undefined : paidQuantities(balance);
-    // A dish is paid when it or any of its extras is, so its parent's number stands for both.
-    const paidDishes = new Set<number>();
-    for (const row of this.lines)
-      if (compareDecimal(decimal(paid?.get(row.lineNo) ?? "0"), zero) > 0)
-        paidDishes.add(row.parentLineNo ?? row.lineNo);
+    const paidDishes = this.#paidDishes();
     const recalled = this.#recalledLineIds();
     const editable = (line: TabLine) =>
       !paidDishes.has(line.lineNo) &&
@@ -2681,7 +2713,7 @@ export class TillTableOrderScreen extends LitElement {
 
   /** A dish's name, and an extra's with its dish's, so two extras of one name can be told apart. */
   #adjustName(line: TabLine): string {
-    const dish = this.#isChild(line) ? this.#lineByNo.get(line.parentLineNo!) : undefined;
+    const dish = this.#isChild(line) ? this.#linesIndex().byNo.get(line.parentLineNo!) : undefined;
     return dish === undefined
       ? this.#nameForLine(line)
       : t("table.extra_of")
@@ -3035,14 +3067,34 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  /** The bill lines recalled into this person's draft or another person's. */
+  #recalledIndexed?: {
+    store: WorkingOrderStore | null;
+    epoch: number;
+    others: readonly OtherDraft[];
+    ids: Set<string>;
+  };
+
+  /** The bill lines recalled into this person's draft or another person's. Kept only while the
+   * draft is the watched one, whose every change moves {@link #draftEpoch} as it happens. */
   #recalledLineIds(): Set<string> {
-    return new Set(
-      [
-        ...(this.#draftStore?.lines ?? []),
-        ...this.otherDrafts.flatMap((draft) => draft.lines),
-      ].flatMap((line) => (line.source === undefined ? [] : [line.source.line.id])),
+    const store = this.#draftStore;
+    const indexed = this.#recalledIndexed;
+    if (
+      indexed?.store === store &&
+      indexed.epoch === this.#draftEpoch &&
+      indexed.others === this.otherDrafts
+    )
+      return indexed.ids;
+    const ids = new Set(
+      [...(store?.lines ?? []), ...this.otherDrafts.flatMap((draft) => draft.lines)].flatMap(
+        (line) => (line.source === undefined ? [] : [line.source.line.id]),
+      ),
     );
+    this.#recalledIndexed =
+      this.#watchedDraft?.store === store
+        ? { store, epoch: this.#draftEpoch, others: this.otherDrafts, ids }
+        : undefined;
+    return ids;
   }
 
   #sentFallback(): TemplateResult | typeof nothing {
@@ -3286,12 +3338,8 @@ export class TillTableOrderScreen extends LitElement {
       this.#draftStore?.sending
     )
       return;
-    return this.lines.find(
-      (line) =>
-        line.id === slice.row.lineId &&
-        line.lineNo === slice.row.lineNo &&
-        line.parentLineNo == null,
-    );
+    const line = this.#linesIndex().byNo.get(slice.row.lineNo);
+    return line?.id === slice.row.lineId && line.parentLineNo == null ? line : undefined;
   }
 
   #canRecallSent(slice: SentSlice): boolean {
