@@ -1817,6 +1817,17 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
   }
 
+  /** Closes the window, throwing away the change its fields hold. */
+  async function closeDiscarding(el: TillApp, screen: TillTableOrderScreen, dialog: WtDialog) {
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-close]")!.click();
+    const question = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "wt-unsaved-changes",
+    )!;
+    await expect.poll(() => question.open).toBe(true);
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => dialog.open).toBe(false);
+  }
+
   /** The window's sentence above its buttons. */
   const windowSentence = (dialog: WtDialog) =>
     dialog.shadowRoot!.querySelector<HTMLElement>(".footer > .form-message")?.textContent?.trim();
@@ -1911,6 +1922,20 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await expect.poll(() => dialog.open).toBe(true);
     await expect.poll(() => windowSentence(dialog)).toBe(started.es);
     expect((await noteBox(screen)).value).toBe("no onions, no salt");
+    expect(banner(el)).toBeNull();
+  });
+
+  it("does not say a refusal the window already showed again when a language change draws the screen afresh", async () => {
+    const { el, screen, dialog } = await openBurgerWindow();
+    await changeNote(el, screen, "no onions");
+    await expect.poll(() => windowSentence(dialog)).toBe(started.es);
+    await closeDiscarding(el, screen, dialog);
+
+    setLocale("en-GB");
+    await flush(el);
+    await flush(el);
+
+    expect(tableOrder(el)).not.toBe(screen);
     expect(banner(el)).toBeNull();
   });
 
@@ -2387,6 +2412,34 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await expect.poll(() => windowSentence(dialog)).toBe(started.es);
       expect(dialog.open).toBe(true);
       expect((await noteBox(screen)).value).toBe("no onions");
+      expect(banner(el)).toBeNull();
+    });
+
+    it("does not say a refusal the window already showed again once a handheld goes to its Floor tab and back", async () => {
+      const { el, screen, settle } = await changeOnFormFactor(
+        phoneFormFactor,
+        {
+          readCurrentOrders: vi.fn().mockResolvedValue(sentBurger),
+          getTabLines: vi.fn().mockResolvedValue({
+            lines: [{ ...burgerLine, state: "preparing", note: "no salt" }],
+            revision: 7,
+          }),
+        },
+        true,
+      );
+      settle().reject({ code: "ticket.already_started" });
+      await flush(el);
+      const dialog = screen.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
+      await expect.poll(() => windowSentence(dialog)).toBe(started.es);
+      await closeDiscarding(el, screen, dialog);
+
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(shell(el), "screen-select", { screen: "order" });
+      await flush(el);
+      await flush(el);
+
+      expect(tableOrder(el)).not.toBe(screen);
       expect(banner(el)).toBeNull();
     });
 

@@ -3178,20 +3178,21 @@ export class TillTableOrderScreen extends LitElement {
     return true;
   }
 
-  /** Reopens the window of the Change dish the app says was refused. While another window is
-   * open, or the change was not sent from here, it hands the refusal back for the app's banner. */
+  /** Reopens the window of the Change dish the app says was refused, and tells the app whether it
+   * did: while another window is open, or the change was not sent from here, the app's banner says
+   * it instead. Either way the app then drops it, so a screen drawn afresh never says it again. */
   #reopenRefusedChange(): void {
     const refusal = this.changeRefusal;
     if (refusal === null) return;
     const attempt = this.#sentChangeAttempts.get(refusal.lineNo);
     this.#sentChangeAttempts.delete(refusal.lineNo);
-    if (attempt === undefined || this.sentLinePending !== null) {
-      this.#dispatch("change-refusal-unshown", refusal);
-      return;
+    const shown = attempt !== undefined && this.sentLinePending === null;
+    if (shown) {
+      const pending = { ...attempt.pending };
+      this.sentLinePending = pending;
+      this.sentChangeRefused = { pending, message: refusal.message, selection: attempt.selection };
     }
-    const pending = { ...attempt.pending };
-    this.sentLinePending = pending;
-    this.sentChangeRefused = { pending, message: refusal.message, selection: attempt.selection };
+    this.#dispatch("change-refusal-taken", { refusal, shown });
   }
 
   /** The open window's fields hold a change that another of its actions would throw away. */
