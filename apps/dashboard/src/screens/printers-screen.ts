@@ -1313,11 +1313,15 @@ export class PrintersScreen extends LitElement {
 
   // ── Printers ───────────────────────────────────────────────────────────────────────────────────
 
+  #scanWanted(): boolean {
+    return this.addingPrinter;
+  }
+
   async #loadDiscovered(epoch = this.#scanEpoch, passive = false): Promise<void> {
     const api = passive ? (this.api.background ?? this.api) : this.api;
     const started = ++this.#readCount;
     const devices = await api.listDiscoveredPrinters();
-    if (epoch !== this.#scanEpoch || !this.addingPrinter || !this.isConnected) return;
+    if (epoch !== this.#scanEpoch || !this.#scanWanted() || !this.isConnected) return;
     // A live answer that arrived after this read started is kept: it may be the newer one.
     if (this.#liveReadFloor > started) return;
     this.#setDiscovered(devices, started);
@@ -1394,11 +1398,11 @@ export class PrintersScreen extends LitElement {
       if (!address) await this.api.startPrinterDiscovery();
       if (epoch !== this.#scanEpoch) return;
       this.#probeTarget = target;
-      if (!this.isConnected || !this.addingPrinter) return this.#endScan();
+      if (!this.isConnected || !this.#scanWanted()) return this.#endScan();
       if (!address) this.#renewTimer ??= setInterval(() => void this.#renew(), DISCOVERY_RENEW_MS);
       await this.#loadDiscovered(epoch);
       if (epoch !== this.#scanEpoch) return;
-      if (!this.isConnected || !this.addingPrinter) return this.#endScan();
+      if (!this.isConnected || !this.#scanWanted()) return this.#endScan();
       this.#scanUntil =
         Date.now() + (target ? target.expiresAt - target.requestedAt : SCAN_LISTEN_MS);
       this.#scanTimer = setInterval(() => void this.#scanTick(), SCAN_POLL_MS);
@@ -1906,7 +1910,7 @@ export class PrintersScreen extends LitElement {
     this.pairSubmitting = true;
     try {
       const { command } = await this.api.pairBluetooth(device.agentId, device.localKey!, pin);
-      if (this.addingPrinter) this.#trackCommand(device.agentId, command, device);
+      if (this.#scanWanted()) this.#trackCommand(device.agentId, command, device);
       if (epoch === this.#pairEpoch && this.isConnected) {
         scope!.commit(pin);
         if (scope!.isDirty()) return;
