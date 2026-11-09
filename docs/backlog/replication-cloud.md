@@ -1015,8 +1015,8 @@ and cloud operations. See [documentation ownership](../cloud-ownership.md).
 
 ## A951. The box's lasting tunnel and public-certificate client
 
-**Owner decision, 6 November 2026: A951-S replaces the earlier build.** The old private branch
-stays parked. Use the existing Cloud gateway and one outbound WireGuard container. Staff use
+**Owner decision, 9 November 2026: the original A951 is dropped.** A951-S replaces it.
+Use the existing Cloud gateway and one outbound WireGuard container. Staff use
 password sign-in on the box; staff-host passkeys enrol separately. Venue devices keep using
 `.local`, and local sales never depend on Cloud or the internet. Customer pages stay later.
 
@@ -1033,7 +1033,8 @@ has no protected owner service, strict instant shutdown or independent protectio
 compromised box server. The watcher lifted the A760 landing freeze and table hold on 7 November.
 
 The [old plan](../superpowers/plans/2026-10-22-a951-connection.md) and its linked protocol and host
-artifacts describe the parked implementation. They do not add work or gates to A951-S.
+artifacts are historical references for the dropped implementation. They do not add work or
+gates to A951-S.
 
 ## A mirror keeps a renamed server's old chart (A917)
 
