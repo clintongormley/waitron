@@ -9352,6 +9352,24 @@ describe("printers-screen Bluetooth pairing", () => {
       expect(q(el, sel("pair-printer-modal"))).not.toBeNull();
     });
 
+    it("leaves a gap between the looking spinner and its words", async () => {
+      const { el } = await mountOff([]);
+      await pairAgain(el);
+      const status = q(el, sel("pair-again-status"))!;
+      const spinner = status.querySelector("wt-spinner")!.getBoundingClientRect();
+      const words = [...status.childNodes].find(
+        (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
+      )!;
+      const range = document.createRange();
+      range.selectNodeContents(words);
+      const first = [...range.getClientRects()].find((rect) => rect.width > 0)!;
+      const glyph = document.createRange();
+      const offset = words.textContent!.search(/\S/);
+      glyph.setStart(words, offset);
+      glyph.setEnd(words, offset + 1);
+      expect(glyph.getBoundingClientRect().left - spinner.right).toBeGreaterThan(first.height / 8);
+    });
+
     it("stops looking when the Pair again window closes", async () => {
       const { el, api, passive } = await mountOff([found]);
       await pairAgain(el);

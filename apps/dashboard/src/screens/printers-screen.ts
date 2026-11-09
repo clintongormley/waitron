@@ -2036,8 +2036,8 @@ export class PrintersScreen extends LitElement {
     if (key !== undefined) status = this.#renderCommand(key, command, "pair-again-command");
     else if (this.scanning)
       status = html`<p data-test="pair-again-status">
-        <wt-spinner decorative size="sm"></wt-spinner
-        >${fill("printers.pair_again_looking", { printer: printer.name })}
+        <wt-spinner decorative size="sm"></wt-spinner>
+        ${fill("printers.pair_again_looking", { printer: printer.name })}
       </p>`;
     else if (this.errorKey === null)
       status = html`<p data-test="pair-again-status">
