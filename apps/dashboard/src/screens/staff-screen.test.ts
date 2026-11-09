@@ -532,7 +532,7 @@ describe("staff-screen", () => {
     );
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")?.textContent).toContain(
-      "no se ha podido enviar",
+      t("staff.invitation_unconfigured"),
     );
   });
 
