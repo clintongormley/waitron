@@ -1,11 +1,12 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons, type WtModal } from "@waitron/ui";
-import type { DashboardApi, DiscoveredPrinter } from "../api/client.js";
+import type { DashboardApi, DiscoveredPrinter, Printer } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { PrintersScreen } from "./printers-screen.js";
 
 registerIcons(DASHBOARD_ICONS);
@@ -401,4 +402,91 @@ it("replacing discovery clears the old Bluetooth question and proof", async () =
   await expect.poll(() => modal(screen)).toBeNull();
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   expect(unload()).toBe(false);
+});
+
+describe("Pair again", () => {
+  const off = {
+    id: "p9",
+    name: "Bar printer",
+    transport: "bluetooth",
+    host: null,
+    port: null,
+    localKey: address,
+    pollId: null,
+    paperWidth: "58mm",
+    resolution: "203dpi",
+    hasCashDrawer: false,
+    portable: false,
+    pickupRoles: [],
+    holder: null,
+    pendingJobs: 0,
+    lastPrintAt: null,
+    lastPrintAgentId: null,
+    active: false,
+  } satisfies Printer;
+  const found: DiscoveredPrinter = { ...device, alreadyRegistered: true, printerId: off.id };
+
+  async function mountPairAgain() {
+    const { el: app } = await mountWidget<PrinterPairLeaveApp>("printer-pair-leave-test-app", {
+      api: {
+        listAgents: async () => [],
+        listPrinters: async () => [off],
+        listRecentJobs: async () => [],
+        listPrinterProfiles: async () => [],
+        listPrinterStationNames: async () => [],
+        joinRequests: async () => [],
+        pairingMode: async () => ({
+          open: false,
+          openUntil: null,
+          deviceAddress: "https://waitron.local",
+        }),
+        listDiscoveredPrinters: async () => [found],
+        listPagePrinters: async () => [],
+        startPrinterDiscovery: async () => {},
+        renewPrinterDiscovery: async () => {},
+        pairBluetooth: async () => ({ command }),
+      } as unknown as DashboardApi,
+    });
+    const screen = app.shadowRoot!.querySelector("dashboard-printers-screen")!;
+    await expect.poll(() => q(screen, "wt-tabs")).not.toBeNull();
+    q(screen, "wt-tabs")!.shadowRoot!.querySelector<HTMLElement>('[data-key="printers"]')!.click();
+    await expect.poll(() => q(screen, '[data-test="printers-table"]')).not.toBeNull();
+    const filter = () =>
+      q(screen, '[data-test="printers-table"]')!.shadowRoot!.querySelector<HTMLElement>(
+        '[name="status-filter"]',
+      );
+    await expect.poll(filter).not.toBeNull();
+    await chooseOption(filter()!, "");
+    await expect.poll(() => q(screen, "[data-test=pair-again-p9]")).not.toBeNull();
+    q(screen, "[data-test=pair-again-p9]")!.click();
+    await expect.poll(() => modal(screen)).not.toBeNull();
+    await modal(screen)!.updateComplete;
+    return { app, screen };
+  }
+  const pairAgainModal = (screen: PrintersScreen) => q(screen, "[data-test=pair-again-modal]");
+
+  it("a PIN typed for Pair again asks before it is lost", async () => {
+    const { app, screen } = await mountPairAgain();
+    change(screen, "8472");
+    expect(unload()).toBe(true);
+    q(screen, "[data-test=cancel-pair]")!.click();
+    await choose(app, "keep");
+    expect(field(screen)?.value).toBe("8472");
+    q(screen, "[data-test=cancel-pair]")!.click();
+    await choose(app, "discard");
+    await expect.poll(() => modal(screen)).toBeNull();
+    expect(pairAgainModal(screen)).not.toBeNull();
+    expect(unload()).toBe(false);
+  });
+
+  it("closing the Pair again window with a typed PIN asks once, and Discard closes both", async () => {
+    const { app, screen } = await mountPairAgain();
+    change(screen, "8472");
+    q(screen, "[data-test=cancel-pair-again]")!.click();
+    await choose(app, "discard");
+    await expect.poll(() => pairAgainModal(screen)).toBeNull();
+    expect(modal(screen)).toBeNull();
+    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(unload()).toBe(false);
+  });
 });

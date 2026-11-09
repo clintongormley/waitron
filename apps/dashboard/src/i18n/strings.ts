@@ -1819,6 +1819,13 @@ export const en = {
   "printers.bluetooth_pair_note": "A Bluetooth printer must be in pairing mode before you add it.",
   "printers.bluetooth_pair": "Pair and add",
   "printers.bluetooth_pair_only": "Pair",
+  "printers.pair_again": "Pair again",
+  "printers.pair_again_looking":
+    "Put {printer} in pairing mode near its print agent. Looking for it…",
+  "printers.pair_again_missing":
+    "{printer} was not found. Check it is on and in pairing mode, then look again.",
+  "printers.pair_again_look": "Look again",
+  "printers.pair_again_done": "{printer} is paired again and active.",
   "printers.bluetooth_forget": "Unpair",
   "printers.bluetooth_show_all": "Show all devices",
   "printers.bluetooth_hide_others": "Hide other devices",
@@ -5690,6 +5697,13 @@ export const es: Record<StringKey, string> = {
     "Una impresora Bluetooth debe estar en modo de emparejamiento antes de añadirla.",
   "printers.bluetooth_pair": "Emparejar y añadir",
   "printers.bluetooth_pair_only": "Emparejar",
+  "printers.pair_again": "Emparejar de nuevo",
+  "printers.pair_again_looking":
+    "Pon {printer} en modo de emparejamiento cerca de su agente de impresión. Buscándola…",
+  "printers.pair_again_missing":
+    "No se ha encontrado {printer}. Comprueba que esté encendida y en modo de emparejamiento, y vuelve a buscar.",
+  "printers.pair_again_look": "Buscar de nuevo",
+  "printers.pair_again_done": "{printer} vuelve a estar emparejada y activa.",
   "printers.bluetooth_forget": "Desvincular",
   "printers.bluetooth_show_all": "Mostrar todos los dispositivos",
   "printers.bluetooth_hide_others": "Ocultar otros dispositivos",

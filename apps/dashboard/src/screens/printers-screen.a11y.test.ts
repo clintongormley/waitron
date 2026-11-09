@@ -12,7 +12,7 @@ import {
 } from "../widgets/test-helpers.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import type { WtRowActions } from "@waitron/ui";
-import "./printers-screen.js";
+import { SCAN_LISTEN_MS, SCAN_POLL_MS } from "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
 import type {
   DashboardApi,
@@ -1107,6 +1107,37 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await flush(el);
     expect(q(el, "[data-test=pair-printer-modal]")).not.toBeNull();
     await expectNoA11yViolations(host);
+  });
+
+  it("renders the Pair again window while it looks and once the printer was not found, accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: bluetoothApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue([]) }) },
+      theme,
+    );
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      q(el, "wt-tabs")!
+        .shadowRoot!.querySelector<HTMLButtonElement>('[data-key="printers"]')!
+        .click();
+      await flush(el);
+      const filter = q(el, '[data-test="printers-table"]')!.shadowRoot!.querySelector<HTMLElement>(
+        '[name="status-filter"]',
+      )!;
+      await pickOption(filter, "");
+      await flush(el);
+      q(el, "[data-test=pair-again-p4]")!.click();
+      await flush(el);
+      expect(q(el, "[data-test=pair-again-status] wt-spinner")).not.toBeNull();
+      await expectNoA11yViolations(host);
+      await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS + SCAN_POLL_MS);
+      await flush(el);
+      expect(q(el, "[data-test=pair-again-look]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders a switched-off Bluetooth printer's Unpair and its outcome accessibly", async () => {
