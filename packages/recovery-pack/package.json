@@ -18,14 +18,14 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "@napi-rs/canvas": "^1.0.13",
+    "@napi-rs/canvas": "^1.1.0",
     "@types/fontkit": "^2.0.9",
     "@types/node": "^26.6.6",
     "@types/pdfkit": "^0.17.7",
     "@types/qrcode": "^1.5.5",
     "@vitest/coverage-v8": "^4.1.12",
     "jsqr": "^1.4.0",
-    "pdfjs-dist": "6.4.299",
+    "pdfjs-dist": "6.5.438",
     "typescript": "^7.0.0",
     "vitest": "^4.1.12"
   }
