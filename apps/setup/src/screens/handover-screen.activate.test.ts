@@ -49,7 +49,12 @@ async function edit(el: HTMLElement, name: string, value: string) {
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await (el as LitElement).updateComplete;
 }
-async function mount(options: { loseAnswer?: boolean; refuse?: boolean } = {}) {
+async function mount(
+  options: {
+    loseAnswer?: boolean;
+    refuse?: boolean | { code: string; params: Record<string, unknown> };
+  } = {},
+) {
   const requests: { path: string; body: Record<string, unknown> }[] = [];
   let state = status.state;
   const fetcher = vi.fn<typeof fetch>(async (path, init) => {
@@ -58,9 +63,17 @@ async function mount(options: { loseAnswer?: boolean; refuse?: boolean } = {}) {
     requests.push({ path: String(path), body });
     if (String(path).endsWith("/activate")) {
       if (options.refuse)
-        return new Response(JSON.stringify({ code: "password.invalid", params: {} }), {
-          status: 401,
-        });
+        return new Response(
+          JSON.stringify({
+            error:
+              typeof options.refuse === "object"
+                ? options.refuse
+                : { code: "password.invalid", params: {} },
+          }),
+          {
+            status: 401,
+          },
+        );
       state = "activated";
       if (options.loseAnswer) throw new TypeError("network lost");
       return new Response(JSON.stringify({ activated: true, restarting: true }));
@@ -166,3 +179,27 @@ it("focuses the first missing field after an empty clock-check submission", asyn
     ).toBe(true),
   );
 });
+
+it.each([
+  [{ code: "password.throttled", params: {} }, "Wait before trying your password again"],
+  [
+    { code: "authorization.not_permitted", params: {} },
+    "Use an administrator account allowed to hand over",
+  ],
+  [
+    { code: "sif.allocation_invalid", params: { reason: "clock_stale" } },
+    "The clock check is too old",
+  ],
+] as const)(
+  "explains an activation refusal and returns to clock comparison: %s",
+  async (refuse, message) => {
+    const { el } = await mount({ refuse });
+    await select(el);
+    q(el, "[data-test=activate]").click();
+    await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).toBeNull());
+    expect(q<HTMLElement & { error: string }>(el, "wt-form-actions").error).toContain(message);
+    expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=authenticate]").disabled).toBe(
+      false,
+    );
+  },
+);

@@ -19,8 +19,8 @@ complete this flow.
 
 Keep both boxes connected. The handover page opens on the spare and follows the transfer. Once
 the copy is ready, enter the same administrator account, compare the clocks and make the new
-series. Choose **Start the venue on this box**, then **Continue to this box**. Staff sign in again
-on their tills. Payments already recorded remain in the transferred copy.
+series. Choose **Start the venue on this box**, then **Continue to this box**. Payments already
+recorded remain in the transferred copy.
 
 If an answer is lost, keep the page open or reload it to read progress. Do not start another
 handover. A waiting message describes the last attempt; keep both boxes connected while they try

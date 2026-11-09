@@ -21,8 +21,7 @@ con contraseña; las llaves de acceso y los códigos de recuperación no complet
 Mantén los dos equipos conectados. La página de traspaso se abre en el equipo de reserva y sigue
 la transferencia. Cuando la copia esté lista, introduce la misma cuenta de administrador, compara
 los relojes y crea la nueva serie. Elige **Iniciar el local en este equipo** y después **Continuar
-en este equipo**. El personal vuelve a identificarse en las cajas. Los pagos ya registrados se
-conservan en la copia transferida.
+en este equipo**. Los pagos ya registrados se conservan en la copia transferida.
 
 Si se pierde una respuesta, mantén la página abierta o recárgala para consultar el progreso. No
 inicies otro traspaso. Un mensaje de espera describe el último intento; mantén los dos equipos

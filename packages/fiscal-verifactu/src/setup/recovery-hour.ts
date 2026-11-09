@@ -46,7 +46,12 @@ const strings = {
     inUse: `${clockWaitStrings.en.inUse} Reload this page and start the restore again: a new restore chooses a new series name.`,
     heading: "Recover this box",
     promotionHeading: "Start the venue on this box",
-    promotionFailed: "Check your password and code, then compare clocks again.",
+    promotionFailed:
+      "Check your password and code, then compare clocks again. Use a fresh authenticator code.",
+    promotionThrottled: "Wait before trying your password again, then compare clocks again.",
+    promotionPermission:
+      "Use an administrator account allowed to hand over the venue, then compare clocks again.",
+    promotionClock: "The clock check is too old. Compare clocks again before starting the venue.",
     deviceInvoices: "Invoices seen on this device",
     deviceInvoicesHint:
       "These are the last invoices this browser kept for this taxpayer and environment. The list may be incomplete. Recovery still uses new series.",
@@ -79,7 +84,14 @@ const strings = {
     inUse: `${clockWaitStrings.es.inUse} Recarga esta página y vuelve a empezar la restauración: una restauración nueva elige otro nombre de serie.`,
     heading: "Recuperar esta caja",
     promotionHeading: "Iniciar el local en este equipo",
-    promotionFailed: "Revisa la contraseña y el código y vuelve a comparar los relojes.",
+    promotionFailed:
+      "Revisa la contraseña y usa un código nuevo del autenticador. Después, vuelve a comparar los relojes.",
+    promotionThrottled:
+      "Espera antes de volver a probar la contraseña y compara los relojes de nuevo.",
+    promotionPermission:
+      "Usa una cuenta de administrador con permiso para traspasar el local y vuelve a comparar los relojes.",
+    promotionClock:
+      "La comprobación del reloj ha caducado. Vuelve a comparar los relojes antes de iniciar el local.",
     deviceInvoices: "Facturas vistas en este dispositivo",
     deviceInvoicesHint:
       "Son las últimas facturas que este navegador guardó para este contribuyente y entorno. La lista puede estar incompleta. La recuperación sigue usando series nuevas.",
@@ -152,6 +164,7 @@ export class RecoveryHourEntry extends LitElement {
   @state() private busy = false;
   @state() private comparison?: ClockComparison;
   @state() private error = false;
+  #failure: unknown;
   @state() private keyError = false;
   @state() private attempted = false;
   @state() private refusalDismissed = false;
@@ -263,6 +276,20 @@ export class RecoveryHourEntry extends LitElement {
       },
     };
   }
+  refusalMessage(cause: unknown): string {
+    const words = strings[this.locale];
+    if (record(cause)) {
+      if (cause.code === "password.throttled") return words.promotionThrottled;
+      if (cause.code === "authorization.not_permitted") return words.promotionPermission;
+      if (
+        cause.code === "sif.allocation_invalid" &&
+        record(cause.params) &&
+        cause.params.reason === "clock_stale"
+      )
+        return words.promotionClock;
+    }
+    return words.promotionFailed;
+  }
   readOperation(): ReturnType<ModulePromotionEntry["readOperation"]> {
     if (!isPromotion(this.context) || this.busy || this.#wait.result?.status !== "selected")
       return null;
@@ -319,6 +346,7 @@ export class RecoveryHourEntry extends LitElement {
   }
   #failed(cause: unknown): void {
     this.error = true;
+    this.#failure = cause;
     this.keyError =
       record(cause) &&
       (cause.code === "promotion.break_glass_invalid" ||
@@ -515,7 +543,7 @@ export class RecoveryHourEntry extends LitElement {
             : nothing
       }
       <wt-form-actions
-        .error=${this.error ? (promote ? words.promotionFailed : words.failed) : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : !promote && this.attempted && !this.#credentials() ? words.missing : ""}
+        .error=${this.error ? (promote ? this.refusalMessage(this.#failure) : words.failed) : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : !promote && this.attempted && !this.#credentials() ? words.missing : ""}
       >
         <wt-button
           data-test="compare"

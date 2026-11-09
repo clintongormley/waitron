@@ -88,6 +88,7 @@ export interface ModulePromotionContext {
   prepare(proposal: unknown): Promise<unknown>;
 }
 export interface ModulePromotionEntry extends HTMLElement {
+  refusalMessage(error: unknown): string;
   locale: "en" | "es";
   clear(): void;
   readOperation(): { binding: RecoveryOperationBinding; input: unknown } | null;

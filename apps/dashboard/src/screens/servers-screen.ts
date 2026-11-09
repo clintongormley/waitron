@@ -168,6 +168,7 @@ export class ServersScreen extends LitElement {
   @state() private handoverBusy = false;
   #operationId = "";
   #handoverSent = false;
+  #startRefusal: unknown;
   #handoverScope?: DraftScope<boolean>;
   #handoverLeave?: LeaveCoordinator;
   #signIn(): FreshSignIn | null {
@@ -177,6 +178,7 @@ export class ServersScreen extends LitElement {
     this.handoverTarget = row;
     this.#operationId = crypto.randomUUID();
     this.#handoverSent = false;
+    this.#startRefusal = undefined;
     this.handoverWays = null;
     this.handoverError = "";
     const { scope, coordinator } = draftScopeFor<boolean>(this, {
@@ -227,7 +229,6 @@ export class ServersScreen extends LitElement {
       return;
     }
     const operationId = this.#operationId;
-    let refused: unknown;
     this.handoverBusy = true;
     try {
       if (!this.#handoverSent) {
@@ -245,6 +246,7 @@ export class ServersScreen extends LitElement {
           return;
         }
         this.#handoverSent = true;
+        this.#startRefusal = undefined;
         try {
           const answer = await this.api.startHandover({
             operationId,
@@ -258,7 +260,7 @@ export class ServersScreen extends LitElement {
           }
         } catch (error) {
           if (this.handoverTarget !== target) return;
-          refused = error;
+          this.#startRefusal = error;
           if (
             typeof error === "object" &&
             error !== null &&
@@ -266,7 +268,7 @@ export class ServersScreen extends LitElement {
             [400, 401, 403, 429].includes(Number(error.status))
           ) {
             this.#handoverSent = false;
-            this.handoverError = codeMessage(codeOf(error));
+            this.handoverError = widget.refuse(error);
             return;
           }
         }
@@ -281,13 +283,29 @@ export class ServersScreen extends LitElement {
         if (status.state === "abandoned") {
           this.#handoverSent = false;
           this.#operationId = crypto.randomUUID();
-          this.handoverError = codeMessage(codeOf(refused, "handover.restarted_before_stepdown"));
+          this.handoverError = codeMessage(
+            codeOf(this.#startRefusal, "handover.restarted_before_stepdown"),
+          );
           return;
         }
-      } catch {
-        /* The next press reads the same public operation. */
+      } catch (error) {
+        if (
+          codeOf(error) === "handover.operation_unknown" &&
+          typeof this.#startRefusal === "object" &&
+          this.#startRefusal !== null &&
+          "status" in this.#startRefusal &&
+          this.#startRefusal.status === 409
+        ) {
+          this.#handoverSent = false;
+          this.#operationId = crypto.randomUUID();
+          this.handoverError = codeMessage(codeOf(this.#startRefusal));
+          return;
+        }
       }
-      this.handoverError = t("servers.handover_reconnect");
+      this.handoverError =
+        this.#startRefusal && !(this.#startRefusal instanceof TypeError)
+          ? `${codeMessage(codeOf(this.#startRefusal))} ${t("servers.handover_reconnect")}`
+          : t("servers.handover_reconnect");
     } finally {
       this.handoverBusy = false;
     }
@@ -305,6 +323,7 @@ export class ServersScreen extends LitElement {
         this.handoverTarget
           ? html`<p class="target">${this.#address(this.handoverTarget)}</p>
               <p>${t("servers.handover_intro")}</p>
+              ${this.#handoverSent ? html`<p>${t("servers.handover_sent")}</p>` : nothing}
               <p>${t("servers.handover_password")}</p>
               <p>
                 <a href=${guideHref("servers.handover")} target="_blank" rel="noopener"
@@ -321,6 +340,7 @@ export class ServersScreen extends LitElement {
                 @sign-in-change=${() => {
                   this.#handoverScope?.changed();
                   this.handoverError = "";
+                  this.requestUpdate();
                 }}
                 @sign-in-passkey=${() => {
                   this.handoverError = t("servers.handover_password");
@@ -339,7 +359,7 @@ export class ServersScreen extends LitElement {
           ?disabled=${this.handoverBusy}
           data-test="stop-handover"
           @click=${() => void this.renderRoot.querySelector<HTMLElement & { requestClose(reason: string): Promise<void> }>('[data-test="handover-dialog"]')?.requestClose("cancel")}
-          >${t("servers.handover_stop")}</wt-button
+          >${t(this.#handoverSent ? "action.close" : "servers.handover_stop")}</wt-button
         >
         <wt-button
           data-test="confirm-handover"

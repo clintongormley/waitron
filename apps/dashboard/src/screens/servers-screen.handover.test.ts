@@ -1,3 +1,4 @@
+import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
@@ -70,7 +71,7 @@ async function mount(options: { permission?: boolean; password?: boolean; lost?:
 }
 const q = (el: HTMLElement, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector)!;
-async function open(el: ServersScreen) {
+async function open(el: ServersScreen, includeCode = true) {
   q(q(el, "wt-data-table"), '[data-test="handover-new"]').click();
   await vi.waitFor(() => expect(q(el, "dashboard-fresh-sign-in")).not.toBeNull());
   const sign = q(el, "dashboard-fresh-sign-in") as LitElement;
@@ -79,6 +80,7 @@ async function open(el: ServersScreen) {
     ["current-password", "secret"],
     ["totp", "123456"],
   ]) {
+    if (name === "totp" && !includeCode) continue;
     const field = q(sign, `[name="${name}"]`) as LitElement;
     await field.updateComplete;
     const input = field.shadowRoot!.querySelector("input")!;
@@ -194,6 +196,86 @@ it("starts a new operation after the source confirms the refused offer was aband
       (q(el, "[data-test=confirm-handover]") as HTMLElement & { disabled: boolean }).disabled,
     ).toBe(false),
   );
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+  expect(start.mock.calls[1]![0].operationId).not.toBe(start.mock.calls[0]![0].operationId);
+});
+
+it.each([
+  "handover.destination_unreachable",
+  "handover.destination_not_joined",
+  "handover.venue_not_supported",
+  "handover.operation_in_progress",
+])("shows an early %s refusal and allows a fresh attempt", async (code) => {
+  const { el, start, status } = await mount();
+  start.mockRejectedValue({ code, status: 409 });
+  status.mockRejectedValue({ code: "handover.operation_unknown", status: 404 });
+  await open(el);
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() =>
+    expect((q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error).toBe(
+      codeMessage(code),
+    ),
+  );
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+  expect(start.mock.calls[1]![0].operationId).not.toBe(start.mock.calls[0]![0].operationId);
+});
+it("redraws the action and clears the marked-fields message after the missing code is entered", async () => {
+  const { el, start } = await mount();
+  await open(el, false);
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() =>
+    expect(
+      (q(el, "[data-test=confirm-handover]") as HTMLElement & { disabled: boolean }).disabled,
+    ).toBe(true),
+  );
+  const code = q(q(el, "dashboard-fresh-sign-in"), '[name="totp"]') as LitElement;
+  await code.updateComplete;
+  const input = code.shadowRoot!.querySelector("input")!;
+  input.value = "123456";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await vi.waitFor(() =>
+    expect(
+      (q(el, "[data-test=confirm-handover]") as HTMLElement & { disabled: boolean }).disabled,
+    ).toBe(false),
+  );
+  expect((q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error).toBe("");
+  expect(start).not.toHaveBeenCalled();
+});
+it("offers Close rather than Stop once a lost request may already have started handover", async () => {
+  const { el, status } = await mount({ lost: true });
+  status.mockRejectedValue({ code: "connection.failed" });
+  await open(el);
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=confirm-handover]").textContent).toContain("Check handover progress"),
+  );
+  expect(q(el, "[data-test=stop-handover]").textContent?.trim()).toBe("Close");
+});
+
+it("keeps an early refusal through a lost status read and retries only after unknown operation is confirmed", async () => {
+  const { el, start, status } = await mount();
+  const refusal = { code: "handover.destination_unreachable", status: 409 };
+  start.mockRejectedValue(refusal);
+  status
+    .mockRejectedValueOnce(new TypeError("network lost"))
+    .mockRejectedValue({ code: "handover.operation_unknown", status: 404 });
+  await open(el);
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=confirm-handover]").textContent).toContain("Check handover progress"),
+  );
+  expect(
+    (q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error,
+  ).toContain(codeMessage(refusal.code));
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() =>
+    expect((q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error).toBe(
+      codeMessage(refusal.code),
+    ),
+  );
+  expect(start).toHaveBeenCalledTimes(1);
   q(el, "[data-test=confirm-handover]").click();
   await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2));
   expect(start.mock.calls[1]![0].operationId).not.toBe(start.mock.calls[0]![0].operationId);

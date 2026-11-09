@@ -52,7 +52,7 @@ export class SetupHandoverScreen extends LitElement {
   @state() private password = "";
   @state() private code = "";
   @state() private attempted = false;
-  @state() private actionError = false;
+  @state() private actionError = "";
   @state() private busy = false;
   @state() private ready = false;
   @state() private entry?: ModulePromotionEntry;
@@ -121,7 +121,7 @@ export class SetupHandoverScreen extends LitElement {
       await focusFirstInvalid(this.shadowRoot!);
       return;
     }
-    this.actionError = false;
+    this.actionError = "";
     this.#resetSelection();
     const contribution = this.contributions.filter((item) => item.createPromotion);
     const status = this.status;
@@ -146,17 +146,17 @@ export class SetupHandoverScreen extends LitElement {
     if (!moduleOperation || this.busy) return;
     const controller = this.#controller;
     this.busy = true;
-    this.actionError = false;
+    this.actionError = "";
     try {
       await this.api.activateHandover(this.operationId, this.#signIn(), moduleOperation);
       if (controller?.signal.aborted) return;
       this.#resetSelection();
       this.password = this.code = "";
       this.#restartPolling();
-    } catch {
+    } catch (cause) {
       if (controller?.signal.aborted) return;
+      this.actionError = this.entry!.refusalMessage(cause);
       this.#resetSelection();
-      this.actionError = true;
       this.#restartPolling();
     } finally {
       this.busy = false;
@@ -180,7 +180,7 @@ export class SetupHandoverScreen extends LitElement {
           this.#resetSelection();
           if (name === "email" && event.detail.value !== this.email) this.password = this.code = "";
           this[name] = event.detail.value;
-          this.actionError = false;
+          this.actionError = "";
         }}
       ></wt-input>`;
     return html`<p>${t("handover.sign_in")}</p>
@@ -192,7 +192,7 @@ export class SetupHandoverScreen extends LitElement {
           : nothing
       }
       <wt-form-actions
-        .error=${this.actionError ? t("handover.failed") : this.attempted && !this.#valid() ? t("handover.fix") : ""}
+        .error=${this.actionError ? this.actionError : this.attempted && !this.#valid() ? t("handover.fix") : ""}
       >
         ${
           this.entry

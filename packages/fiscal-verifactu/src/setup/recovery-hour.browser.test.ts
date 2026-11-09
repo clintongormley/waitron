@@ -1600,3 +1600,34 @@ it("compares and selects a promotion without a recovery key or recovery declarat
   );
   expect(button(el, "compare").disabled).toBe(false);
 });
+
+it.each([
+  [{ code: "password.throttled", params: {} }, "Wait before trying your password again"],
+  [
+    { code: "authorization.not_permitted", params: {} },
+    "Use an administrator account allowed to hand over",
+  ],
+  [
+    { code: "sif.allocation_invalid", params: { reason: "clock_stale" } },
+    "The clock check is too old",
+  ],
+] as const)("explains the promotion preparation refusal: %s", async (refusal, message) => {
+  const host = document.createElement("main");
+  applyTokens(host);
+  document.body.append(host);
+  hosts.push(host);
+  const el = FISCAL_SETUP.createPromotion!({
+    locale: "en",
+    timeZone: "UTC",
+    binding: { ...binding, action: "promote" },
+    prepare: async () => {
+      throw refusal;
+    },
+  }) as Entry;
+  host.append(el);
+  await el.updateComplete;
+  button(el, "compare").click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toContain(message),
+  );
+});

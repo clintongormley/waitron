@@ -870,10 +870,10 @@ it("has a sentence in both languages for these handover refusals", () => {
 
 it("words a handover a newer list of boxes stopped as what happened, not as a fault", () => {
   expect(codeMessage("handover.superseded_during_start", "en")).toBe(
-    "This box no longer runs the venue, because another box took over or the venue's list of boxes changed, so this handover did not go ahead. Nothing is needed on this box.",
+    "Another box took over or the venue’s list of boxes changed. Open the current main box’s address to continue.",
   );
   expect(codeMessage("handover.superseded_during_start", "es")).toBe(
-    "Este equipo ya no lleva el local, porque otro equipo ha pasado a llevarlo o ha cambiado la lista de equipos del local, así que este traspaso no ha seguido adelante. No hace falta hacer nada en este equipo.",
+    "Otro equipo ha pasado a llevar el local o ha cambiado la lista de equipos. Abre la dirección del equipo principal actual para continuar.",
   );
 });
 

@@ -16,7 +16,7 @@ export const handoverEn = {
   "handover.closed":
     "This handover ended without activating this box. Open Servers on the main box to see its current state.",
   "handover.sign_in":
-    "Sign in as an administrator to compare clocks and start the venue here. Use the same account for both steps.",
+    "Sign in as an administrator to compare clocks and start the venue here. Use the same account for both steps. Enter a fresh authenticator code before starting the venue.",
   "handover.email": "Administrator email",
   "handover.password": "Password",
   "handover.code": "Authenticator code, if set up",
@@ -46,7 +46,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.closed":
     "Este traspaso terminó sin activar este equipo. Abre Servidores en el equipo principal para consultar su estado actual.",
   "handover.sign_in":
-    "Identifícate como administrador para comparar los relojes e iniciar el local aquí. Usa la misma cuenta en los dos pasos.",
+    "Identifícate como administrador para comparar los relojes e iniciar el local aquí. Usa la misma cuenta en los dos pasos. Introduce un código nuevo del autenticador antes de iniciar el local.",
   "handover.email": "Correo del administrador",
   "handover.password": "Contraseña",
   "handover.code": "Código de autenticador, si está configurado",
