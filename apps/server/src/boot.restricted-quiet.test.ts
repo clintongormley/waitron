@@ -15,6 +15,8 @@ import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import type { StartedServer } from "./boot.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
+import { ensureBoxSecrets } from "./box-secrets.js";
+import { httpsVia } from "./testing/boot-harness.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { insertFiscalRegistro, insertFiscalSale } from "./testing/fiscal-fixtures.js";
@@ -143,6 +145,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
   let server: StartedServer | undefined;
   let scratch: string | undefined;
   let observed: Observed | undefined;
+  let closeHttp: (() => Promise<void>) | undefined;
 
   beforeAll(async () => {
     beforeServerStarts();
@@ -201,6 +204,15 @@ function observeStart(options: { restricted: boolean }): () => Observed {
       sql`insert into change_log (id, payload) values (${randomUUID()}, ${JSON.stringify({ resource: "venue" })})`,
     );
     scratch = await mkdtemp(join(tmpdir(), "waitron-boot-restricted-quiet-"));
+    await ensureBoxSecrets({
+      stateDir: scratch,
+      hostnames: ["localhost"],
+      now: () => new Date(),
+      makeKeyRing: () => ({ key: KEY_ENV.WAITRON_CREDENTIALS_KEY, version: 1 }),
+    });
+    await writeFile(join(scratch, "trading.env"), "");
+    const { via, close } = httpsVia(await readFile(join(scratch, "tls", "ca.crt")));
+    closeHttp = close;
     const migrationsRoot = join(scratch, "migrations");
     for (const [index, set] of manifestSets().entries()) {
       await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
@@ -213,6 +225,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     );
     const env: Record<string, string> = {
       ...KEY_ENV,
+      WAITRON_BACKUP_RECOVERY_KEY: "backup-key-for-test-0123456789",
       WAITRON_HTTP_LANDING_PORT: "0",
       WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
       WAITRON_STATE_DIR: scratch,
@@ -240,12 +253,12 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     });
     await vi.waitFor(
       async () => {
-        expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
+        expect((await fetch(`https://127.0.0.1:${httpPort()}/health`, via)).status).toBe(200);
       },
       { timeout: 10_000 },
     );
     // A person opening the box's address is part of the quiet period: the page must not write.
-    const pageStatus = (await fetch(`http://127.0.0.1:${httpPort()}/`)).status;
+    const pageStatus = (await fetch(`https://127.0.0.1:${httpPort()}/`, via)).status;
     await new Promise((resolve) => setTimeout(resolve, QUIET_MS));
     observed = { hashBefore, hashAfter: await venueHash(suite), ...calls, pageStatus };
   }, 60_000);
@@ -254,6 +267,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     try {
       if (server !== undefined) await server.close();
     } finally {
+      await closeHttp?.();
       if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     }
   });
