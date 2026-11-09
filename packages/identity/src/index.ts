@@ -104,12 +104,15 @@ export {
   completeAccountAction,
   inspectAccountAction,
   issueAccountAction,
+  issueQueuedAccountAction,
+  queueAccountMail,
   requestAccountRecoveryAction,
 } from "./account-action.js";
 export type {
   AccountActionCompletion,
   AccountActionInspection,
   AccountActionPurpose,
+  AccountMailParams,
   IssuedAccountAction,
 } from "./account-action.js";
 export { hashSecret, verifySecretAsync } from "./secret-hash.js";

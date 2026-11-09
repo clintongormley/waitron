@@ -190,6 +190,8 @@ import {
   DUTY_BUDGET_MS,
   type HealthState,
 } from "./health.js";
+import { abandonMailClaims, startMailSender } from "./mail-sender.js";
+import { accountActionMail } from "./account-mail.js";
 import { runLoop } from "./loop.js";
 import { createLoopWaker } from "./loop-wake.js";
 import { reconcilePassFor, reconcilerAsDuty } from "./reconcile-duty.js";
@@ -277,7 +279,11 @@ import {
   createAccountEmailSender,
   type AccountEmailSender,
 } from "./account-email.js";
-import { resolveEmailDelivery, resolveInvoiceEmailDelivery } from "./email-delivery.js";
+import {
+  resolveEmailDelivery,
+  resolveInvoiceEmailDelivery,
+  resolveMailDeliveryIn,
+} from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { mountEmailSettingsApi } from "./email-settings-api.js";
 import { mountFiscalCertificateApi } from "./fiscal-certificate-api.js";
@@ -2405,6 +2411,8 @@ async function bootServer(
   let demoPrinterLoop: { stop(): Promise<void> } | undefined;
   // Outside the block below so the alert sources have it on every node.
   const testPages = createPageTestPages(now);
+  const mailController = new AbortController();
+  let mailLoop: Promise<void> | undefined;
   const invoiceEmailController = new AbortController();
   let invoiceEmailLoop: Promise<void> | undefined;
   const attendanceController = new AbortController();
@@ -2494,6 +2502,33 @@ async function bootServer(
       invoiceEmailController.abort();
       await invoiceEmailLoop;
     });
+    if (isSingletonPrimary) {
+      const owners = [
+        accountActionMail({
+          codeKey: accountPurposeKey(accountKey, "account-action-code"),
+          emailChangeUrl: `${config.managementOrigin}/`,
+          venueLocale,
+          readTimeZone: () => readVenueTimeZone(db),
+          readPrivacyNoticeUrl: async () =>
+            (await withTransaction(db, readPrivacyContact))?.privacyNoticeUrl ?? null,
+        }),
+      ];
+      await withTransaction(db, (tx) => abandonMailClaims(tx, owners, now()));
+      mailLoop = startMailSender({
+        db,
+        owners,
+        now,
+        isPrimary: () => holders.singletonRole.current === "primary",
+        signal: mailController.signal,
+        resolveDelivery: (tx, rule) => resolveMailDeliveryIn(tx, ring, config, rule),
+        log,
+        bus: liveEvents,
+      });
+      undoOnFailure.push(async () => {
+        mailController.abort();
+        await mailLoop;
+      });
+    }
     const demoPrinter = await configureDemoPrinter(db, tradingContext.practiceMode === true);
     if (demoPrinter !== null) {
       demoPrinterLoop = startDemoPrinterLoop(db, demoPrinter, 500, (error) =>
@@ -3848,6 +3883,7 @@ async function bootServer(
     pendingCardController,
     cloudController,
     invoiceEmailController,
+    mailController,
     attendanceController,
     certificateReminderController,
     tenderRefundController,
@@ -3859,6 +3895,7 @@ async function bootServer(
     certificateDiagnosis,
     fiscalReconciliation,
     invoiceEmailLoop,
+    mailLoop,
     cloudWorker,
     cloudSnapshots,
     suggestionLoop,

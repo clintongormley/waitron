@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { withNodeTransaction, withTransaction } from "@waitron/db";
+import { withNodeTransaction, withTransaction, persons, enqueueMail } from "@waitron/db";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -113,6 +113,7 @@ interface Observed {
   drain: number;
   /** The status of a GET of `/` made during the quiet period. */
   pageStatus: number;
+  mailStatus: string;
 }
 
 function venueFile(suite: VenueDb): string {
@@ -151,6 +152,18 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     beforeServerStarts();
     const venue = await setupVenue(suite.db);
     const nodeId = venue.cfg.nodeId;
+    const personId = randomUUID();
+    await suite.db.insert(persons).values({ id: personId, displayName: "Queued recipient" });
+    await withTransaction(suite.db, (tx) =>
+      enqueueMail(tx, {
+        kind: "account_action",
+        dedupeKey: "quiet-mail",
+        personId,
+        now: new Date(Date.now() - 2 * DAY_MS),
+        notAfter: new Date(Date.now() - DAY_MS),
+        params: { purpose: "password_reset" },
+      }),
+    );
     const ring = loadKeyRing(KEY_ENV);
     await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
     await seedTermZeroMembership(
@@ -260,7 +273,15 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     // A person opening the box's address is part of the quiet period: the page must not write.
     const pageStatus = (await fetch(`https://127.0.0.1:${httpPort()}/`, via)).status;
     await new Promise((resolve) => setTimeout(resolve, QUIET_MS));
-    observed = { hashBefore, hashAfter: await venueHash(suite), ...calls, pageStatus };
+    observed = {
+      hashBefore,
+      hashAfter: await venueHash(suite),
+      ...calls,
+      pageStatus,
+      mailStatus: suite.db.get<{ status: string }>(
+        sql`select status from outgoing_mail where dedupe_key = 'quiet-mail'`,
+      )!.status,
+    };
   }, 60_000);
 
   afterAll(async () => {
@@ -284,6 +305,10 @@ describe("a restricted start touches nothing outside and nothing in venue.db", (
   it("writes nothing to venue.db, with its own page opened", () => {
     expect(observed().pageStatus).toBe(200);
     expect(observed().hashAfter).toBe(observed().hashBefore);
+  });
+
+  it("leaves a queued mail as it was", () => {
+    expect(observed().mailStatus).toBe("pending");
   });
 
   it("asks AEAT's host for no clock reading", () => {
@@ -312,6 +337,10 @@ describe("control: the same folder without the restriction row", () => {
     expect(authority).toBeGreaterThan(0);
     expect(sweep).toBeGreaterThan(0);
     expect(spawn).toBeGreaterThan(0);
+  });
+
+  it("expires a queued mail past its time", () => {
+    expect(observed().mailStatus).toBe("expired");
   });
 
   it("starts the fiscal drain", () => {

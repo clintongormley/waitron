@@ -9,6 +9,7 @@ import {
 } from "node:crypto";
 import { and, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import {
+  enqueueMail,
   indexViolated,
   type Transaction,
   managementAccountActions,
@@ -16,7 +17,7 @@ import {
   loginEmailKey,
   persons,
 } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { normalizeEmail, isValidEmail } from "./email.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
 import { assertPinLength, hashPin } from "./verify-pin.js";
@@ -448,4 +449,61 @@ export async function completeAccountAction(
   if (claimed.length !== 1) throw new AppError("account_action.invalid", {});
   const personId = claimed[0]!.personId;
   return finishClaimedAction(tx, input, personId, nowIso);
+}
+
+export type AccountMailParams = { purpose: AccountActionPurpose; origin?: string };
+export async function queueAccountMail(
+  tx: Transaction,
+  input: {
+    personId: string;
+    purpose: AccountActionPurpose;
+    requestedBy?: string;
+    origin?: string;
+    now?: Date;
+  },
+): Promise<void> {
+  const now = input.now ?? new Date();
+  await enqueueMail(tx, {
+    kind: "account_action",
+    dedupeKey: `account:${randomUUID()}`,
+    personId: input.personId,
+    requestedBy: input.requestedBy,
+    params: {
+      purpose: input.purpose,
+      ...(input.origin === undefined ? {} : { origin: input.origin }),
+    },
+    now,
+    notAfter: new Date(now.getTime() + ACCOUNT_ACTION_TTL_MS[input.purpose]),
+  });
+}
+export async function issueQueuedAccountAction(
+  tx: Transaction,
+  mail: { personId: string; params: AccountMailParams },
+  input: { codeKey?: Buffer; now: Date },
+): Promise<IssuedAccountAction | null> {
+  try {
+    const [person] = await tx
+      .select({ pendingEmail: persons.pendingEmail })
+      .from(persons)
+      .where(eq(persons.id, mail.personId));
+    if (mail.params.purpose === "email_change" && !person?.pendingEmail) return null;
+    return await issueAccountAction(tx, {
+      personId: mail.personId,
+      purpose: mail.params.purpose,
+      targetEmail: person?.pendingEmail ?? undefined,
+      ...input,
+    });
+  } catch (error) {
+    if (
+      isAppError(error) &&
+      [
+        "person.not_found",
+        "person.suspended",
+        "person.transition_invalid",
+        "person.email_invalid",
+      ].includes(error.code)
+    )
+      return null;
+    throw error;
+  }
 }

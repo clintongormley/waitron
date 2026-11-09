@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1185215b-2061-42a0-b33b-a965916f2f4d",
+  "id": "e4f9de83-5008-4361-af4d-b80db8e63622",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "settings": {
@@ -20342,6 +20342,234 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "outgoing_mail": {
+      "name": "outgoing_mail",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "seq": {
+          "name": "seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dedupe_key": {
+          "name": "dedupe_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subject_id": {
+          "name": "subject_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "requested_by": {
+          "name": "requested_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "recipient": {
+          "name": "recipient",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "params": {
+          "name": "params",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'{}'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "next_attempt_at": {
+          "name": "next_attempt_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "not_after": {
+          "name": "not_after",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "queued_at": {
+          "name": "queued_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "claim_token": {
+          "name": "claim_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "failure_code": {
+          "name": "failure_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "outgoing_mail_key_uq": {
+          "name": "outgoing_mail_key_uq",
+          "columns": [
+            "dedupe_key"
+          ],
+          "isUnique": true
+        },
+        "outgoing_mail_seq_uq": {
+          "name": "outgoing_mail_seq_uq",
+          "columns": [
+            "seq"
+          ],
+          "isUnique": true
+        },
+        "outgoing_mail_due_idx": {
+          "name": "outgoing_mail_due_idx",
+          "columns": [
+            "status",
+            "next_attempt_at",
+            "queued_at",
+            "seq"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "outgoing_mail_person_id_persons_id_fk": {
+          "name": "outgoing_mail_person_id_persons_id_fk",
+          "tableFrom": "outgoing_mail",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "outgoing_mail_requested_by_persons_id_fk": {
+          "name": "outgoing_mail_requested_by_persons_id_fk",
+          "tableFrom": "outgoing_mail",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "requested_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "outgoing_mail_kind_ck": {
+          "name": "outgoing_mail_kind_ck",
+          "value": "\"outgoing_mail\".\"kind\" in ('invoice', 'attendance_question', 'certificate_reminder', 'box_alert', 'account_action', 'role_membership_changed')"
+        },
+        "outgoing_mail_status_ck": {
+          "name": "outgoing_mail_status_ck",
+          "value": "\"outgoing_mail\".\"status\" in ('pending', 'sending', 'sent', 'rejected', 'unknown', 'expired', 'cancelled')"
+        },
+        "outgoing_mail_failure_ck": {
+          "name": "outgoing_mail_failure_ck",
+          "value": "\"outgoing_mail\".\"failure_code\" in ('email.test_host_not_found', 'email.test_connection_refused', 'email.test_starttls_refused', 'email.test_tls_refused', 'email.test_certificate_untrusted', 'email.test_login_refused', 'email.test_login_required', 'email.test_timeout', 'email.test_refused', 'mail.compose_failed', 'mail.claim_failed', 'mail.claim_abandoned')"
+        },
+        "outgoing_mail_attempts_ck": {
+          "name": "outgoing_mail_attempts_ck",
+          "value": "\"outgoing_mail\".\"attempts\" >= 0"
+        },
+        "outgoing_mail_not_after_ck": {
+          "name": "outgoing_mail_not_after_ck",
+          "value": "\"outgoing_mail\".\"not_after\" > \"outgoing_mail\".\"queued_at\""
+        },
+        "outgoing_mail_claim_ck": {
+          "name": "outgoing_mail_claim_ck",
+          "value": "(\"outgoing_mail\".\"claim_token\" is null) = (\"outgoing_mail\".\"claimed_at\" is null)"
+        },
+        "outgoing_mail_sending_ck": {
+          "name": "outgoing_mail_sending_ck",
+          "value": "\"outgoing_mail\".\"status\" <> 'sending' or (\"outgoing_mail\".\"claim_token\" is not null and \"outgoing_mail\".\"recipient\" is not null)"
+        },
+        "outgoing_mail_finished_ck": {
+          "name": "outgoing_mail_finished_ck",
+          "value": "\"outgoing_mail\".\"status\" = 'rejected' or (\"outgoing_mail\".\"status\" in ('pending', 'sending') and \"outgoing_mail\".\"finished_at\" is null) or (\"outgoing_mail\".\"status\" in ('sent', 'unknown', 'expired', 'cancelled') and \"outgoing_mail\".\"finished_at\" is not null)"
+        },
+        "outgoing_mail_person_ck": {
+          "name": "outgoing_mail_person_ck",
+          "value": "\"outgoing_mail\".\"person_id\" is not null or \"outgoing_mail\".\"kind\" = 'invoice'"
+        }
+      }
     }
   },
   "views": {},
