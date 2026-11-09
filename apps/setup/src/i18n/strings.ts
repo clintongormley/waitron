@@ -1,3 +1,4 @@
+import { handoverEn, handoverEs } from "./strings/handover.js";
 import { finishEn, finishEs } from "./strings/finish.js";
 import { restoreEn, restoreEs } from "./strings/restore.js";
 import { shellEn, shellEs } from "./strings/shell.js";
@@ -16,6 +17,7 @@ export const en = {
   ...venueEn,
   ...restoreEn,
   ...finishEn,
+  ...handoverEn,
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -30,6 +32,7 @@ export const es: Record<StringKey, string> = {
   ...venueEs,
   ...restoreEs,
   ...finishEs,
+  ...handoverEs,
 };
 
 export const catalogues: Record<string, Partial<Record<StringKey, string>>> = {

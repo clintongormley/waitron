@@ -1,8 +1,20 @@
+import { guideHref } from "../help-guide.js";
+import type { FreshSignIn, SignInWays } from "../widgets/fresh-sign-in.js";
+import "../widgets/fresh-sign-in.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { baseStyles, breakAfterColons, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  breakAfterColons,
+  draftScopeFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+  type DataTableColumn,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -119,6 +131,9 @@ export class ServersScreen extends LitElement {
       .fingerprint-value {
         font-family: var(--wt-font-family-mono);
       }
+      a {
+        color: var(--wt-color-primary-text);
+      }
       .explanation {
         margin: 0;
         color: var(--wt-color-text);
@@ -126,6 +141,7 @@ export class ServersScreen extends LitElement {
     `,
   ];
 
+  @property({ type: Boolean }) canPromote = false;
   @property({ attribute: false }) api!: DashboardApi;
   readonly #queries = new DashboardQueries(
     this,
@@ -145,6 +161,195 @@ export class ServersScreen extends LitElement {
   /** A menu item's popover closes on the click, so the dialog has nothing visible to hand focus
    * back to; the row menu's trigger takes it instead, or the heading after a Remove or Clear. */
   #focusTarget: HTMLElement | null = null;
+
+  @state() private handoverTarget: ServerRow | null = null;
+  @state() private handoverWays: SignInWays | null = null;
+  @state() private handoverError = "";
+  @state() private handoverBusy = false;
+  #operationId = "";
+  #handoverSent = false;
+  #handoverScope?: DraftScope<boolean>;
+  #handoverLeave?: LeaveCoordinator;
+  #signIn(): FreshSignIn | null {
+    return this.renderRoot.querySelector("dashboard-fresh-sign-in");
+  }
+  #openHandover(row: ServerRow): void {
+    this.handoverTarget = row;
+    this.#operationId = crypto.randomUUID();
+    this.#handoverSent = false;
+    this.handoverWays = null;
+    this.handoverError = "";
+    const { scope, coordinator } = draftScopeFor<boolean>(this, {
+      id: {},
+      current: () => this.#signIn()?.typed ?? false,
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: () => this.#signIn()?.clear(),
+    });
+    this.#handoverScope = scope;
+    this.#handoverLeave = coordinator;
+    scope.commit(false);
+  }
+  #closeHandover(): void {
+    this.#signIn()?.clear();
+    this.#handoverScope?.dispose();
+    this.#handoverScope = undefined;
+    this.#handoverLeave = undefined;
+    this.handoverTarget = null;
+    this.handoverBusy = false;
+  }
+  override disconnectedCallback(): void {
+    this.#closeHandover();
+    super.disconnectedCallback();
+  }
+  readonly #handoverBeforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.#handoverScope ||
+    !this.#handoverLeave ||
+    (await this.#handoverLeave.request({
+      scopes: [this.#handoverScope.id],
+      reason,
+      proceed() {},
+    })) === "proceeded";
+  #openHandoverPage(url: string): void {
+    this.#handoverScope?.commit(false);
+    this.#closeHandover();
+    this.dispatchEvent(
+      new CustomEvent("handover-open", { detail: { url }, bubbles: true, composed: true }),
+    );
+  }
+  async #startHandover(): Promise<void> {
+    const target = this.handoverTarget;
+    const widget = this.#signIn();
+    if (!target || !widget || this.handoverBusy || !this.canPromote) return;
+    this.handoverError = "";
+    if (!this.handoverWays?.password) {
+      this.handoverError = t("servers.handover_password");
+      return;
+    }
+    const operationId = this.#operationId;
+    let refused: unknown;
+    this.handoverBusy = true;
+    try {
+      if (!this.#handoverSent) {
+        const signIn = await widget.signIn("password");
+        if (!signIn) {
+          this.handoverError = widget.notice;
+          this.handoverBusy = false;
+          await this.updateComplete;
+          await widget.updateComplete;
+          await focusFirstInvalid(widget.shadowRoot!);
+          return;
+        }
+        if (signIn.method !== "password" || signIn.recoveryCode !== undefined) {
+          this.handoverError = t("servers.handover_password");
+          return;
+        }
+        this.#handoverSent = true;
+        try {
+          const answer = await this.api.startHandover({
+            operationId,
+            destinationNodeId: target.nodeId,
+            signIn,
+          });
+          if (this.handoverTarget !== target) return;
+          if (answer.handoverPage) {
+            this.#openHandoverPage(answer.handoverPage);
+            return;
+          }
+        } catch (error) {
+          if (this.handoverTarget !== target) return;
+          refused = error;
+          if (
+            typeof error === "object" &&
+            error !== null &&
+            "status" in error &&
+            [400, 401, 403, 429].includes(Number(error.status))
+          ) {
+            this.#handoverSent = false;
+            this.handoverError = codeMessage(codeOf(error));
+            return;
+          }
+        }
+      }
+      try {
+        const status = await this.api.handoverStatus(operationId);
+        if (this.handoverTarget !== target) return;
+        if (status.handoverPage) {
+          this.#openHandoverPage(status.handoverPage);
+          return;
+        }
+        if (status.state === "abandoned") {
+          this.#handoverSent = false;
+          this.#operationId = crypto.randomUUID();
+          this.handoverError = codeMessage(codeOf(refused, "handover.restarted_before_stepdown"));
+          return;
+        }
+      } catch {
+        /* The next press reads the same public operation. */
+      }
+      this.handoverError = t("servers.handover_reconnect");
+    } finally {
+      this.handoverBusy = false;
+    }
+  }
+  #renderHandover(): TemplateResult {
+    return html`<wt-dialog
+      data-test="handover-dialog"
+      heading=${t("servers.hand_over")}
+      .open=${this.handoverTarget !== null}
+      .dismissible=${!this.handoverBusy}
+      .beforeClose=${this.#handoverBeforeClose}
+      @wt-close=${() => this.#closeHandover()}
+    >
+      ${
+        this.handoverTarget
+          ? html`<p class="target">${this.#address(this.handoverTarget)}</p>
+              <p>${t("servers.handover_intro")}</p>
+              <p>${t("servers.handover_password")}</p>
+              <p>
+                <a href=${guideHref("servers.handover")} target="_blank" rel="noopener"
+                  >${t("help.guide_link")}</a
+                >
+              </p>
+              <dashboard-fresh-sign-in
+                .api=${this.api.background}
+                .disabled=${this.handoverBusy || this.#handoverSent}
+                @sign-in-ways=${(event: CustomEvent<SignInWays>) => {
+                  this.handoverWays = event.detail;
+                }}
+                @sign-in-change=${() => {
+                  this.#handoverScope?.changed();
+                  this.handoverError = "";
+                }}
+                @sign-in-passkey=${() => {
+                  this.handoverError = t("servers.handover_password");
+                }}
+              ></dashboard-fresh-sign-in>`
+          : nothing
+      }
+      <wt-form-actions
+        slot="footer"
+        data-test="handover-actions"
+        .error=${[this.handoverError, this.#signIn()?.marked ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
+      >
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          ?disabled=${this.handoverBusy}
+          data-test="stop-handover"
+          @click=${() => void this.renderRoot.querySelector<HTMLElement & { requestClose(reason: string): Promise<void> }>('[data-test="handover-dialog"]')?.requestClose("cancel")}
+          >${t("servers.handover_stop")}</wt-button
+        >
+        <wt-button
+          data-test="confirm-handover"
+          .loading=${this.handoverBusy}
+          .disabled=${this.handoverBusy || this.handoverWays === null || !this.handoverWays.password || (this.#signIn()?.invalid ?? false)}
+          @click=${() => void this.#startHandover()}
+          >${t(this.#handoverSent ? "servers.handover_check" : "servers.hand_over")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-dialog>`;
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -265,10 +470,16 @@ export class ServersScreen extends LitElement {
           const actions = (["remove", "clear"] as const).filter((action) =>
             action === "remove" ? row.removable : row.canClear,
           );
-          return actions.length === 0
+          const handover =
+            this.canPromote &&
+            this.#onPrimary() &&
+            !row.isSelf &&
+            row.standing === "serving-secondary" &&
+            row.contactUrl !== "";
+          return actions.length === 0 && !handover
             ? nothing
             : html`<wt-row-actions label=${`${t("servers.actions")}: ${this.#rowName(row)}`}
-                >${actions.map(
+                >${handover ? html`<wt-button align="start" variant="ghost" data-test=${`handover-${row.nodeId}`} @click=${() => this.#openHandover(row)}>${t("servers.hand_over")}</wt-button>` : nothing}${actions.map(
                   (action) =>
                     html`<wt-button
                       align="start"
@@ -362,7 +573,7 @@ export class ServersScreen extends LitElement {
         .emptyMessage=${t("servers.empty")}
         .errorMessage=${this.loadErrorKey === null ? "" : codeMessage(this.loadErrorKey)}
       ></wt-data-table>
-      ${this.#renderDialog("remove")} ${this.#renderDialog("clear")}
+      ${this.#renderDialog("remove")} ${this.#renderDialog("clear")} ${this.#renderHandover()}
     `;
   }
 }

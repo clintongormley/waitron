@@ -1,3 +1,4 @@
+import type { RecoveryOperationBinding } from "@waitron/module/src/setup-contract.js";
 import { firstSetupHeaders } from "./first-setup-types.js";
 import type {
   FirstSetupOwner,
@@ -282,6 +283,23 @@ async function apiError(res: Response): Promise<ApiError> {
   };
 }
 
+export interface HandoverStatus {
+  operationId: string;
+  role: "source" | "destination";
+  scenario: "controlled" | "emergency";
+  state: string;
+  sourceNodeId: string;
+  destinationNodeId: string;
+  waitingReason: string | null;
+  handoverPage?: string;
+  copyPlaced?: boolean;
+}
+export interface HandoverSignIn {
+  email: string;
+  password: string;
+  totp?: string;
+}
+
 export class SetupApi {
   readonly #baseUrl: string;
   /**
@@ -293,6 +311,49 @@ export class SetupApi {
   constructor(baseUrl = "", fetchImpl: FetchLike = fetch) {
     this.#baseUrl = baseUrl;
     this.#fetchImpl = fetchImpl;
+  }
+
+  async handoverStatus(operationId: string, signal?: AbortSignal): Promise<HandoverStatus> {
+    const fetchImpl = this.#fetchImpl;
+    const response = await fetchImpl(
+      this.#baseUrl + `/api/node/handover/${encodeURIComponent(operationId)}`,
+      {
+        method: "GET",
+        credentials: "omit",
+        cache: "no-store",
+        signal,
+      },
+    );
+    if (!response.ok) throw await apiError(response);
+    return ((await response.json()) as { body: HandoverStatus }).body;
+  }
+
+  prepareHandover(
+    operationId: string,
+    signIn: HandoverSignIn,
+    binding: RecoveryOperationBinding,
+    proposal: unknown,
+  ): Promise<unknown> {
+    return this.#request(
+      `/api/node/handover/${encodeURIComponent(operationId)}/preparation`,
+      "POST",
+      {
+        signIn,
+        moduleOperation: { binding, input: null },
+        proposal,
+      },
+    );
+  }
+
+  activateHandover(
+    operationId: string,
+    signIn: HandoverSignIn,
+    moduleOperation: { binding: RecoveryOperationBinding; input: unknown },
+  ): Promise<{ activated: true; restarting: boolean }> {
+    return this.#request(`/api/node/handover/${encodeURIComponent(operationId)}/activate`, "POST", {
+      signIn,
+      moduleOperation,
+    });
   }
 
   getDiscovery(): Promise<{ caDownloadAvailable: boolean }> {

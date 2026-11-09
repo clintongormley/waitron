@@ -5,6 +5,32 @@
 If you see **This box is the spare**, open the main box’s address to use the restaurant screens
 and data. The spare’s page shows its status; it takes no sales and offers no dashboard sign-in.
 
+## Hand over to a spare box {#hand-over}
+
+Use this flow only with a spare that has finished joining the venue. Real-box use also needs the
+emergency recovery flow, which is not available yet; the controlled flow is currently qualified on
+simulated boxes.
+
+On the main box, open **Settings → Servers**. Open the spare’s row menu and choose **Hand over the
+venue**. Read the explanation, then enter your administrator password and authenticator code if
+set up. Choose **Stop** to keep the venue on this box, or **Hand over the venue** to stop sales here
+and move the final copy. You need an account with a password; passkeys and recovery codes cannot
+complete this flow.
+
+Keep both boxes connected. The handover page opens on the spare and follows the transfer. Once
+the copy is ready, enter the same administrator account, compare the clocks and make the new
+series. Choose **Start the venue on this box**, then **Continue to this box**. Staff sign in again
+on their tills. Payments already recorded remain in the transferred copy.
+
+If an answer is lost, keep the page open or reload it to read progress. Do not start another
+handover. A waiting message describes the last attempt; keep both boxes connected while they try
+again.
+
+## After the handover {#after-hand-over}
+
+Use the new box’s address. If the old box’s page offers **Progress**, follow it to resume the
+handover on the spare. Keep the old box and its data until the return flow is available.
+
 ## When a box no longer runs the venue {#handed-over}
 
 If you open a box's address in a browser and see a page titled **This box no longer runs the
@@ -14,7 +40,7 @@ page names, in bold, the box taking over the venue.
 Below that, the page lists each step of the handover that this box has recorded, in the order it
 recorded them, with the date and time of each in the venue's time zone.
 
-The page has no buttons, because nothing on it needs you: the box is meant to be in this state.
+If the page offers **Progress**, use it to finish the handover on the spare.
 
 The page is in Spanish when your browser prefers Spanish, and in English otherwise.
 

@@ -1869,6 +1869,8 @@ Not in any track until the standalone primary is done.
 
 - **A1018. Simple controlled and emergency handover, with Cloud only a placement.** M2 handles all AEAT communication after either takeover; returning M1 transfers fiscal originals/outcomes only.
   The [build plan](superpowers/plans/2026-11-02-a1018-handover-build.md) cuts the work into slices.
+  The controlled Servers-to-spare screen is built and checked on simulated boxes; real-box use
+  still waits for joining and the emergency flow. Slices 7–8 remain open.
   The owner answered (a) to both its questions (returned invoices in modelo 303; the emergency
   minute wait) on 2026-11-02: Slice 12b is built on that answer, landed by the owner and marked
   pending the venue's tax adviser, and Task 7.4b is not built. On 2026-11-03 the owner read
@@ -1931,7 +1933,7 @@ Not in any track until the standalone primary is done.
   nothing holds it at `return_pending`, `return_complete` or `replaced`. Due before Slices 10 and 13
   add code that changes those states. Left open by A1018 Slice 5.
 
-- **Slice 6's list: the handover words no screen shows yet.** Codes whose words name no next step,
+- **Remaining handover refusal wording.** Codes whose words name no next step,
   words false at the stage they appear, and the "Unreadable" settings, each for Slice 6 to settle as
   its screens first show them. Left open by A1018 Slice 5.
   [Detail](backlog/replication-cloud.md#slice-6s-list-the-handover-words-no-screen-shows-yet)

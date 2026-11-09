@@ -244,3 +244,62 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)("controlled handover form (%s)", (theme) => {
+  it("announces marked password fields at the bottom and has no accessibility violations", async () => {
+    const api = stubApi({
+      getProfile: vi.fn().mockResolvedValue({
+        displayName: "Owner",
+        firstNames: null,
+        lastNames: null,
+        telephone: null,
+        email: "owner@example.com",
+        pendingEmail: null,
+        locale: "en",
+        hasPassword: true,
+        hasTotp: true,
+        hasGoogle: false,
+        passkeys: [],
+      }),
+    });
+    Object.defineProperty(api, "background", { get: () => api });
+    const { el, host } = await mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      { api, canPromote: true },
+      theme,
+    );
+    await flush(el);
+    rowMenu(el, STANDBY).shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+    rowMenu(el, STANDBY).querySelector<HTMLElement>(`[data-test="handover-${STANDBY}"]`)!.click();
+    await vi.waitFor(() =>
+      expect(
+        el
+          .shadowRoot!.querySelector("dashboard-fresh-sign-in")
+          ?.shadowRoot?.querySelector("wt-input"),
+      ).toBeTruthy(),
+    );
+    await expectNoA11yViolations(host);
+    const signIn = el.shadowRoot!.querySelector("dashboard-fresh-sign-in")!;
+    const code = signIn.shadowRoot!.querySelector("wt-input[name=totp]")!;
+    code.shadowRoot!.querySelector<HTMLInputElement>("input")!.focus();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-handover]")!.click();
+    await vi.waitFor(() =>
+      expect(
+        (
+          el.shadowRoot!.querySelector("[data-test=handover-actions]") as HTMLElement & {
+            error: string;
+          }
+        ).error,
+      ).not.toBe(""),
+    );
+    await vi.waitFor(() =>
+      expect(
+        signIn
+          .shadowRoot!.querySelector("wt-input[name=current-password]")!
+          .shadowRoot!.querySelector("input")!
+          .matches(":focus"),
+      ).toBe(true),
+    );
+    await expectNoA11yViolations(host);
+  });
+});

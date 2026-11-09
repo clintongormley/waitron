@@ -149,8 +149,7 @@ export function placedSpareFixture(boxes: {
     ]);
   }
 
-  /** Two separate boxes, then the real capture and acceptance, leaving M2 stopped on its own files. */
-  async function stoppedBeforePlacing() {
+  async function setupBoxes() {
     const { mainState, spareState, spareVenue } = dirs();
     for (const dir of [mainState, spareState, spareVenue]) await mkdir(dir);
     await mainBox.db
@@ -249,6 +248,13 @@ export function placedSpareFixture(boxes: {
     await writeNodeMembership(mainBox.db, chart);
     await writeNodeMembership(spareBefore.db, chart);
 
+    return { chart, mainKey, spareKey };
+  }
+
+  /** Two separate boxes, then the real capture and acceptance, leaving M2 stopped on its own files. */
+  async function stoppedBeforePlacing() {
+    const { chart, mainKey, spareKey } = await setupBoxes();
+    const { mainState, spareState, spareVenue } = dirs();
     const mainStore = { node: mainBox.node, nodeId: primary.nodeId };
     await beginHandover(mainStore, handoverBinding, "source");
     await advanceHandover(mainStore, OPERATION, "source_stepped_down", {});
@@ -338,5 +344,5 @@ export function placedSpareFixture(boxes: {
     };
   }
 
-  return { placeRealCopy, stoppedBeforePlacing };
+  return { setupBoxes, placeRealCopy, stoppedBeforePlacing };
 }

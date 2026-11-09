@@ -8,8 +8,7 @@ export default defineConfig({
   plugins: [viteNpmNotices()],
   // Shared brand assets — see the till config for the full rationale.
   publicDir: fileURLToPath(new URL("../../packages/ui/brand/public", import.meta.url)),
-  // Setup mode serves the wizard at the origin root (`mountSpa` with basePath "").
-  base: "/",
+  base: "./",
   server: {
     port: devPort("WAITRON_SETUP_VITE_PORT", 5192),
     // Fail loudly rather than bump to a surprise port whose proxy no longer matches the browser —
@@ -17,6 +16,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/setup-api": devServerProxy(),
+      "/api/node/handover": devServerProxy(),
     },
   },
 });

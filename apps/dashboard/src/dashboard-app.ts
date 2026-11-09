@@ -3054,7 +3054,13 @@ export class DashboardApp extends LitElement {
           @admin-sign-in=${() => void this.#onLogout()}
         ></dashboard-backup-screen>`;
       case "servers":
-        return html`<dashboard-servers-screen .api=${this.api}></dashboard-servers-screen>`;
+        return html`<dashboard-servers-screen
+          .api=${this.api}
+          .canPromote=${this.#sessionPermissions.includes("node.promote")}
+          @handover-open=${(event: CustomEvent<{ url: string }>) => {
+            window.location.href = event.detail.url;
+          }}
+        ></dashboard-servers-screen>`;
       case "email":
         return html`<dashboard-email-screen
           .api=${this.api}
