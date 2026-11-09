@@ -1,6 +1,11 @@
 import { useLocale } from "../testing/locale-setup.js";
 import { LitElement, html } from "lit";
-import { LeaveController, UrlStateController, type WtFormActions } from "@waitron/ui";
+import {
+  LeaveController,
+  UrlStateController,
+  type WtButton,
+  type WtFormActions,
+} from "@waitron/ui";
 import { dashboardPath } from "../navigation.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8232,6 +8237,30 @@ describe("printers-screen Bluetooth pairing", () => {
       expect(q(el, sel("name-printer-modal"))).toBeNull();
     });
 
+    it("opens no form in a reopened Add printer dialog when an earlier opening's pairing answers late", async () => {
+      let answer!: (value: { command: ReturnType<typeof pendingCommand> }) => void;
+      const { el, passive } = await mountQuiet([barPrinter], {
+        pairBluetooth: vi.fn(
+          () =>
+            new Promise<{ command: ReturnType<typeof pendingCommand> }>((resolve) => {
+              answer = resolve;
+            }),
+        ),
+      });
+      passive.mockResolvedValue([succeeded(true)]);
+      await submitPair(el);
+      await clickAndAwaitClose(el, "pair-printer-modal", "cancel-pair");
+      await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
+      q(el, "[data-test=open-add-printer]")!.click();
+      await flush(el);
+      answer({ command: pendingCommand("pair") });
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 2);
+      await flush(el);
+      expect(q(el, sel("new-printer-modal"))).not.toBeNull();
+      expect(q(el, sel("name-printer-modal"))).toBeNull();
+    });
+
     it("leaves an open form to add another printer alone when a pairing finishes, offering Add in the paired row", async () => {
       const paired: DiscoveredPrinter = { ...second, paired: true };
       const { el, passive } = await mountQuiet([barPrinter, paired]);
@@ -9411,6 +9440,94 @@ describe("printers-screen Bluetooth pairing", () => {
       await typePin(el);
       expect(api.pairBluetooth).toHaveBeenCalledTimes(2);
       expect(api.updatePrinter).not.toHaveBeenCalled();
+    });
+
+    it("leaves a reopened Pair again window and its PIN alone when an earlier opening's pairing answers late", async () => {
+      const { el, api, passive } = await mountOff([found]);
+      let answer!: (value: { command: ReturnType<typeof pendingCommand> }) => void;
+      vi.mocked(api.pairBluetooth).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      );
+      await pairAgain(el);
+      await typePin(el);
+      await clickAndAwaitClose(el, "pair-printer-modal", "cancel-pair");
+      await clickAndAwaitClose(el, "pair-again-modal", "cancel-pair-again");
+      await pairAgain(el);
+      typeField(el, sel("bluetooth-pin"), "1234");
+      await flush(el);
+      passive.mockResolvedValue([
+        { ...found, bluetoothCommand: finishedCommand("pair", "succeeded") },
+      ]);
+      answer({ command: pendingCommand("pair") });
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 2);
+      await flush(el);
+      expect(api.updatePrinter).not.toHaveBeenCalled();
+      expect(q(el, sel("pair-again-modal"))).not.toBeNull();
+      expect(pinField(el).value).toBe("1234");
+      expect(q(el, sel("pair-again-done"))).toBeNull();
+    });
+
+    it("switches on a printer the scan finds already paired, so Look again after a failed switch-on asks for no PIN", async () => {
+      const { el, api, passive } = await mountOff([found]);
+      vi.mocked(api.updatePrinter).mockRejectedValueOnce({ code: "storage.disk_full" });
+      await pairAgain(el);
+      passive.mockResolvedValue([
+        { ...found, paired: true, bluetoothCommand: finishedCommand("pair", "succeeded") },
+      ]);
+      await typePin(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(q(el, sel("pair-again-modal"))).not.toBeNull();
+      expect(await bottomOf(el, `${sel("pair-again-modal")} wt-form-actions`)).toBe(
+        codeMessage("storage.disk_full"),
+      );
+      vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([{ ...found, paired: true }]);
+      q(el, sel("pair-again-look"))!.click();
+      await flush(el);
+      expect(q(el, sel("pair-printer-modal"))).toBeNull();
+      await vi.waitFor(() => expect(q(el, sel("pair-again-modal"))).toBeNull());
+      expect(api.updatePrinter).toHaveBeenCalledTimes(2);
+      expect(api.updatePrinter).toHaveBeenLastCalledWith("p9", { active: true });
+      expect(api.pairBluetooth).toHaveBeenCalledOnce();
+      expect(text(el, sel("pair-again-done"))).toBe(
+        fill("printers.pair_again_done", { printer: off.name }),
+      );
+      expect(text(el, "p.error[role=alert]")).toBeUndefined();
+    });
+
+    it("says it is switching on a printer the scan finds already paired, and sends no second switch-on while it does", async () => {
+      const { el, api } = await mountOff([found]);
+      let answer!: () => void;
+      vi.mocked(api.updatePrinter).mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([{ ...found, paired: true }]);
+      await pairAgain(el);
+      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p9", { active: true });
+      expect(text(el, sel("pair-again-status"))).toBe(
+        fill("printers.pair_again_switching_on", { printer: off.name }),
+      );
+      expect(q(el, `${sel("pair-again-status")} wt-spinner`)).not.toBeNull();
+      const look = q(el, sel("pair-again-look")) as WtButton;
+      expect(look.loading).toBe(true);
+      look.shadowRoot!.querySelector("button")!.click();
+      look.click();
+      await flush(el);
+      expect(api.updatePrinter).toHaveBeenCalledOnce();
+      expect(api.startPrinterDiscovery).toHaveBeenCalledOnce();
+      answer();
+      await vi.waitFor(() => expect(q(el, sel("pair-again-modal"))).toBeNull());
+      expect(api.updatePrinter).toHaveBeenCalledOnce();
+      expect(text(el, sel("pair-again-done"))).toBe(
+        fill("printers.pair_again_done", { printer: off.name }),
+      );
     });
   });
 });

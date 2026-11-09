@@ -940,6 +940,7 @@ export class PrintersScreen extends LitElement {
    * found. */
   @state() private pairAgain: { printer: Printer; found: DiscoveredPrinter | null } | null = null;
   @state() private pairedAgainName: string | null = null;
+  @state() private pairAgainSwitching = false;
   #pairAgainOpening = 0;
   /** Holds no value: the parent of the Pair dialog's PIN, so closing Pair again asks about it. */
   #pairAgainScope?: DraftScope<null>;
@@ -1927,12 +1928,20 @@ export class PrintersScreen extends LitElement {
       return;
     }
     const epoch = this.#pairEpoch;
+    const addOpening = this.#addPrinterOpening;
+    const againOpening = this.#pairAgainOpening;
     const scope = this.#pairScope;
     const pin = this.pairPin;
     this.pairSubmitting = true;
     try {
       const { command } = await this.api.pairBluetooth(device.agentId, device.localKey!, pin);
-      if (this.#scanWanted()) this.#trackCommand(device.agentId, command, device);
+      // Tracked for the dialog that asked, even after its Pair dialog closed; never for a later one.
+      if (
+        this.#scanWanted() &&
+        addOpening === this.#addPrinterOpening &&
+        againOpening === this.#pairAgainOpening
+      )
+        this.#trackCommand(device.agentId, command, device);
       if (epoch === this.#pairEpoch && this.isConnected) {
         scope!.commit(pin);
         if (scope!.isDirty()) return;
@@ -1970,6 +1979,7 @@ export class PrintersScreen extends LitElement {
     this.#resetPair();
     this.errorKey = null;
     this.pairedAgainName = null;
+    this.pairAgainSwitching = false;
     this.pairAgain = { printer, found: null };
     ({ coordinator: this.#pairAgainLeave, scope: this.#pairAgainScope } = draftScopeFor<null>(
       this,
@@ -1979,12 +1989,14 @@ export class PrintersScreen extends LitElement {
   }
 
   #lookAgain(): void {
+    if (this.pairAgainSwitching) return;
     this.pairAgain = { ...this.pairAgain!, found: null };
     this.#endScan();
     void this.#scan();
   }
 
-  /** Opens the Pair dialog once a scan lists the printer Pair again looks for. */
+  /** Once a scan lists the printer Pair again looks for, opens the Pair dialog, or switches the
+   * printer on if an agent already reports it paired. */
   #findPairAgain(): void {
     const pairAgain = this.pairAgain;
     if (pairAgain === null || pairAgain.found !== null) return;
@@ -1993,18 +2005,22 @@ export class PrintersScreen extends LitElement {
     );
     if (found === undefined) return;
     this.pairAgain = { ...pairAgain, found };
-    this.#openPair(found, this.#pairAgainScope?.id);
+    if (found.paired === true) void this.#pairedAgain(pairAgain.printer);
+    else this.#openPair(found, this.#pairAgainScope?.id);
   }
 
   /** Never the name form or calibration: the record, its name and settings are the same. */
   async #pairedAgain(printer: Printer): Promise<void> {
     const opening = this.#pairAgainOpening;
+    this.pairAgainSwitching = true;
     try {
       if (this.printers.find(({ id }) => id === printer.id)?.active === false)
         await this.api.updatePrinter(printer.id, { active: true });
     } catch (error) {
       if (opening === this.#pairAgainOpening) this.errorKey = codeOf(error);
       return;
+    } finally {
+      if (opening === this.#pairAgainOpening) this.pairAgainSwitching = false;
     }
     if (opening !== this.#pairAgainOpening || !this.isConnected) return;
     this.pairedAgainName = printer.name;
@@ -2033,7 +2049,12 @@ export class PrintersScreen extends LitElement {
     const key = found === null ? undefined : this.#commandKeyOf(found);
     const command = key === undefined ? undefined : this.commands[key];
     let status: TemplateResult | typeof nothing = nothing;
-    if (key !== undefined) status = this.#renderCommand(key, command, "pair-again-command");
+    if (this.pairAgainSwitching)
+      status = html`<p data-test="pair-again-status">
+        <wt-spinner decorative size="sm"></wt-spinner>
+        ${fill("printers.pair_again_switching_on", { printer: printer.name })}
+      </p>`;
+    else if (key !== undefined) status = this.#renderCommand(key, command, "pair-again-command");
     else if (this.scanning)
       status = html`<p data-test="pair-again-status">
         <wt-spinner decorative size="sm"></wt-spinner>
@@ -2069,6 +2090,7 @@ export class PrintersScreen extends LitElement {
                 variant="primary"
                 data-test="pair-again-look"
                 ?disabled=${command?.state === "pending"}
+                ?loading=${this.pairAgainSwitching}
                 @click=${() => this.#lookAgain()}
                 >${t("printers.pair_again_look")}</wt-button
               >`
