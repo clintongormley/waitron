@@ -892,3 +892,25 @@ it("words a test email no longer in the inbox in both languages", () => {
     "Ese correo ya no está en el buzón de prueba",
   );
 });
+
+// A close by transfer's refusals (apps/server/src/transfer-close.ts).
+it.each([
+  [
+    "transfer_close.ineligible",
+    "This bill can't be closed by transfer because it has already been paid, changed or cancelled, or its total is zero. Take payment the usual way",
+    "Esta cuenta no se puede cerrar por transferencia porque ya se ha pagado, modificado o anulado, o su total es cero. Cóbrala de la forma habitual",
+  ],
+  [
+    "transfer_close.conflict",
+    "This bill's total or invoice details have changed since you opened it. Reload the bill, check them and try again",
+    "El total o los datos de factura de esta cuenta han cambiado desde que la abriste. Vuelve a cargarla, revísalos e inténtalo de nuevo",
+  ],
+  [
+    "transfer_close.day_frozen",
+    "This business day already has its daily close. Close the bill by transfer once the next business day starts",
+    "Este día de trabajo ya tiene su cierre diario. Cierra la cuenta por transferencia cuando empiece el siguiente día de trabajo",
+  ],
+])("explains close-by-transfer refusal %s in English and Spanish", (code, english, spanish) => {
+  expect(codeMessage(code, "en")).toBe(english);
+  expect(codeMessage(code, "es")).toBe(spanish);
+});

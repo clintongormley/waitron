@@ -121,7 +121,7 @@ async function requestFor(
       expectedTotal,
       invoiceType: order!.invoiceType,
       recipient: order!.invoiceType === "F1" ? RECIPIENT : null,
-      receiptLanguage: "es",
+      receiptLanguage: venue.cfg.locale,
       delivery: null,
       partyFinish:
         party === undefined
@@ -475,7 +475,9 @@ describe("closeBillByTransferTx, new work", () => {
         })
         .where(eq(workingOrders.id, party.tabId)),
     );
-    const request = await requestFor(party.tabId, "12.00", party.partyId);
+    const request = await requestFor(party.tabId, "12.00", party.partyId, {
+      delivery: { medium: "email", recipient: "customer@example.com" },
+    });
     const before = ledger();
 
     await expect(
