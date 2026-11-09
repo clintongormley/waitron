@@ -102,15 +102,22 @@ function sibling(f, fields, after = 0) {
 
 describe("server health recovery", () => {
   it.each([
-    ["changes", "success", true],
-    ["changes", "failure", false],
-    ["bundle-smoke", "success", false],
-  ])("completed %s with %s allows a move: %s", async (name, conclusion, move) => {
-    const f = fixture();
-    sibling(f, { name, conclusion, status: "completed", runner_id: 7 });
-    expect((await health.recoverServer(f.options)).retried).toEqual(move ? [12] : []);
-    expect(f.calls.some(([, options]) => options.method)).toBe(move);
-  });
+    ["changes", "success", 7, true],
+    ["changes", "failure", 7, false],
+    ["bundle-smoke", "success", 7, false],
+    ["bundle-smoke", "cancelled", 7, false],
+    ["bundle-smoke", "skipped", 7, false],
+    ["bundle-smoke", "skipped", 0, true],
+    ["bundle-smoke", "cancelled", 0, true],
+  ])(
+    "completed %s with %s and runner %i allows a move: %s",
+    async (name, conclusion, runner_id, move) => {
+      const f = fixture();
+      sibling(f, { name, conclusion, status: "completed", runner_id });
+      expect((await health.recoverServer(f.options)).retried).toEqual(move ? [12] : []);
+      expect(f.calls.some(([, options]) => options.method)).toBe(move);
+    },
+  );
   it("never moves a later attempt again", async () => {
     const f = fixture();
     f.run.run_attempt = 2;
@@ -119,7 +126,7 @@ describe("server health recovery", () => {
     const request = f.options.request;
     f.options.request = (path, options) =>
       request(path.replace("/attempts/2/", "/attempts/1/"), options);
-    expect((await health.recoverServer(f.options)).retried).toEqual([]);
+    expect(await health.recoverServer(f.options)).toEqual({ retried: [], preserved: [12] });
     expect(f.calls.some(([, options]) => options.method)).toBe(false);
   });
   it.each(["server", "hosted", "finished"])(
@@ -194,7 +201,51 @@ describe("server health recovery", () => {
     await health.healthCommand("recover", f.options, {
       report: (message) => reports.push(message),
     });
-    expect(reports).toEqual(["Preserved runs 12 because work has started or completed."]);
+    expect(reports).toEqual([
+      "Preserved runs 12 because work has started or completed, or this is already a retry.",
+    ]);
+    expect(f.calls.some(([, options]) => options.method)).toBe(false);
+  });
+  it("preserves twenty runs without rescanning the whole queue for each", async () => {
+    const f = fixture(),
+      runs = Array.from({ length: 20 }, (_, i) => ({ ...f.run, id: 12 + i }));
+    let reads = 0;
+    f.options.request = async (path, options) => {
+      if (!options?.method) reads++;
+      if (path.includes("/workflows/ci.yml/runs?status=in_progress"))
+        return { total_count: runs.length, workflow_runs: runs };
+      const run = runs.find(
+        (run) => path.includes(`/runs/${run.id}/`) || path.endsWith(`/runs/${run.id}`),
+      );
+      if (run && path.includes("/jobs?"))
+        return {
+          total_count: 2,
+          jobs: [
+            {
+              ...f.job,
+              id: run.id * 10,
+              run_id: run.id,
+              labels: ["self-hosted", `dt-42-${run.id}-1-lint-1`],
+            },
+            {
+              ...f.job,
+              id: run.id * 10 + 1,
+              run_id: run.id,
+              name: "bundle-smoke",
+              labels: ["ubuntu-latest"],
+              status: "completed",
+              conclusion: "success",
+              runner_id: 7,
+            },
+          ],
+        };
+      return run ?? f.request(path, options);
+    };
+    expect(await health.recoverServer(f.options)).toEqual({
+      retried: [],
+      preserved: runs.map((run) => run.id),
+    });
+    expect(reads).toBeLessThan(100);
     expect(f.calls.some(([, options]) => options.method)).toBe(false);
   });
   it("recovers a younger drained run while the oldest has a hosted sibling", async () => {

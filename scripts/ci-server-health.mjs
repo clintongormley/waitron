@@ -214,36 +214,48 @@ export async function recoverServer(options) {
       Date.parse(a.run_started_at || a.created_at) - Date.parse(b.run_started_at || b.created_at),
   );
   for (const run of oldest) {
-    if (run.run_attempt > 1) continue;
+    if (run.run_attempt > 1) {
+      preserved.push(run.id);
+      continue;
+    }
+    const path = `/repos/${repository}/actions/runs/${run.id}`;
+    const eligible = async () => {
+      const current = await request(path);
+      if (
+        current.id !== run.id ||
+        current.run_attempt !== run.run_attempt ||
+        current.head_sha !== run.head_sha ||
+        current.status === "completed"
+      )
+        return;
+      if (
+        (await runJobs(options, current)).some(
+          (job) =>
+            job.name !== "server-queue-watchdog" &&
+            !(
+              job.name === "changes" &&
+              job.status === "completed" &&
+              job.conclusion === "success"
+            ) &&
+            (assigned(job) ||
+              job.runner_id > 0 ||
+              (job.status === "completed" && !["skipped", "cancelled"].includes(job.conclusion))),
+        )
+      ) {
+        preserved.push(run.id);
+        return;
+      }
+      return current;
+    };
+    if (!(await eligible())) continue;
     if (
       !(await serverHealth(options)).stuck.some(
         (current) => current.id === run.id && current.run_attempt === run.run_attempt,
       )
     )
       continue;
-    const path = `/repos/${repository}/actions/runs/${run.id}`;
-    let current = await request(path);
-    if (
-      current.id !== run.id ||
-      current.run_attempt !== run.run_attempt ||
-      current.head_sha !== run.head_sha ||
-      current.status === "completed"
-    )
-      continue;
-    const jobs = await runJobs(options, current);
-    if (
-      jobs.some(
-        (job) =>
-          job.name !== "server-queue-watchdog" &&
-          !(job.name === "changes" && job.status === "completed" && job.conclusion === "success") &&
-          (assigned(job) ||
-            job.runner_id > 0 ||
-            (job.status === "completed" && !["skipped", "cancelled"].includes(job.conclusion))),
-      )
-    ) {
-      preserved.push(run.id);
-      continue;
-    }
+    let current = await eligible();
+    if (!current) continue;
     try {
       await request(path + "/force-cancel", { method: "POST" });
     } catch (error) {
@@ -310,11 +322,13 @@ export async function healthCommand(command, options, { report, output }) {
         };
       }
       output(`server_route=${answer.route}`);
-      report(answer.reason);
+      report(`CI route: ${answer.route}; ${answer.reason}`);
     } else if (command === "recover") {
       const { retried, preserved = [] } = await recoverServer(options);
       if (preserved.length)
-        report(`Preserved runs ${preserved.join(", ")} because work has started or completed.`);
+        report(
+          `Preserved runs ${preserved.join(", ")} because work has started or completed, or this is already a retry.`,
+        );
       if (retried.length || !preserved.length)
         report(
           retried.length

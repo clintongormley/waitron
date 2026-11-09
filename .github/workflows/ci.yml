@@ -296,8 +296,7 @@ jobs:
           fi
 
       - id: server-route
-        name: Choose a responsive CI route
-        if: vars.DISPOSABLE_TESTS_MODE == 'server'
+        name: Compare CI queue pressure
         timeout-minutes: 2
         continue-on-error: true
         env:

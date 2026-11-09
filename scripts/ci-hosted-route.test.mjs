@@ -7,6 +7,9 @@ import { healthCommand, main, serverRoute } from "./ci-server-health.mjs";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 function workflowEnvironment(capacity) {
+  const step = workflow.match(/      - id: server-route\n([\s\S]*?)(?=\n      (?:- |#))/)?.[1];
+  const condition = step.match(/^ {8}if: (.+)$/m)?.[1] ?? "true";
+  expect(runInNewContext(condition, { vars: { DISPOSABLE_TESTS_MODE: "hosted" } })).toBe(true);
   const expression = workflow.match(/^ {10}CAPACITY: \$\{\{ (.+) \}\}$/m)?.[1];
   expect(expression).toBe("vars.DISPOSABLE_TESTS_CAPACITY");
   return {
@@ -59,7 +62,7 @@ function fixture(running = 0, queued = 0) {
   return { options, jobs, run, calls };
 }
 
-describe("GitHub-first routing", () => {
+describe("queue-pressure routing", () => {
   it.each([
     [0, 0, 6, 0, 0, "server"],
     [6, 0, 6, 19, 0, "hosted"],
@@ -106,11 +109,26 @@ describe("GitHub-first routing", () => {
     expect(f.calls.every(([, options]) => !options?.method)).toBe(true);
   });
 
+  it.each(["pending", "waiting", "requested"])("counts hosted %s work", async (status) => {
+    const f = fixture(19, 1);
+    f.jobs[19].status = status;
+    expect((await serverRoute(f.options)).route).toBe("server");
+  });
+  it("names the chosen side in its summary", async () => {
+    const f = fixture(20),
+      reports = [];
+    await healthCommand("route", f.options, {
+      output: () => {},
+      report: (line) => reports.push(line),
+    });
+    expect(reports.join("\n")).toContain("CI route: server");
+  });
   it.each([
     "not JSON",
     "{}",
     "null",
     JSON.stringify({ observedAt: 1, slots: -1, serverRunning: 0, serverWaiting: 0 }),
+    JSON.stringify({ slots: 6, serverRunning: 1, serverWaiting: 5 }),
     JSON.stringify({ observedAt: 1, slots: 6, serverRunning: 1, serverWaiting: 5 }),
   ])("reads the workflow capacity variable: %s", async (capacity) => {
     const f = fixture(20),

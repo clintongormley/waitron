@@ -141,7 +141,7 @@ External provenance, read 2026-11-06:
 
 Set `DISPOSABLE_TESTS_MODE=server` to route CI jobs to Lane I's disposable Linux
 runners. Same-repository pull requests, main pushes, tags, schedules, manual runs and
-ordinary reruns are eligible for the server route when the hosted-capacity check below selects it. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
+ordinary reruns are eligible for the server route when the queue-pressure comparison below selects it. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
 GitHub so routing, recovery and the required result can still run when server assignment
 stops (watcher, 2026-11-08 16:00). Image smoke always uses `ubuntu-latest` until a
 disposable guest is qualified (watcher, 2026-11-09 08:20). CI still passes
@@ -181,7 +181,7 @@ A failed health check publishes zero usable slots. The router refreshes hosted c
 its existing read-only API scan and compares `(running + waiting) / slots` with the server
 snapshot, using the owner's stipulated 20 hosted slots. Ties select the server; zero server
 slots select hosted. Unknown inputs retain the existing server preference and readable-stall checks.
-The summary prints both counts and snapshot age. This repository snapshot reserves no capacity;
+The summary prints both counts, snapshot age and the chosen side, including in hosted mode. This repository snapshot reserves no capacity;
 simultaneous decisions can choose the same side. The run's own `changes` job counts while running.
 Repository-variable arrival and actual route/labels still need qualification before activation;
 there is no new snapshot expiry rule. The decision routes a whole run.
