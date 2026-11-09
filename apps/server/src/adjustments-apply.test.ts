@@ -32,6 +32,7 @@ import {
   adjustments,
   computeAdjustmentReport,
   createAdjustmentReason,
+  readAdjustmentSettings,
   saveAdjustmentSettings,
   updateAdjustmentReason,
   type AdjustmentAction,
@@ -2365,11 +2366,15 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     maxBillComp: string | null,
     billApproverRoles: PersonRoleValue[] = ["manager", "admin"],
   ) =>
-    inTx(venue, (tx) =>
-      saveAdjustmentSettings(tx, {
-        maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
-        billApproverRoles,
-      }),
+    inTx(venue, async (tx) =>
+      saveAdjustmentSettings(
+        tx,
+        {
+          maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
+          billApproverRoles,
+        },
+        { expectedRevision: (await readAdjustmentSettings(tx)).revision, personId: null },
+      ),
     );
   afterEach(() => setLimit(null));
 
@@ -4050,11 +4055,15 @@ describe("a counter order (B11c)", () => {
 
   describe("the bill's comp limit (A758 §3.5)", () => {
     const setLimit = (maxBillComp: string | null) =>
-      inTx(venue, (tx) =>
-        saveAdjustmentSettings(tx, {
-          maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
-          billApproverRoles: ["manager", "admin"],
-        }),
+      inTx(venue, async (tx) =>
+        saveAdjustmentSettings(
+          tx,
+          {
+            maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
+            billApproverRoles: ["manager", "admin"],
+          },
+          { expectedRevision: (await readAdjustmentSettings(tx)).revision, personId: null },
+        ),
       );
     afterEach(() => setLimit(null));
 

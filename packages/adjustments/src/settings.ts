@@ -1,9 +1,4 @@
-import {
-  adjustmentSettings,
-  DEFAULT_BILL_APPROVER_ROLES,
-  nowIso,
-  type Transaction,
-} from "@waitron/db";
+import { defineSettingsDocument, readSettings, saveSettings, type Transaction } from "@waitron/db";
 import type { PersonRoleValue } from "@waitron/identity";
 import {
   centsToDecimal,
@@ -21,20 +16,53 @@ export interface AdjustmentSettings {
   billApproverRoles: PersonRoleValue[];
 }
 
-/** The venue's settings; no row reads as no limit, approved past by managers and admins. */
-export async function readAdjustmentSettings(tx: Transaction): Promise<AdjustmentSettings> {
-  const [row] = await tx
-    .select({
-      maxBillComp: adjustmentSettings.maxBillComp,
-      billApproverRoles: adjustmentSettings.billApproverRoles,
-    })
-    .from(adjustmentSettings);
-  if (row === undefined) {
-    return { maxBillComp: null, billApproverRoles: [...DEFAULT_BILL_APPROVER_ROLES] };
-  }
+export const DEFAULT_BILL_APPROVER_ROLES: readonly PersonRoleValue[] = ["manager", "admin"];
+export interface AdjustmentsDocument {
+  maxBillComp: number | null;
+  billApproverRoles: PersonRoleValue[];
+}
+export const ADJUSTMENTS_SETTINGS = defineSettingsDocument<AdjustmentsDocument>({
+  module: "adjustments",
+  version: 1,
+  transfers: true,
+  defaults: () => ({ maxBillComp: null, billApproverRoles: [...DEFAULT_BILL_APPROVER_ROLES] }),
+  parse(doc) {
+    if (typeof doc !== "object" || doc === null || Array.isArray(doc))
+      return { ok: false, field: "doc" };
+    const value = doc as Record<string, unknown>;
+    for (const key of Object.keys(value)) {
+      if (key !== "maxBillComp" && key !== "billApproverRoles") return { ok: false, field: key };
+    }
+    if (
+      value.maxBillComp !== null &&
+      (typeof value.maxBillComp !== "number" ||
+        !Number.isSafeInteger(value.maxBillComp) ||
+        value.maxBillComp <= 0)
+    )
+      return { ok: false, field: "maxBillComp" };
+    if (
+      !Array.isArray(value.billApproverRoles) ||
+      !value.billApproverRoles.every((role) => typeof role === "string") ||
+      !isRoleList(value.billApproverRoles)
+    )
+      return { ok: false, field: "billApproverRoles" };
+    return {
+      ok: true,
+      doc: {
+        maxBillComp: value.maxBillComp as number | null,
+        billApproverRoles: [...value.billApproverRoles],
+      },
+    };
+  },
+});
+export type AdjustmentSettingsRead = AdjustmentSettings & { revision: number };
+
+export async function readAdjustmentSettings(tx: Transaction): Promise<AdjustmentSettingsRead> {
+  const { doc, revision } = await readSettings(tx, ADJUSTMENTS_SETTINGS);
   return {
-    maxBillComp: row.maxBillComp === null ? null : centsToDecimal(row.maxBillComp),
-    billApproverRoles: row.billApproverRoles,
+    maxBillComp: doc.maxBillComp === null ? null : centsToDecimal(doc.maxBillComp),
+    billApproverRoles: doc.billApproverRoles,
+    revision,
   };
 }
 
@@ -44,7 +72,8 @@ export async function readAdjustmentSettings(tx: Transaction): Promise<Adjustmen
 export async function saveAdjustmentSettings(
   tx: Transaction,
   settings: AdjustmentSettings,
-): Promise<AdjustmentSettings> {
+  change: { expectedRevision: number; personId: string | null },
+): Promise<AdjustmentSettingsRead> {
   const { maxBillComp, billApproverRoles } = settings;
   if (
     maxBillComp !== null &&
@@ -56,17 +85,16 @@ export async function saveAdjustmentSettings(
   if (!isRoleList(billApproverRoles)) {
     throw new RangeError("billApproverRoles is not a non-empty list of distinct roles");
   }
-  const values = {
-    maxBillComp: maxBillComp === null ? null : decimalToCents(maxBillComp),
-    billApproverRoles,
-    updatedAt: nowIso(),
-  };
-  await tx
-    .insert(adjustmentSettings)
-    .values({ id: 1, ...values })
-    .onConflictDoUpdate({ target: adjustmentSettings.id, set: values });
+  const { revision, doc } = await saveSettings(tx, ADJUSTMENTS_SETTINGS, {
+    ...change,
+    doc: {
+      maxBillComp: maxBillComp === null ? null : decimalToCents(maxBillComp),
+      billApproverRoles,
+    },
+  });
   return {
-    maxBillComp: maxBillComp === null ? null : centsToDecimal(values.maxBillComp!),
-    billApproverRoles,
+    maxBillComp: doc.maxBillComp === null ? null : centsToDecimal(doc.maxBillComp),
+    billApproverRoles: doc.billApproverRoles,
+    revision,
   };
 }

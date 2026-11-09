@@ -98,3 +98,30 @@ export async function saveSettings<T extends object>(
   }
   return { doc: parsed.doc, revision: saved.revision };
 }
+
+/** Replaces only the transferring definitions; imported documents name no source person. */
+export async function replaceTransferredSettings(
+  tx: Transaction,
+  definitions: readonly SettingsDocument<object>[],
+  docs: ReadonlyMap<string, object>,
+): Promise<void> {
+  const byModule = new Map(definitions.map((definition) => [definition.module, definition]));
+  for (const key of docs.keys()) {
+    if (!byModule.has(key)) throw new Error(`Unknown settings document: ${key}`);
+  }
+  for (const definition of definitions) {
+    await tx.delete(settings).where(eq(settings.module, definition.module));
+    const doc = docs.get(definition.module);
+    if (doc !== undefined)
+      await tx
+        .insert(settings)
+        .values({
+          module: definition.module,
+          version: definition.version,
+          revision: 1,
+          doc: doc as Record<string, unknown>,
+          updatedBy: null,
+          updatedAt: nowIso(),
+        });
+  }
+}

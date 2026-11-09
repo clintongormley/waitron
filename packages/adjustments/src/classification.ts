@@ -4,7 +4,6 @@ import type { ChangeSource } from "@waitron/shared";
 export const ADJUSTMENTS_TABLES = [
   "adjustment_reasons",
   "adjustments",
-  "adjustment_settings",
   "adjustment_refunds",
   "adjustment_lines",
 ] as const;

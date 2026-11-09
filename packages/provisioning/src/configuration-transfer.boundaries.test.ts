@@ -69,6 +69,15 @@ it.each([
     field: "artifact",
   },
   { value: { ...configurationBundle(), tables: [] }, field: "artifact" },
+  ...[
+    undefined,
+    [],
+    { adjustments: { doc: {} } },
+    { adjustments: { version: 0, doc: {} } },
+    { adjustments: { version: 1.5, doc: {} } },
+    { adjustments: { version: 1, doc: [] } },
+    { adjustments: { version: 1, doc: null } },
+  ].map((settings) => ({ value: { ...configurationBundle(), settings }, field: "artifact" })),
   {
     value: Object.fromEntries(
       Object.entries(configurationBundle()).filter(([key]) => key !== "privacyContact"),
@@ -101,7 +110,7 @@ it.each([
 it("refuses a configuration format newer than this box's as newer software", () => {
   const artifact = encryptArtifact(
     packArchive([
-      { name: "configuration.json", bytes: Buffer.from(JSON.stringify({ version: 11 })) },
+      { name: "configuration.json", bytes: Buffer.from(JSON.stringify({ version: 12 })) },
     ]),
     passphrase,
   );
@@ -110,18 +119,20 @@ it("refuses a configuration format newer than this box's as newer software", () 
   );
 });
 
-it.each([{}, { version: 2 }, { ...configurationBundle(), version: 8 }])(
-  "refuses an obsolete configuration format: %j",
-  (value) => {
-    const artifact = encryptArtifact(
-      packArchive([{ name: "configuration.json", bytes: Buffer.from(JSON.stringify(value)) }]),
-      passphrase,
-    );
-    expect(() => decodeConfigurationBundle(artifact, passphrase)).toThrow(
-      expect.objectContaining({ code: "setup.configuration_outdated" }),
-    );
-  },
-);
+it.each([
+  {},
+  { version: 2 },
+  { ...configurationBundle(), version: 10 },
+  { ...configurationBundle(), version: 8 },
+])("refuses an obsolete configuration format: %j", (value) => {
+  const artifact = encryptArtifact(
+    packArchive([{ name: "configuration.json", bytes: Buffer.from(JSON.stringify(value)) }]),
+    passphrase,
+  );
+  expect(() => decodeConfigurationBundle(artifact, passphrase)).toThrow(
+    expect.objectContaining({ code: "setup.configuration_outdated" }),
+  );
+});
 
 it.each([
   [{ name: "other.json", bytes: Buffer.from("{}") }],

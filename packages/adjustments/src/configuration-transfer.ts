@@ -1,6 +1,6 @@
 import type { ModuleConfigurationTransfer } from "@waitron/module";
 import { AppError, REASON_KINDS, type ReasonKind } from "@waitron/shared";
-import { isRoleList, reasonShapeFault, type ReasonShapeField } from "./policy.js";
+import { reasonShapeFault, type ReasonShapeField } from "./policy.js";
 import "./errors.js";
 
 const REASON_COLUMNS: Record<ReasonShapeField, string> = {
@@ -29,8 +29,7 @@ function textList(value: unknown, field: string): string[] {
 }
 
 /**
- * Refuses a reason of an unknown kind or one {@link reasonShapeFault} faults, settings whose bill
- * approvers {@link isRoleList} does not accept, and a bundle that leaves the venue no Void reason
+ * Refuses a reason of an unknown kind or one {@link reasonShapeFault} faults, a bundle that leaves the venue no Void reason
  * asking for a note, as the operations keep one (A758 D27). A Void reason that passes can cancel.
  * The export writes booleans as 0 and 1.
  */
@@ -55,14 +54,10 @@ function validateAdjustmentsConfiguration(
   if (!reasons.some((row) => row.kind === "void" && row.note_required === 1)) {
     refuse("adjustment_reasons");
   }
-  for (const row of tables.adjustment_settings ?? []) {
-    const field = "adjustment_settings.bill_approver_roles";
-    if (!isRoleList(textList(row.bill_approver_roles, field))) refuse(field);
-  }
 }
 
 export const ADJUSTMENTS_CONFIGURATION_TRANSFER = {
   kind: "tables",
-  tables: [{ name: "adjustment_reasons" }, { name: "adjustment_settings" }],
+  tables: [{ name: "adjustment_reasons" }],
   validate: validateAdjustmentsConfiguration,
 } as const satisfies ModuleConfigurationTransfer;

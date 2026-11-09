@@ -4,7 +4,7 @@ import { LiveData, codeMessage, setLocale, type QueryController } from "@waitron
 import type { DeleteImpact, DeleteImpactRefusal } from "@waitron/shared";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
+import type { AdjustmentReason, AdjustmentSettings, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
 import "./reasons-screen.js";
 import { ADJUSTMENTS_STRINGS, actionChoice, kindName, roleName, t, tf } from "./strings.js";
@@ -117,9 +117,11 @@ function fakeApi(overrides: Partial<Record<keyof AdjustmentsApi, unknown>> = {})
       impactOf(reasons.find((reason) => reason.id === reasonId)!),
     ),
     reorderReasons: vi.fn().mockResolvedValue(undefined),
-    getSettings: vi
-      .fn()
-      .mockResolvedValue({ maxBillComp: null, billApproverRoles: ["manager", "admin"] }),
+    getSettings: vi.fn().mockResolvedValue({
+      maxBillComp: null,
+      billApproverRoles: ["manager", "admin"],
+      revision: 4,
+    }),
     saveSettings: vi.fn(async (settings: unknown) => settings),
     ...overrides,
   } as unknown as FakeApi;
@@ -2145,12 +2147,84 @@ describe("the bill comp limit", () => {
     billApproverRoles: string[] = ["manager", "admin"],
   ) =>
     fakeApi({
-      getSettings: vi.fn().mockResolvedValue({ maxBillComp, billApproverRoles }),
+      getSettings: vi.fn().mockResolvedValue({ maxBillComp, billApproverRoles, revision: 4 }),
       ...over,
     });
-  const body = (maxBillComp: string | null, billApproverRoles = ["manager", "admin"]) => ({
+  const body = (
+    maxBillComp: string | null,
+    billApproverRoles: AdjustmentSettings["billApproverRoles"] = ["manager", "admin"],
+  ) => ({
     maxBillComp,
     billApproverRoles,
+    revision: 4,
+  });
+
+  it("saves naming the revision its draft started from, even after a live update", async () => {
+    const liveData = new LiveData();
+    const api = withLimit("40.00", { liveData });
+    const el = await mount(api);
+    try {
+      await type(el, "maxBillComp", "25");
+      api.getSettings.mockResolvedValue({ ...body("50.00"), revision: 5 });
+      liveData.invalidate([{ type: "settings.adjustments" }]);
+      await expect.poll(() => api.getSettings.mock.calls.length).toBe(2);
+      await el.updateComplete;
+      expect(limit(el).value).toBe("25");
+      await press(el, "save-limit");
+      expect(api.saveSettings).toHaveBeenCalledWith(body("25.00"));
+    } finally {
+      liveData.clear();
+    }
+  });
+
+  it("after a save it keeps editing on, the next save names the revision that save returned", async () => {
+    const liveData = new LiveData();
+    let resolve!: (value: unknown) => void;
+    const result = new Promise((done) => {
+      resolve = done;
+    });
+    const api = withLimit("40.00", {
+      liveData,
+      saveSettings: vi
+        .fn()
+        .mockReturnValueOnce(result)
+        .mockImplementation(async (value) => value),
+    });
+    const el = await mount(api);
+    try {
+      await type(el, "maxBillComp", "25");
+      await press(el, "save-limit");
+      await type(el, "maxBillComp", "30");
+      api.getSettings.mockResolvedValue({ ...body("25.00"), revision: 5 });
+      resolve({ ...body("25.00"), revision: 5 });
+      await expect.poll(() => api.getSettings.mock.calls.length).toBe(2);
+      api.getSettings.mockResolvedValue({ ...body("50.00"), revision: 6 });
+      liveData.invalidate([{ type: "settings.adjustments" }]);
+      await expect.poll(() => api.getSettings.mock.calls.length).toBe(3);
+      await el.updateComplete;
+      await press(el, "save-limit");
+      expect(api.saveSettings).toHaveBeenLastCalledWith({ ...body("30.00"), revision: 5 });
+    } finally {
+      liveData.clear();
+    }
+  });
+
+  it("keeps the draft and explains a clash, then saves over it", async () => {
+    const api = withLimit("40.00");
+    api.saveSettings.mockRejectedValueOnce({
+      code: "settings.out_of_date",
+      params: { module: "adjustments", revision: 5 },
+    });
+    const el = await mount(api);
+    await type(el, "maxBillComp", "25");
+    api.getSettings.mockResolvedValue({ ...body("50.00"), revision: 5 });
+    await press(el, "save-limit");
+    await expect.poll(() => api.getSettings.mock.calls.length).toBe(2);
+    await el.updateComplete;
+    expect(limit(el).value).toBe("25");
+    expect(limitBottom(el)).toBe(codeMessage("settings.out_of_date"));
+    await press(el, "save-limit");
+    expect(api.saveSettings).toHaveBeenLastCalledWith({ ...body("25.00"), revision: 5 });
   });
 
   it.each([
@@ -2225,6 +2299,7 @@ describe("the bill comp limit", () => {
     expect(api.saveSettings.mock.calls[0]![0]).toEqual({
       maxBillComp: "40.00",
       billApproverRoles: ["manager", "admin"],
+      revision: 4,
     });
     expect(api.getSettings).toHaveBeenCalledTimes(2);
     expect(saved(el)).toBe("Limit saved.");

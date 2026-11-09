@@ -14,7 +14,6 @@ describe("ADJUSTMENTS_CLASSIFICATION", () => {
     ).toEqual([
       ["adjustment_reasons", "state", undefined],
       ["adjustments", "ledger", true],
-      ["adjustment_settings", "state", undefined],
       ["adjustment_refunds", "ledger", true],
       ["adjustment_lines", "ledger", true],
     ]);
@@ -33,7 +32,6 @@ describe("ADJUSTMENTS_CLASSIFICATION", () => {
     expect(ADJUSTMENTS_CHANGE_SOURCES).toEqual([
       { table: "adjustment_reasons", type: "adjustment_reasons" },
       { table: "adjustments", type: "adjustments" },
-      { table: "adjustment_settings", type: "adjustment_settings" },
       { table: "adjustment_refunds", type: "adjustment_refunds" },
       { table: "adjustment_lines", type: "adjustment_lines" },
     ]);

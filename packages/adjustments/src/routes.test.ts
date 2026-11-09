@@ -519,12 +519,10 @@ describe("adjustment reason management routes", () => {
 
 describe("adjustment settings routes", () => {
   const SETTINGS = "/management-api/adjustments/settings";
-  const LIMIT = { maxBillComp: "40.00", billApproverRoles: ["supervisor", "manager"] };
+  const LIMIT = { maxBillComp: "40.00", billApproverRoles: ["supervisor", "manager"], revision: 0 };
 
   async function stored(): Promise<unknown[]> {
-    return (
-      await db.execute(sql`select max_bill_comp, bill_approver_roles from adjustment_settings`)
-    ).rows;
+    return (await db.execute(sql`select doc from settings where module = 'adjustments'`)).rows;
   }
 
   it("lets a manager read no limit, set one, and clear it again", async () => {
@@ -535,18 +533,23 @@ describe("adjustment settings routes", () => {
     expect(await empty.json()).toEqual({
       maxBillComp: null,
       billApproverRoles: ["manager", "admin"],
+      revision: 0,
     });
 
     const saved = await send(fx.app, "PUT", SETTINGS, manager, LIMIT);
     expect(saved.status).toBe(200);
-    expect(await saved.json()).toEqual(LIMIT);
-    expect(await (await send(fx.app, "GET", SETTINGS, manager)).json()).toEqual(LIMIT);
+    expect(await saved.json()).toEqual({ ...LIMIT, revision: 1 });
+    expect(await (await send(fx.app, "GET", SETTINGS, manager)).json()).toEqual({
+      ...LIMIT,
+      revision: 1,
+    });
 
     await send(fx.app, "PUT", SETTINGS, fx.cookie.admin, {
       maxBillComp: null,
       billApproverRoles: ["admin"],
+      revision: 1,
     });
-    expect(await stored()).toEqual([{ max_bill_comp: null, bill_approver_roles: '["admin"]' }]);
+    expect(await stored()).toEqual([{ doc: '{"maxBillComp":null,"billApproverRoles":["admin"]}' }]);
   });
 
   it("refuses a supervisor or staff member, and writes nothing", async () => {
@@ -600,6 +603,48 @@ describe("adjustment settings routes", () => {
       error: { code: "management.request_invalid", params: { field } },
     });
     expect(await stored()).toEqual([]);
+  });
+  it("refuses a save from a stale revision with 409", async () => {
+    const fx = await fixture();
+    await send(fx.app, "PUT", SETTINGS, fx.cookie.manager, LIMIT);
+    const response = await send(fx.app, "PUT", SETTINGS, fx.cookie.manager, {
+      ...LIMIT,
+      maxBillComp: "10.00",
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "settings.out_of_date", params: { module: "adjustments", revision: 1 } },
+    });
+    expect(await (await send(fx.app, "GET", SETTINGS, fx.cookie.manager)).json()).toEqual({
+      ...LIMIT,
+      revision: 1,
+    });
+  });
+  it.each([undefined, -1, "1"])(
+    "refuses an invalid revision %s without writing",
+    async (revision) => {
+      const fx = await fixture();
+      const response = await send(fx.app, "PUT", SETTINGS, fx.cookie.manager, {
+        ...LIMIT,
+        revision,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "revision" } },
+      });
+      expect(await stored()).toEqual([]);
+    },
+  );
+  it("answers a stored document the code refuses with 500 settings.invalid", async () => {
+    const fx = await fixture();
+    db.execute(
+      sql`insert into settings (module, version, revision, doc, updated_at) values ('adjustments', 1, 1, '{"maxBillComp":0,"billApproverRoles":["admin"]}', '2026-11-09T12:00:00.000Z')`,
+    );
+    const response = await send(fx.app, "GET", SETTINGS, fx.cookie.manager);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: { code: "settings.invalid", params: { module: "adjustments", field: "maxBillComp" } },
+    });
   });
 });
 

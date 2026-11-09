@@ -500,6 +500,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     this.settings = undefined;
     this.limitLoadError = undefined;
     this.limitDraft = undefined;
+    this.#limitRevision = undefined;
     this.limitSaving = false;
     this.limitAttempted = false;
     this.limitRefused = undefined;
@@ -981,7 +982,10 @@ export class AdjustmentReasonsScreen extends LitElement {
     return errors;
   }
 
+  #limitRevision: number | undefined;
+
   #limitEdit(patch: Partial<LimitDraft>, field: LimitField): void {
+    if (this.limitDraft === undefined) this.#limitRevision = this.settings!.revision;
     this.limitDraft = { ...this.#limitValue(), ...patch };
     this.#limitScope?.changed();
     if (this.limitRefused === field) this.limitRefused = undefined;
@@ -1010,6 +1014,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     let settings: AdjustmentSettings;
     try {
       settings = await this.api.saveSettings({
+        revision: this.#limitRevision ?? this.settings!.revision,
         maxBillComp: money(submitted.amount)!,
         billApproverRoles: bySeniority(submitted.roles),
       });
@@ -1025,6 +1030,10 @@ export class AdjustmentReasonsScreen extends LitElement {
         void this.#focusLimit();
       } else {
         this.limitError = codeMessage(codeOf(error));
+        if (codeOf(error) === "settings.out_of_date") {
+          this.#limitRevision = undefined;
+          await this.#loadSettings();
+        }
       }
       return;
     } finally {
@@ -1033,7 +1042,12 @@ export class AdjustmentReasonsScreen extends LitElement {
     if (generation !== this.#limitGeneration || !this.isConnected) return;
     const unchanged = this.#sameLimit(this.#limitValue(), submitted);
     this.settings = settings;
-    if (unchanged) this.limitDraft = undefined;
+    if (unchanged) {
+      this.limitDraft = undefined;
+      this.#limitRevision = undefined;
+    } else {
+      this.#limitRevision = settings.revision;
+    }
     this.#limitScope?.commit(submitted);
     this.limitAttempted = false;
     this.limitSaved = true;

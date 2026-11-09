@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "917c73d7-bb5b-427f-8238-0f778b0a27b9",
+  "id": "1185215b-2061-42a0-b33b-a965916f2f4d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "settings": {
@@ -15018,59 +15018,6 @@
         "adjustments_bill_level_ck": {
           "name": "adjustments_bill_level_ck",
           "value": "\"adjustments\".\"line_id\" is not null or (\"adjustments\".\"line_name\" is null and \"adjustments\".\"line_quantity\" is null\n          and \"adjustments\".\"line_list_unit_price\" is null and \"adjustments\".\"credited_to\" is null and \"adjustments\".\"quantity\" is null\n          and \"adjustments\".\"stage\" is null and \"adjustments\".\"action\" in ('discount_percent', 'discount_amount'))"
-        }
-      }
-    },
-    "adjustment_settings": {
-      "name": "adjustment_settings",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        },
-        "max_bill_comp": {
-          "name": "max_bill_comp",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "bill_approver_roles": {
-          "name": "bill_approver_roles",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[\"manager\",\"admin\"]'"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "adjustment_settings_singleton_ck": {
-          "name": "adjustment_settings_singleton_ck",
-          "value": "\"adjustment_settings\".\"id\" = 1"
-        },
-        "adjustment_settings_max_bill_comp_ck": {
-          "name": "adjustment_settings_max_bill_comp_ck",
-          "value": "\"adjustment_settings\".\"max_bill_comp\" is null or \"adjustment_settings\".\"max_bill_comp\" > 0"
-        },
-        "adjustment_settings_bill_approver_roles_ck": {
-          "name": "adjustment_settings_bill_approver_roles_ck",
-          "value": "json_array_length(\"adjustment_settings\".\"bill_approver_roles\") > 0"
         }
       }
     },

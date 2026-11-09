@@ -1,4 +1,10 @@
-import { defineSettingsDocument, readSettings, saveSettings, type SettingsParse } from "./index.js";
+import {
+  replaceTransferredSettings,
+  defineSettingsDocument,
+  readSettings,
+  saveSettings,
+  type SettingsParse,
+} from "./index.js";
 import { withTransaction } from "./tenancy.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -284,5 +290,46 @@ describe("a per-module rule on settings", () => {
     expect(await save(3)).toEqual({ doc: { size: 3 }, revision: 1 });
     expect(await save(4, 0, "other")).toEqual({ doc: { size: 4 }, revision: 1 });
     expect(await save(5, 1, "other")).toEqual({ doc: { size: 5 }, revision: 2 });
+  });
+});
+
+describe("replaceTransferredSettings", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  const PROBE = defineSettingsDocument({
+    module: "probe",
+    version: 1,
+    transfers: true,
+    defaults: () => ({}),
+    parse: () => ({ ok: true as const, doc: {} }),
+  });
+  it("replaces only the named documents, resetting revision and saver, and clears an omitted document", async () => {
+    const [person] = await suite.db.insert(persons).values({ displayName: "Saver" }).returning();
+    suite.db.execute(
+      sql`insert into settings values ('probe', 1, 4, '{}', '2026-11-09T12:00:00.000Z', ${person!.id}), ('other', 1, 2, '{"keep":true}', '2026-11-09T12:00:00.000Z', null)`,
+    );
+    await withTransaction(suite.db, (tx) =>
+      replaceTransferredSettings(tx, [PROBE], new Map([["probe", { size: 1, unit: "in" }]])),
+    );
+    expect(
+      suite.db.execute(
+        sql`select module, version, revision, doc, updated_by from settings order by module`,
+      ).rows,
+    ).toEqual([
+      { module: "other", version: 1, revision: 2, doc: '{"keep":true}', updated_by: null },
+      { module: "probe", version: 1, revision: 1, doc: '{"size":1,"unit":"in"}', updated_by: null },
+    ]);
+    await withTransaction(suite.db, (tx) => replaceTransferredSettings(tx, [PROBE], new Map()));
+    expect(suite.db.execute(sql`select module from settings`).rows).toEqual([{ module: "other" }]);
+  });
+  it("refuses an unknown key before deleting existing rows", async () => {
+    await withTransaction(suite.db, (tx) =>
+      saveSettings(tx, PROBE, { doc: {}, expectedRevision: 0, personId: null }),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        replaceTransferredSettings(tx, [PROBE], new Map([["nope", {}]])),
+      ),
+    ).rejects.toThrow();
+    expect(await readSettings(suite.db, PROBE)).toEqual({ doc: {}, revision: 1 });
   });
 });

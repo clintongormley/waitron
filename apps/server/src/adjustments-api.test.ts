@@ -17,6 +17,7 @@ import {
   adjustments,
   createAdjustmentReason,
   deleteAdjustmentReason,
+  readAdjustmentSettings,
   saveAdjustmentSettings,
 } from "@waitron/adjustments";
 import { createPinThrottle, loginWithPin, persons, type PersonRoleValue } from "@waitron/identity";
@@ -405,11 +406,15 @@ describe("approval through the route (plan D6)", () => {
 
   it("past the bill's limit, refuses a PIN from the reason's list that is not on the bill's, and applies one from the bill's", async () => {
     const save = (maxBillComp: string | null, billApproverRoles: PersonRoleValue[]) =>
-      inTx(venue, (tx) =>
-        saveAdjustmentSettings(tx, {
-          maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
-          billApproverRoles,
-        }),
+      inTx(venue, async (tx) =>
+        saveAdjustmentSettings(
+          tx,
+          {
+            maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
+            billApproverRoles,
+          },
+          { expectedRevision: (await readAdjustmentSettings(tx)).revision, personId: null },
+        ),
       );
     await save("10.00", ["supervisor"]);
     try {
@@ -448,11 +453,15 @@ describe("approval through the route (plan D6)", () => {
 
   it("past the bill's limit, answers a request nobody on both lists may approve as 409 no_common_approver", async () => {
     const save = (maxBillComp: string | null, billApproverRoles: PersonRoleValue[]) =>
-      inTx(venue, (tx) =>
-        saveAdjustmentSettings(tx, {
-          maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
-          billApproverRoles,
-        }),
+      inTx(venue, async (tx) =>
+        saveAdjustmentSettings(
+          tx,
+          {
+            maxBillComp: maxBillComp === null ? null : decimal(maxBillComp),
+            billApproverRoles,
+          },
+          { expectedRevision: (await readAdjustmentSettings(tx)).revision, personId: null },
+        ),
       );
     // Past Guest complaint's €30.00 only managers and admins approve it; only supervisors may
     // pass this bill.

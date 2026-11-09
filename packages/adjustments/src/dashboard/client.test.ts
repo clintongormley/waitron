@@ -142,7 +142,7 @@ describe("AdjustmentsApi", () => {
   });
 
   it("reads the venue's bill comp limit, passively on the background client", async () => {
-    const settings = { maxBillComp: "40.00", billApproverRoles: ["manager", "admin"] };
+    const settings = { maxBillComp: "40.00", billApproverRoles: ["manager", "admin"], revision: 4 };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(settings));
     expect(await api(fetchImpl).getSettings()).toEqual(settings);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/settings", {
@@ -156,14 +156,14 @@ describe("AdjustmentsApi", () => {
   });
 
   it("replaces the venue's bill comp limit with a PUT, a null limit included", async () => {
-    const settings = { maxBillComp: null, billApproverRoles: ["admin" as const] };
+    const settings = { maxBillComp: null, billApproverRoles: ["admin" as const], revision: 4 };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(settings));
     expect(await api(fetchImpl).saveSettings(settings)).toEqual(settings);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/settings", {
       method: "PUT",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ maxBillComp: null, billApproverRoles: ["admin"] }),
+      body: JSON.stringify({ maxBillComp: null, billApproverRoles: ["admin"], revision: 4 }),
     });
   });
 

@@ -38,9 +38,6 @@ beforeEach(() => {
       sql`insert into adjustment_reasons (id,name,names,kind,actions,apply_roles,approver_roles,position,created_at) values ('reason','Current reason','{"en":"Current reason"}','comp','["comp"]','["manager"]','["admin"]',0,'2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into adjustment_settings (id,updated_at) values (1,'2026-10-20T08:00:00.000Z')`,
-    );
-    db.run(
       sql`insert into adjustments (id,working_order_id,line_id,splits,comped_extras,line_name,line_quantity,line_list_unit_price,credited_to,reason_id,reason_name,policy_snapshot,action,quantity,percent_bp,before_amount,after_amount,reduction,nominal_value,requested_by,approved_by,note,stage,by_guest,created_at) values ('adjustment','order','deleted-line','[{"from":"old","to":"split"}]','["deleted-extra"]','Recorded dish',2000,500,'former-person','removed-reason','Issued reason','{"actions":["cancel"],"applyRoles":[],"approverRoles":[],"maxPercentBp":null,"maxAmount":null,"noteRequired":true}','cancel',1000,null,1000,500,500,500,'requester','approver','Recorded note','fired',1,'2026-10-20T08:00:00.000Z')`,
     );
   }
@@ -182,14 +179,13 @@ describe("adjustment backup evidence", () => {
     await corrupt(restored.db, `update adjustments set ${change}`);
     expect((await run()).status).toBe("invalid");
   });
-  it.each([
-    "delete from adjustments",
-    "update adjustment_reasons set name='Changed reason'",
-    "update adjustment_settings set max_bill_comp=500",
-  ])("compares all retained rows: %s", async (statement) => {
-    await corrupt(restored.db, statement);
-    expect((await run()).status).toBe("invalid");
-  });
+  it.each(["delete from adjustments", "update adjustment_reasons set name='Changed reason'"])(
+    "compares all retained rows: %s",
+    async (statement) => {
+      await corrupt(restored.db, statement);
+      expect((await run()).status).toBe("invalid");
+    },
+  );
   it("checks the retained order reference on both copies", async () => {
     expect(await run()).toEqual(passed);
     for (const db of [original.db, restored.db])
@@ -208,16 +204,11 @@ describe("adjustment backup evidence", () => {
     expect((await run({ sourceSchema: 0 })).status).toBe("invalid");
   });
   it("accepts honest empty target-only data and refuses invented state", async () => {
-    for (const table of [
-      "adjustment_refunds",
-      "adjustments",
-      "adjustment_reasons",
-      "adjustment_settings",
-    ])
+    for (const table of ["adjustment_refunds", "adjustments", "adjustment_reasons"])
       await corrupt(restored.db, `delete from "${table}"`);
     expect(await run({ absent: true, sourceSchema: 0 })).toEqual(passed);
     restored.db.run(
-      sql`insert into adjustment_settings (id,updated_at) values (1,'2026-10-20T08:00:00.000Z')`,
+      sql`insert into adjustment_reasons (id,name,names,kind,actions,apply_roles,approver_roles,position,created_at) values ('reason','Current reason','{"en":"Current reason"}','comp','["comp"]','["manager"]','["admin"]',0,'2026-10-20T08:00:00.000Z')`,
     );
     expect((await run({ absent: true })).status).toBe("invalid");
   });

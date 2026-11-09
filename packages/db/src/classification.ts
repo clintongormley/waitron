@@ -481,11 +481,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "what was taken off a bill, by whom and under which reason; nothing may change or remove it",
   ),
-  classify(
-    "adjustment_settings",
-    "state",
-    "venue discount limit an owner edits; copied to a standby, never drained back",
-  ),
   appendOnly(
     "adjustment_refunds",
     "ledger",

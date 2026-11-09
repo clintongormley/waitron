@@ -60,7 +60,7 @@ function settings(
   maxBillComp: string | null,
   billApproverRoles: AdjustmentSettings["billApproverRoles"] = ["manager", "admin"],
 ): AdjustmentSettings {
-  return { maxBillComp, billApproverRoles };
+  return { maxBillComp, billApproverRoles, revision: 4 };
 }
 function fakeApi() {
   const api = {
@@ -787,7 +787,7 @@ it("live settings refresh retains an edited limit and its original baseline", as
   const { screen } = await mount(api);
   await field(screen, "maxBillComp", "20");
   api.getSettings.mockResolvedValue(settings("30.00"));
-  liveData.invalidate([{ type: "adjustment_settings" }]);
+  liveData.invalidate([{ type: "settings.adjustments" }]);
   await expect.poll(() => api.getSettings.mock.calls.length).toBe(2);
   await settle(screen);
   expect(value(screen, "maxBillComp")).toBe("20");
@@ -801,7 +801,7 @@ it("live settings refresh updates a clean limit and its accepted baseline", asyn
   api.getSettings.mockResolvedValue(settings("10.00"));
   const { screen } = await mount(api);
   api.getSettings.mockResolvedValue(settings("30.00"));
-  liveData.invalidate([{ type: "adjustment_settings" }]);
+  liveData.invalidate([{ type: "settings.adjustments" }]);
   await expect.poll(() => value(screen, "maxBillComp")).toBe("30.00");
   expect(unload()).toBe(false);
   await field(screen, "maxBillComp", "20");

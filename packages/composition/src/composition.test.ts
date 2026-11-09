@@ -6,6 +6,7 @@ import {
   ADJUSTMENTS_PERSONAL_DATA,
   ADJUSTMENTS_PROVISIONING,
   ADJUSTMENTS_ROUTES,
+  ADJUSTMENTS_SETTINGS,
 } from "@waitron/adjustments";
 import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
@@ -381,6 +382,13 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
     expect(venueService?.permissions).toBe(VENUE_SERVICE_PERMISSIONS);
   });
 
+  it("no two modules declare the same settings document key", () => {
+    const keys = ALL_MODULES.flatMap((module) => module.settings ?? []).map(
+      (definition) => definition.module,
+    );
+    expect(keys).toHaveLength(new Set(keys).size);
+  });
+
   it("adjustments is mandatory and declares its tables, route, permission and transfer seats", () => {
     const adjustments = ALL_MODULES.find((module) => module.name === "adjustments");
     expect(adjustments?.tier).toBe("mandatory");
@@ -388,7 +396,6 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
     const adjustmentTables = [
       "adjustment_reasons",
       "adjustments",
-      "adjustment_settings",
       "adjustment_refunds",
       "adjustment_lines",
     ];
@@ -398,6 +405,7 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
         ?.classification?.map((c) => c.table)
         .filter((table) => adjustmentTables.includes(table)),
     ).toEqual(adjustmentTables);
+    expect(adjustments?.settings).toEqual([ADJUSTMENTS_SETTINGS]);
     expect(adjustments?.changes).toBe(ADJUSTMENTS_CHANGE_SOURCES);
     expect(adjustments?.routes).toBe(ADJUSTMENTS_ROUTES);
     expect(adjustments?.permissions).toBe(ADJUSTMENTS_PERMISSIONS);

@@ -44,7 +44,7 @@ const ADDED_TABLES = [
   "working_line_portions",
 ];
 /** Tables dropped after the capture; the seed wrote no row to them. */
-const REMOVED_TABLES = ["mirror_config", "node_roles", "pass_item_marks"];
+const REMOVED_TABLES = ["adjustment_settings", "mirror_config", "node_roles", "pass_item_marks"];
 // The baseline rebuild moves these columns before the named anchor, retaining their metadata.
 const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {
   adjustments: [

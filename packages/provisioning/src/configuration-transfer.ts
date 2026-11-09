@@ -1,3 +1,9 @@
+import {
+  exportSettingsDocuments,
+  checkImportedSettings,
+  importSettingsDocuments,
+  type TransferredSettings,
+} from "./settings-transfer.js";
 import { requireCountryTimeZone } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -120,7 +126,7 @@ export async function buildConfigurationBundle(
     throw new AppError("setup.request_invalid", { field: "businessDayStart" });
   const transferred = await exportConfigurationTables(db, modules);
   return {
-    version: 10,
+    version: 11,
     createdAt: now.toISOString(),
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
@@ -136,6 +142,7 @@ export async function buildConfigurationBundle(
     },
     defaultCatalogueId,
     privacyContact: { privacyNoticeUrl, privacyEmail },
+    settings: await exportSettingsDocuments(db, modules),
     // A trading box's versions also name its switched-off modules, which setup refuses.
     modules: Object.fromEntries(
       Object.entries(moduleVersions).filter(([name]) =>
@@ -157,7 +164,8 @@ export async function applyPreparedVenue(
 }
 
 export interface ConfigurationBundle {
-  version: 10;
+  version: 11;
+  settings: Record<string, TransferredSettings>;
   createdAt: string;
   sourceOperatorId: string;
   venue: PreparedVenue;
@@ -533,10 +541,10 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  if (typeof value.version === "number" && value.version > 10) {
+  if (typeof value.version === "number" && value.version > 11) {
     throw new AppError("setup.configuration_newer", {});
   }
-  if (value.version !== 10) throw new AppError("setup.configuration_outdated", {});
+  if (value.version !== 11) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
   const modules = value.modules;
   const tables = value.tables;
@@ -549,6 +557,14 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     !isRecord(modules) ||
     Object.values(modules).some((version) => !Number.isInteger(version) || Number(version) < 0) ||
     !isRecord(tables) ||
+    !isRecord(value.settings) ||
+    Object.values(value.settings).some(
+      (entry) =>
+        !isRecord(entry) ||
+        !Number.isInteger(entry.version) ||
+        Number(entry.version) < 1 ||
+        !isRecord(entry.doc),
+    ) ||
     !Array.isArray(value.reconnect) ||
     value.reconnect.some((name) => typeof name !== "string")
   ) {
@@ -641,6 +657,7 @@ export function validateConfigurationBundle(
   modules: readonly WaitronModule[],
   targetVersions: Readonly<Record<string, number>>,
 ): void {
+  checkImportedSettings(bundle.settings, modules);
   const timeZone = requireCountryTimeZone(bundle.venue.country, bundle.venue.timeZone);
   const versioned = modulesWithSets(modules);
   const serverSets = new Set(versioned.map((module) => module.name));
@@ -867,6 +884,7 @@ export async function importConfigurationTables(
     privacyEmail:
       privacyEmail === null ? null : privacyContactChecked("privacyEmail", privacyEmail),
   });
+  await importSettingsDocuments(tx, bundle.settings, modules);
   for (const module of modules) {
     const contribution = module.configurationTransfer;
     if (contribution?.kind === "tables") await contribution.afterImport?.(tx);
