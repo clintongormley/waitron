@@ -215,6 +215,8 @@ import {
 } from "./free-space-watch.js";
 import { mountNodeApi } from "./node-api.js";
 import { restrictedPageRoute } from "./restricted-page.js";
+import { mountHandoverPage } from "./handover-page-mount.js";
+import { createPasswordThrottle } from "./password-throttle.js";
 import { startRestricted } from "./restricted-start.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
@@ -1905,6 +1907,23 @@ async function bootServer(
               { db, node: store.node, ring, nodeId: node.nodeId },
               log,
             ),
+          (waitingApp) => {
+            mountHandoverStatusApi(
+              waitingApp,
+              { db, node: store.node, ring, nodeId: node.nodeId },
+              log,
+            );
+            if (!fencedAtWait && config.setupAppDir !== undefined)
+              mountHandoverPage(
+                waitingApp,
+                {
+                  root: config.setupAppDir,
+                  node: store.node,
+                  nodeId: node.nodeId,
+                },
+                log,
+              );
+          },
           (waitingApp, hooks) =>
             mountNodeMembershipApi(
               waitingApp,
@@ -3566,6 +3585,7 @@ async function bootServer(
     },
     log,
   );
+  const handoverPasswordThrottle = createPasswordThrottle();
   mountHandoverPreparationApi(
     app,
     {
@@ -3573,6 +3593,7 @@ async function bootServer(
       nodeId: tradingContext.nodeId,
       appDb: db,
       nodePreparation,
+      passwordThrottle: handoverPasswordThrottle,
       requestFromBox: seams.requestFromBox,
     },
     log,
@@ -3584,6 +3605,7 @@ async function bootServer(
       nodeId: tradingContext.nodeId,
       appDb: db,
       nodePreparation,
+      passwordThrottle: handoverPasswordThrottle,
       run: promoteRun,
     },
     log,
@@ -3606,6 +3628,17 @@ async function bootServer(
     },
     log,
   );
+
+  if (!fenced && config.setupAppDir !== undefined)
+    mountHandoverPage(
+      app,
+      {
+        root: config.setupAppDir,
+        node: store.node,
+        nodeId: tradingContext.nodeId,
+      },
+      log,
+    );
 
   // The built front-ends, mounted LAST so the till's root catch-all cannot shadow an API route.
   // Dashboard first so `/manage/*` wins; the till's origin-root catch-all last
