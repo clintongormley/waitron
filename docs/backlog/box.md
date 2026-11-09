@@ -68,6 +68,7 @@ Three parts:
 ## Automatic upgrades with rollback until a clean, running restart
 
 **A950 design and implementation plan approved, 2026-10-29; build eligible cuts separately.**
+**2026-11-09:** go-live work again; lane F writes a new, shorter plan for the owner's approval before any build ([decision](#decisions-and-deliberate-limits)).
 The [approved design](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) follows the
 owner's 28 October answer: rollback closes automatically only after a successful restart of
 the new version, a confirmed clean database upgrade and confirmation that the system is running
@@ -132,13 +133,13 @@ notifications; A9/Cloud reporting and A1016 backup/support choices remain separa
 The source inventory is explicitly historical READ evidence at
 `9d5853c310e691ed558d80a8a12d0dbddccab2e7`, not today's runtime. Later source changes prove no
 A950 behaviour. No A950 Linux, VM, TPM, btrfs, bucket or two-box runtime qualification has run;
-A799 historical qualification and B3 hardware/trust holds remain gates; owner option A supplies build authority for eligible cuts.
+B3 hardware/trust holds remain gates (A799 is folded into A950's new plan, owner 2026-11-09).
 The mockup brief and EN/ES copy (removed from the repository on 2026-11-02) retained the existing
 validation/restoration/completion views and added eight rendered and visually inspected window-settings
 views. The [sliced implementation plan](../superpowers/plans/2026-10-29-a950-automatic-upgrades.md)
 has owner approval (option A). Cuts 1–2 add isolated settings, dated-window, bounded-discovery, attempt-journal and startup-decision libraries. After cancellation, discovery waits for one immediate callback and one timer callback before deciding whether to retry; unfinished work keeps the discovery slot. Its fake-clock cancellation and cooperative-deadline tests wait for each attempt and deadline to be armed before advancing time; native cancellation cleanup runs between advances. The cancellation test polls with a zero interval and checks that synchronisation leaves its fake clock unchanged. The cooperative cases also cover an adapter admitted on the next event-loop turn. Both fixture groups abort and await their discovery in `finally`; forced-assertion controls leave the following discovery able to run. The separate uncooperative-timeout fixture still needs `finally` cleanup that settles its deliberately non-cancelling adapter after a failed assertion. The journal retains one attempt’s immutable hash-linked records and terminal facts behind an injected fixed-root, exclusive-turn, no-follow IO contract. A publication marker keeps failed flushes/read-back under inspection. Startup decisions cover design §6 and require further checks or recorded transitions; they issue no trading permit. The verifier, hold and journal IO boundaries have no production adapters, and no installed updater or timer calls them. B3 must qualify actual root/disk/mount identity, caller authentication, exclusion, IO and power-loss durability. Later controller work must preserve terminal evidence when allocating another attempt namespace, resolve interrupted publication through authoritative evidence, and rebind fresh terminal startup checks before issuing any new-boot release. Floor/publication/input digest references still need their real immutable documents from cuts 3/5. An intact incomplete freeze must be durably abandoned before the old service reopens; elapsed restore budgets now lead to inspection. JournalIo reserves `.turn` inside its namespace: a future production adapter must use that name or keep its lock outside the namespace. Remaining work includes the production close/report receipt
 producer, archive completion integration, account-free Cloud hold contract, B3 host/image/trust
-qualification, A799 historical evidence, and released A947 stream/spare/membership interfaces.
+qualification, and released A947 stream/spare/membership interfaces.
 Host binding also needs diagnostics for missing Temporal, canonical zone handling and an explicit policy for an already-installed candidate.
 Application stays disabled until its exact release and platform pass every required gate.
 All A950 runtime qualification remains **UNVERIFIED / NOT RUN**.
@@ -1780,7 +1781,7 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
 - **`resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged, and nothing chmods the
   staging folder**
   [Detail](box.md#resolvesafeentrypath-appsserversrcstate-secretsts-is-unchanged-and-nothing-chmods-the-staging-folder)
-- **A799 and A950 come after the first venue (owner, 2026-11-06).** A799 tests upgrades from real older versions, and none exists until after the first release and the A760 reset. A950 is automatic upgrades, first needed at a live box's first upgrade. The first upgrade of a real venue is done by hand.
+- **A950 is go-live work, and A799 is folded into it (owner, 2026-11-09; supersedes the 2026-11-06 decision that both come after the first venue).** Owner: "it's required for go live and needs to be bullet proof. i don't want to lose this one. the first live venue is going to be remote so it will be difficult for me to fix. i need upgrades to be solid." A799's trial of the new release's database changes on a copy of the live data is A950's step 4, now; testing against real older releases is kept from go-live onwards. After the first venue, as points under A950: the Cloud release check, the password-checked go-back button, proof-of-close, and the backup-stream handoff.
 
 ## Migrating a box drops the change-feed triggers one statement at a time, outside a transaction
 

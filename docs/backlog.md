@@ -103,6 +103,7 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 - [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
 - [A1398. Pack the other packages' test shards by measured time](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
 - [A1400. An older copy must not undo a save](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
+- [A950. Automatic upgrades with rollback](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order): go-live (owner, 2026-11-09); lane F writes the new plan for the owner's approval before any build.
 
 **3. The foundation, already running.** A1308 stays first in lane A, with
 [Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).
@@ -133,7 +134,7 @@ no design yet.
 **5. Important work.** The 56 bundles marked important under each area, taken by theme so that a lane
 stays in one area.
 
-**6. After the first venue.** A799, A950 and the 89 remaining bundles, which are nice to have. Take
+**6. After the first venue.** The 89 remaining bundles, which are nice to have. Take
 them only when a lane has nothing better.
 
 **Features the owner ranked on 2026-10-16 that are still open:** A803 bills and tables, A646 the
@@ -382,6 +383,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).**
   **Build remains open**; Cloud's qualified trial journey is prerequisite G1 in the plan.
+  Stays in the backlog, in no lane, until Cloud's sign-up and trial pages and a real box-to-Cloud connection exist (owner, 2026-11-09).
   [Detail](backlog/setup.md#a1186-the-setup-tour-offers-waitron-clouds-level-2-trial-owner-2026-10-29).
 
 - **A1215. Correcting invoices issued under a wrong clock** (from A1207): a box can hold invoices
@@ -1822,9 +1824,7 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **a local maintenance account on each box** — belongs with B3; a discussion record, not an approved spec. Its remote-support half is tracked in Cloud and not approved. [Detail](backlog/box.md#a-local-maintenance-account-on-each-box)
 
-- **A799. Real historical upgrade testing: build authorised; after the first venue (owner, 2026-11-06).**
-  The owner authorised all seven [implementation-plan](superpowers/plans/2026-10-22-a799-real-upgrade-testing.md) cuts on 23 October 2026. Cuts 1–3 add metadata admission, oldest-supported plus previous-retained selection, pending-migration classification, pure typed record/schema comparison and bounded archive/fetch admission with injected adapters; the qualification index is empty. Actual filesystem adapters, isolated rigs, historical qualification, continued-sale execution and trusted CI wiring remain open.
-  Runtime, capture, A760 reset, migration, upload, provider and CI activation gates remain. No historical image, issued-F1 preservation or real upgrade is qualified. After A760, rebase onto the squashed base and regenerate any migrations it adds there. Before landing, show any new tables in `apps/server`'s `pnpm protection-list`: a table in a retired migration folder creates nothing. [Detail and current execution contract](backlog/box.md#2026-10-23-a799-build-authority-and-history-selection).
+- **A799. Real historical upgrade testing: folded into A950's new plan (owner, 2026-11-09).** Its trial of the new release's database changes on a copy of the live data is A950's step 4, now; testing against real older releases is kept from go-live onwards. [Earlier detail](backlog/box.md#2026-10-23-a799-build-authority-and-history-selection).
 - **A1016. Keep every box current and backed up, with no effort from the owner (owner,
   2026-10-22).** "Another super important part of the story especially for on prem is automated
   backups. We need to make it incredibly easy for users to upgrade, hopefully even automatically,
@@ -1838,9 +1838,10 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   monitor calls it every minute (design section 5). It must exercise the server, not only its
   front door, and must not write fiscal records. Defined jointly with Waitron Cloud.
 
-- **Automatic upgrades with rollback until a clean, running restart (A950)**: after the first venue (owner, 2026-11-06); [design approved 29 October](superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md), [plan approved 29 October](superpowers/plans/2026-10-29-a950-automatic-upgrades.md), build eligible cuts in separate pull requests.
+- **Automatic upgrades with rollback until a clean, running restart (A950)**: go-live (owner, 2026-11-09): "it's required for go live and needs to be bullet proof." The owner adopted the shorter route of a fresh review on 2026-11-09, adding a real test sale on the copy to its step 3; lane F writes the new plan for the owner's approval before any build. It includes A799's trial on a copy of the live data. Earlier: [design approved 29 October](superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md), [plan approved 29 October](superpowers/plans/2026-10-29-a950-automatic-upgrades.md).
+  After the first venue: the Cloud release check, the password-checked go-back button, proof-of-close, and the backup-stream handoff.
   Every venue starts automatic-on with an editable **03:00–05:00 local** window. Both manual and automatic application wait for this close episode's actual reports and primary backup, 10 quiet minutes and strictly more than 17 minutes before reopening. Clean restart, database and local running checks close rollback before normal work resumes.
-  Cuts 1–2 add isolated settings, dated-window, bounded-discovery, attempt-journal and startup-decision libraries. After cancellation, discovery waits for one immediate callback and one timer callback before deciding whether to retry; unfinished work keeps the discovery slot. Its fake-clock cancellation and cooperative-deadline tests wait for each attempt and deadline before advancing time. The cancellation test checks that this synchronisation leaves its fake clock unchanged. The cooperative cases also cover an adapter admitted on the next event-loop turn. Both fixture groups abort and await their discovery in `finally`; forced-assertion controls leave the following discovery able to run. The separate uncooperative-timeout fixture still needs `finally` cleanup that settles its deliberately non-cancelling adapter after a failed assertion. The journal uses a fixed-root injected IO boundary, retains terminal history, and keeps interrupted publication under inspection; startup decisions grant no trading permit. Reopening an incomplete freeze requires durable abandonment. JournalIo reserves `.turn` inside the namespace for its future adapter. No production verifier, hold or journal IO adapter, installed updater or timer calls them. Cuts 3–12 and all real runtime qualification stay open, including close/report receipts, B3, A799, account-free Cloud hold and A947 stream/spare integration. Host binding also needs diagnostics for missing Temporal, canonical zone handling and an explicit policy for an already-installed candidate.
+  Cuts 1–2 add isolated settings, dated-window, bounded-discovery, attempt-journal and startup-decision libraries. After cancellation, discovery waits for one immediate callback and one timer callback before deciding whether to retry; unfinished work keeps the discovery slot. Its fake-clock cancellation and cooperative-deadline tests wait for each attempt and deadline before advancing time. The cancellation test checks that this synchronisation leaves its fake clock unchanged. The cooperative cases also cover an adapter admitted on the next event-loop turn. Both fixture groups abort and await their discovery in `finally`; forced-assertion controls leave the following discovery able to run. The separate uncooperative-timeout fixture still needs `finally` cleanup that settles its deliberately non-cancelling adapter after a failed assertion. The journal uses a fixed-root injected IO boundary, retains terminal history, and keeps interrupted publication under inspection; startup decisions grant no trading permit. Reopening an incomplete freeze requires durable abandonment. JournalIo reserves `.turn` inside the namespace for its future adapter. No production verifier, hold or journal IO adapter, installed updater or timer calls them. Cuts 3–12 and all real runtime qualification stay open, including close/report receipts, B3, account-free Cloud hold and A947 stream/spare integration. Host binding also needs diagnostics for missing Temporal, canonical zone handling and an explicit policy for an already-installed candidate.
   [Detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)
 
 - **Finish the clock work: a check at every start and every change** (bundle of 3, 1 go-live, 2 important, size L, waits for another entry). Holds A798. [Detail](backlog/box.md#bundle-finish-the-clock-work-a-check-at-every-start-and-every-change)
@@ -2468,6 +2469,7 @@ _Formerly entries spread across the old sections._
 - **A664 — archive or delete a venue's old data once it no longer has to be kept.** Revised
   proposal adopted for specialist review (owner, 2026-10-17); relevant adviser agreement,
   build and verification remain open.
+  Stays in the backlog until the advisers answer; question 48 is the owner's to send (owner, 2026-11-09).
   [Detail and audit](backlog/data-protection.md#a664--archive-or-delete-a-venues-old-data-once-it-no-longer-has-to-be-kept)
 
 - **Third party licence notices** (bundle of 2, 2 important, size S, needs the adviser). [Detail](backlog/data-protection.md#bundle-third-party-licence-notices)
