@@ -1170,9 +1170,6 @@ describe("till-modifier-picker", () => {
       labelRadio(el, "list-cooked", "label-rare").click();
       await el.updateComplete;
       expect(seen.at(-1)).toMatchObject({ changed: true, savable: true, fixFields: false });
-      expect(seen.at(-1)!.selection.options).toEqual([
-        { listId: "list-cooked", labelId: "label-rare" },
-      ]);
       labelRadio(el, "list-cooked", "label-medium").click();
       await el.updateComplete;
       expect(seen.at(-1)).toMatchObject({ changed: false, savable: false });
@@ -1180,6 +1177,43 @@ describe("till-modifier-picker", () => {
       el.requestUpdate();
       await el.updateComplete;
       expect(seen, "an update that changes nothing reports nothing").toHaveLength(count);
+    });
+
+    it("reports a note's typing only when it moves whether the draft changed", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        ...edited,
+        inline: true,
+      });
+      const seen = reports(el);
+      const field = el.shadowRoot!.querySelector<WtTextarea>('[data-test="line-note"]')!;
+      await field.updateComplete;
+      const box = field.shadowRoot!.querySelector("textarea")!;
+      for (const value of ["sin sal,", "sin sal, b", "sin sal, bi"]) {
+        box.value = value;
+        box.dispatchEvent(new Event("input"));
+        await el.updateComplete;
+      }
+      expect(seen).toHaveLength(1);
+      expect(seen[0]).toMatchObject({ changed: true, savable: true, fixFields: false });
+    });
+
+    it("reports the count and extras a confirm would send, as they move", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        ...edited,
+        inline: true,
+      });
+      const seen = reports(el);
+      incButton(el, "list-extras", "p-cheese")!.click();
+      await el.updateComplete;
+      expect(seen.at(-1)).toMatchObject({
+        quantity: "2",
+        extras: [{ listId: "list-extras", productId: "p-cheese", quantity: 2 }],
+      });
+      el.shadowRoot!.querySelector('[name="quantity"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "3" } }),
+      );
+      await el.updateComplete;
+      expect(seen.at(-1)).toMatchObject({ quantity: "3" });
     });
 
     it("is not savable while a required list is unanswered, however the draft changed", async () => {
@@ -1246,7 +1280,10 @@ describe("till-modifier-picker", () => {
       await el.updateComplete;
       expect(fromWindow).toMatchObject({ quantity: "3", note: "sin sal, bien hecha" });
       expect(fromInline).toEqual(fromWindow);
-      expect(seen.at(-2)!.selection).toEqual(fromWindow);
+      expect({ quantity: seen.at(-2)!.quantity, extras: seen.at(-2)!.extras }).toEqual({
+        quantity: fromWindow!.quantity,
+        extras: fromWindow!.extras,
+      });
       expect(seen.at(-1), "a saved draft is the new baseline").toMatchObject({
         changed: false,
         savable: false,

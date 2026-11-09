@@ -93,7 +93,7 @@ import type {
   ModifierConfirmDetail,
   TillModifierPicker,
 } from "../widgets/modifier-picker.js";
-import { deriveExtraSelections } from "../state/held-extras.js";
+import { deriveExtraSelections, sameExtraSelections } from "../state/held-extras.js";
 import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
 import { offeredListsOf } from "../state/order-line.js";
 import type { LineSelection, SelectedExtra } from "../state/working-order.js";
@@ -564,21 +564,12 @@ type SentChangeSeed<Pending> = {
   selection: LineSelection;
 };
 
-/** Extras by what is picked, in any order. */
-function extraPicks(extras: LineSelection["extras"]): string {
-  return JSON.stringify(
-    (extras ?? [])
-      .map(({ listId, productId, quantity }) => JSON.stringify([listId, productId, quantity]))
-      .sort(),
-  );
-}
-
 /** Whether two seeds of one Sent window describe the same stored dish. */
 function sameSentFacts<P>(a: SentChangeSeed<P>, b: SentChangeSeed<P>): boolean {
   return (
     a.selection.note === b.selection.note &&
     sameOptionSelections(a.selection.options ?? [], b.selection.options ?? []) &&
-    extraPicks(a.selection.extras) === extraPicks(b.selection.extras) &&
+    sameExtraSelections(a.selection.extras ?? [], b.selection.extras ?? []) &&
     a.counts.join() === b.counts.join()
   );
 }
@@ -3505,7 +3496,7 @@ export class TillTableOrderScreen extends LitElement {
    * charges for what a change adds depends on the dish's kitchen state and adjustments
    * (`applyLineEdits`), which the window does not know, so it shows no count or Total then. */
   #sentChangeMovesPrice(
-    selection: ModifierConfirmDetail,
+    selection: Pick<ModifierChangeDetail, "quantity" | "extras">,
     shown: Decimal,
     before: LineSelection,
   ): boolean {
@@ -3516,7 +3507,7 @@ export class TillTableOrderScreen extends LitElement {
         return true;
       }
     }
-    return extraPicks(selection.extras) !== extraPicks(before.extras);
+    return !sameExtraSelections(selection.extras ?? [], before.extras ?? []);
   }
 
   #sentLineDialog(): TemplateResult {
@@ -3551,10 +3542,10 @@ export class TillTableOrderScreen extends LitElement {
     const seed =
       changeLines === undefined ? undefined : this.#sentChangeSeedFor(pending!, changeLines);
     const change = this.sentChange?.pending === pending ? this.sentChange.detail : undefined;
-    const changeReady = change?.changed === true && change.savable && !disabled;
+    const changeReady = change?.savable === true && !disabled;
     const priceMoves =
       change?.changed === true &&
-      this.#sentChangeMovesPrice(change.selection, decimal(shownQuantity), seed!.selection);
+      this.#sentChangeMovesPrice(change, decimal(shownQuantity), seed!.selection);
     const refused =
       this.sentChangeRefused?.pending === pending ? this.sentChangeRefused : undefined;
     const refusedVoid = refused !== undefined && slice !== undefined && this.#canVoidSent(slice);

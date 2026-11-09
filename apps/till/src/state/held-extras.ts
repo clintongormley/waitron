@@ -47,3 +47,18 @@ export function deriveExtraSelections(
   }
   return { extras, notOffered };
 }
+
+/** Whether two sets of extras pick the same counts of the same list-and-product pairs, in any
+ * order. */
+export function sameExtraSelections(
+  left: readonly SelectedExtra[],
+  right: readonly SelectedExtra[],
+): boolean {
+  const key = (picks: readonly SelectedExtra[]) =>
+    JSON.stringify(
+      picks
+        .map(({ listId, productId, quantity }) => JSON.stringify([listId, productId, quantity]))
+        .sort(),
+    );
+  return key(left) === key(right);
+}

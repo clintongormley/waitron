@@ -319,6 +319,16 @@ it("keeps Change dish quiet and disabled until the dish changes, and again once 
   expect(button.getAttribute("variant")).toBe("secondary");
 });
 
+it("disables Change dish in the same update the screen turns busy", async () => {
+  const el = await openRow({ lines: [line()] });
+  await editNote(el, "warm, no cream");
+  const button = q(el, "[data-sent-change]")!;
+  expect(button.hasAttribute("disabled")).toBe(false);
+  el.busy = true;
+  await el.updateComplete;
+  expect(button.hasAttribute("disabled")).toBe(true);
+});
+
 /** The dialog's footer sentence, which wt-dialog draws above the footer's row of buttons. */
 function footerSentence(el: TillTableOrderScreen): HTMLElement | null {
   const dialog = q<WtDialog>(el, "[data-sent-line-dialog]")!;

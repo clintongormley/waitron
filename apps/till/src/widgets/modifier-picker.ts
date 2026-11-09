@@ -23,6 +23,7 @@ import {
   quantityPlaces,
 } from "../state/order-line.js";
 import { optionSnapshotOf } from "../state/held-options.js";
+import { sameExtraSelections } from "../state/held-extras.js";
 import { productName, productUnit } from "./product-name.js";
 import { lineNutrition } from "./line-nutrition.js";
 import { optionAnswers } from "./option-snapshot.js";
@@ -54,8 +55,9 @@ export interface ModifierConfirmDetail extends LineSelection {
   courseId?: string;
 }
 
-/** What an inline picker tells its host after any update that moves one of these. */
-export interface ModifierChangeDetail {
+/** What an inline picker tells its host after any update that moves one of these. `quantity` and
+ * `extras` are what a confirm would send now; the rest of the selection arrives with the confirm. */
+export interface ModifierChangeDetail extends Pick<ModifierConfirmDetail, "quantity" | "extras"> {
   /** The draft differs from what it opened with, or from what it last confirmed; always true for a
    * picker opened with no `initialSelections`, as a new dish may be added unchanged. */
   changed: boolean;
@@ -63,8 +65,6 @@ export interface ModifierChangeDetail {
   savable: boolean;
   /** The windowed footer would show `form.fix_fields` now. */
   fixFields: boolean;
-  /** What a confirm would send now. */
-  selection: ModifierConfirmDetail;
 }
 
 /**
@@ -253,7 +253,7 @@ export class TillModifierPicker extends LitElement {
    * total. The host saves through {@link confirm}, guards leaving through {@link requestLeave} and
    * follows `wt-modifier-change`. */
   @property({ type: Boolean }) inline = false;
-  #reported?: { key: string; product: TillProduct };
+  #reported?: ModifierChangeDetail;
   @state() private courseId = "";
   @state() private editedQuantity = "1";
   @state() private attempted = false;
@@ -647,16 +647,26 @@ export class TillModifierPicker extends LitElement {
     if (!this.inline || !this.product || !this.#scope) return;
     const { saveAction, satisfied } = this.#checks;
     const quantityRefused = this.attempted && this.lineDetails && this.#quantityInvalid();
+    const extras = this.#selectedExtras();
     const report: ModifierChangeDetail = {
       changed: !saveAction.unchanged,
       savable:
         !this.disabled && !this.readOnly && !saveAction.unchanged && !quantityRefused && satisfied,
       fixFields: !this.readOnly && quantityRefused,
-      selection: this.#detail(),
+      ...(this.#editsQuantity ? { quantity: this.editedQuantity } : {}),
+      ...(extras.length === 0 ? {} : { extras }),
     };
-    const key = JSON.stringify({ ...report, selection: { ...report.selection, product: null } });
-    if (this.#reported?.key === key && this.#reported.product === report.selection.product) return;
-    this.#reported = { key, product: report.selection.product };
+    const last = this.#reported;
+    if (
+      last !== undefined &&
+      last.changed === report.changed &&
+      last.savable === report.savable &&
+      last.fixFields === report.fixFields &&
+      last.quantity === report.quantity &&
+      sameExtraSelections(last.extras ?? [], report.extras ?? [])
+    )
+      return;
+    this.#reported = report;
     this.dispatchEvent(
       new CustomEvent<ModifierChangeDetail>("wt-modifier-change", {
         detail: report,
