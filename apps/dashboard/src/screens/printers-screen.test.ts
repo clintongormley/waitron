@@ -1,5 +1,5 @@
 import { LitElement, html } from "lit";
-import { LeaveController, UrlStateController } from "@waitron/ui";
+import { LeaveController, UrlStateController, type WtFormActions } from "@waitron/ui";
 import { dashboardPath } from "../navigation.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12318,6 +12318,148 @@ describe("an A4 printer's details", () => {
     expect(inDetails(el, "[data-test=edit-page-printer-details]")).toBeNull();
     expect(activeSwitch(el).disabled).toBe(true);
     expect(inDetails(el, "[data-test=printer-details-close]")).not.toBeNull();
+  });
+
+  const nameField = (el: PrintersScreen) =>
+    inDetails(el, "wt-input[name=printer-detail-name]") as unknown as
+      HTMLElementTagNameMap["wt-input"] | null;
+  const saveButton = (el: PrintersScreen) =>
+    inDetails(
+      el,
+      "[data-test=save-printer-details]",
+    ) as unknown as HTMLElementTagNameMap["wt-button"];
+  const editActions = (el: PrintersScreen) =>
+    saveButton(el).closest("wt-form-actions") as unknown as WtFormActions;
+  async function clickIn(el: PrintersScreen, sel: string) {
+    inDetails(el, sel)!.click();
+    await flush(el);
+  }
+  async function openEdit(el: PrintersScreen) {
+    await clickIn(el, "[data-test=edit-page-printer-details]");
+  }
+  async function typeName(el: PrintersScreen, value: string) {
+    const field = nameField(el)!;
+    await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
+    await flush(el);
+  }
+
+  it("renames a printer in a dialog whose Save waits for a change, then reads the list again", async () => {
+    const listPagePrinters = vi.fn().mockResolvedValue([pagePrinter]);
+    const { el, api } = await openA4({ listPagePrinters });
+    await openEdit(el);
+    const field = nameField(el)!;
+    expect(field.required).toBe(true);
+    expect(field.value).toBe("Back office");
+    const save = saveButton(el);
+    expect(save.disabled).toBe(true);
+    expect(save.variant).toBe("secondary");
+    await typeName(el, "  Upstairs ");
+    expect(save.disabled).toBe(false);
+    expect(save.variant).toBe("primary");
+    const reads = listPagePrinters.mock.calls.length;
+    await clickIn(el, "[data-test=save-printer-details]");
+    expect(api.updatePagePrinter).toHaveBeenCalledWith("pp1", { name: "Upstairs" });
+    await vi.waitFor(() => expect(listPagePrinters).toHaveBeenCalledTimes(reads + 1));
+    await vi.waitFor(() => expect(nameField(el)).toBeNull());
+  });
+
+  it("a press that reaches an untouched rename Save's handler sends nothing and marks nothing", async () => {
+    const { el, api } = await openA4();
+    await openEdit(el);
+    await clickIn(el, "[data-test=save-printer-details]");
+    expect(api.updatePagePrinter).not.toHaveBeenCalled();
+    expect(nameField(el)!.invalid).toBe(false);
+  });
+
+  it("explains an empty name beside the field and at the bottom, and sends nothing", async () => {
+    const { el, api } = await openA4();
+    await openEdit(el);
+    await typeName(el, "   ");
+    await clickIn(el, "[data-test=save-printer-details]");
+    expect(api.updatePagePrinter).not.toHaveBeenCalled();
+    expect(nameField(el)!.error).toBe(t("form.name_required"));
+    expect((await formMessageOf(editActions(el)))?.textContent?.trim()).toBe(t("form.fix_fields"));
+    expect(saveButton(el).disabled).toBe(true);
+  });
+
+  it("keeps a refused rename open with the refusal at the bottom and Save still usable", async () => {
+    const listPagePrinters = vi.fn().mockResolvedValue([pagePrinter]);
+    const { el } = await openA4({
+      listPagePrinters,
+      updatePagePrinter: vi.fn().mockRejectedValueOnce({ code: "page_printer.not_found" }),
+    });
+    const reads = listPagePrinters.mock.calls.length;
+    await openEdit(el);
+    await typeName(el, "Upstairs");
+    await clickIn(el, "[data-test=save-printer-details]");
+    await flush(el);
+    expect((await formMessageOf(editActions(el)))?.textContent?.trim()).toBe(
+      codeMessage("page_printer.not_found"),
+    );
+    expect(nameField(el)).not.toBeNull();
+    expect(saveButton(el).disabled).toBe(false);
+    expect(listPagePrinters).toHaveBeenCalledTimes(reads);
+  });
+
+  it("puts a refusal that names the name field under it, until the name changes", async () => {
+    const { el } = await openA4({
+      updatePagePrinter: vi.fn().mockRejectedValueOnce({
+        code: "management.request_invalid",
+        params: { field: "name" },
+      }),
+    });
+    await openEdit(el);
+    await typeName(el, "Upstairs");
+    await clickIn(el, "[data-test=save-printer-details]");
+    await flush(el);
+    const field = nameField(el)!;
+    expect(field.error).toBe(codeMessage("management.request_invalid"));
+    expect((await formMessageOf(editActions(el)))?.textContent?.trim()).toBe(t("form.fix_fields"));
+    await typeName(el, "Upstairs 2");
+    expect(field.error).toBe("");
+  });
+
+  it("saves a rename on Enter", async () => {
+    const { el, api } = await openA4();
+    await openEdit(el);
+    await typeName(el, "Upstairs");
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() =>
+      expect(api.updatePagePrinter).toHaveBeenCalledWith("pp1", { name: "Upstairs" }),
+    );
+  });
+
+  it("a rename whose re-read fails closes the dialog and shows a load failure", async () => {
+    const listPagePrinters = vi.fn().mockResolvedValue([pagePrinter]);
+    const { el } = await openA4({ listPagePrinters });
+    const reads = listPagePrinters.mock.calls.length;
+    listPagePrinters.mockRejectedValueOnce({ code: "connection.failed" });
+    await openEdit(el);
+    await typeName(el, "Upstairs");
+    await clickIn(el, "[data-test=save-printer-details]");
+    await vi.waitFor(() => expect(listPagePrinters).toHaveBeenCalledTimes(reads + 1));
+    await flush(el);
+    expect(detailText(el, "[data-test=printer-refresh-error] .error")).toBe(
+      `${t("printers.refresh_failed")} ${codeMessage("connection.failed")}`,
+    );
+    expect(nameField(el)).toBeNull();
+  });
+
+  it("a sent rename replaces a refused disable's message", async () => {
+    const { el } = await openA4({
+      updatePagePrinter: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(undefined),
+    });
+    toggleSwitch(el, '[name="page-printer-detail-active"]', false);
+    await flush(el);
+    expect(inDetails(el, "[data-test=printer-detail-active-error]")).not.toBeNull();
+    await openEdit(el);
+    await typeName(el, "Upstairs");
+    await clickIn(el, "[data-test=save-printer-details]");
+    await flush(el);
+    expect(inDetails(el, "[data-test=printer-detail-active-error]")).toBeNull();
   });
 });
 

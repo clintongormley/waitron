@@ -1,9 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import type { WtFormActions } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { en, es, type StringKey } from "../i18n/strings.js";
 import type { PagePrinterRow, PageTestPage } from "../api/client.js";
@@ -116,15 +112,6 @@ async function click(el: PagePrintersPanel, sel: string) {
   q(el, sel)!.click();
   await flush(el);
 }
-async function typeName(el: PagePrintersPanel, value: string) {
-  const field = q(
-    el,
-    "[data-test=rename-page-printer-modal] wt-input[name=name]",
-  ) as unknown as HTMLElementTagNameMap["wt-input"];
-  await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
-  await flush(el);
-}
-
 it("lists each office printer under the A4 printers heading, with its agent, address and paper", async () => {
   const { el } = await mount();
   expect(text(el, "h2")).toBe(t("printers.invoice_printers_title"));
@@ -201,108 +188,6 @@ it("draws nothing while the venue has no office printer", async () => {
   expect(q(el, "[data-test=page-printers-panel]")).toBeNull();
 });
 
-it("renames a printer in a dialog whose Save waits for a change, then reads the list again", async () => {
-  const { el, api, reload } = await mount();
-  await click(el, "[data-test=rename-page-printer-pp2]");
-  const field = q(
-    el,
-    "[data-test=rename-page-printer-modal] wt-input[name=name]",
-  ) as unknown as HTMLElementTagNameMap["wt-input"];
-  expect(field.required).toBe(true);
-  expect(field.value).toBe("Back office");
-  const save = button(el, "[data-test=confirm-rename-page-printer]");
-  expect(save.disabled).toBe(true);
-  expect(save.variant).toBe("secondary");
-  await typeName(el, "  Upstairs ");
-  expect(save.disabled).toBe(false);
-  expect(save.variant).toBe("primary");
-  await click(el, "[data-test=confirm-rename-page-printer]");
-  expect(api.updatePagePrinter).toHaveBeenCalledWith("pp2", { name: "Upstairs" });
-  await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-  await vi.waitFor(() =>
-    expect(
-      (q(el, "[data-test=rename-page-printer-modal]") as unknown as { open: boolean }).open,
-    ).toBe(false),
-  );
-});
-
-it("a press that reaches an untouched rename Save's handler sends nothing and marks nothing", async () => {
-  const { el, api } = await mount();
-  await click(el, "[data-test=rename-page-printer-pp2]");
-  await click(el, "[data-test=confirm-rename-page-printer]");
-  expect(api.updatePagePrinter).not.toHaveBeenCalled();
-  const field = q(
-    el,
-    "[data-test=rename-page-printer-modal] wt-input[name=name]",
-  ) as unknown as HTMLElementTagNameMap["wt-input"];
-  expect(field.invalid).toBe(false);
-});
-
-it("explains an empty name beside the field and at the bottom, and sends nothing", async () => {
-  const { el, api } = await mount();
-  await click(el, "[data-test=rename-page-printer-pp2]");
-  await typeName(el, "   ");
-  await click(el, "[data-test=confirm-rename-page-printer]");
-  expect(api.updatePagePrinter).not.toHaveBeenCalled();
-  const field = q(
-    el,
-    "[data-test=rename-page-printer-modal] wt-input[name=name]",
-  ) as unknown as HTMLElementTagNameMap["wt-input"];
-  expect(field.error).toBe(t("form.name_required"));
-  const actions = q(el, "[data-test=rename-page-printer-actions]") as unknown as WtFormActions;
-  expect((await formMessageOf(actions))?.textContent?.trim()).toBe(t("form.fix_fields"));
-  expect(button(el, "[data-test=confirm-rename-page-printer]").disabled).toBe(true);
-});
-
-it("keeps a refused rename open with the refusal at the bottom and Save still usable", async () => {
-  const { el, api, reload } = await mount();
-  api.updatePagePrinter.mockRejectedValueOnce({ code: "page_printer.not_found" });
-  await click(el, "[data-test=rename-page-printer-pp2]");
-  await typeName(el, "Upstairs");
-  await click(el, "[data-test=confirm-rename-page-printer]");
-  await flush(el);
-  const actions = q(el, "[data-test=rename-page-printer-actions]") as unknown as WtFormActions;
-  expect((await formMessageOf(actions))?.textContent?.trim()).toBe(
-    codeMessage("page_printer.not_found"),
-  );
-  expect(
-    (q(el, "[data-test=rename-page-printer-modal]") as unknown as { open: boolean }).open,
-  ).toBe(true);
-  expect(button(el, "[data-test=confirm-rename-page-printer]").disabled).toBe(false);
-  expect(reload).not.toHaveBeenCalled();
-});
-
-it("puts a refusal that names the name field under it, until the name changes", async () => {
-  const { el, api } = await mount();
-  api.updatePagePrinter.mockRejectedValueOnce({
-    code: "management.request_invalid",
-    params: { field: "name" },
-  });
-  await click(el, "[data-test=rename-page-printer-pp2]");
-  await typeName(el, "Upstairs");
-  await click(el, "[data-test=confirm-rename-page-printer]");
-  await flush(el);
-  const field = q(
-    el,
-    "[data-test=rename-page-printer-modal] wt-input[name=name]",
-  ) as unknown as HTMLElementTagNameMap["wt-input"];
-  expect(field.error).toBe(codeMessage("management.request_invalid"));
-  const actions = q(el, "[data-test=rename-page-printer-actions]") as unknown as WtFormActions;
-  expect((await formMessageOf(actions))?.textContent?.trim()).toBe(t("form.fix_fields"));
-  await typeName(el, "Upstairs 2");
-  expect(field.error).toBe("");
-});
-
-it("saves a rename on Enter", async () => {
-  const { el, api } = await mount();
-  await click(el, "[data-test=rename-page-printer-pp2]");
-  await typeName(el, "Upstairs");
-  await userEvent.keyboard("{Enter}");
-  await vi.waitFor(() =>
-    expect(api.updatePagePrinter).toHaveBeenCalledWith("pp2", { name: "Upstairs" }),
-  );
-});
-
 it("puts a printer name holding a replacement pattern into its menu and rename heading as written", async () => {
   const name = "Office $& 2";
   const { el } = await mount({ rows: [row({ name })] });
@@ -324,22 +209,6 @@ it("a role without hardware.manage sees the list with no row menu and no rename"
   expect(q(el, "dashboard-row-actions")).toBeNull();
 });
 
-it("a rename whose re-read fails closes the dialog and shows a load failure", async () => {
-  const { el, reload } = await mount();
-  reload.mockRejectedValueOnce({ code: "connection.failed" });
-  await click(el, "[data-test=rename-page-printer-pp2]");
-  await typeName(el, "Upstairs");
-  await click(el, "[data-test=confirm-rename-page-printer]");
-  await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-  await flush(el);
-  expect(text(el, "[data-test=page-printers-read-error]")).toBe(
-    `${t("printers.refresh_failed")} ${codeMessage("connection.failed")}`,
-  );
-  expect(
-    (q(el, "[data-test=rename-page-printer-modal]") as unknown as { open: boolean }).open,
-  ).toBe(false);
-});
-
 it("a later list clears the load failure", async () => {
   const { el, reload } = await mount();
   reload.mockRejectedValueOnce({ code: "connection.failed" });
@@ -350,17 +219,4 @@ it("a later list clears the load failure", async () => {
   el.rows = [ROWS[0]!, { ...ROWS[1]!, active: false }, ROWS[2]!];
   await flush(el);
   expect(q(el, "[data-test=page-printers-read-error]")).toBeNull();
-});
-
-it("a sent rename replaces a refused disable's message", async () => {
-  const { el, api } = await mount();
-  api.updatePagePrinter.mockRejectedValueOnce({ code: "connection.failed" });
-  await click(el, "[data-test=disable-page-printer-pp2]");
-  await flush(el);
-  expect(q(el, "[data-test=page-printers-action-error]")).not.toBeNull();
-  await click(el, "[data-test=rename-page-printer-pp2]");
-  await typeName(el, "Upstairs");
-  await click(el, "[data-test=confirm-rename-page-printer]");
-  await flush(el);
-  expect(q(el, "[data-test=page-printers-action-error]")).toBeNull();
 });

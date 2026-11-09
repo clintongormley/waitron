@@ -787,6 +787,8 @@ export class PrintersScreen extends LitElement {
     port: string;
     saving: boolean;
     error: string | null;
+    /** A refusal the server tied to the name field, shown under it until the name changes. */
+    nameRefusal: string | null;
   } | null = null;
   #detailEditScope?: DraftScope<DetailEditValues>;
   /** What the form opened with, or last saved. */
@@ -1030,6 +1032,12 @@ export class PrintersScreen extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues): void {
+    if (
+      changed.has("canManage") &&
+      !this.canManage &&
+      this.pagePrinters.some(({ id }) => id === this.detailEdit?.id)
+    )
+      this.#disposeDetailDrafts();
     if (changed.has("commands") || changed.has("printers")) {
       const forgets = new Map<string, [string, TrackedCommand]>();
       for (const entry of Object.entries(this.commands))
@@ -2580,7 +2588,7 @@ export class PrintersScreen extends LitElement {
         @click=${(event: Event) => {
           const button = event.currentTarget as HTMLElement;
           this.#showPrinterStatus(p.id, this.#rowMenuButton(button) ?? button);
-          this.#openDetailEdit(p);
+          this.#openDetailEdit(p.id, this.#savedEditValues(p));
         }}
         >${t("action.edit")}</wt-button
       >
@@ -2681,14 +2689,9 @@ export class PrintersScreen extends LitElement {
     };
   }
 
-  #openDetailEdit(printer: Printer): void {
+  #openDetailEdit(id: string, saved: DetailEditValues): void {
     this.#detailEditScope?.dispose();
-    this.detailEdit = {
-      id: printer.id,
-      ...this.#savedEditValues(printer),
-      saving: false,
-      error: null,
-    };
+    this.detailEdit = { id, ...saved, saving: false, error: null, nameRefusal: null };
     this.#detailEditBaseline = this.#detailEditValues();
     this.#detailEditScope = draftScopeFor<DetailEditValues>(this, {
       id: {},
@@ -2696,11 +2699,11 @@ export class PrintersScreen extends LitElement {
       snapshot: (value) => ({ ...value }),
       equal: (a, b) => a.name === b.name && a.host === b.host && a.port === b.port,
       restore: (value) => {
-        this.detailEdit = { ...this.detailEdit!, ...value, error: null };
+        this.detailEdit = { ...this.detailEdit!, ...value, error: null, nameRefusal: null };
       },
     }).scope;
     void this.updateComplete.then(() => {
-      if (this.detailEdit?.id === printer.id)
+      if (this.detailEdit?.id === id)
         this.renderRoot.querySelector<HTMLElement>('[name="printer-detail-name"]')?.focus();
     });
   }
@@ -2711,7 +2714,11 @@ export class PrintersScreen extends LitElement {
       if (scope !== this.#detailEditScope) return;
       this.#disposeDetailDrafts();
       void this.updateComplete.then(() => {
-        this.renderRoot.querySelector<HTMLElement>("[data-test=edit-printer-details]")?.focus();
+        this.renderRoot
+          .querySelector<HTMLElement>(
+            "[data-test=edit-printer-details], [data-test=edit-page-printer-details]",
+          )
+          ?.focus();
       });
     };
     const coordinator = leaveCoordinatorFor(this);
@@ -2794,6 +2801,48 @@ export class PrintersScreen extends LitElement {
     await this.#load();
   }
 
+  #pagePrinterEditErrors(row: PagePrinterRow): DetailEditErrors {
+    const draft = this.detailEdit;
+    if (draft?.id !== row.id) return { name: "", host: "", port: "" };
+    return {
+      name: draft.name.trim() ? (draft.nameRefusal ?? "") : t("form.name_required"),
+      host: "",
+      port: "",
+    };
+  }
+
+  async #savePagePrinterEdit(row: PagePrinterRow): Promise<void> {
+    const scope = this.#detailEditScope;
+    if (!scope || saveActionState(scope).unchanged) return;
+    const draft = this.detailEdit;
+    if (draft?.id !== row.id || draft.saving || !this.canManage) return;
+    if (hasErrors(this.#pagePrinterEditErrors(row))) return;
+    const values = this.#detailEditValues();
+    this.detailEdit = { ...draft, saving: true, error: null, nameRefusal: null };
+    this.detailActiveError = null;
+    try {
+      await this.api.updatePagePrinter(row.id, { name: values.name });
+    } catch (error) {
+      if (!this.isConnected || scope !== this.#detailEditScope) return;
+      const code = codeOf(error);
+      const field = (error as { params?: { field?: unknown } }).params?.field;
+      const onName = code === "management.request_invalid" && field === "name";
+      this.detailEdit = {
+        ...this.detailEdit!,
+        saving: false,
+        error: onName ? null : codeMessage(code),
+        nameRefusal: onName ? codeMessage(code) : null,
+      };
+      return;
+    }
+    if (!this.isConnected || scope !== this.#detailEditScope) return;
+    scope.commit(values);
+    this.#detailEditBaseline = values;
+    if (scope.isDirty()) this.detailEdit = { ...this.detailEdit!, saving: false, error: null };
+    else this.#disposeDetailDrafts();
+    await this.#refreshPagePrinters();
+  }
+
   /** Closing the details asks first when a detail draft is dirty, through the address change. */
   readonly #beforeDetailsClose = async (): Promise<boolean> => {
     if (this.detailEdit?.saving) return false;
@@ -2811,6 +2860,10 @@ export class PrintersScreen extends LitElement {
     const a4 = p ? undefined : this.pagePrinters.find(({ id }) => id === this.selectedPrinterId);
     const editing = p !== undefined && this.detailEdit?.id === p.id;
     const errors = editing ? this.#detailEditErrors(p) : undefined;
+    const a4Errors =
+      a4 && this.canManage && this.detailEdit?.id === a4.id
+        ? this.#pagePrinterEditErrors(a4)
+        : undefined;
     return html`<wt-modal
       size="standard"
       data-test="printer-details-modal"
@@ -2842,10 +2895,12 @@ export class PrintersScreen extends LitElement {
             ? nothing
             : p
               ? errors
-                ? this.#renderDetailEditForm(p, errors)
+                ? this.#renderDetailEditForm(p.id, p.transport === "network_tcp", errors)
                 : this.#renderPrinterStatus(p)
               : a4
-                ? this.#renderPagePrinterDetails(a4)
+                ? a4Errors
+                  ? this.#renderDetailEditForm(a4.id, false, a4Errors)
+                  : this.#renderPagePrinterDetails(a4)
                 : html`<p role="status">
                     ${this.loading ? t("printers.table_loading") : codeMessage("printer.not_found")}
                   </p>`
@@ -2853,10 +2908,12 @@ export class PrintersScreen extends LitElement {
       </div>
       ${
         p && errors
-          ? this.#renderDetailEditActions(p, errors)
-          : a4
-            ? this.#renderPagePrinterActions(a4)
-            : this.#renderDetailViewActions(p)
+          ? this.#renderDetailEditActions(errors, () => void this.#saveDetailEdit(p))
+          : a4 && a4Errors
+            ? this.#renderDetailEditActions(a4Errors, () => void this.#savePagePrinterEdit(a4))
+            : a4
+              ? this.#renderPagePrinterActions(a4)
+              : this.#renderDetailViewActions(p)
       }
     </wt-modal>`;
   }
@@ -2886,7 +2943,13 @@ export class PrintersScreen extends LitElement {
                   ?loading=${pages.sending.has(row.id)}
                   @click=${() => void pages.print(row)}
                   >${t("printers.print_test_page")}</wt-button
-                ><wt-button data-test="edit-page-printer-details">${t("action.edit")}</wt-button>`
+                ><wt-button
+                  data-test="edit-page-printer-details"
+                  @click=${() => {
+                    this.#openDetailEdit(row.id, { name: row.name, host: "", port: "" });
+                  }}
+                  >${t("action.edit")}</wt-button
+                >`
             : nothing
         }
       </wt-form-actions>
@@ -3038,7 +3101,7 @@ export class PrintersScreen extends LitElement {
               ><wt-button
                 data-test="edit-printer-details"
                 @click=${() => {
-                  this.#openDetailEdit(p);
+                  this.#openDetailEdit(p.id, this.#savedEditValues(p));
                 }}
                 >${t("action.edit")}</wt-button
               >`
@@ -3047,13 +3110,18 @@ export class PrintersScreen extends LitElement {
     </wt-form-actions>`;
   }
 
-  #renderDetailEditForm(p: Printer, errors: DetailEditErrors): TemplateResult {
+  #renderDetailEditForm(id: string, network: boolean, errors: DetailEditErrors): TemplateResult {
     const draft = this.detailEdit!;
     const change = (field: keyof DetailEditValues) => (event: CustomEvent<{ value: string }>) => {
       if (!(event.currentTarget as HTMLElement).isConnected) return;
       event.stopPropagation();
-      if (this.detailEdit?.id !== p.id) return;
-      this.detailEdit = { ...this.detailEdit, [field]: event.detail.value, error: null };
+      if (this.detailEdit?.id !== id) return;
+      this.detailEdit = {
+        ...this.detailEdit,
+        [field]: event.detail.value,
+        error: null,
+        ...(field === "name" ? { nameRefusal: null } : {}),
+      };
       this.#detailEditScope?.changed();
     };
     return html`<div
@@ -3073,7 +3141,7 @@ export class PrintersScreen extends LitElement {
         @wt-change=${change("name")}
       ></wt-input>
       ${
-        p.transport === "network_tcp"
+        network
           ? html`<wt-input
                 name="printer-detail-host"
                 label=${t("printers.host")}
@@ -3099,10 +3167,10 @@ export class PrintersScreen extends LitElement {
     </div>`;
   }
 
-  #renderDetailEditActions(p: Printer, errors: DetailEditErrors): TemplateResult {
+  #renderDetailEditActions(errors: DetailEditErrors, save: () => void): TemplateResult {
     const draft = this.detailEdit!;
     const invalid = hasErrors(errors);
-    const save = saveActionState(this.#detailEditScope);
+    const action = saveActionState(this.#detailEditScope);
     return html`<wt-form-actions
       slot="footer"
       .error=${bottomMessage(draft.error, invalid ? t("form.fix_fields") : null)}
@@ -3115,10 +3183,10 @@ export class PrintersScreen extends LitElement {
         >${t("action.cancel")}</wt-button
       >
       <wt-button
-        variant=${save.variant}
+        variant=${action.variant}
         data-test="save-printer-details"
-        ?disabled=${save.unchanged || draft.saving || invalid}
-        @click=${() => void this.#saveDetailEdit(p)}
+        ?disabled=${action.unchanged || draft.saving || invalid}
+        @click=${save}
         >${t("action.save")}</wt-button
       >
     </wt-form-actions>`;

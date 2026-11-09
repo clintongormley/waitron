@@ -3,14 +3,9 @@ import { LitElement, html } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import { t } from "../i18n/t.js";
-import type { PagePrinterRow } from "../api/client.js";
-import {
-  cleanupWidgets,
-  closeReportsDelivered,
-  mountWidget,
-  reattachAfterDetachedUpdate,
-} from "./test-helpers.js";
-import "./page-printers-panel.js";
+import type { DashboardApi, PagePrinterRow } from "../api/client.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
+import "./printers-screen.js";
 
 const row = (over: Partial<PagePrinterRow> = {}): PagePrinterRow => ({
   id: "pp1",
@@ -28,74 +23,71 @@ const row = (over: Partial<PagePrinterRow> = {}): PagePrinterRow => ({
   ...over,
 });
 
-class PanelLeaveApp extends LitElement {
+class A4DetailsLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   readonly api = {
+    listAgents: async () => [],
+    listPrinters: async () => [],
+    listRecentJobs: async () => [],
+    listPrinterProfiles: async () => [],
+    listPrinterStationNames: async () => [],
+    listDiscoveredPrinters: async () => [],
+    listPagePrinters: vi
+      .fn()
+      .mockResolvedValue([row(), row({ id: "pp2", name: "Back office", host: "10.0.0.57" })]),
+    pairingMode: async () => ({
+      open: false,
+      openUntil: null,
+      deviceAddress: "https://waitron.local",
+    }),
+    joinRequests: async () => [],
     updatePagePrinter: vi.fn().mockResolvedValue(undefined),
   };
-  readonly reload = vi.fn().mockResolvedValue(undefined);
-  rows = [row(), row({ id: "pp2", name: "Back office", host: "10.0.0.57" })];
   canManage = true;
   override render() {
-    return html`<dashboard-page-printers-panel
-        .api=${this.api}
-        .rows=${this.rows}
+    return html`<dashboard-printers-screen
+        .api=${this.api as unknown as DashboardApi}
         .canManage=${this.canManage}
-        .reload=${this.reload}
-      ></dashboard-page-printers-panel
+      ></dashboard-printers-screen
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
 }
-customElements.define("page-printers-panel-leave-app", PanelLeaveApp);
+customElements.define("printer-details-a4-leave-app", A4DetailsLeaveApp);
 afterEach(cleanupWidgets);
 
-type Panel = HTMLElementTagNameMap["dashboard-page-printers-panel"];
+type Screen = HTMLElementTagNameMap["dashboard-printers-screen"];
 
 async function mount() {
-  const { el: app } = await mountWidget<PanelLeaveApp>("page-printers-panel-leave-app", {});
-  const panel = app.shadowRoot!.querySelector("dashboard-page-printers-panel")!;
-  await panel.updateComplete;
-  return { app, panel };
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/pp2");
+  const { el: app } = await mountWidget<A4DetailsLeaveApp>("printer-details-a4-leave-app", {});
+  const screen = app.shadowRoot!.querySelector("dashboard-printers-screen")!;
+  await expect.poll(() => q(screen, "[data-test=edit-page-printer-details]")).not.toBeNull();
+  return { app, panel: screen };
 }
-function deepQuery(root: ShadowRoot | HTMLElement, sel: string): HTMLElement | null {
-  const found = root.querySelector<HTMLElement>(sel);
-  if (found) return found;
-  for (const node of root.querySelectorAll<HTMLElement>("*")) {
-    if (node.shadowRoot) {
-      const nested = deepQuery(node.shadowRoot, sel);
-      if (nested) return nested;
-    }
-  }
-  return null;
+const q = (screen: Screen, sel: string) => screen.shadowRoot!.querySelector<HTMLElement>(sel);
+const nameField = (screen: Screen) =>
+  q(screen, "wt-input[name=printer-detail-name]") as unknown as HTMLElementTagNameMap["wt-input"];
+const editing = (screen: Screen) => nameField(screen) !== null;
+async function openRename(screen: Screen) {
+  q(screen, "[data-test=edit-page-printer-details]")!.click();
+  await screen.updateComplete;
+  await nameField(screen).updateComplete;
 }
-const q = (panel: Panel, sel: string) => deepQuery(panel.shadowRoot!, sel);
-const modal = (panel: Panel) =>
-  q(panel, "[data-test=rename-page-printer-modal]") as unknown as HTMLElementTagNameMap["wt-modal"];
-const nameField = (panel: Panel) =>
-  q(
-    panel,
-    "[data-test=rename-page-printer-modal] wt-input[name=name]",
-  ) as unknown as HTMLElementTagNameMap["wt-input"];
-async function openRename(panel: Panel, id = "pp2") {
-  q(panel, `[data-test=rename-page-printer-${id}]`)!.click();
-  await panel.updateComplete;
-  await modal(panel).updateComplete;
-}
-async function type(panel: Panel, value: string) {
-  const field = nameField(panel);
+async function type(screen: Screen, value: string) {
+  const field = nameField(screen);
   await field.updateComplete;
   await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
-  await panel.updateComplete;
+  await screen.updateComplete;
 }
-async function question(app: PanelLeaveApp) {
+async function question(app: A4DetailsLeaveApp) {
   await app.updateComplete;
   const found = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await found.updateComplete;
   await found.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   return found;
 }
-function cancel(panel: Panel) {
-  q(panel, "[data-test=cancel-rename-page-printer]")!.click();
+function cancel(screen: Screen) {
+  q(screen, "[data-test=cancel-printer-details]")!.click();
 }
 
 it("closing a rename with a typed name asks, keeps the name through Keep, and closes after Discard", async () => {
@@ -108,12 +100,12 @@ it("closing a rename with a typed name asks, keeps the name through Keep, and cl
   q1.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
   await expect.poll(() => q1.open).toBe(false);
   await closeReportsDelivered();
-  expect(modal(panel).open).toBe(true);
+  expect(editing(panel)).toBe(true);
   expect(nameField(panel).value).toBe("Upstairs");
   cancel(panel);
   await question(app);
   q1.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-  await expect.poll(() => modal(panel).open).toBe(false);
+  await expect.poll(() => editing(panel)).toBe(false);
   await closeReportsDelivered();
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
@@ -126,7 +118,7 @@ it("closing an untouched rename does not ask, and a name typed back is no change
   await type(panel, "Back office");
   expect(app.leave.coordinator.isDirty()).toBe(false);
   cancel(panel);
-  await expect.poll(() => modal(panel).open).toBe(false);
+  await expect.poll(() => editing(panel)).toBe(false);
   expect((await question(app)).open).toBe(false);
 });
 
@@ -134,8 +126,8 @@ it("a saved rename closes without asking", async () => {
   const { app, panel } = await mount();
   await openRename(panel);
   await type(panel, "Upstairs");
-  q(panel, "[data-test=confirm-rename-page-printer]")!.click();
-  await expect.poll(() => modal(panel).open).toBe(false);
+  q(panel, "[data-test=save-printer-details]")!.click();
+  await expect.poll(() => editing(panel)).toBe(false);
   expect(app.api.updatePagePrinter).toHaveBeenCalledWith("pp2", { name: "Upstairs" });
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect((await question(app)).open).toBe(false);
@@ -146,20 +138,9 @@ it("a refused rename keeps the name as a change, so closing still asks", async (
   app.api.updatePagePrinter.mockRejectedValueOnce({ code: "page_printer.not_found" });
   await openRename(panel);
   await type(panel, "Upstairs");
-  q(panel, "[data-test=confirm-rename-page-printer]")!.click();
+  q(panel, "[data-test=save-printer-details]")!.click();
   await expect.poll(() => app.api.updatePagePrinter.mock.calls.length).toBe(1);
   await panel.updateComplete;
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-  cancel(panel);
-  expect((await question(app)).open).toBe(true);
-});
-
-it("a name typed before the panel is taken out of the page still counts once it is put back", async () => {
-  const { app, panel } = await mount();
-  await openRename(panel);
-  await type(panel, "Upstairs");
-  await reattachAfterDetachedUpdate(panel);
-  expect(nameField(panel).value).toBe("Upstairs");
   expect(app.leave.coordinator.isDirty()).toBe(true);
   cancel(panel);
   expect((await question(app)).open).toBe(true);
@@ -183,6 +164,6 @@ it("losing hardware.manage drops an open rename from the unsaved-changes check",
   app.requestUpdate();
   await app.updateComplete;
   await panel.updateComplete;
-  expect(modal(panel).open).toBe(false);
+  expect(editing(panel)).toBe(false);
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
