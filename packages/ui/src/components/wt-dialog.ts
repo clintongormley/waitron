@@ -198,7 +198,7 @@ export class WtDialog extends LitElement {
     return false;
   }
 
-  /** This opening's place among all openings: later is higher. */
+  /** This opening's place among all openings: later is higher, 0 until shown. */
   private openedAt = 0;
   /** Where focus last was inside this dialog. The browser has already moved it by
    * `disconnectedCallback`, so it cannot be read on leaving. */
@@ -267,7 +267,8 @@ export class WtDialog extends LitElement {
     if (this.hasUpdated) this.observeBody();
     if (this.hasUpdated) this.syncMessageTabStop();
     if (this.hasUpdated && this.open) {
-      this.returnToOpeningOrder();
+      if (this.dialog.open) this.returnToOpeningOrder();
+      else if (this.openedAt === 0) this.requestUpdate("open", false);
       this.watchContent();
     }
   }
@@ -353,7 +354,7 @@ export class WtDialog extends LitElement {
 
   override updated(changed: Map<string, unknown>): void {
     if (changed.has("open")) {
-      if (this.open && !this.dialog.open) {
+      if (this.open && this.isConnected && !this.dialog.open) {
         const focused = deepActiveElement();
         this.returnTarget = focused === document.body ? null : focused;
         this.openedAt = ++WtDialog.openings;
@@ -366,6 +367,7 @@ export class WtDialog extends LitElement {
         this.unwatchContent();
         WtDialog.untrack(this);
         this.lastFocused = null;
+        this.openedAt = 0;
       }
       if (!this.open && this.dialog.open) {
         this.dialog.close();
@@ -426,7 +428,7 @@ export class WtDialog extends LitElement {
   private onClose(): void {
     // Native reports arrive later; a reopened dialog owns its new opening, and a closed opening
     // reports once even if an earlier opening's native event also reaches this handler.
-    if (this.dialog.open) return;
+    if (this.dialog.open || (this.open && this.openedAt === 0)) return;
     if (this.open && (!this.dismissible || this.beforeClose)) {
       this.dialog.showModal();
       return;

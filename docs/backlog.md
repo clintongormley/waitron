@@ -1486,7 +1486,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   new email against other people's pending emails**
   [Detail](backlog/dashboard.md#setemail-in-packagesidentitysrcstaffts-unlike-updatepersondetails-never-checks-the-new-email-against-other-peoples-pending-emails)
 
-- **Wt dialog lifecycle** (bundle of 8, 2 important, size M). [Detail](backlog/dashboard.md#bundle-wt-dialog-lifecycle)
+- **Wt dialog lifecycle** (remaining: caret keys, sibling save guards, covered-dialog reinsertion, wrappers, modifier picker and coverage leftovers). [Detail](backlog/dashboard.md#bundle-wt-dialog-lifecycle)
 
 - **Should an all-archived product selection show Archive greyed out rather than hidden?**
   Left open by W110c (#1271); A435-1 removes Enable and keeps Archive hidden for that selection.

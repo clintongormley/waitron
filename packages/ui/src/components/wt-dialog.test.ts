@@ -1917,6 +1917,87 @@ test.each([
 
 const nativeOf = (el: HTMLElement) => el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
 
+test.each([
+  ["wt-dialog", false],
+  ["wt-dialog", true],
+  ["wt-modal", false],
+  ["wt-modal", true],
+] as const)(
+  "%s opens on attachment after a detached update (previously opened: %s)",
+  async (tag, previouslyOpened) => {
+    const el = (await mount(`<${tag} heading="Edit"><input name="note" /></${tag}>`)) as WtDialog;
+    if (previouslyOpened) {
+      el.open = true;
+      await el.updateComplete;
+      el.open = false;
+      await el.updateComplete;
+      await closeReportsDelivered();
+    }
+    const putBack = takeOut(el);
+    el.open = true;
+    await expect(el.updateComplete).resolves.toBeDefined();
+    expect(nativeOf(el).open).toBe(false);
+    const target = document.createElement("button");
+    host.append(target);
+    target.focus();
+    putBack();
+    await el.updateComplete;
+    expect(nativeOf(el).matches(":modal")).toBe(true);
+    expect(takesFocus(el.querySelector("input")!)).toBe(true);
+    el.open = false;
+    await el.updateComplete;
+    await closeReportsDelivered();
+    expect(deepActiveElement()).toBe(target);
+  },
+);
+
+test("an opening cancelled off-page stays closed on attachment", async () => {
+  const el = (await mount('<wt-dialog heading="Edit">Draft</wt-dialog>')) as WtDialog;
+  const putBack = takeOut(el);
+  el.open = true;
+  await expect(el.updateComplete).resolves.toBeDefined();
+  el.open = false;
+  await el.updateComplete;
+  putBack();
+  await el.updateComplete;
+  expect(nativeOf(el).open).toBe(false);
+});
+
+test.each([false, true])(
+  "a late close report preserves a newer off-page opening (guarded: %s)",
+  async (guarded) => {
+    const errors: unknown[] = [];
+    const recordError = (event: ErrorEvent) => {
+      errors.push(event.error);
+      event.preventDefault();
+    };
+    window.addEventListener("error", recordError);
+    onTestFinished(() => window.removeEventListener("error", recordError));
+    const el = (await mount(
+      '<wt-dialog heading="Edit"><input name="note" /></wt-dialog>',
+    )) as WtDialog;
+    if (guarded) el.beforeClose = async () => true;
+    const closes = vi.fn();
+    el.addEventListener("wt-close", closes);
+    el.open = true;
+    await el.updateComplete;
+    el.open = false;
+    await el.updateComplete;
+    const putBack = takeOut(el);
+    el.open = true;
+    await el.updateComplete;
+    await closeReportsDelivered();
+    expect(errors).toEqual([]);
+    expect(el.open).toBe(true);
+    expect(closes).not.toHaveBeenCalled();
+    expect(nativeOf(el).open).toBe(false);
+    putBack();
+    await el.updateComplete;
+    expect(nativeOf(el).matches(":modal")).toBe(true);
+    expect(takesFocus(el.querySelector("input")!)).toBe(true);
+  },
+);
+
 function takeOut(el: HTMLElement): () => void {
   const parent = el.parentNode!;
   const next = el.nextSibling;

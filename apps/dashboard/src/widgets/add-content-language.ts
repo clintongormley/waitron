@@ -81,6 +81,7 @@ export class AddContentLanguageDialog extends LitElement {
     return html`<wt-modal
       size="compact"
       .open=${this.open}
+      .dismissible=${!this.busy}
       heading=${t("content_languages.add")}
       @wt-close=${(event: Event) => {
         event.stopPropagation();

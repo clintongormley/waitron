@@ -992,6 +992,7 @@ export class ExtraListForm extends LitElement {
     return html`<wt-modal
       size="wide"
       .open=${this.open}
+      .dismissible=${!this.busy}
       .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       heading=${t(this.value ? "extras.edit" : "extras.create")}
       @keydown=${(event: KeyboardEvent) => {

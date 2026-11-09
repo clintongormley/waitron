@@ -2872,3 +2872,35 @@ it("shows the staff abbreviation on an extras item's price when every translated
   });
   expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").unit).toBe("st");
 });
+
+it("keeps its native dialog open through repeated Escape while busy without a coordinator", async () => {
+  const { el, host } = await mount({ value: addons });
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  await modal.updateComplete;
+  const field = el.shadowRoot!.querySelector("wt-input")!;
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector("input")!;
+  input.focus();
+  expect(field.shadowRoot!.activeElement).toBe(input);
+  const cancelled = vi.fn();
+  host.addEventListener("wt-cancel", cancelled);
+  el.busy = true;
+  await el.updateComplete;
+  await modal.updateComplete;
+  for (let press = 0; press < 2; press++) {
+    await userEvent.keyboard("{Escape}");
+    await closeReportsDelivered();
+    expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  }
+  expect(cancelled).not.toHaveBeenCalled();
+  el.busy = false;
+  await el.updateComplete;
+  await modal.updateComplete;
+  input.focus();
+  const closed = new Promise((resolve) =>
+    modal.addEventListener("wt-close", resolve, { once: true }),
+  );
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  expect(cancelled).toHaveBeenCalledOnce();
+});
