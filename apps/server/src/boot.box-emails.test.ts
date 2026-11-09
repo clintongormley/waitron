@@ -335,7 +335,9 @@ describe("the running server's managers' email check", () => {
       await bootServer(booted, venue, { intent: "prepare", development: false });
       await expect(withTransaction(suite.db, holder.managementMode!)).resolves.toBe("smtp");
       await expect(withTransaction(suite.db, holder.profileMode!)).resolves.toBe("smtp");
-      expect((await withTransaction(suite.db, tx => holder.mail!.resolveDelivery(tx, "notice"))).mode).toBe("smtp");
+      expect(
+        (await withTransaction(suite.db, (tx) => holder.mail!.resolveDelivery(tx, "notice"))).mode,
+      ).toBe("smtp");
     } finally {
       await shutDown(booted);
     }
