@@ -3,28 +3,15 @@ import { tmpdir } from "node:os";
 import { runInNewContext } from "node:vm";
 import { URL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { healthCommand, initialJobs, main, serverRoute } from "./ci-server-health.mjs";
+import { healthCommand, main, serverRoute } from "./ci-server-health.mjs";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
-function workflowEnvironment(classified, gates) {
-  const changes = workflow.match(/^ {2}changes:\n([\s\S]*?)(?=^ {2}\w)/m)[1];
-  const steps = { classify: { outputs: {} }, gates: { outputs: {} } };
-  for (const [, id, body] of changes.matchAll(
-    /^ {6}- id: ([\w-]+)\n([\s\S]*?)(?=^ {6}- |$(?![\s\S]))/gm,
-  )) {
-    if (id === "classify") steps.classify.outputs = classified;
-    if (id === "gates") steps.gates.outputs = gates;
-    if (id === "server-route")
-      return Object.fromEntries(
-        [...body.matchAll(/^ {10}(CLASSIFIED|GATES): \$\{\{ (.+) \}\}$/gm)].map(
-          ([, key, expression]) => [
-            key,
-            runInNewContext(expression, { steps, toJSON: JSON.stringify }),
-          ],
-        ),
-      );
-  }
-  throw new Error("Missing route step");
+function workflowEnvironment(capacity) {
+  const expression = workflow.match(/^ {10}CAPACITY: \$\{\{ (.+) \}\}$/m)?.[1];
+  expect(expression).toBe("vars.DISPOSABLE_TESTS_CAPACITY");
+  return {
+    CAPACITY: runInNewContext(expression, { vars: { DISPOSABLE_TESTS_CAPACITY: capacity } }),
+  };
 }
 
 function fixture(running = 0, queued = 0) {
@@ -51,6 +38,7 @@ function fixture(running = 0, queued = 0) {
     repositoryId: 42,
     runId: 51,
     attempt: 1,
+    capacity: { observedAt: 1, slots: 6, serverRunning: 6, serverWaiting: 0 },
     request: async (path, requestOptions) => {
       calls.push([path, requestOptions]);
       if (path.includes("/workflows/ci.yml/runs?")) return { total_count: 0, workflow_runs: [] };
@@ -73,11 +61,41 @@ function fixture(running = 0, queued = 0) {
 
 describe("GitHub-first routing", () => {
   it.each([
+    [0, 0, 6, 0, 0, "server"],
+    [6, 0, 6, 19, 0, "hosted"],
+    [1, 5, 6, 20, 0, "server"],
+    [6, 12, 6, 0, 1, "hosted"],
+    [0, 3, 6, 20, 43, "server"],
+    [0, 0, 0, 20, 0, "hosted"],
+  ])(
+    "compares server %i + %i over %i with hosted %i + %i",
+    async (serverRunning, serverWaiting, slots, running, waiting, route) => {
+      const f = fixture(running, waiting);
+      f.options.capacity = { observedAt: 1, slots, serverRunning, serverWaiting };
+      expect((await serverRoute(f.options)).route).toBe(route);
+      expect(f.calls.every(([, options]) => !options?.method)).toBe(true);
+    },
+  );
+
+  it("includes its own running changes job when resolving a tie", async () => {
+    const f = fixture(19),
+      request = f.options.request;
+    const own = { ...f.run, id: 51, head_repository: { id: 42 } };
+    f.options.request = async (path, options) => {
+      if (path.includes("/actions/runs?status=in_progress"))
+        return { total_count: 2, workflow_runs: [f.run, own] };
+      if (path.includes("/runs/51/attempts/2/jobs?"))
+        return { total_count: 1, jobs: [{ ...f.jobs[0], id: 99, run_id: 51, name: "changes" }] };
+      return request(path, options);
+    };
+    expect((await serverRoute(f.options)).route).toBe("server");
+  });
+  it.each([
     [0, 0, "hosted"],
     [19, 0, "hosted"],
     [20, 0, "server"],
     [21, 0, "server"],
-    [0, 1, "server"],
+    [0, 1, "hosted"],
     [19, 1, "server"],
   ])("routes %i running and %i queued hosted jobs to %s", async (running, queued, expected) => {
     const f = fixture(running, queued);
@@ -89,61 +107,14 @@ describe("GitHub-first routing", () => {
   });
 
   it.each([
-    [19, 1, "hosted"],
-    [19, 2, "server"],
-    [2, 18, "hosted"],
-    [3, 18, "server"],
-    [0, 21, "server"],
-  ])("fits %i running plus %i selected jobs on %s", async (running, selectedJobs, route) => {
-    const f = fixture(running);
-    f.options.selectedJobs = selectedJobs;
-    expect((await serverRoute(f.options)).route).toBe(route);
-  });
-
-  it.each([
-    [{ code: "false" }, {}, 17, "hosted", 2],
-    [{ code: "false" }, {}, 19, "server", 2],
-    [{ code: "true" }, {}, 16, "hosted", 4],
-    [{ code: "true" }, { server: "true" }, 1, "server", 29],
-    [{ code: "false", deploy: "true" }, {}, 18, "server", 3],
-  ])(
-    "routes the actual initial workflow wave for %j / %j",
-    async (classified, gates, running, route, count) => {
-      const f = fixture(running),
-        directory = mkdtempSync(tmpdir() + "/route-wave-");
-      try {
-        await main(
-          "route",
-          {
-            GITHUB_REPOSITORY: "fixture/waitron",
-            GITHUB_REPOSITORY_ID: "42",
-            GITHUB_RUN_ID: "51",
-            GITHUB_RUN_ATTEMPT: "1",
-            GITHUB_OUTPUT: directory + "/output",
-            GITHUB_STEP_SUMMARY: directory + "/summary",
-            ...workflowEnvironment(classified, gates),
-          },
-          f.options.request,
-        );
-        expect(readFileSync(directory + "/output", "utf8")).toBe(`server_route=${route}\n`);
-        expect(readFileSync(directory + "/summary", "utf8")).toContain(
-          `${count} selected initial jobs`,
-        );
-      } finally {
-        rmSync(directory, { recursive: true, force: true });
-      }
-    },
-  );
-
-  it.each([{}, null, [], { deploy: "true" }])("refuses selection without code: %j", (outputs) => {
-    expect(() => initialJobs(outputs)).toThrow(/selection/i);
-  });
-
-  it.each(["CLASSIFIED", "GATES"])("uses server when %s cannot be read", async (key) => {
-    const f = fixture(),
-      directory = mkdtempSync(tmpdir() + "/bad-route-selection-");
-    const env = workflowEnvironment({ code: "true" }, {});
-    env[key] = "not JSON";
+    "not JSON",
+    "{}",
+    "null",
+    JSON.stringify({ observedAt: 1, slots: -1, serverRunning: 0, serverWaiting: 0 }),
+    JSON.stringify({ observedAt: 1, slots: 6, serverRunning: 1, serverWaiting: 5 }),
+  ])("reads the workflow capacity variable: %s", async (capacity) => {
+    const f = fixture(20),
+      directory = mkdtempSync(tmpdir() + "/route-capacity-");
     try {
       await main(
         "route",
@@ -154,39 +125,17 @@ describe("GitHub-first routing", () => {
           GITHUB_RUN_ATTEMPT: "1",
           GITHUB_OUTPUT: directory + "/output",
           GITHUB_STEP_SUMMARY: directory + "/summary",
-          ...env,
+          ...workflowEnvironment(capacity),
         },
         f.options.request,
       );
       expect(readFileSync(directory + "/output", "utf8")).toBe("server_route=server\n");
-      expect(readFileSync(directory + "/summary", "utf8")).toContain("could not be verified");
+      expect(readFileSync(directory + "/summary", "utf8")).toContain(
+        capacity.startsWith('{"observedAt":1,"slots":6') ? "snapshot age" : "could not be verified",
+      );
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
-  });
-
-  it.each([
-    ["list dependency", "    needs: changes", "    needs: [changes]"],
-    [
-      "success condition",
-      "if: (needs.changes.outputs.code",
-      "if: needs.changes.result == 'success' && (needs.changes.outputs.code",
-    ],
-  ])("counts a setup job using a %s", (_, before, after) => {
-    const changed = workflow.replace(
-      /( {2}test-setup:\n)([\s\S]*?)(?=^ {2}[\w-]+:)/m,
-      (_, start, body) => start + body.replace(before, after),
-    );
-    expect(initialJobs({ code: "true", setup: "true" }, changed)).toBe(5);
-  });
-
-  it("refuses an unsupported additional matrix dimension", () => {
-    const changed = workflow.replace(
-      /( {2}test-till:\n[\s\S]*? {6}matrix:\n)/m,
-      "$1        flavour: [a, b]\n",
-    );
-    expect(initialJobs({ code: "true", till: "true" })).toBe(11);
-    expect(() => initialJobs({ code: "true", till: "true" }, changed)).toThrow(/matrix/i);
   });
 
   it("counts all hosted jobs when GitHub refuses job pages over 30 records", async () => {
@@ -227,7 +176,7 @@ describe("GitHub-first routing", () => {
             workflow_runs: path.includes("status=queued") ? [f.run] : [],
           }
         : request(path, options);
-    expect((await serverRoute(f.options)).route).toBe("server");
+    expect((await serverRoute(f.options)).route).toBe("hosted");
   });
 
   it("counts a run only once when it moves between active run lists", async () => {
@@ -279,15 +228,16 @@ describe("GitHub-first routing", () => {
         runner_id: 1,
         labels: ["ubuntu-latest"],
       })),
-      {
-        id: 101,
+      ...Array.from({ length: 20 }, (_, index) => ({
+        ...f.jobs[0],
+        id: 101 + index,
         run_id: 50,
         run_attempt: 2,
         head_sha: f.run.head_sha,
         status: "queued",
         runner_id: 0,
         labels: ["ubuntu-latest"],
-      },
+      })),
     );
     expect((await serverRoute(f.options)).route).toBe("server");
   });

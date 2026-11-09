@@ -76,88 +76,103 @@ function fixture() {
     job,
     calls,
     request,
-    options: { request, repository: "fixture/waitron", repositoryId: 42, now },
+    options: {
+      request,
+      repository: "fixture/waitron",
+      repositoryId: 42,
+      now,
+      capacity: { observedAt: now, slots: 6, serverRunning: 6, serverWaiting: 0 },
+    },
   };
 }
 
+function replyJobs(f, reply, after = 0) {
+  const request = f.options.request;
+  let reads = 0;
+  f.options.request = (path, options) =>
+    path.includes("/runs/12/attempts/1/jobs?") && ++reads > after
+      ? typeof reply === "function"
+        ? reply(path)
+        : { total_count: reply.length, jobs: reply }
+      : request(path, options);
+}
+function sibling(f, fields, after = 0) {
+  replyJobs(f, [f.job, { ...f.job, id: 124, ...fields }], after);
+}
+
 describe("server health recovery", () => {
+  it.each([
+    ["changes", "success", true],
+    ["changes", "failure", false],
+    ["bundle-smoke", "success", false],
+  ])("completed %s with %s allows a move: %s", async (name, conclusion, move) => {
+    const f = fixture();
+    sibling(f, { name, conclusion, status: "completed", runner_id: 7 });
+    expect((await health.recoverServer(f.options)).retried).toEqual(move ? [12] : []);
+    expect(f.calls.some(([, options]) => options.method)).toBe(move);
+  });
+  it("never moves a later attempt again", async () => {
+    const f = fixture();
+    f.run.run_attempt = 2;
+    f.job.run_attempt = 2;
+    f.job.labels = ["self-hosted", "dt-42-12-2-lint-1"];
+    const request = f.options.request;
+    f.options.request = (path, options) =>
+      request(path.replace("/attempts/2/", "/attempts/1/"), options);
+    expect((await health.recoverServer(f.options)).retried).toEqual([]);
+    expect(f.calls.some(([, options]) => options.method)).toBe(false);
+  });
   it.each(["server", "hosted", "finished"])(
     "checks a %s sibling in the final inventory",
     async (pool) => {
-      const f = fixture(),
-        request = f.request;
-      let reads = 0;
-      f.options.request = async (path, options) => {
-        if (path.includes("/runs/12/attempts/1/jobs?") && ++reads >= 3)
-          return {
-            total_count: 2,
-            jobs: [
-              f.job,
-              {
-                ...f.job,
-                id: 124,
-                labels: pool === "hosted" ? ["ubuntu-latest"] : f.job.labels,
-                status: pool === "finished" ? "completed" : "in_progress",
-                runner_id: pool === "hosted" ? 0 : 7,
-                completed_at: date(10),
-              },
-            ],
-          };
-        return request(path, options);
-      };
-      expect((await health.recoverServer(f.options)).retried).toEqual(
-        pool === "finished" ? [12] : [],
+      const f = fixture();
+      sibling(
+        f,
+        {
+          labels: pool === "hosted" ? ["ubuntu-latest"] : f.job.labels,
+          status: pool === "finished" ? "completed" : "in_progress",
+          runner_id: pool === "hosted" ? 0 : 7,
+          completed_at: date(10),
+        },
+        2,
       );
+      expect((await health.recoverServer(f.options)).retried).toEqual([]);
     },
   );
-
   it.each(["run_id", "run_attempt", "head_sha"])(
     "rejects a foreign %s at the final read",
     async (field) => {
-      const f = fixture(),
-        request = f.request;
-      let reads = 0;
-      f.options.request = async (path, options) =>
-        path.includes("/runs/12/attempts/1/jobs?") && ++reads >= 3
-          ? {
-              total_count: 1,
-              jobs: [{ ...f.job, [field]: field === "head_sha" ? "b".repeat(40) : 99 }],
-            }
-          : request(path, options);
+      const f = fixture();
+      replyJobs(f, [{ ...f.job, [field]: field === "head_sha" ? "b".repeat(40) : 99 }], 2);
       await expect(health.recoverServer(f.options)).rejects.toThrow(/Foreign.*inventory/);
       expect(f.calls.some(([, options]) => options.method)).toBe(false);
     },
   );
-
   it.each([false, true])(
     "requires all final inventory pages when the last page is empty: %s",
     async (empty) => {
-      const f = fixture(),
-        request = f.request;
-      let reads = 0;
+      const f = fixture();
       const jobs = Array.from({ length: 31 }, (_, i) => ({
         ...f.job,
         id: 1000 + i,
         labels: ["ubuntu-latest"],
         status: i === 30 ? "in_progress" : "completed",
+        conclusion: i === 30 ? null : "skipped",
         runner_id: i === 30 ? 7 : 0,
       }));
-      f.options.request = async (path, options) => {
-        if (path.includes("/runs/12/attempts/1/jobs?") && ++reads >= 3) {
-          const page = Number(new URL("https://fixture.test" + path).searchParams.get("page"));
-          return {
-            total_count: 31,
-            jobs: page === 1 ? jobs.slice(0, 30) : empty ? [] : jobs.slice(30),
-          };
-        }
-        return request(path, options);
-      };
+      replyJobs(
+        f,
+        (path) => ({
+          total_count: 31,
+          jobs: path.endsWith("page=1") ? jobs.slice(0, 30) : empty ? [] : jobs.slice(30),
+        }),
+        2,
+      );
       if (empty) await expect(health.recoverServer(f.options)).rejects.toThrow(/Incomplete.*empty/);
       else expect((await health.recoverServer(f.options)).retried).toEqual([]);
       expect(f.calls.some(([, options]) => options.method)).toBe(false);
     },
   );
-
   it("keeps an unstarted job's creation time when selecting a cancelled retry", async () => {
     const f = fixture();
     Object.assign(f.run, { status: "completed", conclusion: "cancelled" });
@@ -172,43 +187,24 @@ describe("server health recovery", () => {
       "hosted",
     );
   });
-
   it("reports the run kept for a hosted sibling", async () => {
     const f = fixture(),
-      request = f.request,
       reports = [];
-    f.options.request = async (path, options) =>
-      path.includes("/runs/12/attempts/1/jobs?")
-        ? {
-            total_count: 2,
-            jobs: [
-              f.job,
-              { ...f.job, id: 124, labels: ["ubuntu-latest"], status: "in_progress", runner_id: 7 },
-            ],
-          }
-        : request(path, options);
+    sibling(f, { labels: ["ubuntu-latest"], status: "in_progress", runner_id: 7 });
     await health.healthCommand("recover", f.options, {
       report: (message) => reports.push(message),
     });
-    expect(reports).toEqual(["Preserved runs 12 because a sibling job is running or assigned."]);
+    expect(reports).toEqual(["Preserved runs 12 because work has started or completed."]);
     expect(f.calls.some(([, options]) => options.method)).toBe(false);
   });
-
   it("recovers a younger drained run while the oldest has a hosted sibling", async () => {
-    const f = fixture(),
-      request = f.request;
-    const younger = { ...f.run, id: 13, created_at: date(5.5), run_started_at: date(5.5) };
+    const f = fixture();
+    sibling(f, { labels: ["ubuntu-latest"], status: "in_progress", runner_id: 7 });
+    const request = f.options.request,
+      younger = { ...f.run, id: 13, created_at: date(5.5), run_started_at: date(5.5) };
     f.options.request = async (path, options) => {
       if (path.includes("/workflows/ci.yml/runs?status=in_progress"))
         return { total_count: 2, workflow_runs: [f.run, younger] };
-      if (path.includes("/runs/12/attempts/1/jobs?"))
-        return {
-          total_count: 2,
-          jobs: [
-            f.job,
-            { ...f.job, id: 124, labels: ["ubuntu-latest"], status: "in_progress", runner_id: 7 },
-          ],
-        };
       if (path.includes("/runs/13/attempts/1/jobs?"))
         return {
           total_count: 1,
@@ -225,71 +221,31 @@ describe("server health recovery", () => {
     };
     expect((await health.recoverServer(f.options)).retried).toEqual([13]);
   });
-
   it.each(["in_progress", "queued"])(
     "preserves a hosted sibling with an assigned runner while it is %s",
     async (status) => {
-      const f = fixture(),
-        request = f.request;
-      const sibling = {
-        ...f.job,
-        id: 124,
-        name: "bundle-smoke",
-        labels: ["ubuntu-latest"],
-        status,
-        runner_id: 7,
-      };
-      f.options.request = async (path, options) =>
-        path.includes("/runs/12/attempts/1/jobs?")
-          ? { total_count: 2, jobs: [f.job, sibling] }
-          : request(path, options);
+      const f = fixture();
+      sibling(f, { name: "bundle-smoke", labels: ["ubuntu-latest"], status, runner_id: 7 });
       expect((await health.recoverServer(f.options)).retried).toEqual([]);
       expect(f.calls.some(([, options]) => options.method)).toBe(false);
     },
   );
-
   it.each(["server-queue-watchdog", "server-queue-watchdog-copy"])(
     "exempts only the exact recovery control job: %s",
     async (name) => {
-      const f = fixture(),
-        request = f.request;
-      const watchdog = {
-        ...f.job,
-        id: 124,
-        name,
-        labels: ["ubuntu-latest"],
-        status: "in_progress",
-        runner_id: 7,
-      };
-      f.options.request = async (path, options) =>
-        path.includes("/runs/12/attempts/1/jobs?")
-          ? { total_count: 2, jobs: [f.job, watchdog] }
-          : request(path, options);
+      const f = fixture();
+      sibling(f, { name, labels: ["ubuntu-latest"], status: "in_progress", runner_id: 7 });
       expect((await health.recoverServer(f.options)).retried).toEqual(
         name === "server-queue-watchdog" ? [12] : [],
       );
     },
   );
-
   it("preserves a hosted assignment appearing in the final cancellation inventory", async () => {
-    const f = fixture(),
-      request = f.request;
-    let reads = 0;
-    f.options.request = async (path, options) => {
-      if (path.includes("/runs/12/attempts/1/jobs?") && ++reads >= 3)
-        return {
-          total_count: 2,
-          jobs: [
-            f.job,
-            { ...f.job, id: 124, labels: ["ubuntu-latest"], status: "queued", runner_id: 9 },
-          ],
-        };
-      return request(path, options);
-    };
+    const f = fixture();
+    sibling(f, { labels: ["ubuntu-latest"], status: "queued", runner_id: 9 }, 2);
     expect((await health.recoverServer(f.options)).retried).toEqual([]);
     expect(f.calls.some(([, options]) => options.method)).toBe(false);
   });
-
   it.each([date(1), undefined])(
     "does not date an unstarted job from an old workflow when created_at is %s",
     async (created_at) => {
@@ -299,13 +255,11 @@ describe("server health recovery", () => {
       expect(f.calls.some(([, options]) => options.method)).toBe(false);
     },
   );
-
   it("recovers an unstarted job whose own creation was more than five minutes ago", async () => {
     const f = fixture();
     Object.assign(f.job, { started_at: null, created_at: date(6) });
     expect((await health.recoverServer(f.options)).retried).toEqual([12]);
   });
-
   it.each(["started_at", "completed_at"])(
     "preserves queued work after recent server %s activity",
     async (field) => {

@@ -301,8 +301,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         env:
-          CLASSIFIED: ${{ toJSON(steps.classify.outputs) }}
-          GATES: ${{ toJSON(steps.gates.outputs) }}
+          CAPACITY: ${{ vars.DISPOSABLE_TESTS_CAPACITY }}
           GH_TOKEN: ${{ github.token }}
           LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
         run: node scripts/ci-server-health.mjs route
