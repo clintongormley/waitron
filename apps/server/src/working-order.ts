@@ -7175,14 +7175,21 @@ function rowPortions(
 ): EditableParent[] {
   const refused = () => new AppError("management.request_invalid", { field: "portionLineNos" });
   if (!Array.isArray(lineNos)) throw refused();
+  if (lineNos.length === 0) return [];
+  const byLineNo = new Map<number, EditableParent>();
+  for (const candidate of order.parents)
+    if (!byLineNo.has(candidate.lineNo)) byLineNo.set(candidate.lineNo, candidate);
+  let firstKey: string | undefined;
   const seen = new Set<number>([first.lineNo]);
   return lineNos.map((lineNo: unknown) => {
     if (typeof lineNo !== "number" || !Number.isInteger(lineNo) || seen.has(lineNo)) {
       throw refused();
     }
     seen.add(lineNo);
-    const dish = order.parents.find((candidate) => candidate.lineNo === lineNo);
-    if (dish === undefined || sameDishKey(dish) !== sameDishKey(first)) throw refused();
+    const dish = byLineNo.get(lineNo);
+    if (dish === undefined || sameDishKey(dish) !== (firstKey ??= sameDishKey(first))) {
+      throw refused();
+    }
     return dish;
   });
 }
