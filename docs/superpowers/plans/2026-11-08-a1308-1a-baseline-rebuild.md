@@ -23,6 +23,17 @@ second migration in any set; it replaces `scripts/migrations-match-schema.test.t
 "rules §n", including §8's "any schema change, A1308 or not, is made with the rebuild command");
 [build order](2026-11-08-a1308-build-order.md), batch 1, slice 1a.
 
+**Changed on `main` since (checked 2026-11-09 against `48d527dbc8`):** #2594 (`5f11ab6405`) added
+core's first generated migration, `packages/db/drizzle/0001_print_job_kind_index.sql` (one
+`CREATE INDEX print_jobs_printer_kind_idx ON print_jobs (printer_id, kind)`), from one `index(...)`
+line in `packages/db/src/schema/print-jobs.ts`; the same range changed two comments in
+`packages/db/src/schema/orders.ts` and `working-order-counters.ts`. Its `0001_snapshot.json` has
+`prevId` equal to `0000_snapshot.json`'s `id` and differs from it only by that index (`jq -S .tables`
+diff, run), so it passes this plan's `--fold-generated` test, and core folds it exactly as
+workforce-es folds its `0001`. Core's SQL hash in the Finish line was measured before it and is
+re-measured by the builder (stop point 4); the protection-list prediction does not change, because
+the base list and the slice's both hold the index.
+
 **Base:** worktree HEAD `a086eedfb7` (`main` `d908a5b8d4` plus two docs commits). `main` at
 `15e6f3de87` (2026-11-08) has no change under `packages/*/drizzle`, `packages/*/src/schema`,
 `packages/migrations` or the epoch file since `d908a5b8d4` (`git diff --stat`, run). Every
@@ -88,7 +99,8 @@ text and column order.
    pins only what stays steady across a rebuild, with controls.
 6. The one-off rebuild of all eight sets; `workforce-es`'s generated `0001_continuous_paid_breaks`
    (landed 2026-11-08 by #2597: four `ALTER TABLE … ADD` statements) folds into its starting
-   migration through `--fold-generated`.
+   migration through `--fold-generated`, and so does core's generated `0001_print_job_kind_index`
+   (landed 2026-11-08 by #2594: one `CREATE INDEX`).
 7. The two-branch rehearsal (rules §2.4), run once by hand and pasted into the pull request.
 8. The method in `docs/developers/conventions-data.md`, the testing guide's A760 tools section,
    `packages/db/README.md` and one CLAUDE.md §3 entry, including that work beside A1308 changes a
@@ -137,7 +149,8 @@ text and column order.
   and `scripts/migration-baseline-epoch.json`; `packages/fiscal-none/drizzle/` is rewritten
   byte-identical.
 - Deleted by the command: `packages/workforce-es/drizzle/0001_continuous_paid_breaks.sql`,
-  `packages/workforce-es/drizzle/meta/0001_snapshot.json`
+  `packages/workforce-es/drizzle/meta/0001_snapshot.json`, `packages/db/drizzle/0001_print_job_kind_index.sql`,
+  `packages/db/drizzle/meta/0001_snapshot.json`
 - Modify docs: `docs/developers/conventions-data.md` (:448, :1657, :3650-3660),
   `docs/developers/testing-guide.md` (:3364-3395), `CLAUDE.md:607-611`,
   `docs/backlog/architecture.md:1053-1054`
@@ -178,7 +191,7 @@ Each line is a check someone can run from the repository root after the pull req
 
    | Set | SHA-256 |
    | --- | --- |
-   | core | `16b618499ef6af160582d4477340828c3f98b5bb082df20a916d5aedaec998c2` |
+   | core | measured before #2594's index; the builder records the rebuilt hash in the pull request, and the reviewer re-runs the rebuild on the base and compares |
    | node | `b06a23f66d22d3ee373aef6bc5afd58126dfb5e66214e58e5f7cab450a2fc91f` |
    | workforce | `1e3e95d1d248ad0b8b2d616c1815867bd6301d0a3d3d69b56d5f41a82171afd2` |
    | workforce-es | `bf21f3fa8bef6380d8e0b7d881fe29b7bd1321f1bc2c70ce894d442659a7235d` |
@@ -187,7 +200,7 @@ Each line is a check someone can run from the repository root after the pull req
    | fiscal-verifactu | `2f806e48a4944b9563c1e978267488b0852c1129fbc159be2f71214012bcbae2` |
 
 3. `grep -c '^CREATE TRIGGER' packages/db/triggers/core.sql` prints `42`;
-   `ls packages/workforce-es/drizzle` prints `0000_baseline.sql meta`; no `package.json` under
+   `ls packages/workforce-es/drizzle` and `ls packages/db/drizzle` each print `0000_baseline.sql meta`; no `package.json` under
    `packages/` has a `db:generate:custom` script.
 4. `pnpm exec vitest run scripts/starting-migrations.test.ts scripts/migration-upgrade.test.ts scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/journal-monotonic.test.ts scripts/two-file-foreign-keys.test.ts scripts/classification-complete.test.ts scripts/module-graph-honesty.test.ts`
    passes (on the scratch tree with every set rebuilt, these nine files less the new guard, plus the
@@ -261,13 +274,17 @@ clause, it printed both `changed` lines and `NOT A REORDERING`.
 0. The owner has not ruled on landing (header). Tasks 1–4 may be built; Task 5's rebuild commit
    waits for the ruling.
 1. Before Task 1: `git diff --stat a086eedfb7 HEAD -- 'packages/*/drizzle' 'packages/*/src/schema' packages/migrations scripts/migration-baseline-epoch.json`
-   prints anything. The prediction and the hashes above are for `a086eedfb7`'s schema; ask the
-   watcher for a re-derived prediction.
+   prints anything beyond #2594's files (`packages/db/drizzle/0001_print_job_kind_index.sql`,
+   `packages/db/drizzle/meta/0001_snapshot.json`, `packages/db/drizzle/meta/_journal.json`, and in
+   `packages/db/src/schema` the `print_jobs_printer_kind_idx` line and the two comment edits named
+   under "Changed on `main` since"). The prediction and the hashes above are for `a086eedfb7`'s
+   schema; ask the watcher for a re-derived prediction.
 2. Any set's `node_modules/drizzle-kit/package.json` version is not `0.31.11`.
 3. Task 3's extracted file does not start with `CREATE TRIGGER tenders_reject_post_settlement`, does
    not hold 42 `CREATE TRIGGER` lines, or does not reproduce today's tail byte for byte.
 4. A rebuilt set's SQL hash differs from the Finish line table, or `--fold-generated` refuses
-   workforce-es's `0001`.
+   workforce-es's or core's `0001`. Core's hash is the exception: it was measured before #2594, so
+   the builder records it instead, after checking that a second rebuild prints `unchanged core`.
 5. A test outside this plan's lists fails after Task 5 for a reason tied to column order (for
    example a test that reads a `SELECT *` row's key order, or a digest over exported rows). Report
    it; do not change its assertion (rules §4).
@@ -599,21 +616,22 @@ conflicts on it. The SQL's integrity is pinned by the epoch and `verifyEpoch`.
 point 0.
 
 - [ ] **Step 1: Base protection list** (rules §3): in a throwaway worktree of the base
-  (`git worktree add --detach <dir> a086eedfb7 && pnpm install --frozen-lockfile` there),
+  (`git worktree add --detach <dir> <the branch's base on main, at or after 5f11ab6405> && pnpm install --frozen-lockfile` there, so the base list already holds #2594's index),
   `cd apps/server && pnpm protection-list list --out <empty absolute dir A>`.
 - [ ] **Step 2: Rebuild**, one set at a time, stopping at the first failure:
 
 ```bash
 bash -eu -c '
-for set in core node workforce payments bookings fiscal-verifactu fiscal-none; do
+for set in node workforce payments bookings fiscal-verifactu fiscal-none; do
   pnpm --filter @waitron/server migration-baseline rebuild --set "$set"
 done
+pnpm --filter @waitron/server migration-baseline rebuild --set core --fold-generated 0001_print_job_kind_index
 pnpm --filter @waitron/server migration-baseline rebuild --set workforce-es --fold-generated 0001_continuous_paid_breaks
 '; echo "status $?"
 ```
 
-  Expected: `rebuilt` for the six populated sets in the loop, `unchanged fiscal-none`, `rebuilt
-  workforce-es`, then `status 0`. Any other status is a failure to report, not to retry.
+  Expected: `rebuilt` for the five populated sets in the loop, `unchanged fiscal-none`, `rebuilt
+  core`, `rebuilt workforce-es`, then `status 0`. Any other status is a failure to report, not to retry.
 - [ ] **Step 3: Check nothing more would change:**
 
 ```bash
