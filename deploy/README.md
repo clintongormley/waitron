@@ -410,12 +410,12 @@ the box had just been installed. Use it to get a demo or test box back to a know
 recovery tool for a box holding real trading data — see the refusal below.
 
 ```bash
-sudo bash waitron.sh reset          # wipe the database and settings, keep the certificate, the start-again records, and the files a Move set aside
+sudo bash waitron.sh reset          # wipe the database and settings, keep the certificate and the Start-again records
 sudo bash waitron.sh reset --all    # also wipe those, so a new certificate is minted on next boot
 ```
 
 Both forms stop the optional staff tunnel and remove its control and key volumes. A reset box
-re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue databases and wizard settings, logs, local backups, the captured mail inbox and print-agent settings. Plain `reset` keeps four things inside the box's
+re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue databases and wizard settings, logs, local backups, the captured mail inbox and print-agent settings. Plain `reset` keeps two folders inside the box's
 `state` volume:
 
 - `tls/`, which holds the certificate authority the box's devices already trust and the box's own
@@ -424,18 +424,13 @@ re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue da
   `venue-ca.crt` and `venue-ca.key`, the other server's certificate authority that joining it as a
   spare left on this box, together with their working copies `venue-ca.crt.tmp` and
   `venue-ca.key.tmp`, which a join stopped while writing them can leave.
-- `first-setup-start-again-confirmations/`, one small record for each Start again confirmed while
-  the venue database was missing or partly unreadable:
-  whose setup it was, that it was confirmed on the repair page with nobody signed in, when, and the
-  summary the page confirmed.
-- `first-setup-start-again-choices/`, one small record for each Keep or Move choice someone made
-  at Start again.
-- `first-setup-set-aside/`, the files a Move set aside rather than deleted. Each Move's folder also
-  holds `secrets.env`, a copy of the box's key ring file as it was at the Move, because the moved
+- `records/`, the record of each Keep or Move choice made at Start again (`records/choices/`)
+  and the files a Move set aside (`records/set-aside/`). Each Move's folder also holds
+  `secrets.env`, a copy of the box's key ring file as it was at the Move, because the moved
   databases' sealed rows open only with it. Anyone who copies this folder off the box copies that
   key ring too.
 
-`reset --all` removes the whole `state` volume, those four included, so the box mints a brand-new
+`reset --all` removes the whole `state` volume, both folders included, so the box mints a brand-new
 certificate authority on its next boot and every device has to go through the trust step again. That includes any device with a dashboard or till tab left open across the reset:
 take it through the trust step, then reopen the dashboard or till. Neither form touches `.env`, so if
 a branch install pinned an image there, the box comes back on that same image. Only the data in the

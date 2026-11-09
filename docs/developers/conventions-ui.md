@@ -1301,18 +1301,18 @@ every entry under it by the same fields (`surveyStartAgainLeftovers`,
 change that keeps a file's inode, size and time is not seen.
 
 Each choice writes one record, never replaced and never deleted by the box:
-`<state>/first-setup-start-again-choices/<ms>-<attemptId>.json`, holding the choice, the
+`<state>/records/choices/<ms>-<attemptId>.json`, holding the choice, the
 administrator the setup record names, the listed units and digest, and for a Move its set-aside
 folders (`writeStartAgainChoice`,
 `packages/provisioning/src/first-setup-start-again-choice.ts`). A Move puts the files under
-`<state>/first-setup-set-aside/<stem>/state/` and `…/venue/` when the two roots report one
+`<state>/records/set-aside/<stem>/state/` and `…/venue/` when the two roots report one
 filesystem, otherwise the venue files under `<venue>/first-setup-set-aside/<stem>/`
 (`setAsideDestinations`, `packages/provisioning/src/first-setup-start-again-set-aside.ts`). Before
 the record it makes those folders and renames an empty probe folder from each source root into
 them; a probe that fails with `EXDEV` removes the empty folders it made and refuses
 `setup.start_again_set_aside_unavailable`, and Keep stays available. Then it writes the record,
 copies the box's key ring file `<state>/secrets.env`, when there is one, to
-`<state>/first-setup-set-aside/<stem>/secrets.env` (`keepRingCopy`, the same file; the moved
+`<state>/records/set-aside/<stem>/secrets.env` (`keepRingCopy`, the same file; the moved
 databases' sealed rows open only with that ring, and a later join replaces the box's own), renames
 the pieces (a database's main file last, never over anything) and runs
 A1042's finisher. Any failure after the record is written refuses
