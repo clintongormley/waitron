@@ -252,6 +252,7 @@ describe("a per-module rule on settings", () => {
         begin select raise(abort, 'probe.too_big'); end`),
         );
       }
+      return Promise.resolve();
     },
   });
   const definition = (module = "probe") =>
