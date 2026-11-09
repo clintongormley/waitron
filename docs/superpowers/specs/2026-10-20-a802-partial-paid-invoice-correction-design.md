@@ -145,6 +145,8 @@ original rate; never apply the first line's rate to the whole amount. For exampl
 over €11.00 at 10% and €12.10 at 21% gives €0.95 and €1.05 gross respectively. Its proposed base/VAT
 split is €0.86/€0.09 and €0.87/€0.18. The credit totals −€2.00, with two rate groups.
 
+**2026-11-09:** For the approved cash Amount foundation and its cumulative base/VAT bounds, use the [cash-first extraction plan](../plans/2026-11-09-a802-cash-first-extraction.md).
+
 Within each rate, derive the base from cumulative credited gross divided by `1 + rate/100`,
 rounded to cents with shared exact decimal arithmetic. The new base is that cumulative target
 less base already credited. VAT is gross less base. When a correction exhausts a rate group,

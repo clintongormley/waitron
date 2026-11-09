@@ -125,13 +125,9 @@ describe("correction amount allocation", () => {
 
   it("keeps four one-cent lines correctable as cumulative VAT rounding moves between them", () => {
     const history: CorrectionAmountHistory = {
-      lines: ["a", "b", "c", "d"].map((id, index) => ({
-        id,
-        lineNo: index + 1,
-        rate: d("21"),
-        gross: d("0.01"),
-        base: d(index === 3 ? "0.00" : "0.01"),
-      })),
+      lines: ["a", "b", "c", "d"].map((id, index) =>
+        line(id, index + 1, "21", "0.01", index === 3 ? "0.00" : "0.01"),
+      ),
       vatBreakdown: [{ rate: d("21"), base: d("0.03"), tax: d("0.01") }],
       consumed: [],
     };
@@ -201,8 +197,8 @@ describe("correction amount allocation", () => {
     );
   });
 
-  it.each(["0", "-1", "0.001", "1.001", "1000000000000"])(
-    "refuses a nonpositive, fractional-cent or oversized request %s",
+  it.each(["0", "-1", "0.001", "1.001", "1000000000000", "11.01"])(
+    "refuses an invalid or unavailable amount %s",
     (gross) => {
       expect(() => allocateCorrectionAmounts(oneRate(), { gross: d(gross) })).toThrowError(
         expect.objectContaining({ code: "sale.correction_amount_invalid" }),
@@ -214,31 +210,16 @@ describe("correction amount allocation", () => {
     expect(allocateCorrectionAmounts(oneRate(), { gross: d("2.0000") }).gross).toBe("2.00");
   });
 
-  it("refuses value beyond the selected line's remaining gross", () => {
-    expect(() => allocateCorrectionAmounts(oneRate(), { gross: d("11.01") })).toThrowError(
-      expect.objectContaining({ code: "sale.correction_amount_invalid" }),
-    );
-  });
-
   it.each([
     [[], "empty"],
     [["missing"], "missing"],
     [["dish", "dish"], "duplicate"],
+    [undefined, "required"],
   ] as const)("refuses an invalid explicit scope %j", (lineIds, reason) => {
-    expect(() => allocateCorrectionAmounts(oneRate(), { gross: d("1"), lineIds })).toThrowError(
+    expect(() => allocateCorrectionAmounts(mixedRates(), { gross: d("1"), lineIds })).toThrowError(
       expect.objectContaining({
         code: "sale.correction_scope_invalid",
         params: { reason },
-      }),
-    );
-  });
-
-  it("requires a visible explicit scope when more than one rate remains", () => {
-    const history = mixedRates();
-    expect(() => allocateCorrectionAmounts(history, { gross: d("2") })).toThrowError(
-      expect.objectContaining({
-        code: "sale.correction_scope_invalid",
-        params: { reason: "required" },
       }),
     );
   });
@@ -477,13 +458,9 @@ function smallBill(
 ): CorrectionAmountHistory {
   const totalBase = multiplyDecimal(d(base), d(String(count)));
   return {
-    lines: Array.from({ length: count }, (_, index) => ({
-      id: count === 1 ? "dish" : String(index),
-      lineNo: index + 1,
-      rate: d(rate),
-      gross: d(gross),
-      base: d(base),
-    })),
+    lines: Array.from({ length: count }, (_, index) =>
+      line(count === 1 ? "dish" : String(index), index + 1, rate, gross, base),
+    ),
     vatBreakdown: [
       {
         rate: d(rate),

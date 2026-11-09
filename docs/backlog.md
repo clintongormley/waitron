@@ -347,6 +347,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#vat-at-line-add-m7v-a68)
 
 - **A802 — correct part of a paid invoice: build the approved design.**
+  **2026-11-09:** The first arithmetic foundation and cumulative base/VAT bounds follow the [approved cash-first extraction plan](superpowers/plans/2026-11-09-a802-cash-first-extraction.md); staff correction preview/acceptance remains a later slice.
+
   Follow the [build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md), including its separate protected-writer approval
   and exact-gross qualification. The fiscal PR waits for the owner to land it.
   After A760, rebase onto the squashed base and regenerate its migrations there; its tables go in core's set (`packages/db`). Before landing, show its new tables in `apps/server`'s `pnpm protection-list`: a table in a retired migration folder creates nothing.

@@ -211,6 +211,8 @@ Define `CorrectionProviderCapabilities` as `{observedAt:string; entries:readonly
 - [ ] Record refreshed base, H2 answer and actual dependency intersections. Read TDD skill; retain the complete old fiscal-test assertion inventory. Run the protected pair unedited and existing core correction suite using the commands under validation below.
 - [ ] Record baseline results and preserve existing fixtures. Do not introduce the exact-gross RED fixture until Task 3, so Task 2 can end with a coherent passing commit.
 
+**2026-11-09:** Task 2’s first cash Amount foundation and cumulative base/VAT bounds follow the [approved cash-first extraction plan](2026-11-09-a802-cash-first-extraction.md).
+
 ### Task 2: Calculate frozen entitlements and cumulative deltas
 
 **Files:** Create `packages/core/src/correction-allocation.ts`, `correction-allocation.test.ts`; export domain types and pure allocator from `packages/core/src/index.ts`. The persistent server history reader belongs to Task 5 after its schema exists.

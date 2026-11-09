@@ -98,30 +98,18 @@ export function allocateCorrectionAmounts(
     const priorGross = sumDecimals(prior.map((allocation) => allocation.gross));
     const priorBase = sumDecimals(prior.map((allocation) => allocation.base));
     const cumulativeGross = addDecimal(priorGross, gross);
-    let cumulativeBase =
-      compareDecimal(cumulativeGross, addDecimal(original.base, original.tax)) === 0
-        ? original.base
-        : divideDecimal(
-            cumulativeGross,
-            addDecimal(decimal("1"), divideDecimal(rate, decimal("100"), 4)),
-            2,
-          );
+    let cumulativeBase = divideDecimal(
+      cumulativeGross,
+      addDecimal(decimal("1"), divideDecimal(rate, decimal("100"), 4)),
+      2,
+    );
     // Stored line rounding sets the rate's total budgets, including before its final return.
     const minimumBase = subtractDecimal(cumulativeGross, original.tax);
     if (compareDecimal(cumulativeBase, original.base) > 0) cumulativeBase = original.base;
     if (compareDecimal(cumulativeBase, minimumBase) < 0) cumulativeBase = minimumBase;
     const base = subtractDecimal(cumulativeBase, priorBase);
     const tax = subtractDecimal(gross, base);
-    if (
-      !isMoney(base) ||
-      !isMoney(tax) ||
-      compareDecimal(base, subtractDecimal(original.base, priorBase)) > 0 ||
-      compareDecimal(
-        tax,
-        subtractDecimal(original.tax, sumDecimals(prior.map((allocation) => allocation.tax))),
-      ) > 0
-    )
-      unusable();
+    if (!isMoney(base) || !isMoney(tax)) unusable();
     const bases = apportionCorrectionCents(
       base,
       atRate.map((allocation) => allocation.gross),
