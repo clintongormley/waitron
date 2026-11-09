@@ -1522,3 +1522,81 @@ it("drops a returning device's report when the selected backup scope changes", a
     observation.invoiceNumber,
   );
 });
+
+it("compares and selects a promotion without a recovery key or recovery declarations", async () => {
+  const promotionBinding = { ...binding, action: "promote" };
+  let decision = clock;
+  const prepare = vi.fn(async (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: "comparison", clock: decision };
+    if (action === "preview") return { status: "preview" };
+    if (action === "select") return { ...selected, binding: promotionBinding };
+    throw new Error("unexpected promotion proposal");
+  });
+  const factory = Reflect.get(FISCAL_SETUP, "createPromotion") as
+    | undefined
+    | ((context: {
+        locale: "en" | "es";
+        timeZone: string;
+        binding: typeof promotionBinding;
+        prepare: typeof prepare;
+      }) => Entry & {
+        readOperation(): { binding: typeof promotionBinding; input: unknown } | null;
+      });
+  expect(factory, "the fiscal contribution offers the shared promotion clock form").toBeTypeOf(
+    "function",
+  );
+  const host = document.createElement("main");
+  applyTokens(host);
+  document.body.append(host);
+  hosts.push(host);
+  const el = factory!({
+    locale: "en",
+    timeZone: "America/New_York",
+    binding: promotionBinding,
+    prepare,
+  });
+  host.append(el);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("vf-recovery-key")).toBeNull();
+  expect(el.shadowRoot!.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="device-invoices"]')).toBeNull();
+  expect(button(el, "compare").disabled).toBe(false);
+  expect(el.readOperation()).toBeNull();
+  await compare(el);
+  await vi.waitFor(() => expect(button(el, "select").disabled).toBe(false));
+  button(el, "select").click();
+  await vi.waitFor(() =>
+    expect(el.readOperation()).toEqual({ binding: promotionBinding, input: selected.input }),
+  );
+  expect(prepare.mock.calls.map(([proposal]) => (proposal as { action: string }).action)).toEqual([
+    "clock-challenge",
+    "compare-clocks",
+    "preview",
+    "clock-challenge",
+    "compare-clocks",
+    "select",
+  ]);
+  el.clear();
+  await el.updateComplete;
+  expect(el.readOperation()).toBeNull();
+  decision = noSecondClock;
+  await compare(el);
+  await vi.waitFor(() => expect(button(el, "select").disabled).toBe(false));
+  button(el, "select").click();
+  await vi.waitFor(() =>
+    expect(text(el)).toContain("open this handover page on another phone or laptop"),
+  );
+  expect(text(el)).not.toContain("has the backup");
+  el.clear();
+  await el.updateComplete;
+  prepare.mockRejectedValue({ code: "password.invalid", params: {} });
+  button(el, "compare").click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.textContent).toContain(
+      "Check your password and code",
+    ),
+  );
+  expect(button(el, "compare").disabled).toBe(false);
+});

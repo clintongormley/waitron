@@ -556,6 +556,12 @@ export const FISCAL_SETUP: SetupContribution = {
     element.locale = context.locale;
     return element;
   },
+  createPromotion(context) {
+    const element = document.createElement("vf-recovery-hour");
+    element.context = { ...context, mode: "promote" };
+    element.locale = context.locale;
+    return element;
+  },
   createRecoveryKey({ locale, selection }) {
     const element = document.createElement("vf-recovery-key");
     element.locale = locale;

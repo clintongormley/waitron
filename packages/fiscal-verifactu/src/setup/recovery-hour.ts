@@ -5,6 +5,7 @@ import { readInvoiceEvidenceReport } from "@waitron/fiscal/src/invoice-evidence.
 import { classifySavedTimeZone } from "@waitron/shared";
 import type {
   ModuleRecoveryCredentials,
+  ModulePromotionEntry,
   SetupContribution,
 } from "@waitron/module/src/setup-contract.js";
 import { isMinuteIdentity } from "../hour-identity.js";
@@ -23,7 +24,12 @@ import {
   type ClockComparison,
 } from "./clock-wait.js";
 
-type Context = Parameters<NonNullable<SetupContribution["createRecovery"]>>[0];
+type RecoveryContext = Parameters<NonNullable<SetupContribution["createRecovery"]>>[0];
+type PromotionContext = Parameters<NonNullable<SetupContribution["createPromotion"]>>[0] & {
+  mode: "promote";
+};
+type Context = RecoveryContext | PromotionContext;
+const isPromotion = (context: Context): context is PromotionContext => "mode" in context;
 interface Draft {
   oldBoxGone: boolean;
   soleRecovery: boolean;
@@ -39,6 +45,8 @@ const strings = {
     ...clockWaitStrings.en,
     inUse: `${clockWaitStrings.en.inUse} Reload this page and start the restore again: a new restore chooses a new series name.`,
     heading: "Recover this box",
+    promotionHeading: "Start the venue on this box",
+    promotionFailed: "Check your password and code, then compare clocks again.",
     deviceInvoices: "Invoices seen on this device",
     deviceInvoicesHint:
       "These are the last invoices this browser kept for this taxpayer and environment. The list may be incomplete. Recovery still uses new series.",
@@ -70,6 +78,8 @@ const strings = {
     ...clockWaitStrings.es,
     inUse: `${clockWaitStrings.es.inUse} Recarga esta página y vuelve a empezar la restauración: una restauración nueva elige otro nombre de serie.`,
     heading: "Recuperar esta caja",
+    promotionHeading: "Iniciar el local en este equipo",
+    promotionFailed: "Revisa la contraseña y el código y vuelve a comparar los relojes.",
     deviceInvoices: "Facturas vistas en este dispositivo",
     deviceInvoicesHint:
       "Son las últimas facturas que este navegador guardó para este contribuyente y entorno. La lista puede estar incompleta. La recuperación sigue usando series nuevas.",
@@ -212,6 +222,16 @@ export class RecoveryHourEntry extends LitElement {
     );
   }
   #notify(): void {
+    if (isPromotion(this.context)) {
+      this.dispatchEvent(
+        new CustomEvent("promotion-change", {
+          detail: { ready: this.readOperation() !== null },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      return;
+    }
     this.dispatchEvent(
       new CustomEvent("recovery-invalid", {
         detail: { invalid: this.attempted && !this.#credentials() },
@@ -221,6 +241,7 @@ export class RecoveryHourEntry extends LitElement {
     );
   }
   #credentials(): ModuleRecoveryCredentials | null {
+    if (isPromotion(this.context)) return null;
     if (
       this.busy ||
       !this.#secret ||
@@ -242,6 +263,14 @@ export class RecoveryHourEntry extends LitElement {
       },
     };
   }
+  readOperation(): ReturnType<ModulePromotionEntry["readOperation"]> {
+    if (!isPromotion(this.context) || this.busy || this.#wait.result?.status !== "selected")
+      return null;
+    return {
+      binding: { ...this.context.binding },
+      input: structuredClone(this.#wait.result.input),
+    };
+  }
   readCredentials(): ModuleRecoveryCredentials | null {
     this.attempted = true;
     this.#notify();
@@ -250,13 +279,16 @@ export class RecoveryHourEntry extends LitElement {
     return credentials;
   }
   get #canCompare(): boolean {
-    return Boolean(this.#secret && this.draft.oldBoxGone && this.draft.soleRecovery);
+    return (
+      isPromotion(this.context) ||
+      Boolean(this.#secret && this.draft.oldBoxGone && this.draft.soleRecovery)
+    );
   }
   get #canSelect(): boolean {
     const clock = this.comparison?.clock;
     return this.#canCompare && clock !== undefined && !clock.releaseBlocked && !clock.rangeBlocked;
   }
-  #request(context: Context) {
+  #request(context: RecoveryContext) {
     return {
       binding: { ...context.binding },
       context: {
@@ -270,11 +302,13 @@ export class RecoveryHourEntry extends LitElement {
   #begin(): { call: (proposal: unknown) => Promise<unknown>; current: () => boolean } {
     const generation = ++this.#generation;
     const context = this.context;
-    const request = this.#request(context);
+    const request = isPromotion(context) ? undefined : this.#request(context);
     const current = () =>
       this.isConnected && this.context === context && this.#generation === generation;
     const call = async (proposal: unknown) => {
-      const result = await context.prepare({ ...request, proposal });
+      const result = isPromotion(context)
+        ? await context.prepare(proposal)
+        : await context.prepare({ ...request!, proposal });
       if (!current()) throw new Error("stale recovery");
       return result;
     };
@@ -349,12 +383,32 @@ export class RecoveryHourEntry extends LitElement {
   }
   override render() {
     const en = this.locale === "en";
-    const words = en ? strings.en : strings.es;
-    const observations = readInvoiceEvidenceReport({
-      taxpayerId: this.context.selection.taxId,
-      environment: this.context.selection.environment,
-    });
-    const zone = classifySavedTimeZone(this.context.selection.timeZone);
+    const context = this.context;
+    const promote = isPromotion(context);
+    const baseWords = en ? strings.en : strings.es;
+    const words = promote
+      ? {
+          ...baseWords,
+          secondClockDo: en
+            ? "Connect the box to the internet, or open this handover page on another phone or laptop."
+            : "Conecta el equipo a internet o abre esta página de traspaso en otro móvil o portátil.",
+          secondClockEnds: en
+            ? "Keep this page open, or continue on the other device."
+            : "Mantén esta página abierta o continúa en el otro dispositivo.",
+          differDo: en
+            ? "Open this handover page on another phone or laptop and compare the clocks again."
+            : "Abre esta página de traspaso en otro móvil o portátil y vuelve a comparar los relojes.",
+        }
+      : baseWords;
+    const observations = isPromotion(context)
+      ? []
+      : readInvoiceEvidenceReport({
+          taxpayerId: context.selection.taxId,
+          environment: context.selection.environment,
+        });
+    const zone = classifySavedTimeZone(
+      isPromotion(context) ? context.timeZone : context.selection.timeZone,
+    );
     const displayZone = zone.kind === "valid" ? zone.timeZone : "UTC";
     const format = (ms: number) =>
       dateTimeFormat(en ? "en" : "es", displayZone, {
@@ -366,7 +420,7 @@ export class RecoveryHourEntry extends LitElement {
     const result = this.#wait.result;
     const canSelect =
       this.#canSelect && !this.busy && !this.#wait.waiting && result?.status !== "selected";
-    return html`<h3>${words.heading}</h3>
+    return html`<h3>${promote ? words.promotionHeading : words.heading}</h3>
       ${
         observations.length === 0
           ? nothing
@@ -382,46 +436,50 @@ export class RecoveryHourEntry extends LitElement {
               </dl>
             </section>`
       }
-      <vf-recovery-key
-        .selection=${this.context.selection}
-        .locale=${this.locale}
-        .errorMessage=${this.keyError || (this.attempted && !this.#secret) ? words.key : !this.refusalDismissed && this.refusedField === "nodeRecoverySecret" ? this.errorMessage : undefined}
-        @recovery-key-change=${(event: CustomEvent<{ secret?: string }>) => {
-          event.stopPropagation();
-          this.#secret = event.detail.secret;
-          this.#edited("nodeRecoverySecret");
-          this.#invalidate();
-          this.#notify();
-        }}
-      ></vf-recovery-key>
-      <label
-        ><input
-          type="checkbox"
-          name="recovery-old-box-stopped"
-          required
-          aria-invalid=${this.attempted && !this.draft.oldBoxGone ? "true" : "false"}
-          aria-describedby="stopped-error"
-          .checked=${this.draft.oldBoxGone}
-          @change=${(event: Event) => this.#edit({ oldBoxGone: (event.currentTarget as HTMLInputElement).checked })}
-        />${words.stopped} *</label
-      >
-      <p id="stopped-error" class="error">
-        ${this.attempted && !this.draft.oldBoxGone ? words.stopped : ""}
-      </p>
-      <label
-        ><input
-          type="checkbox"
-          name="recovery-sole-operation"
-          required
-          aria-invalid=${this.attempted && !this.draft.soleRecovery ? "true" : "false"}
-          aria-describedby="sole-error"
-          .checked=${this.draft.soleRecovery}
-          @change=${(event: Event) => this.#edit({ soleRecovery: (event.currentTarget as HTMLInputElement).checked })}
-        />${words.sole} *</label
-      >
-      <p id="sole-error" class="error">
-        ${this.attempted && !this.draft.soleRecovery ? words.sole : ""}
-      </p>
+      ${
+        isPromotion(context)
+          ? nothing
+          : html`<vf-recovery-key
+                .selection=${context.selection}
+                .locale=${this.locale}
+                .errorMessage=${this.keyError || (this.attempted && !this.#secret) ? words.key : !this.refusalDismissed && this.refusedField === "nodeRecoverySecret" ? this.errorMessage : undefined}
+                @recovery-key-change=${(event: CustomEvent<{ secret?: string }>) => {
+                  event.stopPropagation();
+                  this.#secret = event.detail.secret;
+                  this.#edited("nodeRecoverySecret");
+                  this.#invalidate();
+                  this.#notify();
+                }}
+              ></vf-recovery-key>
+              <label
+                ><input
+                  type="checkbox"
+                  name="recovery-old-box-stopped"
+                  required
+                  aria-invalid=${this.attempted && !this.draft.oldBoxGone ? "true" : "false"}
+                  aria-describedby="stopped-error"
+                  .checked=${this.draft.oldBoxGone}
+                  @change=${(event: Event) => this.#edit({ oldBoxGone: (event.currentTarget as HTMLInputElement).checked })}
+                />${words.stopped} *</label
+              >
+              <p id="stopped-error" class="error">
+                ${this.attempted && !this.draft.oldBoxGone ? words.stopped : ""}
+              </p>
+              <label
+                ><input
+                  type="checkbox"
+                  name="recovery-sole-operation"
+                  required
+                  aria-invalid=${this.attempted && !this.draft.soleRecovery ? "true" : "false"}
+                  aria-describedby="sole-error"
+                  .checked=${this.draft.soleRecovery}
+                  @change=${(event: Event) => this.#edit({ soleRecovery: (event.currentTarget as HTMLInputElement).checked })}
+                />${words.sole} *</label
+              >
+              <p id="sole-error" class="error">
+                ${this.attempted && !this.draft.soleRecovery ? words.sole : ""}
+              </p>`
+      }
       ${
         clock
           ? html`<section aria-label=${words.readings} data-test="clock-readings">
@@ -457,7 +515,7 @@ export class RecoveryHourEntry extends LitElement {
             : nothing
       }
       <wt-form-actions
-        .error=${this.error ? words.failed : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : this.attempted && !this.#credentials() ? words.missing : ""}
+        .error=${this.error ? (promote ? words.promotionFailed : words.failed) : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : !promote && this.attempted && !this.#credentials() ? words.missing : ""}
       >
         <wt-button
           data-test="compare"
