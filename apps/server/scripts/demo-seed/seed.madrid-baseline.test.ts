@@ -43,6 +43,124 @@ const ADDED_TABLES = [
 ];
 /** Tables dropped after the capture; the seed wrote no row to them. */
 const REMOVED_TABLES = ["mirror_config", "node_roles", "pass_item_marks"];
+// The baseline rebuild moves these columns before the named anchor, retaining their metadata.
+const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {
+  adjustments: [
+    ["line_name", "comped_extras"],
+    ["created_at", "charge_kept", "preparation_started", "refund_handoff", "refund_value"],
+  ],
+  bookings: [["tab_id", "table_label"]],
+  card_readers: [["created_at", "prints_own_slip_automatically"]],
+  convenio_config: [
+    [
+      "created_at",
+      "split_min_segment_minutes",
+      "split_max_segment_minutes",
+      "split_min_gap_minutes",
+      "continuous_paid_break_minutes",
+    ],
+  ],
+  departments: [
+    ["created_at", "needs_clearing", "late_send_needs_manager", "release_reminder_minutes"],
+  ],
+  devices: [
+    ["label", "invoice_printer_id", "invoice_page_printer_id"],
+    ["last_seen_at", "deleted_at"],
+  ],
+  dining_tables: [["zone_id", "short_name", "short_name_key"]],
+  envios: [["csv", "technical_incidence"]],
+  floor_plan_tables: [["seats", "short_name"]],
+  floor_reset_tables: [["seats", "short_name"]],
+  invoice_deliveries: [["person_id", "made_by_retry", "printer_chosen"]],
+  kitchen_courses: [["created_at", "held_until_fired"]],
+  kitchen_stations: [
+    ["is_default", "ready_warning_after_minutes"],
+    [
+      "created_at",
+      "shows_rest_of_order",
+      "print_moved_slips",
+      "colour",
+      "ticket_grouping",
+      "print_held_work",
+      "bump_mode",
+      "changes_after_sending",
+      "waits_for_pass",
+    ],
+  ],
+  order_draft_lines: [
+    ["no_merge", "make_at_station_id", "slot", "join_group_id", "after_group_id"],
+  ],
+  order_drafts: [["owner_id", "bill_id"]],
+  order_groups: [
+    ["state", "display_number", "number_party_id"],
+    ["created_at", "request_kind"],
+  ],
+  payment_refunds: [["created_at", "provider_refund_ref"]],
+  payments: [["state", "requested_amount"]],
+  persons: [
+    ["first_names", "display_name_folded"],
+    ["pending_email", "email_folded"],
+    ["email_verified_at", "pending_email_folded"],
+  ],
+  print_agents: [["node_id", "setup_url", "setup_port"]],
+  print_jobs: [["status", "receipt_copy", "receipt_handover"]],
+  printers: [["active", "portable", "pickup_roles"]],
+  products: [
+    ["customer_name", "name_key"],
+    ["allergens", "color"],
+  ],
+  registros_facturacion: [
+    ["source", "corrects_registro_id"],
+    ["tipo_rectificativa", "subsanacion", "rechazo_previo", "sin_registro_previo"],
+  ],
+  sale_lines: [["classification", "list_gross", "list_unit_price_gross"]],
+  sales: [
+    ["total", "operation_date"],
+    [
+      "authorized_by",
+      "counterparty_identifier_type",
+      "counterparty_identifier_country_code",
+      "counterparty_address",
+      "taxpayer_domicile",
+    ],
+  ],
+  tenants: [["created_at", "taxpayer_domicile", "privacy_notice_url", "privacy_email"]],
+  ticket_items: [
+    ["note", "requested_at", "pass_controlled", "station_chosen_at", "station_retained_at_release"],
+  ],
+  units: [["name", "staff_name", "staff_abbreviation"]],
+  webauthn_credentials: [["created_at", "aaguid"]],
+  working_line_contexts: [
+    ["menu_name", "menu_version_id"],
+    ["hardware_unit", "sold_in_each"],
+  ],
+  working_orders: [
+    ["collected_at", "delivery_table_label"],
+    [
+      "payment_attempt_at",
+      "invoice_type",
+      "recipient_tax_id",
+      "recipient_legal_name",
+      "recipient_address",
+      "recipient_country_code",
+      "recipient_identifier_type",
+      "recipient_identifier_country_code",
+      "invoice_delivery",
+      "receipt_locale",
+    ],
+  ],
+};
+// Each entry lists the captured foreign-key groups in their rebuilt id order.
+const REBUILT_FOREIGN_KEY_ORDER: Record<string, readonly number[]> = {
+  devices: [5, 6, 0, 1, 2, 3, 4],
+  floor_today_zones: [1, 0],
+  order_draft_lines: [2, 3, 4, 0, 1],
+  order_drafts: [1, 0],
+  page_printers: [1, 0],
+  print_jobs: [3, 4, 0, 1, 2],
+  tenders: [1, 0],
+  working_line_contexts: [2, 0, 1],
+};
 const byName = <T>(tables: Record<string, T>) =>
   Object.fromEntries(Object.entries(tables).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -265,6 +383,28 @@ for (const locale of ["en", "es"] as const) {
         const table = expected[phase].tables.convenio_config!;
         table.columns.push({ name, type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 });
         for (const row of Object.values(table.rows)) row[name] = null;
+      }
+      for (const [name, moves] of Object.entries(REBUILT_COLUMN_ORDER)) {
+        const columns = expected[phase].tables[name]!.columns;
+        for (const [anchor, ...names] of moves) {
+          const moved = names.map((name) => {
+            const index = columns.findIndex((column) => column.name === name);
+            expect(index, `${phase}/${name} captured column`).toBeGreaterThanOrEqual(0);
+            return columns.splice(index, 1)[0]!;
+          });
+          const index = columns.findIndex((column) => column.name === anchor);
+          expect(index, `${phase}/${name}/${anchor} anchor`).toBeGreaterThanOrEqual(0);
+          columns.splice(index, 0, ...moved);
+        }
+      }
+      for (const [name, order] of Object.entries(REBUILT_FOREIGN_KEY_ORDER)) {
+        const table = expected[phase].tables[name]!;
+        expect([...new Set(table.foreignKeys.map((key) => key.id))].sort()).toEqual(
+          [...order].sort(),
+        );
+        table.foreignKeys = order.flatMap((capturedId, id) =>
+          table.foreignKeys.filter((key) => key.id === capturedId).map((key) => ({ ...key, id })),
+        );
       }
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));
