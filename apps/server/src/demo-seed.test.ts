@@ -62,6 +62,18 @@ beforeEach(async () => {
 
 describe("demoSeedLocale", () => {
   it.each([
+    ["es-ES", "en"],
+    ["en-GB", "es"],
+  ] as const)(
+    "uses explicit %s / %s working language instead of the admin language",
+    (adminLocale, staffLanguage) => {
+      expect(demoSeedLocale({ ...venueWithLocales([adminLocale]), staffLanguage })).toBe(
+        staffLanguage,
+      );
+    },
+  );
+
+  it.each([
     [["es-ES", "en-GB"], "es"],
     [["ES-mx"], "es"],
     [["en-GB", "es-ES"], "en"],

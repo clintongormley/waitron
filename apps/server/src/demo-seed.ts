@@ -8,7 +8,10 @@ import { readDemoSeedSelection } from "../scripts/demo-seed/data-set.js";
 export const INSTALLED_DEMO_SALES_DAYS = 30;
 
 export function demoSeedLocale(venue: VenueRequest): SeedLocale {
-  return venue.admin.locale?.toLowerCase().startsWith("es") === true ? "es" : "en";
+  return (
+    venue.staffLanguage ??
+    (venue.admin.locale?.toLowerCase().startsWith("es") === true ? "es" : "en")
+  );
 }
 
 /** Add sample catalogues, floor, staff, media and practice sales to a freshly provisioned Demo. */

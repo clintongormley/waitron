@@ -52,6 +52,7 @@ export function createDemoVenueProvisioner(
     /** Spain only. */
     nifFormat?: NifFormat;
     invoiceLocale: string;
+    staffLanguage?: "en" | "es";
     adminPin?: string;
     adminEmail?: string;
     province?: string;
@@ -74,6 +75,7 @@ export function createDemoVenueProvisioner(
           name: fixture.venueName,
           fiscalTerritory: fixture.fiscalTerritory,
           invoiceLocales: [options.invoiceLocale],
+          ...(options.staffLanguage === undefined ? {} : { staffLanguage: options.staffLanguage }),
           operationDescription: fixture.operationDescription,
           addressLine1: fixture.addressLine1,
           addressLine2: null,
