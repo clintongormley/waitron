@@ -2243,6 +2243,8 @@ _Formerly parts of B9 and Track C._ Open work:
 
 - **Playwright 1.65 browser qualification remains A1464.** The dependency group keeps
   Playwright at 1.64.1 until its Chromium layout and computed-style failures are resolved.
+  Remove `pnpm.overrides.playwright` from the root `package.json`, update the workspace
+  Playwright ranges together and regenerate the lockfile when that qualification passes.
 
 - **A Vitest 5 retry still needs mutation qualification after the Stryker 10.1.1 update.**
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
