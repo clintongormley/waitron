@@ -48,6 +48,18 @@ for (const locale of ["en", "es"] as const) {
       departmentTradingNames: getCountryPack("ES")!.demo!.departmentTradingNames,
       dataSet: CASA_DELGADO_ES,
     });
+    expect(
+      suite.db.all(sql`
+        select s.name from service_steps s join departments d on d.id = s.department_id
+        where d.name = ${CASA_DELGADO_ES.floor.departmentNames.deli[locale]}
+        order by s.position
+      `),
+    ).toEqual(
+      (locale === "en"
+        ? ["Set up", "Take order", "Anything else?"]
+        : ["Montar mesa", "Tomar nota", "¿Algo más?"]
+      ).map((name) => ({ name })),
+    );
     const rows = suite.db.all<{ name: string; kitchen_name: string | null; customer_name: string }>(
       sql`select name, kitchen_name, customer_name from products`,
     );
