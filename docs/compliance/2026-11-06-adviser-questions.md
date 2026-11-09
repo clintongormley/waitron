@@ -250,8 +250,10 @@ here, the owner should say so.
   way to report one as excluded. Please say so in writing.
 - **L2. How is overtime counted under a yearly total?** The agreement sets 1,783 hours a year. Proposed:
   overtime is what exceeds the person's published calendar for that day or the nine-hour limit. It goes
-  on that month's payroll or into rest within four months, and 1,783 is checked at year end as a
-  backstop.
+  on that month's payroll or into rest within four months. At year end, ordinary hours above 1,783 that
+  were not already counted as overtime become overtime, so no hour is counted twice. The ET defines
+  overtime against the maximum ordinary working day (arts. 34 and 35.1), not the calendar: is counting
+  against the published calendar right when hours are spread unevenly across the year?
 
 ### Confirmations
 
