@@ -1,3 +1,4 @@
+import { URL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { healthCommand, serverRoute } from "./ci-server-health.mjs";
 
