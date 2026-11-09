@@ -1,5 +1,6 @@
 import {
   replaceTransferredSettings,
+  readActivityForSubject,
   defineSettingsDocument,
   readSettings,
   saveSettings,
@@ -233,6 +234,49 @@ describe("settings documents", () => {
     });
     expect(suite.db.execute(sql`select * from settings`).rows).toEqual([]);
   });
+  const history = () => readActivityForSubject(suite.db, { kind: "settings", id: "probe" });
+  it("a save records who saved which document and the revision it made", async () => {
+    const people = await suite.db
+      .insert(persons)
+      .values([{ displayName: "First saver" }, { displayName: "Second saver" }])
+      .returning();
+    await save({ size: 2, unit: "cm" }, 0, people[0]!.id);
+    await save({ size: 3, unit: "in" }, 1, people[1]!.id);
+    expect((await history()).map(({ kind, personId, data }) => ({ kind, personId, data }))).toEqual(
+      [
+        { kind: "settings.saved", personId: people[0]!.id, data: { revision: 1 } },
+        { kind: "settings.saved", personId: people[1]!.id, data: { revision: 2 } },
+      ],
+    );
+  });
+  it("a save no person made is recorded with no person", async () => {
+    await save(undefined, 0, null);
+    expect((await history()).map(({ personId, data }) => ({ personId, data }))).toEqual([
+      { personId: null, data: { revision: 1 } },
+    ]);
+  });
+  it("a refused save records nothing", async () => {
+    await save();
+    await expect(save(undefined, 0)).rejects.toMatchObject({ code: "settings.out_of_date" });
+    await expect(save({ size: 99, unit: "cm" }, 1)).rejects.toMatchObject({
+      code: "settings.invalid",
+    });
+    expect((await history()).map((entry) => entry.data)).toEqual([{ revision: 1 }]);
+  });
+  it("the entry is in the save's transaction", async () => {
+    await expect(
+      withTransaction(suite.db, async (tx) => {
+        await saveSettings(tx, probe(), {
+          doc: { size: 2, unit: "cm" },
+          expectedRevision: 0,
+          personId: null,
+        });
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+    expect(suite.db.execute(sql`select * from settings`).rows).toEqual([]);
+    expect(await history()).toEqual([]);
+  });
   it("refuses a caller's invalid revision", async () => {
     for (const revision of [-1, 1.5])
       await expect(save(undefined, revision)).rejects.toBeInstanceOf(RangeError);
@@ -300,7 +344,7 @@ describe("replaceTransferredSettings", () => {
     version: 1,
     transfers: true,
     defaults: () => ({}),
-    parse: () => ({ ok: true as const, doc: {} }),
+    parse: (doc: unknown) => ({ ok: true as const, doc: doc as object }),
   });
   it("replaces only the named documents, resetting revision and saver, and clears an omitted document", async () => {
     const [person] = await suite.db.insert(persons).values({ displayName: "Saver" }).returning();
@@ -320,6 +364,28 @@ describe("replaceTransferredSettings", () => {
     ]);
     await withTransaction(suite.db, (tx) => replaceTransferredSettings(tx, [PROBE], new Map()));
     expect(suite.db.execute(sql`select module from settings`).rows).toEqual([{ module: "other" }]);
+  });
+  it("records each imported document with revision one and no source person, but no save for an omission", async () => {
+    await withTransaction(suite.db, (tx) =>
+      replaceTransferredSettings(tx, [PROBE], new Map([["probe", { size: 1 }]])),
+    );
+    const history = () => readActivityForSubject(suite.db, { kind: "settings", id: "probe" });
+    expect((await history()).map(({ kind, personId, data }) => ({ kind, personId, data }))).toEqual(
+      [{ kind: "settings.saved", personId: null, data: { revision: 1 } }],
+    );
+    await withTransaction(suite.db, (tx) => replaceTransferredSettings(tx, [PROBE], new Map()));
+    expect(await readSettings(suite.db, PROBE)).toEqual({ doc: {}, revision: 0 });
+    expect(await history()).toHaveLength(1);
+  });
+  it("rolls back an imported document and its history together", async () => {
+    await expect(
+      withTransaction(suite.db, async (tx) => {
+        await replaceTransferredSettings(tx, [PROBE], new Map([["probe", {}]]));
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+    expect(await readSettings(suite.db, PROBE)).toEqual({ doc: {}, revision: 0 });
+    expect(await readActivityForSubject(suite.db, { kind: "settings", id: "probe" })).toEqual([]);
   });
   it("refuses an unknown key before deleting existing rows", async () => {
     await withTransaction(suite.db, (tx) =>

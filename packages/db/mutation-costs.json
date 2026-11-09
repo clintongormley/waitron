@@ -86,8 +86,6 @@
   "src/schema/location-catalogues.ts": 23.9,
   "src/schema/media/images.ts": 111.5,
   "src/schema/media/index.ts": 0.1,
-  "src/schema/membership-clearances.ts": 10.7,
-  "src/schema/membership-removals.ts": 15.6,
   "src/schema/node-membership.ts": 12.2,
   "src/schema/node-sealed-state.ts": 10.7,
   "src/schema/nodes.ts": 11.7,

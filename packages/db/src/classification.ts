@@ -71,14 +71,9 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("purchase_invoices", "ledger", LEDGER),
   classify("purchase_invoice_vat", "ledger", LEDGER),
   appendOnly(
-    "membership_removals",
+    "activity_log",
     "ledger",
-    "who removed which machine from the membership chart, and at which term; an audit row is never corrected",
-  ),
-  appendOnly(
-    "membership_clearances",
-    "ledger",
-    "who cleared which removed machine from the membership chart, and at which term; an audit row is never corrected",
+    "who did what, for people to read; product logic never decides from it; an entry is never corrected",
   ),
   classify(
     "bill_payments",

@@ -156,6 +156,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
     alerts: CORE_ALERTS,
     classification: CORE_CLASSIFICATION,
+    startAgainDeletable: ["activity_log"],
     changes: CORE_CHANGE_SOURCES,
     configurationTransfer: CORE_TRANSFER,
     backup: { verification: CORE_BACKUP_VERIFICATION },

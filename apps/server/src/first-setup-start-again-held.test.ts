@@ -1,5 +1,15 @@
 import {
+  openVenueDatabase,
+  nodes,
+  persons,
+  readActivityForSubject,
+  withTransaction,
+} from "@waitron/db";
+import { buildConfigurationBundle, importConfigurationTables } from "./configuration-transfer.js";
+import { schemaVersionsByModule } from "./backup-manifest.js";
+import {
   holdingsRead,
+  askStartAgain,
   expectRefused,
   keptRecordsLogReason,
   notReadyBecause,
@@ -252,4 +262,45 @@ it("a held setup whose database the inspection shows empty refuses the summary s
     },
   } as Held["host"];
   await expectRefused(f, notReadyBecause("may-have-filed"), { host });
+});
+
+it("imported settings history does not block Start again for a held setup", async () => {
+  const f = await heldSetup();
+  const held = await openVenueDatabase(f.roots.venueDir);
+  try {
+    const versions = await schemaVersionsByModule(held, f.host.modules);
+    const [node] = await held.venue.select({ id: nodes.id }).from(nodes).limit(1);
+    const [operator] = await held.venue.select({ id: persons.id }).from(persons).limit(1);
+    const bundle = await buildConfigurationBundle(
+      held.venue,
+      { nodeId: node!.id, sourceOperatorId: operator!.id },
+      f.host.modules,
+      new Date("2026-11-09T12:00:00.000Z"),
+      versions,
+    );
+    await withTransaction(held.venue, (tx) =>
+      importConfigurationTables(
+        tx,
+        {
+          ...bundle,
+          settings: {
+            ...bundle.settings,
+            adjustments: { version: 1, doc: { maxBillComp: 4000, billApproverRoles: ["manager"] } },
+          },
+        },
+        f.host.modules,
+        versions,
+      ),
+    );
+    expect(
+      (await readActivityForSubject(held.venue, { kind: "settings", id: "adjustments" })).map(
+        ({ personId, data }) => ({ personId, data }),
+      ),
+    ).toEqual([{ personId: null, data: { revision: 1 } }]);
+  } finally {
+    await held.close();
+  }
+  const attempt = await askStartAgain(f);
+  await expect(attempt.run()).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f.roots);
 });

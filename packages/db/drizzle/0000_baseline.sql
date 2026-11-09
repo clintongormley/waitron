@@ -1,3 +1,20 @@
+CREATE TABLE `activity_log` (
+	`id` text PRIMARY KEY NOT NULL,
+	`at` text NOT NULL,
+	`kind` text NOT NULL,
+	`subject_kind` text NOT NULL,
+	`subject_id` text NOT NULL,
+	`person_id` text,
+	`device_id` text,
+	`data` text NOT NULL,
+	FOREIGN KEY (`person_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict
+);
+--> statement-breakpoint
+CREATE INDEX `activity_log_subject_idx` ON `activity_log` (`subject_kind`,`subject_id`);--> statement-breakpoint
+CREATE INDEX `activity_log_kind_at_idx` ON `activity_log` (`kind`,`at`);--> statement-breakpoint
+CREATE INDEX `activity_log_at_idx` ON `activity_log` (`at`);--> statement-breakpoint
+CREATE INDEX `activity_log_person_at_idx` ON `activity_log` (`person_id`,`at`);--> statement-breakpoint
 CREATE TABLE `settings` (
 	`module` text PRIMARY KEY NOT NULL,
 	`version` integer NOT NULL,
@@ -1447,23 +1464,6 @@ CREATE TABLE `node_membership` (
 	`document` text NOT NULL,
 	`updated_at` text NOT NULL,
 	CONSTRAINT "node_membership_singleton_ck" CHECK("node_membership"."id" = 1)
-);
---> statement-breakpoint
-CREATE TABLE `membership_removals` (
-	`id` text PRIMARY KEY NOT NULL,
-	`removed_node_id` text NOT NULL,
-	`contact_url` text NOT NULL,
-	`person_id` text NOT NULL,
-	`term` integer NOT NULL,
-	`removed_at` text NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE `membership_clearances` (
-	`id` text PRIMARY KEY NOT NULL,
-	`cleared_node_id` text NOT NULL,
-	`person_id` text NOT NULL,
-	`term` integer NOT NULL,
-	`cleared_at` text NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE `node_sealed_state` (

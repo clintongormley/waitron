@@ -468,6 +468,10 @@ called weaker than its name, the topic file lists what it does not see.
   JSON names; the database refuses no write elsewhere.** Guard: `scripts/write-path-tables.test.ts`
   is the whole of the enforcement, weaker than its name: it reads TEXT and judges a FILE, not a call
   chain. Receipt: [conventions-data.md](docs/developers/conventions-data.md#a-write-of-a-table-scriptswrite-path-tablesjson-lists-lives-only-in-the-files-it-names).
+- **`activity_log` is for people to read: no product decision reads it, though a screen may join
+  other tables to its entries for display** (owner, 2026-11-04). Write it through `recordActivity`,
+  declaring each kind in `packages/db/src/activity-kinds.ts`; `data` names people by id only.
+  Nothing guards the readers' callers. [Receipt](docs/developers/conventions-data.md#activity_log-is-for-people-to-read-and-one-function-writes-it).
 - **A module's configuration is one document in the shared `settings` table, declared with
   `defineSettingsDocument` and saved only through `saveSettings`; its shape changes on read, never
   in a migration (and not at all before go-live), and a per-module database rule is a trigger on

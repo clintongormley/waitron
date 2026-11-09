@@ -5,12 +5,15 @@ import { blankComments } from "../packages/shared/src/source-comments.js";
 
 /**
  * The tables whose writes live only in the files `write-path-tables.json` names: venue.db's `tenants`, `nodes` and
- * `deployment` and `settings`, and node.db's `node_mode`, `node_mirror_link`, `node_primary_key`,
+ * `deployment`, `settings` and `activity_log`, and node.db's `node_mode`, `node_mirror_link`, `node_primary_key`,
  * `node_recovery_key`, `node_signing_key`, `node_handover_operations`, `node_handover_events` and
  * `node_handover_restriction`.
  *
  * `packages/db/src/settings.ts` saveSettings is the one settings writer: every document passes
  * its module’s checker and revision check.
+ *
+ * `packages/db/src/activity-log.ts` recordActivity is the one activity_log writer, so each row
+ * passes through the kind registry (packages/db/src/activity-kinds.ts).
  *
  * NOTHING BUT THIS FILE REFUSES THEM. SQLite has no roles and no grants, so the rule survives only
  * as a convention over source text, and this guard is the whole of its enforcement.
@@ -193,6 +196,7 @@ describe("no source writes a listed table outside the files the JSON names", () 
 
   it("keeps every table whose writes live only in named files", () => {
     expect(TABLES.slice().sort()).toEqual([
+      "activity_log",
       "deployment",
       "node_handover_events",
       "node_handover_operations",

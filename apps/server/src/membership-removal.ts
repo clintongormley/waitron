@@ -2,8 +2,7 @@ import "./errors.js";
 import { inArray } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
-  membershipClearances,
-  membershipRemovals,
+  recordActivity,
   nodes,
   persistNodeMembershipIfNewerTx,
   readNodeMembership,
@@ -263,11 +262,11 @@ export async function removeUnjoinedStandby(
         if ((await nodeIdsWithRows(tx, [args.targetNodeId])).has(args.targetNodeId)) {
           throw new AppError("membership.standby_joined", {});
         }
-        await tx.insert(membershipRemovals).values({
-          removedNodeId: args.targetNodeId,
-          contactUrl: verdict.node.contactUrl,
+        await recordActivity(tx, {
+          kind: "membership.node_removed",
+          subjectId: args.targetNodeId,
           personId: args.personId,
-          term,
+          data: { contactUrl: verdict.node.contactUrl, term },
         });
       },
       committed: (term) => {
@@ -309,10 +308,11 @@ export async function clearRemovedMachine(
       nodes: held!.body.nodes.filter((n) => n.nodeId !== args.targetNodeId),
       revoked: [...(held!.body.revoked ?? []), args.targetNodeId],
       record: async (tx, term) => {
-        await tx.insert(membershipClearances).values({
-          clearedNodeId: args.targetNodeId,
+        await recordActivity(tx, {
+          kind: "membership.node_cleared",
+          subjectId: args.targetNodeId,
           personId: args.personId,
-          term,
+          data: { term },
         });
       },
       committed: (term) => {

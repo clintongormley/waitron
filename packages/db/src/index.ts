@@ -247,8 +247,6 @@ export {
   readRecoveryPacks,
 } from "./recovery-packs.js";
 export type { RecoveryPackPartRecord, RecoveryPackRecord } from "./recovery-packs.js";
-export { membershipRemovals } from "./schema/membership-removals.js";
-export { membershipClearances } from "./schema/membership-clearances.js";
 export {
   persistNodeMembershipIfNewer,
   persistNodeMembershipIfNewerTx,
@@ -512,3 +510,20 @@ export type { SettingsParse, SettingsDocument, SettingsRead, SettingsChange } fr
 export * from "./schema/outgoing-mail.js";
 export { enqueueMail, cancelMail, readMail, MAIL_LIFETIME_MS } from "./outgoing-mail.js";
 export type { MailRequest } from "./outgoing-mail.js";
+
+export { activityLog } from "./schema/activity-log.js";
+
+export { ACTIVITY_KINDS } from "./activity-kinds.js";
+export type {
+  ActivityKindData,
+  ActivityKind,
+  ActivityKindRule,
+  ActivitySubjectKind,
+} from "./activity-kinds.js";
+export { recordActivity, readActivityForSubject, readActivityForPerson } from "./activity-log.js";
+export type {
+  ActivityInput,
+  RecordedActivity,
+  ActivityEntry,
+  ActivityReadOptions,
+} from "./activity-log.js";

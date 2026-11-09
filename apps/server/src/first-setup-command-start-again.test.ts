@@ -314,15 +314,8 @@ it.each(["activation-started", "uncertain"] as const)(
     const db = new DatabaseSync(join(f.folders.venueDir, "venue.db"));
     try {
       db.prepare(
-        "insert into membership_removals (id, removed_node_id, contact_url, person_id, term, removed_at) values (?, ?, ?, ?, ?, ?)",
-      ).run(
-        randomUUID(),
-        randomUUID(),
-        "https://other.example.test",
-        randomUUID(),
-        1,
-        "2026-10-16T11:40:00.000Z",
-      );
+        "insert into bill_number_allocations (id, party_id, working_order_id, number, allocated_at) values (?, ?, ?, ?, ?)",
+      ).run(randomUUID(), randomUUID(), randomUUID(), 1, "2026-10-16T11:40:00.000Z");
     } finally {
       db.close();
     }
