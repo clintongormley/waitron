@@ -2030,7 +2030,7 @@ outstanding on code that exists.
 
 - **A1321. Retire a dead or reset spare from Servers.** The
   [reduced design](superpowers/specs/2026-11-08-a1321-retire-spare-design.md) was owner-approved on 8 November; the
-  [one-page plan](superpowers/plans/2026-11-08-a1321-retire-spare.md) awaits watcher approval;
+  [one-page plan](superpowers/plans/2026-11-08-a1321-retire-spare.md) has watcher approval (2026-11-09 10:27);
   reduced scope extends Remove with server-checked declarations and the existing audit.
   Build waits for A947 3b-6; no new start check or returning-key trust path.
   [Detail](backlog/replication-cloud.md#a1321-retire-a-dead-or-reset-spare-from-servers)

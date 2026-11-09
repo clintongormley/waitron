@@ -1803,6 +1803,8 @@ the bucket problem when the supervisor has none). Tests `stream-host.test.ts`, `
 **Files:** Create `apps/server/src/spare-join.ts`; register it in `boot.ts`'s full start on the one
 main box and in `background-duties.ts` (stopped at a stepdown). Test `spare-join.test.ts`.
 
+> **2026-11-09 10:27, watcher A1321 plan approval:** after a successful old probe, match its peer id against the current link inside the node transaction before marking it streaming, so it cannot change a replacement link; this guard belongs to A947 3b-6, not A1321.
+
 **Interfaces — Produces:** `runSpareJoin(deps: { db; node; ring; nodeId; stream: StreamHost; probe?; intervalMs?; log; signal }): Promise<void>`
 — while this box's pair link is `pending`: every 5 seconds probe the spare's store through a store
 pipe with the pair's key (`packages/stream/src/probe.ts`); on the first success, in one `venue.db`

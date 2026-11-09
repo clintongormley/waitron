@@ -1047,16 +1047,16 @@ mirror's copy was found (not exhaustive). [Design §7.2](../superpowers/specs/20
 Wanted before go-live (owner, 2026-11-04). The
 [reduced design](../superpowers/specs/2026-11-08-a1321-retire-spare-design.md) was approved by the
 owner on 2026-11-08 at 13:34 (answered “y”, relayed in Lane K’s `questions.md`). The
-[one-page plan](../superpowers/plans/2026-11-08-a1321-retire-spare.md) awaits watcher approval. WATCHER 2026-11-08 02:33 settles the reduced scope: extend Remove / Retirar to a joined
+[one-page plan](../superpowers/plans/2026-11-08-a1321-retire-spare.md) was approved by the watcher on 2026-11-09 at 10:27, with its three corrections. WATCHER 2026-11-08 02:33 settles the reduced scope: extend Remove / Retirar to a joined
 serving-secondary, including one that once sold, with both declarations checked on the server,
 the existing chart-transaction audit and only the matching pair link cleared. Use the existing
 administrator session and whatever permission Remove checks when built (A1002 calls it
 `node.manage`); A1321 adds or renames none, following OWNER 2026-11-07 22:51.
 Keep fiscal originals and existing handover recovery/return/archive gates;
 add no returning-key trust path, spare-start check, client term field or second audit write.
-Repair only a removed/revoked id's matching link on repeated Remove, Clear or replacement join.
+Repeated Remove and Clear repair only a removed/revoked id's matching link. Replacement admission ignores that link without deleting or reloading; active or unknown peers still refuse.
 Include EN/ES guide, dialog, error and recovery wording. The dated A947 pointer replaces its duplicate backlog filing.
-Build waits for A947 3b-6 and watcher approval of the plan. No build approval.
+Build waits for A947 3b-6, confirmation of its matching-peer probe guard, and a timing ruling before build.
 
 ## A947. Go-live on two local boxes
 
