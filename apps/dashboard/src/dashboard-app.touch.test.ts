@@ -99,10 +99,11 @@ function scrollEnd(element: HTMLElement): Promise<void> {
 it.each<[number, number, "capped" | "page", number]>([
   [375, 667, "capped", 3],
   [390, 844, "capped", 6],
+  [1280, 800, "capped", 6],
   [667, 375, "page", 0],
   [844, 390, "page", 0],
 ])(
-  "at %i×%i native row and page-heading drags follow %s scrolling",
+  "at %i×%i Structure native drags follow %s scrolling and leave the other container still",
   async (width, height, mode, wholeRows) => {
     await page.viewport(width, height);
     history.replaceState(null, "", "/manage/menus/menu/menu-lunch/view/structure");
