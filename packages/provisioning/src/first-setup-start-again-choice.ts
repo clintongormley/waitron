@@ -196,7 +196,17 @@ export async function writeStartAgainChoice(
     throw new AppError("setup.attempt_invalid", {});
   }
   const stem = startAgainChoiceStem(value);
-  await mkdirDurable(join(stateDir, RECORDS_DIR), 0o700);
+  const records = join(stateDir, RECORDS_DIR);
+  try {
+    const parent = await lstat(records).catch((error: unknown) => {
+      if (object(error) && error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (parent !== null && !parent.isDirectory()) throw new AppError("setup.attempt_invalid", {});
+    await mkdirDurable(records, 0o700);
+  } catch {
+    throw new AppError("setup.attempt_invalid", {});
+  }
   const path = join(stateDir, START_AGAIN_CHOICES_DIR, `${stem}.json`);
   const existing = await lstat(path).then(
     () => true,

@@ -1,3 +1,4 @@
+import { RESTORE_REQUEST_FILE, RESET_REQUEST_FILE } from "@waitron/store";
 import "./errors.js";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
@@ -103,7 +104,7 @@ async function assertNoOtherSetupInProgress(stateDir: string): Promise<void> {
     const operation = await createSetupOperationStore(stateDir).read();
     if (operation !== null && operation.phase !== "complete")
       throw new AppError("setup.attempt_conflict", {});
-    for (const name of ["restore-request.json", "reset-request.json"]) {
+    for (const name of [RESTORE_REQUEST_FILE, RESET_REQUEST_FILE]) {
       const exists = await lstat(join(stateDir, name)).then(
         () => true,
         (error: unknown) => {

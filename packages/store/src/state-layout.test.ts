@@ -21,7 +21,3 @@ it("every constant is in the table", () => {
   }
   expect(names).toContain(`trading.env${layout.TRADING_ENV_REPLACED_SUFFIX}`);
 });
-
-it("joins a state path without changing the supplied folder", () => {
-  expect(layout.statePath("/box", "records", "choices")).toBe("/box/records/choices");
-});

@@ -1,3 +1,4 @@
+import { FIRST_SETUP_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -150,7 +151,7 @@ async function presentAttemptEligibility(
 ) {
   const noOtherHistory = inspection.artifacts.every(
     (artifact) =>
-      ["first-setup.json", "first-setup-claim.json", "venue.db", "venue.db-wal"].includes(
+      [FIRST_SETUP_FILE, "first-setup-claim.json", "venue.db", "venue.db-wal"].includes(
         artifact.name,
       ) ||
       (!artifact.name.startsWith("outside-") && artifact.status === "missing"),

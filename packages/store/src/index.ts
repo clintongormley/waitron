@@ -327,9 +327,3 @@ export {
 } from "./verification-venue-copy.js";
 
 export * from "./state-layout.js";
-export {
-  SPARE_SPACE_FILE,
-  SPARE_SPACE_RELEASED_FILE,
-  START_AGAIN_CHOICES_DIR,
-  START_AGAIN_SET_ASIDE_DIR,
-} from "./state-layout.js";

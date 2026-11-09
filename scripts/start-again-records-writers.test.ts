@@ -21,7 +21,6 @@ const ALLOWED = [
   "packages/provisioning/src/first-setup-start-again-names.ts",
   "packages/provisioning/src/first-setup-start-again-set-aside.ts",
   "packages/provisioning/src/index.ts",
-  "packages/store/src/index.ts",
   "packages/store/src/state-layout.ts",
 ];
 

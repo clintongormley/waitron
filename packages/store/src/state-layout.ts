@@ -1,5 +1,3 @@
-import { join } from "node:path";
-
 export type ResetFate = "kept" | "deleted";
 export interface StateEntry {
   readonly name: string;
@@ -311,7 +309,3 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
 export const RESET_KEPT: readonly string[] = STATE_LAYOUT.filter(
   (entry) => entry.reset === "kept",
 ).map((entry) => entry.name);
-
-export function statePath(stateDir: string, ...parts: string[]): string {
-  return join(stateDir, ...parts);
-}

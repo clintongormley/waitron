@@ -209,6 +209,13 @@ export async function prepareSetAside(
     units.some((unit) => unit.root === root),
   );
   const under = destinationRoots(roots, destinations);
+  const parent = await notAFolder(join(roots.stateDir, RECORDS_DIR), io);
+  if (parent !== null)
+    throw new AppError(
+      "setup.start_again_set_aside_unavailable",
+      {},
+      { reason: `set-aside failed: ${parent} state/${RECORDS_DIR}` },
+    );
   for (const root of used) {
     const found = await notASetAsideFolder(roots, under[root], io);
     if (found !== null)
@@ -222,7 +229,7 @@ export async function prepareSetAside(
   let probeAt: string | null = null;
   try {
     const records = join(roots.stateDir, RECORDS_DIR);
-    const existed = await fs.lstat(records).then(
+    const existed = await io.lstat(records).then(
       () => true,
       (error: unknown) => {
         if (codeOf(error) === "ENOENT") return false;

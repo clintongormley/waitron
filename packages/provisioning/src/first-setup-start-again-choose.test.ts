@@ -1,3 +1,4 @@
+import * as folderSync from "./folder-sync.js";
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -74,6 +75,8 @@ vi.mock("./first-setup-start-again-deletion.js", async (original) => {
   };
 });
 
+vi.mock("./folder-sync.js", { spy: true });
+
 const children: ChildProcess[] = [];
 const dirs: string[] = [];
 async function scratch() {
@@ -84,6 +87,7 @@ async function scratch() {
 afterEach(async () => {
   afterSurvey = undefined;
   failFinish = false;
+  vi.mocked(folderSync.syncFolder).mockReset();
   for (const child of children.splice(0)) child.kill("SIGKILL");
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -928,3 +932,45 @@ it("no log call and no thrown error carries the administrator's name or email", 
     for (const spy of spies) spy.mockRestore();
   }
 });
+
+it.each([
+  ["keep", false, "setup.attempt_invalid"],
+  ["keep", true, "setup.attempt_invalid"],
+  ["move", false, "setup.start_again_set_aside_unavailable"],
+  ["move", true, "setup.start_again_set_aside_unavailable"],
+] as const)(
+  "%s refuses a records-parent link (broken: %s) before writing outside state",
+  async (selection, broken, code) => {
+    const f = await found();
+    const elsewhere = await scratch();
+    await rmdir(join(f.roots.stateDir, "records"));
+    await symlink(
+      broken ? join(elsewhere, "missing") : elsewhere,
+      join(f.roots.stateDir, "records"),
+    );
+
+    await expect(choose(f, selection)).rejects.toMatchObject({ code });
+    expect(await readdir(elsewhere)).toEqual([]);
+    expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+  },
+);
+
+it.each([
+  ["keep", "setup.attempt_invalid"],
+  ["move", "EIO"],
+] as const)(
+  "%s refuses before recording a choice if the new records parent's entry cannot be flushed",
+  async (selection, code) => {
+    const f = await found();
+    await rmdir(join(f.roots.stateDir, "records"));
+    const real = await vi.importActual<typeof folderSync>("./folder-sync.js");
+    vi.mocked(folderSync.syncFolder).mockImplementation(async (path) => {
+      if (path === f.roots.stateDir) throw errno("EIO");
+      await real.syncFolder(path);
+    });
+
+    await expect(choose(f, selection)).rejects.toMatchObject({ code });
+    expect(await recordsOf(f)).toEqual([]);
+    expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+  },
+);

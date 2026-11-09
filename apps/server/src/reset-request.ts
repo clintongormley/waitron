@@ -13,8 +13,6 @@ import { stagedPath, writeFileAtomic } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 
-/** The staged reset request the next start carries out. */
-
 const MARKER = RESET_REQUEST_FILE;
 
 export interface StagedResetDeps {

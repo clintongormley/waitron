@@ -93,7 +93,7 @@ type Roots = { stateDir: string; venueDir: string };
  * without it, no node.db row counts as the attempt's.
  */
 type Options = { held?: true; nodeId?: string };
-const HELD_ONLY = ["modules.json", "trading.env"] as const;
+const HELD_ONLY = [MODULES_FILE, TRADING_ENV_FILE] as const;
 const isHeldOnly = (name: string): name is (typeof HELD_ONLY)[number] =>
   (HELD_ONLY as readonly string[]).includes(name);
 /** A marker that names a `HELD_ONLY` file was taken with `held`. */
@@ -137,7 +137,6 @@ const checkFailed = (error: unknown) =>
 const entryName = (name: string) =>
   name !== "" && name !== "." && name !== ".." && !name.includes("/") && !name.includes("\0");
 
-/** Only the deletion list's own names; the confirmation folder and `tls/` are not among them. */
 function listed(root: Root, name: string): boolean {
   const parts = name.split("/");
   if (!parts.every(entryName)) return false;
@@ -283,11 +282,11 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
     const path = join(roots.venueDir, name);
     if (await present(path)) items.push({ kind: "side", path });
   }
-  await file("state", "module-preparation-state.json");
+  await file("state", MODULE_PREPARATION_STATE_FILE);
   if ((await filesIn(DOCUMENTS, false)) !== null)
     items.push({ kind: "folder", path: join(roots.stateDir, DOCUMENTS) });
-  await file("state", "first-setup-node-key.json");
-  await file("state", "module-operation-public.json");
+  await file("state", FIRST_SETUP_NODE_KEY_FILE);
+  await file("state", MODULE_OPERATION_PUBLIC_FILE);
   if (options.held === true) for (const name of HELD_ONLY) await file("state", name);
   const records = await entries(join(roots.stateDir, RECORDS));
   if (records !== null) {
@@ -307,7 +306,7 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
     items.push({ kind: "folder", path: join(roots.stateDir, RECORDS) });
   }
   await file("venue", "first-setup-claim.json");
-  await file("state", "first-setup.json");
+  await file("state", FIRST_SETUP_FILE);
   return items;
 }
 

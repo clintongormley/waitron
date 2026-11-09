@@ -2,6 +2,8 @@
  * Weaker than its name: reads TEXT, seeing only a const holding a whole state name or a join from
  * a variable ending in stateDir. Arrays, objects, differently named roots, names assembled from
  * pieces and shell escape it; it checks declarations, never whether the resulting path is right.
+ * Its scanner can also misread comment-like text inside a regular expression or template and hide
+ * later definitions.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";

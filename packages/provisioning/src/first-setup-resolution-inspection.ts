@@ -1,3 +1,4 @@
+import { TRADING_ENV_FILE } from "@waitron/store";
 import {
   FIRST_SETUP_FILE,
   FIRST_SETUP_NODE_KEY_FILE,
@@ -293,7 +294,7 @@ export function createFirstSetupResolutionInspection(
         "cloud-replacement.json",
       ])
         artifacts.push(await artifact(options.stateDir, name));
-      artifacts.push(await artifact(options.stateDir, "trading.env", 65536, false));
+      artifacts.push(await artifact(options.stateDir, TRADING_ENV_FILE, 65536, false));
       artifacts.push(await artifact(options.venueDir, "first-setup-claim.json", 16384));
       for (const name of ["venue.db", "venue.db-wal"])
         artifacts.push(await artifact(options.venueDir, name, 128 * 1024 * 1024, false));
