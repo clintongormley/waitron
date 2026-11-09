@@ -3899,3 +3899,34 @@ mailbox and clock preview with `expect.poll`, retaining the exact deadline and
 email-time assertions. Run `pnpm --filter @waitron/server exec vitest run
 src/boot.venue-details.test.ts`. This reproduces the clock-advance mechanism; the
 failed run did not retain which earlier read first crossed a polling interval.
+
+## Root receipts moved on 2026-11-09
+
+These excerpts retain supporting detail from `CLAUDE.md` at
+`c7ca274eeb1426f64a825164ee3411630545efcd`. They are not new measurements or changes to the rules.
+
+### A test child process that freezes
+
+**A test child process that freezes `Date` freezes `performance.now` with it**, or the hour clock
+refuses it only on a slow runner. Guard: the one-time 1.1-second holds in the hour test children,
+weaker than the rule: those children only. [Receipt and paths](testing-guide.md#root-receipts-moved-on-2026-10-31).
+
+### A suite that sends a room's revision
+
+**A suite that sends a room's revision to a today's-floor write route pins the API's clock at its
+own fixed time and seeds at that time**, or a run across the venue's day change can be refused
+`floor_today.out_of_date`. Nothing guards it. Receipt:
+[testing-guide.md](testing-guide.md#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change).
+
+### A package that pins one worker
+
+**A package that pins one worker inside one of several projects numbers its `groupOrder`s from 1,
+never 0**: Vitest 4 runs a `groupOrder: 0` project that runs one isolated worker AFTER every other
+group. Guard: `scripts/bookings-test-budget.test.ts` — which pins bookings alone.
+
+### Code every database test runs
+
+**Code every database test runs — `useVenueDb`'s hooks — never checks something already
+guaranteed**: that check's mutants change nothing, and on CI's runners some ran to Stryker's
+per-mutant timeout. Nothing guards it.
+[Receipt](ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).

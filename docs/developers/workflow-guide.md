@@ -647,11 +647,10 @@ rule of that date, not text from `1d03a7c`.
 
 ## Root receipts moved on 2026-11-09
 
-These source excerpts retain the detail moved from `CLAUDE.md` at
-`c7ca274eeb1426f64a825164ee3411630545efcd` by A1467. They are not new measurements or changes to the rules.
-Markdown link targets are relative to this topic file.
+These excerpts retain supporting detail from `CLAUDE.md` at
+`c7ca274eeb1426f64a825164ee3411630545efcd`. They are not new measurements or changes to the rules.
 
-### Backlog growth
+### Mock-ups and screenshots
 
-Cost: the list grew by about 25 entries a day, about
-half of them from reviews.
+Cost:
+184 MiB of them in the tree when removed.

@@ -4999,27 +4999,43 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ## Root receipts moved on 2026-11-09
 
-These source excerpts retain the detail moved from `CLAUDE.md` at
-`c7ca274eeb1426f64a825164ee3411630545efcd` by A1467. They are not new measurements or changes to the rules.
-Markdown link targets are relative to this topic file.
+These excerpts retain supporting detail from `CLAUDE.md` at
+`c7ca274eeb1426f64a825164ee3411630545efcd`. They are not new measurements or changes to the rules.
 
-### R CI runs scoped package tests without package-wide coverage; ordinary main pushes run no package tests in ci.yml; nightly, manual and release runs enforce 98/98/98/95 coverage.
+### `prettier --check` on an IGNORED path
 
-**PR CI runs scoped package tests without package-wide coverage; ordinary main pushes run no
-package tests in `ci.yml`; nightly, manual and release runs enforce `98/98/98/95` coverage.**
-A PR tests only the changed packages, not their dependents (owner, 2026-11-08, A1461); those are
-typechecked on the PR and tested nightly. Root coverage remains on every run. UI registry publication keeps its separate package checks;
-deploy-selected image smoke stays on main (owner, 2026-11-08, A1452). Verify the
-current head's selected jobs, and the full run's coverage or merge jobs before claiming full
-coverage. Shard counts must not exceed the package's test-file count. Guard:
-`scripts/ci-workflow.test.mjs`, weaker than the rule: workflow text and controlled shell fixtures,
-not a hosted Actions run. [Modes and limits](ci-and-gates.md#scoped-tests-and-full-verification).
+`docs/` is ignored
+whole, so `pnpm exec prettier --file-info <file>` is the one that discriminates — it prints
+`"ignored": true`.
 
-### I does not run every check on every push.
+### Check every command's exit status.
 
-**CI does not run every check on every push.** Read `changes` outputs `code`, `scope`, `packages`
-and `full`. Main uses the newest completed successful main ancestor to scope quick checks;
-without a baseline, change scope is global. Main's named package gates are false even when `scope`
-and `packages` name code changes. PR evidence is not reused. Container publication, including `:main`, follows
-full scheduled/manual main verification or a fully checked release tag, never an ordinary main
-push. [Modes and limits](ci-and-gates.md#scoped-tests-and-full-verification).
+A shell sequence separated by newlines reports only its
+LAST command's status.
+
+### `apps/server`'s shards
+
+Guard:
+`scripts/vitest-duration-sequencer.test.mjs`, weaker than its name: checks packing, not a Vitest run or freshness.
+
+### `mutation-db`'s whole files
+
+Guard: the cost-table cases in `scripts/mutation-shard.test.mjs`, weaker
+than their name: existence, shape and that every file named is still mutated, not freshness. [Receipt](ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).
+
+### `bundle-smoke` builds dashboard
+
+A blank dashboard or till still passes, and setup's server routes are not tested.
+
+### Every workflow job carries
+
+Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads text, does not judge the limit
+or read an external called workflow.
+
+### On GitHub's ubuntu-26.04
+
+Cost: root-guards failed on 26.04 runners.
+
+### The upgrade test uses
+
+It prefers `/dev/shm` when present.

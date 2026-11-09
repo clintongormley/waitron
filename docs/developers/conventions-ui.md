@@ -2365,61 +2365,26 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ## Root receipts moved on 2026-11-09
 
-These source excerpts retain the detail moved from `CLAUDE.md` at
-`c7ca274eeb1426f64a825164ee3411630545efcd` by A1467. They are not new measurements or changes to the rules.
-Markdown link targets are relative to this topic file.
+These excerpts retain supporting detail from `CLAUDE.md` at
+`c7ca274eeb1426f64a825164ee3411630545efcd`. They are not new measurements or changes to the rules.
 
-### ew or changed forms use design-system.md → Forms.
+### A screen does not draw its own form field
 
-**New or changed forms use [design-system.md](design-system.md) → Forms.**
-Required fields are marked; invalid fields get inline errors and one localized bottom message on its
-own line above buttons, never a top summary, with the action disabled until fixed. Request refusals alone never disable it; field refusals appear under that field (owner,
-2026-09-29). Saves stay quiet and disabled until the draft changes, using `draftScopeFor`,
-`saveActionState` and a save-handler early return (owner, 2026-10-07, A331). Other actions stay quiet while awaiting a choice,
-selection or load, or barred by row state; use their own colour when actionable or sending (owner,
-2026-10-08, A416/A427). Exceptions are in the Forms contract; nothing guards these across screens.
-A hint is the placeholder; short explanations are hints, not “?” buttons (owner, 2026-10-03; unguarded,
-A237). Inputs have semantic `name`s, never widget ids. Other dated decisions and the sign-in exception:
-[conventions-ui.md](conventions-ui.md).
+Guard:
+`scripts/native-form-fields.test.ts`, weaker than its name — it reads string literals, and holds
+the files it allows by name only to a line count.
 
-### utomatic dashboard reads are passive session activity.
+### A device's profile and
 
-**Automatic dashboard reads are passive session activity.** Use the shared query controller or the
-request primitive's `passive` option, or polling keeps an unattended dashboard signed in. Observer
-callbacks assign snapshots; they do not rerun loaders that reset drafts.
-
-###  login refusal never reveals account existence
-
-**A login refusal never reveals account existence** (owner, 2026-09-30): unknown, suspended,
-pending, wrong-secret and till-profile-inadmissible accounts answer `password.invalid` or `pin.invalid`
-after the same hashing work, as one sentence with no field marked. Only missing/malformed
-input marks a field; the real cause is a log-only `reason`. Owner-approved exception: `passkey.not_registered`.
-An email sign-in through a queue keyed by person id takes its id from `personIdForLoginEmail`,
-stable per address, or attempts sent at once finish sooner for an unknown address.
-Guards: identity login and route suites, weaker than the set looks: no new sign-in route is covered.
-[Detail](conventions-ui.md#a-logins-refusal-never-says-whether-the-account-exists).
-
-###  device's profile and the signed-in person must both allow a till action; profile zones bound service and its admission list bounds sign-in.
-
-**A device's profile and the signed-in person must both allow a till action; profile zones bound
-service and its admission list bounds sign-in.** Preserve the stated action exceptions. New routes
+Preserve the stated action exceptions. New routes
 add refusing cases and inventory rows to `apps/server/src/till-api.profile-actions.test.ts` and
 zone rows to `apps/server/src/till-api.profile-zones.test.ts`. The inventory guard is weaker than
 its name: only its till/device/schedule mounts, and device-proof refusals, not every action
 label or zone check. The zone map remains a comment.
 [Limits](conventions-ui.md#a-devices-profile-and-the-signed-in-person-must-both-allow-what-the-device-does).
 
-### he unauthenticated recovery page's title and action are fixed strings chosen by the error code (after a Start again Move, an answer naming the set-aside folder takes their place); its log tail is written through redactSecrets and the personal-data mask (except the frozen-process watchdog's own line, which goes through neither), and HTML-escaped
+### Every staff-notice code
 
-**The unauthenticated recovery page's title and action are fixed strings chosen by the error
-code (after a Start again Move, an answer naming the set-aside folder takes their place); its log
-tail is written through `redactSecrets` and the personal-data mask (except the frozen-process
-watchdog's own line, which goes through neither), and HTML-escaped** (owner decision 2026-09-26;
-the personal-data mask is A980 S10's default, open to the owner). `redactSecrets` masks only a
-password in a URL, which is why no code's params and no logged message may carry a secret. Its one
-password form, for `setup.start_again_files_found`, takes the administrator password over HTTPS
-only; its Move choice is the owner's one exception to never suggesting a removal (A1098). The
-tail's span and the cost of taking that password without HTTPS:
-[conventions-ui.md](conventions-ui.md#root-receipts-moved-on-2026-11-06). Guard:
-the never-delete cases in `apps/server/src/recovery-surface.test.ts`, weaker than their name: they
-read the text tables, not the page.
+Guard:
+`scripts/staff-notice-codes.test.ts`, weaker than its name — it reads `code: "…"` literals as
+text, in source files it lists by hand. See [conventions-ui.md](conventions-ui.md).

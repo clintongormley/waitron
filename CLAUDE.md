@@ -100,28 +100,29 @@ for the sharded packages' bars (db, ui and ui-core). Which package bites where:
 [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 Traps, each of which cost a round trip. The mechanism behind every one is in
-[ci-and-gates.md](docs/developers/ci-and-gates.md#root-detail-moved-on-2026-10-26) — read it before changing anything about CI, the
+[ci-and-gates.md](docs/developers/ci-and-gates.md#root-receipts-moved-on-2026-11-09) — read it before changing anything about CI, the
 hook, or how tests are scheduled:
 
-- **`prettier --check` on an IGNORED path prints the same line as a clean one.** `docs/` is ignored
-  whole, so `pnpm exec prettier --file-info <file>` is the one that discriminates — it prints
-  `"ignored": true`.
-- **Check every command's exit status.** A shell sequence separated by newlines reports only its
-  LAST command's status. Use `&&` for dependent validation steps, or capture each status separately.
+- **`prettier --check` on an IGNORED path prints the same line as a clean one.**
+- **Check every command's exit status.** Use `&&` for dependent validation steps, or capture each
+  status separately.
 - **PR CI runs scoped package tests without package-wide coverage; ordinary main pushes run no
   package tests in `ci.yml`; nightly, manual and release runs enforce `98/98/98/95` coverage.**
-  Verify the current head's selected jobs, and the full run's coverage or merge jobs before claiming
-  full coverage. Shard counts must not exceed the package's test-file count. Guard:
+  A PR tests only the changed packages, not their dependents (owner, 2026-11-08, A1461); those are
+  typechecked on the PR and tested nightly. Root coverage remains on every run. UI registry publication keeps its separate package checks;
+  deploy-selected image smoke stays on main (owner, 2026-11-08, A1452). Verify the
+  current head's selected jobs, and the full run's coverage or merge jobs before claiming full
+  coverage. Shard counts must not exceed the package's test-file count. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than the rule: workflow text and controlled shell fixtures,
-  not a hosted Actions run.
-  [Detail](docs/developers/ci-and-gates.md#root-receipts-moved-on-2026-11-09).
+  not a hosted Actions run. [Modes and limits](docs/developers/ci-and-gates.md#scoped-tests-and-full-verification).
 - **`apps/server`'s shards are packed by the committed duration table, not Vitest's hash split.**
   Refresh it with `scripts/test-durations.mjs` when a shard drifts past 4 minutes. Guard:
-  `scripts/vitest-duration-sequencer.test.mjs`, weaker than its name: checks packing, not a Vitest run or freshness.
+  `scripts/vitest-duration-sequencer.test.mjs`, weaker than its name: checks packing.
 - **`mutation-db`'s whole files are packed by the committed `packages/db/mutation-costs.json`, not
   by bytes.** Refresh it with `scripts/mutation-costs.mjs` from a nightly run's reports when a shard
-  nears its 25-minute limit. Guard: the cost-table cases in `scripts/mutation-shard.test.mjs`, weaker
-  than their name: existence, shape and that every file named is still mutated, not freshness. [Receipt](docs/developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).
+  nears its 25-minute limit. Guard: the cost-table cases in `scripts/mutation-shard.test.mjs`,
+  weaker than their name: existence, shape.
+  [Receipt](docs/developers/ci-and-gates.md#root-receipts-moved-on-2026-11-09).
 - **Every CI test job should finish in about 4 minutes** (owner, 2026-10-09 and 2026-10-11).
   Fix the cause, never cut a check. Guards, weaker than the rule: the reporter only warns;
   `scripts/ci-workflow.test.mjs` pins shard counts and 10-minute limits.
@@ -132,13 +133,16 @@ hook, or how tests are scheduled:
 - **Moving harness code out of a `.test.ts` and into `src/testing/` can put it under coverage and
   mutation**, depending on the package's coverage settings and Stryker `mutate` list.
 - **CI does not run every check on every push.** Read `changes` outputs `code`, `scope`, `packages`
-  and `full`.
-  [Detail](docs/developers/ci-and-gates.md#root-receipts-moved-on-2026-11-09).
-- **`bundle-smoke` builds dashboard, setup and till but opens only setup in Chromium with server reads
-  intercepted**; PRs whose scope is `documentation` or `root` skip it.
-  A blank dashboard or till still passes, and setup's server routes are not tested. Guard:
+  and `full`. Main uses the newest completed successful main ancestor to scope quick checks;
+  without a baseline, change scope is global. Main's named package gates are false even when `scope`
+  and `packages` name code changes. PR evidence is not reused. Container publication, including `:main`, follows
+  full scheduled/manual main verification or a fully checked release tag, never an ordinary main
+  push. [Modes and limits](docs/developers/ci-and-gates.md#scoped-tests-and-full-verification).
+- **`bundle-smoke` builds dashboard, setup and till but opens only setup in Chromium with server
+  reads intercepted**; PRs whose scope is `documentation` or `root` skip it. Guard:
   `scripts/bundle-smoke.test.mjs`, weaker than its name: reads workflow steps and real build-script
-  declarations, not the builds or browser check. [Detail](docs/developers/ci-and-gates.md#built-applications-in-bundle-smoke).
+  declarations, not the builds or browser check.
+  [Detail](docs/developers/ci-and-gates.md#root-receipts-moved-on-2026-11-09).
 - **Every Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out; the box image
   copies sharp into `/app/node_modules`.** Guards: `scripts/deploy-image-env.test.ts` and bundle-smoke
   (weaker than their names: read text; bundle-smoke reads only `dist/server.js`), and image-smoke's sharp step.
@@ -151,8 +155,7 @@ hook, or how tests are scheduled:
 - **The GHA cache is a shared per-repository budget, evicted least-recently-used.** Name the entries
   a new exporter would compete with before adding it.
 - **Every workflow job carries `timeout-minutes`; a reusable workflow's called jobs carry it.**
-  Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads text, does not judge the limit
-  or read an external called workflow.
+  Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads text.
 - **An apt-get in a workflow, `deploy/Dockerfile`, `deploy/waitron.sh` or the bench's CA probe image
   runs under an outer `timeout` and retries stalls and failures; so does `playwright install --with-deps`,
   and every `curl` in `deploy/Dockerfile` carries `--retry`, `--connect-timeout` and `--max-time`.**
@@ -163,10 +166,10 @@ hook, or how tests are scheduled:
   name: reads text) and `scripts/ci-setup-pnpm.test.mjs`.
 - **On GitHub's ubuntu-26.04 runners `timeout` is uutils', not GNU's, and its `-k` forced kill
   reaches the command alone, never its children; a script that relies on `-k` to stop a process tree
-  looks for `gnutimeout` first.** Cost: root-guards failed on 26.04 runners. Guards: the "prefers
-  gnutimeout" and "kills an attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
-  rule: that script only; `scripts/ci-diff-paths.sh` never looks for `gnutimeout` (backlog).
-  [Receipt](docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
+  looks for `gnutimeout` first.** Guards: the "prefers gnutimeout" and "kills an attempt that
+  ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the rule: that
+  script only; `scripts/ci-diff-paths.sh` never looks for `gnutimeout` (backlog).
+  [Receipt](docs/developers/ci-and-gates.md#root-receipts-moved-on-2026-11-09).
 - **Every `actions/setup-node` has two bounded attempts; only a failed first attempt runs the retry,
   and a second failure fails the job.** Guard: `scripts/ci-workflow.test.mjs`, weaker than its name:
   reads workflow text. Receipt: [ci-and-gates.md](docs/developers/ci-and-gates.md#every-node-setup-is-bounded).
@@ -206,8 +209,8 @@ hook, or how tests are scheduled:
 - **A migration can fail on a box with an earlier trigger naming what it changes, including in
   another set's trigger body.** Guard: `scripts/migration-upgrade.test.ts`, weaker than its name:
   synthetic counted rows, not compared; today's trigger lists, not each historical boot's.
-- **The upgrade test uses `scratchParent()` from `scripts/scratch-dir.mjs` for its scratch directory.**
-  It prefers `/dev/shm` when present. Nothing guards it.
+- **The upgrade test uses `scratchParent()` from `scripts/scratch-dir.mjs` for its scratch
+  directory.** Nothing guards it.
 - **CI's stream loop/pause tests and each `test-venue-service` shard set `TMPDIR=/dev/shm`, in CI only.**
   Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text, not the tests.
 - **The stream tests' CI job sets loopback's MTU to 1500 before they run, in CI only.** Guard:
@@ -228,18 +231,25 @@ One line each; the receipt for every one is in its topic file. **Read that file 
 area** — these lines tell you what the rule is, not why it exists or how it broke. Where a guard is
 called weaker than its name, the topic file lists what it does not see.
 
-### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26)
+### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-09)
 
 - **A refusal explains what happened and what each choice does; offer any needed administrator or
   owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody
   else.** Nothing guards it. Receipt and the owner's few exceptions:
   [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
 - **New or changed forms use [design-system.md](docs/developers/design-system.md) → Forms.**
-  [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-09).
+  Required fields are marked; invalid fields get inline errors and one localized bottom message on its
+  own line above buttons, never a top summary, with the action disabled until fixed. Request refusals alone never disable it; field refusals appear under that field (owner,
+  2026-09-29). Saves stay quiet and disabled until the draft changes, using `draftScopeFor`,
+  `saveActionState` and a save-handler early return (owner, 2026-10-07, A331). Other actions stay quiet while awaiting a choice,
+  selection or load, or barred by row state; use their own colour when actionable or sending (owner,
+  2026-10-08, A416/A427). Exceptions are in the Forms contract; nothing guards these across screens.
+  A hint is the placeholder; short explanations are hints, not “?” buttons (owner, 2026-10-03; unguarded,
+  A237). Inputs have semantic `name`s, never widget ids. Other dated decisions and the sign-in exception:
+  [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A screen does not draw its own form field**: a `<select>`, a `<textarea>` or a text `<input>`
   comes from a field primitive; where none fits, add to one or add one (owner, 2026-10-01). Guard:
-  `scripts/native-form-fields.test.ts`, weaker than its name — it reads string literals, and holds
-  the files it allows by name only to a line count.
+  `scripts/native-form-fields.test.ts`, weaker than its name — it reads string literals.
 - **A form that asks for a postal address puts `wt-address-lookup` above its address fields**
   (the owner's ask, 2026-10-28, A1171); it stays hidden until the form is handed an address
   provider. Guard: `scripts/address-lookup-forms.test.ts`, weaker than its name: reads text, not
@@ -279,8 +289,9 @@ called weaker than its name, the topic file lists what it does not see.
 - **A successful write followed by a failed refresh is a load failure, not a failed save.** Close the
   editor after the write succeeds, then refresh separately — a retained create form invites a
   duplicate submission.
-- **Automatic dashboard reads are passive session activity.**
-  [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-09).
+- **Automatic dashboard reads are passive session activity.** Use the shared query controller or the
+  request primitive's `passive` option, or polling keeps an unattended dashboard signed in. Observer
+  callbacks assign snapshots; they do not rerun loaders that reset drafts.
 - **A screen that shows a read's and an action's failure in one field remembers which one set it:
   the reads' recovery clears only a read's message, a reload that can finish after another action
   failed clears only a read's message, and a read's failure does not replace an action's**. Nothing
@@ -296,7 +307,8 @@ called weaker than its name, the topic file lists what it does not see.
 - **Every staff-notice code a source sends is worded by the till's `staffNoticeText`**; a code it
   does not name is drawn as "The server needs attention". Guard:
   `scripts/staff-notice-codes.test.ts`, weaker than its name — it reads `code: "…"` literals as
-  text, in source files it lists by hand. See [conventions-ui.md](docs/developers/conventions-ui.md).
+  text. See
+  [conventions-ui.md](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-09).
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;
   automatic pairing renewal uses its own authenticated route.
 - **Dashboard subscription names travel with their server sources.** Guard: `scripts/live-subscriptions.test.ts` — it catches unknown names, NOT missing SQL dependencies or disabled-module combinations. [Detail](docs/developers/conventions-ui.md).
@@ -312,16 +324,20 @@ called weaker than its name, the topic file lists what it does not see.
   or passkey enrolment to choose the public screen. A modal passkey prompt requires an explicit
   action: navigation, refresh, logout and session expiry never open one. Save the authenticated email and the successful method only with Remember selected, never
   in tab storage.
-- **A login refusal never reveals account existence**. Owner-approved exception:
-  `passkey.not_registered`. Guards: identity login and route suites, weaker than the set looks: no
-  new sign-in route is covered.
-  [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-09).
+- **A login refusal never reveals account existence** (owner, 2026-09-30): unknown, suspended,
+  pending, wrong-secret and till-profile-inadmissible accounts answer `password.invalid` or `pin.invalid`
+  after the same hashing work, as one sentence with no field marked. Only missing/malformed
+  input marks a field; the real cause is a log-only `reason`. Owner-approved exception: `passkey.not_registered`.
+  An email sign-in through a queue keyed by person id takes its id from `personIdForLoginEmail`,
+  stable per address, or attempts sent at once finish sooner for an unknown address.
+  Guards: identity login and route suites, weaker than the set looks: no new sign-in route is covered.
+  [Detail](docs/developers/conventions-ui.md#a-logins-refusal-never-says-whether-the-account-exists).
 - **A device's profile and the signed-in person must both allow a till action; profile zones bound
   service and its admission list bounds sign-in.** Preserve the stated action exceptions. New routes
   add refusing cases and inventory rows to `apps/server/src/till-api.profile-actions.test.ts` and
   zone rows to `apps/server/src/till-api.profile-zones.test.ts`. The inventory guard is weaker than
   its name: only its till/device/schedule mounts, and device-proof refusals.
-  [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-09).
+  [Limits](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-09).
 - **A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`** (owner, A155).
   Guard: `scripts/pinned-actions-column.test.ts`, weaker than its name: identifies menus only by that
   literal key; a data column must use another key.
@@ -358,17 +374,20 @@ called weaker than its name, the topic file lists what it does not see.
   sends a bus message the profile does not list is refused until the profile gains a rule for it.**
   Guards, weaker than their names: image-smoke (no Bluetooth on the runner) and
   `scripts/deploy-image-env.test.ts` (reads the profile as TEXT).
-- **The unauthenticated recovery page's title and action are fixed strings chosen by the error code
-  (after a Start again Move, an answer naming the set-aside folder takes their place); its log tail
-  is written through `redactSecrets` and the personal-data mask (except the frozen-process
-  watchdog's own line, which goes through neither), and HTML-escaped**. Its one password form, for
-  `setup.start_again_files_found`, takes the administrator password over HTTPS only; its Move choice
-  is the owner's one exception to never suggesting a removal (A1098). Guard: the never-delete cases
-  in `apps/server/src/recovery-surface.test.ts`, weaker than their name: they read the text tables,
-  not the page.
-  [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-09).
+- **The unauthenticated recovery page's title and action are fixed strings chosen by the error
+  code (after a Start again Move, an answer naming the set-aside folder takes their place); its log
+  tail is written through `redactSecrets` and the personal-data mask (except the frozen-process
+  watchdog's own line, which goes through neither), and HTML-escaped** (owner decision 2026-09-26;
+  the personal-data mask is A980 S10's default, open to the owner). `redactSecrets` masks only a
+  password in a URL, which is why no code's params and no logged message may carry a secret. Its one
+  password form, for `setup.start_again_files_found`, takes the administrator password over HTTPS
+  only; its Move choice is the owner's one exception to never suggesting a removal (A1098). The
+  tail's span and the cost of taking that password without HTTPS:
+  [conventions-ui.md](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-06). Guard:
+  the never-delete cases in `apps/server/src/recovery-surface.test.ts`, weaker than their name: they
+  read the text tables, not the page.
 
-### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md#root-detail-moved-on-2026-10-26)
+### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-09)
 
 - **Validate a saved time zone as stored; normalize new input separately.** Cost: a padded name
   admitted duties while repair refused it. Guards: `packages/shared/src/time-zone.test.ts` and
@@ -378,37 +397,42 @@ called weaker than its name, the topic file lists what it does not see.
   Explicit null and coerced arrays passed modifier validation. A field whose null is itself a value
   is deliberately outside the rule — an extras list's `maxPicks`, an extras item's `maxQuantity`,
   the seat-a-table route's `guestCount` and the setup request's `taxpayerDomicile` among them.
-- **Error codes name the domain concept, never the throwing package; `server.*` names process
-  facts.** Every throwing file imports its registry. Before a venue is live, rename/delete freely;
-  afterwards either is a migration (owner, 2026-09-26).
-  [Detail](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-09).
+- **Error codes name the domain concept, never the throwing package; `server.*` names process facts.**
+  Every throwing file imports its registry. Before a venue is live, rename/delete freely; afterwards
+  either is a migration (owner, 2026-09-26). Move every tree copy together; once live, rewrite stored
+  copies and keep external readers accepting both names until both sides deploy. Stored-copy and
+  prefix-matcher locations: [conventions-data.md](docs/developers/conventions-data.md).
 - **A detail or log field holding a person's name, email or tax number uses a name on
   `PERSONAL_LOG_KEYS` or a path on `PERSONAL_LOG_PATHS` (`apps/server/src/log-personal-data.ts`),
-  which the server's logger masks in every line it writes; the answer keeps it. Name it for whose
-  it is (`guestName`, `customerTaxId`), never a bare `name` or `taxId` (the listed bare `taxId` is
-  the venue's own): the list is flat across every code.** Cost: staff names and
-  emails reached the sign-in-free recovery page. Guard: `scripts/personal-log-params.test.ts`, weaker than its name:
-  reads text. [Limits](docs/developers/conventions-data.md#root-receipts-moved-on-2026-10-31).
+  which the server's logger masks in every line it writes; the answer keeps it. Name it for whose it
+  is (`guestName`, `customerTaxId`), never a bare `name` or `taxId` (the listed bare `taxId` is the
+  venue's own): the list is flat across every code.** Guard: `scripts/personal-log-params.test.ts`,
+  weaker than its name: reads text.
+  [Limits](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-09).
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
   `scripts/alert-codes.test.ts`, weaker than its name — it reads literals in hand-listed files.
 - **General code is English only** (owner, 2026-09-07 and 2026-10-19), including literals, comments,
-  identifiers, file names, seeds, starter content and tests. Exceptions:
-  `packages/fiscal-verifactu`, AEAT wire names, translation files/guides and Spain-specific packages
-  (`country-es`, `workforce-es`, reporting's modelo 303) for official Spain-only text/terms (owner,
-  2026-10-20, A913). Guard: `scripts/english-only.test.ts`, weaker than its name: listed words and
-  packages only, no apps; review greps the diff.
-  [Detail](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-09).
+  identifiers, file names, seeds, starter content and tests. Exceptions: `packages/fiscal-verifactu`,
+  AEAT wire names, translation files/guides and Spain-specific packages (`country-es`, `workforce-es`,
+  reporting's modelo 303) for official Spain-only text/terms (owner, 2026-10-20, A913).
+  [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02). Country packs
+  also provide English and own demo data; Spain receipts use the venue's receipt language, never English. Starter content is English
+  in code and translated at setup; its words in other languages go in the writing package's
+  `src/starter-content.ts`, which the guard skips by exact path (owner, 2026-10-20, A918);
+  non-English screen tests read expected strings. Domain terms
+  have one declaring module vocabulary; fiscal terms never enter the base.
+  Guard: `scripts/english-only.test.ts`, weaker than its name: listed words and packages only, no apps;
+  review greps the diff.
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`,
   weaker than its name (it reads text) — shrink its allowlist, never grow it.
   `@waitron/dashboard-modules` is the browser-side twin.
 - **A configuration bundle value that is not a setup field stays out of `venue`'s own keys** (the
-  default menu travels as the top-level `defaultCatalogueId`). Cost: from #1752 to A980 S1a2
-  no production box could be set up from an export. Guards:
-  `apps/server/src/first-fiscal-setup.e2e.test.ts` and `apps/setup/src/setup-app-first-fiscal.test.ts`,
-  weaker than the rule: one export shape.
-  [Limits](docs/developers/conventions-data.md#root-receipts-moved-on-2026-10-31).
+  default menu travels as the top-level `defaultCatalogueId`). Guards:
+  `apps/server/src/first-fiscal-setup.e2e.test.ts` and
+  `apps/setup/src/setup-app-first-fiscal.test.ts`, weaker than the rule: one export shape.
+  [Limits](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-09).
 - **A test-only dependency closes a workspace dependency loop as surely as a runtime one.** A suite
   needing packages from both ends of a loop goes in a package nothing depends on. Guard:
   `scripts/workspace-cycles.test.ts` — it reads each `package.json`, not pnpm's own graph.
@@ -420,8 +444,7 @@ called weaker than its name, the topic file lists what it does not see.
 - **A command name is declared under `waitron.commands`, never `bin`.**
 - **A change adding third-party code or a binary to the image carries its licence notices, shipped
   in `/app/third-party/`** (owner, 2026-09-24). Guard: the third-party blocks in
-  `scripts/deploy-image-env.test.ts`, weaker than their name — they read text, and a new binary or
-  system package is seen by none of them.
+  `scripts/deploy-image-env.test.ts`, weaker than their name — they read text.
 - **`@waitron/db`'s `exports` map is enumerated, not a wildcard**, so `apps/server` cannot deep-import
   its `errors.ts`.
 - **Never build SQL by string concatenation — except where the engine takes no bound value**: an
@@ -572,9 +595,9 @@ called weaker than its name, the topic file lists what it does not see.
 - **A till request that needs a signed-in person is checked against the `x-waitron-person` header
   inside `requireSession`, `signedInPersonOn` and sign-out; read the session's person only through
   them.** Guard: `apps/server/src/till-api.session-person.test.ts`, weaker than its name: only the
-  till, device and schedule mounts' routes, statuses rather than bodies, and a text check for the
-  cookie. A new route the walk sees answered as with nobody signed in goes in its `BLIND` list, and
-  one that needs a body in `BODIES`. [Receipt](docs/developers/conventions-data.md#a-till-requests-person-is-checked-where-the-sign-in-is-read).
+  till, device and schedule mounts' routes. A new route the walk sees answered as with nobody signed
+  in goes in its `BLIND` list, and one that needs a body in `BODIES`.
+  [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-09).
 - **A module with a migration set names in `requires` every other set its SQL references, puts a
   trigger on, names in a trigger body or writes at top level.** Guard: `scripts/module-graph-honesty.test.ts`,
   weaker than its name: text scan recognising fixed SQL shapes.
@@ -590,10 +613,10 @@ called weaker than its name, the topic file lists what it does not see.
   with its tables in workforce's set, and `node`, whose set is applied to `node.db`. Append-only
   classification travels with the set. Guard: the eight-sets cases in
   `packages/composition/src/composition.test.ts`, weaker than the rule: they pin today's sets and
-  hosted modules, never whether a module can be switched off.
-- **Declare every foreign key and unique index in the TypeScript schema.** If impossible, say at
-  the column what it cost and where the refusal moved. Guard: `scripts/schema-constraints.test.ts`,
-  weaker than its name: reads built schema, never offending writes; matches unique indexes by name.
+  hosted modules.
+- **Declare every foreign key and unique index in the TypeScript schema.** If impossible, say at the
+  column what it cost and where the refusal moved. Guard: `scripts/schema-constraints.test.ts`,
+  weaker than its name: reads built schema.
 - **A schema change rebuilds the set's one starting migration, never a new migration or a hand edit:**
   change the TypeScript schema (hand-written SQL only in `<package>/triggers/<set>.sql`) and run
   `migration-baseline rebuild --set <name>`; on a rebase conflict take main's copy
@@ -643,7 +666,7 @@ called weaker than its name, the topic file lists what it does not see.
 ## 4. Testing
 
 One line each; the mechanism, the measurement and the incident behind every one are in
-[testing-guide.md](docs/developers/testing-guide.md#root-detail-moved-on-2026-10-26) and
+[testing-guide.md](docs/developers/testing-guide.md#root-receipts-moved-on-2026-11-09) and
 [its 2026-11-02 excerpts](docs/developers/testing-guide.md#root-receipts-moved-on-2026-11-02).
 **Read it before writing a database or browser test** — most of these rules exist because a test
 passed while proving nothing.
@@ -694,9 +717,9 @@ passed while proving nothing.
   `startServer` or after `close()`**. Guard: `apps/server/src/boot.backup-network.test.ts`'s
   `beforeServerStarts`, weaker than the rule — it covers the file's two write helpers only. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down).
-- **A test child process that freezes `Date` freezes `performance.now` with it**, or the hour clock
-  refuses it only on a slow runner. Guard: the one-time 1.1-second holds in the hour test children,
-  weaker than the rule: those children only. [Receipt and paths](docs/developers/testing-guide.md#root-receipts-moved-on-2026-10-31).
+- **A test child process that freezes `Date` freezes `performance.now` with it**. Guard: the
+  one-time 1.1-second holds in the hour test children, weaker than the rule: those children only.
+  [Receipt and paths](docs/developers/testing-guide.md#root-receipts-moved-on-2026-11-09).
 - **Draw every port a test needs in one `freePorts(n)` call, before binding any of them**
   (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound. Nothing
   guards it.
@@ -707,9 +730,8 @@ passed while proving nothing.
   In a shared database, every write and helper takes its clock from the latest record time;
   otherwise give the case its own database. Nothing guards it.
 - **A suite that sends a room's revision to a today's-floor write route pins the API's clock at its
-  own fixed time and seeds at that time**, or a run across the venue's day change can be refused
-  `floor_today.out_of_date`. Nothing guards it. Receipt:
-  [testing-guide.md](docs/developers/testing-guide.md#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change).
+  own fixed time and seeds at that time**. Nothing guards it. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#root-receipts-moved-on-2026-11-09).
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
   `pnpm reap` sweeps these, scoped by ppid 1 AND the shapes vitest leaves in `ps`, never a bare `vitest` match.
 - **Concurrent coverage runs must not share a package's report directory, and an intentional second
@@ -730,8 +752,7 @@ passed while proving nothing.
   `scripts/fiscal-test-budget.test.ts`, weaker than its name — it pins one arrangement, not how
   Vitest resolves the limit.
 - **A package that pins one worker inside one of several projects numbers its `groupOrder`s from 1,
-  never 0**: Vitest 4 runs a `groupOrder: 0` project that runs one isolated worker AFTER every other
-  group. Guard: `scripts/bookings-test-budget.test.ts` — which pins bookings alone.
+  never 0**. Guard: `scripts/bookings-test-budget.test.ts` — which pins bookings alone.
 - **A test's timeout must exceed the SUM of its waits plus untimed work.** Guard:
   `scripts/spawn-timeout-budget.test.ts`, weaker than its name: text scan of `scripts/` only,
   checks only the largest single wait; packages/apps unguarded.
@@ -813,8 +834,7 @@ passed while proving nothing.
   pages have no harness: write the rendered string to a file and open it with the workspace's
   playwright Chromium.
 - **Code every database test runs — `useVenueDb`'s hooks — never checks something already
-  guaranteed**: that check's mutants change nothing, and on CI's runners some ran to Stryker's
-  per-mutant timeout. Nothing guards it.
+  guaranteed**. Nothing guards it.
   [Receipt](docs/developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).
 - **In `packages/db`, import inside a case only to assert what a source module builds on load;
   otherwise import at the top.** Its Stryker config uses `ignoreStatic`; nothing guards this.
@@ -846,9 +866,12 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **One database per environment.** A pre-production database is never promoted. `WAITRON_ENV`
   governs this; unset means `preproduction`, `production` must be typed out, and `dev` is
   preproduction plus `config.devMode`.
-- **Nothing EXTERNAL may block a sale — and a till needs the venue's PRIMARY.** Fiscal submission is
-  an outbox, never inline. TODAY a venue has ONE node and no failover at all.
-  [Detail](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-09).
+- **Nothing EXTERNAL may block a sale — and a till needs the venue's PRIMARY.** AEAT, the card network
+  and the internet are never on the sale path of whichever node is primary: records chain locally and
+  the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
+  the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
+  inline. TODAY a venue has ONE node and no failover at all. Detail:
+  [conventions-data.md](docs/developers/conventions-data.md).
 - **A box that is not a mirror, whose held chart lists another box that finished joining, asks it
   by signed query before selling or filing, and waits while every box it counts is silent (a box
   it took over from, or demoted by its own promotion, it asks but never waits for), until one
@@ -893,12 +916,15 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   `apps/server/src/boot.producer-change.test.ts` and the publish cases in
   `scripts/ci-workflow.test.mjs`, weaker than the rule: a stand-in `docker`, never a real publish.
   [Detail](docs/developers/ci-and-gates.md#the-publish-job-requires-guards-and-checks-the-producers-settings)
-- **Restore and promotion start a new chain under a new installation name.** Only preproduction
-  throwaway skips second-clock/history checks; refuse it outside preproduction. Restore takes one
-  source; working-time chain continues from its head. Guards:
-  hour-selection/hour-clock/minute-selection-unknown-name suites (the last weaker than its name) and
-  `packages/workforce/src/restore-continuation.test.ts`.
-  [Detail](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-09).
+- **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion
+  use five symbols for the box's UTC minute, after another machine's clock agrees within 30 seconds
+  (no confirmation); a minute whose name is already in a history the box reads is not taken. Its
+  waits, its other refusals and when a name can repeat:
+  [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06). Only
+  preproduction throwaway skips second-clock/history checks; refuse it outside preproduction.
+  Restore takes one source; working-time chain continues from its head. Guards:
+  hour-selection/hour-clock/minute-selection-unknown-name suites (the last weaker than its name)
+  and `packages/workforce/src/restore-continuation.test.ts`.
 - **A box holding a `node_handover_restriction` row starts restricted, before every worker; a
   background duty is stopped through `apps/server/src/background-duties.ts`, signalled at a
   stepdown or carrying a reason.** Guards: `apps/server/src/boot.restricted-quiet.test.ts` and
@@ -915,7 +941,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 ## 6. Workflow
 
 The commands, the dev stack and the receipts are in
-[workflow-guide.md](docs/developers/workflow-guide.md#root-detail-moved-on-2026-10-26). **Model selection is not a waitron rule** —
+[workflow-guide.md](docs/developers/workflow-guide.md#root-receipts-moved-on-2026-11-09). **Model selection is not a waitron rule** —
 it lives in the global `~/.claude/CLAUDE.md` and is shared by every repo. When CODEX drives, the roles reverse: Codex implements and Claude reviews — so establish who is driving
 before treating an implementation as a rule violation.
 
@@ -961,10 +987,9 @@ before treating an implementation as a rule violation.
   that slot's venue — so a branch's migrations can fail on the rows already in it.**
   `wa-wt reset demo <name>` rebuilds it.
 - **Mock-ups and screenshots are never committed, and not copied to Drive** (owner, 2026-11-02):
-  they stay in the working folder of whoever made them and are shown to the owner directly. Cost:
-  184 MiB of them in the tree when removed. Guard:
-  `scripts/no-mockups-in-docs.test.ts`, weaker than its name: reads tracked file names, not
-  content. [Limits](docs/developers/workflow-guide.md#mock-ups-and-screenshots-are-never-committed).
+  they stay in the working folder of whoever made them and are shown to the owner directly. Guard:
+  `scripts/no-mockups-in-docs.test.ts`, weaker than its name: reads tracked file names, not content.
+  [Limits](docs/developers/workflow-guide.md#root-receipts-moved-on-2026-11-09).
 
 **Docs.** `docs/backlog.md` answers "what should I work on?" — read it before starting anything
 unprompted, and **update it in the same change that makes it stale**. A change that finishes an
@@ -972,7 +997,8 @@ entry DELETES it rather than marking it done. **A loose end found in review is f
 request; if that really cannot be done, it joins an existing bundle in its area. It, or a point a
 finished entry leaves open, gets a short entry of its own in the same area only if a person would
 notice it, it could cost money or a filing, or it breaks a written rule. Everything else stays in
-the pull request thread** (owner, 2026-11-06). A decision a comment or doc cites moves to its area's
+the pull request thread** (owner, 2026-11-06). Cost: the list grew by about 25 entries a day, about
+half of them from reviews. A decision a comment or doc cites moves to its area's
 `## Decisions and deliberate limits` instead of being deleted. How, and where long detail goes:
 `docs/backlog.md` → _How to keep this file honest_. Specs live in `docs/superpowers/specs/`, plans in
 `docs/superpowers/plans/`, both committed deliberately. Session handoffs in `docs/handoffs/` are
