@@ -94,6 +94,14 @@ Each stays open until the owner answers it. "The picture" was a mock-up, removed
 
 ## The SumUp Solo experiments
 
+**9 November continuation:** the owner's cross-account session accepted Waitron's new affiliate
+block with the restaurant's credential. A reference read changed from 404 to PENDING before the
+tap; after payment it matched the saved identities and EUR 1.00. Integer-cents refunds returned
+REFUNDED events while the payment stayed SUCCESSFUL. An unpaid cancellation was visible by
+reference as FAILED; only its checkout's failure reason identified cancellation. Read
+[the retained results and limits](../research/2026-09-10-sumup-solo-experiments.md#11-a949-cross-account-session-2026-11-09).
+The earlier session below remains a historical measurement.
+
 **A949 session, 2026-11-05:** affiliate checkout and lookup after payment worked. A repeated
 foreign reference started a new checkout, so the reference did not prevent a second request. The
 first immediate lookup before the tap returned 404; a later checkout was visible as PENDING
@@ -118,7 +126,7 @@ complete detail through the real adapter matched its refund; the raw 19-row hist
 omits foreign-reference keys, while the two detail responses carry them. See the runbook's
 §10.7.
 
-Still open: pending lookup by supplied reference, signature-required cards, the statement/fee
+Still open: declined-card behavior, signature-required cards, the statement/fee
 check, the SIM-only/offline/busy-reader/termination probes, and a second standalone machine's
 matching sample. The phone-app samples below do not establish the latter. No further paid
 request is authorised unattended, and a distinct authorisation void has not been measured.
@@ -150,8 +158,11 @@ read-only follow-up has no foreign-reference key; two original details do. Both 
 retain refund ids, and their real-adapter replays match the corresponding refund. The earlier
 projection omitted ids; it is not evidence for a parser change. A first missing lookup does not
 license another charge; ambiguous matches stay visible. No reconciler was built. Its design may
-continue, but table changes wait for A760 under A1308. Signature handling remains independently
-open.
+continue against [the 9 November cross-account session](../research/2026-09-10-sumup-solo-experiments.md#11-a949-cross-account-session-2026-11-09).
+The A1308 table-work hold was lifted on 7 November; any new schema work regenerates on the
+current main baseline. The owner decided on 9 November that every reader checkout carries
+Waitron's affiliate block and each venue's own credential. Revise the plan and obtain approval
+before building; signature handling remains independently open.
 
 Settlement-report audit and orphan self-heal. `resolvePending` is the interim backstop; without
 an affiliate key a create whose response is lost resolves `failed` and raises
