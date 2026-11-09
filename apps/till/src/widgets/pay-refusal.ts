@@ -73,6 +73,7 @@ export function refusalText(
       return t(refusal.code);
     case "storage.disk_full":
       return t(refusal.manualCard ? "sale.disk_full_manual_card" : "sale.disk_full");
+    case "handover.stepping_down":
     case "fiscal.chain_handed_over":
       if (refusal.manualCard) return t("sale.chain_handed_over_manual_card");
       break;

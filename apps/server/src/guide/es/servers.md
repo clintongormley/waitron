@@ -33,22 +33,16 @@ normalidad o, si el otro ha pasado a llevar el local, lo indica.
 
 Si sabes que el otro equipo está apagado, puedes dejar que este equipo siga sin él. Abre el equipo
 en su dirección `https://`, inicia sesión como administrador en **Seguir como equipo principal** y
-marca las dos casillas. Este equipo vuelve a aceptar ventas y pregunta al otro equipo cuando se
-reinicia.
+marca las dos casillas. Este equipo lleva entonces el local hasta que se reinicie, y entonces vuelve
+a preguntar al otro equipo.
 
 Si el otro equipo responde antes, manda su respuesta. Un equipo que ya ha pasado el local no puede
 seguir; su página lo indica en lugar de mostrar el formulario.
 
 Si la copia de seguridad confirma que otro equipo ha pasado a llevar el local, este equipo se
-niega a seguir como principal. Abre el otro equipo con el enlace y deja este esperando o apágalo.
-Si el traspaso aparece en la copia después de continuar, este equipo deja de vender y de enviar
-registros a Hacienda.
-
-Un equipo detenido así puede conservar un esquema antiguo que lo nombra principal, por lo que
-**Volver a unirse** se niega. Sigue usando el nuevo equipo principal y deja apagado el detenido.
-Para volver a configurarlo, usa el procedimiento **Empezar de nuevo** de la configuración inicial;
-esto borra su parada registrada. Antes, comprueba las ventas que solo haya registrado ese equipo.
-Los equipos antiguos pueden compartir dirección: comprueba qué equipo has abierto antes de seguir.
+niega a seguir como principal. Abre el otro equipo con el enlace. Si esa información aparece después
+de continuar, este equipo deja de aceptar ventas. Usa el nuevo equipo principal. Los equipos antiguos
+pueden compartir dirección: comprueba qué equipo has abierto.
 
 ## Activar o desactivar el acceso remoto del personal {#remote-access}
 

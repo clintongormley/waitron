@@ -12,6 +12,7 @@ import {
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import {
   CORE_MIGRATIONS,
+  readNodeMembership,
   withNodeTransaction,
   withTransaction,
   writeNodeMembership,
@@ -28,6 +29,7 @@ import {
   type SpawnFn,
   type StreamStatus,
 } from "@waitron/stream";
+import * as stream from "@waitron/stream";
 import { FakeLitestream, type FakeChild } from "@waitron/stream/testing/fake-litestream.js";
 import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import {
@@ -196,6 +198,16 @@ describe("the live copy's wiring", () => {
         endorsement: kind === "missing-endorsement" ? "missing" : undefined,
       });
       const bucket = store();
+      if (kind === "self") {
+        const chart = (await readNodeMembership(db))!;
+        await writeNodeMembership(db, {
+          ...chart,
+          endorsements: [
+            ...chart.endorsements,
+            endorseKey(NODE_ID, keys.publicKey, NODE_ID, keys.privateKey),
+          ],
+        });
+      }
       if (kind !== "missing-pointer")
         await publish(
           bucket,
@@ -209,6 +221,44 @@ describe("the live copy's wiring", () => {
       if (kind === "unconfigured")
         await withTransaction(db, (tx) => tx.run(sql`delete from tenant_credentials`));
       expect(await readNewerBucketMain(deps(bucket))).toBeNull();
+    });
+    it("retries a failed stop instead of leaving the old main trading", async () => {
+      await configure();
+      const bucket = store();
+      await publish(bucket);
+      let attempts = 0;
+      const rt = runtime({ store: bucket });
+      try {
+        rt.observeNewerMain(async () => {
+          if (++attempts === 1) throw new Error("node read failed");
+        }, 5);
+        await vi.waitFor(() => expect(attempts).toBe(2));
+      } finally {
+        await rt.stop();
+      }
+    });
+    it("reuses its bucket client until saved settings change", async () => {
+      await configure();
+      const bucket = store();
+      const opened = vi.spyOn(stream, "createS3ObjectStore").mockReturnValue(bucket);
+      const reads = vi.spyOn(bucket, "get");
+      const rt = runtime();
+      try {
+        rt.observeNewerMain(async () => {}, 5);
+        await vi.waitFor(() => expect(reads.mock.calls.length).toBeGreaterThanOrEqual(3));
+        expect(opened).toHaveBeenCalledTimes(1);
+        await withTransaction(db, (tx) =>
+          putCredential(tx, RING, {
+            purpose: STREAM_PURPOSE,
+            value: { ...SETTINGS, secretAccessKey: "replacement-secret" },
+          }),
+        );
+        await vi.waitFor(() => expect(opened).toHaveBeenCalledTimes(2));
+        expect(opened.mock.calls[1]![0].secretAccessKey).toBe("replacement-secret");
+      } finally {
+        await rt.stop();
+        opened.mockRestore();
+      }
     });
     it("checks the current chart after a slow bucket answer", async () => {
       await configure();
@@ -240,8 +290,57 @@ describe("the live copy's wiring", () => {
       const rt = runtime({ store: bucket });
       rt.observeNewerMain(stopped, 5);
       await vi.waitFor(() => expect(reading).toHaveBeenCalledOnce());
-      await rt.stop();
-      expect(stopped).not.toHaveBeenCalled();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const prompt = await Promise.race([
+          rt.stop().then(() => true),
+          new Promise<boolean>((done) => {
+            timer = setTimeout(() => done(false), 5_000);
+          }),
+        ]);
+        expect(prompt).toBe(true);
+        expect(stopped).not.toHaveBeenCalled();
+      } finally {
+        clearTimeout(timer);
+        await rt.stop();
+      }
+    });
+    it("settles an in-flight read before shutdown and ignores its late evidence", async () => {
+      await configure();
+      const bucket = store();
+      await publish(bucket);
+      const get = bucket.get.bind(bucket);
+      let release!: () => void;
+      let entered!: () => void;
+      const held = new Promise<void>((done) => {
+        release = done;
+      });
+      const reading = new Promise<void>((done) => {
+        entered = done;
+      });
+      vi.spyOn(bucket, "get").mockImplementation(async (key) => {
+        entered();
+        await held;
+        return get(key);
+      });
+      const stop = vi.fn(async () => {});
+      const rt = runtime({ store: bucket });
+      let settled = false;
+      try {
+        rt.observeNewerMain(stop, 5);
+        await reading;
+        const closing = rt.stop().then(() => {
+          settled = true;
+        });
+        await new Promise<void>((done) => setImmediate(done));
+        expect(settled).toBe(false);
+        release();
+        await closing;
+        expect(stop).not.toHaveBeenCalled();
+      } finally {
+        release();
+        await rt.stop();
+      }
     });
     it("observes later evidence even while copying is off, and stops observing on shutdown", async () => {
       await configure();
@@ -249,7 +348,9 @@ describe("the live copy's wiring", () => {
       const stopped = vi.fn(async () => {});
       const rt = runtime({ store: bucket, isPrimary: () => false });
       await rt.start();
+      const duplicate = vi.fn(async () => {});
       rt.observeNewerMain(stopped, 5);
+      rt.observeNewerMain(duplicate, 5);
       await publish(bucket);
       await vi.waitFor(() =>
         expect(stopped).toHaveBeenCalledWith({
@@ -260,6 +361,7 @@ describe("the live copy's wiring", () => {
       );
       await rt.stop();
       expect(stopped).toHaveBeenCalledTimes(1);
+      expect(duplicate).not.toHaveBeenCalled();
       expect(rt.status()).toEqual({ state: "off" });
     });
   });

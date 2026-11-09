@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { nodeSigningPublicKey, tryGetCredential, type KeyRing } from "@waitron/credentials";
@@ -103,12 +104,13 @@ export interface NewerBucketMain {
 export async function readNewerBucketMain(
   deps: Pick<StreamHostDeps, "db" | "node" | "ring" | "nodeId" | "store">,
   signal?: AbortSignal,
+  openStore: typeof createS3ObjectStore = createS3ObjectStore,
 ): Promise<NewerBucketMain | null> {
   try {
     const settings = await readStreamSettings(deps.db, deps.ring);
     if (settings === null) return null;
     const stored = await readPointer(
-      boundObjectStore(deps.store ?? createS3ObjectStore(settings.bucket), 15_000),
+      boundObjectStore(deps.store ?? openStore(settings.bucket), 15_000),
       settings.venueId,
       { signal },
     );
@@ -180,6 +182,7 @@ export class StreamHost {
   #stopped = false;
   #observerAbort: AbortController | undefined;
   #observer: Promise<void> | undefined;
+  #pointerStore: { bucket: BucketConfig; store: ObjectStore } | undefined;
   #retiring: Promise<void> = Promise.resolve();
   /** A stopped supervisor's pointer write can still land after the next one reads the pointer. */
   readonly #sentPointers = new SentPointers();
@@ -197,15 +200,23 @@ export class StreamHost {
     this.#observerAbort = abort;
     this.#observer = (async () => {
       while (!abort.signal.aborted) {
-        const evidence = await readNewerBucketMain(this.#deps, abort.signal);
+        const evidence = await readNewerBucketMain(this.#deps, abort.signal, (bucket) => {
+          if (
+            this.#pointerStore === undefined ||
+            !isDeepStrictEqual(this.#pointerStore.bucket, bucket)
+          )
+            this.#pointerStore = { bucket, store: createS3ObjectStore(bucket) };
+          return this.#pointerStore.store;
+        });
         if (abort.signal.aborted) return;
         if (evidence !== null) {
           try {
             await stop(evidence);
+            return;
           } catch (error) {
+            if (codeOf(error) === "handover.restriction_conflict") return;
             this.#deps.log("error", "stream.main_stop_failed", { errorCode: codeOf(error) });
           }
-          return;
         }
         await new Promise<void>((resolve) => {
           const done = () => {

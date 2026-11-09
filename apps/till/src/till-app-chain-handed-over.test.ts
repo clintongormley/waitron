@@ -176,3 +176,22 @@ it.each(["en-GB", "es-ES"])("says a bill payment was refused in %s", async (loca
   );
   expect(write).toHaveBeenCalledOnce();
 });
+
+it.each(["en-GB", "es-ES"])(
+  "keeps terminal refund advice on a stopped hand-keyed table bill in %s",
+  async (locale) => {
+    const write = vi.fn().mockRejectedValue({ ...refusal, code: "handover.stepping_down" });
+    const { el } = await mount(locale, { takeBillPayment: write });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    inDialog(el, 'input[name="method"][value="card"]')!.click();
+    await flush(el);
+    await type(el, "externalRef", "123");
+    await press(el, "[data-pay-continue]");
+    emit(dialog(el)!, "bill-pay-confirm", { guestCount: 4 });
+    await flush(el);
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.chain_handed_over_manual_card"));
+    expect(write).toHaveBeenCalledOnce();
+  },
+);

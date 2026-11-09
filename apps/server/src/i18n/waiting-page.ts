@@ -71,7 +71,7 @@ export const WAITING_PAGE_WORDS: Readonly<
       openMain: "Open the other box",
       intro: [
         "Only if ",
-        " is switched off. This box then runs the venue until it next restarts, when it asks again.",
+        " is switched off. This box starts taking sales again, but stops if its backup confirms that another box has taken over. It asks the other box again at its next restart.",
       ],
       email: "Email",
       password: "Password",
@@ -129,7 +129,7 @@ export const WAITING_PAGE_WORDS: Readonly<
       openMain: "Abrir el otro equipo",
       intro: [
         "Solo si ",
-        " está apagado. Este equipo lleva entonces el local hasta que se reinicie, y entonces vuelve a preguntar.",
+        " está apagado. Este equipo vuelve a aceptar ventas, pero se detiene si la copia de seguridad confirma que otro equipo ha pasado a llevar el local. Vuelve a preguntar al reiniciarse.",
       ],
       email: "Correo electrónico",
       password: "Contraseña",

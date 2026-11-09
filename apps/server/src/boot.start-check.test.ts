@@ -519,9 +519,12 @@ describe("the start check on a real start", () => {
   );
 
   it("a seeded main box whose chart lists an adopted, unfinished spare starts selling", async () => {
+    const observer = vi.spyOn(StreamHost.prototype, "observeNewerMain");
     const booted = await boot(suite, { spareUrl: OWN_URL, joined: false });
     expect(booted.acceptingSales).toBe(true);
     expect(startChecks(booted.lines)).toEqual([{ result: "proceed", peers: [] }]);
+    expect(observer).not.toHaveBeenCalled();
+    observer.mockRestore();
   }, 60_000);
 
   it("control: with the spare's nodes row the box counts it; at this box's own address it is never asked, so it counts as silent", async () => {
