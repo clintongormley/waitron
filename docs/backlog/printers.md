@@ -107,27 +107,15 @@ the cause was not found.
 
 ## A790: document and printer routing plan
 
-Owner20:34 on 9 November 2026: “Drop it, small slices”. The
-[current proposed till slice](../superpowers/plans/2026-11-09-a790-till-document-printer.md)
-has had its Claude read and needs watcher approval before implementation. The folded Invoice
-printer chooser is already on main (#2640); extend it rather than rebuild it.
+A790 remains open for orderless historical F1 Invoice delivery, dashboard routing and its separate
+browser preference, and subsequent integration checks. The [order-linked till slice](../superpowers/plans/2026-11-09-a790-till-document-printer.md)
+releases A739’s prerequisite for sales with an order (watcher approval, 9 November 2026 at23:14).
+A739 owns its payment window and final-entry changes, including the separate handheld paid view;
+A840/A842/A848 follow as one change.
 
-Next, use one Print/Reprint entry on the till ticket view: choose the recorded Receipt or Invoice,
-then that document's device-profile printer list, default first, and explicitly Print on the named
-printer. Preserve successful selection saving the same Equipment setting, Receipt holding and
-takeover, Invoice's lack of a holder, existing permissions and delivery/original/copy/handover rules.
-F1 Receipt is the compact rendering of the recorded full invoice; Invoice uses the Invoice list,
-including receipt-paper and A4 printers. F2 offers only Receipt. The proposed slice covers live
-sales and history with a working-order id through today's receipt/reprint/delivery routes.
-These are planned changes, not shipped common-chooser behavior.
-
-Once landed, the proposed till slice releases A739's current order-linked prerequisite. A739 owns its payment
-window and final-entry changes, including the separate handheld paid view; A840/A842/A848 follow
-as one change. A790 remains open for orderless historical F1 Invoice delivery, dashboard routing
-and its separate browser preference, and subsequent integration checks. Today's orderless path
-prints Receipt copies but has no Invoice delivery route. A later small slice extends that sale-id
-path using existing delivery actions; it does not add another protocol. F2 A4/email are absent
-and are not offered by the till slice. F2-to-F1 replacement remains separate fiscal work.
+Today’s orderless path prints Receipt copies but has no Invoice delivery route. A later small slice
+extends that sale-id path using existing delivery actions; it does not add another protocol.
+F2 A4/email remain absent. F2-to-F1 replacement remains separate fiscal work.
 
 The payment-time mixed-printer choice remains in A790: a printed full invoice should offer the
 profile's Invoice list, including receipt-paper printers, using the device's saved choice and then
@@ -139,7 +127,7 @@ G4, the recovery-origin file, browser operation journal and two-stage prepare/ac
 dropped entirely for remaining A790; nothing here or in A739/A840–A848 waits on A947. Do not plan a
 new table, ledger, all-writer revision or duplicate-print protection. Already landed foundations
 are not cleanup authority. The historical design and plans carry dated supersession pointers;
-their old machinery and release gates do not govern this proposed slice.
+their old machinery and release gates do not govern the remaining slices.
 
 ## Show a failed automatic invoice copy to staff
 

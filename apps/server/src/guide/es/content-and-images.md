@@ -122,8 +122,8 @@ preferencia aparte. Estos ajustes también ofrecen los idiomas para futuro conte
 no crean un sitio de pedidos en línea.
 
 Pedir de nuevo el ticket original conserva el trabajo de impresión existente. Para imprimir otra
-hoja cuando haya terminado, elige **Reimprimir** en la caja; la copia lleva el mismo número de factura y la
-marca de duplicado.
+hoja cuando haya terminado, abre **Imprimir/Reimprimir**, elige una impresora para **Recibo** y pulsa
+**Imprimir una copia en {printer}**. La copia lleva el mismo número de factura y la marca de duplicado.
 
 Los tickets de cocina y los comprobantes del número de recogida también usan tu idioma del
 contenido predeterminado en sus cabeceras. Con español salen en español; con otros idiomas, en

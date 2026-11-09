@@ -65,17 +65,24 @@ for (const language of ["en-GB", "es-ES"])
               },
               invoicePrintersEnabled: true,
               invoiceEquipment: { ...roleOf("invoice", office, [office, bar]), default: office },
+              receiptEquipment: { ...roleOf("receipt", bar, [bar]), default: bar },
             },
             theme,
           );
-          const toggle = el.shadowRoot!.querySelector<HTMLElement>(
-            "[data-test=invoice-printer-toggle]",
-          )!;
-          await userEvent.click(toggle);
+          await userEvent.click(
+            el.shadowRoot!.querySelector<HTMLElement>("[data-test=document-print-toggle]")!,
+          );
+          await userEvent.click(
+            el.shadowRoot!.querySelector<HTMLElement>("[data-test=document-invoice]")!,
+          );
           await el.updateComplete;
           await document.fonts.ready;
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-          const row = el.shadowRoot!.querySelector<HTMLElement>(".invoice-printer")!;
+          const row = el.shadowRoot!.querySelector<HTMLElement>("section.invoice-printer")!;
+          const delivery = el.shadowRoot!.querySelector<HTMLElement>(".original-delivery")!;
+          expect(row.getBoundingClientRect().width).toBeLessThanOrEqual(
+            delivery.getBoundingClientRect().width + 1,
+          );
           expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
           for (const control of row.querySelectorAll<HTMLElement>("wt-button, wt-combobox")) {
             expect(control.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
@@ -83,6 +90,24 @@ for (const language of ["en-GB", "es-ES"])
           }
           await page.screenshot({
             path: `../../__screenshots__/a790-invoice-printer/${language}-${theme}-${width}.png`,
+          });
+          await userEvent.click(
+            el.shadowRoot!.querySelector<HTMLElement>("[data-test=document-back]")!,
+          );
+          await el.updateComplete;
+          await page.screenshot({
+            path: `../../__screenshots__/a790-invoice-printer/${language}-${theme}-${width}-documents.png`,
+          });
+          await userEvent.click(
+            el.shadowRoot!.querySelector<HTMLElement>("[data-test=document-receipt]")!,
+          );
+          await el.updateComplete;
+          expect(
+            el.shadowRoot!.querySelector<HTMLElement>("[data-test=print-receipt]")!.textContent,
+          ).toContain("Bar");
+          expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth + 1);
+          await page.screenshot({
+            path: `../../__screenshots__/a790-invoice-printer/${language}-${theme}-${width}-receipt.png`,
           });
         } finally {
           await page.viewport(incoming.width, incoming.height);

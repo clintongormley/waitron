@@ -1,3 +1,4 @@
+import { equipmentItem, roleOf } from "../test/pay-equipment-fixtures.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { passBoard } from "../test/pass-board-fixtures.js";
 import type { TillFindBillScreen } from "./screens/till-find-bill-screen.js";
@@ -563,6 +564,18 @@ const modeIndicator = (el: TillApp) =>
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
 const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
+async function showTicketDocument(el: TillApp, document: "receipt" | "invoice") {
+  const view = ticket(el)!;
+  const toggle = view.shadowRoot!.querySelector<HTMLElement>("[data-test=document-print-toggle]");
+  if (toggle === null || toggle.getAttribute("aria-expanded") === "true") return;
+  await userEvent.click(toggle);
+  if (view.result.invoiceType === "F1")
+    await userEvent.click(
+      view.shadowRoot!.querySelector<HTMLElement>(`[data-test=document-${document}]`)!,
+    );
+  await flush(el);
+}
+
 const overrideDialog = (el: TillApp) =>
   el.shadowRoot!.querySelector<HTMLElement & { authorizers: unknown; error: string | null }>(
     "till-supervisor-override-dialog",
@@ -4690,6 +4703,7 @@ describe("till-app", () => {
     expect(
       ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
     ).toContain("Factura completa no entregada");
+    await showTicketDocument(el, "receipt");
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
     emit(ticket(el)!, "print-receipt");
     await flush(el);
@@ -4865,6 +4879,7 @@ describe("till-app", () => {
       expect(
         ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent,
       ).toContain("El original no se ha enviado");
+      await showTicketDocument(el, "receipt");
       expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
     },
   );
@@ -5261,6 +5276,7 @@ describe("till-app", () => {
       );
       const { el, id } = await soldF1({ getInvoiceDeliveries, requestPrintDelivery });
       await flush(el);
+      await showTicketDocument(el, "invoice");
       emit(ticket(el)!, "print-invoice");
       emit(ticket(el)!, "print-invoice");
       await flush(el);
@@ -5299,6 +5315,7 @@ describe("till-app", () => {
         requestPrintDelivery,
       });
       await flush(el);
+      await showTicketDocument(el, "invoice");
       expect(part(el, "print-invoice")!.textContent!.trim()).toBe("Imprimir en Bar printer");
       emit(ticket(el)!, "print-invoice");
       await flush(el);
@@ -5406,6 +5423,7 @@ describe("till-app", () => {
         .mockResolvedValue(statusOf(attempt({ medium: "receipt", status: "queued" })));
       const { el, id } = await soldF1({ getInvoiceDeliveries });
       await flush(el);
+      await showTicketDocument(el, "invoice");
       expect(part(el, "print-invoice")).not.toBeNull();
       emit(ticket(el)!, "print-receipt");
       await flush(el);
@@ -5503,11 +5521,15 @@ describe("till-app", () => {
       );
       const printReceipt = vi.fn().mockResolvedValue(undefined);
       const { el } = await soldF1({
+        getDeviceEquipment: vi.fn().mockResolvedValue({
+          roles: [roleOf("receipt", equipmentItem("bar", "Bar", { kind: "receipt" }), [])],
+        }),
         getInvoiceDeliveries: vi.fn().mockResolvedValue(statusOf(null, { print: a4Offer })),
         requestPrintDelivery,
         printReceipt,
       });
       await flush(el);
+      await showTicketDocument(el, "receipt");
       expect(part(el, "print-receipt")!.hasAttribute("disabled")).toBe(false);
       emit(ticket(el)!, "print-invoice");
       await flush(el);
@@ -5793,6 +5815,7 @@ describe("till-app", () => {
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
 
+      await showTicketDocument(el, "receipt");
       expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
       expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).toBeNull();
 
@@ -5821,6 +5844,7 @@ describe("till-app", () => {
     emit(c, "collect-order", { method: "cash", amount: "5" });
     await flush(el);
 
+    await showTicketDocument(el, "receipt");
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).toBeNull();
     emit(ticket(el)!, "print-receipt");
@@ -12382,6 +12406,7 @@ describe("till-app", () => {
       await flush(el);
       expect(ticket(el)?.result).toEqual(filed);
       expect(ticket(el)?.originalReceiptPrint).toEqual({ status: "not_queued" });
+      await showTicketDocument(el, "receipt");
       expect(ticket(el)?.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
       expect(getTransactionReceipt).toHaveBeenCalledWith("sale-filed", {
         signal: expect.any(AbortSignal),
@@ -23910,6 +23935,7 @@ describe("A737 Find a bill page", () => {
     );
     await ticket(el)!.updateComplete;
     expect(getReceiptPrintStatus).toHaveBeenCalledWith("wo-filed");
+    await showTicketDocument(el, "receipt");
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
     expect(currentApi.collectOrder).not.toHaveBeenCalled();
     expect(currentApi.recordSale).not.toHaveBeenCalled();

@@ -1,3 +1,4 @@
+import { equipmentItem, roleOf } from "../../test/pay-equipment-fixtures.js";
 import { getCountryPack, RECIPIENT_REGION_NAMES } from "@waitron/country-packs";
 import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -2005,7 +2006,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
   const button = (el: TillTicketView, name: string) =>
     el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`);
 
-  it("keeps the Invoice printer folded, names A4, and saves a choice without printing", async () => {
+  it("keeps document choice folded, names A4, and saves Invoice choice without printing", async () => {
     const { el } = await mountF1({
       deliveries: statusOf(null, { print: a4Offer }),
       invoicePrintersEnabled: true,
@@ -2026,10 +2027,15 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     el.addEventListener("equipment-change", (event) => picks.push((event as CustomEvent).detail));
     el.addEventListener("print-invoice", (event) => prints.push(event));
     expect(el.shadowRoot!.querySelector("wt-combobox")).toBeNull();
-    expect(button(el, "invoice-printer-toggle")).not.toBeNull();
-    await userEvent.click(button(el, "invoice-printer-toggle")!);
+    expect(button(el, "document-print-toggle")).not.toBeNull();
+    await userEvent.click(button(el, "document-print-toggle")!);
+    await userEvent.click(button(el, "document-invoice")!);
     const field = el.shadowRoot!.querySelector("wt-combobox")!;
     expect(field).not.toBeNull();
+    expect(field.options.map((item) => [item.value, item.label])).toEqual([
+      ["", "Use default: Office"],
+      ["p2", "Bar · receipt paper"],
+    ]);
     expect(field.closest('[role="status"]')).toBeNull();
     field.dispatchEvent(
       new CustomEvent("wt-change", {
@@ -2060,8 +2066,9 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       deliveries: statusOf(attempt({ status: "failed" })),
       deliveryRefusal: {},
     });
+    await userEvent.click(button(el, "document-print-toggle")!);
+    await userEvent.click(button(el, "document-invoice")!);
     expect(button(el, "invoice-printer-toggle")!.textContent).toContain("Office · A4");
-    await userEvent.click(button(el, "invoice-printer-toggle")!);
     await el.updateComplete;
     const field = el.shadowRoot!.querySelector("wt-combobox")!;
     await field.updateComplete;
@@ -2094,7 +2101,8 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       invoicePrintersEnabled: true,
       invoicePrinterReadFailed: true,
     });
-    await userEvent.click(button(el, "invoice-printer-toggle")!);
+    await userEvent.click(button(el, "document-print-toggle")!);
+    await userEvent.click(button(el, "document-invoice")!);
     expect(button(el, "invoice-printer-read-retry")).not.toBeNull();
     expect(button(el, "print-invoice")!.hasAttribute("disabled")).toBe(false);
     Object.assign(el, { invoicePrinterBlocked: true });
@@ -2963,6 +2971,157 @@ describe("till-ticket-view: identical dishes (A803)", () => {
     expect(rowsOf(el).map(([name, quantity]) => [name, quantity])).toEqual([
       ["Caña", "1"],
       ["Caña", "1"],
+    ]);
+  });
+});
+
+describe("A790 recorded document then printer", () => {
+  const bar = equipmentItem("bar", "Bar", { kind: "receipt" });
+  const office = equipmentItem("office", "Office", { kind: "a4" });
+  const mountChoice = (props: Record<string, unknown> = {}, invoiceType: "F1" | "F2" = "F1") =>
+    mountWidget<TillTicketView>("till-ticket-view", {
+      issuer,
+      result: { ...result, invoiceType },
+      invoicePrintersEnabled: true,
+      originalReceiptPrint: { status: "not_queued" },
+      originalReceiptAvailable: true,
+      receiptEquipment: { ...roleOf("receipt", bar, [bar]), default: bar },
+      invoiceEquipment: roleOf("invoice", office, [office]),
+      ...props,
+    });
+  const part = (el: TillTicketView, key: string) =>
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${key}]`);
+  const press = async (el: TillTicketView, key: string) => {
+    const control = part(el, key);
+    expect(control, key).not.toBeNull();
+    await userEvent.click(control!);
+    await el.updateComplete;
+  };
+
+  it("opens F1 document choices without printing, then Receipt's named destination and Back", async () => {
+    const { el } = await mountChoice();
+    const actions: string[] = [];
+    for (const type of ["print-receipt", "reprint", "print-invoice"])
+      el.addEventListener(type, () => actions.push(type));
+    expect(part(el, "print-receipt")).toBeNull();
+    expect(part(el, "print-invoice")).toBeNull();
+    await press(el, "document-print-toggle");
+    expect(part(el, "document-receipt")).not.toBeNull();
+    expect(part(el, "document-invoice")).not.toBeNull();
+    await press(el, "document-receipt");
+    expect(el.shadowRoot!.querySelector("wt-combobox")!.name).toBe("receiptPrinterId");
+    expect(part(el, "print-receipt")!.textContent!.trim()).toBe("Print on Bar");
+    await press(el, "document-back");
+    expect(part(el, "print-receipt")).toBeNull();
+    expect(actions).toEqual([]);
+    await press(el, "document-receipt");
+    await press(el, "print-receipt");
+    expect(actions).toEqual(["print-receipt"]);
+  });
+
+  it("opens F2 directly at its Receipt printer and explicitly confirms a copy", async () => {
+    const { el } = await mountChoice({ originalReceiptAvailable: false }, "F2");
+    const copies: Event[] = [];
+    el.addEventListener("reprint", (event) => copies.push(event));
+    await press(el, "document-print-toggle");
+    expect(part(el, "document-invoice")).toBeNull();
+    expect(part(el, "reprint")!.textContent!.trim()).toBe("Print a copy on Bar");
+    await press(el, "reprint");
+    expect(copies).toHaveLength(1);
+  });
+
+  it.each([
+    ["not queued", { status: "not_queued" }, null, "print-receipt"],
+    ["done receipt", { status: "done", jobId: "j", canRetry: false }, null, "reprint"],
+    ["queued", { status: "queued", jobId: "j", canRetry: false }, null, null],
+    ["failed", { status: "failed", jobId: "j", canRetry: true }, null, null],
+    ["unresolved", undefined, null, null],
+    ["completed email", { status: "not_queued" }, { originalCompleted: true }, "reprint"],
+    ["active invoice", { status: "not_queued" }, { current: { status: "sending" } }, null],
+  ])(
+    "Receipt availability follows %s",
+    async (_name, originalReceiptPrint, deliveries, expected) => {
+      const { el } = await mountChoice({
+        originalReceiptPrint,
+        deliveries:
+          deliveries === null
+            ? null
+            : {
+                current: null,
+                originalCompleted: false,
+                originalPrinterId: null,
+                history: [],
+                actions: { print: null, retryOriginal: null, receiptInstead: null, email: null },
+                ...deliveries,
+              },
+      });
+      await press(el, "document-print-toggle");
+      await press(el, "document-receipt");
+      expect(part(el, "print-receipt") !== null).toBe(expected === "print-receipt");
+      expect(part(el, "reprint") !== null).toBe(expected === "reprint");
+      if (_name === "failed") expect(part(el, "retry-receipt")).not.toBeNull();
+    },
+  );
+
+  it("keeps a missing explicit selection unresolved and offers Refresh instead of choosing the only printer", async () => {
+    const { el } = await mountChoice(
+      {
+        receiptEquipment: {
+          ...roleOf("receipt", null, [bar]),
+          selection: "item",
+          chosenId: "removed",
+          default: bar,
+        },
+      },
+      "F2",
+    );
+    await press(el, "document-print-toggle");
+    expect(part(el, "print-receipt")!.hasAttribute("disabled")).toBe(true);
+    expect(el.shadowRoot!.querySelector("wt-combobox")!.value).toBe("removed");
+    expect(part(el, "invoice-printer-read-retry")).not.toBeNull();
+    el.receiptEquipment = roleOf("receipt", null, []);
+    el.invoicePrinterReadFailed = true;
+    await el.updateComplete;
+    expect(part(el, "print-receipt")!.hasAttribute("disabled")).toBe(true);
+    expect(part(el, "document-back")).not.toBeNull();
+  });
+
+  it("asks before taking another device's Receipt printer and sends takeOver only after Take", async () => {
+    const carried = equipmentItem("belt", "Belt", {
+      kind: "receipt",
+      portable: true,
+      heldBy: { deviceId: "other", deviceName: "Patio", personName: null },
+    });
+    const { el } = await mountChoice({ receiptEquipment: roleOf("receipt", bar, [bar, carried]) });
+    const changes: unknown[] = [];
+    el.addEventListener("equipment-change", (event) => changes.push((event as CustomEvent).detail));
+    await press(el, "document-print-toggle");
+    await press(el, "document-receipt");
+    const field = el.shadowRoot!.querySelector("wt-combobox")!;
+    const pick = async () => {
+      await userEvent.click(field.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+      await field.updateComplete;
+      const option = [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+        (row) => row.textContent!.includes("Belt"),
+      )!;
+      await userEvent.click(option);
+    };
+    await pick();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-equipment-confirm]")!.textContent).toContain(
+      "Patio",
+    );
+    expect(changes).toEqual([]);
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-equipment-cancel]")!);
+    await el.updateComplete;
+    expect(changes).toEqual([]);
+    expect(field.value).toBe("bar");
+    expect(part(el, "print-receipt")!.textContent).toContain("Bar");
+    await pick();
+    await el.updateComplete;
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-equipment-take]")!);
+    expect(changes).toEqual([
+      { role: "receipt", selection: { id: "belt" }, via: "list", takeOver: true },
     ]);
   });
 });

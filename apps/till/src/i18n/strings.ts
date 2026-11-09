@@ -342,6 +342,11 @@ export const en = {
   "mode.prepare": "Preparation",
   "mode.live": "Live",
   // Counter receipt and drawer
+  "document.print": "Print/Reprint",
+  "document.receipt": "Receipt",
+  "document.invoice": "Invoice",
+  "document.printer_read_failed": "Could not read the receipt printers. Refresh to try again.",
+  "document.no_printers": "No receipt printers are available. Refresh after changing Equipment.",
   "action.reprint": "Reprint",
   "action.print_receipt": "Print receipt",
   "action.payment_slip": "Payment slip",
@@ -2310,6 +2315,13 @@ export const es: Record<StringKey, string> = {
   "mode.demo": "Demostración",
   "mode.prepare": "Preparación",
   "mode.live": "En vivo",
+  "document.print": "Imprimir/Reimprimir",
+  "document.receipt": "Recibo",
+  "document.invoice": "Factura",
+  "document.printer_read_failed":
+    "No se han podido cargar las impresoras de recibos. Pulsa Actualizar para volver a intentarlo.",
+  "document.no_printers":
+    "No hay impresoras de recibos disponibles. Actualiza después de cambiar el equipo.",
   "action.reprint": "Reimprimir",
   "action.print_receipt": "Imprimir recibo",
   "action.payment_slip": "Justificante de pago",

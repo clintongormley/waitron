@@ -51,6 +51,44 @@ const ROWS: { role: EquipmentRole; field: Field; scan: "printer" | "reader" | nu
   { role: "invoice", field: "invoicePrinterId", scan: null },
 ];
 
+export function equipmentTakeover(
+  item: EquipmentItem,
+  take: () => void,
+  cancel: () => void,
+): TemplateResult {
+  const question = carriedText(
+    item.name,
+    item.heldBy!,
+    "equipment.take_question",
+    "equipment.take_question_person",
+  );
+  return html`<wt-dialog
+    ${trackDialog()}
+    data-equipment-confirm
+    .open=${true}
+    .heading=${t("equipment.take_title")}
+    @wt-close=${(event: Event) => {
+      event.stopPropagation();
+      cancel();
+    }}
+  >
+    <p>${question}</p>
+    <wt-form-actions slot="footer">
+      <wt-button slot="cancel" data-equipment-cancel variant="secondary" @click=${cancel}
+        >${t("action.cancel")}</wt-button
+      >
+      <wt-button
+        data-equipment-take
+        variant="primary"
+        @click=${() => {
+          take();
+        }}
+        >${t("equipment.take")}</wt-button
+      >
+    </wt-form-actions>
+  </wt-dialog>`;
+}
+
 export function canScan(): boolean {
   return (navigator.mediaDevices as MediaDevices | undefined)?.getUserMedia !== undefined;
 }
@@ -478,47 +516,21 @@ export class TillEquipmentDialog extends LitElement {
   #renderAsking(): TemplateResult | typeof nothing {
     const asking = this.asking;
     if (asking === null) return nothing;
-    const question = carriedText(
-      asking.item.name,
-      asking.item.heldBy!,
-      "equipment.take_question",
-      "equipment.take_question_person",
-    );
-    return html`<wt-dialog
-      ${trackDialog()}
-      data-equipment-confirm
-      .open=${true}
-      .heading=${t("equipment.take_title")}
-      @wt-close=${(event: Event) => {
-        event.stopPropagation();
+    return equipmentTakeover(
+      asking.item,
+      () => {
         this.asking = null;
-      }}
-    >
-      <p>${question}</p>
-      <wt-form-actions slot="footer">
-        <wt-button
-          slot="cancel"
-          data-equipment-cancel
-          variant="secondary"
-          @click=${() => (this.asking = null)}
-          >${t("action.cancel")}</wt-button
-        >
-        <wt-button
-          data-equipment-take
-          variant="primary"
-          @click=${() => {
-            this.asking = null;
-            this.#change({
-              role: asking.role,
-              selection: { id: asking.item.id },
-              via: "list",
-              takeOver: true,
-            });
-          }}
-          >${t("equipment.take")}</wt-button
-        >
-      </wt-form-actions>
-    </wt-dialog>`;
+        this.#change({
+          role: asking.role,
+          selection: { id: asking.item.id },
+          via: "list",
+          takeOver: true,
+        });
+      },
+      () => {
+        this.asking = null;
+      },
+    );
   }
 
   override render() {
