@@ -829,7 +829,8 @@ this floor — removing the `min-width` regresses that guard.
 ## Primitives
 
 `wt-segmented-control` shows a short single-choice list as joined buttons. Give it `name`,
-`label`, `options` (`{ value, label }`), and `value`. The chosen button uses the primary colour;
+`label`, `options` (`{ value, label }`), and `value`. Use `hide-label` in a labelled table column;
+the group keeps its accessible name. The chosen button uses the primary colour;
 `disabled`, `hint` and `error` carry the group state. A different choice emits `wt-change` with
 `{ value }`. Tab reaches the selected choice, arrow keys move and select, and Home/End select
 the first/last choice. Enter and Space activate without reaching an enclosing form's save handler.
@@ -837,6 +838,12 @@ A choice too wide for its share of the row wraps between words, never inside one
 choices' longest words fit side by side. When they do not, the choices shrink to the control's
 space and break inside words; each stays at least the tap target wide, so only choices too many for
 their tap targets run past the control's edge.
+
+A `wt-row-actions` containing exactly one directly slotted button marked `data-action="delete"`
+uses its trigger as a trash button. Give that action a localized `aria-label` naming the row,
+such as “Delete: Starters”, and register the `bin` icon in the application. The trigger invokes
+the action's native button, so its disabled and loading states still refuse the action. `show()`
+does nothing in this mode. A sole Remove or a mixed set of actions keeps the popup.
 
 A `wt-disclosure` with `ruled` draws a line under its title. Its named `summary` slot replaces
 the generated closed summary when assigned. The `section`, `header` and `summary` parts let

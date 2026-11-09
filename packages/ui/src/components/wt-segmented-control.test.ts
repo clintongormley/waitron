@@ -407,3 +407,17 @@ test("choosing does not measure the row again", async () => {
   expect(el.value).toBe("2");
   expect(measured).not.toHaveBeenCalled();
 });
+
+test("hides a repeated visible label while keeping the group named and keyboard-operable", async () => {
+  const el = await setup();
+  el.setAttribute("hide-label", "");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".label")).toBeNull();
+  expect(el.shadowRoot!.querySelector('[role="radiogroup"]')!.getAttribute("aria-label")).toBe(
+    "Ordered on its own by",
+  );
+  buttons(el)[0]!.focus();
+  await userEvent.keyboard("{ArrowRight}");
+  expect(el.value).toBe("staff_only");
+  expect(el.shadowRoot!.activeElement).toBe(buttons(el)[1]);
+});

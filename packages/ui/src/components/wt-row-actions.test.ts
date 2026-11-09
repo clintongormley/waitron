@@ -1,3 +1,4 @@
+import { registerIcons } from "./wt-icon.js";
 import { html, nothing } from "lit";
 import { afterEach, describe, expect, it, test, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
@@ -25,6 +26,10 @@ declare module "vitest/browser" {
   }
 }
 
+registerIcons({
+  bin: "M6 1.75H10V3.25H13.5V4.75H2.5V3.25H6ZM3.75 4.75H12.25V13a1 1 0 0 1-1 1H4.75a1 1 0 0 1-1-1ZM5 4.75V12.75H11V4.75ZM6.5 6.5H7.5V11H6.5ZM8.5 6.5H9.5V11H8.5Z",
+});
+
 afterEach(cleanup);
 
 async function mountActions() {
@@ -41,6 +46,58 @@ async function mountActions() {
   const popup = mounted.el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
   return { ...mounted, edit, remove, trigger, popup };
 }
+
+describe("direct Delete", () => {
+  it.each(["click", "Enter", "Space"])("forwards %s once without opening a popup", async (key) => {
+    const el = (await mount(
+      '<wt-row-actions label="Actions: Starters"><wt-button data-action="delete" aria-label="Delete: Starters">Delete</wt-button></wt-row-actions>',
+    )) as WtRowActions;
+    const action = el.querySelector<WtButton>("wt-button")!;
+    await action.updateComplete;
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe(
+        "Delete: Starters",
+      ),
+    );
+    const trigger = el.shadowRoot!.querySelector("button")!;
+    const native = action.shadowRoot!.querySelector("button")!;
+    const called = vi.fn();
+    native.addEventListener("click", called);
+    trigger.focus();
+    if (key === "click") await userEvent.click(trigger);
+    else await userEvent.keyboard(key === "Space" ? " " : "{Enter}");
+    expect(called).toHaveBeenCalledTimes(1);
+    expect(trigger.hasAttribute("aria-expanded")).toBe(false);
+    expect(trigger.hasAttribute("aria-haspopup")).toBe(false);
+    expect(trigger.hasAttribute("popovertarget")).toBe(false);
+    expect(trigger.querySelector("wt-icon")!.getAttribute("name")).toBe("bin");
+    el.show();
+    expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+    expect(el.shadowRoot!.activeElement).toBe(trigger);
+    for (const state of ["disabled", "loading"] as const) {
+      action[state] = true;
+      await action.updateComplete;
+      await userEvent.click(trigger);
+      expect(called).toHaveBeenCalledTimes(1);
+      action[state] = false;
+      await action.updateComplete;
+    }
+  });
+
+  it("keeps a sole Remove and mixed Delete actions as menus", async () => {
+    for (const content of [
+      "<wt-button>Remove</wt-button>",
+      '<wt-button>Edit</wt-button><wt-button data-action="delete">Delete</wt-button>',
+    ]) {
+      const el = (await mount(
+        `<wt-row-actions label="Actions">${content}</wt-row-actions>`,
+      )) as WtRowActions;
+      await userEvent.click(el.shadowRoot!.querySelector("button")!);
+      expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      el.hide();
+    }
+  });
+});
 
 describe("row actions", () => {
   it("renders a slotted name inside the native trigger, opens the menu and returns focus on Escape", async () => {

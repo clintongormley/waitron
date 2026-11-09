@@ -5,6 +5,19 @@ import "./wt-segmented-control.js";
 
 afterEach(cleanup);
 describe.each(["light", "dark"] as const)("%s", (theme) => {
+  test("hidden visible label keeps the radio group named", async () => {
+    const el = (await mountThemed(
+      '<wt-segmented-control label="On the till: Starters" hide-label></wt-segmented-control>',
+      theme,
+    )) as HTMLElementTagNameMap["wt-segmented-control"];
+    el.options = [
+      { value: "false", label: "Fire now" },
+      { value: "true", label: "Hold for later" },
+    ];
+    el.value = "true";
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
   test.each(["public", "staff_only", "not_sold_separately"])("selected %s", async (value) => {
     const el = (await mountThemed(
       '<wt-segmented-control label="Ordered on its own by"></wt-segmented-control>',

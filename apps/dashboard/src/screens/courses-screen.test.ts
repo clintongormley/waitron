@@ -77,13 +77,16 @@ async function mount(
 }
 
 describe("dashboard-courses-screen", () => {
-  it("shows the Courses heading, its description and the shared course list, which loads the courses itself", async () => {
+  it("shows the Courses heading, its help and the shared course list, which loads the courses itself", async () => {
     const { el, api } = await mount();
     await vi.waitFor(() =>
       expect(list(el).shadowRoot!.querySelectorAll("tbody tr[data-course]")).toHaveLength(2),
     );
     expect(q(el, "h1")!.textContent!.trim()).toBe(t("kitchen.courses_title"));
-    expect(q(el, ".description")!.textContent!.trim()).toBe(t("courses.description"));
+    expect(q(el, ".description")).toBeNull();
+    expect(
+      list(el).shadowRoot!.querySelector("wt-help-tooltip")!.getAttribute("guide-href"),
+    ).toContain("products#course");
     expect(el.shadowRoot!.querySelectorAll("dashboard-course-list")).toHaveLength(1);
     expect(list(el).api).toBe(api);
     expect(list(el).readOnly).toBe(false);
@@ -123,18 +126,15 @@ describe("dashboard-courses-screen", () => {
   it("read-only: names and firing settings, no Add course, and no drag instructions", async () => {
     const { el } = await mount(true);
     expect(q(el, "[data-test=add-course]")).toBeNull();
-    expect(q(el, ".description")!.textContent!.trim()).toBe(t("courses.description_read_only"));
+    expect(q(el, ".description")).toBeNull();
     const courseList = list(el);
     expect(courseList.readOnly).toBe(true);
     expect(
       [...courseList.shadowRoot!.querySelectorAll("li[data-course]")].map((row) =>
         row.textContent!.trim().replace(/\s+/g, " "),
       ),
-    ).toEqual([
-      `Starters · ${t("courses.held_until_fired")}`,
-      `Mains · ${t("courses.goes_to_fire_now")}`,
-    ]);
-    expect(courseList.shadowRoot!.querySelectorAll("wt-switch")).toHaveLength(0);
+    ).toEqual([`Starters · ${t("courses.hold_for_later")}`, `Mains · ${t("courses.fire_now")}`]);
+    expect(courseList.shadowRoot!.querySelectorAll("wt-segmented-control")).toHaveLength(0);
     expect(courseList.shadowRoot!.querySelector("[data-test=add-course]")).toBeNull();
     expect(courseList.shadowRoot!.querySelector("[data-test=name-c1]")).toBeNull();
   });

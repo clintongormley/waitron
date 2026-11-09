@@ -2330,6 +2330,11 @@ describe("catalogue-screen", () => {
       ).toEqual([t("action.done")]);
       expect(dialog.querySelector("[data-test=courses-done]")!.getAttribute("slot")).toBe("cancel");
       expect(editor(el).childOpen).toBe(true);
+      const timing = inList(el, "tr wt-segmented-control");
+      expect(timing).not.toBeNull();
+      expect(timing.getAttribute("hide-label")).not.toBeNull();
+      const actions = inList(el, "tr wt-row-actions");
+      expect(actions.shadowRoot!.querySelector("button")!.getAttribute("popovertarget")).toBeNull();
     });
 
     it("selects a course added in the window once Done closes it, keeping the product's unsaved edits", async () => {

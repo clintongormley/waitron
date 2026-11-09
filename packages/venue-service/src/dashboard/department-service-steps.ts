@@ -250,6 +250,8 @@ export class DepartmentServiceSteps extends LitElement {
                 <wt-button
                   align="start"
                   variant="ghost"
+                  data-action="delete"
+                  aria-label=${`${t("venue.delete")}: ${step.name}`}
                   data-test=${`remove-${step.key}`}
                   @click=${(event: Event) => {
                     stop(event);

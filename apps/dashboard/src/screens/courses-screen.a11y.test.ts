@@ -1,10 +1,14 @@
+import { setHelpMode } from "@waitron/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Course, DashboardApi } from "../api/client.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { CoursesScreen } from "./courses-screen.js";
 import "./courses-screen.js";
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  setHelpMode(false);
+  cleanupWidgets();
+});
 
 const COURSES: Course[] = [
   { id: "c1", name: "Starters", displayOrder: 0, active: true, inUse: false, heldUntilFired: true },
@@ -46,6 +50,19 @@ describe.each(["light", "dark"] as const)("courses-screen a11y (%s theme)", (the
 
   it("renders a read-only list accessibly", async () => {
     const { host } = await mount(COURSES, theme, true);
+    await expectNoA11yViolations(host);
+  });
+});
+
+describe.each(["light", "dark"] as const)("Courses help (%s)", (theme) => {
+  it("keeps the column help and guide accessible", async () => {
+    setHelpMode(true);
+    const { el, host } = await mount(COURSES, theme);
+    const list = el.shadowRoot!.querySelector("dashboard-course-list")!;
+    const tooltip = list.shadowRoot!.querySelector("wt-help-tooltip")!;
+    await tooltip.updateComplete;
+    tooltip.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+    await tooltip.updateComplete;
     await expectNoA11yViolations(host);
   });
 });

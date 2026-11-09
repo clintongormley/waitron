@@ -477,11 +477,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
-- **A1457. The Courses page reworked (owner, 2026-11-08)** (bundle of 4, size M). Shorter text,
-  "Fire now" or "Hold for later" in place of the held switch, a help bubble, a layout that holds
-  still, and a trash can in place of any row menu whose only action is Delete, on every screen.
-  Holds A1075, A928. [Detail](backlog/catalogue.md#bundle-a1457-the-courses-page-reworked-owner-2026-11-08)
-
 - **Menu prices' narrow-layout CI failure still needs a cause (A613).**
   [Detail](backlog/ci.md#menu-prices-narrow-layout-ci-failure-still-needs-a-cause-a613)
 
