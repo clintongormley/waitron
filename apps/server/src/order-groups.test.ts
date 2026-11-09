@@ -12,7 +12,7 @@ import {
   updateOrderLine,
 } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
-import { setRoutingCell } from "@waitron/venue-service";
+import { VENUE_SERVICE_PROVISIONING, setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -22,6 +22,7 @@ import {
   kitchenPrintJobs,
   lineServiceCancellations,
   kitchenStations,
+  kitchenCourses,
   locations,
   orderGroupEvents,
   orderGroupHoldStations,
@@ -68,6 +69,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   createOpenOrder,
+  fireLines,
   listStationQueue,
   parkOrder,
   splitUnitsWithinOrder,
@@ -158,12 +160,12 @@ interface Venue {
   zoneId: string;
 }
 
-async function setupVenue(): Promise<Venue> {
+async function setupVenue(countryCourses = false): Promise<Venue> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
   await seedVenue(db, {
     name: "Sala",
-    invoiceLocales: [LOCALE],
+    invoiceLocales: [countryCourses ? "en-GB" : LOCALE],
     operationDescription: "Restaurante",
   });
   const locationId = await venueLocationId(db);
@@ -178,12 +180,19 @@ async function setupVenue(): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   } satisfies WithVenueRowId);
   return inTx(async (tx) => {
+    if (countryCourses) await VENUE_SERVICE_PROVISIONING.seed!.run(tx, { nodeId });
+    const seededCourses = countryCourses ? await tx.select().from(kitchenCourses) : [];
     const catalogue = await createCatalogue(tx, { name: "Carta" });
     const category = await createCategory(tx, { name: "Platos" });
     const courseIds: Record<string, string> = {};
     let displayOrder = 1;
     for (const [key, name] of Object.entries(COURSES)) {
-      courseIds[key] = (await createCourse(tx, { name, displayOrder: displayOrder++ })).id;
+      const seeded = seededCourses.find(
+        (course) => course.name === (key === "drinks" ? "Sharing plates" : name),
+      );
+      courseIds[key] = countryCourses
+        ? seeded!.id
+        : (await createCourse(tx, { name, displayOrder: displayOrder++ })).id;
     }
     const productId = {} as Record<Dish, string>;
     for (const [dish, names] of Object.entries(DISHES) as [Dish, (typeof DISHES)[Dish]][]) {
@@ -949,6 +958,58 @@ describe("per-group submission destinations", () => {
         ),
       { code: "management.request_invalid" },
     );
+  });
+});
+
+describe("country starter courses in service", () => {
+  it("fires the immediate starter course and holds later courses at a table", async () => {
+    const v = await setupVenue(true);
+    const s = await seated(v);
+    await inTx((tx) =>
+      addTabRound(tx, v.cfg, s.tabId, [line(v, "cold"), line(v, "steak"), line(v, "flan")]),
+    );
+    const rows = await linesOf(s.partyId);
+    const fired = await firedTicketLineIds(s.partyId);
+    expect(rows.map((row) => [row.productId, fired.includes(row.id)]).sort()).toEqual(
+      [
+        [v.productId.cold, true],
+        [v.productId.steak, false],
+        [v.productId.flan, false],
+      ].sort(),
+    );
+    const held = rows.find((row) => row.productId === v.productId.steak)!;
+    await inTx((tx) => sendLines(tx, v.cfg, s.tabId, [held.lineNo]));
+    expect(await firedTicketLineIds(s.partyId)).toContain(held.id);
+  });
+
+  it("fires the starter and later courses together at the counter", async () => {
+    const v = await setupVenue(true);
+    const id = randomUUID();
+    await inTx((tx) =>
+      createOpenOrder(tx, v.cfg, id, [line(v, "cold"), line(v, "steak"), line(v, "flan")], null, {
+        zoneId: v.zoneId,
+      }),
+    );
+    await inTx(async (tx) => {
+      const lines = await tx
+        .select({
+          id: workingOrderLines.id,
+          productId: workingOrderLines.productId,
+          courseId: workingOrderLines.courseId,
+          parentLineId: workingOrderLines.parentLineId,
+          note: workingOrderLines.note,
+          quantity: workingOrderLines.quantity,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id));
+      await fireLines(tx, v.cfg, id, lines);
+    });
+    const tickets = await db
+      .select({ firedAt: ticketItems.firedAt })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, id));
+    expect(tickets).toHaveLength(3);
+    expect(tickets.every((ticket) => ticket.firedAt !== null)).toBe(true);
   });
 });
 

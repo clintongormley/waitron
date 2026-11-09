@@ -676,12 +676,9 @@ language bundle. Spanish and English can be built now; every other language wait
   Each regional demo then needs staff and kitchen names in every language setup offers. Update
   A972's decision in [architecture.md](architecture.md) and "Regional practice names" in
   `docs/developers/products.md` when this is built.
-- **Starter courses, chosen by the country pack.** Setup creates no courses today. Each pack names
-  its list, written in English in code and translated through the starter-content file into the
-  chosen language (Spain's "Sharing plates" is «Pica pica»):
-  - Spain: «Pica pica» and «Entradas» fire now; «Platos principales» and «Postres» are held for
-    later. Catalan, Valencian, Galician and Basque words too; add them to the Native speaker review.
-  - Great Britain: Starters fires now; Mains and Desserts are held for later.
+- **Remaining course words.** Initial setup now creates Spain’s four courses and Great Britain’s
+  three in the existing English/Spanish starter language. Catalan, Valencian, Galician and Basque
+  course words still wait for C125; include them in the Native speaker review.
   - Italy, when its pack is built: Antipasti, Primi piatti, Secondi piatti, Dolci. Which fire now
     was not decided; ask the owner then.
 - **The demo venue's departments' internal names still follow the seed language.** Left open by
@@ -690,6 +687,10 @@ language bundle. Spanish and English can be built now; every other language wait
   stay English under Spanish staff-facing dish names (the plan's known limit).
 
 ## Decisions and deliberate limits
+
+- **A1458’s language choice applies to initial setup only** (watcher, 2026-11-09 12:45). A department
+  you add later from the dashboard keeps the language derived from the country and receipt settings.
+  No venue language setting or export-format change is part of A1458.
 
 - **Demo and Preparation need no proof of who owns the box.** Whoever reaches an unconfigured box's
   setup page first can set up either; the owner accepted this when dropping the setup code

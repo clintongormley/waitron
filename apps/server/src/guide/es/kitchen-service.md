@@ -365,6 +365,11 @@ quien envía no es encargado, el terminal pide el PIN de un encargado tras **La 
 
 ## Pide la preparación desde el terminal {#request-cooking}
 
+En un local nuevo en España, Pica pica y Entradas empiezan sin espera; Platos principales y
+Postres quedan en espera para más tarde. En Gran Bretaña, los entrantes empiezan sin espera y los
+principales y postres quedan en espera. Elige el curso de cada producto y organiza los platos de
+la mesa en **Nuevo pedido** antes de enviarlos. En el mostrador, el envío marcha todos los platos juntos.
+
 Pide los platos en espera desde el pedido de la mesa. Las colas de las estaciones y el pase muestran los pases
 y grupos en espera sin botón Marchar. En las colas de las estaciones, los platos en espera se muestran
 atenuados y no avanzan al tocarlos; en el pase, una tarjeta con todos sus platos en espera está bajo

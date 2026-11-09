@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { STARTER_COURSE_NAMES } from "../../../../packages/venue-service/src/starter-content.js";
 import { createHash } from "node:crypto";
 import {
   canonicalMadridSemantics,
@@ -405,6 +406,36 @@ for (const locale of ["en", "es"] as const) {
         table.foreignKeys = order.flatMap((capturedId, id) =>
           table.foreignKeys.filter((key) => key.id === capturedId).map((key) => ({ ...key, id })),
         );
+      }
+      if (phase !== "before") {
+        const courses = expected[phase].tables.kitchen_courses!;
+        expect(courses.rows).toEqual({});
+        expect(phases[phase]!.kitchen_courses).toBe(0);
+        const locationId = Object.values(expected[phase].tables.locations!.rows)[0]!.id;
+        const names = [
+          STARTER_COURSE_NAMES["Sharing plates"].es,
+          STARTER_COURSE_NAMES.Starters.es,
+          STARTER_COURSE_NAMES.Mains.es,
+          STARTER_COURSE_NAMES.Desserts.es,
+        ];
+        courses.rows = Object.fromEntries(
+          names.map((name, displayOrder) => {
+            const id = `@kitchen_courses:${JSON.stringify([name])}`;
+            return [
+              id,
+              {
+                id,
+                location_id: locationId,
+                name,
+                display_order: displayOrder,
+                active: 1,
+                held_until_fired: displayOrder >= 2 ? 1 : 0,
+                created_at: "2026-10-08T10:00:00.000Z",
+              },
+            ];
+          }),
+        );
+        phases[phase]!.kitchen_courses = 4;
       }
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));

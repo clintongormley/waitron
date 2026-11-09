@@ -141,6 +141,7 @@ export async function canonicalMadridSemantics(
       case "departments":
       case "device_profiles":
       case "extra_lists":
+      case "kitchen_courses":
       case "kitchen_stations":
       case "locations":
       case "nodes":

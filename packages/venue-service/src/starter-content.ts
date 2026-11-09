@@ -27,3 +27,10 @@ export const STARTER_ZONE_NAMES = {
 export const STARTER_PERIOD_NAMES = {
   Open: { es: "Abierto" },
 } as const satisfies StaffNames;
+
+export const STARTER_COURSE_NAMES = {
+  "Sharing plates": { es: "Pica pica" },
+  Starters: { es: "Entradas" },
+  Mains: { es: "Platos principales" },
+  Desserts: { es: "Postres" },
+} as const satisfies StaffNames;

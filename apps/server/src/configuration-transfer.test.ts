@@ -7148,6 +7148,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
   });
   nodeId(source.nodeId);
   const ids = await withTransaction(suite.db, async (tx) => {
+    await tx.delete(kitchenCourses);
     const course = await createCourse(tx, { name: "Retired dessert", displayOrder: 2 });
     const station = await createStation(tx, { name: "Retired pastry" });
     const catalogue = await createCatalogue(tx, { name: "Archive menu" });
