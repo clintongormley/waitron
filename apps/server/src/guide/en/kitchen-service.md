@@ -333,8 +333,7 @@ person sending is not a manager, the till asks for a manager's PIN after **Kitch
 ## Request cooking from the till {#request-cooking}
 
 For a new venue in Spain, Sharing plates and Starters start without a hold; Mains and Desserts
-start held for later. Great Britain starts with Starters without a hold and Mains and Desserts
-held. Choose the course on each product, then arrange the table’s dishes in **New order** before
+start held for later. Choose the course on each product, then arrange the table’s dishes in **New order** before
 sending them. At the counter, sending fires all the dishes together.
 
 Request held food from the table's order screen. Station queues and the pass show held courses and groups

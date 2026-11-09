@@ -109,8 +109,8 @@ The unsaved product fields remain in place if the nested save fails or you cance
 
 ## Choose the course {#course}
 
-New venues in Spain start with **Sharing plates**, **Starters**, **Mains** and **Desserts**;
-Great Britain starts with **Starters**, **Mains** and **Desserts**. Their names follow the starter
+New venues in Spain start with **Sharing plates**, **Starters**, **Mains** and **Desserts**.
+Their names follow the starter
 language. Assign these courses to your products, or edit the list to suit your service.
 
 Use the **Course** field under **Kitchen** to choose the course for new dishes. It saves

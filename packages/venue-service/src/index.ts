@@ -174,6 +174,7 @@ export {
 } from "./day-resolver.js";
 export { readSeasons } from "./seasons.js";
 export {
+  STARTER_COURSE_NAMES,
   STARTER_PERIOD_NAMES,
   STARTER_SEASON_NAMES,
   STARTER_ZONE_NAMES,

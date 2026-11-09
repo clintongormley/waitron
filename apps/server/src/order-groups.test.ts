@@ -12,6 +12,8 @@ import {
   updateOrderLine,
 } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
+import { placeFor, type PlaceContext } from "../../till/src/state/draft-place.js";
+import { fireDishesAtPayment } from "./till-sale.js";
 import { VENUE_SERVICE_PROVISIONING, setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
@@ -69,7 +71,6 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   createOpenOrder,
-  fireLines,
   listStationQueue,
   parkOrder,
   splitUnitsWithinOrder,
@@ -965,45 +966,55 @@ describe("country starter courses in service", () => {
   it("fires the immediate starter course and holds later courses at a table", async () => {
     const v = await setupVenue(true);
     const s = await seated(v);
-    await inTx((tx) =>
-      addTabRound(tx, v.cfg, s.tabId, [line(v, "cold"), line(v, "steak"), line(v, "flan")]),
-    );
+    const courses = await db.select().from(kitchenCourses);
+    const productCourses = await db
+      .select({ id: products.id, courseId: products.courseId })
+      .from(products);
+    const placed: PlaceContext["placed"][number][] = [];
+    const groups = (["beer", "cold", "steak", "flan"] as const).map((dish) => {
+      const courseId = productCourses.find((product) => product.id === v.productId[dish])!.courseId;
+      const { place } = placeFor(courseId, { courses, held: [], firstOrder: true, placed });
+      placed.push({ courseId, place });
+      return {
+        release: place.kind === "fire" ? ("fire" as const) : ("hold" as const),
+        lines: [line(v, dish)],
+      };
+    });
+    expect(placed.map(({ place }) => place.kind)).toEqual(["fire", "fire", "new", "new"]);
+    await submit(v, s.partyId, groups);
     const rows = await linesOf(s.partyId);
     const fired = await firedTicketLineIds(s.partyId);
     expect(rows.map((row) => [row.productId, fired.includes(row.id)]).sort()).toEqual(
       [
+        [v.productId.beer, true],
         [v.productId.cold, true],
         [v.productId.steak, false],
         [v.productId.flan, false],
       ].sort(),
     );
     const held = rows.find((row) => row.productId === v.productId.steak)!;
-    await inTx((tx) => sendLines(tx, v.cfg, s.tabId, [held.lineNo]));
+    await fire(v, s.partyId, held.groupId!);
     expect(await firedTicketLineIds(s.partyId)).toContain(held.id);
   });
 
   it("fires the starter and later courses together at the counter", async () => {
     const v = await setupVenue(true);
+    const counter = await inTx((tx) => offerProducts(tx, v.cfg, { zone: "counter" }));
     const id = randomUUID();
     await inTx((tx) =>
-      createOpenOrder(tx, v.cfg, id, [line(v, "cold"), line(v, "steak"), line(v, "flan")], null, {
-        zoneId: v.zoneId,
-      }),
+      createOpenOrder(
+        tx,
+        v.cfg,
+        id,
+        (["cold", "steak", "flan"] as const).map((dish) => ({
+          menuItemId: counter.offerFor(v.productId[dish]),
+          quantity: "1",
+        })),
+        null,
+        { zoneId: counter.zoneId },
+      ),
     );
-    await inTx(async (tx) => {
-      const lines = await tx
-        .select({
-          id: workingOrderLines.id,
-          productId: workingOrderLines.productId,
-          courseId: workingOrderLines.courseId,
-          parentLineId: workingOrderLines.parentLineId,
-          note: workingOrderLines.note,
-          quantity: workingOrderLines.quantity,
-        })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, id));
-      await fireLines(tx, v.cfg, id, lines);
-    });
+    await inTx((tx) => fireDishesAtPayment(tx, v.cfg, id));
     const tickets = await db
       .select({ firedAt: ticketItems.firedAt })
       .from(ticketItems)

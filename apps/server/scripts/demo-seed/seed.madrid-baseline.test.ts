@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { STARTER_COURSE_NAMES } from "../../../../packages/venue-service/src/starter-content.js";
+import { STARTER_COURSE_NAMES } from "@waitron/venue-service";
 import { createHash } from "node:crypto";
 import {
   canonicalMadridSemantics,

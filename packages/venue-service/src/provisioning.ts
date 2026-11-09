@@ -26,7 +26,7 @@ export const COUNTER_ZONE_NAME = "Counter";
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary:
-      "Create the default department with its starter service steps, counter zone and four seasons, and give each profile that takes orders that department",
+      "Create the default department with its starter service steps, country courses, counter zone and four seasons, and give each profile that takes orders that department",
     async run(tx) {
       const staffLanguage = await readStarterStaffLanguage(tx);
       const venue = await readVenue(tx);
