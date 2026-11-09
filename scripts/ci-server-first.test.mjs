@@ -1,4 +1,7 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { runInNewContext } from "node:vm";
 import { URL } from "node:url";
 import { describe, it, expect } from "vitest";
@@ -149,4 +152,48 @@ describe("server-first workflow routing", () => {
       expect(route(job.route, { mode: "hosted" }), job.id).toBe("ubuntu-latest");
     }
   });
+});
+
+it("runs the workflow's router beside an older candidate checkout", () => {
+  const root = mkdtempSync(join(tmpdir(), "workflow-router-"));
+  try {
+    mkdirSync(join(root, "scripts"));
+    writeFileSync(
+      join(root, "scripts/ci-server-health.mjs"),
+      'console.log("old candidate router");',
+    );
+    const fresh = join(root, "workflow.mjs");
+    writeFileSync(fresh, 'console.log("workflow router", process.argv[2], process.env.CAPACITY);');
+    writeFileSync(
+      join(root, "gh"),
+      `#!/bin/sh
+[ "$1" = api ] && [ "$2" = 'repos/fixture/waitron/contents/scripts/ci-server-health.mjs?ref=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' ] || exit 41
+[ "$3" = -H ] && [ "$4" = 'Accept: application/vnd.github.raw+json' ] || exit 42
+cat "$FIXTURE_ROUTER"
+`,
+      { mode: 0o755 },
+    );
+    const step = yaml.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {6}(?:- |#))/)[1];
+    const body =
+      step.match(/^ {8}run: \|\n([\s\S]*)$/m)?.[1].replace(/^ {10}/gm, "") ??
+      step.match(/^ {8}run: (.+)$/m)[1];
+    const result = spawnSync("bash", ["-e", "-c", body], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 5000,
+      env: {
+        ...process.env,
+        PATH: root + ":" + process.env.PATH,
+        RUNNER_TEMP: root,
+        GITHUB_REPOSITORY: "fixture/waitron",
+        GITHUB_WORKFLOW_SHA: "b".repeat(40),
+        FIXTURE_ROUTER: fresh,
+        CAPACITY: '{"slots":6}',
+      },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.trim()).toBe('workflow router route {"slots":6}');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
