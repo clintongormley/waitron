@@ -1,62 +1,50 @@
 # A1440: keep image smoke on GitHub
 
-The watcher’s **2026-11-09 08:20** instruction in
-`~/waitron-campaign-i/questions.md:827` is “image smoke always runs on GitHub's
-machines, until a guest is proven to run it.” Ship this small A1440 correction first.
-Retained job logs for nightly `42550200310` and lane E’s `42525659420` (#2543)
-both end at the Bluetooth check with `dbus_unreachable`. The nightly’s ssh2
-optional-binding compiler error is followed by `Done` and later successful image
-builds; it is not established as a failing-job cause. Receipts are in
+**Ask and authority:** watcher, 2026-11-09 08:20, Lane I questions.md:
+“image smoke always runs on GitHub's machines, until a guest is proven to run it.”
+The same note parks A1454 with six slots retained. Claude read the initial plan
+in 216 seconds; findings and triage are in
 `~/waitron-campaign-i/receipts/a1440-hosted-image-20261109/`.
+Build waits for watcher approval, explicitly including the routing guard changes.
 
-**Approval before build:** obtain one Claude plan read through
-`~/workspace/tools/claude-seat.sh review-branch`, then watcher approval. Explicitly
-request approval to change the routing guard under `scripts/`: the queue’s
-changed-check rule calls such changes controversial. Replace image’s server
-expectations with equally strict hosted expectations; preserve other jobs’ checks.
+**Outcome:** retain every image check, run it on GitHub, and stop assigning it to
+unqualified guests. Retained logs for nightly42550200310 and PR2543/run42525659420
+both fail Bluetooth step27 with `dbus_unreachable`. The nightly's ssh2 optional
+binding compiler error ends in `Done` before later image-build success; it is not
+the reported failing step. See `failure-evidence.md` beside the review.
 
-**Exact files and estimated size:** configuration: one changed line; runtime code:
-zero; tests: 20–40 changed lines; existing docs: 15–30 changed lines; this one-page plan.
+**Files and size:** configuration one changed line; runtime code zero; tests about
+5–12 changed lines; existing docs about15–30 changed lines, plus this plan.
 
 | File | Change |
 | --- | --- |
-| `.github/workflows/image-smoke.yml` | Set `jobs.smoke.runs-on` to literal `ubuntu-latest`. Keep declared `server_route` input. |
-| `scripts/ci-server-first.test.mjs` | Make image an explicit hosted exception and directly test it. |
-| `docs/developers/ci-and-gates.md` | Update disposable-runner prose: image is always hosted; input is retained but unused for placement; `image-smoke-1` is historical. |
-| `docs/backlog.md` | Update the network-step bundle for the hosted exception and parked A1454. |
-| `docs/backlog/ci.md` | Update A1440’s bundle; retain the guest-failure investigation and unfinished routing work. Add a dated correction to the earlier A1454 decision. |
+| `.github/workflows/image-smoke.yml` | Literal `jobs.smoke.runs-on: ubuntu-latest`; keep declared `server_route` input and caller unchanged. |
+| `scripts/ci-server-first.test.mjs` | Assert image's route is literal `ubuntu-latest`; add image to the hosted exception list and exclude it from the ordinary-rerun server list. Preserve all other checks. |
+| `docs/developers/ci-and-gates.md` | Image always hosted; retained input unused for placement; remove current image-key and guest-activation requirements. |
+| `docs/backlog.md` | Network-step bundle: hosted image exception, A1454 parked. |
+| `docs/backlog/ci.md` | Same bundle and hosted list; retain guest investigation and unfinished routing. Add dated pointer to the A1454 parking decision. |
 | `docs/superpowers/plans/2026-11-09-a1440-hosted-image-smoke.md` | This plan. |
 
-**Build and verification, after approval:**
+**Build after approval:**
 
-1. Extend the existing routing suite first. Assert image’s literal hosted route and
-   hosted results with server mode/input, events `pull_request`, `push`, `schedule`,
-   `workflow_dispatch`, attempts 1, 2 and 7, and marked/unmarked retries. Change
-   image’s expectations in the general server and overflow cases; retain fork,
-   maintenance, health fallback and caller-input assertions. Run
-   `pnpm exec vitest run scripts/ci-server-first.test.mjs`; observe the new hosted
-   assertion fail because the current workflow selects self-hosted.
-2. Make the one-line workflow edit and update the three docs. Leave
-   `.github/workflows/ci.yml:812–819` and its input forwarding unchanged. Run the
-   routing suite again, then
-   `pnpm exec vitest run scripts/ci-workflow.test.mjs -t 'disposable server routing|the image smoke.s scoping|ci.yml.s job graph|CI image provenance'`.
-   Require passing test counts. In a disposable candidate copy, restore only the
-   old server-routing expression: the new hosted assertion must fail. Keep the
-   working checkout unchanged during this deletion control.
-3. Use `finish-branch`, including Claude run-it review, signed-off commits, the
-   normal pre-push hook and required CI on the exact candidate SHA. Record changed
-   assertions and approval in the PR’s “Changed test checks” section.
+1. Add the literal assertion and two exception-list edits first. Run
+   `pnpm exec vitest run scripts/ci-server-first.test.mjs`; observe failure because
+   image still has the self-hosted expression. These changes replace image's
+   server-label and ordinary-rerun assertions with strict hosted assertions;
+   the existing event/attempt matrix still checks hosted placement.
+2. Make the one-line workflow edit and named prose changes; rerun that suite.
+   Restore the old routing line in a disposable copy and observe the guard fail,
+   as the campaign's guard-deletion rule requires. Keep the feature tree intact.
+3. Run `finish-branch`: Claude run-it, signed-off commits, normal push hook and
+   required exact-head CI. Name changed checks in the PR. Ordinary PR CI skips
+   image for these paths, so also dispatch `image-nightly.yml` on this branch and
+   require its hosted smoke job to pass at the exact candidate before landing.
+4. Land under `main.lock` with `land-branch`. The nightly failure rule requires
+   `gh workflow run ci.yml --ref main`; read its result. Require `image / smoke`
+   success on a GitHub runner, handle any other failure under the shared rule,
+   and report result/source/runner to lane E and the watcher.
 
-**Leaves out:** guest qualification, guest root-cause fixes, capacity/overflow changes,
-new controls or credentials, runtime changes and further A1454 measurements. Six
-slots stay. Keep unfinished work in the existing A1440 bundle. Any additional file
-requires a named plan amendment and watcher approval before editing.
-
-**Finish line:** hosted image smoke and required checks pass on the exact candidate.
-Land through `land-branch` under `~/waitron-campaign-shared/main.lock`. Then follow
-`~/waitron-campaign-shared/ci-failure-rule.md`: read the failed nightly’s logs and
-history, dispatch the same CI workflow with `gh workflow run ci.yml --ref main`,
-and read its result before claiming the correction complete. Retain source SHA,
-runner and run receipts; report to lane E and the watcher. This full nightly is
-required failure followup, not a local whole-suite run or proof the guest causes
-are fixed.
+**Leaves out:** guest qualification or cause fixes, capacity changes, new controls,
+credentials or further A1454 measurement. No extra files without approval.
+**Finish line:** exact-head checks and hosted image smoke pass, correction is on
+main and its manual full CI follow-up has been read. No guest repair is claimed.
