@@ -313,6 +313,7 @@ export class ServersScreen extends LitElement {
               </p>
               <dashboard-fresh-sign-in
                 .api=${this.api.background}
+                .passwordAndCodeOnly=${true}
                 .disabled=${this.handoverBusy || this.#handoverSent}
                 @sign-in-ways=${(event: CustomEvent<SignInWays>) => {
                   this.handoverWays = event.detail;
@@ -342,6 +343,7 @@ export class ServersScreen extends LitElement {
         >
         <wt-button
           data-test="confirm-handover"
+          variant=${this.handoverWays?.password ? "primary" : "secondary"}
           .loading=${this.handoverBusy}
           .disabled=${this.handoverBusy || this.handoverWays === null || !this.handoverWays.password || (this.#signIn()?.invalid ?? false)}
           @click=${() => void this.#startHandover()}
