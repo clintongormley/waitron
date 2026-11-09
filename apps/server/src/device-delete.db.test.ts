@@ -226,7 +226,7 @@ async function openOrder(venue: Venue, label: string | null = "Table 1"): Promis
   await parkOrder({ db: suite.db }, venue.cfg, {
     id: orderId,
     zoneId: offers.zoneId,
-    lines: offers.toOfferLines([{ productId: venue.cafeId, quantity: "1" }]),
+    lines: offers.toOfferLines([{ productId: venue.coffeeId, quantity: "1" }]),
     ...(label === null ? {} : { label }),
   });
   return orderId;

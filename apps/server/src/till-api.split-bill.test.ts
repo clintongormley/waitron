@@ -479,7 +479,7 @@ describe("a split-off check after the till that made it has forgotten it", () =>
 
   async function provisionedTab(): Promise<{ app: Hono; tabId: string; cookie: string }> {
     const db = venueSuite.db;
-    const { cfg: venueCfg, cafeId: provisionedCoffeeId } = await setupVenue(db);
+    const { cfg: venueCfg, coffeeId: provisionedCoffeeId } = await setupVenue(db);
     const { tabId, personId, profileId } = await withTransaction(db, async (tx) => {
       const offers = await offerProducts(tx, venueCfg, { zone: "tables" });
       const table = await createTable(tx, venueCfg, { label: "Table 5", zoneId: offers.zoneId });

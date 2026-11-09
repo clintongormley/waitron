@@ -367,7 +367,7 @@ describe("boot's authority clock wiring", () => {
       const translationUrl = `http://127.0.0.1:${httpPort()}/management-api/content-translations`;
       const readTranslations = async () => {
         const response = await fetch(
-          `${translationUrl}?language=en&target=product:${venue.cafeId}`,
+          `${translationUrl}?language=en&target=product:${venue.coffeeId}`,
           { headers: { cookie: venue.managerCookie } },
         );
         expect(response.status).toBe(200);
@@ -384,7 +384,14 @@ describe("boot's authority clock wiring", () => {
           },
           body: JSON.stringify({
             edits: [
-              { kind: "product", id: venue.cafeId, language: "en", field: "name", expected, text },
+              {
+                kind: "product",
+                id: venue.coffeeId,
+                language: "en",
+                field: "name",
+                expected,
+                text,
+              },
             ],
           }),
         });
@@ -416,7 +423,7 @@ describe("boot's authority clock wiring", () => {
       ).toEqual([
         {
           kind: "product",
-          id: venue.cafeId,
+          id: venue.coffeeId,
           language: "en",
           field: "name",
           text: "Customer coffee",

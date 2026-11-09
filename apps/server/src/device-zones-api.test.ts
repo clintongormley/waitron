@@ -287,7 +287,7 @@ describe("the device's zone preferences", () => {
           await parkOrder({ db: suite.db }, f.venue.cfg, {
             id: orderId,
             zoneId: offers.zoneId,
-            lines: offers.toOfferLines([{ productId: f.venue.cafeId, quantity: "1" }]),
+            lines: offers.toOfferLines([{ productId: f.venue.coffeeId, quantity: "1" }]),
           });
           await suite.db.insert(payments).values({
             workingOrderId: orderId,
@@ -342,7 +342,7 @@ describe("the device's zone preferences", () => {
     await parkOrder({ db: suite.db }, f.venue.cfg, {
       id: orderId,
       zoneId: offers.zoneId,
-      lines: offers.toOfferLines([{ productId: f.venue.cafeId, quantity: "1" }]),
+      lines: offers.toOfferLines([{ productId: f.venue.coffeeId, quantity: "1" }]),
     });
     await suite.db.insert(payments).values({
       workingOrderId: orderId,
