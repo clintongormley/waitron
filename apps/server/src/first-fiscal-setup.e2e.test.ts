@@ -35,6 +35,7 @@ import {
   type HourTestClock,
 } from "./testing/hour-test-clock.js";
 import { useTestProducer } from "./testing/test-producer.js";
+import { ownedHourSetup } from "../test/owned-hour-setup.js";
 
 useTestProducer();
 
@@ -518,6 +519,85 @@ it.each([
     }
   },
 );
+
+it("keeps English working names through fresh Live publication with Spanish receipts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "first-live-language-"));
+  dirs.push(root);
+  const stateDir = join(root, "state"),
+    venueDir = join(root, "venue"),
+    migrations = join(root, "migrations");
+  await copyMigrationsRoot(migrations);
+  const [port] = await freePorts(1);
+  const restart = vi.spyOn(process, "kill").mockReturnValue(true);
+  const server = await startServer(
+    {
+      WAITRON_ENV: "production",
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_VENUE_DIR: venueDir,
+      WAITRON_MIGRATIONS_DIR: migrations,
+      WAITRON_HTTP_HOST: "127.0.0.1",
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_LANDING_PORT: "0",
+      WAITRON_MANAGEMENT_RP_ID: "localhost",
+      WAITRON_MANAGEMENT_ORIGIN: "https://localhost",
+    },
+    {},
+    { testClock: time.clock },
+  );
+  const agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
+  try {
+    const transport: typeof fetch = (input, options) =>
+      fetch(input, { ...options, dispatcher: agent } as RequestInit);
+    const url = `https://127.0.0.1:${port}`;
+    const owner = await ownedHourSetup(
+      transport,
+      url,
+      { ...request, staffLanguage: "en" },
+      PASSWORD,
+      undefined,
+      time.clock,
+    );
+    const body = {
+      mode: "live",
+      aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic", certKind: "sello" },
+      email: {
+        server: "smtp.example.test",
+        port: 465,
+        encryption: "tls",
+        user: "test",
+        password: "test",
+        from: "owner@example.test",
+      },
+    };
+    const post = (path: string) =>
+      transport(url + path, { method: "POST", headers: owner.headers, body: JSON.stringify(body) });
+    const readiness = await post("/setup-api/fiscal-test");
+    expect({ status: readiness.status, body: await readiness.json() }).toMatchObject({
+      status: 200,
+      body: { status: "accepted" },
+    });
+    const activated = await post("/setup-api/provision");
+    expect({ status: activated.status, body: await activated.json() }).toMatchObject({
+      status: 200,
+      body: { provisioned: true },
+    });
+    await vi.waitFor(() => expect(restart).toHaveBeenCalledWith(process.pid, "SIGTERM"));
+  } finally {
+    await server.close();
+    await agent.close();
+  }
+  const db = new DatabaseSync(join(venueDir, "venue.db"), { readOnly: true });
+  try {
+    expect(db.prepare("select name from service_steps order by position").all()).toEqual(
+      ["Set up", "Take order", "Anything else?"].map((name) => ({ name })),
+    );
+    expect(db.prepare("select invoice_locales from locations").all()).toEqual([
+      { invoice_locales: '["es-ES"]' },
+    ]);
+  } finally {
+    db.close();
+  }
+});
 
 it("accepts real retained readiness before the wizard collects email settings", async () => {
   const root = await mkdtemp(join(tmpdir(), "first-fiscal-before-email-"));

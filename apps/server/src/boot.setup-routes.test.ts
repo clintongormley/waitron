@@ -700,7 +700,14 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         async ({ post, kills, stateDir }) => {
           const response = await post("/setup-api/provision", {
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ mode: "demo", venue: provisionVenueBody("60000012G") }),
+            body: JSON.stringify({
+              mode: "demo",
+              venue: {
+                ...provisionVenueBody("60000012G"),
+                staffLanguage: "en",
+                admin: { ...provisionVenueBody("60000012G").admin, locale: "es-ES" },
+              },
+            }),
           });
           expect(response.status, await response.clone().text()).toBe(200);
           expect(await response.json()).toEqual({ provisioned: true, restarting: true });
@@ -710,6 +717,17 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         },
       );
       expectThrowawayVenue(venue.store.venue, "60000012G");
+      expect(
+        venue.store.venue.all(sql`
+        select s.name from service_steps s join departments d on d.id = s.department_id
+        where d.is_default = 1 order by s.position
+      `),
+      ).toEqual(["Set up", "Take order", "Anything else?"].map((name) => ({ name })));
+      expect(
+        venue.store.venue.all(sql`
+        select name, kitchen_name from products where json_extract(customer_name, '$.en') = 'Ham croquettes'
+      `),
+      ).toEqual([{ name: "Croquettes", kitchen_name: "HAM CROQUETTES · TAPAS" }]);
 
       const port = await freePort();
       const server = await startServer(

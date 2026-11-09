@@ -262,6 +262,31 @@ it.each([undefined, "en", "es"] as const)(
   },
 );
 
+it("keeps starter options out of an operation without a preparation seat", async () => {
+  const calls: unknown[][] = [];
+  const input = { chosen: "existing operation input" };
+  const recorder = fakeModule("probe", {
+    provisioning: {
+      seed: {
+        summary: "record operation",
+        run: async (...args) => {
+          calls.push(args);
+          return "recorded";
+        },
+      },
+    },
+  });
+  const modules = [...ALL_MODULES, recorder];
+  await applyVenue(planVenue({ ...request("B10000015"), staffLanguage: "en" }, modules), {
+    db: suite.db,
+    modules,
+    moduleInputs: new Map([["probe", { eventId: "probe-event", sourceId: "probe-source", input }]]),
+  });
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toHaveLength(3);
+  expect((calls[0]![2] as { input: unknown }).input).toBe(input);
+});
+
 describe("applyVenue: the one taxpayer row", () => {
   it("stores the taxpayer domicile without copying the location address", async () => {
     await applyVenue(
