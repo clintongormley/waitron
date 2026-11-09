@@ -1,6 +1,6 @@
 # A1437: the dashboard's sign-in follows Cloud's rules, with SMS codes through Cloud
 
-**Design only, nothing built. Waiting for the owner's choices (§7).** The rules come from the owner's
+**Design only, nothing built. The owner answered every choice on 2026-11-09 (§7); the first build step is in lane K's queue.** The rules come from the owner's
 decision of 2026-11-08 (11:25, made with the campaign watcher; the watcher's file
 `sign-in-rules-20261108.md`), shared with Waitron Cloud's account design (Cloud repository, D608,
 `docs/superpowers/specs/2026-11-07-cloud-single-owner-lifecycle-design.md`) and its SMS design (D610,
@@ -20,7 +20,7 @@ are already signed in, before a risky action.
 | An authenticator app | Password, then the app code (`packages/identity/src/manager-login.ts:129-151`) | Unchanged |
 | A passkey, but you type the password instead | The password alone | Password, then the app code if there is one; otherwise a code by email, or by text message if you choose "text me instead" |
 | Password only | The password alone, on any browser | The password alone on a browser this account has used before. A **new browser** also gets a code by email (or text, if chosen) and is then remembered |
-| Google | Google alone; refused when an app is set up (`google-oidc.ts:151`) | Unchanged (choice 7a) |
+| Google | Google alone; refused when an app is set up (`google-oidc.ts:151`) | Through Cloud only, for a Cloud-connected venue (choice 7a) |
 
 New: an **administrator setting, off by default**: "everyone who signs in must set up an
 authenticator app or a passkey".
@@ -37,7 +37,7 @@ the email and the sign-in method in the browser (`apps/dashboard/src/login-prefe
 the sign-in cookie ends with the browser session (`packages/server-kit/src/management-cookie.ts:11-18`).
 The design adds a long-lived browser cookie holding a random token, stored on the box only as a hash
 (CLAUDE.md §3, "Store anything that works as a live login as a hash"). How long a browser stays
-remembered is choice 7b.
+remembered: 30 days from its last sign-in (choice 7b).
 
 ## 2. Asked again: what exists today
 
@@ -114,21 +114,20 @@ per code, EU numbers only. Each text counts toward the venue's monthly figure on
 So SMS needs a venue connected to Cloud (the box's `cloud-connection.json`, `apps/server/src/cloud-client.ts:189`).
 It also needs Cloud's D610 built; until then the "text me instead" choice is not shown.
 
-## 5. A venue without Cloud, or without email
+## 5. A venue without Cloud
 
-- **No Cloud:** no text messages. An account uses its app, a passkey, a recovery code or an email code.
-- **No email either:** today a box sends email only through the venue's own SMTP settings
-  (`apps/server/src/email-delivery.ts:46-80`); with none saved it refuses with `email.unconfigured`.
-  Such a box cannot send an email code. What a new browser and a password-only account get then is
-  choice 7d.
+The owner, 2026-11-09 (choice 7d): "i think we should just require a cloud login for now, so they'll
+automatically get email via cloud". So this design assumes a venue connected to Cloud: email codes,
+text messages and Google all go through Cloud. A venue without Cloud is not a path in this design;
+it is a short backlog entry, low priority ("shouldn't be forgotten").
 
 ## 6. What it costs to build
 
 Rough sizes, tests included. About 3,000 lines over five pull requests:
 
 1. **Ask again on the §3 list** (~900 lines): one check function in `packages/identity`, the
-   remembered "proved at" time on the sign-in session (one new column on `management_sessions`, if
-   choice 7e is a time window), the check on about 25 server routes in `apps/server`, and the
+   remembered "proved at" time on the sign-in session (one new column on `management_sessions`, for
+   choice 7e's time window), the check on about 25 server routes in `apps/server`, and the
    existing window (`widgets/fresh-sign-in.ts`) opened by each dashboard action. Uses only today's
    proofs (password for a password-only account) until step 2 lands. The biggest gain for the least
    work: build first.
@@ -145,18 +144,18 @@ Packages: `identity`, `db` (two tables, one column), `apps/server`, `apps/dashbo
 shared with Cloud) would take the sign-in decision itself, so step 2 should agree with Cloud's
 version before either is built.
 
-## 7. Open choices (each has a recommendation)
+## 7. The owner's choices (answered 2026-11-09)
 
-- **7a. Google.** Keep Google signing in alone for an account without an app (today's rule), or treat
-  it as a password? Recommend: keep it; Google's own account checks stand in for ours, as the item
-  text allowed.
-- **7b. How long a browser stays remembered.** Recommend 90 days from its last sign-in, and every
-  remembered browser forgotten when the password is reset or changed.
-- **7c. Pairing a till or print agent.** Recommend: not asked again. Pairing needs the device on the
-  venue's own network with pairing mode on, and setting up a venue pairs many devices in a row.
-- **7d. A box that cannot send email.** Recommend: the new-browser email check is skipped, and the
-  dashboard tells administrators "Set up email so new browsers are checked". The other way, refusing,
-  would lock everyone out of a box whose email is not set up yet, and the owner has no other way in.
-  A password-only account is then asked for its password again before a §3 action, as today.
-- **7e. How long one proof covers.** Today each guarded action asks every time. Recommend: one proof
-  covers every §3 action for 5 minutes in that sign-in session, so inviting three people asks once.
+- **7a. Google: through Cloud.** Cloud holds Waitron's Google sign-in client, and the box trusts
+  Cloud's signed answer about who signed in. Only venues connected to Cloud get Google; the box's own
+  Google settings (`WAITRON_GOOGLE_CLIENT_ID` and `_SECRET`) are not offered to venues.
+- **7b. A remembered browser: 30 days** from that browser's last sign-in. Every remembered browser is
+  forgotten when the password is changed or reset.
+- **7c. Pairing a till or print agent: not asked again** (the recommendation). Pairing needs the
+  device on the venue's own network with pairing mode on, and setting up a venue pairs many devices
+  in a row.
+- **7d. A box that cannot send email: require Cloud for now** (§5). Email codes are sent through
+  Cloud.
+- **7e. One proof covers 15 minutes**, or until the sign-in session ends if that is sooner: the
+  owner, "until the session timesout or 15 minutes". It covers every §3 action in that session, so
+  inviting three people asks once.

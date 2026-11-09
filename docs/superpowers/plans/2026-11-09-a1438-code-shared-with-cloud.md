@@ -1,6 +1,6 @@
 # A1438: code Waitron and Cloud should share, published like ui-core
 
-**Plan only, nothing built. Waiting for the owner's choices (§6).** The owner asked on 2026-11-08
+**Plan only, nothing built. The owner answered every choice on 2026-11-09 (§6); step 1 is queued in a Codex lane.** The owner asked on 2026-11-08
 whether the sign-in code copied from Waitron into Cloud should be shared instead, and how: "let's not
 publish it like verifactu. instead treat it like waitron-ui". Waitron Cloud is the separate,
 closed-source service at `~/workspace/repos/waitron-cloud`; paths below starting `cloud:` are in it.
@@ -112,15 +112,16 @@ A change to a signing format must reach Cloud before any box uses it: a new form
    A1437's second step (email codes) and Cloud's D608, so the rules are written once.
 3. **Messages** (3c): ~400 lines; built with Waitron's relay client and Cloud's D610.
 
-## 6. Choices for the owner (each with a recommendation)
+## 6. The owner's choices (answered 2026-11-09)
 
-- **6a. One package or three.** Recommend one, `@waitron-io/contract`, with a folder per part: one
-  release workflow and one Dependabot entry instead of three.
-- **6b. Password length.** Recommend 15 characters for new passwords on both sides (Cloud's rule);
-  existing Waitron passwords keep working until changed.
-- **6c. Recovery codes.** Recommend Cloud's: 128-bit codes, stored hashed with the account they belong
-  to. Every Waitron account with an authenticator makes new codes once.
-- **6d. Passkeys.** Recommend Cloud's "required", so the browser can offer every passkey without
-  the email being typed first, as A1437's "a passkey signs you in alone" needs.
-- **6e. Order.** Recommend signing first (smallest, already pinned by shared test files), then
-  sign-in with A1437, then messages with the relay.
+- **6a. One package**, `@waitron-io/contract`, with a folder per part: one release workflow and one
+  Dependabot entry.
+- **6b. Password length: an administrator setting**, default 15 characters, on both sides; the
+  owner, "let's make it configurable, defaulting to 15". It applies to new passwords; existing
+  Waitron passwords keep working until changed.
+- **6c. Recovery codes stay 16 characters** (`XXXX-XXXX-XXXX-XXXX`), each stored hash bound to its
+  account as Cloud does. Cloud's codes change to this length.
+- **6d. Passkeys "required"** (discoverable) on both sides, so the browser can offer every passkey
+  without the email being typed first.
+- **6e. Order:** signing, then sign-in with A1437, then messages with the relay. Step 1 (signing) is
+  queued now.

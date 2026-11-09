@@ -1431,8 +1431,13 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 - **A1437. Dashboard sign-in and SMS through Cloud — designed; no build yet.**
   The [ask-again plan](superpowers/plans/2026-11-09-a1437-1-dashboard-reproof.md) awaits the owner's
-  slice-size and authentication exceptions; its shared window is fifteen minutes. Remaining sign-in
-  choices, email/browser checks, enrolment and SMS stay in the [design](superpowers/specs/2026-11-09-a1437-dashboard-sign-in-rules-design.md).
+  slice-size and authentication exceptions; its shared window is fifteen minutes. Email/browser
+  checks, enrolment and SMS stay in the [design](superpowers/specs/2026-11-09-a1437-dashboard-sign-in-rules-design.md),
+  whose choices the owner answered on 2026-11-09: Google, email codes and texts go through Cloud.
+
+- **A venue without Cloud gets no dashboard email codes, texts or Google sign-in (left by A1437).**
+  The owner, 2026-11-09: require a Cloud login for now; supporting a venue without one "shouldn't be
+  forgotten". Low priority.
 
 - **A1227. The Catalogue screen replaces its live stream once per load when catalogues exist (left
   open by A1222).** It watches `ingredients` and `recipe_lines` only after awaited reads, so its
@@ -1926,8 +1931,8 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 ### Replication, failover and the cloud
 
-- **A1438. Code Waitron and Cloud share, published like ui-core (owner, 2026-11-08) — planned,
-  waiting for the owner's five choices.** One database-free package, `@waitron-io/contract`: the
+- **A1438. Code Waitron and Cloud share, published like ui-core (owner, 2026-11-08) — planned;
+  the owner answered its choices on 2026-11-09 and step 1 (signing) is queued in a Codex lane.** One database-free package, `@waitron-io/contract`: the
   box-to-Cloud signing formats first, then the sign-in rules (with A1437 and Cloud's D608), then the
   message list and texts (with Cloud's D610 and the email relay). Roles, storage, sessions and
   screens stay apart. [Plan](superpowers/plans/2026-11-09-a1438-code-shared-with-cloud.md).
