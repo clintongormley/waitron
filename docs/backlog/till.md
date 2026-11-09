@@ -3805,7 +3805,9 @@ Board 1 is the target; board 2 the windows.
 setup reads carry it, and the existing sale-slip action excludes readers that print their own.
 A1141's Counter retrieval keeps the table bill's edit observation for payment and stored-line
 saves. The shared payment window, frozen per-attempt slip intent and final document choice remain
-for the next cut, after A790's complete live routing cuts and the G4/path releases.
+for the next cut, after A790’s order-linked till document/printer slice lands (owner20:34,
+watcher23:14 on 9 November 2026). A739 replans its document-command rows on today’s print path
+without adding a protocol; G4/A947 and prepare/accept no longer gate this work.
 
 **2026-10-27 approved update (owner, about 02:01/02:05/02:12 CET).**
 Read the [authoritative addendum](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)

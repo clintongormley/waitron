@@ -1,3 +1,11 @@
+> **9 November 2026, owner20:34 direction; watcher23:10 documentation approval:**
+> A739 follows A790’s [till document/printer slice](2026-11-09-a790-till-document-printer.md),
+> rather than the complete historical Cut B. G4/A947, the recovery-origin file, browser journal,
+> prepare/accept exchange and all-writer revisions are dropped. A739 must replan its document-command
+> rows on today’s print path without adding a protocol. This pointer supersedes conflicting
+> dependencies below; the historical body is preserved. Follow the latest slice approval before building.
+
+
 # A739 Approved Payment Flow Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task, inline by the driver. Steps use checkbox (`- [ ]`) syntax for tracking. The owner has already approved the flow and build; no further design approval is required.
