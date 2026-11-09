@@ -56,6 +56,7 @@ export {
   flag,
   id,
   json,
+  jsonShapeCheck,
   label,
   labelList,
   money,

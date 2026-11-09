@@ -1449,6 +1449,12 @@ export interface RecoveryPackPageResult {
   readonly keyFile?: Readonly<Record<string, unknown>>;
 }
 
+/** Each path step is an object key, or "*" for every object key or array element. */
+export interface JsonReference {
+  readonly column: string;
+  readonly paths: readonly (readonly string[])[];
+}
+
 /** One table whose rows may cross from preparation into a fresh production database. */
 export interface ConfigurationTransferTable {
   readonly name: string;
@@ -1460,6 +1466,8 @@ export interface ConfigurationTransferTable {
    * references, so a key onto a column that is not an id would have a value equal to a bundle id
    * replaced. */
   readonly references?: readonly string[];
+  /** Export prunes ids without exported rows; import remaps ids and refuses missing targets. */
+  readonly jsonReferences?: readonly JsonReference[];
   /** An export leaves behind each row whose value in this column is not null, and then, in every
    * declared table, each row whose foreign key names a row left behind. */
   readonly leaveBehindWhenSet?: string;
