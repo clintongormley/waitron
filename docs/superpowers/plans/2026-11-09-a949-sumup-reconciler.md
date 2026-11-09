@@ -6,17 +6,17 @@
 
 **Evidence:** [session §11](../../research/2026-09-10-sumup-solo-experiments.md#11-a949-cross-account-session-2026-11-09) qualifies the cross-account key, 404/PENDING/paid reference reads and REFUNDED events with original SUCCESSFUL. Both saved refunded payments currently classify as captured: two diagnostic failures reproduced the review finding.
 
-## Proposed build
+## Proposed build, blocked after the permitted reread
 
 Deliver `SUMUP_WAITRON_AFFILIATE_KEY` through the existing app-image ARG/ENV and publish-secret checks; fix app ID `io.waitron.pos` in the server adapter. Read it in `sumupClientForTenant`, overriding stored affiliate values but retaining the venue's authorization credential. Remove affiliate fields/help from the dashboard form; connect ignores supplied affiliate values and seals `-`. Preserve the four-field vault, `optionsFromSealed` and backup/read/unpair acceptance. Image restart replaces cached clients; no reconnect, OAuth, new secret store or schema.
 
-Missing/blank/whitespace/`-` key fails publication. Contribution `build` also refuses it with existing `payment.provider_credential_rejected` before collection; no attempting row or false card decline. `createCheckout` rejects missing/incomplete/foreign affiliate configuration before HTTP. Source builds need the build argument for real SumUp; demo cash/simulators remain available.
+Reread correction: gate collection before `insertAttempting`, not provider construction or low-level checkout; those gates can block existing refunds and sweeps. If image delivery is chosen, the repository secret must exist before landing and source-install wiring must be included. Wrong/revoked-key behavior still needs a qualified response policy.
 
-**Watcher choice:** the key is image-readable and rotates through image updates; the package gains a server-side environment read. SumUp says “Affiliate keys are not an authorization mechanism.” ([source](https://developer.sumup.com/tools/authorization/affiliate-keys/), read 9 November.) The owner must arrange the repository secret; this proposal copies none.
+**Watcher choice, unresolved:** the key is image-readable (potentially public) and rotates through image updates; the package gains a server-side environment read. SumUp says “Affiliate keys are not an authorization mechanism.” ([source](https://developer.sumup.com/tools/authorization/affiliate-keys/), read 9 November.) Decide confidentiality before delivery: an expressly public server constant is smaller; a confidential key needs runtime delivery. This proposal copies none.
 
-For unresolved successful payments, completed or uncertain REFUND events use the existing deferred/incident path rather than a new gross capture. FAILED refund events alone do not prove returned money. Keep `lookupRefund`'s correct REFUNDED/amount/id checks; no refund is sent. Test the local state and incident, not only classification.
+Reread correction: the existing deferred path marks a row failed permanently, so it is not a sufficient refund repair. Uncertain refunds must remain pending/rechecked; completed/partial refunds need an agreed local money state and truthful incident reason. FAILED refund events alone do not prove returned money. Keep `lookupRefund`'s correct mapping; send no refund.
 
-**Changed-line estimate:** 200 code, 200 tests, 40 docs; 440 total, counting deletions. No generated/dependency changes.
+**Provisional image-option estimate:** 200 code, 200 tests, 40 docs; 440 total including deletions. Source-install wiring and resolved refund semantics must be counted after the watcher chooses. No generated/dependency changes.
 
 **Files:**
 
@@ -35,4 +35,4 @@ For unresolved successful payments, completed or uncertain REFUND events use the
 
 Retain [the complete backlog contract](../../backlog/payments.md#the-sumup-reconciler), including all three backup-machine cases. Later plans qualify history/detail matching, completed payout (SCHEDULED/PENDING is insufficient), mounted audit and visible ambiguity. Before automatic refunds, trace callers and first reuse `bill-refunds.ts`'s committed-before-send recovery pattern; no new ledger is assumed. Second-Solo, signature/decline, fees and connection probes remain unqualified. No paid probes or protected fiscal changes. A760/A1308's table hold is lifted.
 
-**Gate:** one permitted Claude reread, then watcher approval of image distribution, refund-recovery repair and named assertion changes. The first read's “Should this exist?” simplification finding stays with the watcher; no product build or landing before its answer. Later scope is not an approved deferral.
+**Gate:** both permitted reads are complete and reject approval as written. The watcher must decide key confidentiality/delivery and refund-state scope; then repair the page without another review loop. No product build or landing before that answer. Later scope is not an approved deferral.
