@@ -1143,6 +1143,34 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     }
   });
 
+  it("renders the Reprint dialog, with its hint and then a refusal, accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      {
+        api: stubApi(false, {
+          resendPrintJob: vi.fn().mockRejectedValue({ code: "print_job.printer_unsuitable" }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    q(el, "wt-tabs")!.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="queue"]')!.click();
+    await flush(el);
+    q(el, "[data-test=resend-job-j1]")!.click();
+    await flush(el);
+    expect(q(el, "wt-combobox[name=printerId]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+    q(el, "[data-test=reprint-send]")!.click();
+    await flush(el);
+    await vi.waitFor(() =>
+      expect(
+        (q(el, "[data-test=reprint-send]") as HTMLElementTagNameMap["wt-button"]).loading,
+      ).toBe(false),
+    );
+    await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
   it("renders a switched-off Bluetooth printer's Unpair and its outcome accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",

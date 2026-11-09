@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupWidgets,
   dialogClosed,
+  dialogMessageOf,
   mountWidget,
   openDetailsEdit,
   saveDetailsEdit,
@@ -5076,20 +5077,22 @@ it("offers resend for eligible jobs and enqueues the selected document only once
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   expect(q(el, "[data-test=resend-job-j1]")).toBeNull();
-  const button = q(el, "[data-test=resend-job-j2]")!;
-  expect(button).not.toBeNull();
-  button.click();
-  button.click();
+  q(el, "[data-test=resend-job-j2]")!.click();
   await flush(el);
-  expect(api.resendPrintJob).toHaveBeenCalledExactlyOnceWith("j2");
-  expect((q(el, "[data-test=resend-job-j2]") as import("@waitron/ui").WtButton).disabled).toBe(
-    true,
+  expect((q(el, "wt-combobox[name=printerId]") as import("@waitron/ui").WtCombobox).value).toBe(
+    "p1",
   );
+  const send = q(el, "[data-test=reprint-send]")!;
+  send.click();
+  send.click();
+  await flush(el);
+  expect(api.resendPrintJob).toHaveBeenCalledExactlyOnceWith("j2", "p1");
   resolve({ jobId: "resent" });
   await flush(el);
   expect(api.listRecentJobs).toHaveBeenCalledTimes(2);
-  expect((q(el, "[data-test=resend-job-j2]") as import("@waitron/ui").WtButton).disabled).toBe(
-    false,
+  expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull();
+  expect(text(el, "[data-test=reprint-sent]")).toBe(
+    fill("printers.reprint_sent", { printer: "Cocina" }),
   );
 });
 
@@ -5101,11 +5104,31 @@ it("shows a localized resend failure and permits another attempt", async () => {
   await flush(el);
   q(el, "[data-test=resend-job-j2]")!.click();
   await flush(el);
-  expect(text(el, "[role=alert]")).toContain(codeMessage("print_job.not_resendable", "es-ES"));
-  expect((q(el, "[data-test=resend-job-j2]") as import("@waitron/ui").WtButton).disabled).toBe(
+  q(el, "[data-test=reprint-send]")!.click();
+  await flush(el);
+  const dialog = q(el, "dashboard-print-job-reprint-dialog")!.shadowRoot!.querySelector(
+    "wt-dialog",
+  )!;
+  expect(await dialogMessageOf(dialog)).toBe(codeMessage("print_job.not_resendable", "es-ES"));
+  expect((q(el, "[data-test=reprint-send]") as import("@waitron/ui").WtButton).disabled).toBe(
     false,
   );
   expect(api.listRecentJobs).toHaveBeenCalledTimes(1);
+});
+
+it("words a job moved to another printer and shows no attempts for it", async () => {
+  const moved: PrintJobRow = {
+    ...jobs[0]!,
+    id: "j40",
+    attempts: 5,
+    lastError: "print_job.moved",
+  };
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi({ listRecentJobs: vi.fn().mockResolvedValue([moved]) }),
+  });
+  await flush(el);
+  expect(text(el, "[data-test=job-error-j40]")).toBe(codeMessage("print_job.moved", "es-ES"));
+  expect(text(el, "[data-test=job-attempts-j40]")).toBe("—");
 });
 
 it("keeps pairing open, polls passively, and makes Scan usable again after listening", async () => {

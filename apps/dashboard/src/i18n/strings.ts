@@ -1826,6 +1826,16 @@ export const en = {
     "{printer} was not found. Check it is on and in pairing mode, then look again.",
   "printers.pair_again_look": "Look again",
   "printers.pair_again_done": "{printer} is paired again and active.",
+  "printers.reprint_printer": "Print on",
+  "printers.reprint_wide_enough": "Only printers at least as wide as this printout are offered.",
+  "printers.reprint_own_only": "This printout reprints only on its own printer.",
+  "printers.reprint_original_off":
+    "{printer} is disabled. Switch it on in its details, then reprint.",
+  "printers.reprint_none":
+    "No other active printer can take this printout. Switch {printer} on in its details, then reprint.",
+  "printers.reprint_stuck":
+    "{printer} has not printed this. Reprinting it elsewhere cancels it there.",
+  "printers.reprint_sent": "Reprint sent to {printer}",
   "printers.bluetooth_forget": "Unpair",
   "printers.bluetooth_show_all": "Show all devices",
   "printers.bluetooth_hide_others": "Hide other devices",
@@ -5704,6 +5714,17 @@ export const es: Record<StringKey, string> = {
     "No se ha encontrado {printer}. Comprueba que esté encendida y en modo de emparejamiento, y vuelve a buscar.",
   "printers.pair_again_look": "Buscar de nuevo",
   "printers.pair_again_done": "{printer} vuelve a estar emparejada y activa.",
+  "printers.reprint_printer": "Imprimir en",
+  "printers.reprint_wide_enough":
+    "Solo se ofrecen impresoras al menos tan anchas como esta impresión.",
+  "printers.reprint_own_only": "Esta impresión solo se reimprime en su propia impresora.",
+  "printers.reprint_original_off":
+    "{printer} está deshabilitada. Actívala en sus detalles y reimprime.",
+  "printers.reprint_none":
+    "Ninguna otra impresora activa sirve para esta impresión. Activa {printer} en sus detalles y reimprime.",
+  "printers.reprint_stuck":
+    "{printer} aún no la ha impreso. Si la reimprimes en otra, se cancela allí.",
+  "printers.reprint_sent": "Reimpresión enviada a {printer}",
   "printers.bluetooth_forget": "Desvincular",
   "printers.bluetooth_show_all": "Mostrar todos los dispositivos",
   "printers.bluetooth_hide_others": "Ocultar otros dispositivos",

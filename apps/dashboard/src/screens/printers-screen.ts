@@ -37,6 +37,7 @@ import "../widgets/page-printer-add.js";
 import { PageTestPages } from "../widgets/page-test-pages.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
 import "../widgets/equipment-label.js";
+import "../widgets/print-job-reprint-dialog.js";
 import { holderText } from "../i18n/equipment.js";
 import { printerDeleteCopy } from "../widgets/printer-delete-copy.js";
 import { relativeTime } from "../widgets/relative-time.js";
@@ -147,10 +148,8 @@ interface PrinterDraft {
   pollId?: string;
 }
 
-/** The `last_error` codes of a job the server ended itself, setting its attempts to the cap
- * (`PRINTER_UNPAIRED`, packages/printing/src/runtime.ts;
- * `PRINTER_DELETED`, packages/printing/src/printer-delete-jobs.ts). */
-const ENDED_BY_SERVER = new Set(["printer.unpaired", "printer.deleted"]);
+/** The `last_error` codes of a job the server ended itself, setting its attempts to the cap. */
+const ENDED_BY_SERVER = new Set(["printer.unpaired", "printer.deleted", "print_job.moved"]);
 
 const LOCALIZED_JOB_REASONS = new Set([
   ...ENDED_BY_SERVER,
@@ -903,7 +902,10 @@ export class PrintersScreen extends LitElement {
   @state() private preview: PrintJobPreview | null = null;
   @state() private previewOpen = false;
   @state() private jobs: PrintJobRow[] = [];
-  @state() private resendingJobId: string | null = null;
+  /** The job the Reprint dialog is open on. */
+  @state() private reprintJob: PrintJobRow | null = null;
+  /** The printer a reprint was last sent to, while its notice shows. */
+  @state() private reprintSentTo: string | null = null;
   /** The last print the edit or calibration dialog sent. */
   @state() private calibrationJobId: string | null = null;
 
@@ -3773,8 +3775,9 @@ export class PrintersScreen extends LitElement {
               j.canResend
                 ? html`<wt-button
                     data-test=${`resend-job-${j.id}`}
-                    ?disabled=${this.resendingJobId !== null}
-                    @click=${() => void this.#resendJob(j.id)}
+                    @click=${() => {
+                      this.reprintJob = j;
+                    }}
                     >${t("printers.resend_job")}</wt-button
                   >`
                 : nothing
@@ -3813,14 +3816,34 @@ export class PrintersScreen extends LitElement {
     </section>`;
   }
 
-  async #resendJob(id: string): Promise<void> {
-    if (this.resendingJobId !== null) return;
-    this.resendingJobId = id;
-    try {
-      await this.#mutate(() => this.api.resendPrintJob(id));
-    } finally {
-      this.resendingJobId = null;
-    }
+  #renderReprint(): TemplateResult | typeof nothing {
+    if (this.reprintJob === null) return nothing;
+    return html`<dashboard-print-job-reprint-dialog
+      .api=${this.api}
+      .job=${this.reprintJob}
+      .printers=${this.printers}
+      @reprint-close=${() => {
+        this.reprintJob = null;
+      }}
+      @reprinted=${(event: CustomEvent<{ printerName: string }>) => {
+        this.reprintJob = null;
+        this.reprintSentTo = event.detail.printerName;
+        void this.#load();
+      }}
+    ></dashboard-print-job-reprint-dialog>`;
+  }
+
+  #renderReprintSent(): TemplateResult | typeof nothing {
+    if (this.reprintSentTo === null) return nothing;
+    return html`<wt-notice
+      class="sent"
+      data-test="reprint-sent"
+      .duration=${NOTICE_MS}
+      @wt-notice-gone=${() => {
+        this.reprintSentTo = null;
+      }}
+      >${fill("printers.reprint_sent", { printer: this.reprintSentTo })}</wt-notice
+    >`;
   }
 
   async #viewJob(id: string): Promise<void> {
@@ -4922,10 +4945,10 @@ export class PrintersScreen extends LitElement {
       ${
         dialogOpen
           ? nothing
-          : html`${this.#renderTestPageSent()}${this.#renderPairedAgain()}${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
+          : html`${this.#renderTestPageSent()}${this.#renderReprintSent()}${this.#renderPairedAgain()}${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
-      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}
+      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#renderDeleteDialog()}${this.#renderReprint()}
       <dashboard-print-job-preview
         .preview=${this.preview}
         .open=${this.previewOpen}
