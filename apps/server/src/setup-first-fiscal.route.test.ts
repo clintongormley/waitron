@@ -60,6 +60,7 @@ async function fixture(
   sendEmailTest?: SetupDeps["sendEmailTest"],
   extra: Partial<SetupDeps> = {},
   grantClock?: () => number,
+  staffLanguage?: unknown,
 ) {
   const root = await mkdtemp(join(tmpdir(), "first-route-"));
   dirs.push(root);
@@ -104,7 +105,7 @@ async function fixture(
     );
   const claimed = await post("/setup-api/first-setup/claim", {
     clientClaimNonce: nonce,
-    venue: request,
+    venue: staffLanguage === undefined ? request : { ...request, staffLanguage },
   });
   const claim = claimed.status === 200 ? await claimed.json() : {};
   const headers = (state = claim.state, capability = claim.capability) => ({
@@ -226,6 +227,27 @@ async function recoveryDocument(
     },
   };
 }
+it.each(["en", "es"])(
+  "accepts explicit %s working language in the Live setup claim",
+  async (staffLanguage) => {
+    const f = await fixture(undefined, {}, undefined, staffLanguage);
+    expect(f.claimed.status).toBe(200);
+    expect((await f.host.store.read())?.frozen.request.staffLanguage).toBe(staffLanguage);
+  },
+);
+
+it.each([null, "en-GB", "fr", ["en"]])(
+  "refuses invalid Live setup working language %j",
+  async (staffLanguage) => {
+    const f = await fixture(undefined, {}, undefined, staffLanguage);
+    expect(f.claimed.status).toBe(400);
+    expect(await f.claimed.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "staffLanguage" } },
+    });
+    expect(await f.host.store.read()).toBeNull();
+  },
+);
+
 it("claims only the validated wizard identity and conceals all owner state from a stranger", async () => {
   const f = await fixture();
   expect(f.claimed.status).toBe(200);

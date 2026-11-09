@@ -651,6 +651,41 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(SUPPORTED_LOCALE_CODES).toContain(provisionRequests[0].venue.admin.locale);
   });
 
+  it.each(["en", "es"])(
+    "passes explicit %s working language independently of receipts",
+    async (staffLanguage) => {
+      const app = new Hono();
+      const { deps, provisionRequests } = makeDeps();
+      mountSetup(app, deps, noopLog);
+      const body = demoBody();
+      asRec(body.venue).staffLanguage = staffLanguage;
+      const res = await postProvision(app, body);
+      expect(res.status).toBe(200);
+      expect(provisionRequests[0].venue).toMatchObject({
+        staffLanguage,
+        invoiceLocales: ["es-ES"],
+      });
+      await tick();
+    },
+  );
+
+  it.each([null, "en-GB", "fr", ["en"]])(
+    "refuses invalid working language %j before provisioning",
+    async (staffLanguage) => {
+      const app = new Hono();
+      const { deps, provisionRequests } = makeDeps();
+      mountSetup(app, deps, noopLog);
+      const body = demoBody();
+      asRec(body.venue).staffLanguage = staffLanguage;
+      const res = await postProvision(app, body);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "setup.request_invalid", params: { field: "staffLanguage" } },
+      });
+      expect(provisionRequests).toEqual([]);
+    },
+  );
+
   it.each(["admin.firstNames", "admin.lastNames"] as const)(
     "refuses an empty %s rather than storing it",
     async (field) => {
