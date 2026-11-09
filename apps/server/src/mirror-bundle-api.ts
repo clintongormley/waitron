@@ -11,7 +11,7 @@ import {
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
-import { withMember } from "@waitron/membership";
+import { withMember, type Endorsement } from "@waitron/membership";
 import {
   authorizeManager,
   checkManagerPassword,
@@ -140,7 +140,13 @@ export function mountMirrorBundleApi(
         // Before the response, so no bundle is handed out for a node the chart omits: a till reroutes by
         // the chart's `contactUrl`. Deliberately a separate transaction: assembly's reservation has already
         // committed.
-        await appendStandbyToChart(deps, signingKey, standby.nodeId, standbyContactUrl);
+        await appendStandbyToChart(
+          deps,
+          signingKey,
+          standby.nodeId,
+          standbyContactUrl,
+          bundle.reservedIdentity.endorsement,
+        );
 
         return c.json(bundle);
       };
@@ -195,6 +201,7 @@ async function appendStandbyToChart(
   signingKey: string,
   standbyNodeId: string,
   standbyContactUrl: string,
+  endorsement: Endorsement,
 ): Promise<void> {
   for (let round = 1; round <= MAX_CHART_WRITE_ROUNDS; round += 1) {
     const held = await readNodeMembership(deps.appDb);
@@ -208,6 +215,7 @@ async function appendStandbyToChart(
         nodes: withMember(held?.body.nodes ?? [], standbyNodeId, standbyContactUrl),
         signerNodeId: deps.designated.nodeId,
         verifyHeld: "stored-keys",
+        endorsements: [endorsement],
       },
     );
     if (await persistNodeMembershipIfNewer(deps.appDb, document)) return;

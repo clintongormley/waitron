@@ -1968,7 +1968,8 @@ Not in any track until the standalone primary is done.
   not name it main, it writes no new fiscal record, and refuses sales and bill payments before any
   money moves (`fiscal.chain_handed_over`); refunds are not refused. It still sends AEAT the
   records it wrote before: the filing loop does not read the chart, and a third box's promotion can
-  leave it `serving-secondary`, which does not fence it. Two boxes filing could not be repaired.
+  leave it `serving-secondary`, which does not fence it.
+  Enrollment now retains this box’s signed spare endorsement; the bucket stop remains to build.
   Left open by A1018 Slice 5 (Ruling R42).
   [Detail](backlog/replication-cloud.md#a-box-the-chart-no-longer-names-main-keeps-filing-its-earlier-records)
 

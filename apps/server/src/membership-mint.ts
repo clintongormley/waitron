@@ -1,10 +1,12 @@
 import {
   buildNextMembershipDocument,
+  verifyEndorsement,
+  type Endorsement,
   type MembershipNode,
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import { readNodeEndorsement, type Database, type NodeDatabase } from "@waitron/db";
-import type { KeyRing } from "@waitron/credentials";
+import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { assertHeldDocumentTrusted } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -51,6 +53,7 @@ export async function mintNextMembershipDocument(
     verifyHeld: HeldChartCheck;
     minTerm?: number;
     revoked?: readonly string[];
+    endorsements?: readonly Endorsement[];
   },
 ): Promise<SignedMembershipDocument> {
   const signerPrivateKey =
@@ -65,12 +68,25 @@ export async function mintNextMembershipDocument(
     );
   }
   const endorsement = await readNodeEndorsement(deps.db, args.signerNodeId);
+  const listed = new Set(args.nodes.filter((n) => n.standing !== "evicted").map((n) => n.nodeId));
+  const carried = new Map<string, Endorsement>();
+  const ownKey = nodeSigningPublicKey(signerPrivateKey);
+  for (const e of [...(args.endorsements ?? []), ...(args.heldDocument?.endorsements ?? [])]) {
+    if (
+      listed.has(e.nodeId) &&
+      e.endorsedBy === args.signerNodeId &&
+      verifyEndorsement(e, ownKey) &&
+      !carried.has(e.nodeId)
+    )
+      carried.set(e.nodeId, e);
+  }
+  if (endorsement !== null) carried.set(endorsement.nodeId, endorsement);
   return buildNextMembershipDocument({
     heldDocument: args.heldDocument,
     nodes: args.nodes,
     signerNodeId: args.signerNodeId,
     signerPrivateKey,
-    endorsements: endorsement === null ? [] : [endorsement],
+    endorsements: [...carried.values()],
     minTerm: args.minTerm,
     revoked: args.revoked,
   });

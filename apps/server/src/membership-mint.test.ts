@@ -88,6 +88,39 @@ describe("mintNextMembershipDocument", () => {
     expect(doc.endorsements).toEqual([]);
   });
 
+  it("keeps an enrolled spare's endorsement through later charts, dropping evicted and absent nodes", async () => {
+    const own = await readNodeIdentityKey(suite.node, RING, nodeId);
+    const spare = generateNodeKeyPair();
+    const retained = endorseKey("spare", spare.publicKey, nodeId, own);
+    const removed = endorseKey("removed", spare.publicKey, nodeId, own);
+    const absent = endorseKey("absent", spare.publicKey, nodeId, own);
+    const foreign = endorseKey("third", spare.publicKey, "other", spare.privateKey);
+    const body: MembershipDocumentBody = {
+      term: 7,
+      nodes: [
+        { nodeId, contactUrl: "", standing: "serving-primary" },
+        { nodeId: "spare", contactUrl: "https://spare.example", standing: "serving-secondary" },
+        { nodeId: "removed", contactUrl: "", standing: "evicted" },
+        { nodeId: "third", contactUrl: "", standing: "serving-secondary" },
+      ],
+    };
+    const held: SignedMembershipDocument = {
+      body,
+      signerNodeId: nodeId,
+      signature: signDocumentBody(body, own),
+      endorsements: [retained, removed, absent, retained, foreign],
+    };
+    const doc = await mintNextMembershipDocument(
+      { db, node: suite.node, ring: RING },
+      { heldDocument: held, nodes: body.nodes, signerNodeId: nodeId, verifyHeld: "stored-keys" },
+    );
+    expect(doc.endorsements).toEqual([retained]);
+    expect(
+      verifyMembershipDocument(doc, { [nodeId]: (await readMembershipTrustSet(db))[nodeId]! })
+        .valid,
+    ).toBe(true);
+  });
+
   describe("the held chart's check", () => {
     function strangerChart(): SignedMembershipDocument {
       const stranger = generateNodeKeyPair();
