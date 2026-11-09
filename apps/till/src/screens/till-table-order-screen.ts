@@ -4264,7 +4264,8 @@ export class TillTableOrderScreen extends LitElement {
                 ></till-basket>`
               : this.#draftSections(draft),
           )}
-          ${this.#draftBar(draft)} ${this.#draftMoveDialog(draft)}
+          ${this.handheld && !this.wide && draft.lineCount === 0 ? nothing : this.#draftBar(draft)}
+          ${this.#draftMoveDialog(draft)}
           <wt-button
             data-discard-draft
             variant="secondary"

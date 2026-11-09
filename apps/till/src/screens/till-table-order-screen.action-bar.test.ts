@@ -459,4 +459,39 @@ describe("till-table-order-screen: the fixed foot on a handheld", () => {
       cleanupWidgets();
     }
   });
+
+  it("Send all goes when the New order is empty, and a till keeps it", async () => {
+    const { el } = await longBill({ handheld: true });
+    const root = el.shadowRoot!;
+    expect(root.querySelector("[data-draft-action]")).not.toBeNull();
+    el.draftStore!.clear();
+    await resized(el);
+
+    expect(root.querySelector("[data-draft-action]")).toBeNull();
+    expect(root.querySelector("[data-order-foot]")).not.toBeNull();
+    cleanupWidgets();
+
+    const till = (await longBill({ handheld: false })).el;
+    till.draftStore!.clear();
+    await resized(till);
+    const actions = [...till.shadowRoot!.querySelectorAll("[data-draft-action]")];
+    expect(actions).toHaveLength(2);
+    for (const action of actions) expect(action.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("the newest line is not hidden behind the bar or the foot", async () => {
+    const { el, host } = await orderedInWindow(390, 700, { handheld: true }, dishes.slice(0, -1));
+    await showView(el, "order");
+    await linesRendered(el);
+    host.scrollTop = 0;
+    await resized(el);
+    expect(el.shadowRoot!.querySelector("[data-order-foot]")).not.toBeNull();
+
+    await tap(el, dishes.at(-1)!.name);
+    await linesRendered(el);
+    await scrollSettled(host);
+
+    expect(host.scrollTop).toBeGreaterThan(0);
+    expectClearOfBar(el, host);
+  });
 });
