@@ -139,7 +139,7 @@ it("recovers the exact public delivery from retained bytes without granting acti
     ...f.reference,
     statement: f.statement,
   });
-  await expect(f.runtime.recoveryDelivery.checkKept(f.owner, MODULE)).rejects.toMatchObject({
+  await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",
   });
   expect(f.bytes.toString()).not.toContain(f.staged.key.secret);
@@ -333,56 +333,45 @@ it("distinguishes absent snapshot bytes from malformed or oversized delivery", a
   expect(f.snapshot()).toEqual(f.manifest);
 });
 
-it.each(["checkKept", "consume"] as const)(
-  "%s refuses an expired kept confirmation and accepts a fresh one",
-  async (method) => {
-    const f = await fixture();
-    await f.kept();
-    vi.advanceTimersByTime(299999);
-    await expect(f.runtime.recoveryDelivery.checkKept(f.owner, MODULE)).resolves.toMatch(
-      /^[a-f0-9]{64}$/,
-    );
-    vi.advanceTimersByTime(1);
-    await expect(f.runtime.recoveryDelivery[method](f.owner, MODULE)).rejects.toMatchObject({
-      code: "setup.not_ready",
-    });
-    expect(await readFile(f.path)).toEqual(f.bytes);
-    await f.kept();
-    await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).resolves.toBeUndefined();
-    await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
-      code: "setup.not_ready",
-    });
-  },
-);
+it("consume refuses an expired kept confirmation and accepts a fresh one", async () => {
+  const f = await fixture();
+  await f.kept();
+  vi.advanceTimersByTime(299999);
+  await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).resolves.toBeUndefined();
+  await f.kept();
+  vi.advanceTimersByTime(300000);
+  await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  expect(await readFile(f.path)).toEqual(f.bytes);
+  await f.kept();
+  await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).resolves.toBeUndefined();
+  await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+});
 
 it("invalidates only the matching attempt's kept confirmation", async () => {
   const f = await fixture();
   await f.kept();
   f.runtime.recoveryDelivery.invalidate("another-attempt");
-  await expect(f.runtime.recoveryDelivery.checkKept(f.owner, MODULE)).resolves.toMatch(
-    /^[a-f0-9]{64}$/,
-  );
+  await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).resolves.toBeUndefined();
+  await f.kept();
   f.runtime.recoveryDelivery.invalidate(f.owner.attemptId);
-  await expect(f.runtime.recoveryDelivery.checkKept(f.owner, MODULE)).rejects.toMatchObject({
-    code: "setup.not_ready",
-  });
   await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",
   });
   expect(await readFile(f.path)).toEqual(f.bytes);
 });
 
-it.each(["checkKept", "consume"] as const)(
-  "%s refuses a changed delivery after kept confirmation",
-  async (method) => {
-    const f = await fixture();
-    await f.kept();
-    await writeFile(f.path, JSON.stringify({ ...f.manifest, documentDigest: "b".repeat(64) }));
-    await expect(f.runtime.recoveryDelivery[method](f.owner, MODULE)).rejects.toMatchObject({
-      code: "setup.not_ready",
-    });
-    await writeFile(f.path, f.bytes);
-    await f.kept();
-    await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).resolves.toBeUndefined();
-  },
-);
+it("consume refuses a changed delivery after kept confirmation", async () => {
+  const f = await fixture();
+  await f.kept();
+  await writeFile(f.path, JSON.stringify({ ...f.manifest, documentDigest: "b".repeat(64) }));
+  await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
+    code: "setup.not_ready",
+  });
+  await writeFile(f.path, f.bytes);
+  await f.kept();
+  await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).resolves.toBeUndefined();
+});

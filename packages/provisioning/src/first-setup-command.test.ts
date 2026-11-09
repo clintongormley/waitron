@@ -706,7 +706,7 @@ it("a module's last check before activation relays its question and refuses a ne
 it("an expired kept grant cannot authorize resumption", async () => {
   const f = await resumptionFixture();
   vi.advanceTimersByTime(300001);
-  await expect(f.runtime.recoveryDelivery.checkKept(f.owner, MODULE)).rejects.toMatchObject({
+  await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",
   });
 });
@@ -718,7 +718,7 @@ it("a changed staged key cannot authorize resumption with the original kept docu
   const stage = JSON.parse(await readFile(path, "utf8"));
   stage.name = stage.name.endsWith("AAAA") ? "2026-10-16 · CCCC" : "2026-10-16 · AAAA";
   await writeFile(path, JSON.stringify(stage));
-  await expect(f.runtime.recoveryDelivery.checkKept(f.owner, MODULE)).rejects.toMatchObject({
+  await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",
   });
 });

@@ -19,7 +19,7 @@ import {
 import { AppError, isUuid } from "@waitron/shared";
 import { deleteBackupRoomNote } from "./backup-room-note-file.js";
 import { readDurableHostJsonWithBytes, writeDurableHostJson } from "./durable-host-json.js";
-import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
+import { canonicalFirstSetupRoots } from "./first-setup-directories.js";
 import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { removeAndSync } from "./folder-sync.js";
 import { openImmutableWhenWalEmpty } from "./read-only-database.js";

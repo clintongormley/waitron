@@ -523,9 +523,6 @@ it("reissues an unfinished key without another hour selection and requires a new
   expect(await f.host.store.read()).toEqual(state);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(fiscalBefore);
   expect(f.counts()).toEqual({ activations: 0, publications: 0 });
-  await expect(f.host.recoveryDelivery.checkKept(f.owner, MODULE)).rejects.toMatchObject({
-    code: "setup.not_ready",
-  });
   await expect(f.host.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",
   });

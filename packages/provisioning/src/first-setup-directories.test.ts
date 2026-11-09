@@ -5,7 +5,7 @@ import { afterEach, expect, it } from "vitest";
 import {
   canonicalFirstSetupDirectory,
   canonicalFirstSetupRoots,
-} from "./first-setup-resolution.js";
+} from "./first-setup-directories.js";
 
 const invalid = { code: "setup.attempt_invalid" };
 const roots: string[] = [];

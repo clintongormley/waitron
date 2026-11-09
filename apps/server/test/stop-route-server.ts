@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { afterAll, afterEach, expect, vi, type Mock } from "vitest";
-import { openVenueDatabase, type VenueDatabase } from "@waitron/db";
-import { applyMigrationSet } from "@waitron/db/testing/venue-db.js";
+import { afterEach, expect, vi, type Mock } from "vitest";
+import { openVenueDatabase } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ALL_MODULES } from "@waitron/composition";
 import { hourFirstFiscalFixture } from "./hour-first-fiscal.js";
+import { migratedTemplate } from "./migrated-template.js";
 import { ownedHourSetup } from "./owned-hour-setup.js";
 import { MODULE, PASSWORD, request } from "./first-fiscal.js";
 import { createFirstSetupModuleHost } from "../src/module-operation-host.js";
@@ -21,31 +21,10 @@ export const STOP = START_AGAIN_ROUTES.stop.path;
 
 // Read at load, before anything can point TMPDIR elsewhere.
 const PARENT = tmpdir();
-let template: Promise<string> | undefined;
-let templateFolder: string | undefined;
-afterAll(async () => {
-  await template?.catch(() => {});
-  if (templateFolder !== undefined) await rm(templateFolder, { recursive: true, force: true });
-  template = templateFolder = undefined;
-});
-/** A folder whose `venue.db` and `node.db` hold every migration set, migrated once per file. */
-function migratedTemplate(): Promise<string> {
-  template ??= (async () => {
-    const folder = (templateFolder = await mkdtemp(join(PARENT, "stop-route-template-")));
-    const migrated = await openVenueDatabase(folder);
-    try {
-      for (const set of migrationOptionsFor(manifestSets(), null))
-        await applyMigrationSet(
-          (set.database === "node" ? migrated.node : migrated.venue) as VenueDatabase["venue"],
-          set,
-        );
-    } finally {
-      await migrated.close();
-    }
-    return folder;
-  })();
-  return template;
-}
+const stopTemplate = migratedTemplate(
+  "stop-route-template-",
+  migrationOptionsFor(manifestSets(), null),
+);
 
 export const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -77,7 +56,7 @@ export async function ordinaryServer(
     venueDir = join(root, "venue");
   await mkdir(stateDir, { recursive: true });
   await mkdir(venueDir, { recursive: true });
-  const migrated = await migratedTemplate();
+  const migrated = await stopTemplate();
   for (const name of ["venue.db", "node.db"])
     await copyFile(join(migrated, name), join(venueDir, name));
   const held = await openVenueDatabase(venueDir);

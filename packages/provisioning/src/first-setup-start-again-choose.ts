@@ -5,7 +5,7 @@ import { verifyPassword } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { inTurn } from "./attempt-turns.js";
 import { errnoOf } from "./errno.js";
-import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
+import { canonicalFirstSetupRoots } from "./first-setup-directories.js";
 import {
   readStartAgainChoices,
   startAgainChoiceStem,

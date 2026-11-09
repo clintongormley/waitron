@@ -68,8 +68,8 @@ export type {
 export {
   canonicalFirstSetupDirectory,
   canonicalFirstSetupRoots,
-} from "./first-setup-resolution.js";
-export type { RegisterAnswer, FirstSetupOriginal } from "./first-setup-resolution.js";
+} from "./first-setup-directories.js";
+export type { RegisterAnswer, FirstSetupOriginal } from "./first-setup-directories.js";
 export { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 export { createSetupPreparationHost } from "./setup-preparation-host.js";
 export { publicFirstSetupState, createFirstSetupOwner } from "./first-setup-owner.js";
@@ -92,7 +92,7 @@ export {
   openImmutableWhenWalEmpty,
   openWalInPlace,
 } from "./read-only-database.js";
-export type { ImmutableOpen, InPlaceOpen } from "./read-only-database.js";
+export type { ImmutableOpen } from "./read-only-database.js";
 export { createSetupOperationStore } from "./setup-operation.js";
 export type {
   SetupOperationKind,

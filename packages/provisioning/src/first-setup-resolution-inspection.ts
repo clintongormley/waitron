@@ -10,7 +10,7 @@ import { migrationSetsHolding, type WaitronModule } from "@waitron/module";
 import { executeTarget } from "./read-only-database.js";
 import { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
 import { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
-import { canonicalFirstSetupDirectory } from "./first-setup-resolution.js";
+import { canonicalFirstSetupDirectory } from "./first-setup-directories.js";
 import { readOperationalVenueIds, readTenantIdentities } from "./tenant-guard.js";
 import { type FirstSetupStore } from "./first-setup-state.js";
 export interface FirstSetupRoots {

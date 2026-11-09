@@ -4,7 +4,7 @@ import { basename, dirname, join, relative, sep } from "node:path";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { deleteBackupRoomNote } from "./backup-room-note-file.js";
-import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
+import { canonicalFirstSetupRoots } from "./first-setup-directories.js";
 import {
   readStartAgainChoices,
   type StartAgainChoiceRecord,

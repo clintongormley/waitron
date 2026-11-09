@@ -143,6 +143,24 @@ export function firstFiscalOwner(c: Context): FirstSetupOwnerAttempt {
     ownerGeneration: integer("X-Waitron-Setup-Generation"),
   };
 }
+function assertAttemptCounts(body: Record<string, unknown>) {
+  if (
+    ![body.revision, body.ownerGeneration].every(
+      (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
+    )
+  )
+    invalid();
+}
+/** The body of a request naming only the attempt it acts on. */
+async function attemptReference(c: Context) {
+  const body = exact(await readFirstFiscalBody(c), ["inspectionId", "revision", "ownerGeneration"]);
+  assertAttemptCounts(body);
+  return {
+    inspectionId: text(body.inspectionId),
+    revision: body.revision as number,
+    ownerGeneration: body.ownerGeneration as number,
+  };
+}
 export async function readFirstFiscalBody(c: Context, limit = 131072): Promise<unknown> {
   const reader = c.req.raw.body?.getReader();
   if (reader === undefined) invalid();
@@ -687,27 +705,9 @@ export function mountFirstSetupResolutionApi(
       boundary(c, log, async () => {
         assertFirstFiscalRequest(c);
         assertHttps(c);
-        const body = exact(await readFirstFiscalBody(c), [
-          "inspectionId",
-          "revision",
-          "ownerGeneration",
-        ]);
-        if (
-          ![body.revision, body.ownerGeneration].every(
-            (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
-          )
-        )
-          invalid();
+        const reference = await attemptReference(c);
         try {
-          return c.json(
-            await diskFullOr(() =>
-              options.summary!({
-                inspectionId: text(body.inspectionId),
-                revision: body.revision as number,
-                ownerGeneration: body.ownerGeneration as number,
-              }),
-            ),
-          );
+          return c.json(await diskFullOr(() => options.summary!(reference)));
         } catch (error) {
           // The next start tries to finish what an earlier Start again left.
           if (error instanceof AppError && error.code === "setup.start_again_incomplete")
@@ -723,24 +723,8 @@ export function mountFirstSetupResolutionApi(
       boundary(c, log, async () => {
         assertFirstFiscalRequest(c);
         assertHttps(c);
-        const body = exact(await readFirstFiscalBody(c), [
-          "inspectionId",
-          "revision",
-          "ownerGeneration",
-        ]);
-        if (
-          ![body.revision, body.ownerGeneration].every(
-            (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
-          )
-        )
-          invalid();
-        await diskFullOr(() =>
-          stop({
-            inspectionId: text(body.inspectionId),
-            revision: body.revision as number,
-            ownerGeneration: body.ownerGeneration as number,
-          }),
-        );
+        const reference = await attemptReference(c);
+        await diskFullOr(() => stop(reference));
         setTimeout(() => requestRestart(), 0);
         return c.json({ restarting: true });
       }),
@@ -770,12 +754,7 @@ export function mountFirstSetupResolutionApi(
           body.recoveryRecordDamagedShown !== true
         )
           invalid();
-        if (
-          ![body.revision, body.ownerGeneration].every(
-            (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
-          )
-        )
-          invalid();
+        assertAttemptCounts(body);
         const register = Object.hasOwn(body, "register")
           ? registerAnswer(body.register)
           : undefined;

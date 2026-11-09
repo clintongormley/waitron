@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
-import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
+import { canonicalFirstSetupRoots } from "./first-setup-directories.js";
 import {
   collectStartAgainFindings,
   type StartAgainFinding,

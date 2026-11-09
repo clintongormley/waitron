@@ -12,7 +12,7 @@ export async function firstSetupUnusedAssignment(
   originals: readonly FirstSetupOriginal[],
   modules: readonly WaitronModule[],
   /** The current attempt may also have begun activation, and have been marked uncertain. */
-  cutOff = false,
+  cutOff: boolean,
 ): Promise<false | { recoveryRecordDamaged: boolean }> {
   if (
     Object.keys(state.inputs).some(
