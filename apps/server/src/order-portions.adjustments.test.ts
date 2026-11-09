@@ -383,12 +383,12 @@ function expectSameMoney(
 const bread: RoundLine = { name: "Bread" };
 
 describe("A803 portions: a discount or comp on a whole row of identical portions", () => {
-  it("A803 portions: 10% off a row of three €3.33 croquetas files 2 × €3.00 and 1 × €2.99 and prints one 10% line under the row, as one line of three does", async () => {
+  it("A803 portions: 10% off a row of three €3.33 croquettes files 2 × €3.00 and 1 × €2.99 and prints one 10% line under the row, as one line of three does", async () => {
     const {
       grouped,
       portions,
       portionsBill: bill,
-    } = await bothShapes([{ name: "Croquetas", quantity: "3" }, bread], "Croquetas", {
+    } = await bothShapes([{ name: "Croquettes", quantity: "3" }, bread], "Croquettes", {
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -404,9 +404,9 @@ describe("A803 portions: a discount or comp on a whole row of identical portions
         row.listUnitPriceGross,
       ]),
     ).toEqual([
-      ["Croquetas", "3.00", "3.33"],
-      ["Croquetas", "3.00", "3.33"],
-      ["Croquetas", "2.99", "3.33"],
+      ["Croquettes", "3.00", "3.33"],
+      ["Croquettes", "3.00", "3.33"],
+      ["Croquettes", "2.99", "3.33"],
       ["Bread", "2.50", null],
     ]);
     // Stated difference 1: today the cheaper part is numbered, and printed, after the Bread. Each
@@ -425,10 +425,10 @@ describe("A803 portions: a discount or comp on a whole row of identical portions
     ]);
   });
 
-  it("A803 portions: €1.00 off a row of seven croquetas prices five at €3.19 and two at €3.18, as one line of seven", async () => {
+  it("A803 portions: €1.00 off a row of seven croquettes prices five at €3.19 and two at €3.18, as one line of seven", async () => {
     const { grouped, portions } = await bothShapes(
-      [{ name: "Croquetas", quantity: "7" }, bread],
-      "Croquetas",
+      [{ name: "Croquettes", quantity: "7" }, bread],
+      "Croquettes",
       { action: "discount_amount", amount: "1.00" },
     );
 
@@ -477,12 +477,12 @@ describe("A803 portions: a discount or comp on a whole row of identical portions
     expectSameMoney(grouped, portions);
   });
 
-  it("A803 portions: a comp of a row of three croquetas zeroes all three, lists none as comped extras, and prints one comp under the row", async () => {
+  it("A803 portions: a comp of a row of three croquettes zeroes all three, lists none as comped extras, and prints one comp under the row", async () => {
     const {
       grouped,
       portions,
       portionsBill: bill,
-    } = await bothShapes([{ name: "Croquetas", quantity: "3" }, bread], "Croquetas", {
+    } = await bothShapes([{ name: "Croquettes", quantity: "3" }, bread], "Croquettes", {
       action: "comp",
       reasonId: venue.reasonId.complaint,
     });
@@ -492,9 +492,9 @@ describe("A803 portions: a discount or comp on a whole row of identical portions
     expectSameMoney(grouped, portions);
     expect((await rowsOf(venue, bill.billId)).map((row) => [row.name, row.unitPriceGross])).toEqual(
       [
-        ["Croquetas", "0.00"],
-        ["Croquetas", "0.00"],
-        ["Croquetas", "0.00"],
+        ["Croquettes", "0.00"],
+        ["Croquettes", "0.00"],
+        ["Croquettes", "0.00"],
         ["Bread", "2.50"],
       ],
     );
@@ -596,19 +596,19 @@ const pricesOf = async (billId: string) =>
 
 describe("A803 portions: part of a row, and a row's extras", () => {
   it("A803 portions: 10% off 1 of a row of three takes the last portion, keeps the other two at €3.33 with their list price stamped, and records 1 of 3 on the row's first portion with a split to the portion taken", async () => {
-    const lines = [{ name: "Croquetas", quantity: "3" }, bread];
+    const lines = [{ name: "Croquettes", quantity: "3" }, bread];
     const ask = { ...tenOff, quantity: "1" };
-    const { grouped, portions, portionsBill: bill } = await bothShapes(lines, "Croquetas", ask);
+    const { grouped, portions, portionsBill: bill } = await bothShapes(lines, "Croquettes", ask);
 
     expect(grouped.record).toMatchObject({ reduction: 33, quantity: 1000, lineQuantity: 3000 });
     expectSameMoney(grouped, portions);
     expect(await pricesOf(bill.billId)).toEqual([
-      ["Croquetas", "3.33", "3.33"],
-      ["Croquetas", "3.33", "3.33"],
-      ["Croquetas", "3.00", "3.33"],
+      ["Croquettes", "3.33", "3.33"],
+      ["Croquettes", "3.33", "3.33"],
+      ["Croquettes", "3.00", "3.33"],
       ["Bread", "2.50", null],
     ]);
-    const members = await dishesNamed(bill.billId, "Croquetas");
+    const members = await dishesNamed(bill.billId, "Croquettes");
     expect(await recordedOn(bill.billId)).toMatchObject([
       { lineId: members[0], splits: [{ from: members[0], to: members[2] }] },
     ]);
@@ -616,8 +616,8 @@ describe("A803 portions: part of a row, and a row's extras", () => {
     // A full invoice places the entry under the portion taken and marks the family, as today.
     const groupedF1 = await groupedBill(lines);
     const portionsF1 = await portionsBill(lines);
-    const [line] = await dishesNamed(groupedF1.billId, "Croquetas");
-    const row = await dishesNamed(portionsF1.billId, "Croquetas");
+    const [line] = await dishesNamed(groupedF1.billId, "Croquettes");
+    const row = await dishesNamed(portionsF1.billId, "Croquettes");
     await adjust(groupedF1.billId, { ...ask, lineId: line! });
     await adjust(portionsF1.billId, { ...ask, lineId: row[0]!, lineIds: row });
     const today = await invoiceOf(groupedF1.billId);
@@ -625,19 +625,19 @@ describe("A803 portions: part of a row, and a row's extras", () => {
     expect(invoiceRows(await invoiceOf(portionsF1.billId))).toEqual(invoiceRows(today));
   });
 
-  it("A803 portions: 10% off 2 of a row of three croquetas prices them €3.00 and €2.99 and records today's second-price split from the first portion taken", async () => {
+  it("A803 portions: 10% off 2 of a row of three croquettes prices them €3.00 and €2.99 and records today's second-price split from the first portion taken", async () => {
     const {
       grouped,
       portions,
       portionsBill: bill,
-    } = await bothShapes([{ name: "Croquetas", quantity: "3" }, bread], "Croquetas", {
+    } = await bothShapes([{ name: "Croquettes", quantity: "3" }, bread], "Croquettes", {
       ...tenOff,
       quantity: "2",
     });
 
     expectSameMoney(grouped, portions);
     expect(grouped.record.splits).toHaveLength(2);
-    const members = await dishesNamed(bill.billId, "Croquetas");
+    const members = await dishesNamed(bill.billId, "Croquettes");
     expect((await pricesOf(bill.billId)).map(([, unit]) => unit)).toEqual([
       "3.33",
       "3.00",
@@ -738,8 +738,8 @@ describe("A803 portions: part of a row, and a row's extras", () => {
   });
 
   it("A803 portions: part of a row takes the last portion not already cancelled", async () => {
-    const { billId } = await portionsBill([{ name: "Croquetas", quantity: "3" }]);
-    const members = await dishesNamed(billId, "Croquetas");
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "3" }]);
+    const members = await dishesNamed(billId, "Croquettes");
     await inTx(venue, (tx) =>
       tx.insert(lineServiceCancellations).values({
         lineId: members[2]!,
@@ -756,8 +756,8 @@ describe("A803 portions: part of a row, and a row's extras", () => {
   });
 
   it("A803 portions: half a portion of a row is refused adjustment.quantity_invalid", async () => {
-    const { billId } = await portionsBill([{ name: "Croquetas", quantity: "3" }]);
-    const members = await dishesNamed(billId, "Croquetas");
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "3" }]);
+    const members = await dishesNamed(billId, "Croquettes");
 
     await refusedWith(
       billId,
@@ -852,8 +852,8 @@ const fieldLineIds = { field: "lineIds" };
 
 describe("A803 portions: refusing a row the till could not have drawn", () => {
   it("A803 portions: portions of two different rows, one already discounted, are refused management.request_invalid on lineIds", async () => {
-    const { billId } = await portionsBill([{ name: "Croquetas", quantity: "2" }]);
-    const [first, second] = await dishesNamed(billId, "Croquetas");
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "2" }]);
+    const [first, second] = await dishesNamed(billId, "Croquettes");
     await adjust(billId, { ...tenOff, lineId: first! });
 
     await refusedWith(
@@ -865,8 +865,8 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
   });
 
   it("A803 portions: a line not on the bill is refused the same way", async () => {
-    const { billId } = await portionsBill([{ name: "Croquetas", quantity: "2" }]);
-    const [first] = await dishesNamed(billId, "Croquetas");
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "2" }]);
+    const [first] = await dishesNamed(billId, "Croquettes");
 
     await refusedWith(
       billId,
@@ -893,8 +893,8 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
   });
 
   it("A803 portions: one id twice is refused the same way", async () => {
-    const { billId } = await portionsBill([{ name: "Croquetas", quantity: "2" }]);
-    const [first] = await dishesNamed(billId, "Croquetas");
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "2" }]);
+    const [first] = await dishesNamed(billId, "Croquettes");
 
     await refusedWith(
       billId,
@@ -917,14 +917,14 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
     );
   });
 
-  it("A803 portions: two croquetas from two rounds, one with a kitchen note, are refused the same way", async () => {
-    const { billId } = await portionsBill([{ name: "Croquetas" }]);
+  it("A803 portions: two croquettes from two rounds, one with a kitchen note, are refused the same way", async () => {
+    const { billId } = await portionsBill([{ name: "Croquettes" }]);
     await inTx(venue, (tx) =>
       addPortionRound(tx, venue.cfg, billId, [
-        { ...roundOf([{ name: "Croquetas" }])[0]!, note: "no salt" },
+        { ...roundOf([{ name: "Croquettes" }])[0]!, note: "no salt" },
       ]),
     );
-    const croquetteLineIds = await dishesNamed(billId, "Croquetas");
+    const croquetteLineIds = await dishesNamed(billId, "Croquettes");
 
     await refusedWith(
       billId,
@@ -934,15 +934,15 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
     );
   });
 
-  it("A803 portions: two croquetas from two rounds, one in a course, are refused the same way", async () => {
-    const { billId } = await portionsBill([{ name: "Croquetas" }]);
+  it("A803 portions: two croquettes from two rounds, one in a course, are refused the same way", async () => {
+    const { billId } = await portionsBill([{ name: "Croquettes" }]);
     await inTx(venue, async (tx) => {
       const course = await createCourse(tx, { name: "Starters", displayOrder: 90 });
       await addPortionRound(tx, venue.cfg, billId, [
-        { ...roundOf([{ name: "Croquetas" }])[0]!, courseId: course.id },
+        { ...roundOf([{ name: "Croquettes" }])[0]!, courseId: course.id },
       ]);
     });
-    const croquetteLineIds = await dishesNamed(billId, "Croquetas");
+    const croquetteLineIds = await dishesNamed(billId, "Croquettes");
 
     await refusedWith(
       billId,
@@ -966,8 +966,8 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
   });
 
   it("A803 portions: more of a row than it holds is refused adjustment.quantity_invalid", async () => {
-    const { billId } = await portionsBill([{ name: "Croquetas", quantity: "3" }]);
-    const members = await dishesNamed(billId, "Croquetas");
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "3" }]);
+    const members = await dishesNamed(billId, "Croquettes");
 
     await refusedWith(
       billId,
@@ -1126,8 +1126,8 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
 
 describe("A803 portions: a replayed row request", () => {
   it("A803 portions: a replayed request with the same submission id records one adjustment", async () => {
-    const { billId } = await portionsBill([{ name: "Croquetas", quantity: "3" }]);
-    const members = await dishesNamed(billId, "Croquetas");
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "3" }]);
+    const members = await dishesNamed(billId, "Croquettes");
     const args = await inTx(venue, (tx) =>
       argsFor(tx, billId, { ...tenOff, lineId: members[0]!, lineIds: members }),
     );
@@ -1179,8 +1179,8 @@ describe("A803 portions: the adjustment routes name a row", () => {
   }
 
   it("A803 portions: 10% off a row through the route takes €1.00 off the three, and its preview names the row's first portion", async () => {
-    const { billId } = await portionsBill([{ name: "Croquetas", quantity: "3" }]);
-    const members = await dishesNamed(billId, "Croquetas");
+    const { billId } = await portionsBill([{ name: "Croquettes", quantity: "3" }]);
+    const members = await dishesNamed(billId, "Croquettes");
     const body = { ...tenOff, lineId: members[1], lineIds: [members[1], members[0], members[2]] };
 
     const preview = await post(billId, body, "/preview");
@@ -1215,8 +1215,8 @@ describe("A803 portions: the adjustment routes name a row", () => {
   ])(
     "A803 portions: lineIds %s is refused management.request_invalid on lineIds",
     async (_, of) => {
-      const { billId } = await portionsBill([{ name: "Croquetas", quantity: "3" }]);
-      const members = await dishesNamed(billId, "Croquetas");
+      const { billId } = await portionsBill([{ name: "Croquettes", quantity: "3" }]);
+      const members = await dishesNamed(billId, "Croquettes");
 
       const answer = await post(billId, { ...tenOff, lineId: members[0], lineIds: of(members) });
 
@@ -1278,11 +1278,11 @@ const burgers = (quantity: string): RoundLine[] => [{ name: "Burger", quantity }
 describe("A803 portions: the lines a comp or discount covered", () => {
   it("A803 portions: a whole row records its portions, a part the portions taken, a row's olives the olives named, and one portion itself", async () => {
     const { billId } = await portionsBill([
-      { name: "Croquetas", quantity: "3" },
+      { name: "Croquettes", quantity: "3" },
       { name: "Pizza", quantity: "2", olives: 1 },
       { name: "Burger", quantity: "2" },
     ]);
-    const croquetteLineIds = await dishesNamed(billId, "Croquetas");
+    const croquetteLineIds = await dishesNamed(billId, "Croquettes");
     const olives = (await rowsOf(venue, billId))
       .filter((row) => row.name === "Olives")
       .map((row) => row.id);
@@ -1309,20 +1309,20 @@ describe("A803 portions: the lines a comp or discount covered", () => {
   });
 
   it("A803 portions: a discount of the whole bill, and one on an unbound line, record what they took off each line", async () => {
-    const portions = await portionsBill([{ name: "Croquetas", quantity: "3" }]);
+    const portions = await portionsBill([{ name: "Croquettes", quantity: "3" }]);
     await adjust(portions.billId, tenOff);
-    const grouped = await groupedBill([{ name: "Croquetas", quantity: "3" }]);
-    const [line] = await dishesNamed(grouped.billId, "Croquetas");
+    const grouped = await groupedBill([{ name: "Croquettes", quantity: "3" }]);
+    const [line] = await dishesNamed(grouped.billId, "Croquettes");
     await adjust(grouped.billId, { ...tenOff, lineId: line!, quantity: "1" });
 
     expect(await takenOn(portions.billId)).toEqual([
       [
-        "Croquetas 2.99 off 0.34 of 1.000",
-        "Croquetas 3.00 off 0.33 of 1.000",
-        "Croquetas 3.00 off 0.33 of 1.000",
+        "Croquettes 2.99 off 0.34 of 1.000",
+        "Croquettes 3.00 off 0.33 of 1.000",
+        "Croquettes 3.00 off 0.33 of 1.000",
       ],
     ]);
-    expect(await takenOn(grouped.billId)).toEqual([["Croquetas 3.00 off 0.33 of 1.000"]]);
+    expect(await takenOn(grouped.billId)).toEqual([["Croquettes 3.00 off 0.33 of 1.000"]]);
   });
 });
 
@@ -1389,7 +1389,7 @@ describe("A803 portions: what each comp or discount took off each line (plan D37
         tx,
         venue.cfg,
         bill.billId,
-        roundOf([{ name: "Croquetas", quantity: "3" }]),
+        roundOf([{ name: "Croquettes", quantity: "3" }]),
         "checked",
       );
       await insertTabRound(tx, venue.cfg, round, round.rows);
@@ -1398,12 +1398,12 @@ describe("A803 portions: what each comp or discount took off each line (plan D37
     });
     await adjust(billId, tenOff);
 
-    expect(await dishesNamed(billId, "Croquetas")).toHaveLength(2);
+    expect(await dishesNamed(billId, "Croquettes")).toHaveLength(2);
     expect(await takenOn(billId)).toEqual([
       [
         "Burger 10.80 off 1.20 of 1.000",
-        "Croquetas 2.99 off 0.34 of 1.000",
-        "Croquetas 3.00 off 0.66 of 2.000",
+        "Croquettes 2.99 off 0.34 of 1.000",
+        "Croquettes 3.00 off 0.66 of 2.000",
       ],
     ]);
   });
@@ -1417,13 +1417,13 @@ describe("A803 portions: what each comp or discount took off each line (plan D37
   });
 
   it("A803 portions: a discount that leaves an unbound line at two prices records a row on each line it leaves", async () => {
-    const { billId } = await groupedBill([{ name: "Croquetas", quantity: "3" }]);
-    const [line] = await dishesNamed(billId, "Croquetas");
+    const { billId } = await groupedBill([{ name: "Croquettes", quantity: "3" }]);
+    const [line] = await dishesNamed(billId, "Croquettes");
     await adjust(billId, { ...tenOff, lineId: line! });
 
-    expect(await dishesNamed(billId, "Croquetas")).toHaveLength(2);
+    expect(await dishesNamed(billId, "Croquettes")).toHaveLength(2);
     expect(await takenOn(billId)).toEqual([
-      ["Croquetas 2.99 off 0.34 of 1.000", "Croquetas 3.00 off 0.66 of 2.000"],
+      ["Croquettes 2.99 off 0.34 of 1.000", "Croquettes 3.00 off 0.66 of 2.000"],
     ]);
   });
 
@@ -1640,11 +1640,11 @@ describe("A803 portions: a row's approval verdicts are one line's", () => {
   });
 
   it("A803 portions: a row priced at two prices by a reason, beside its discount of the whole bill, gets one line's verdicts", async () => {
-    const lines = [{ name: "Croquetas", quantity: "3" }, bread];
+    const lines = [{ name: "Croquettes", quantity: "3" }, bread];
     const grouped = await groupedBill(lines);
     const portions = await portionsBill(lines);
-    const [line] = await dishesNamed(grouped.billId, "Croquetas");
-    const row = await dishesNamed(portions.billId, "Croquetas");
+    const [line] = await dishesNamed(grouped.billId, "Croquettes");
+    const row = await dishesNamed(portions.billId, "Croquettes");
     await adjust(grouped.billId, crew({ lineId: line! }, undefined, 1000));
     await adjust(portions.billId, crew(rowOf(row), undefined, 1000));
     const wholeBill: Ask = {
@@ -1666,7 +1666,7 @@ describe("A803 portions: a row's approval verdicts are one line's", () => {
       }
       return out;
     };
-    const [first] = await dishesNamed(grouped.billId, "Croquetas");
+    const [first] = await dishesNamed(grouped.billId, "Croquettes");
     const today = await verdicts(grouped.billId, { lineId: first! });
     expect(today.some(([, verdict]) => verdict === null)).toBe(true);
     expect(today.some(([, verdict]) => verdict !== null)).toBe(true);
@@ -1730,7 +1730,7 @@ describe("A803 portions: a row's approval verdicts are one line's", () => {
 });
 
 describe("A803 portions: a row of two sends", () => {
-  it("A803 portions: 10% off a row of four croquetas from two sends takes what one line of four does, each send filed as its own rows", async () => {
+  it("A803 portions: 10% off a row of four croquettes from two sends takes what one line of four does, each send filed as its own rows", async () => {
     const twoSends = await inTx(venue, async (tx) => {
       const bill = await seated(tx);
       for (let send = 0; send < 2; send++) {
@@ -1738,7 +1738,7 @@ describe("A803 portions: a row of two sends", () => {
           tx,
           venue.cfg,
           bill.billId,
-          roundOf([{ name: "Croquetas", quantity: "2" }]),
+          roundOf([{ name: "Croquettes", quantity: "2" }]),
           {
             fire: true,
           },
@@ -1746,10 +1746,10 @@ describe("A803 portions: a row of two sends", () => {
       }
       return bill;
     });
-    const row = await dishesNamed(twoSends.billId, "Croquetas");
+    const row = await dishesNamed(twoSends.billId, "Croquettes");
     expect(row).toHaveLength(4);
-    const today = await groupedBill([{ name: "Croquetas", quantity: "4" }]);
-    const [line] = await dishesNamed(today.billId, "Croquetas");
+    const today = await groupedBill([{ name: "Croquettes", quantity: "4" }]);
+    const [line] = await dishesNamed(today.billId, "Croquettes");
     await adjust(today.billId, { ...tenOff, lineId: line! });
     await adjust(twoSends.billId, { ...tenOff, ...rowOf(row) });
 
@@ -2370,24 +2370,24 @@ describe("A803 portions: the per-dish floor (plan D36)", () => {
     expect(await oneVerdict(pizza, "Pizza", onOlives(9000))).toBeNull();
   });
 
-  it("A803 portions: exactly 50% never asks on rounding: 50% off one €3.33 croqueta (€1.66 left) and 50% off a row of three (€4.99 left) go through, as €1.67 off one does; €1.68 off one asks", async () => {
+  it("A803 portions: exactly 50% never asks on rounding: 50% off one €3.33 croquette (€1.66 left) and 50% off a row of three (€4.99 left) go through, as €1.67 off one does; €1.68 off one asks", async () => {
     const croquetteRound = (quantity: string): RoundLine[] => [
-      { name: "Croquetas", quantity },
+      { name: "Croquettes", quantity },
       bread,
     ];
     const half = async (_: string, dish: Target) => crew(dish);
-    expect(await oneVerdict(croquetteRound("1"), "Croquetas", half)).toBeNull();
-    expect(await oneVerdict(croquetteRound("3"), "Croquetas", half)).toBeNull();
+    expect(await oneVerdict(croquetteRound("1"), "Croquettes", half)).toBeNull();
+    expect(await oneVerdict(croquetteRound("3"), "Croquettes", half)).toBeNull();
     const amount = (value: string) => async (_: string, dish: Target) => off(dish, value);
-    expect(await oneVerdict(croquetteRound("1"), "Croquetas", amount("1.67"))).toBeNull();
-    expect(await oneVerdict(croquetteRound("1"), "Croquetas", amount("1.68"))).toMatchObject(ASKS);
+    expect(await oneVerdict(croquetteRound("1"), "Croquettes", amount("1.67"))).toBeNull();
+    expect(await oneVerdict(croquetteRound("1"), "Croquettes", amount("1.68"))).toMatchObject(ASKS);
   });
 
-  it("A803 portions: each portion of a row is checked: €5.01 off three €3.33 croquetas leaves each at €1.66 and goes through; €5.02 leaves one at €1.65 and asks", async () => {
-    const three: RoundLine[] = [{ name: "Croquetas", quantity: "3" }, bread];
+  it("A803 portions: each portion of a row is checked: €5.01 off three €3.33 croquettes leaves each at €1.66 and goes through; €5.02 leaves one at €1.65 and asks", async () => {
+    const three: RoundLine[] = [{ name: "Croquettes", quantity: "3" }, bread];
     const amount = (value: string) => async (_: string, dish: Target) => off(dish, value);
-    expect(await oneVerdict(three, "Croquetas", amount("5.01"))).toBeNull();
-    expect(await oneVerdict(three, "Croquetas", amount("5.02"))).toMatchObject(ASKS);
+    expect(await oneVerdict(three, "Croquettes", amount("5.01"))).toBeNull();
+    expect(await oneVerdict(three, "Croquettes", amount("5.02"))).toMatchObject(ASKS);
   });
 
   it("A803 portions: 50% off 3 kg of €12.99 Fish under Crew meal goes through (it takes €19.50 against an exact €19.485); €19.53 off asks", async () => {
@@ -3152,10 +3152,10 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
   it("A803 portions: a cancel naming portions of two different rows is refused management.request_invalid on lineIds, changing nothing", async () => {
     const bill = await portionsBill([
       { name: "Burger", quantity: "2" },
-      { name: "Croquetas", quantity: "2" },
+      { name: "Croquettes", quantity: "2" },
     ]);
     const burgersHere = await dishesNamed(bill.billId, "Burger");
-    const croquetteLineIds = await dishesNamed(bill.billId, "Croquetas");
+    const croquetteLineIds = await dishesNamed(bill.billId, "Croquettes");
     const before = await rowsOf(venue, bill.billId);
     for (const outcome of ["remove_charge", "keep_charge"] as const) {
       await expect(
@@ -3534,8 +3534,8 @@ describe("A803 portions: a whole-bill discount that prices a row two ways record
     expect(await asked(portions.billId, crew({ lineId: row[2]! }, undefined, 3000))).toEqual(today);
   });
 
-  it("A803 portions: a full invoice marks the croquetas a bill discount split as one family, and not a dish only its own discount touched", async () => {
-    const lines = [{ name: "Burger" }, { name: "Croquetas", quantity: "3" }];
+  it("A803 portions: a full invoice marks the croquettes a bill discount split as one family, and not a dish only its own discount touched", async () => {
+    const lines = [{ name: "Burger" }, { name: "Croquettes", quantity: "3" }];
     const outcome = async (bill: Bill) => {
       const [burger] = await dishesNamed(bill.billId, "Burger");
       await adjust(bill.billId, { ...tenOff, lineId: burger! });

@@ -22,6 +22,10 @@ assertions, and add accepting controls that distinguish the intended note/course
 condition from another invalid-request condition before changing these cases. No production
 fault was established by these probes.
 
+Current command after A976’s staff-sample rename (2026-11-09):
+`pnpm --filter @waitron/server exec vitest run src/order-portions.adjustments.test.ts -t 'two croquettes from two rounds|a cancel naming portions of two different rows'`
+The dated experiment above retains its original titles and command.
+
 ## Tests that read a built command's error output fail under Claude Code
 
 The command's stderr

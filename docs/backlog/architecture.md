@@ -389,8 +389,7 @@ until A977).
   such as `made-here.test.ts`. Record and submission names also remain in server seed,
   snapshot and fiscal-identity suites; check protected fixtures and fiscal-provider contracts.
   Fixture strings remain separate from this naming work. Shared helpers' Spanish dish samples
-  and their consumers stay with A976, as do the filing and adjustment order-portion samples
-  and adjustment test descriptions.
+  and their consumers stay with A976, as do the filing order-portion samples.
   Keep accented search fixtures unchanged. String-selected product keys stay with their fixture text
   under A976.
   Catalogue display names, recipe ingredient text, seasonal venue and zone names and printer-screen display labels
@@ -405,21 +404,19 @@ until A977).
 - **A976 — remaining test-venue defaults.** Menu-period rule samples use English names.
   The nine local party suites use English table, party, course and printer samples; shared
   party-venue defaults, dish selectors and till-API samples remain.
-  The filing and adjustment order-portion suites still have Spanish dish samples; the adjustment
-  suite has Spanish dish words in test descriptions. Shared helpers' dish names and selectors
+  The filing order-portion suite still has Spanish dish samples. Shared helpers' dish names and selectors
   remain, including those read by the working-order, receipt-print and counter-portion suites.
   Native allergy, kitchen-note and bill-identity suites use English sample location names.
   The bill, party, boot, stream and clock fixtures
   listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults, as do the split-extras venue's operation description and the
-  adjustment venue's Spanish staff dish names, legal name and operation description.
+  adjustment venue's legal name and operation description.
   Native provisioning and floor-plan-set route suites use English venue, operation and menu
   samples; their Spanish locale and starter-content checks remain.
   The adjustment venue (`apps/server/src/testing/adjustment-venue.ts`) now gives English
   customer-facing and kitchen names to its dishes and wine-glass variant, and English category,
-  printer, device, location and administrator names. Its staff names "Croquetas", "Tortilla",
-  "Pimientos" and "Cana", its legal name and its operation description remain; it keeps its
-  street address, its es-ES locale, its reasons' Spanish translations, setup's default station
+  printer, device, location and administrator names. Its legal name and operation description
+  remain; it keeps its street address, its es-ES locale, its reasons' Spanish translations, setup's default station
   "Cocina" and the Spanish ticket and receipt words its es-ES venue prints. Some of its suites
   keep their own Spanish samples, among them the apply suite's "Barra" counter zones,
   the collect-at-counter suite's "Fríos" printer and the receipt and portions suites' customer
@@ -843,13 +840,13 @@ product failures.
   course and printer samples use English. Shared dish samples remain in their helpers and
   consumers, including `party-bill-actions.test.ts`, `party-move-bill.test.ts`,
   `party-arriving-dishes.test.ts` and `receipt-guests.test.ts`. Spanish display samples remain in
-  `order-portions.filing.test.ts`, `order-portions.adjustments.test.ts`,
+  `order-portions.filing.test.ts`,
   `till-api.move-bill.test.ts`, `till-api.groups.test.ts` and `till-api.fiscal-sale-paths.test.ts`;
   shared helper samples and their consumers' dish selectors also remain. These belong to
   A976 rather than the private-name work in A974. The `made-here.routes.test.ts` venue
   samples and `receipt-document.test.ts` fixture descriptions and test titles also need
-  triage there; preserve Spanish receipt output and deliberate locale checks. Fiscal-sale and
-  adjustment order-portion descriptions also retain Spanish words. The fiscal-sale
+  triage there; preserve Spanish receipt output and deliberate locale checks. Fiscal-sale
+  descriptions also retain Spanish words. The fiscal-sale
   suite’s string-selected SQL count alias stays with its fixture text. Bookings’ native suites use English
   sample location, operation, contact and note text. Native provisioning and floor-plan-set route
   suites use English venue, operation and menu samples; their Spanish locale and starter-content
@@ -980,8 +977,8 @@ product failures.
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".
   The server's adjustment venue gives English customer-facing and kitchen dish names and English
   category, printer, device, location and administrator names; its locale, street address,
-  reasons' Spanish translations and setup's default station "Cocina" stay, and its Spanish staff
-  dish names, legal name and operation description remain.
+  reasons' Spanish translations and setup's default station "Cocina" stay, and its legal name
+  and operation description remain.
   The server's kitchen-ticket renderer suite uses English station, table, dish, note and place
   names; it keeps the Spanish ticket words its es-ES cases print, its accented wrapping and
   character samples and one French sample.

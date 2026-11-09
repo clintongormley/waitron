@@ -835,10 +835,7 @@ describe("receiptLines", () => {
   });
 
   it("prints a whole-line discount that split the line in two beneath the line it was made on", async () => {
-    // €1.00 off three Croquetas at €3.33 leaves unit prices in whole cents only as two rows. Each
-    // croqueta is its own portion line (A803), so the second row keeps its place before the Bread.
-    // The amount prints the share it took: 1.00 of 9.99.
-    const billId = await bill([{ name: "Croquetas", quantity: "3" }, { name: "Bread" }]);
+    const billId = await bill([{ name: "Croquettes", quantity: "3" }, { name: "Bread" }]);
     await adjust(billId, {
       ...(await todayLine(venue, billId, 1)),
       action: "discount_amount",
@@ -880,7 +877,7 @@ describe("receiptLines", () => {
   });
 
   it("marks both rows of a full invoice's line its own discount split into two prices as one family", async () => {
-    const billId = await bill([{ name: "Croquetas", quantity: "3" }]);
+    const billId = await bill([{ name: "Croquettes", quantity: "3" }]);
     await adjust(billId, {
       ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
@@ -897,7 +894,7 @@ describe("receiptLines", () => {
     // Grouped, as an order stored before portions.
     const { billId } = await billWith(
       venue,
-      [{ name: "Croquetas", quantity: "3" }, { name: "Burger" }],
+      [{ name: "Croquettes", quantity: "3" }, { name: "Burger" }],
       { shape: "grouped" },
     );
     await adjust(billId, {
@@ -917,7 +914,7 @@ describe("receiptLines", () => {
   });
 
   it("marks a family the discount on the bill split, and not a dish only its own discount touched", async () => {
-    const billId = await bill([{ name: "Burger" }, { name: "Croquetas", quantity: "3" }]);
+    const billId = await bill([{ name: "Burger" }, { name: "Croquettes", quantity: "3" }]);
     await adjust(billId, {
       ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
@@ -953,7 +950,7 @@ describe("receiptLines", () => {
   });
 
   it("marks no family on a simplified receipt", async () => {
-    const billId = await bill([{ name: "Croquetas", quantity: "3" }]);
+    const billId = await bill([{ name: "Croquettes", quantity: "3" }]);
     await adjust(billId, {
       ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
@@ -975,7 +972,7 @@ describe("receiptLines", () => {
   });
 
   it("marks no family when the records no longer add up to the bill", async () => {
-    const billId = await bill([{ name: "Croquetas", quantity: "3" }]);
+    const billId = await bill([{ name: "Croquettes", quantity: "3" }]);
     await adjust(billId, {
       ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",

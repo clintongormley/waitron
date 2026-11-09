@@ -100,7 +100,7 @@ const MENU: {
     vat: "general",
   },
   {
-    name: "Croquetas",
+    name: "Croquettes",
     customer: "Ham croquettes",
     kitchen: "CROQ",
     price: "3.33",
@@ -156,7 +156,7 @@ const MENU: {
     vat: "reduced",
   },
   {
-    name: "Pimientos",
+    name: "Peppers",
     customer: "Pepper tapa",
     kitchen: "PEPS",
     price: "3.33",
@@ -164,7 +164,7 @@ const MENU: {
     vat: "reduced",
   },
   {
-    name: "Cana",
+    name: "Draught beer",
     customer: "Small draught beer",
     kitchen: "BEER",
     price: "3.34",

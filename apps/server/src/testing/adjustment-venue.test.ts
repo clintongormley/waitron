@@ -75,20 +75,20 @@ function billOf(rounds: { shape: "grouped" | "portions"; lines: RoundLine[] }[])
 describe("todayLine", () => {
   it("on a bill of grouped lines answers the line of that number", async () => {
     const bill = await billOf([
-      { shape: "grouped", lines: [{ name: "Croquetas", quantity: "3" }, { name: "Burger" }] },
+      { shape: "grouped", lines: [{ name: "Croquettes", quantity: "3" }, { name: "Burger" }] },
     ]);
 
-    expect(bill.names).toEqual(["Croquetas", "Burger"]);
+    expect(bill.names).toEqual(["Croquettes", "Burger"]);
     expect(await todayLine(venue, bill.billId, 1)).toEqual({ lineId: bill.ids[0] });
     expect(await todayLine(venue, bill.billId, 2)).toEqual({ lineId: bill.ids[1] });
   });
 
   it("on a bill of portions answers a row's dishes as today's one line, and a lone dish alone", async () => {
     const bill = await billOf([
-      { shape: "portions", lines: [{ name: "Croquetas", quantity: "3" }, { name: "Burger" }] },
+      { shape: "portions", lines: [{ name: "Croquettes", quantity: "3" }, { name: "Burger" }] },
     ]);
 
-    expect(bill.names).toEqual(["Croquetas", "Croquetas", "Croquetas", "Burger"]);
+    expect(bill.names).toEqual(["Croquettes", "Croquettes", "Croquettes", "Burger"]);
     expect(await todayLine(venue, bill.billId, 1)).toEqual({
       lineId: bill.ids[0],
       lineIds: bill.ids.slice(0, 3),
@@ -136,11 +136,11 @@ describe("todayLine", () => {
   it("numbers grouped and portion rounds on one bill in turn", async () => {
     const bill = await billOf([
       { shape: "grouped", lines: [{ name: "Burger", quantity: "2" }] },
-      { shape: "portions", lines: [{ name: "Croquetas", quantity: "2" }] },
+      { shape: "portions", lines: [{ name: "Croquettes", quantity: "2" }] },
       { shape: "grouped", lines: [{ name: "Bread" }] },
     ]);
 
-    expect(bill.names).toEqual(["Burger", "Croquetas", "Croquetas", "Bread"]);
+    expect(bill.names).toEqual(["Burger", "Croquettes", "Croquettes", "Bread"]);
     expect(await todayLine(venue, bill.billId, 1)).toEqual({ lineId: bill.ids[0] });
     expect(await todayLine(venue, bill.billId, 2)).toEqual({
       lineId: bill.ids[1],
@@ -193,10 +193,10 @@ describe("todayLine", () => {
 
   it("todayLineNos answers the stored line numbers standing for today's line", async () => {
     const grouped = await billOf([
-      { shape: "grouped", lines: [{ name: "Croquetas", quantity: "3" }, { name: "Burger" }] },
+      { shape: "grouped", lines: [{ name: "Croquettes", quantity: "3" }, { name: "Burger" }] },
     ]);
     const portions = await billOf([
-      { shape: "portions", lines: [{ name: "Croquetas", quantity: "3" }, { name: "Burger" }] },
+      { shape: "portions", lines: [{ name: "Croquettes", quantity: "3" }, { name: "Burger" }] },
     ]);
 
     expect(await todayLineNos(venue, grouped.billId, 1)).toEqual([1]);
@@ -218,7 +218,7 @@ describe("todayLine", () => {
       const bill = await billOf([
         {
           shape: "portions",
-          lines: [{ name: "Croquetas", quantity: "3" }, { name: "Bread" }, { name: "Water" }],
+          lines: [{ name: "Croquettes", quantity: "3" }, { name: "Bread" }, { name: "Water" }],
         },
       ]);
       await remove(bill.billId, [bill.ids[2]!]);
@@ -233,7 +233,7 @@ describe("todayLine", () => {
 
     it("keeps them after a row that lost its first dish", async () => {
       const bill = await billOf([
-        { shape: "portions", lines: [{ name: "Croquetas", quantity: "3" }, { name: "Bread" }] },
+        { shape: "portions", lines: [{ name: "Croquettes", quantity: "3" }, { name: "Bread" }] },
       ]);
       await remove(bill.billId, [bill.ids[0]!]);
 
@@ -271,7 +271,7 @@ describe("todayLine", () => {
 
     it("refuses to number a bill a whole row of several dishes left", async () => {
       const bill = await billOf([
-        { shape: "portions", lines: [{ name: "Croquetas", quantity: "2" }, { name: "Bread" }] },
+        { shape: "portions", lines: [{ name: "Croquettes", quantity: "2" }, { name: "Bread" }] },
       ]);
       await remove(bill.billId, bill.ids.slice(0, 2));
 
@@ -283,7 +283,7 @@ describe("todayLine", () => {
 
   it("refuses a line number the bill does not reach", async () => {
     const bill = await billOf([
-      { shape: "portions", lines: [{ name: "Croquetas", quantity: "2" }] },
+      { shape: "portions", lines: [{ name: "Croquettes", quantity: "2" }] },
     ]);
 
     await expect(todayLine(venue, bill.billId, 2)).rejects.toThrow(
