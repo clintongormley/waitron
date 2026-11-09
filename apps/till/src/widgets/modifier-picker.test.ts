@@ -5,7 +5,11 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./menu-browser.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
-import { TillModifierPicker, type ModifierConfirmDetail } from "./modifier-picker.js";
+import {
+  TillModifierPicker,
+  type ModifierChangeDetail,
+  type ModifierConfirmDetail,
+} from "./modifier-picker.js";
 import {
   sellingValuesOf,
   type OfferedModifier,
@@ -1083,12 +1087,6 @@ describe("till-modifier-picker", () => {
   });
 
   describe("inline mode", () => {
-    type ChangeDetail = {
-      changed: boolean;
-      savable: boolean;
-      fixFields: boolean;
-      selection: ModifierConfirmDetail;
-    };
     /** A line of two Burgers, cooked medium, cheese once and a note: what a Sent row's window edits. */
     const edited = {
       product: burger,
@@ -1109,10 +1107,10 @@ describe("till-modifier-picker", () => {
         note: "sin sal",
       },
     };
-    function reports(picker: TillModifierPicker): ChangeDetail[] {
-      const seen: ChangeDetail[] = [];
+    function reports(picker: TillModifierPicker): ModifierChangeDetail[] {
+      const seen: ModifierChangeDetail[] = [];
       picker.addEventListener("wt-modifier-change", (event) =>
-        seen.push((event as CustomEvent<ChangeDetail>).detail),
+        seen.push((event as CustomEvent<ModifierChangeDetail>).detail),
       );
       return seen;
     }
@@ -1182,6 +1180,43 @@ describe("till-modifier-picker", () => {
       el.requestUpdate();
       await el.updateComplete;
       expect(seen, "an update that changes nothing reports nothing").toHaveLength(count);
+    });
+
+    it("is not savable while a required list is unanswered, however the draft changed", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        product: sandwich,
+        quantity: "1",
+        lineDetails: true,
+        withNote: true,
+        initialSelections: {},
+        inline: true,
+      });
+      const seen = reports(el);
+      el.shadowRoot!.querySelector('[name="quantity"]')!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "2" } }),
+      );
+      await el.updateComplete;
+      expect(seen.at(-1)).toMatchObject({ changed: true, savable: false });
+      pickBox(el, "list-bread", "p-white")!.click();
+      await el.updateComplete;
+      expect(seen.at(-1)).toMatchObject({ changed: true, savable: true });
+    });
+
+    it("is not savable while disabled, and savable again once enabled", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        ...edited,
+        inline: true,
+      });
+      const seen = reports(el);
+      labelRadio(el, "list-cooked", "label-rare").click();
+      await el.updateComplete;
+      expect(seen.at(-1)).toMatchObject({ changed: true, savable: true });
+      el.disabled = true;
+      await el.updateComplete;
+      expect(seen.at(-1)).toMatchObject({ changed: true, savable: false });
+      el.disabled = false;
+      await el.updateComplete;
+      expect(seen.at(-1)).toMatchObject({ changed: true, savable: true });
     });
 
     it("confirms with the detail the windowed Save gives for the same edits", async () => {

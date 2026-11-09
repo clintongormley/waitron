@@ -56,7 +56,8 @@ export interface ModifierConfirmDetail extends LineSelection {
 
 /** What an inline picker tells its host after any update that moves one of these. */
 export interface ModifierChangeDetail {
-  /** The draft differs from what it opened with, or from what it last confirmed. */
+  /** The draft differs from what it opened with, or from what it last confirmed; always true for a
+   * picker opened with no `initialSelections`, as a new dish may be added unchanged. */
   changed: boolean;
   /** The windowed Save would be enabled now. */
   savable: boolean;
@@ -300,7 +301,27 @@ export class TillModifierPicker extends LitElement {
     this.requestUpdate();
   }
 
+  /** The checks one update's render and change report share. */
+  #checks!: {
+    stale: SelectedExtra[];
+    totals: Map<string, number>;
+    saveAction: ReturnType<typeof saveActionState>;
+    satisfied: boolean;
+  };
+
   override willUpdate(): void {
+    this.#prepareDraft();
+    const stale = this.#stalePicks();
+    const totals = this.#listTotals();
+    this.#checks = {
+      stale,
+      totals,
+      saveAction: this.#saveAction(),
+      satisfied: this.#satisfied(stale, totals),
+    };
+  }
+
+  #prepareDraft(): void {
     if (!this.product || !this.active) return;
     if (!this.#seeded) this.#seedSelections();
     if (!this.isConnected || this.#scope) return;
@@ -612,23 +633,21 @@ export class TillModifierPicker extends LitElement {
     this.#confirm();
   }
 
-  /** Asks the leave question when the draft changed; true when the host may close. */
+  /** Asks the leave question when the draft changed; true when the host may close. Answers true
+   * without asking while it has no leave coordinator: before its first connected update with a
+   * product, and once disconnected. */
   async requestLeave(reason: LeaveReason): Promise<boolean> {
     return this.#leave ? this.#beforeClose(reason) : true;
   }
 
   override updated(): void {
     if (!this.inline || !this.product || !this.#scope) return;
-    const saveAction = this.#saveAction();
+    const { saveAction, satisfied } = this.#checks;
     const quantityRefused = this.attempted && this.lineDetails && this.#quantityInvalid();
     const report: ModifierChangeDetail = {
       changed: !saveAction.unchanged,
       savable:
-        !this.disabled &&
-        !this.readOnly &&
-        !saveAction.unchanged &&
-        !quantityRefused &&
-        this.#satisfied(this.#stalePicks(), this.#listTotals()),
+        !this.disabled && !this.readOnly && !saveAction.unchanged && !quantityRefused && satisfied,
       fixFields: !this.readOnly && quantityRefused,
       selection: this.#detail(),
     };
@@ -675,10 +694,7 @@ export class TillModifierPicker extends LitElement {
   }
 
   override render() {
-    const stale = this.#stalePicks();
-    const totals = this.#listTotals();
-    const saveAction = this.#saveAction();
-    const satisfied = this.#satisfied(stale, totals);
+    const { stale, totals, saveAction, satisfied } = this.#checks;
     const fields = html`<div ?inert=${this.disabled}>
       ${this.inline ? nothing : html`<slot name="line-details"></slot>${lineNutrition(this.nutrition)}`}
       ${
@@ -888,6 +904,10 @@ export class TillModifierPicker extends LitElement {
   }
 
   #quantityInvalid(): boolean {
+    return this.#quantityImprecise() || this.#quantityBelowMinimum();
+  }
+
+  #quantityImprecise(): boolean {
     if (this.quantityReadOnly) return false;
     try {
       assertQuantityPrecision(this.editedQuantity, productUnit(this.product).precision, {
@@ -896,11 +916,14 @@ export class TillModifierPicker extends LitElement {
     } catch {
       return true;
     }
-    return this.#quantityBelowMinimum();
+    return false;
   }
 
+  /** Only a quantity the dish's unit can take is measured against the minimum, so a fraction is
+   * refused for its precision first. */
   #quantityBelowMinimum(): boolean {
-    if (this.minQuantity === undefined || !this.#editsQuantity) return false;
+    if (this.minQuantity === undefined || !this.#editsQuantity || this.#quantityImprecise())
+      return false;
     try {
       return compareDecimal(decimal(this.editedQuantity), decimal(this.minQuantity)) < 0;
     } catch {
