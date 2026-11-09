@@ -22,6 +22,10 @@ export class PrintJobReprintDialog extends LitElement {
       p {
         margin-block: var(--wt-space-3);
       }
+      .rule {
+        margin-block-end: 0;
+        color: var(--wt-color-text-muted);
+      }
     `,
   ];
   @property({ attribute: false }) api!: Pick<DashboardApi, "resendPrintJob">;
@@ -88,7 +92,7 @@ export class PrintJobReprintDialog extends LitElement {
           },
         )}
       </p>`;
-    const hint =
+    const rule =
       job.reprintRule === "wide_enough"
         ? t("printers.reprint_wide_enough")
         : job.reprintRule === "own"
@@ -105,7 +109,6 @@ export class PrintJobReprintDialog extends LitElement {
         search="auto"
         required
         label=${t("printers.reprint_printer")}
-        hint=${hint}
         .options=${offers.map((printer) => ({ value: printer.id, label: printer.name }))}
         .value=${this.printerId}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -113,7 +116,8 @@ export class PrintJobReprintDialog extends LitElement {
           this.printerId = event.detail.value;
           this.errorKey = null;
         }}
-      ></wt-combobox>`;
+      ></wt-combobox
+      >${rule === "" ? nothing : html`<p class="rule" data-test="reprint-rule">${rule}</p>`}`;
   }
 
   override render() {

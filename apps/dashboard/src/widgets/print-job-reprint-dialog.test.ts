@@ -79,6 +79,8 @@ const combobox = (el: PrintJobReprintDialog) =>
 const reprint = (el: PrintJobReprintDialog) =>
   el.shadowRoot!.querySelector<WtButton>("[data-test=reprint-send]")!;
 const offered = (el: PrintJobReprintDialog) => combobox(el)!.options.map((o) => o.label);
+const explanation = (el: PrintJobReprintDialog) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=reprint-rule]");
 
 it("offers the original chosen, then every other receipt printer by name, whatever its width, with no hint", async () => {
   const { el } = await mount(job());
@@ -86,6 +88,7 @@ it("offers the original chosen, then every other receipt printer by name, whatev
   expect(offered(el)).toEqual(["Kitchen", "Bar", "Terrace"]);
   expect(combobox(el)!.value).toBe("p1");
   expect(combobox(el)!.hint).toBe("");
+  expect(explanation(el)).toBeNull();
   expect(reprint(el).disabled).toBe(false);
   expect(reprint(el).variant).toBe("primary");
 });
@@ -93,13 +96,19 @@ it("offers the original chosen, then every other receipt printer by name, whatev
 it("says only printers wide enough are offered for a kitchen ticket or refund receipt", async () => {
   const { el } = await mount(job({ reprintRule: "wide_enough", reprintPrinterIds: ["p3"] }));
   expect(offered(el)).toEqual(["Kitchen", "Bar"]);
-  expect(combobox(el)!.hint).toBe(t("printers.reprint_wide_enough"));
+  expect(combobox(el)!.value).toBe("p1");
+  expect(combobox(el)!.hint).toBe("");
+  expect(explanation(el)!.textContent!.trim()).toBe(t("printers.reprint_wide_enough"));
+  expect(explanation(el)!.checkVisibility()).toBe(true);
 });
 
 it("offers only its own printer for any other printout, and says so", async () => {
   const { el } = await mount(job({ reprintRule: "own", reprintPrinterIds: [] }));
   expect(offered(el)).toEqual(["Kitchen"]);
-  expect(combobox(el)!.hint).toBe(t("printers.reprint_own_only"));
+  expect(combobox(el)!.value).toBe("p1");
+  expect(combobox(el)!.hint).toBe("");
+  expect(explanation(el)!.textContent!.trim()).toBe(t("printers.reprint_own_only"));
+  expect(explanation(el)!.checkVisibility()).toBe(true);
 });
 
 it("chooses nothing when the original is disabled, and keeps Reprint quiet until a printer is chosen", async () => {
