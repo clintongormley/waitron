@@ -183,7 +183,7 @@ describe("row actions", () => {
   });
 
   it("supports Tab then Enter to activate an action and close the disclosure", async () => {
-    const { edit, trigger, popup } = await mountActions();
+    const { el, edit, trigger, popup } = await mountActions();
     const action = vi.fn();
     edit.addEventListener("click", action);
     trigger.focus();
@@ -192,6 +192,7 @@ describe("row actions", () => {
     await userEvent.keyboard("{Enter}");
     expect(action).toHaveBeenCalledTimes(1);
     await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
+    expect(el.shadowRoot!.activeElement).toBe(trigger);
   });
 
   it("closes on Escape and returns focus to its trigger", async () => {
@@ -226,7 +227,7 @@ describe("row actions", () => {
   });
 
   it("leaves keyboard focus in a modal opened by an action", async () => {
-    const { edit, host, trigger, popup } = await mountActions();
+    const { el, edit, host, trigger, popup } = await mountActions();
     const dialog = document.createElement("dialog");
     const input = document.createElement("input");
     input.setAttribute("aria-label", "Printer name");
@@ -238,7 +239,12 @@ describe("row actions", () => {
     expect(dialog.open).toBe(true);
     expect(popup.matches(":popover-open")).toBe(false);
     expect(document.activeElement).toBe(input);
+    const closed = new Promise<void>((resolve) => {
+      dialog.addEventListener("close", () => resolve(), { once: true });
+    });
     dialog.close();
+    await closed;
+    expect(el.shadowRoot!.activeElement).toBe(trigger);
   });
 
   it("lets the last action receive a real pointer click beyond a horizontally scrolling table", async () => {

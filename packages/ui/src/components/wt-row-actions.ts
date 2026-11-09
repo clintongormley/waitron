@@ -187,7 +187,10 @@ export class WtRowActions extends LitElement {
     capture: true,
     handleEvent: (event: MouseEvent) => {
       this.cancelDisabledLink(event);
-      if (this.closesMenu(event)) this.closingClicks.add(event);
+      if (this.closesMenu(event)) {
+        this.closingClicks.add(event);
+        this.trigger.focus();
+      }
     },
   };
   // A middle-click opens a link in a new tab through `auxclick`, which fires no `click`.
