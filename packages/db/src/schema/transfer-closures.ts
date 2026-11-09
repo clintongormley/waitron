@@ -31,7 +31,7 @@ export interface TransferClosureResult {
  * A bill closed as to be paid by bank transfer: one row per operation, per bill and per sale.
  *
  * `intent` is a digest of the request, not the request: the delivery email and invoice recipient
- * stay out of this append-only row. `actor_id` is a plain person id with no key, as on
+ * stay out of this append-only row. `actor_id` is a plain person id. No key yet, as on
  * `sales.operator_id`.
  */
 export const transferClosures = table(

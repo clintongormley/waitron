@@ -348,8 +348,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este artículo está en espera y todavía no se puede enviar ni servir",
   },
   "transfer_close.ineligible": {
-    en: "This bill can't be closed by transfer because it has already been paid, changed or cancelled, or its total is zero. Take payment the usual way",
-    es: "Esta cuenta no se puede cerrar por transferencia porque ya se ha pagado, modificado o anulado, o su total es cero. Cóbrala de la forma habitual",
+    en: "This bill can't be closed by transfer: it has already been paid, changed or cancelled, it belongs to another server, or its total is zero",
+    es: "Esta cuenta no se puede cerrar por transferencia: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
   },
   "transfer_close.conflict": {
     en: "This bill's total or invoice details have changed since you opened it. Reload the bill, check them and try again",

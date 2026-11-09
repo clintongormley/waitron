@@ -282,10 +282,6 @@ async function refuseTouchedSale(
   if (substituted !== undefined) throw ineligible("substitution");
 }
 
-/**
- * The party after this bill closed: finished through explicit finish when release is admitted,
- * expectations were sent and readiness finds nothing in the way; otherwise left open with why.
- */
 async function finishParty(
   tx: Transaction,
   deps: TransferCloseDeps,
@@ -351,7 +347,6 @@ async function replay(
   return byBill.result;
 }
 
-/** One spelling of the request: lower-case ids, the total to the cent, edits in bill order. */
 function normalised(
   backend: FiscalBackend,
   request: CloseByTransferRequest,
@@ -456,10 +451,7 @@ async function stagedChoice(
   });
 }
 
-/**
- * The request's SHA-256, bound to who sent it from where. It is taken over the normalised
- * request, so recipient and email text never reach the stored row.
- */
+/** The request's SHA-256, bound to who sent it from where. */
 function intentDigest(
   cfg: DeviceRequestConfig,
   request: CloseByTransferRequest,

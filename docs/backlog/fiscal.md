@@ -335,8 +335,7 @@ The plan's source observations are **READ ONLY / runtime UNVERIFIED** at
 proposals; no product test, renderer, fiscal or legal verification was run. A1003 is now landed
 (PR #1973); preserve its refusal/rollback boundary. Recheck released A696 clock, F/A739 Pay,
 A555/A948 delivery and A947 minute-allocation contracts before their dependent build steps.
-A948 enables existing table-payment and unpaid-departure F1 paths; transfer closure remains
-unbuilt. Physical/manual-remedy/B2B qualification remains separate. The €5,000 transfer example
+A948 enables existing table-payment and unpaid-departure F1 paths. Physical/manual-remedy/B2B qualification remains separate. The €5,000 transfer example
 is still a future path; €220 F2 stays within existing limits. The plan places a precise
 RUNNER H2 approval gate before later work reaches protected fiscal behavior, and keeps golden
 huella/inmutabilidad unedited. Design approval does not waive that gate.
@@ -344,7 +343,10 @@ huella/inmutabilidad unedited. Design approval does not waive that gate.
 The [partial-receipts proposal](../superpowers/specs/2026-10-20-a275-invoice-now-transfer-later-design.md),
 historical research/source receipts and pictures remain unchanged. Old question 1 is retired;
 questions 2–5 are withdrawn. The revised Spanish adviser confirmation remains attached, not sent.
-A275 stays open pending build and acceptance. The reviewed plan includes an explicit recovery read,
+Tasks 0–2 are built: the `transfer_closures` table, the party readiness read and a hidden close
+command ([2026-11-09 plans](../superpowers/plans/2026-11-09-a275-transfer-close-command.md)), not
+usable until Task 7 adds the button, after A739 Cut B. A275 stays open pending the rest of the
+build and acceptance. The reviewed plan includes an explicit recovery read,
 party completion before its retained result, live Bills exclusion, separate delivery/closing actors
 and bounded implementation checkpoints.
 

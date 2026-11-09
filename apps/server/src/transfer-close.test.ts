@@ -38,7 +38,7 @@ import {
 import type { CloseByTransferRequest } from "./transfer-close-types.js";
 import "./errors.js";
 
-// Close one bill by transfer, new work only (A275 Task 2): every case calls the writer directly on
+// Close one bill by transfer, new work only: every case calls the writer directly on
 // a real venue that files Veri*Factu records, in its own transaction.
 let venue: BillVenue;
 let counterZone: string;

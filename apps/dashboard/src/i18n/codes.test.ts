@@ -897,8 +897,8 @@ it("words a test email no longer in the inbox in both languages", () => {
 it.each([
   [
     "transfer_close.ineligible",
-    "This bill can't be closed by transfer because it has already been paid, changed or cancelled, or its total is zero. Take payment the usual way",
-    "Esta cuenta no se puede cerrar por transferencia porque ya se ha pagado, modificado o anulado, o su total es cero. Cóbrala de la forma habitual",
+    "This bill can't be closed by transfer: it has already been paid, changed or cancelled, it belongs to another server, or its total is zero",
+    "Esta cuenta no se puede cerrar por transferencia: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
   ],
   [
     "transfer_close.conflict",

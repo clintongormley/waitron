@@ -289,7 +289,6 @@ async function readFinishState(tx: Transaction, args: FinishStateArgs) {
   return { bills, remaining };
 }
 
-/** Scope and authority are the later command's admission to supply; this read emits neither. */
 export type PartyFinishBlocker =
   "other_bills" | "service" | "revision" | "editor" | "scope" | "authority";
 

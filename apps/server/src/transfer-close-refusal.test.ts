@@ -39,7 +39,7 @@ import {
 } from "./testing/transfer-close-fixture.js";
 import "./errors.js";
 
-// Every refusal of a close by transfer (A275 Task 2) leaves the ledger as it was; beside each, where
+// Every refusal of a close by transfer leaves the ledger as it was; beside each, where
 // one exists, the legitimate close that must still be served.
 let t: TransferCloseKit;
 

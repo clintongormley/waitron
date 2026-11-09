@@ -30,7 +30,7 @@ import {
 import type { AppError } from "@waitron/shared";
 import "./errors.js";
 
-// Strict replay of a close by transfer (A275 Task 2): the same operation answers with what it
+// Strict replay of a close by transfer: the same operation answers with what it
 // answered first, and anything that is not the same request is refused before it writes.
 let t: TransferCloseKit;
 
