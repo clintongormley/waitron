@@ -331,7 +331,9 @@ export async function healthCommand(command, options, { report, output }) {
       let capacity;
       try {
         capacity = typeof options.capacity === "function" ? options.capacity() : options.capacity;
-      } catch {}
+      } catch {
+        capacity = undefined;
+      }
       const age = (options.now ?? Date.now()) - capacity?.observedAt;
       const full =
         Number.isSafeInteger(capacity?.slots) &&

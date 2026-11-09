@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { URL } from "node:url";
+import { performance } from "node:perf_hooks";
 import * as health from "./ci-server-health.mjs";
 
 const now = Date.parse("2026-11-08T17:00:00Z");
