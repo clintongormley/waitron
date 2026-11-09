@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { kitchenStations, withTransaction } from "@waitron/db";
 import { businessDayBounds } from "@waitron/shared";
@@ -17,6 +17,19 @@ import { countRows, dayEvents, planDay, tradeDay, type PlanningVenue } from "./t
 // Each case migrates and seeds a venue (1.3 s locally) and trades a few bills (about 0.12 s each);
 // the limit leaves a slower CI runner many times that.
 const CASE_TIMEOUT_MS = 180_000;
+
+const attendance = vi.hoisted(() => ({ beforePass: undefined as (() => void) | undefined }));
+
+vi.mock("../../src/attendance-loop.js", async (loadOriginal) => {
+  const original = await loadOriginal<typeof import("../../src/attendance-loop.js")>();
+  return {
+    ...original,
+    runAttendancePass: (...args: Parameters<typeof original.runAttendancePass>) => {
+      attendance.beforePass?.();
+      return original.runAttendancePass(...args);
+    },
+  };
+});
 
 const opened: { venue: BenchVenue; dir: string }[] = [];
 let clock: BenchClock | undefined;
@@ -248,6 +261,62 @@ describe("tradeDay", () => {
     },
     CASE_TIMEOUT_MS,
   );
+
+  it(
+    "lets a timer run throughout the day, as the venue watchdog needs",
+    async () => {
+      const day = "2025-11-03";
+      const venue = await freshVenue(`${day}T04:00:00Z`);
+      const { startAt } = businessDayBounds(
+        {
+          timeZone: BENCH_PROFILE.timeZone,
+          dayCutover: BENCH_PROFILE.dayCutover,
+          cutoverChanges: [],
+        },
+        day,
+      );
+      const steps = dayEvents(planDay(venue, day, 10, Date.parse(startAt), undefined)).length;
+      let turns = 0;
+      const ticker = setInterval(() => (turns += 1), 1);
+      try {
+        // Signing the tills in gives many turns of its own, so only those from the first seat count.
+        await tradeDay(venue, day, 10, {
+          beforeBill: (index) => {
+            if (index === 0) turns = 0;
+          },
+        });
+      } finally {
+        clearInterval(ticker);
+      }
+
+      expect(turns).toBeGreaterThanOrEqual(steps / 2);
+    },
+    CASE_TIMEOUT_MS,
+  );
+
+  it(
+    "lets a timer run between the overnight attendance passes",
+    async () => {
+      const venue = await freshVenue("2025-11-03T04:00:00Z");
+      const turnsAtPass: number[] = [];
+      let turns = 0;
+      attendance.beforePass = () => turnsAtPass.push(turns);
+      const ticker = setInterval(() => (turns += 1), 1);
+      try {
+        await tradeDay(venue, "2025-11-03", 10);
+      } finally {
+        clearInterval(ticker);
+        attendance.beforePass = undefined;
+      }
+
+      expect(turnsAtPass.length).toBeGreaterThanOrEqual(3);
+      expect(turnsAtPass.at(-1)! - turnsAtPass[0]!).toBeGreaterThanOrEqual(
+        (turnsAtPass.length - 1) / 2,
+      );
+    },
+    CASE_TIMEOUT_MS,
+  );
+
   it(
     "reopens a seeded folder with its saved device cookies and trades the next day",
     async () => {

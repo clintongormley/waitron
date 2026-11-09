@@ -318,10 +318,10 @@ export async function tradeDay(
       });
       taken.delete(bill.tableId!);
       results.push({ seatedAt: bill.seatedAt!, finishedAt: clock.now(), route: plan.route });
-      // Synchronous SQLite starves the venue watchdog's timer unless the loop gets a turn.
-      if (results.length % 25 === 0) await nextTurn();
     }
     await printQueued();
+    // Synchronous SQLite starves the venue watchdog's timer unless the loop gets a turn.
+    await nextTurn();
   }
 
   clock.set(new Date(Math.max(...events.map((event) => event.at)) + 5 * MINUTE));
@@ -433,7 +433,7 @@ async function closeDay(venue: BenchVenue, day: string, at: Date) {
         isPrimary: () => true,
       })
     ).more;
-    if (attendancePasses % 25 === 0) await nextTurn();
+    await nextTurn();
   }
   await withTransaction(venue.db, async (tx) => {
     const close = await computeDailyClose(tx, {
