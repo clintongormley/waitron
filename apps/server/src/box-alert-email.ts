@@ -56,7 +56,10 @@ export interface EmailedIncident {
  * `backup.staging_space_low` that one of its checks sees. */
 export const BACKUP_REFUSED_EMAIL_CODE = "backup.run_stopped";
 
-type EmailCode = BoxEmailCode | IncidentEmailCode | typeof BACKUP_REFUSED_EMAIL_CODE;
+export type BoxAlertCode = BoxEmailCode | IncidentEmailCode | typeof BACKUP_REFUSED_EMAIL_CODE;
+type EmailCode = BoxAlertCode;
+export const boxAlertMailKey = (episodeId: string, personId: string) =>
+  `alert:${episodeId}:${personId}`;
 
 /** Each time placeholder and the param holding the offset it is written in. */
 const TIME_PLACEHOLDERS = {

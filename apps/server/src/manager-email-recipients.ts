@@ -8,11 +8,10 @@ export interface ManagerEmailRecipient {
   readonly language: "en" | "es";
 }
 
-/** Every active person with an email address whose role holds `system.manage`: the address trimmed,
- * the language their own (`es-ES`, `en-GB`), else the venue's. */
-export async function readManagerEmailRecipients(
+async function recipients(
   tx: Transaction,
   venueLanguage: "en" | "es",
+  personId?: string,
 ): Promise<ManagerEmailRecipient[]> {
   const people = await tx
     .select({
@@ -24,6 +23,7 @@ export async function readManagerEmailRecipients(
     .from(persons)
     .where(
       and(
+        personId === undefined ? undefined : eq(persons.id, personId),
         eq(persons.status, "active"),
         isNotNull(persons.email),
         sql`length(trim(${persons.email})) > 0`,
@@ -41,4 +41,18 @@ export async function readManagerEmailRecipients(
             ? ("en" as const)
             : venueLanguage,
     }));
+}
+
+export function readManagerEmailRecipients(
+  tx: Transaction,
+  venueLanguage: "en" | "es",
+): Promise<ManagerEmailRecipient[]> {
+  return recipients(tx, venueLanguage);
+}
+export async function readManagerEmailRecipient(
+  tx: Transaction,
+  personId: string,
+  venueLanguage: "en" | "es",
+): Promise<ManagerEmailRecipient | undefined> {
+  return (await recipients(tx, venueLanguage, personId))[0];
 }
