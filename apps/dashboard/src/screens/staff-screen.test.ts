@@ -514,7 +514,7 @@ describe("staff-screen", () => {
       createPerson: vi.fn().mockResolvedValue({
         id: "p3",
         invitationSent: false,
-        problem: "email.send_refused",
+        problem: "email.unconfigured",
         uncertain: false,
       }),
     });
@@ -1235,11 +1235,11 @@ describe("staff-screen — row actions, filters and edit races", () => {
     expect(rowDialog(el).open).toBe(true);
   });
 
-  it("confirms enabling, then reports that the invitation email could not be sent", async () => {
+  it("confirms enabling, then reports that the invitation email is not configured", async () => {
     const api = stubApi({
       reactivatePerson: vi.fn().mockResolvedValue({
         invitationSent: false,
-        problem: "email.send_refused",
+        problem: "email.unconfigured",
         uncertain: false,
       }),
     });
@@ -1255,7 +1255,7 @@ describe("staff-screen — row actions, filters and edit races", () => {
     await flush(el);
     expect(api.reactivatePerson).toHaveBeenCalledExactlyOnceWith("p2");
     expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")!.textContent!.trim()).toBe(
-      t("staff.invitation_not_sent"),
+      t("staff.invitation_unconfigured"),
     );
   });
 
@@ -1326,7 +1326,7 @@ describe("staff-screen — row actions, filters and edit races", () => {
   it("drops a resend-invitation from a closed edit dialog and a second one while the first runs", async () => {
     let finish!: (value: {
       invitationSent: boolean;
-      problem?: "email.send_refused";
+      problem?: "email.unconfigured";
       uncertain?: boolean;
     }) => void;
     const api = stubApi({
@@ -1351,11 +1351,11 @@ describe("staff-screen — row actions, filters and edit races", () => {
     await openEdit(el, "p1");
     resend();
     resend();
-    finish({ invitationSent: false, problem: "email.send_refused", uncertain: false });
+    finish({ invitationSent: false, problem: "email.unconfigured", uncertain: false });
     await flush(el);
     expect(api.resendInvitation).toHaveBeenCalledExactlyOnceWith("p1");
     expect(el.shadowRoot!.querySelector("[data-test=invitation-status]")!.textContent!.trim()).toBe(
-      t("staff.invitation_not_sent"),
+      t("staff.invitation_unconfigured"),
     );
   });
 
@@ -1650,23 +1650,11 @@ describe("staff-screen filter fields", () => {
 describe("account email outcome messages", () => {
   for (const locale of ["en-GB", "es-ES"]) {
     it.each([
-      { result: { invitationSent: true, delivery: "sent" }, key: "staff.invitation_sent" },
+      { result: { invitationSent: true, delivery: "queued" }, key: "staff.invitation_sent" },
       { result: { invitationSent: true, delivery: "captured" }, key: "staff.invitation_captured" },
       {
         result: { invitationSent: false, problem: "email.unconfigured", uncertain: false },
         key: "staff.invitation_unconfigured",
-      },
-      {
-        result: { invitationSent: false, problem: "email.send_refused", uncertain: false },
-        key: "staff.invitation_not_sent",
-      },
-      {
-        result: { invitationSent: false, problem: "email.send_refused", uncertain: true },
-        key: "staff.invitation_uncertain",
-      },
-      {
-        result: { invitationSent: false, problem: "email.send_timeout", uncertain: true },
-        key: "staff.invitation_uncertain",
       },
     ] as const)(
       `shows the actual account email outcome in ${locale}: $key`,
@@ -1696,13 +1684,13 @@ describe("account email outcome messages", () => {
     );
   }
 
-  it("distinguishes an immediate invitation retry from a mail failure", async () => {
+  it("distinguishes an immediate invitation retry from email not being configured", async () => {
     const api = stubApi({
       resendInvitation: vi
         .fn()
         .mockResolvedValueOnce({
           invitationSent: false,
-          problem: "email.send_refused",
+          problem: "email.unconfigured",
           uncertain: false,
         })
         .mockResolvedValueOnce({ invitationSent: false }),
@@ -1712,7 +1700,7 @@ describe("account email outcome messages", () => {
       canAdminister: true,
     });
     await flush(el);
-    for (const key of ["staff.invitation_not_sent", "staff.invitation_throttled"] as const) {
+    for (const key of ["staff.invitation_unconfigured", "staff.invitation_throttled"] as const) {
       list(el).dispatchEvent(
         new CustomEvent("person-action", {
           detail: { personId: "p1", action: "resend-invitation" },
@@ -1729,4 +1717,28 @@ describe("account email outcome messages", () => {
       );
     }
   });
+});
+
+it("offers the primary dashboard beside a refused spare invitation", async () => {
+  const api = stubApi({
+    createPerson: vi.fn().mockRejectedValue({
+      code: "account_mail.primary_required",
+      params: { primaryDashboardUrl: "https://primary.test/manage/" },
+    }),
+  });
+  const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+    api,
+    canAdminister: true,
+  });
+  await flush(el);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
+  await flush(el);
+  await createThroughForm(el);
+  await flush(el);
+  const link = el.shadowRoot!.querySelector<HTMLAnchorElement>(
+    "[data-test=primary-dashboard-link]",
+  );
+  expect(link?.href).toBe("https://primary.test/manage/");
+  expect(link?.getBoundingClientRect().width).toBeGreaterThan(0);
+  expect(await formErrorText(el)).toContain(codeMessage("account_mail.primary_required"));
 });

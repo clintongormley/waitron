@@ -95,12 +95,13 @@ export class StaffScreen extends LitElement {
   @state() private editingPerson: PersonSummary | null = null;
   @state() private editOpen = false;
   @state() private errorKey: string | null = null;
+  @state() private primaryDashboardUrl: string | null = null;
   /** The refusal's `params.field`, read by the add and edit forms beside `errorKey`. */
   @state() private errorField: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
-  @state() private invitationStatus:
-    "sent" | "captured" | "not_sent" | "unconfigured" | "uncertain" | "throttled" | null = null;
+  @state() private invitationStatus: "sent" | "captured" | "unconfigured" | "throttled" | null =
+    null;
   @state() private search = "";
   @state() private roleFilter: PersonRole | "all" = "all";
   @state() private statusFilter: "current" | "pending" | "active" | "suspended" | "all" = "current";
@@ -183,17 +184,25 @@ export class StaffScreen extends LitElement {
 
   #showInvitation(result: Awaited<ReturnType<DashboardApi["resendInvitation"]>>): void {
     this.invitationStatus =
-      result.uncertain === true
-        ? "uncertain"
-        : result.problem === "email.unconfigured"
-          ? "unconfigured"
-          : result.problem !== undefined
-            ? "not_sent"
-            : result.delivery === "captured"
-              ? "captured"
-              : result.invitationSent
-                ? "sent"
-                : "throttled";
+      result.problem === "email.unconfigured"
+        ? "unconfigured"
+        : result.delivery === "captured"
+          ? "captured"
+          : result.invitationSent
+            ? "sent"
+            : "throttled";
+  }
+
+  #primaryLink(slot?: string) {
+    return this.primaryDashboardUrl
+      ? html`<a
+          slot=${slot ?? nothing}
+          data-test="primary-dashboard-link"
+          href=${this.primaryDashboardUrl}
+          style="color: var(--wt-color-primary-text)"
+          >${t("account.primary_dashboard")}</a
+        >`
+      : nothing;
   }
 
   #onRowAction(event: CustomEvent<{ personId: string; action: string }>): void {
@@ -305,6 +314,7 @@ export class StaffScreen extends LitElement {
 
   #showError(code: string | null, field: string | null = null, fromRead = false): void {
     this.errorKey = code;
+    this.primaryDashboardUrl = null;
     this.errorField = field;
     this.#readErrorShown = fromRead;
   }
@@ -312,6 +322,10 @@ export class StaffScreen extends LitElement {
   #fail(error: unknown, fromRead = false): void {
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
     this.#showError(codeOf(error), typeof field === "string" ? field : null, fromRead);
+    if (this.errorKey === "account_mail.primary_required")
+      this.primaryDashboardUrl =
+        (error as { params?: { primaryDashboardUrl?: string } }).params?.primaryDashboardUrl ??
+        null;
   }
 
   /** A read's failure never replaces an action's message. */
@@ -544,6 +558,7 @@ export class StaffScreen extends LitElement {
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
           : nothing
       }
+      ${!this.formOpen && !this.editOpen && this.rowAction === null ? this.#primaryLink() : nothing}
       ${this.#renderDownloadLines()}
       ${
         this.invitationStatus
@@ -576,6 +591,7 @@ export class StaffScreen extends LitElement {
               </p>`
             : nothing
         }
+        ${this.rowAction ? this.#primaryLink() : nothing}
         <wt-form-actions
           slot="footer"
           .error=${this.rowAction && this.errorKey ? codeMessage(this.errorKey) : ""}
@@ -613,7 +629,8 @@ export class StaffScreen extends LitElement {
           }>,
         ) => void this.#onCreatePerson(e)}
         @wt-close=${() => (this.formOpen = false)}
-      ></dashboard-person-form>
+        >${this.formOpen ? this.#primaryLink("refusal-action") : nothing}</dashboard-person-form
+      >
       <dashboard-person-edit
         .busy=${this.#editing}
         .person=${this.editingPerson}
@@ -625,7 +642,8 @@ export class StaffScreen extends LitElement {
         @save-person=${(e: CustomEvent<PersonEditDetails>) => this.#onSavePerson(e)}
         @resend-invitation=${(e: Event) => void this.#onResendInvitation(e)}
         @wt-close=${() => this.#closeEdit()}
-      ></dashboard-person-edit>
+        >${this.editOpen ? this.#primaryLink("refusal-action") : nothing}</dashboard-person-edit
+      >
     `;
   }
 }

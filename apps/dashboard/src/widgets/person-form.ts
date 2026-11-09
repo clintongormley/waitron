@@ -303,6 +303,7 @@ export class PersonForm extends LitElement {
             this.#scope?.changed();
           }}
         ></wt-combobox>
+        <slot name="refusal-action"></slot>
         <wt-form-actions slot="footer" .error=${bottom}>
           <wt-button
             slot="cancel"

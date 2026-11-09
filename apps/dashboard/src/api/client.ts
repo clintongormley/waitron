@@ -373,8 +373,8 @@ export type {
 export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
 
 export interface AccountEmailDeliveryDetails {
-  delivery?: "sent" | "captured";
-  problem?: "email.unconfigured" | "email.send_refused" | "email.send_timeout";
+  delivery?: "queued" | "captured";
+  problem?: "email.unconfigured";
   uncertain?: boolean;
 }
 

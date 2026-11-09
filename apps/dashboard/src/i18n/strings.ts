@@ -1148,29 +1148,24 @@ export const en = {
   "email.settings.accepted": "The mail server accepted the test message. Check your inbox.",
   "email.settings.show_password": "Show password",
   "email.settings.hide_password": "Hide password",
+  "account.primary_dashboard": "Open the main box’s dashboard",
   "profile.title": "Your profile",
   "profile.details": "Your details",
   "profile.security": "Security",
   "profile.language": "Language",
   "profile.saved": "Your changes have been saved.",
   "staff.invitation_captured":
-    "The invitation is waiting in the server inbox. Open Email inbox to read it.",
+    "The invitation is on its way to the server inbox. Open Email inbox to read it.",
   "staff.invitation_unconfigured":
-    "The account action was saved, but email is not set up. Open Email settings, then send a new invitation.",
-  "staff.invitation_uncertain":
-    "The account action was saved. The invitation may not have been sent. Check the recipient’s inbox first. If it does not arrive, check Email settings and send a new invitation. Only the newest link works.",
+    "No invitation was sent because email is not set up. Open Email settings, then send a new invitation.",
   "staff.invitation_throttled":
     "Nothing changed and no new invitation was sent. Wait a minute before trying again.",
   "profile.email_sent":
-    "The mail server accepted the confirmation email. Enter the code from your new address to confirm it.",
+    "The confirmation email is on its way. Enter the code from your new address to confirm it.",
   "profile.email_captured":
-    "The confirmation is waiting in the server inbox. Only an administrator can read it.",
+    "The confirmation is on its way to the server inbox. Only an administrator can read it.",
   "profile.email_unconfigured":
     "The confirmation could not be sent because email is not set up. After email is set up, open Your details, re-enter the new address and save.",
-  "profile.email_not_sent":
-    "The mail server refused the confirmation. Check Email settings, then open Your details, re-enter the new address and save.",
-  "profile.email_uncertain":
-    "The confirmation may not have been sent. Check your new address’s inbox first. If it does not arrive, check Email settings, then re-enter the new address in Your details and save. Only the newest code works.",
   "profile.email_admin_help":
     "Sign in as an administrator to open the inbox or change Email settings. Then sign back in to your account.",
 
@@ -1412,9 +1407,7 @@ export const en = {
   "staff.badge_password": "Password",
   "staff.badge_totp": "TOTP",
   "staff.invitation_sent":
-    "The mail server accepted the invitation email. Check the recipient’s inbox.",
-  "staff.invitation_not_sent":
-    "The account action was saved, but the invitation could not be sent. Check Email settings, then send a new invitation.",
+    "The invitation email is on its way. Check the recipient’s inbox in a few minutes.",
   "staff.data_copy_busy": "Preparing a copy of {name}'s data…",
   "staff.data_copy_not_permitted":
     "Only an administrator can download another person's data, and this account can no longer do it. Sign in as an administrator to download {name}'s data: this signs you out here first.",
@@ -5007,29 +5000,24 @@ export const es: Record<StringKey, string> = {
   "email.settings.accepted": "El servidor de correo ha aceptado la prueba. Revisa tu bandeja.",
   "email.settings.show_password": "Mostrar contraseña",
   "email.settings.hide_password": "Ocultar contraseña",
+  "account.primary_dashboard": "Abrir el panel del equipo principal",
   "profile.title": "Tu perfil",
   "profile.details": "Tus datos",
   "profile.security": "Seguridad",
   "profile.language": "Idioma",
   "profile.saved": "Se han guardado tus cambios.",
   "staff.invitation_captured":
-    "La invitación está en la bandeja de correo del servidor. Abre la bandeja de correo para leerla.",
+    "La invitación va a la bandeja de correo del servidor. Abre la bandeja de correo para leerla.",
   "staff.invitation_unconfigured":
-    "Se ha guardado la acción de cuenta, pero el correo no está configurado. Abre Correo y envía una nueva invitación.",
-  "staff.invitation_uncertain":
-    "Se ha guardado la acción de cuenta. Puede que la invitación no se haya enviado. Revisa primero la bandeja del destinatario. Si no llega, revisa Correo y envía una nueva invitación. Solo funciona el enlace más reciente.",
+    "No se ha enviado la invitación porque el correo no está configurado. Abre Correo y envía una nueva invitación.",
   "staff.invitation_throttled":
     "No ha cambiado nada ni se ha enviado otra invitación. Espera un minuto antes de volver a intentarlo.",
   "profile.email_sent":
-    "El servidor de correo ha aceptado la confirmación. Introduce el código que llegue a tu nueva dirección para confirmarla.",
+    "La confirmación está en camino. Introduce el código que llegue a tu nueva dirección para confirmarla.",
   "profile.email_captured":
-    "La confirmación está en la bandeja de correo del servidor. Solo un administrador puede leerla.",
+    "La confirmación va a la bandeja de correo del servidor. Solo un administrador puede leerla.",
   "profile.email_unconfigured":
     "No se ha podido enviar la confirmación porque el correo no está configurado. Una vez configurado, abre Tus datos, vuelve a introducir la nueva dirección y guarda.",
-  "profile.email_not_sent":
-    "El servidor de correo ha rechazado la confirmación. Revisa Correo, abre Tus datos, vuelve a introducir la nueva dirección y guarda.",
-  "profile.email_uncertain":
-    "Puede que la confirmación no se haya enviado. Revisa primero la bandeja de tu nueva dirección. Si no llega, revisa Correo y vuelve a introducir la nueva dirección en Tus datos y guarda. Solo funciona el código más reciente.",
   "profile.email_admin_help":
     "Inicia sesión como administrador para abrir la bandeja o cambiar Correo. Después, vuelve a iniciar sesión en tu cuenta.",
 
@@ -5281,9 +5269,7 @@ export const es: Record<StringKey, string> = {
   "staff.badge_password": "Contraseña",
   "staff.badge_totp": "TOTP",
   "staff.invitation_sent":
-    "El servidor de correo ha aceptado la invitación. Revisa la bandeja de entrada del destinatario.",
-  "staff.invitation_not_sent":
-    "Se ha guardado la acción de cuenta, pero no se ha podido enviar la invitación. Revisa Correo y envía una nueva invitación.",
+    "La invitación está en camino. Revisa la bandeja de entrada del destinatario en unos minutos.",
   "staff.data_copy_busy": "Preparando una copia de los datos de {name}…",
   "staff.data_copy_not_permitted":
     "Solo un administrador puede descargar los datos de otra persona, y esta cuenta ya no puede hacerlo. Inicia sesión como administrador para descargar los datos de {name}: antes se cierra tu sesión aquí.",

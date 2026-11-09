@@ -278,6 +278,7 @@ export class LoginScreen extends LitElement {
   private resetTimer?: ReturnType<typeof setInterval>;
   private passkeyAttempt = 0;
   @state() private errorKey: string | null = null;
+  @state() private primaryDashboardUrl: string | null = null;
   @state() private passkeyForgotten = false;
   /** The shown field `errorKey`'s refusal names, if any; the refusal shows under that field. */
   @state() private refusalField: string | null = null;
@@ -645,6 +646,9 @@ export class LoginScreen extends LitElement {
     } catch (error) {
       if (!this.#current(generation)) return;
       this.errorKey = codeOf(error);
+      this.primaryDashboardUrl =
+        (error as { params?: { primaryDashboardUrl?: string } }).params?.primaryDashboardUrl ??
+        null;
     } finally {
       if (this.#current(generation)) this.busy = false;
     }
@@ -728,6 +732,9 @@ export class LoginScreen extends LitElement {
     } catch (error) {
       if (!this.#current(generation)) return;
       this.errorKey = codeOf(error);
+      this.primaryDashboardUrl =
+        (error as { params?: { primaryDashboardUrl?: string } }).params?.primaryDashboardUrl ??
+        null;
     } finally {
       if (this.#current(generation)) this.busy = false;
     }
@@ -1138,6 +1145,14 @@ export class LoginScreen extends LitElement {
       <div class="other-ways">${others}</div>`;
   }
 
+  #primaryLink() {
+    return this.errorKey === "account_mail.primary_required" && this.primaryDashboardUrl
+      ? html`<a data-test="primary-dashboard-link" href=${this.primaryDashboardUrl}
+          >${t("account.primary_dashboard")}</a
+        >`
+      : nothing;
+  }
+
   #methodActions(primary: TemplateResult, message: string) {
     return html`${
       (this.step === "passkey" || this.step === "email") &&
@@ -1150,7 +1165,7 @@ export class LoginScreen extends LitElement {
             }
           </p>`
         : nothing
-    }${formMessage(message)}${primary}${this.#otherWays()}`;
+    }${formMessage(message)}${this.#primaryLink()}${primary}${this.#otherWays()}`;
   }
 
   #privacyLink() {
@@ -1226,6 +1241,7 @@ export class LoginScreen extends LitElement {
               ? html`
                   <p role="status">${t("account.validating_link")}</p>
                   ${this.actionResent ? html`<p role="status">${t("account.link_resent")}</p>` : nothing}
+                  ${this.#primaryLink()}
                   <wt-form-actions .error=${form.bottom}>
                     <wt-button
                       slot="cancel"
