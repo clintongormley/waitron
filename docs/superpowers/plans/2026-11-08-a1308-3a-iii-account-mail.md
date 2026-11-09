@@ -122,7 +122,7 @@ person's screen can no longer hear about a send that fails … `invitationSent` 
   with the same personal values asserted absent and the recovery page still showing the code.
 - `boot.box-emails.test.ts`'s "Prepare sends through the saved relay at both account boundaries"
   captures `accountMailMode` and `startMailSender`'s owners instead of `sendAccountEmail`, and asserts
-  both modes answer `smtp` and the account owner's `deliveryRule` is `"notice"`.
+  both modes answer `smtp` and the account owner's `deliveryRule` is `"notice"`; non-development Demo with a saved relay stays captured. This keeps A987's single Demo capture rule (watcher, 2026-11-09 11:44).
 - The dashboard's `not_sent` and `uncertain` status cases are deleted with those statuses;
   `account-email.test.ts`'s `AccountEmailFailure` cases are deleted with it. Its message cases and
   `i18n/account-email-output.test.ts` keep their message-object assertions: they send through
@@ -231,7 +231,7 @@ the owner holds the email-change link since 3a-ii) and gain
   managementSessionId, personId, origin: passkeySite(c).origin })` inside the transaction that
   issues today (`:1158-1163`, `:1180-1186`, `:1264-1270`, `:1285-1291`).
 - Profile: read the mode in a transaction first, then `queueEmailChange: mode !== "unconfigured"`.
-- Boot: both starts pass `accountMailMode: (tx) => resolveMailDeliveryIn(tx, ring, config, "notice").then((d) => d.mode)` to both APIs.
+- Boot: keeps A987's single Demo capture rule (watcher, 2026-11-09 11:44); both starts pass `accountMailMode: (tx) => resolveMailDeliveryIn(tx, ring, config, "notice").then((d) => d.mode)` to both APIs.
 - Repair start: when `!fencedOrMirror && holders.singletonRole.current === "primary"` (on a mirror or fenced box the read-only gate already refuses these requests), `await withTransaction(db, (tx) => abandonMailClaims(tx, [owner], now()))`, then `repairMail = startMailSender({ db, owners: [owner], now, isPrimary: () => holders.singletonRole.current === "primary", signal: repairMailController.signal, resolveDelivery, log, maxTickMs: 5_000 })` with no `bus` (this start installs no change feed, `boot.ts:2215-2217`, so the short ceiling stands in for the wake), `owner` being the same `accountActionMail(...)` the full start builds (its time zone read falls back to UTC here, as today's direct send does). Register `undoOnFailure.push(async () => { repairMailController.abort(); await repairMail; })` at once, and `stopWork` (`:2206`) aborts and awaits it.
 
 - [ ] **Step 1: Re-point the tests** as listed. In `recovery-page-personal-data.test.ts:735-835` the two refusal cases queue, then run `runMailPass` with 3a-ii's owner, the refusing relay as the saved server and the rig's `r.log`; they keep `relay.recipients` and the refusal text and assert `mail.send_failed` as listed. New: `"answers 202 and queues one reset row for a known address, and leaves no row for an unknown one"`; `"queues nothing for a known or unknown address when email is not set up"`; `"builds a remote staff request's link on the remote site"` (the row's `params.origin`); `"a reset-login press inside the cooldown queues nothing"`. In `boot.zone-admission.test.ts`, `"starts no sender on a fenced or mirror box in repair"` (control: the primary repair case starts one). The local-secondary check (Stop point 1).

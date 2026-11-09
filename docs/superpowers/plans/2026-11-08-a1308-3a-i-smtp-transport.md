@@ -217,8 +217,8 @@ only once `DATA` was accepted (`index.js:683-713`: `_setEnvelope`'s callback, th
 
 ```ts
 export type MailDeliveryRule = "notice" | "invoice";
-/** "notice": the saved server; else the practice inbox on a development or Demo box; else
- * unconfigured. "invoice": the practice inbox on a development or Demo box even when a server is
+/** "notice": on non-development Demo, the practice inbox; else the saved server; else the
+ * practice inbox in development; else unconfigured. "invoice": the practice inbox on a development or Demo box even when a server is
  * saved; else the saved server; else unconfigured. */
 export function resolveMailDeliveryIn(
   tx: Transaction, ring: KeyRing,
@@ -227,13 +227,13 @@ export function resolveMailDeliveryIn(
 ): Promise<EmailDelivery>;
 ```
 
-The two rules can disagree on "unconfigured" in one case: on a development or Demo box whose saved
+The two rules can disagree on "unconfigured" in one case: on a development box whose saved
 server has an unusable `from`, the notice rule answers `unconfigured` (`email-delivery.ts:39-46`,
 before its practice-inbox fallback) while the invoice rule answers `local_capture` (`:73-74`). That
-is today's behaviour, kept. It does not matter to the queue while no invoice is queued (3a-ii's
+keeps A987's single Demo capture rule (watcher, 2026-11-09 11:44). It does not matter to the queue while no invoice is queued (3a-ii's
 sender resolves each rule separately anyway).
 
-- [ ] **Step 1: Failing test** `"chooses the server or the practice inbox as each rule says"` — (devMode, intent, saved server?) × rule: dev + saved: notice `smtp`, invoice `local_capture`; Demo + none: both `local_capture`; Live + saved: both `smtp`; Live + none: both `unconfigured`; dev + saved server with an unusable `from`: notice `unconfigured`, invoice `local_capture`.
+- [ ] **Step 1: Failing test** `"chooses the server or the practice inbox as each rule says"` — (devMode, intent, saved server?) × rule: dev + saved: notice `smtp`, invoice `local_capture`; non-development Demo + none, saved or unusable From: both `local_capture`; Live + saved: both `smtp`; Live + none: both `unconfigured`; dev + saved server with an unusable `from`: notice `unconfigured`, invoice `local_capture`.
 - [ ] **Step 2:** FAIL. **Step 3:** implement; the two existing functions call it. **Step 4:** Finish lines 1–2 PASS. **Step 5:** commit, then `/finish-branch`.
 
 ## Backlog
