@@ -7,7 +7,7 @@ import { healthCommand, main, serverRoute } from "./ci-server-health.mjs";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 function workflowEnvironment(capacity) {
-  const step = workflow.match(/      - id: server-route\n([\s\S]*?)(?=\n      (?:- |#))/)?.[1];
+  const step = workflow.match(/ {6}- id: server-route\n([\s\S]*?)(?=\n {6}(?:- |#))/)?.[1];
   const condition = step.match(/^ {8}if: (.+)$/m)?.[1] ?? "true";
   expect(runInNewContext(condition, { vars: { DISPOSABLE_TESTS_MODE: "hosted" } })).toBe(true);
   const expression = workflow.match(/^ {10}CAPACITY: \$\{\{ (.+) \}\}$/m)?.[1];
