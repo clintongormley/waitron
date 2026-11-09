@@ -1,3 +1,4 @@
+import { VENUE_DIR_NAME } from "@waitron/store";
 // Where a one-shot operator script finds the venue it writes to. It must be the directory the server
 // on the same box opens, or the script writes into a database nobody serves, so it reads the same
 // variables through the same resolver `config.ts` uses.
@@ -20,5 +21,5 @@ export async function resolveScriptVenueDir(
   if (!isUnset(env.WAITRON_VENUE_DIR)) return resolveConfigDir(env.WAITRON_VENUE_DIR, "");
   const root = defaultStateRoot ?? (await import("../src/boot.js")).DEFAULT_STATE_ROOT;
   const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, root);
-  return resolveConfigDir(undefined, join(stateDir, "venue"));
+  return resolveConfigDir(undefined, join(stateDir, VENUE_DIR_NAME));
 }

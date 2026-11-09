@@ -1,3 +1,4 @@
+import { MODULE_OPERATION_PUBLIC_FILE } from "@waitron/store";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
@@ -82,7 +83,7 @@ function wellFormedHistoryEntry(entry: unknown): entry is PublicEvidenceFile["hi
 }
 
 export function createFirstFiscalEvidence(options: EvidenceOptions) {
-  const path = join(options.stateDir, "module-operation-public.json");
+  const path = join(options.stateDir, MODULE_OPERATION_PUBLIC_FILE);
   const grants = new Map<
     string,
     {

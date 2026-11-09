@@ -1,3 +1,4 @@
+import { REBUILD_MARKER } from "@waitron/store";
 import { access, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -27,7 +28,6 @@ import "./errors.js";
 
 /** Left in the state folder by `writeValidated` (restore.ts) whenever a restore takes on the
  * archive's identity; holds `{ version: 1, source }`. */
-export const REBUILD_MARKER = "rebuild-first-start.json";
 
 /** Which restore wrote the marker. Both get the same first start. */
 export type RebuildSource = "archive" | "stream";
@@ -239,3 +239,5 @@ export async function readBucketPointerTerm(
   if (read === TIMED_OUT) throw new AppError("restore.pointer_unreadable", {});
   return read === null ? null : read.pointer.body.term;
 }
+
+export { REBUILD_MARKER } from "@waitron/store";

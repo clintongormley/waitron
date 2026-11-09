@@ -1,3 +1,4 @@
+import { LOGS_DIR } from "@waitron/store";
 import { join } from "node:path";
 import {
   setVenueCrashReportDirectory,
@@ -24,7 +25,7 @@ export function resolveLogDir(
 ): string | undefined {
   const setting = env.WAITRON_LOG_DIR;
   if (setting !== undefined && setting !== "") return setting;
-  return stateDir === undefined ? undefined : join(stateDir, "logs");
+  return stateDir === undefined ? undefined : join(stateDir, LOGS_DIR);
 }
 
 /** The version this build reports for itself: the image's build id, then the package version. */

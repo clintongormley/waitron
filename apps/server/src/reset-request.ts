@@ -1,3 +1,5 @@
+import { MODULES_FILE, SETUP_OPERATION_FILE } from "@waitron/store";
+import { RESET_REQUEST_FILE, TRADING_ENV_FILE } from "@waitron/store";
 import { assertVenueFirstSetupAllowed } from "@waitron/provisioning";
 import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
@@ -12,7 +14,7 @@ import type { Logger } from "./logger.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 
 /** The staged reset request the next start carries out. */
-export const RESET_REQUEST_FILE = "reset-request.json";
+
 const MARKER = RESET_REQUEST_FILE;
 
 export interface StagedResetDeps {
@@ -71,7 +73,7 @@ async function holdsVenue(venueDir: string): Promise<boolean> {
 async function refusal(deps: StagedResetDeps, raw: string): Promise<string | null> {
   const operationId = stagedOperationId(raw);
   if (operationId === null) return "marker_invalid";
-  if (existsSync(join(deps.stateDir, "trading.env"))) return "trading_configured";
+  if (existsSync(join(deps.stateDir, TRADING_ENV_FILE))) return "trading_configured";
   if (!(await recordMatches(deps.stateDir, operationId))) return "operation_mismatch";
   if (await holdsVenue(deps.venueDir)) return "venue_present";
   return null;
@@ -108,8 +110,8 @@ export async function runStagedReset(
     // a join stopped before their rename leaves.
     for (const file of [
       PENDING_ADOPTION_FILE,
-      "modules.json",
-      "setup-operation.json",
+      MODULES_FILE,
+      SETUP_OPERATION_FILE,
       "tls/venue-ca.crt",
       "tls/venue-ca.key",
       stagedPath("tls/venue-ca.crt"),
@@ -125,3 +127,5 @@ export async function runStagedReset(
     hold.release();
   }
 }
+
+export { RESET_REQUEST_FILE } from "@waitron/store";

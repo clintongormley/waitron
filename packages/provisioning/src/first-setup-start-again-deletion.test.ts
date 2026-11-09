@@ -5,11 +5,8 @@ import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
 import { lockVenueDatabase } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
-import {
-  BACKUP_ROOM_NOTE_FILE,
-  BACKUP_ROOM_START_DELETED_FILE,
-  backupRoomNoteTemporaryName,
-} from "./spare-space-name.js";
+import { BACKUP_ROOM_NOTE_FILE, BACKUP_ROOM_START_DELETED_FILE } from "@waitron/store";
+import { backupRoomNoteTemporaryName } from "./backup-room-note-file.js";
 import {
   START_AGAIN_MARKER_FILE,
   assertStartAgainAllowedOnDisk,

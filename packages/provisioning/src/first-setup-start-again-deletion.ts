@@ -1,3 +1,15 @@
+import {
+  FIRST_SETUP_FILE,
+  FIRST_SETUP_NODE_KEY_FILE,
+  MODULES_FILE,
+  MODULE_OPERATION_PUBLIC_FILE,
+  MODULE_PREPARATION_STATE_FILE,
+  RESET_REQUEST_FILE,
+  RESTORE_REQUEST_FILE,
+  SETUP_OPERATION_FILE,
+  TRADING_ENV_FILE,
+} from "@waitron/store";
+import { FIRST_FISCAL_DOCUMENTS_DIR } from "@waitron/store";
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -24,7 +36,7 @@ import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { removeAndSync } from "./folder-sync.js";
 import { openImmutableWhenWalEmpty } from "./read-only-database.js";
 import { quoteIdent } from "./identifiers.js";
-import { BACKUP_ROOM_NOTE_FILE } from "./spare-space-name.js";
+import { BACKUP_ROOM_NOTE_FILE } from "@waitron/store";
 import "./errors.js";
 
 export const START_AGAIN_MARKER_FILE = "first-setup-deleting.json";
@@ -38,7 +50,7 @@ const LEGACY = [
   "first-setup-retirement.json",
   "first-setup-workspace.json",
 ] as const;
-const DOCUMENTS = "first-fiscal-documents";
+const DOCUMENTS = FIRST_FISCAL_DOCUMENTS_DIR;
 const STEP = /^step-\d{6}$/;
 const WAL_FILES = ["venue.db-wal", "node.db-wal"] as const;
 // A journal left beside a later database would be rolled into it on its first read-write open.
@@ -52,11 +64,11 @@ const SIDE_FILES = [
 ] as const;
 const REFUSED = {
   state: [
-    "trading.env",
-    "setup-operation.json",
-    "restore-request.json",
-    "reset-request.json",
-    "modules.json",
+    TRADING_ENV_FILE,
+    SETUP_OPERATION_FILE,
+    RESTORE_REQUEST_FILE,
+    RESET_REQUEST_FILE,
+    MODULES_FILE,
     "cloud-replacement.json",
     "first-setup-workspaces",
     "first-setup-selection.json",
@@ -133,11 +145,11 @@ function listed(root: Root, name: string): boolean {
     return parts.length === 1 && ["venue.db", "node.db", "first-setup-claim.json"].includes(name);
   if (parts.length === 1)
     return [
-      "module-preparation-state.json",
-      "first-setup-node-key.json",
-      "module-operation-public.json",
+      MODULE_PREPARATION_STATE_FILE,
+      FIRST_SETUP_NODE_KEY_FILE,
+      MODULE_OPERATION_PUBLIC_FILE,
       ...HELD_ONLY,
-      "first-setup.json",
+      FIRST_SETUP_FILE,
     ].includes(name);
   if (parts[0] === DOCUMENTS) return parts.length === 2;
   return (

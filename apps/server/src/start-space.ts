@@ -1,3 +1,4 @@
+import { BACKUP_STAGING_DIR } from "@waitron/store";
 import { lstat, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { LOG_FILE_NAME, isVenueHolderFresh, type VenueHolder, type VenueLock } from "@waitron/db";
@@ -10,7 +11,6 @@ import { RESTORE_STAGING_DIR, restoreLeftovers } from "./restore-staging-dirs.js
 
 export const START_FREE_SPACE_FLOOR = 256 * 1024 * 1024;
 export const CRASH_REPORT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
-export const BACKUP_STAGING_DIR = "backup-staging";
 
 export const ROTATED_LOG = new RegExp(`^${LOG_FILE_NAME.replaceAll(".", "\\.")}\\.(\\d+)$`);
 export const CRASH_REPORT = /^holder-frozen-.*\.json$/;
@@ -191,3 +191,5 @@ async function entries(
     return null;
   }
 }
+
+export { BACKUP_STAGING_DIR } from "@waitron/store";

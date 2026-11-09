@@ -1,3 +1,4 @@
+import { HANDOVER_DIR } from "@waitron/store";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
@@ -139,7 +140,7 @@ export async function* destinationOperationFolders(
   deps: HandoverStoreDeps,
   stateDir: string,
 ): AsyncGenerator<HandoverOperation> {
-  const names = await readdir(join(stateDir, "handover")).catch(() => []);
+  const names = await readdir(join(stateDir, HANDOVER_DIR)).catch(() => []);
   for (const name of names) {
     const row = await readHandoverOperation(deps.node, deps.nodeId, name);
     if (row?.role === "destination") yield row;

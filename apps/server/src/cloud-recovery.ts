@@ -1,3 +1,4 @@
+import { RESTORE_REQUEST_FILE } from "@waitron/store";
 import {
   createHash,
   createPrivateKey,
@@ -185,7 +186,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     const state = await read();
     if (state?.phase === "staged") {
       try {
-        await lstat(join(options.stateDir, "restore-request.json"));
+        await lstat(join(options.stateDir, RESTORE_REQUEST_FILE));
       } catch (error) {
         if (!record(error) || error.code !== "ENOENT") return unavailable();
         // A failed cold restore removes its marker. Keep the approved identity for a retry.

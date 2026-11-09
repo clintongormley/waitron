@@ -1,3 +1,4 @@
+import { HANDOVER_DIR } from "@waitron/store";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
@@ -85,7 +86,7 @@ const ACCEPTANCE_LIMIT_MS = 30_000;
 const MAX_RELINQUISHMENT_BYTES = 64 * 1024;
 
 export function receivedCopyPath(stateDir: string, operationId: string): string {
-  return join(stateDir, "handover", operationId, "received.db");
+  return join(stateDir, HANDOVER_DIR, operationId, "received.db");
 }
 
 export interface DestinationDutyDeps {

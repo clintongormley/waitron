@@ -1,3 +1,4 @@
+import { FIRST_FISCAL_DOCUMENTS_DIR } from "@waitron/store";
 import { isDeepStrictEqual as equal } from "node:util";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
@@ -190,7 +191,7 @@ export function readFirstSetupRecoveryDeliverySnapshot(
 export function createFirstSetupRecoveryDelivery(options: Options) {
   const grants = new Map<string, { manifest: Manifest; expires: number }>();
   const path = (module: string) =>
-    join(options.stateDir, "first-fiscal-documents", `${module}.recovery.json`);
+    join(options.stateDir, FIRST_FISCAL_DOCUMENTS_DIR, `${module}.recovery.json`);
   const inside = <T>(
     hold: FirstSetupHold | undefined,
     run: (held: FirstSetupHold) => Promise<T>,

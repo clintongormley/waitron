@@ -1,3 +1,9 @@
+import {
+  FIRST_FISCAL_DOCUMENTS_DIR,
+  FIRST_SETUP_NODE_KEY_FILE,
+  MODULE_OPERATION_PUBLIC_FILE,
+} from "@waitron/store";
+import { FIRST_SETUP_FILE } from "@waitron/store";
 import { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { lstat, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -129,11 +135,11 @@ export interface FirstSetupRepair {
   repairMarker: "active" | "abandoned" | null;
 }
 export const FIRST_SETUP_HOST_FILES = [
-  "first-setup.json",
+  FIRST_SETUP_FILE,
   "first-setup-claim.json",
-  "module-operation-public.json",
-  "first-setup-node-key.json",
-  "first-fiscal-documents",
+  MODULE_OPERATION_PUBLIC_FILE,
+  FIRST_SETUP_NODE_KEY_FILE,
+  FIRST_FISCAL_DOCUMENTS_DIR,
   "first-setup-resolutions",
   "first-setup-workspaces",
   "first-setup-selection.json",
@@ -399,7 +405,7 @@ export async function readFirstSetupRecord(
   venueDir: string,
   stateDir: string,
 ): Promise<FirstSetupState | null> {
-  const value = await readDurableHostJson(join(stateDir, "first-setup.json"), STATE_LIMIT);
+  const value = await readDurableHostJson(join(stateDir, FIRST_SETUP_FILE), STATE_LIMIT);
   return value === null ? null : parseState(value, venueDir, stateDir);
 }
 
@@ -465,7 +471,7 @@ async function readPair(
   if (value === null) {
     if (
       expectedStateDir !== undefined &&
-      (await readDurableHostJson(join(expectedStateDir, "first-setup.json"), STATE_LIMIT)) !== null
+      (await readDurableHostJson(join(expectedStateDir, FIRST_SETUP_FILE), STATE_LIMIT)) !== null
     )
       invalid();
     return null;
@@ -483,7 +489,7 @@ async function readPair(
     invalid();
   if (expectedStateDir !== undefined && value.stateDir !== expectedStateDir) conflict();
   const state = parseState(
-    await readDurableHostJson(join(value.stateDir, "first-setup.json"), STATE_LIMIT),
+    await readDurableHostJson(join(value.stateDir, FIRST_SETUP_FILE), STATE_LIMIT),
     venueDir,
     value.stateDir,
   );
@@ -540,14 +546,14 @@ export function createFirstSetupStore(options: {
 }): FirstSetupStore {
   let venueDir = resolve(options.venueDir);
   let stateDir = resolve(options.stateDir);
-  let statePath = join(stateDir, "first-setup.json");
+  let statePath = join(stateDir, FIRST_SETUP_FILE);
   let markerPath = join(venueDir, "first-setup-claim.json");
   let roots: Promise<void> | undefined;
   const bindRoots = async () => {
     await (roots ??= (async () => {
       venueDir = await canonicalDirectory(options.venueDir);
       stateDir = await canonicalDirectory(options.stateDir);
-      statePath = join(stateDir, "first-setup.json");
+      statePath = join(stateDir, FIRST_SETUP_FILE);
       markerPath = join(venueDir, "first-setup-claim.json");
     })());
   };

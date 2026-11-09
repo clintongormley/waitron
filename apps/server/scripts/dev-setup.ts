@@ -1,3 +1,4 @@
+import { VENUE_DIR_NAME } from "@waitron/store";
 import { DEMO_DEVELOPER_PRESETS, DEFAULT_DEMO_DEVELOPER_PRESET } from "@waitron/country-packs/demo";
 // Idempotent local-dev bootstrap: provision ONE preproduction venue into a local venue directory and
 // write its identity to `apps/server/.env`. Run from the repo root via `pnpm dev:setup`; never
@@ -46,7 +47,7 @@ export { parseEnvFile };
  * venue is stood up somewhere the server never opens.
  */
 export function defaultDevVenueDir(stateDir: string): string {
-  return join(stateDir, "venue");
+  return join(stateDir, VENUE_DIR_NAME);
 }
 
 /** Named once so the venue plan and the fiscal-slot `modules.json` select the same regime, and boot

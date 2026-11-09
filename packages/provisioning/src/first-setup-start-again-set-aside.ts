@@ -1,3 +1,4 @@
+import { SECRETS_ENV_FILE } from "@waitron/store";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import { basename, dirname, join, relative, sep } from "node:path";
@@ -13,7 +14,7 @@ import { readStartAgainMarker } from "./first-setup-start-again-deletion.js";
 import type { StartAgainUnit } from "./first-setup-start-again-leftovers.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
 import { syncFolder } from "./folder-sync.js";
-import { BACKUP_ROOM_NOTE_FILE } from "./spare-space-name.js";
+import { BACKUP_ROOM_NOTE_FILE } from "@waitron/store";
 import "./errors.js";
 
 export interface SetAsideIo {
@@ -39,7 +40,7 @@ const PROBE = ".first-setup-set-aside-probe-";
 const LEFTOVER_PROBE =
   /^\.first-setup-set-aside-probe-\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MODE = 0o700;
-const RING = "secrets.env";
+const RING = SECRETS_ENV_FILE;
 const RING_TEMP = ".secrets.env.set-aside-";
 const LEFTOVER_RING_TEMP =
   /^\.secrets\.env\.set-aside-\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

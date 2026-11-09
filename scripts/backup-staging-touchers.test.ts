@@ -17,6 +17,7 @@ const ALLOWED = [
   "apps/server/src/backup-supervisor.ts",
   "apps/server/src/free-space-now.ts",
   "apps/server/src/start-space.ts",
+  "packages/store/src/state-layout.ts",
 ];
 
 function sourceFilesIn(dir: string): string[] {

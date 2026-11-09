@@ -1,3 +1,4 @@
+import { PENDING_ADOPTION_FILE } from "@waitron/store";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "@waitron/db";
@@ -12,9 +13,6 @@ import {
 } from "./reserved-identity.js";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import type { Logger } from "./logger.js";
-
-/** The file under `<stateDir>` a mirror writes at adopt and clears once its identity is established. */
-export const PENDING_ADOPTION_FILE = "pending-adoption.json";
 
 export function assertAdoptionModules(modules: readonly WaitronModule[]): void {
   for (const module of modules) {
@@ -102,3 +100,5 @@ export async function runFinishAdoption(deps: {
     deps.log("error", "adoption.establish_failed", { code: codeOf(error) });
   }
 }
+
+export { PENDING_ADOPTION_FILE } from "@waitron/store";

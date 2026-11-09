@@ -26,7 +26,7 @@ import {
 import { finishStartAgainDeletion } from "./first-setup-start-again-deletion.js";
 import { surveyStartAgainLeftovers } from "./first-setup-start-again-leftovers.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
-import { BACKUP_ROOM_NOTE_FILE } from "./spare-space-name.js";
+import { BACKUP_ROOM_NOTE_FILE } from "@waitron/store";
 import {
   moveStartAgainUnits,
   prepareSetAside,

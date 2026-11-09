@@ -202,9 +202,8 @@ export {
   BACKUP_ROOM_START_DELETED_FILE,
   SPARE_SPACE_FILE,
   SPARE_SPACE_RELEASED_FILE,
-  backupRoomNoteTemporaryName,
-  isBackupRoomFileName,
-} from "./spare-space-name.js";
+} from "@waitron/store";
+export { backupRoomNoteTemporaryName, isBackupRoomFileName } from "./backup-room-note-file.js";
 export { deleteBackupRoomNote } from "./backup-room-note-file.js";
 export {
   START_AGAIN_CHOICES_DIR,

@@ -1,3 +1,4 @@
+import { VENUE_DIR_NAME } from "@waitron/store";
 import { join } from "node:path";
 import { rm } from "node:fs/promises";
 import {
@@ -77,7 +78,7 @@ export async function runRejoin(deps: {
   }
 
   const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
-  const venueDir = resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
+  const venueDir = resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, VENUE_DIR_NAME));
   const log = createLogger(
     (line) => deps.out(line.trimEnd()),
     () => new Date(),

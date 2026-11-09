@@ -1,3 +1,4 @@
+import { MODULE_EVIDENCE_DIR } from "@waitron/store";
 import { join } from "node:path";
 import {
   readDurableHostJson,
@@ -24,7 +25,7 @@ export async function readRecoveryDocumentEvidence(
     if (![module.name, source.source].every((name) => /^[a-z][a-z0-9-]*$/.test(name)))
       throw new AppError("recovery.pack_invalid", { reason: "module_unsupported" });
     const value = await readDurableHostJson(
-      join(currentStateDir, "module-evidence", module.name, `${source.source}.json`),
+      join(currentStateDir, MODULE_EVIDENCE_DIR, module.name, `${source.source}.json`),
       1024 * 1024,
     );
     const retained = value === null ? [] : [value];

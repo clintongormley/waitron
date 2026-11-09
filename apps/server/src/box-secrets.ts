@@ -1,3 +1,4 @@
+import { SECRETS_ENV_FILE, TLS_DIR } from "@waitron/store";
 import {
   access,
   chmod,
@@ -44,16 +45,16 @@ export interface BoxTlsFiles {
 
 /** The box CA certificate's path, shared by its writer and every reader so none re-derives it. */
 export function caCertPath(stateDir: string): string {
-  return join(stateDir, "tls", "ca.crt");
+  return join(stateDir, TLS_DIR, "ca.crt");
 }
 
 /** The box CA private key's path, beside {@link caCertPath}. */
 export function caKeyPath(stateDir: string): string {
-  return join(stateDir, "tls", "ca.key");
+  return join(stateDir, TLS_DIR, "ca.key");
 }
 
 function boxTlsPaths(stateDir: string) {
-  const tlsDir = join(stateDir, "tls");
+  const tlsDir = join(stateDir, TLS_DIR);
   return {
     tlsDir,
     certFile: join(tlsDir, "server.crt"),
@@ -75,7 +76,7 @@ export interface EncodedKeyRing {
  */
 export async function writeCredentialsRing(stateDir: string, ring: EncodedKeyRing): Promise<void> {
   // Durable: node.db's commit is, and a key it holds sealed under this ring opens only with it.
-  await writeFileDurable(join(stateDir, "secrets.env"), formatEnvFile(keyRingEnv(ring)), 0o600);
+  await writeFileDurable(join(stateDir, SECRETS_ENV_FILE), formatEnvFile(keyRingEnv(ring)), 0o600);
 }
 
 /** The ring's variables, as `loadKeyRing` reads them; the previous pair only when it has one. */
@@ -99,7 +100,7 @@ export async function writeVenueAuthority(
   stateDir: string,
   authority: { certPem: string; keyPem: string },
 ): Promise<void> {
-  const tlsDir = join(stateDir, "tls");
+  const tlsDir = join(stateDir, TLS_DIR);
   await mkdirDurable(tlsDir, 0o700);
   await writeFileDurable(join(tlsDir, "venue-ca.crt"), authority.certPem, 0o600);
   await writeFileDurable(join(tlsDir, "venue-ca.key"), authority.keyPem, 0o600);
@@ -205,7 +206,7 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
       files.certFile,
       `${files.certFile}.previous`,
       join(files.tlsDir, "repair-archive"),
-      join(deps.stateDir, "secrets.env"),
+      join(deps.stateDir, SECRETS_ENV_FILE),
     ]) {
       if (await exists(path)) throw new AppError("setup.not_ready", {});
     }
@@ -220,7 +221,7 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
     await writeFileDurable(files.keyFile, m.serverKeyPem, 0o600);
   }
 
-  const secretsFile = join(deps.stateDir, "secrets.env");
+  const secretsFile = join(deps.stateDir, SECRETS_ENV_FILE);
   if (!(await exists(secretsFile))) {
     const ring = makeKeyRing();
     const body = formatEnvFile({
@@ -307,7 +308,7 @@ async function reissueBoxLeafLocked(deps: {
 async function assertNoPendingTlsRepair(stateDir: string): Promise<void> {
   let tlsDir: string;
   try {
-    tlsDir = await realpath(join(stateDir, "tls"));
+    tlsDir = await realpath(join(stateDir, TLS_DIR));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
     throw error;

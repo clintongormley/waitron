@@ -1,3 +1,4 @@
+import { MODULES_FILE } from "@waitron/store";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
@@ -12,7 +13,7 @@ import { writeFileAtomic } from "./fs-atomic.js";
 export async function readModuleConfig(stateDir: string): Promise<ModuleConfig> {
   let text: string;
   try {
-    text = await readFile(join(stateDir, "modules.json"), "utf8");
+    text = await readFile(join(stateDir, MODULES_FILE), "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return parseModuleConfig({}, ALL_MODULES); // no file → all enabled
@@ -31,7 +32,7 @@ export async function readModuleConfig(stateDir: string): Promise<ModuleConfig> 
 /** Write `<stateDir>/modules.json` from a validated ModuleConfig, atomically. Returns the path. */
 export async function writeModuleConfig(stateDir: string, config: ModuleConfig): Promise<string> {
   const body = JSON.stringify({ modules: serializeModuleConfig(config) }, null, 2) + "\n";
-  const path = join(stateDir, "modules.json");
+  const path = join(stateDir, MODULES_FILE);
   await writeFileAtomic(path, body, 0o600);
   return path;
 }

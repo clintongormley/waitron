@@ -1,3 +1,4 @@
+import { STREAM_DIR } from "@waitron/store";
 import { isDeepStrictEqual } from "node:util";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -280,7 +281,7 @@ export class StreamHost {
       const supervisor = new StreamSupervisor({
         litestreamBin: this.#deps.litestreamBin,
         venueDbPath,
-        configDir: join(this.#deps.stateDir, "stream"),
+        configDir: join(this.#deps.stateDir, STREAM_DIR),
         bucket: settings.bucket,
         streamKey: deriveStreamKey(recoveryKey, settings.venueId),
         venueId: settings.venueId,

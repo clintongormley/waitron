@@ -1,3 +1,4 @@
+import { MODULES_FILE, SECRETS_ENV_FILE, TRADING_ENV_FILE } from "@waitron/store";
 import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -124,7 +125,9 @@ export function createFirstSetupCommandDeployment(options: {
       );
       let storedEnvironment: Record<string, string | undefined> = {};
       try {
-        storedEnvironment = parseEnv(await readFile(join(state.stateDir, "secrets.env"), "utf8"));
+        storedEnvironment = parseEnv(
+          await readFile(join(state.stateDir, SECRETS_ENV_FILE), "utf8"),
+        );
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
@@ -154,7 +157,7 @@ export function createFirstSetupCommandDeployment(options: {
           clearConfiguration: () => clearStagedConfigurationImport(state.stateDir),
           publishSelection: async () => {
             await writeFileAtomic(
-              join(state.stateDir, "modules.json"),
+              join(state.stateDir, MODULES_FILE),
               JSON.stringify({ modules: serializeModuleConfig(config) }, null, 2) + "\n",
               0o600,
             );
@@ -218,7 +221,7 @@ export function createFirstSetupCommandDeployment(options: {
               WAITRON_ACCOUNT_KEY: accountKey,
             };
             await writeFileAtomic(
-              join(current.stateDir, "trading.env"),
+              join(current.stateDir, TRADING_ENV_FILE),
               Object.entries(entries)
                 .map(([name, value]) => `${name}=${value}\n`)
                 .join(""),

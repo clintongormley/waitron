@@ -1,3 +1,4 @@
+import { CLOUD_SNAPSHOTS_DIR } from "@waitron/store";
 import { constants } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { chmod, lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
@@ -138,7 +139,7 @@ const pendingExpired = (p: { createdAt: number }, t: number) => {
   return age >= 86400000 || age < -86400000;
 };
 export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
-  const dir = join(deps.stateDir, "cloud-snapshots"),
+  const dir = join(deps.stateDir, CLOUD_SNAPSHOTS_DIR),
     file = join(dir, "archive.enc");
   const now = deps.now ?? (() => new Date());
   let running = false;

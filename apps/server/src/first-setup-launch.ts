@@ -1,3 +1,4 @@
+import { VENUE_DIR_NAME } from "@waitron/store";
 import { Hono } from "hono";
 import { resolveLogDir } from "@waitron/db";
 import { join } from "node:path";
@@ -41,7 +42,7 @@ export async function startServerOrFirstSetupResolution(
   failedLater: Promise<never>;
 }> {
   const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
-  const venueDir = resolveConfigDir(env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
+  const venueDir = resolveConfigDir(env.WAITRON_VENUE_DIR, join(stateDir, VENUE_DIR_NAME));
   const log = createLogger(
     (line) => process.stdout.write(line),
     () => new Date(),

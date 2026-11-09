@@ -1,4 +1,14 @@
 import {
+  RESTORE_REQUEST_ARTIFACT,
+  RESTORE_REQUEST_DB,
+  RESTORE_REQUEST_ENTRIES,
+  RESTORE_REQUEST_FILE,
+  RESTORE_REQUEST_KEY,
+  RESTORE_REQUEST_NODE_KEY,
+  RESTORE_REQUEST_PLACEMENT,
+  SETUP_OPERATION_FILE,
+} from "@waitron/store";
+import {
   assertNoStartAgainDeletion,
   assertNotAhead,
   assertVenueFirstSetupAllowed,
@@ -75,16 +85,14 @@ import {
   type RecoveryEntryContext,
 } from "./recovery-entry.js";
 
-const ARTIFACT = "restore-request.artifact";
-const KEY = "restore-request.key";
-const STREAM_DB = "restore-request.db";
-const STREAM_ENTRIES = "restore-request.entries";
-const STREAM_PLACEMENT = "restore-request.placement.db";
-/** The staged restore request the next start carries out. */
-export const RESTORE_REQUEST_FILE = "restore-request.json";
+const ARTIFACT = RESTORE_REQUEST_ARTIFACT;
+const KEY = RESTORE_REQUEST_KEY;
+const STREAM_DB = RESTORE_REQUEST_DB;
+const STREAM_ENTRIES = RESTORE_REQUEST_ENTRIES;
+const STREAM_PLACEMENT = RESTORE_REQUEST_PLACEMENT;
 const MARKER = RESTORE_REQUEST_FILE;
-const SETUP_OPERATION = "setup-operation.json";
-const NODE_KEY = "restore-request.node-key";
+const SETUP_OPERATION = SETUP_OPERATION_FILE;
+const NODE_KEY = RESTORE_REQUEST_NODE_KEY;
 const MAX_NODE_KEY_BYTES = 4096;
 
 async function flushPath(path: string): Promise<void> {
@@ -705,3 +713,5 @@ async function runHeld(
   await clearStagedRestore(deps.stateDir);
   return true;
 }
+
+export { RESTORE_REQUEST_FILE } from "@waitron/store";

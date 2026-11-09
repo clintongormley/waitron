@@ -1,3 +1,4 @@
+import { TLS_DIR } from "@waitron/store";
 import { X509Certificate, createPrivateKey, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -39,7 +40,7 @@ interface Pending {
 const limit = 131072;
 const refused = () => new AppError("setup.not_ready", {});
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
-const tlsDir = (deps: BoxTlsRepairDeps) => join(deps.stateDir, "tls");
+const tlsDir = (deps: BoxTlsRepairDeps) => join(deps.stateDir, TLS_DIR);
 const pendingPath = (deps: BoxTlsRepairDeps) => join(tlsDir(deps), "repair-pending.json");
 function addresses(deps: BoxTlsRepairDeps) {
   return [...new Set(["127.0.0.1", ...deps.listIpv4()])].filter(isPermittedLeafIpv4);
@@ -111,7 +112,7 @@ async function readServedCa(
   stateDir: string,
   now: Date,
 ): Promise<{ ca: X509Certificate; pem: string } | null> {
-  const pem = await fs.readFile(join(stateDir, "tls", "ca.crt"), "utf8");
+  const pem = await fs.readFile(join(stateDir, TLS_DIR, "ca.crt"), "utf8");
   const ca = caPublic(Buffer.from(pem), now);
   return ca === null ? null : { ca, pem };
 }

@@ -1,3 +1,4 @@
+import { FISCAL_READINESS_FILE } from "@waitron/store";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -5,7 +6,7 @@ import { AppError } from "@waitron/shared";
 import { writeFileAtomic } from "./fs-atomic.js";
 import "./errors.js";
 
-const EVIDENCE_FILE = "fiscal-readiness.json";
+const EVIDENCE_FILE = FISCAL_READINESS_FILE;
 
 export interface FiscalReadinessInput {
   requirement: "accepted-test-submission" | "not-applicable";

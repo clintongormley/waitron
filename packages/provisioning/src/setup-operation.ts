@@ -1,3 +1,4 @@
+import { SETUP_OPERATION_FILE, SETUP_OPERATION_LOCK_FILE } from "@waitron/store";
 import type { FirstSetupCoordinator, FirstSetupHold } from "./first-setup-state.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, unlink } from "node:fs/promises";
@@ -84,8 +85,8 @@ export function createSetupOperationStore(
   ownerId: string = randomUUID(),
   options: { coordinator?: FirstSetupCoordinator; guard?: () => Promise<void> } = {},
 ): SetupOperationStore {
-  const statePath = join(stateDir, "setup-operation.json");
-  const lockPath = join(stateDir, "setup-operation.lock");
+  const statePath = join(stateDir, SETUP_OPERATION_FILE);
+  const lockPath = join(stateDir, SETUP_OPERATION_LOCK_FILE);
   let active = false;
 
   const read = async (): Promise<SetupOperationState | null> => {

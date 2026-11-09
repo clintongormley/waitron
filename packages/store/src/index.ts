@@ -327,3 +327,4 @@ export {
 } from "./verification-venue-copy.js";
 
 export * from "./state-layout.js";
+export { SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE } from "./state-layout.js";

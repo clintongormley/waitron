@@ -1,3 +1,4 @@
+import { FIRST_SETUP_NODE_KEY_FILE } from "@waitron/store";
 import "./errors.js";
 import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -69,7 +70,7 @@ export function readFirstSetupStagedKey(value: unknown, state: FirstSetupState):
   return Object.freeze({ ...v }) as unknown as StagedNodeKey;
 }
 export function createFirstSetupNodeKeys(options: Options) {
-  const path = join(options.stateDir, "first-setup-node-key.json");
+  const path = join(options.stateDir, FIRST_SETUP_NODE_KEY_FILE);
   let transient:
     | {
         stage: StagedNodeKey;

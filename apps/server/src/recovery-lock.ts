@@ -1,3 +1,4 @@
+import { RECOVERY_LOCK_FILE } from "@waitron/store";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { isLocked } from "@waitron/db";
@@ -6,7 +7,6 @@ import { isLocked } from "@waitron/db";
  * Serialises every change to `recovery.json` across processes. Never unlink it: a process opening
  * the path after an unlink locks a fresh file beside a holder that still has the old one.
  */
-export const RECOVERY_LOCK_FILE = "recovery.lock";
 
 export const RECOVERY_LOCK_WAIT_MS = 10_000;
 
@@ -41,3 +41,5 @@ export async function withRecoveryLock<T>(
     connection.close();
   }
 }
+
+export { RECOVERY_LOCK_FILE } from "@waitron/store";

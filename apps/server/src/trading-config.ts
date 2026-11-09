@@ -1,3 +1,4 @@
+import { TRADING_ENV_FILE } from "@waitron/store";
 import { join } from "node:path";
 import { rm } from "node:fs/promises";
 import { writeFileAtomic } from "./fs-atomic.js";
@@ -28,7 +29,7 @@ export interface TradingConfig {
 
 /** Atomically write `<stateDir>/trading.env` (0600). Returns the path written. */
 export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Promise<string> {
-  const path = join(stateDir, "trading.env");
+  const path = join(stateDir, TRADING_ENV_FILE);
   const body = formatEnvFile({
     WAITRON_NODE_ID: cfg.nodeId,
     WAITRON_ENV: cfg.developmentMode === true ? "dev" : cfg.environment,
@@ -43,5 +44,5 @@ export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Pro
 
 /** Remove `<stateDir>/trading.env` so the next boot comes up in SETUP mode. */
 export async function clearTradingEnv(stateDir: string): Promise<void> {
-  await rm(join(stateDir, "trading.env"), { force: true });
+  await rm(join(stateDir, TRADING_ENV_FILE), { force: true });
 }

@@ -1,3 +1,4 @@
+import { HANDOVER_DIR } from "@waitron/store";
 import { rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { KeyRing } from "@waitron/credentials";
@@ -37,7 +38,7 @@ export interface AcceptanceDeps {
 }
 
 export function acceptedCopyPath(stateDir: string, operationId: string): string {
-  return join(stateDir, "handover", operationId, "accepted.db");
+  return join(stateDir, HANDOVER_DIR, operationId, "accepted.db");
 }
 
 /**
