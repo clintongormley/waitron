@@ -1229,7 +1229,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **Waitron carries two QR encoders; consolidate on `qrcode-generator`** — Small.
   [Detail](backlog/printers.md#waitron-carries-two-qr-encoders-consolidate-on-qrcode-generator)
 
-- **Printers screen leftovers, inside A405's remaining pull requests** (bundle of 6, 1 important, size S). [Detail](backlog/printers.md#bundle-printers-screen-leftovers-inside-a405s-remaining-pull-requests)
+- **Printers screen leftovers** (bundle of 6, 1 important, size S). [Detail](backlog/printers.md#bundle-printers-screen-leftovers)
 
 - **Since W72c an imported print agent arrives with no node; the importing box's own agent still
   enrols as a new row beside it**, as it did before (read, not run). Left open by W72c (#1237).
@@ -1239,9 +1239,12 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
   Finished jobs are to be kept one month (owner, 2026-10-14). [Detail](backlog/printers.md#the-virtual-pdf-printer)
 
-- **A405 — printer details and the print queue (owner, 2026-10-08; open; lane B: PR 1, details in a
-  window, landed #2492; PR 2, Used by, landed #2511; PR 3, one table, landed #2661; PR 4 to come).**
-  [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue)
+- **Reprint kitchen tickets and other printouts laid out again for any printer (left by A405
+  point 4)** — needs a `print_jobs` column.
+  [Detail](backlog/printers.md#reprint-kitchen-tickets-and-other-printouts-laid-out-again-for-any-printer)
+
+- **Deleting an A4 printer (left by A405 point 6)** — needs a soft-delete column.
+  [Detail](backlog/printers.md#deleting-an-a4-printer)
 
 - **A Used by link to a prep station opens the Stations tab, not the station (left open by A405).**
   [Detail](backlog/printers.md#a-used-by-link-to-a-prep-station-opens-the-stations-tab-not-the-station)

@@ -319,43 +319,26 @@ checked on the box).
   Whether a future replication drain can carry the audit row to a node without its print job is
   unverified and needs a test when that drain is built.
 
-## A405 — printer details and the print queue
+## Reprint kitchen tickets and other printouts laid out again for any printer
 
-- **A405 — printer details and the print queue (owner, 2026-10-08; open; lane B: PR 1, details in a window, landed #2492; PR 2, Used by, landed #2511; PR 3, one table, landed #2661; PR 4 to come).** A modal means the printer page is no longer a sub-page, so the owner
-  dropped lane B's A398 redraw of the printer page's heading (2026-10-08).
-  3. **No way to pair a Bluetooth printer again after Unpair.** A succeeded Unpair switches the
-     printer off (C109, #960). Add restores its existing registration and settings. Offer
-     "Pair again" (or similar) directly on the same printer record.
-  4. **Reprint on the print queue lets the person choose a different printer**, for when the
-     original is out of service. Offer active printers, the original chosen by default. Drawer jobs
-     stay unresendable (CLAUDE.md §5).
-     **Every job is laid out again for the printer chosen (owner, 2026-10-14)** — kitchen tickets
-     as much as receipts, since a jammed kitchen printer is when this matters most. Today a job
-     stores only its finished ESC/POS bytes, and Reprint copies them to the same printer
-     (`resendPrintJob`, `packages/printing/src/outbox.ts`); those bytes come out wrong on a printer
-     of another paper width. So every job also keeps the input it was built from, and Reprint
-     builds it again for the chosen printer with the same builder: `formatReceipt` for receipts
-     and full invoices, `formatKitchenTicket` and `formatCorrectionSlip` (`kitchen-print.ts`),
-     `formatPaymentSlip`, and `formatCategorySalesPage` (`report-api.ts`). Rebuilding a kitchen
-     ticket from the order instead is not the same thing: `kitchen_print_job_lines` records which
-     order lines a ticket carried, by id, not what they said when it printed, so a line changed or
-     split since could print differently. Test and calibration pages reprint only on their own
-     printer.
-     A job printed before the change has bytes alone and is offered only printers of the same
-     paper width (no migration: CLAUDE.md §3). Open: receipts and invoices already have an A4 page
-     (`apps/server/src/invoice-page.ts`); a kitchen ticket, payment slip or report sent to an A4
-     printer needs one too, or the A4 printers are left out for those kinds — settle which and say
-     so on the screen.
-     **Keeping the stored input cheap to support (owner, 2026-10-14).** A stored input is a format
-     that must stay readable for as long as the job is kept (one month: the retention entry under
-     "The virtual PDF printer"). Two rules keep that cost small. (a) Every builder produces one
-     shared, printer-independent document — a list of text lines, two-column rows, rules, QR codes
-     and logos — and only that is stored; receipts already work this way (`buildReceiptDocument`
-     in `apps/server/src/receipt-document.ts`, laid out by `formatReceipt`). One small format
-     changes far less often than five builders' inputs. (b) The stored document carries a version
-     number. A job whose version the running code cannot read falls back to today's behaviour
-     (its own printer, or one of the same paper width), so an upgrade never needs conversion code
-     and can only narrow the printers offered for older jobs.
+- **Reprint kitchen tickets and other printouts laid out again for any printer (left by A405
+  point 4).** Receipts and full invoices are laid out again from the sale. Every other job keeps
+  only its finished bytes, so Reprint copies them: kitchen tickets and refund receipts to an
+  active receipt printer at least as wide, centred; everything else to its own printer only.
+  Laying them out again needs each job to keep the printer-independent document it was built from,
+  with a version number, in a new `print_jobs` column, and each builder (`formatKitchenTicket`,
+  `formatCorrectionSlip`, `formatPaymentSlip`, `formatCategorySalesPage`,
+  `formatTenderRefundAcknowledgment`) to draw from it; a job whose version the running code cannot
+  read falls back to today's rule. Also open: whether kitchen tickets, payment slips and reports
+  need an A4 page, or A4 printers stay out for them.
+
+## Deleting an A4 printer
+
+- **Deleting an A4 printer (left by A405 point 6).** `page_printers` has no deletion column and is
+  referenced with `restrict` by `invoice_deliveries`, `devices` and `device_profile_printers`, so a
+  delete must be a soft delete, which needs a column. Until then A4 details have no Delete.
+  Switching an A4 printer back on and changing its address stay in Add a printer by design: both
+  need a fresh discovery entry (`apps/server/src/page-printers-api.ts:166-167`).
 
 ## A Used by link to a prep station opens the Stations tab, not the station
 
@@ -687,7 +670,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 - **RFCOMM always uses channel 1.** Nothing looks up a printer's channel, so a printer whose serial
   port is on another channel fails each job with the connection error.
 
-## Bundle: Printers screen leftovers, inside A405's remaining pull requests
+## Bundle: Printers screen leftovers
 
 6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
