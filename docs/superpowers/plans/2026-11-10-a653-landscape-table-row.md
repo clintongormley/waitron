@@ -35,11 +35,13 @@ Stop for the watcher before scope changes or growth beyond about 1.5× the estim
 This already-committed plan is separate from those build estimates. Both backlog entries exist
 on the landed cap base. Do not rewrite the historical A653 plan.
 
-**Test responsibility.** Extend the existing native Structure fixture with normal-mode cases
-at 667×375 and 844×390. A native row drag must move the main column while the table's own row
-scroll stays zero; observe the failing capped case first, then apply the override. Wait for
-native `scrollend` before the absence assertion and prove it with one deliberate forbidden
-movement. Keep portrait gestures and their behavioural assertions. No extra heading gesture:
+**Test responsibility.** Add a mode column to the existing `it.each` and branch after its
+shared setup; do not extract or re-indent the inline fixture. Add normal-mode cases at
+667×375 and 844×390. A native row drag must move the main column while the table's own row
+scroll stays zero. In the capped failing run, confirm the row drag moved `.scroll` and not
+`.main`; if it did not, fix the start point so the drag starts on a row before proceeding.
+Then apply the override. Wait for native `scrollend` before the absence assertion. Keep
+portrait gestures and their behavioural assertions. No extra heading gesture:
 it already moves the column. Existing UI suites retain capped/uncapped, focus/reveal and heading
 responsibilities; add no private-style mirror, duplicate selection or geometry test.
 
