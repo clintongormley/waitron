@@ -56,6 +56,7 @@ import {
   type ObjectStore,
 } from "@waitron/stream";
 import { recordFixtureSale } from "../../scripts/testing/sale.js";
+import { deriveStreamKey } from "../stream-key.js";
 import { startServer, type StartedServer } from "../boot.js";
 import { loadBoxEnv } from "../box-env.js";
 import { ensureBoxSecrets } from "../box-secrets.js";
@@ -404,6 +405,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         await restoreGeneration({
           litestreamBin,
           bucket,
+          streamKey: deriveStreamKey(RECOVERY_KEY, venueId),
           venueId,
           generation,
           outPath: out,
@@ -670,6 +672,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     await restoreGeneration({
       litestreamBin,
       bucket,
+      streamKey: deriveStreamKey(RECOVERY_KEY, venueId),
       venueId,
       generation: pointerB.pointer.body.generation,
       outPath: restoredB,

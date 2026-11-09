@@ -190,6 +190,11 @@ function buildApp(
       readBoxEnv: () => loadBoxEnv(sc.base, sc.stateDir),
       sealedState: { refresh: async () => "sealed" },
       readStream: () => ({ state: "off" }),
+      stream: {
+        reload: async (write) => {
+          await write?.();
+        },
+      },
       turns: createTurns(),
       ...extra,
     },

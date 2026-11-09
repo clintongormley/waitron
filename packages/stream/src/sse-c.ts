@@ -3,10 +3,12 @@ import {
   DeleteObjectCommand,
   GetBucketEncryptionCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutBucketEncryptionCommand,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { bucketKey } from "./names.js";
+import { generationPrefix } from "./generations.js";
 import { PROBE_PREFIX, type ProbeResult } from "./probe.js";
 import {
   createBucketClient,
@@ -15,6 +17,56 @@ import {
   statusOf,
   type BucketConfig,
 } from "./s3-client.js";
+
+export async function verifyStreamKey(
+  bucket: BucketConfig,
+  venueId: string,
+  generation: string,
+  streamKey: string,
+): Promise<void> {
+  const client = createBucketClient(bucket);
+  const prefix = bucketKey(bucket, generationPrefix(venueId, generation));
+  try {
+    let token: string | undefined;
+    do {
+      const page = await client.send(
+        new ListObjectsV2Command({
+          Bucket: bucket.bucket,
+          Prefix: prefix,
+          ContinuationToken: token,
+        }),
+      );
+      const object = page.Contents?.find(
+        ({ Key }) =>
+          Key?.startsWith(prefix) &&
+          /^[0-9a-f]{4}\/[0-9a-f]{16}-[0-9a-f]{16}\.ltx$/.test(Key.slice(prefix.length)),
+      );
+      if (object?.Key !== undefined) {
+        const response = await client.send(
+          new GetObjectCommand({
+            Bucket: bucket.bucket,
+            Key: object.Key,
+            Range: "bytes=0-0",
+            SSECustomerAlgorithm: "AES256",
+            SSECustomerKey: streamKey,
+            SSECustomerKeyMD5: createHash("md5")
+              .update(Buffer.from(streamKey, "base64"))
+              .digest("base64"),
+          }),
+        );
+        if (response.Body === undefined) throw new Error("IncompleteResponse");
+        await response.Body.transformToByteArray();
+        return;
+      }
+      token = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (token !== undefined);
+    throw new Error("NoDatabaseObject");
+  } catch (error) {
+    throw requestFailed("get", prefix, statusOf(error), nameOf(error));
+  } finally {
+    client.destroy();
+  }
+}
 
 /** A failed settings read must never be followed by replacing unknown bucket rules. */
 export async function prepareBucketEncryption(bucket: BucketConfig): Promise<ProbeResult> {

@@ -1,8 +1,12 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { hasCode, isAppError } from "@waitron/shared";
+import { generationPrefix } from "./generations.js";
+import { verifyStreamKey } from "./sse-c.js";
 import { replicaUrl } from "./litestream.js";
 import { restoreGeneration } from "./restore.js";
 
@@ -13,15 +17,16 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   return { ...actual, writeFile: writeFileMock };
 });
 
+vi.mock("./sse-c.js", () => ({ verifyStreamKey: vi.fn(async () => {}) }));
+const STREAM_KEY = Buffer.alloc(32, 7).toString("base64");
+
 let dir: string;
 let bin: string;
 
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "waitron-stream-restore-"));
   bin = join(dir, "litestream");
-  // The child gets PATH, HOME and the two key variables only, so what each case varies travels in a
-  // control file the stub sources, not in the environment. It records its argv, the two key
-  // variables and its whole environment, then behaves as STUB_MODE says.
+  // The child receives no parent variables beyond PATH and HOME; each case uses a control file.
   await writeFile(
     bin,
     [
@@ -87,6 +92,7 @@ async function run(
   const promise = restoreGeneration({
     litestreamBin: bin,
     bucket,
+    streamKey: STREAM_KEY,
     venueId: "v1",
     generation: GENERATION,
     outPath,
@@ -97,6 +103,64 @@ async function run(
 }
 
 describe("restoreGeneration", () => {
+  it.each([false, true])(
+    "checks a real database object with a ranged keyed read before starting restore: refused=%s",
+    async (refused) => {
+      const objectKey = `waitron/${generationPrefix("v1", GENERATION)}0000/0000000000000001-0000000000000001.ltx`;
+      const requests: { key: string | undefined; range: string | undefined; path: string }[] = [];
+      const server = createServer((req, res) => {
+        const url = new URL(req.url!, "http://local");
+        if (url.searchParams.has("list-type")) {
+          res.setHeader("content-type", "application/xml");
+          res.end(
+            `<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>${objectKey}</Key></Contents></ListBucketResult>`,
+          );
+          return;
+        }
+        requests.push({
+          key: req.headers["x-amz-server-side-encryption-customer-key"] as string | undefined,
+          range: req.headers.range,
+          path: url.pathname,
+        });
+        if (refused) {
+          res.writeHead(403, { "content-type": "application/xml" });
+          res.end("<Error><Code>AccessDenied</Code></Error>");
+        } else {
+          res.writeHead(206);
+          res.end("x");
+        }
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const real = await vi.importActual<typeof import("./sse-c.js")>("./sse-c.js");
+      vi.mocked(verifyStreamKey).mockImplementation(real.verifyStreamKey);
+      try {
+        const { out, outPath, promise } = await run(
+          "ok",
+          {},
+          {
+            ...BUCKET,
+            prefix: "waitron/",
+            endpoint: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          },
+        );
+        if (refused) {
+          await expect(promise).rejects.toMatchObject({ code: "backup.stream_request_failed" });
+          await expect(stat(join(out, "argv"))).rejects.toMatchObject({ code: "ENOENT" });
+        } else {
+          await promise;
+          expect(await readFile(outPath, "utf8")).toBe("db");
+        }
+        expect(requests).toEqual([
+          { key: STREAM_KEY, range: "bytes=0-0", path: `/venue-copy/${objectKey}` },
+        ]);
+      } finally {
+        vi.mocked(verifyStreamKey).mockImplementation(async () => {});
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    },
+  );
+
   it("restores the named generation into the output file, credentials through the environment only", async () => {
     const { out, outPath, promise } = await run("ok");
     await promise;
@@ -115,10 +179,12 @@ describe("restoreGeneration", () => {
     const config = await readFile(join(out, "litestream", "restore.yml"), "utf8");
     expect(config).toContain(JSON.stringify(replicaUrl(BUCKET, "v1", GENERATION)));
     expect(config).not.toContain(BUCKET.secretAccessKey);
+    expect(config).not.toContain(STREAM_KEY);
+    expect(config).toContain("sse-customer-key: '${WAITRON_STREAM_ENCRYPTION_KEY}'");
     expect((await stat(join(out, "litestream", "restore.yml"))).mode & 0o777).toBe(0o600);
   });
 
-  it("gives the child no WAITRON_ variable but the two bucket-key ones", async () => {
+  it("gives the child only the bucket credentials and derived encryption key", async () => {
     process.env.WAITRON_BACKUP_RECOVERY_KEY = "must-not-reach-the-child";
     try {
       const { out, promise } = await run("ok");
@@ -128,7 +194,14 @@ describe("restoreGeneration", () => {
         .map((line) => line.split("=")[0])
         .filter((name) => name?.startsWith("WAITRON_"))
         .sort();
-      expect(names).toEqual(["WAITRON_STREAM_ACCESS_KEY_ID", "WAITRON_STREAM_SECRET_ACCESS_KEY"]);
+      expect(names).toEqual([
+        "WAITRON_STREAM_ACCESS_KEY_ID",
+        "WAITRON_STREAM_ENCRYPTION_KEY",
+        "WAITRON_STREAM_SECRET_ACCESS_KEY",
+      ]);
+      expect(await readFile(join(out, "env"), "utf8")).toContain(
+        `WAITRON_STREAM_ENCRYPTION_KEY=${STREAM_KEY}`,
+      );
     } finally {
       delete process.env.WAITRON_BACKUP_RECOVERY_KEY;
     }
@@ -210,6 +283,7 @@ describe("restoreGeneration", () => {
       restoreGeneration({
         litestreamBin: join(dir, "missing"),
         bucket: BUCKET,
+        streamKey: STREAM_KEY,
         venueId: "v1",
         generation: GENERATION,
         outPath: join(out, "venue.db"),
@@ -227,6 +301,7 @@ describe("restoreGeneration", () => {
     await restoreGeneration({
       litestreamBin: bin,
       bucket: BUCKET,
+      streamKey: STREAM_KEY,
       venueId: "v1",
       generation: GENERATION,
       outPath,
@@ -317,6 +392,7 @@ describe("restoreGeneration", () => {
     const error = await restoreGeneration({
       litestreamBin: bin,
       bucket: BUCKET,
+      streamKey: STREAM_KEY,
       venueId: "v1",
       generation: GENERATION,
       outPath: join(out, "venue.db"),

@@ -245,6 +245,11 @@ function buildApp(
       readBoxEnv: () => loadBoxEnv(base, stateDir),
       sealedState,
       readStream,
+      stream: {
+        reload: async (write) => {
+          await write?.();
+        },
+      },
       turns,
       ...extra,
     },
@@ -2669,6 +2674,81 @@ describe("backup admin routes", () => {
         recoveryKeyTooShort: false,
       });
     }, 60_000);
+
+    it("stops the old stream before sealing secrets under a replacement key", async () => {
+      const events: string[] = [];
+      const { post } = await primaryApp({
+        sealedState: {
+          refresh: async () => {
+            events.push("seal");
+            return "sealed";
+          },
+        },
+        stream: {
+          reload: async (write) => {
+            events.push("stop");
+            await write?.();
+            events.push("start");
+          },
+        },
+      });
+      expect(
+        (await post("/api/backup/apply", applyBody({ kind: "local-fs", dir: makeDestDir() })))
+          .status,
+      ).toBe(200);
+      events.length = 0;
+      expect((await post("/api/backup/rotate", { recoveryKey: KEY_2 })).status).toBe(200);
+      expect(events.indexOf("stop")).toBeLessThan(events.indexOf("seal"));
+    });
+
+    it("reloads the stream under the effective key after initial save and both rotation paths, including metadata failure", async () => {
+      const loaded: (string | undefined)[] = [];
+      let stateDir = "";
+      const { sc, post } = await primaryApp({
+        stream: {
+          reload: async (write) => {
+            await write?.();
+            loaded.push(loadRecoveryKey(await loadBoxEnv({}, stateDir)));
+          },
+        },
+      });
+      stateDir = sc.stateDir;
+      expect(
+        (await post("/api/backup/apply", applyBody({ kind: "local-fs", dir: makeDestDir() })))
+          .status,
+      ).toBe(200);
+      expect(loaded).toEqual([KEY_1]);
+      expect((await post("/api/backup/rotate", { recoveryKey: KEY_2 })).status).toBe(200);
+      expect(loaded).toEqual([KEY_1, KEY_2]);
+      suite.db.run(
+        sql.raw(
+          `create trigger refuse_rotation before insert on tenant_credentials when new.purpose = '${ARCHIVE_PURPOSE}' begin select raise(abort, 'refused'); end`,
+        ),
+      );
+      try {
+        const response = await post("/api/backup/rotate", { recoveryKey: KEY_1 });
+        expect(response.status).toBe(500);
+        expect(await response.json()).toMatchObject({
+          error: { code: "backup.rotation_metadata_failed" },
+        });
+        expect(loaded).toEqual([KEY_1, KEY_2, KEY_1]);
+      } finally {
+        suite.db.run(sql.raw("drop trigger refuse_rotation"));
+      }
+      await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: ARCHIVE_PURPOSE }));
+      const keyOnly = await primaryApp({
+        stream: {
+          reload: async (write) => {
+            await write?.();
+            loaded.push(loadRecoveryKey(await loadBoxEnv({}, stateDir)));
+          },
+        },
+      });
+      stateDir = keyOnly.sc.stateDir;
+      await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+      expect((await keyOnly.post("/api/backup/rotate", { recoveryKey: KEY_2 })).status).toBe(200);
+      expect(loaded).toEqual([KEY_1, KEY_2, KEY_1, KEY_2]);
+    });
 
     describe("rotation", () => {
       const triggers = ["insert", "update"] as const;

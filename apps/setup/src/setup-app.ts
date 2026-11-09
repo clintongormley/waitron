@@ -437,6 +437,8 @@ function describeBucketRefusal(
     return say("shell.bucket.kit_damaged");
   if (code === "restore.stream_pointer_unverified" && params?.reason === "venue_mismatch")
     return say("shell.bucket.venue_mismatch");
+  if (code === "restore.stream_pointer_unverified" && params?.reason === "key_or_access")
+    return say("shell.bucket.key_or_access");
   if (code === "restore.stream_venue_unconfirmed") return say("shell.bucket.venue_unconfirmed");
   const key = BUCKET_ERROR_MESSAGES[code];
   return key === undefined ? sayWith("shell.bucket.refused_code", { code }) : say(key);

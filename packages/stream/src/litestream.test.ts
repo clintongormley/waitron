@@ -13,6 +13,8 @@ import {
 } from "./litestream.js";
 import { KILL_GRACE_MS } from "./litestream-process.js";
 
+const STREAM_KEY = Buffer.alloc(32, 7).toString("base64");
+
 const BUCKET: BucketConfig = {
   region: "eu-south-2",
   bucket: "venue-copies",
@@ -58,6 +60,7 @@ describe("the Litestream configuration", () => {
         '  - path: "/var/lib/waitron/state/venue/venue.db"',
         "    replica:",
         '      url: "s3://venue-copies/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2"',
+        "      sse-customer-key: '${WAITRON_STREAM_ENCRYPTION_KEY}'",
         "",
       ].join("\n"),
     );
@@ -86,10 +89,11 @@ describe("the Litestream configuration", () => {
   // starting "*" or holding ": " stops the file parsing at all.
   it("lands a key holding YAML's own characters inside a single-quoted scalar, whole", () => {
     const hostile = { accessKeyId: "*abc", secretAccessKey: "abc #def: g&!@" };
-    const env = litestreamEnv(hostile);
+    const env = litestreamEnv(hostile, STREAM_KEY);
     expect(env).toEqual({
       WAITRON_STREAM_ACCESS_KEY_ID: "*abc",
       WAITRON_STREAM_SECRET_ACCESS_KEY: "abc #def: g&!@",
+      WAITRON_STREAM_ENCRYPTION_KEY: STREAM_KEY,
     });
     const expanded = litestreamConfig({ dbPath: "/d/venue.db", replicaUrl: "s3://b/p?region=r" })
       .replace(/\$\{(\w+)\}/g, (_, name: string) => env[name] ?? "")
@@ -112,11 +116,21 @@ describe("the Litestream configuration", () => {
     ["accessKeyId", { accessKeyId: "a\u0085b", secretAccessKey: "s" }],
     ["secretAccessKey", { accessKeyId: "a", secretAccessKey: "\u00e9" }],
   ])("refuses a %s a single-quoted scalar cannot hold whole", (field, keys) => {
-    expect(refusalOf(() => litestreamEnv(keys))).toEqual({
+    expect(refusalOf(() => litestreamEnv(keys, STREAM_KEY))).toEqual({
       code: "backup.stream_config_unsafe",
       params: { field },
     });
   });
+
+  it.each(["", "bad-key", Buffer.alloc(31).toString("base64"), "'\nsnapshot: x"])(
+    "refuses an unusable encryption key before starting a child: %j",
+    (key) => {
+      expect(refusalOf(() => litestreamEnv(BUCKET, key))).toEqual({
+        code: "backup.stream_config_unsafe",
+        params: { field: "streamKey" },
+      });
+    },
+  );
 
   it("puts the endpoint and region in the replica address only when there is one", () => {
     expect(replicaUrl(BUCKET, "v1", "gen-0-a-20260923T120000Z")).toBe(

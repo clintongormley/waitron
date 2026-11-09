@@ -4,9 +4,13 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deleteCredential, loadKeyRing, type KeyRing } from "@waitron/credentials";
-import { withTransaction } from "@waitron/db";
+import { deleteCredential, loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
+import { withNodeTransaction, withTransaction, type NodeDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { FakeLitestream } from "@waitron/stream/testing/fake-litestream.js";
+import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
+import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+import { setNodeModeTx } from "@waitron/node-db";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -14,6 +18,8 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ARCHIVE_PURPOSE, writeArchiveSettings } from "./archive-settings.js";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { establishNodeIdentity } from "./node-identity.js";
+import { seedTermZeroMembership } from "./membership-seed.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import type { StorageBackend, StorageCall } from "./storage-backend.js";
 import { provisionBillVenue, fiscalRecordCount, type BillVenue } from "./testing/bill-venue.js";
@@ -49,6 +55,22 @@ vi.mock("@waitron/stream", async (importOriginal) => {
             detail: "keys ignored",
           })
         : actual.prepareBucketEncryption(...args),
+  };
+});
+
+const sealing = vi.hoisted(() => ({ fail: false, node: undefined as NodeDatabase | undefined }));
+vi.mock("./sealed-state.js", async (original) => {
+  const actual = await original<typeof import("./sealed-state.js")>();
+  return {
+    ...actual,
+    createSealedStateRefresher: (deps: Parameters<typeof actual.createSealedStateRefresher>[0]) => {
+      sealing.node = deps.node;
+      const real = actual.createSealedStateRefresher(deps);
+      return {
+        ...real,
+        refresh: () => (sealing.fail ? Promise.resolve("failed" as const) : real.refresh()),
+      };
+    },
   };
 });
 
@@ -127,9 +149,13 @@ let serverRunning = false;
 afterEach(async () => {
   serverRunning = false;
   streamCheck.refuse = false;
+  sealing.fail = false;
   stall.on = false;
   stall.started = [];
-  await withTransaction(venue.db, (tx) => deleteCredential(tx, { purpose: ARCHIVE_PURPOSE }));
+  await withTransaction(venue.db, async (tx) => {
+    await deleteCredential(tx, { purpose: ARCHIVE_PURPOSE });
+    await deleteCredential(tx, { purpose: STREAM_PURPOSE });
+  });
   await Promise.all(scratches.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
@@ -192,6 +218,7 @@ async function bootAndTrade(
     lines: readonly string[],
     http: { base: string; via: RequestInit },
   ) => Promise<(() => Promise<void>) | void>,
+  seams: Parameters<typeof startServer>[2] = {},
 ): Promise<void> {
   const { env, scratch } = await tradingEnv();
 
@@ -201,7 +228,7 @@ async function bootAndTrade(
     try {
       const raw = await backupBase(scratch);
       serverRunning = true;
-      server = await startServer(env, raw);
+      server = await startServer(env, raw, seams);
       const base = `https://127.0.0.1:${httpPort()}`;
       const afterTrading = await whileStarted(lines, { base, via });
       const orderId = randomUUID();
@@ -438,6 +465,67 @@ describe("trading with environment backup settings beside a sealed record", () =
 });
 
 describe("stream encryption checks at the real trading boot", () => {
+  it("holds the copy after a failed reseal and retries after a successful node refresh", async () => {
+    const litestream = new FakeLitestream();
+    const store = new SwitchableStore(() => new Date());
+    sealing.fail = true;
+    await bootAndTrade(
+      async () => {
+        const ring = loadKeyRing({
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        });
+        await establishNodeIdentity(
+          { ownerDb: suite.db, node: suite.node, ring },
+          venue.cfg.nodeId,
+        );
+        await seedTermZeroMembership(
+          { db: suite.db, node: suite.node, ring },
+          venue.cfg.nodeId,
+          "https://localhost",
+        );
+        await withTransaction(suite.db, (tx) =>
+          putCredential(tx, ring, {
+            purpose: STREAM_PURPOSE,
+            value: streamSettingsPayload({
+              venueId: venue.cfg.locationId,
+              bucket: {
+                region: "eu-west-1",
+                bucket: "copies",
+                prefix: "",
+                accessKeyId: "A",
+                secretAccessKey: "S",
+              },
+            }),
+          }),
+        );
+        return { WAITRON_BACKUP_RECOVERY_KEY: "backup-key-for-test-0123456789" };
+      },
+      async (_lines, { base, via }) => {
+        expect(litestream.children).toHaveLength(0);
+        sealing.fail = false;
+        const response = await fetch(`${base}/test-node-commit`, { ...via, method: "POST" });
+        expect(response.status).toBe(200);
+        await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10000 });
+        expect(litestream.running()!.env.WAITRON_STREAM_ENCRYPTION_KEY).toEqual(expect.any(String));
+        expect(Object.values(litestream.running()!.env)).not.toContain(
+          "backup-key-for-test-0123456789",
+        );
+      },
+      {
+        stream: { spawn: litestream.spawn, store },
+        observeApp: (app) => {
+          app.post("/test-node-commit", async (c) => {
+            await withNodeTransaction(sealing.node!, (tx) =>
+              setNodeModeTx(tx, venue.cfg.nodeId, "primary"),
+            );
+            return c.json({});
+          });
+        },
+      },
+    );
+  }, 120000);
+
   it("refuses Save when the provider ignores keys and keeps trading without saved stream settings", async () => {
     streamCheck.refuse = true;
     let cookie = "";

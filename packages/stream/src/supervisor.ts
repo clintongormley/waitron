@@ -90,6 +90,7 @@ export interface SupervisorDeps {
   /** A directory the supervisor may write Litestream's configuration into. */
   configDir: string;
   bucket: BucketConfig;
+  streamKey: string;
   venueId: string;
   nodeId: string;
   /** The membership term this box holds: written into every generation name and the pointer. */
@@ -369,7 +370,7 @@ export class StreamSupervisor {
   #configurationIsSafe(): boolean {
     const { bucket, venueDbPath, venueId, nodeId, term } = this.#deps;
     try {
-      this.#env = litestreamEnv(bucket);
+      this.#env = litestreamEnv(bucket, this.#deps.streamKey);
       const sample = generationName(term, nodeId, this.#deps.now());
       litestreamConfig({ dbPath: venueDbPath, replicaUrl: replicaUrl(bucket, venueId, sample) });
       return true;

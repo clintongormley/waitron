@@ -34,6 +34,7 @@ import {
   type SupervisorDeps,
 } from "./supervisor.js";
 
+const STREAM_KEY = Buffer.alloc(32, 7).toString("base64");
 const VENUE = "venue-1";
 const NODE = "node-a";
 const START = "2026-09-23T12:00:00Z";
@@ -125,6 +126,7 @@ async function harness(options: HarnessOptions = {}) {
     venueDbPath,
     configDir: join(directory, "stream"),
     bucket: options.bucket ?? BUCKET,
+    streamKey: STREAM_KEY,
     venueId: options.venueId ?? VENUE,
     nodeId: NODE,
     term: options.term ?? 2,
@@ -310,6 +312,7 @@ describe("opening a generation", () => {
     expect(child.env).toEqual({
       WAITRON_STREAM_ACCESS_KEY_ID: "AKIAEXAMPLE",
       WAITRON_STREAM_SECRET_ACCESS_KEY: "secret-example",
+      WAITRON_STREAM_ENCRYPTION_KEY: STREAM_KEY,
     });
     expect(child.args).toEqual([
       "replicate",
@@ -318,6 +321,8 @@ describe("opening a generation", () => {
     ]);
     const config = await readFile(join(h.directory, "stream", "litestream.yml"), "utf8");
     expect(config).not.toContain("secret-example");
+    expect(config).not.toContain(STREAM_KEY);
+    expect(config).toContain("sse-customer-key: '${WAITRON_STREAM_ENCRYPTION_KEY}'");
     expect(config).toContain(
       `venues/${VENUE}/${h.supervisor.status().generation}?region=eu-south-2`,
     );
@@ -2592,6 +2597,7 @@ describe("constructed without test seams", () => {
       venueDbPath: "/nowhere/venue.db",
       configDir: "/nowhere/stream",
       bucket: BUCKET,
+      streamKey: STREAM_KEY,
       venueId: VENUE,
       nodeId: NODE,
       term: 0,

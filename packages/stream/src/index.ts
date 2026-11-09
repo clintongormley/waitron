@@ -36,6 +36,7 @@ export { prepareBucketEncryption } from "./sse-c.js";
 export type { ProbeFailure, ProbeResult } from "./probe.js";
 export {
   ENV_ACCESS_KEY_ID,
+  ENV_ENCRYPTION_KEY,
   ENV_SECRET_ACCESS_KEY,
   LITESTREAM_VERSION,
   checkLitestreamSettings,

@@ -25,6 +25,8 @@ import {
 import type { Logger } from "./logger.js";
 import { credentialField } from "./credentials.js";
 import { readNodeIdentityKey } from "./node-identity.js";
+import type { SealedStateOutcome } from "./sealed-state.js";
+import { deriveStreamKey } from "./stream-key.js";
 import "./errors.js";
 
 /** The vault purpose holding the owner's bucket. */
@@ -100,6 +102,8 @@ export interface StreamHostDeps {
   now: () => Date;
   /** Read at each start, so a promotion is followed. */
   isPrimary: () => boolean;
+  readRecoveryKey: () => Promise<string | undefined>;
+  refreshSealedState: () => Promise<SealedStateOutcome>;
   /** False while a restored box's first start is unfinished (`rebuild-first-start.ts`). Read at
    * each start, so a reload after a settings save is held too. Default: always true. */
   mayStream?: () => boolean;
@@ -131,6 +135,11 @@ export class StreamHost {
   }
 
   async start(): Promise<void> {
+    if (this.#reloading) return;
+    await this.#start();
+  }
+
+  async #start(duringReload = false): Promise<void> {
     if (this.#stopped || this.#supervisor !== undefined) return;
     this.#notStarted = undefined;
     const { db, ring, log } = this.#deps;
@@ -155,16 +164,27 @@ export class StreamHost {
         this.#notStartedFor("no_membership");
         return;
       }
+      if ((await this.#deps.refreshSealedState()) !== "sealed") {
+        this.#notStartedFor("reseal_required");
+        return;
+      }
+      const recoveryKey = await this.#deps.readRecoveryKey();
+      if (recoveryKey === undefined) {
+        this.#notStartedFor("reseal_required");
+        return;
+      }
       // A supervisor still stopping may still have Litestream running; and a stop() or an
       // overlapping start() may land while this waits.
       await this.#retiring;
-      if (this.#stopped || this.#supervisor !== undefined) return;
+      if (this.#stopped || this.#supervisor !== undefined || (this.#reloading && !duringReload))
+        return;
       const venueDbPath = join(this.#deps.venueDir, VENUE_FILE);
       const supervisor = new StreamSupervisor({
         litestreamBin: this.#deps.litestreamBin,
         venueDbPath,
         configDir: join(this.#deps.stateDir, "stream"),
         bucket: settings.bucket,
+        streamKey: deriveStreamKey(recoveryKey, settings.venueId),
         venueId: settings.venueId,
         nodeId: this.#deps.nodeId,
         term: membership.body.term,
@@ -214,16 +234,19 @@ export class StreamHost {
   }
 
   /**
-   * After the settings change: stops the running supervisor, then starts one on whatever the vault
-   * now holds — none, if the settings were removed. A second call while one runs is refused rather
-   * than interleaved.
+   * Stop before a key write so the old generation retains secrets its recovery pack opens.
+   * A failed write still restarts under the effective key. The reload gate covers both steps.
    */
-  async reload(): Promise<void> {
+  async reload(write?: () => Promise<void>): Promise<void> {
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
     this.#reloading = true;
     try {
       await this.#retire();
-      await this.start();
+      try {
+        await write?.();
+      } finally {
+        await this.#start(true);
+      }
     } finally {
       this.#reloading = false;
     }

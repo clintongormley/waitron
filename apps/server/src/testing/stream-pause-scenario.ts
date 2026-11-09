@@ -52,6 +52,7 @@ import {
   type ObjectStore,
   type StreamView,
 } from "@waitron/stream";
+import { deriveStreamKey } from "../stream-key.js";
 import { startServer, type StartedServer } from "../boot.js";
 import { loadBoxEnv } from "../box-env.js";
 import { ensureBoxSecrets } from "../box-secrets.js";
@@ -792,13 +793,14 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
           await restoreGeneration({
             litestreamBin,
             bucket,
+            streamKey: deriveStreamKey("stream-pause-e2e-recovery-key", box.venueId),
             venueId: box.venueId,
             generation,
             outPath: out,
             ceilingMs: RESTORE_MS,
-            onFailure: ({ exitCode, output, abandoned }) => {
+            onFailure: ({ exitCode, abandoned }) => {
               console.error(
-                `stream pause restore probe: exitCode=${exitCode}, abandoned=${abandoned}, Litestream output:\n${output}`,
+                `stream pause restore probe: exitCode=${exitCode}, abandoned=${abandoned}`,
               );
             },
           });

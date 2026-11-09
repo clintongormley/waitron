@@ -1716,7 +1716,9 @@ declare module "@waitron/shared" {
     "restore.stream_pointer_missing": Record<string, never>;
     /** `current.json` was not signed by the key the recovery kit carries (`signature`), or names a
      * different venue (`venue_mismatch`). The key in the bucket is never the one trusted. */
-    "restore.stream_pointer_unverified": { reason: "signature" | "venue_mismatch" };
+    "restore.stream_pointer_unverified": {
+      reason: "signature" | "venue_mismatch" | "key_or_access";
+    };
     /** The live generation received a change within the last ten minutes on the bucket's own
      * clock, so the old box may still be selling; refused until the operator confirms it is gone.
      * `lastChangeAt` is an ISO time on the bucket's clock. */

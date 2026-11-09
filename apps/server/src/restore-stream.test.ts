@@ -1,5 +1,7 @@
 import { readdirSync } from "node:fs";
 import { copyFile, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -249,6 +251,7 @@ describe("prepareStreamRestore", () => {
         generation: GENERATION,
         venueId: T.locationId,
         bucket: KIT.bucket,
+        streamKey: "ORDJdLj2BbyzMwSmlgQMW4J4JTtlToWe1oIRIEd9D/M=",
       }),
     );
     expect(await readFile(join(dirname(prepared.databasePath), "node.db"))).toEqual(
@@ -445,6 +448,24 @@ describe("prepareStreamRestore", () => {
     await expectStateUntouched(deps.stateDir);
   });
 
+  it("refuses a copy whose database object cannot be read with the kit key and leaves no scratch", async () => {
+    const deps = await prepareDeps(await bucket(), {
+      restoreGeneration: async () => {
+        throw new AppError("backup.stream_request_failed", {
+          operation: "get",
+          key: "database.ltx",
+          status: 403,
+          name: "AccessDenied",
+        });
+      },
+    });
+    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.stream_pointer_unverified",
+      params: { reason: "key_or_access" },
+    });
+    await expectStateUntouched(deps.stateDir);
+  });
+
   it("passes any other download failure through as it came, and removes the partial download", async () => {
     const deps = await prepareDeps(await bucket(), {
       restoreGeneration: async (args) => {
@@ -509,15 +530,40 @@ describe("prepareStreamRestore", () => {
   });
 
   it("reports a Litestream that cannot be started as a failed download, leaving nothing behind", async () => {
-    const deps = await prepareDeps(await bucket(), {
-      litestreamBin: join(tmpdir(), "waitron-no-such-litestream"),
-      restoreGeneration: undefined,
+    const key = `${generationPrefix(KIT.venueId, GENERATION)}0000/0000000000000001-0000000000000001.ltx`;
+    const server = createServer((req, res) => {
+      if (new URL(req.url!, "http://local").searchParams.has("list-type")) {
+        res.setHeader("content-type", "application/xml");
+        res.end(
+          `<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>${key}</Key></Contents></ListBucketResult>`,
+        );
+      } else {
+        res.writeHead(206);
+        res.end("x");
+      }
     });
-    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
-      code: "backup.stream_restore_failed",
-      params: { exitCode: null, diskFull: false },
-    });
-    await expectStateUntouched(deps.stateDir);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const deps = await prepareDeps(await bucket(), {
+        kit: {
+          ...KIT,
+          bucket: {
+            ...KIT.bucket,
+            endpoint: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          },
+        },
+        litestreamBin: join(tmpdir(), "waitron-no-such-litestream"),
+        restoreGeneration: undefined,
+      });
+      await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+        code: "backup.stream_restore_failed",
+        params: { exitCode: null, diskFull: false },
+      });
+      await expectStateUntouched(deps.stateDir);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   it("opens the kit's bucket itself when no store is given", async () => {

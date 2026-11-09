@@ -1,5 +1,7 @@
 # Recover from backup
 
+Keep the previous recovery pack when you change the recovery key. Until the new bucket copy is ready, the previous pack still matches the copy offered for recovery. If the page says the pack does not match the copy or the bucket login cannot read it, try the matching pack, or correct the bucket access and try again.
+
 ## When first setup was interrupted {#interrupted-setup}
 
 If the repair page cannot continue your setup, it offers **Start again** and **Recover from
