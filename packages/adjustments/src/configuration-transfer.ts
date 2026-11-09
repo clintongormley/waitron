@@ -28,11 +28,7 @@ function textList(value: unknown, field: string): string[] {
   return parsed as string[];
 }
 
-/**
- * Refuses a reason of an unknown kind or one {@link reasonShapeFault} faults, a bundle that leaves the venue no Void reason
- * asking for a note, as the operations keep one (A758 D27). A Void reason that passes can cancel.
- * The export writes booleans as 0 and 1.
- */
+/** A copied list must retain a Void reason asking for a note, as operations do. */
 function validateAdjustmentsConfiguration(
   tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
 ): void {

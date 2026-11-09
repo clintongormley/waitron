@@ -113,15 +113,13 @@ export async function replaceTransferredSettings(
     await tx.delete(settings).where(eq(settings.module, definition.module));
     const doc = docs.get(definition.module);
     if (doc !== undefined)
-      await tx
-        .insert(settings)
-        .values({
-          module: definition.module,
-          version: definition.version,
-          revision: 1,
-          doc: doc as Record<string, unknown>,
-          updatedBy: null,
-          updatedAt: nowIso(),
-        });
+      await tx.insert(settings).values({
+        module: definition.module,
+        version: definition.version,
+        revision: 1,
+        doc: doc as Record<string, unknown>,
+        updatedBy: null,
+        updatedAt: nowIso(),
+      });
   }
 }

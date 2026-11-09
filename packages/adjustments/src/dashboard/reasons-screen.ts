@@ -1031,7 +1031,7 @@ export class AdjustmentReasonsScreen extends LitElement {
       } else {
         this.limitError = codeMessage(codeOf(error));
         if (codeOf(error) === "settings.out_of_date") {
-          this.#limitRevision = undefined;
+          this.#limitRevision = (error as { params: { revision: number } }).params.revision;
           await this.#loadSettings();
         }
       }

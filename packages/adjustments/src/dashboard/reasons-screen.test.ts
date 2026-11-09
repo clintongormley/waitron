@@ -2227,6 +2227,30 @@ describe("the bill comp limit", () => {
     expect(api.saveSettings).toHaveBeenLastCalledWith({ ...body("25.00"), revision: 5 });
   });
 
+  it("keeps the clash revision across a later live update and more typing", async () => {
+    const liveData = new LiveData();
+    const api = withLimit("40.00", { liveData });
+    api.saveSettings.mockRejectedValueOnce({
+      code: "settings.out_of_date",
+      params: { module: "adjustments", revision: 5 },
+    });
+    const el = await mount(api);
+    try {
+      await type(el, "maxBillComp", "25");
+      api.getSettings.mockResolvedValue({ ...body("50.00"), revision: 5 });
+      await press(el, "save-limit");
+      await expect.poll(() => api.getSettings.mock.calls.length).toBe(2);
+      api.getSettings.mockResolvedValue({ ...body("60.00"), revision: 6 });
+      liveData.invalidate([{ type: "settings.adjustments" }]);
+      await expect.poll(() => api.getSettings.mock.calls.length).toBe(3);
+      await type(el, "maxBillComp", "30");
+      await press(el, "save-limit");
+      expect(api.saveSettings).toHaveBeenLastCalledWith({ ...body("30.00"), revision: 5 });
+    } finally {
+      liveData.clear();
+    }
+  });
+
   it.each([
     {
       locale: "en",

@@ -657,7 +657,6 @@ export function validateConfigurationBundle(
   modules: readonly WaitronModule[],
   targetVersions: Readonly<Record<string, number>>,
 ): void {
-  checkImportedSettings(bundle.settings, modules);
   const timeZone = requireCountryTimeZone(bundle.venue.country, bundle.venue.timeZone);
   const versioned = modulesWithSets(modules);
   const serverSets = new Set(versioned.map((module) => module.name));
@@ -680,6 +679,7 @@ export function validateConfigurationBundle(
   if (differences.some((difference) => difference < 0)) {
     throw new AppError("setup.configuration_outdated", {});
   }
+  checkImportedSettings(bundle.settings, modules);
   checkedRows(bundle, modules);
   for (const field of PRIVACY_CONTACT_FIELDS) {
     const value = bundle.privacyContact[field];

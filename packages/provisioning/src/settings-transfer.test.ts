@@ -1,3 +1,5 @@
+import { configurationBundle } from "../test/configuration-bundle.js";
+import { validateConfigurationBundle } from "./configuration-transfer.js";
 import { expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS, readSettings, saveSettings, withTransaction } from "@waitron/db";
@@ -50,21 +52,26 @@ it.each([
   expect(() => checkImportedSettings(value, ALL_MODULES)).toThrow(
     expect.objectContaining({ code, params }),
   );
-  await expect(
-    withTransaction(suite.db, (tx) => importSettingsDocuments(tx, value, ALL_MODULES)),
-  ).rejects.toMatchObject({ code, params });
+  await withTransaction(suite.db, async (tx) => {
+    await expect(importSettingsDocuments(tx, value, ALL_MODULES)).rejects.toMatchObject({
+      code,
+      params,
+    });
+    expect(await readSettings(tx, definition)).toEqual({ doc, revision: 1 });
+  });
   expect(await readSettings(suite.db, definition)).toEqual({ doc, revision: 1 });
 });
-it.each([["owner"], ["manager", "manager"], [], "manager", undefined])(
+it.each([["owner"], ["manager", "manager"], [], "manager", undefined].map((value) => [value]))(
   "refuses bad approvers before writing: %j",
   async (billApproverRoles) => {
     await save();
     const value = { adjustments: { version: 1, doc: { ...doc, billApproverRoles } } };
-    await expect(
-      withTransaction(suite.db, (tx) => importSettingsDocuments(tx, value, ALL_MODULES)),
-    ).rejects.toMatchObject({
-      code: "setup.request_invalid",
-      params: { field: "settings.adjustments.billApproverRoles" },
+    await withTransaction(suite.db, async (tx) => {
+      await expect(importSettingsDocuments(tx, value, ALL_MODULES)).rejects.toMatchObject({
+        code: "setup.request_invalid",
+        params: { field: "settings.adjustments.billApproverRoles" },
+      });
+      expect(await readSettings(tx, definition)).toEqual({ doc, revision: 1 });
     });
     expect(await readSettings(suite.db, definition)).toEqual({ doc, revision: 1 });
   },
@@ -85,4 +92,30 @@ it("an export with no adjustments key resets the target to the defaults", async 
     doc: { maxBillComp: null, billApproverRoles: ["manager", "admin"] },
     revision: 0,
   });
+});
+
+it("validates documents before the configuration is staged", () => {
+  const bundle = {
+    ...configurationBundle(),
+    settings: { adjustments: { version: 1, doc: { ...doc, maxBillComp: 0 } } },
+  };
+  expect(() => validateConfigurationBundle(bundle, [adjustments], {})).toThrow(
+    expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: "settings.adjustments.maxBillComp" },
+    }),
+  );
+});
+it("keeps the module mismatch refusal ahead of document checking", () => {
+  const bundle = {
+    ...configurationBundle(),
+    modules: { absent: 1 },
+    settings: { absent: { version: 1, doc: {} } },
+  };
+  expect(() => validateConfigurationBundle(bundle, [], {})).toThrow(
+    expect.objectContaining({
+      code: "setup.configuration_parts_differ",
+      params: { exportOnly: ["absent"], serverOnly: [] },
+    }),
+  );
 });

@@ -64,17 +64,20 @@ const OTHER = {
 interface Fixture {
   app: Hono;
   cookie: Record<PersonRoleValue, string>;
+  personIds: Record<PersonRoleValue, string>;
 }
 
 async function fixture(): Promise<Fixture> {
   await seedTenant(db);
   const cookie = {} as Record<PersonRoleValue, string>;
+  const personIds = {} as Record<PersonRoleValue, string>;
   await db.transaction(async (tx) => {
     for (const role of ["staff", "supervisor", "manager", "admin"] as const) {
       const [person] = await tx
         .insert(persons)
         .values({ displayName: `A ${role}`, pinHash: hashPin("1234"), role })
         .returning({ id: persons.id });
+      personIds[role] = person!.id;
       const session = await startManagementSession(tx, { personId: person!.id });
       cookie[role] = `${MANAGEMENT_COOKIE}=${session.token}`;
     }
@@ -89,7 +92,7 @@ async function fixture(): Promise<Fixture> {
     },
     noopLog,
   );
-  return { app, cookie };
+  return { app, cookie, personIds };
 }
 
 async function send(
@@ -539,6 +542,9 @@ describe("adjustment settings routes", () => {
     const saved = await send(fx.app, "PUT", SETTINGS, manager, LIMIT);
     expect(saved.status).toBe(200);
     expect(await saved.json()).toEqual({ ...LIMIT, revision: 1 });
+    expect(
+      db.execute(sql`select updated_by from settings where module = 'adjustments'`).rows,
+    ).toEqual([{ updated_by: fx.personIds.manager }]);
     expect(await (await send(fx.app, "GET", SETTINGS, manager)).json()).toEqual({
       ...LIMIT,
       revision: 1,

@@ -91,6 +91,28 @@ describe("configuration export API", () => {
     expect(response.status).toBe(401);
   });
 
+  it("answers a damaged stored settings document as a server failure", async () => {
+    suite.db.execute(
+      sql`insert into settings (module, version, revision, doc, updated_at) values ('adjustments', 1, 1, '{"maxBillComp":0,"billApproverRoles":["admin"]}', '2026-11-09T12:00:00.000Z')`,
+    );
+    try {
+      const response = await app().request("/management-api/configuration-export", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ passphrase: "a strong passphrase" }),
+      });
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({
+        error: {
+          code: "settings.invalid",
+          params: { module: "adjustments", field: "maxBillComp" },
+        },
+      });
+    } finally {
+      suite.db.execute(sql`delete from settings where module = 'adjustments'`);
+    }
+  });
+
   it("returns an encrypted configuration-only artifact", async () => {
     const response = await app().request("/management-api/configuration-export", {
       method: "POST",

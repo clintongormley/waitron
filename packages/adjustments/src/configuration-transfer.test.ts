@@ -58,7 +58,7 @@ function withExtra(extra: Record<string, unknown>) {
 }
 
 describe("ADJUSTMENTS_CONFIGURATION_TRANSFER", () => {
-  it("transfers the reasons and the venue's discount limit, which are venue policy rather than trading history", () => {
+  it("transfers adjustment reasons", () => {
     expect(ADJUSTMENTS_CONFIGURATION_TRANSFER).toEqual({
       kind: "tables",
       tables: [{ name: "adjustment_reasons" }],

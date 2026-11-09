@@ -325,11 +325,12 @@ describe("replaceTransferredSettings", () => {
     await withTransaction(suite.db, (tx) =>
       saveSettings(tx, PROBE, { doc: {}, expectedRevision: 0, personId: null }),
     );
-    await expect(
-      withTransaction(suite.db, (tx) =>
+    await withTransaction(suite.db, async (tx) => {
+      await expect(
         replaceTransferredSettings(tx, [PROBE], new Map([["nope", {}]])),
-      ),
-    ).rejects.toThrow();
+      ).rejects.toThrow();
+      expect(await readSettings(tx, PROBE)).toEqual({ doc: {}, revision: 1 });
+    });
     expect(await readSettings(suite.db, PROBE)).toEqual({ doc: {}, revision: 1 });
   });
 });
