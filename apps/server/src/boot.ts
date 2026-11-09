@@ -2072,7 +2072,9 @@ async function bootServer(
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
   };
   const captureAccountEmail = config.devMode || config.onboardingIntent === "demo";
-  const resolveAccountEmail = () => resolveEmailDelivery(db, ring, captureAccountEmail);
+  const captureOnly = !config.devMode && config.onboardingIntent === "demo";
+  const resolveAccountEmail = () =>
+    resolveEmailDelivery(db, ring, captureAccountEmail, captureOnly);
   // Interim: the venue row's id; removed by S18e or S28.
   const venueId = await venueLocationId(db);
   // The venue's default DISPLAY locale. The override is the RAW `tradingContext.localeOverride`, not the
@@ -2995,6 +2997,7 @@ async function bootServer(
       readBoxEmailContext(db, {
         ring,
         practiceMode: captureAccountEmail,
+        captureOnly,
         venueLanguage: venueLocale === "es-ES" ? "es" : "en",
       }),
     send: createTextEmailSender(),

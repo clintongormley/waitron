@@ -1,3 +1,7 @@
+> **2026-11-09 amendment:** [Demo notice capture](2026-11-09-a987-demo-account-capture.md)
+> keeps account mail, reminders and alerts in local capture outside development even with saved SMTP
+> (watcher, 2026-11-09 11:44 and 11:51); development retains its SMTP preference.
+
 # A987 Prepare venue email Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Native inline execution is owner-authorised. Steps use checkbox (`- [ ]`) syntax for tracking. Do not dispatch agents or ask an execution-method question.

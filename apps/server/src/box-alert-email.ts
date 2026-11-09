@@ -216,6 +216,7 @@ export async function readBoxEmailContext(
   deps: {
     ring: KeyRing;
     practiceMode: boolean;
+    captureOnly?: boolean;
     venueLanguage: "en" | "es";
   },
 ): Promise<BoxEmailContext> {
@@ -223,7 +224,7 @@ export async function readBoxEmailContext(
     return {
       venue: (await readVenue(db)).name,
       recipients: await readManagerEmailRecipients(db, deps.venueLanguage),
-      delivery: await resolveEmailDeliveryIn(db, deps.ring, deps.practiceMode),
+      delivery: await resolveEmailDeliveryIn(db, deps.ring, deps.practiceMode, deps.captureOnly),
     };
   });
 }
