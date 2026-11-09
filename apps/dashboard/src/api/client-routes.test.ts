@@ -2046,7 +2046,7 @@ describe("the recovery pack calls", () => {
     const api = new DashboardApi("", fetchImpl);
 
     expect(await api.getRecoveryPackStatus()).toEqual(status);
-    expect(await api.recoveryPackPasskeyOptions()).toEqual({
+    expect(await api.freshSignInPasskeyOptions()).toEqual({
       challengeHandle: "h1",
       options: { challenge: "AQID" },
     });

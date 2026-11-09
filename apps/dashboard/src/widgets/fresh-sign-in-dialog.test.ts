@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import type { DashboardApi, OwnProfile } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { FreshSignIn } from "./fresh-sign-in.js";
@@ -23,7 +24,7 @@ const profile: OwnProfile = {
 async function open() {
   const api = {
     getProfile: vi.fn(async () => profile),
-    recoveryPackPasskeyOptions: vi.fn(),
+    freshSignInPasskeyOptions: vi.fn(),
     confirmFreshSignIn: vi.fn(async () => {}),
   };
   const { el } = await mountWidget<FreshSignInDialog>("dashboard-fresh-sign-in-dialog", {
@@ -115,7 +116,7 @@ it("keeps a wrong answer beside the password and Cancel clears it without retryi
   expect(api.confirmFreshSignIn).toHaveBeenCalledTimes(1);
   expect(signIn.typed).toBe(false);
 });
-it("the passkey button confirms through the shared endpoint using the real browser library", async () => {
+it("Enter on the passkey button confirms through the shared endpoint using the real browser library", async () => {
   vi.spyOn(navigator.credentials, "get").mockResolvedValue({
     id: "cred-mine",
     rawId: new Uint8Array([1]).buffer,
@@ -130,11 +131,16 @@ it("the passkey button confirms through the shared endpoint using the real brows
     getClientExtensionResults: () => ({}),
   } as unknown as PublicKeyCredential);
   const { api, result, signIn } = await open();
-  api.recoveryPackPasskeyOptions.mockResolvedValue({
+  api.freshSignInPasskeyOptions.mockResolvedValue({
     challengeHandle: "h1",
     options: { challenge: "AQID" },
   });
-  signIn.shadowRoot!.querySelector<HTMLElement>("[data-test=use-passkey]")!.click();
+  const button = signIn
+    .shadowRoot!.querySelector("[data-test=use-passkey]")!
+    .shadowRoot!.querySelector("button")!;
+  button.focus();
+  await userEvent.keyboard("{Enter}");
+  await expect.poll(() => navigator.credentials.get).toHaveBeenCalledTimes(1);
   expect(await result).toBe(true);
   expect(api.confirmFreshSignIn).toHaveBeenCalledWith(
     expect.objectContaining({

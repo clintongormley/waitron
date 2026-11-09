@@ -1,5 +1,4 @@
 import { TLSSocket } from "node:tls";
-import { isRemoteStaffRequest } from "./request-from-box.js";
 import { eq, inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import { credentialRevision, type KeyRing } from "@waitron/credentials";
@@ -19,12 +18,7 @@ import {
   type RecoveryPackRecord,
   type Transaction,
 } from "@waitron/db";
-import {
-  authorizeManager,
-  requireFreshManagementSignIn,
-  beginOwnPasskeyCheck,
-  persons,
-} from "@waitron/identity";
+import { authorizeManager, requireFreshManagementSignIn, persons } from "@waitron/identity";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { readRecoveryKeyName, setRecoveryKeyTx } from "@waitron/node-db";
 import { newBreakGlassKeyName } from "@waitron/provisioning";
@@ -66,44 +60,6 @@ import { STREAM_PURPOSE } from "./stream-host.js";
 import { knownZone } from "./venue-time-zone.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import "./errors.js";
-
-export interface BackupRecoveryPackApiDeps {
-  db: Database;
-  /** The WebAuthn Relying Party ID passkeys are bound to (`config.ts`'s `managementRpId`). */
-  rpId: string;
-}
-
-const run = createErrorBoundary(
-  {
-    "management_session.required": 401,
-    "management_session.expired": 401,
-    "person.suspended": 403,
-    "authorization.not_permitted": 403,
-    "passkey.not_registered": 404,
-  },
-  "backup.failed",
-);
-
-export function mountBackupRecoveryPackApi(
-  app: Hono,
-  deps: BackupRecoveryPackApiDeps,
-  log: Logger,
-): void {
-  app.post("/api/backup/recovery-pack/passkey-options", (c) => {
-    c.header("Cache-Control", "no-store");
-    return run(c, log, async () => {
-      const managementSessionId = requireManagementSession(c);
-      const out = await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, { managementSessionId, permission: "system.manage" });
-        return beginOwnPasskeyCheck(tx, {
-          managementSessionId,
-          rpId: isRemoteStaffRequest(c) ? new URL(c.req.url).hostname : deps.rpId,
-        });
-      });
-      return c.json(out);
-    });
-  });
-}
 
 export interface BackupRecoveryPackMakeDeps {
   db: Database;

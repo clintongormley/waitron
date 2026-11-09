@@ -381,10 +381,7 @@ import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.j
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
-import {
-  mountBackupRecoveryPackApi,
-  mountBackupRecoveryPackMakeApi,
-} from "./backup-recovery-pack-api.js";
+import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
 import {
   readRecoveryDocumentEvidence,
   type RecoveryDocumentEvidence,
@@ -3282,7 +3279,6 @@ async function bootServer(
   mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
   const documentEvidence: RecoveryDocumentEvidence = (module) =>
     readRecoveryDocumentEvidence({ stateDir: config.stateDir, venueDir: config.venueDir }, module);
-  mountBackupRecoveryPackApi(app, { db, rpId: config.managementRpId }, log);
   mountRecoveryPackApi(
     app,
     {

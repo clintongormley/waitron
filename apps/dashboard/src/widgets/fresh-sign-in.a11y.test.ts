@@ -55,7 +55,7 @@ describe.each(["light", "dark"] as const)("fresh sign-in accessibility (%s)", (t
         own === "failed"
           ? vi.fn().mockRejectedValue({ code: "connection.failed" })
           : vi.fn().mockResolvedValue(profile(own)),
-      recoveryPackPasskeyOptions: vi.fn(),
+      freshSignInPasskeyOptions: vi.fn(),
     } as unknown as DashboardApi;
     const { el, host } = await mountWidget<FreshSignIn>("dashboard-fresh-sign-in", { api }, theme);
     const root = el.shadowRoot!;

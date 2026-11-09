@@ -29,11 +29,13 @@ no confirma que exista una cuenta ni que pueda acceder. Restablecer la contrase�
 cuenta deshabilitada.
 
 Waitron te pide que vuelvas a identificarte antes de cambiar las copias de seguridad, descargar
-archivos de recuperación, mostrar la clave de recuperación de las copias, retirar un equipo o
-exportar la configuración o los datos de otra persona. Usa tu contraseña o passkey y, si tienes
+archivos de recuperación, mostrar la clave de recuperación de las copias o exportar la
+configuración o los datos de otro miembro del personal. Usa tu contraseña o passkey y, si tienes
 verificación en dos pasos, un código del autenticador o de recuperación. La confirmación cubre
 estas acciones en este navegador durante 15 minutos o hasta que termine tu sesión.
-Elige **Cancelar** para dejar la acción sin realizar.
+Elige **Cancelar** para dejar la acción sin realizar. Si el disco está lleno, abre **Estado del
+equipo** y usa **Liberar** para dejar espacio antes de confirmar. Consulta
+[Liberar espacio en el equipo](box-status.md#free-space).
 
 ## Tu propia cuenta {#own-account}
 

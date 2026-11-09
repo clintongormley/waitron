@@ -4,6 +4,7 @@ import {
   baseStyles,
   draftScopeFor,
   focusFirstInvalid,
+  submitOnEnter,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -33,7 +34,7 @@ export class FreshSignInDialog extends LitElement {
   ];
   @property({ attribute: false }) api!: Pick<
     DashboardApi,
-    "getProfile" | "recoveryPackPasskeyOptions" | "confirmFreshSignIn"
+    "getProfile" | "freshSignInPasskeyOptions" | "confirmFreshSignIn"
   >;
   @state() private opened = false;
   @state() private busy = false;
@@ -157,10 +158,7 @@ export class FreshSignInDialog extends LitElement {
                 }}
                 @sign-in-passkey=${() => void this.#confirm("passkey")}
                 @keydown=${(event: KeyboardEvent) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void this.#confirm();
-                  }
+                  submitOnEnter(event, this.renderRoot.querySelector("[data-test=confirm-proof]"));
                 }}
               ></dashboard-fresh-sign-in>
               <wt-form-actions

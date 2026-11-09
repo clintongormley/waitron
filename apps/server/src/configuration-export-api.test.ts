@@ -1,3 +1,4 @@
+import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -100,6 +101,17 @@ describe("configuration export API", () => {
     } finally {
       await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie));
     }
+  });
+
+  it("refuses an unproved staff session by permission before asking for proof", async () => {
+    const { token } = await openManagementSession(suite.db, "staff");
+    const response = await app().request("/management-api/configuration-export", {
+      method: "POST",
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ passphrase: "a strong passphrase" }),
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
   });
 
   it("requires an authenticated manager", async () => {

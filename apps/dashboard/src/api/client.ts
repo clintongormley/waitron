@@ -4716,7 +4716,7 @@ export class DashboardApi {
     return this.#request("/management-api/session/me/fresh-sign-in", "POST", body);
   }
 
-  recoveryPackPasskeyOptions(): Promise<PasskeyChallenge> {
+  freshSignInPasskeyOptions(): Promise<PasskeyChallenge> {
     return this.#request<PasskeyChallenge>(
       "/management-api/session/me/fresh-sign-in/passkey-options",
       "POST",

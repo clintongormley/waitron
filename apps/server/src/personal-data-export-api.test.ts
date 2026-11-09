@@ -365,3 +365,14 @@ it("requires proof to export another person's data, while own export stays avail
   expect(own.status).toBe(200);
   await own.arrayBuffer();
 });
+
+it("refuses an unproved staff session by permission before asking for proof", async () => {
+  const response = await mounted().request(
+    `/management-api/staff/${colleagueId}/personal-data/export`,
+    {
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${martaToken}` },
+    },
+  );
+  await refused(response, 403, "authorization.not_permitted");
+  expect(order).toEqual([]);
+});

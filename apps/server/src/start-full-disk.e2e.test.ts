@@ -594,7 +594,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       headers: { cookie: admin.cookie },
     });
 
-  it("an admin's personal-data download of another person answers on a full disk with a change waiting, and writes nothing", async (ctx) => {
+  it("an already-proved admin's personal-data download of another person answers on a full disk with a change waiting, and writes nothing", async (ctx) => {
     const small = needDisk(ctx);
     const at = new Date(Date.now() - 60_000).toISOString();
     db.run(

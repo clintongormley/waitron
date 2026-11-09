@@ -108,7 +108,7 @@ function stubApi(at: RecoveryPackStatus = status()) {
   return {
     getRecoveryPackStatus: vi.fn<() => Promise<RecoveryPackStatus>>().mockResolvedValue(at),
     getProfile: vi.fn().mockResolvedValue(profile()),
-    recoveryPackPasskeyOptions: vi.fn(),
+    freshSignInPasskeyOptions: vi.fn(),
     makeRecoveryPack: vi
       .fn<(body: unknown) => Promise<MadeRecoveryPack>>()
       .mockResolvedValue({ pdf: pdf(), number: 4, key: "unchanged" }),

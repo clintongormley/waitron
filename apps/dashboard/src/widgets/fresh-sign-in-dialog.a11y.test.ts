@@ -32,7 +32,7 @@ for (const theme of ["light", "dark"] as const)
               passkeys: [],
             }),
             confirmFreshSignIn: vi.fn(),
-            recoveryPackPasskeyOptions: vi.fn(),
+            freshSignInPasskeyOptions: vi.fn(),
           } as unknown as DashboardApi,
         },
         theme,
