@@ -2241,6 +2241,9 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 _Formerly parts of B9 and Track C._ Open work:
 [backlog/dependencies.md](backlog/dependencies.md).
 
+- **Playwright 1.65 browser qualification remains A1464.** The dependency group keeps
+  Playwright at 1.64.1 until its Chromium layout and computed-style failures are resolved.
+
 - **A Vitest 5 retry still needs mutation qualification after the Stryker 10.1.1 update.**
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
 
