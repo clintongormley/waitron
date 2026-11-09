@@ -999,3 +999,28 @@ it.each([
     await expect.poll(() => dialog.open).toBe(false);
   },
 );
+
+it.each([
+  ["its station stops allowing changes", { lines: [line({ changesAfterSending: "never" })] }],
+  ["its bill is presented", { bills: [bill("placed")] }],
+] as const)(
+  "drops a staged change when %s while the window is open, and opens fresh once it can change again",
+  async (_, readOnly) => {
+    const el = await openRow({ lines: [line()] });
+    await setQuantity(el, "3");
+    expect(titleCount(el)).toBeNull();
+    Object.assign(el, readOnly);
+    await el.updateComplete;
+    expect(q<WtDialog>(el, "[data-sent-line-dialog]")!.open).toBe(true);
+    expect(offered(el)).toBe(false);
+    expect(titleCount(el)).toBe("×2");
+    expect(footerSentence(el)?.textContent?.trim() ?? "").toBe("");
+    Object.assign(el, { lines: [line()], bills: [bill("open")] });
+    await el.updateComplete;
+    expect(offered(el)).toBe(true);
+    await q<TillModifierPicker>(el, "till-modifier-picker")!.updateComplete;
+    await el.updateComplete;
+    expect(titleCount(el)).toBe("×2");
+    expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(true);
+  },
+);

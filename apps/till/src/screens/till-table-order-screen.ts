@@ -2272,6 +2272,18 @@ export class TillTableOrderScreen extends LitElement {
       this.billNaming = null;
       this.counting = null;
     }
+    this.#dropUnchangeableSentChange();
+  }
+
+  /** Once the open Sent window's dish can no longer be changed, forgets what its fields staged, so
+   * that if it becomes changeable again its fields start from the dish as it is then. Runs last in
+   * `willUpdate`, after everything the check reads is current. */
+  #dropUnchangeableSentChange(): void {
+    if (this.sentChange === null && this.#sentChangeSeed === undefined) return;
+    const members = this.sentLinePending === null ? undefined : this.#sentLineMembers();
+    if (members !== undefined && this.#sentChangeLines(members) !== undefined) return;
+    this.sentChange = null;
+    this.#sentChangeSeed = undefined;
   }
 
   override updated(changed: PropertyValues<this>): void {
