@@ -372,6 +372,34 @@ describe("the waiting start", () => {
         ]),
       ).toBe("waiting");
 
+    it("a newer backup main refuses carry-on without restricting the waiting box, and releases its turn", async () => {
+      await h.waiting.server.close();
+      let newer = true;
+      h = harness(() => new Promise(() => {}), {
+        node: suite.node,
+        intervalMs: 60_000,
+        carryOn: {
+          db: suite.db,
+          credentialKeyRing: TOTP_KEY_RING,
+          readNewerMain: async () =>
+            newer
+              ? { successorNodeId: SPARE_ID, membershipTerm: 4, contactUrl: "https://m2.test" }
+              : null,
+        },
+      });
+      const response = await post({ ...ADMIN, ...BOTH });
+      expect(response.status).toBe(409);
+      const body = await response.text();
+      expect(body).toContain("https://m2.test");
+      expect(body).toContain("backup");
+      expect(await events()).toEqual([]);
+      expect(await readHandoverRestriction(suite.node, NODE_ID)).toBeNull();
+      await stillWaiting();
+      newer = false;
+      expect((await post({ ...ADMIN, ...BOTH })).status).toBe(200);
+      expect(await events()).toHaveLength(1);
+    });
+
     const REFUSED = { error: { code: "management.origin_refused", params: {} } };
     const cookie = `waitron_management_session=${randomUUID()}`;
     const postFrom = (headers: Record<string, string>, fields: Record<string, string>) =>

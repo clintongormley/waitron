@@ -4,7 +4,7 @@ import "./errors.js";
 
 export interface HandoverGate {
   middleware: MiddlewareHandler;
-  close(deps: { allowed: (c: Context) => boolean; self: Context }): void;
+  close(deps: { allowed: (c: Context) => boolean; self?: Context }): void;
   isClosed(): boolean;
   settled(limitMs: number): Promise<{ remaining: readonly { method: string; path: string }[] }>;
 }
@@ -42,7 +42,7 @@ export function createHandoverGate(): HandoverGate {
     },
     close: ({ allowed: names, self }) => {
       allowed = names;
-      leave(self);
+      if (self !== undefined) leave(self);
     },
     isClosed: () => allowed !== null,
     settled: (limitMs) =>

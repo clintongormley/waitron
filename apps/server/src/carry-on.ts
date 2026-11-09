@@ -23,6 +23,7 @@ import {
 import { appendHandoverEventTx } from "@waitron/node-db";
 import { WAITING_PAGE_WORDS, type CarryOnWords } from "./i18n/waiting-page.js";
 import { resolveLoginLocale } from "./login-locale.js";
+import type { NewerBucketMain } from "./stream-host.js";
 import type { Logger } from "./logger.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { createPasswordThrottle } from "./password-throttle.js";
@@ -80,6 +81,7 @@ export interface CarryOnDeps {
   chartTerm: () => Promise<number>;
   /** Takes the one carry-on turn, after any re-ask in flight has settled. */
   beginCarryOn: () => Promise<CarryOnTurn>;
+  readNewerMain?: () => Promise<NewerBucketMain | null>;
   log: Logger;
 }
 
@@ -319,6 +321,14 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
         );
     }
     try {
+      const newer = await deps.readNewerMain?.();
+      if (newer != null) {
+        turn.abandon();
+        return page(
+          `<p role="alert">${escapeHtml(words.bucketMain)}</p>\n${newer.contactUrl === "" ? "" : `<p><a href="${escapeHtml(newer.contactUrl)}">${escapeHtml(words.openMain)}</a></p>\n`}`,
+          409,
+        );
+      }
       await withNodeTransaction(deps.node, async (tx) => {
         // A stepdown may have recorded a handover since the check above; it wins.
         const since = await knownHandoverSuccessor(tx, deps.nodeId);

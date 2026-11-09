@@ -55,7 +55,7 @@ export type StepDownRequest =
       kind: "superseded";
       successorNodeId: string | null;
       membershipTerm: number;
-      self: Context;
+      self?: Context;
     };
 
 export interface StepDownResult {

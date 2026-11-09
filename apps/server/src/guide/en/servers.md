@@ -30,11 +30,21 @@ other box has taken over, says so.
 
 If you know the other box is switched off, you can let this box carry on without it. Open the box
 at its `https://` address, sign in as an administrator under **Carry on as the main box**, and
-tick both statements. This box then runs the venue until it next restarts, when it asks the other
-box again.
+tick both statements. This box starts taking sales again and asks the other box again at its next
+restart.
 
 If the other box answers first, its answer wins. A box that has already handed over cannot carry
 on; its page says so instead of showing the form.
+
+If the backup confirms that another box has taken over, this box refuses to carry on. Open the
+other box using the link, and keep this one waiting or switch it off. If the takeover appears in
+the backup after you carry on, this box stops selling and sending records to the tax agency.
+
+A box stopped this way may still have an old chart naming itself main, so **Rejoin** refuses.
+Keep using the new main box and leave the stopped box switched off. To set the stopped box up
+again, use the first-setup **Start again** procedure; this clears its recorded stop. Do not do
+this until you have accounted for any sales recorded only on the stopped box. Older boxes may
+share an address: check which box you opened before continuing.
 
 ## Turn remote staff access on or off {#remote-access}
 

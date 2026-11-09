@@ -3,6 +3,8 @@ import type { SupportedLocale } from "@waitron/shared";
 /** The words of the page's "Carry on as the main box" form and its answers. */
 export interface CarryOnWords {
   heading: string;
+  bucketMain: string;
+  openMain: string;
   /** The words around the other box's name. */
   intro: readonly [string, string];
   email: string;
@@ -64,6 +66,9 @@ export const WAITING_PAGE_WORDS: Readonly<
     otherBox: "the other box",
     carryOn: {
       heading: "Carry on as the main box",
+      bucketMain:
+        "Another box has published a newer signed backup for this venue. This box cannot carry on as the main box. Open the other box to use the venue; keep this box waiting, or switch it off.",
+      openMain: "Open the other box",
       intro: [
         "Only if ",
         " is switched off. This box then runs the venue until it next restarts, when it asks again.",
@@ -119,6 +124,9 @@ export const WAITING_PAGE_WORDS: Readonly<
     otherBox: "otro equipo",
     carryOn: {
       heading: "Seguir como equipo principal",
+      bucketMain:
+        "Otro equipo ha publicado una copia de seguridad firmada más reciente para este local. Este equipo no puede seguir como principal. Abre el otro equipo para usar el local; deja este equipo esperando o apágalo.",
+      openMain: "Abrir el otro equipo",
       intro: [
         "Solo si ",
         " está apagado. Este equipo lleva entonces el local hasta que se reinicie, y entonces vuelve a preguntar.",

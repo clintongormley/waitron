@@ -511,12 +511,11 @@ Enrollment prerequisite (2026-11-09): new enrollment retains this box’s signed
 its held chart, and later charts retain its own verified endorsements of listed, non-evicted nodes.
 Earlier enrollments are not backfilled. Bucket checks and the stop remain in A1342’s next part.
 
-A1342. The owner chose on 2026-11-05: settle it before A947 3b lands, and a box that sees another
-main box stops selling. Left open by A1018 Slice 5 (Ruling R42). `apps/server/src/node-membership-api.ts` and
-`apps/server/src/boot-peer-check.ts` stop a box only when the chart fences it (`isFencedStanding`),
-and a third box's promotion leaves a box `serving-secondary`, which does not fence. Run through real
-starts on the Slice 5 branch; on main since #2436. It needs a third box promoted over a running main
-box, so no real venue reaches it before 3b.
+The third-box admission cases below remain separate work.
+
+Remaining third-box cases from A1342. Owner 2026-11-09 17:04 accepted the two-box bucket-evidence
+stop as clearing the before-A947-3b-6 gate; it does not close these third-box cases. The older
+receipts below describe those cases, rather than the returned-main T versus T+1 incident.
 
 Since A1425 the Veri\*Factu backend's `refuseNewIssuance` and `appendToChain` refuse a box the held
 chart does not name `serving-primary` (`fiscal.chain_handed_over`), so such a box writes no new record

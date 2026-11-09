@@ -1858,6 +1858,7 @@ function saleRefusalOf(
     case "sale.full_invoice_unavailable":
     case "fiscal.fingerprint_mismatch":
       return { code: refusal.code };
+    case "handover.stepping_down":
     case "fiscal.chain_handed_over":
       return tender.manualCard ? "sale.chain_handed_over_manual_card" : { code: refusal.code };
     case "storage.disk_full":

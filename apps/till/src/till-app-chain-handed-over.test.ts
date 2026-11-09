@@ -122,10 +122,14 @@ it.each(
   },
 );
 
-it.each(["en-GB", "es-ES"])(
-  "adds the terminal refund advice to a hand-keyed card counter sale, and only there, in %s",
-  async (locale) => {
-    const write = vi.fn().mockRejectedValue(refusal);
+it.each(
+  ["en-GB", "es-ES"].flatMap((locale) =>
+    ["fiscal.chain_handed_over", "handover.stepping_down"].map((code) => ({ locale, code })),
+  ),
+)(
+  "adds terminal refund advice for $code on a hand-keyed card counter sale in $locale",
+  async ({ locale, code }) => {
+    const write = vi.fn().mockRejectedValue({ ...refusal, code });
     const { el } = await mount(locale, { recordSale: write });
     const screen = await openCounter(el);
     emit(screen, "confirm-payment", { method: "card", amount: "3.00" });

@@ -1,17 +1,40 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { once } from "node:events";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { nodes, readNodeMembership, stampDeployment, writeNodeMembership } from "@waitron/db";
+import {
+  nodes,
+  readNodeMembership,
+  stampDeployment,
+  writeNodeMembership,
+  withTransaction,
+  withNodeTransaction,
+} from "@waitron/db";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
-import { loadKeyRing } from "@waitron/credentials";
+import { loadKeyRing, putCredential, sealNodeSigningKeyTx } from "@waitron/credentials";
+import { Hono } from "hono";
+import { persons, startManagementSession } from "@waitron/identity";
+import type { WaitronModule } from "@waitron/module";
+import { FakeLitestream } from "@waitron/stream/testing/fake-litestream.js";
+import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
+import { readPointer, venuePrefix } from "@waitron/stream";
+import { mountStreamApi } from "./stream-api.js";
+import { createTurns } from "./backup-turns.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { StreamHost, STREAM_PURPOSE } from "./stream-host.js";
+import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { ALL_MODULES } from "./modules.js";
+import { standbyContract, allocatedStandbyModules } from "./testing/allocated-contract.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { signEnvelope } from "@waitron/handover";
 import {
   generateNodeKeyPair,
+  buildNextMembershipDocument,
   signDocumentBody,
   type MembershipDocumentBody,
   type NodeStanding,
@@ -50,6 +73,11 @@ vi.mock("@waitron/module", async (importOriginal) => {
   };
 });
 
+vi.mock("./modules.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./modules.js")>();
+  return { ...actual, ALL_MODULES: [...actual.ALL_MODULES] };
+});
+
 const migrations = migrationOptionsFor(manifestSets(), null);
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -62,6 +90,7 @@ let server: StartedServer | undefined;
 let peer: Server | undefined;
 const scratch: string[] = [];
 const suite = useVenueDb({ migrations });
+const spareSuite = useVenueDb({ migrations });
 
 afterEach(async () => {
   listener.configured = false;
@@ -122,6 +151,8 @@ async function boot(
     spareUrl: string;
     joined: boolean;
     pinned?: boolean;
+    enrolled?: boolean;
+    beforeStart?: (nodeId: string) => Promise<void>;
     seams?: StartServerSeams;
     /** A fixed HTTP port, bound as given rather than replaced by an ephemeral one. */
     port?: number;
@@ -184,6 +215,68 @@ async function boot(
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
     ...(options.port === undefined ? {} : { WAITRON_HTTP_PORT: String(options.port) }),
   };
+  if (options.enrolled) {
+    await mkdir(join(dir, "tls"), { recursive: true });
+    const ca = mintSelfSignedServerCert({
+      hostnames: ["waitron.local"],
+      ipAddresses: [],
+      now: new Date(),
+    });
+    await writeFile(join(dir, "tls", "ca.crt"), ca.caCertPem);
+    await writeFile(join(dir, "tls", "ca.key"), ca.caKeyPem);
+    const [admin] = await suite.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.role, "admin"));
+    const fixture = await standbyContract(
+      suite.db,
+      { nodeId },
+      SPARE.nodeId,
+      [
+        { code: "A", purpose: "standard" },
+        { code: "FF", purpose: "full" },
+        { code: "R", purpose: "rectificative" },
+      ],
+      admin!.id,
+    );
+    const held = fixture.request("reserve");
+    const app = new Hono();
+    mountMirrorBundleApi(app, {
+      appDb: suite.db,
+      node: suite.node,
+      ring,
+      stateDir: dir,
+      relayUrl: "https://relay.example",
+      boxHostname: "waitron.local",
+      designated: { nodeId },
+      accountKey: Buffer.alloc(32, 9).toString("base64"),
+      credentialKeyRing: TOTP_KEY_RING,
+    });
+    const original = [...ALL_MODULES];
+    (ALL_MODULES as WaitronModule[]).splice(
+      0,
+      ALL_MODULES.length,
+      ...allocatedStandbyModules(original, fixture),
+    );
+    try {
+      const response = await app.request("/management-api/mirror-bundle", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          personId: admin!.id,
+          password: "dashPass123",
+          standbyNodeId: SPARE.nodeId,
+          standbyPublicKey: SPARE.publicKey,
+          standbyContactUrl: options.spareUrl,
+          moduleOperation: { binding: held.binding, input: held.input },
+        }),
+      });
+      expect(response.status, JSON.stringify(await response.json())).toBe(200);
+    } finally {
+      (ALL_MODULES as WaitronModule[]).splice(0, ALL_MODULES.length, ...original);
+    }
+  }
+  await options.beforeStart?.(nodeId);
   const lines: Record<string, unknown>[] = [];
   const original = process.stdout.write.bind(process.stdout);
   process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
@@ -238,6 +331,193 @@ function spareChart(
 }
 
 describe("the start check on a real start", () => {
+  it.each(["before", "after"])(
+    "a returning enrolled main stops when the spare publishes %s carry-on",
+    async (when) => {
+      const bucket = new SwitchableStore(() => new Date());
+      const litestream = new FakeLitestream();
+      let publisher: StreamHost | undefined;
+      let publishCopy!: () => Promise<void>;
+      const restarted = vi.fn();
+      try {
+        const booted = await boot(suite, {
+          spareUrl: "https://spare.example",
+          joined: true,
+          pinned: false,
+          enrolled: true,
+          seams: {
+            peerCheck: async () => ({
+              result: "wait",
+              successorNodeId: null,
+              waitingOn: [SPARE.nodeId],
+            }),
+            waitingStart: { intervalMs: 60_000, secure: () => true },
+            stream: { store: bucket, mainCheckIntervalMs: 5 },
+            stepdown: { mount: () => {}, restart: restarted },
+          },
+          beforeStart: async (nodeId) => {
+            const settings = {
+              venueId: "returning-main",
+              endpoint: "-",
+              region: "eu-west-1",
+              bucket: "copies",
+              prefix: "-",
+              accessKeyId: "test",
+              secretAccessKey: "test-secret",
+            };
+            await withTransaction(suite.db, (tx) =>
+              putCredential(tx, loadKeyRing(KEY_ENV), { purpose: STREAM_PURPOSE, value: settings }),
+            );
+            const held = (await readNodeMembership(suite.db))!;
+            await writeNodeMembership(
+              spareSuite.db,
+              buildNextMembershipDocument({
+                heldDocument: held,
+                nodes: [
+                  { nodeId, contactUrl: OWN_URL, standing: "sell-only" },
+                  {
+                    nodeId: SPARE.nodeId,
+                    contactUrl: "https://spare.example",
+                    standing: "serving-primary",
+                  },
+                ],
+                signerNodeId: SPARE.nodeId,
+                signerPrivateKey: SPARE.privateKey,
+              }),
+            );
+            await withNodeTransaction(spareSuite.node, (tx) =>
+              sealNodeSigningKeyTx(tx, loadKeyRing(KEY_ENV), SPARE.nodeId, SPARE.privateKey),
+            );
+            let recoveryKey: string | undefined;
+            publisher = new StreamHost({
+              db: spareSuite.db,
+              node: spareSuite.node,
+              ring: loadKeyRing(KEY_ENV),
+              nodeId: SPARE.nodeId,
+              venueDir: dirname(
+                spareSuite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file,
+              ),
+              stateDir: scratch[0]!,
+              litestreamBin: "litestream",
+              log: () => {},
+              now: () => new Date(),
+              isPrimary: () => true,
+              readRecoveryKey: async () => recoveryKey,
+              refreshSealedState: async () => "sealed",
+              store: bucket,
+              spawn: litestream.spawn,
+            });
+            const [admin] = await suite.db.select().from(persons).where(eq(persons.role, "admin"));
+            await spareSuite.db.insert(persons).values(admin!);
+            const session = await withTransaction(spareSuite.db, (tx) =>
+              startManagementSession(tx, { personId: admin!.id }),
+            );
+            const streamApp = new Hono();
+            mountStreamApi(
+              streamApp,
+              {
+                db: spareSuite.db,
+                ring: loadKeyRing(KEY_ENV),
+                stream: publisher,
+                venueId: "returning-main",
+                isPrimary: () => true,
+                isManagedByEnvironment: () => false,
+                loadedArchives: () => [],
+                readRecoveryKey: async () => recoveryKey,
+                writeRecoveryKey: async (key) => {
+                  recoveryKey = key;
+                },
+                sealedState: { refresh: async () => "sealed" },
+                probe: async () => ({ ok: true }),
+                prepareEncryption: async () => ({ ok: true }),
+                turns: createTurns(),
+              },
+              () => {},
+            );
+            // Stream Save stands in for A947 3b-5's backup.env provisioning, not promotion itself.
+            const saved = await streamApp.request("/api/backup/stream", {
+              method: "PUT",
+              headers: {
+                "content-type": "application/json",
+                cookie: `${MANAGEMENT_COOKIE}=${session.token}`,
+              },
+              body: JSON.stringify({
+                endpoint: "",
+                region: settings.region,
+                bucket: settings.bucket,
+                prefix: "",
+                accessKeyId: settings.accessKeyId,
+                secretAccessKey: settings.secretAccessKey,
+              }),
+            });
+            expect(saved.status, await saved.text()).toBe(200);
+            expect(recoveryKey).toMatch(/^[A-Za-z0-9_-]{43}$/);
+            await vi.waitFor(() => expect(litestream.running()).toBeDefined());
+            publishCopy = async () => {
+              const generation = (publisher!.status() as { generation: string }).generation;
+              bucket.upload(
+                `${venuePrefix("returning-main")}${generation}/0000/0000000000000001-0000000000000001.ltx`,
+              );
+              await vi.waitFor(
+                async () =>
+                  expect((await readPointer(bucket, "returning-main"))?.pointer.body).toMatchObject(
+                    { nodeId: SPARE.nodeId, term: 3 },
+                  ),
+                { timeout: 10_000 },
+              );
+            };
+            if (when === "before") await publishCopy();
+          },
+        });
+        expect(booted.acceptingSales).toBe(false);
+        const carried = await fetch(`http://127.0.0.1:${httpPort()}/carry-on`, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            email: "owner@example.test",
+            password: "dashPass123",
+            switchedOff: "yes",
+            noOtherRecovery: "yes",
+          }),
+        });
+        if (when === "before") {
+          expect(carried.status).toBe(409);
+          expect(await carried.text()).toContain("https://spare.example");
+          expect(await suite.node.select().from(nodeHandoverEvents)).toEqual([]);
+          expect(await readHandoverRestriction(suite.node, booted.nodeId)).toBeNull();
+        } else {
+          expect(carried.status).toBe(200);
+          await carried.text();
+          await vi.waitFor(
+            async () => {
+              const node = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
+              expect(await node.json()).toMatchObject({ acceptingSales: true });
+            },
+            { timeout: 30_000 },
+          );
+          await publishCopy();
+          await vi.waitFor(async () =>
+            expect(await readHandoverRestriction(suite.node, booted.nodeId)).toMatchObject({
+              kind: "superseded",
+              successorNodeId: SPARE.nodeId,
+              membershipTerm: 3,
+            }),
+          );
+          await vi.waitFor(() => expect(restarted).toHaveBeenCalledOnce(), { timeout: 30_000 });
+          await server!.close();
+          server = undefined;
+          beforeServerStarts();
+          server = await startServer(booted.env, booted.env);
+          const node = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
+          expect(await node.json()).toMatchObject({ acceptingSales: false });
+        }
+      } finally {
+        await publisher?.stop();
+      }
+    },
+    60_000,
+  );
+
   it("a seeded main box whose chart lists an adopted, unfinished spare starts selling", async () => {
     const booted = await boot(suite, { spareUrl: OWN_URL, joined: false });
     expect(booted.acceptingSales).toBe(true);
