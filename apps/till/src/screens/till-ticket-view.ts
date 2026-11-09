@@ -651,6 +651,13 @@ export class TillTicketView extends LitElement {
   #renderInvoicePrinter() {
     if (!this.invoicePrintersEnabled || !this.canPrintReceipt) return nothing;
     const role = this.invoiceEquipment;
+    const printer =
+      role?.choices.find((item) => item.id === role.resolved?.id) ??
+      role?.chosen ??
+      role?.default ??
+      this.deliveries?.actions.print?.printers[0];
+    const paper =
+      printer?.kind === "a4" ? "A4" : printer?.kind === "receipt" ? t("invoice.receipt_paper") : "";
     return html`<div class="invoice-printer">
       <wt-button
         data-test="invoice-printer-toggle"
@@ -661,7 +668,7 @@ export class TillTicketView extends LitElement {
           if (this.invoicePrinterOpen) this.#readInvoicePrinters();
         }}
         >${t("equipment.invoice")}:
-        ${role?.resolved?.name ?? this.deliveries?.actions.print?.printers[0]?.name ?? t("equipment.none")}</wt-button
+        ${role?.resolved?.name ?? this.deliveries?.actions.print?.printers[0]?.name ?? t("equipment.none")}${paper ? ` · ${paper}` : ""}</wt-button
       >
       ${
         this.invoicePrinterOpen
@@ -675,6 +682,7 @@ export class TillTicketView extends LitElement {
                           name="invoicePrinterId"
                           label=${t("equipment.invoice")}
                           search="auto"
+                          placeholder=${t("equipment.use_default").replace("{name}", () => role.default?.name ?? t("equipment.none"))}
                           searchPlaceholder=${t("form.combobox_search")}
                           noResultsLabel=${t("form.combobox_no_results")}
                           .value=${this.invoicePrinterValue ?? (role.selection === "default" ? "" : (role.chosenId ?? ""))}
@@ -722,17 +730,18 @@ export class TillTicketView extends LitElement {
                 @click=${() => this.#readInvoicePrinters()}
                 >${t("hours.refresh")}</wt-button
               >
-              ${
-                this.invoicePrinterError
-                  ? html`<wt-button
-                      data-test="invoice-printer-save-retry"
-                      variant="secondary"
-                      @click=${() => this.dispatchEvent(new CustomEvent("invoice-printer-retry", { bubbles: true, composed: true }))}
-                      >${t("find_page.retry")}</wt-button
-                    >`
-                  : nothing
-              }
             `
+          : nothing
+      }
+      ${
+        this.invoicePrinterError
+          ? html`<p role="alert">${this.invoicePrinterError}</p>
+              <wt-button
+                data-test="invoice-printer-save-retry"
+                variant="secondary"
+                @click=${() => this.dispatchEvent(new CustomEvent("invoice-printer-retry", { bubbles: true, composed: true }))}
+                >${t("find_page.retry")}</wt-button
+              >`
           : nothing
       }
     </div>`;
@@ -772,15 +781,17 @@ export class TillTicketView extends LitElement {
         ? status.current?.id
         : null;
     return html`
-      ${words === undefined ? nothing : html`<p data-test="delivery-status">${words}</p>`}
+      ${words === undefined ? nothing : html`<p role="status" data-test="delivery-status">${words}</p>`}
       ${
         this.deliveriesReadFailed
-          ? html`<p data-test="delivery-read-failed">${t("invoice.delivery_read_failed")}</p>`
+          ? html`<p role="status" data-test="delivery-read-failed">
+              ${t("invoice.delivery_read_failed")}
+            </p>`
           : nothing
       }
       ${
         this.deliveryRefusal
-          ? html`<p data-test="delivery-refused">
+          ? html`<p role="alert" data-test="delivery-refused">
               ${this.deliveryRefusal.code === undefined ? t("invoice.delivery_error") : codeMessage(this.deliveryRefusal.code)}
             </p>`
           : nothing
@@ -791,9 +802,9 @@ export class TillTicketView extends LitElement {
           ? html`<wt-button
               variant="secondary"
               data-test="print-invoice"
-              ?disabled=${busy || this.invoicePrinterBlocked || this.deliveriesReadFailed}
+              ?disabled=${busy || this.invoicePrinterBlocked}
               @click=${() => this.dispatchEvent(new CustomEvent("print-invoice", { bubbles: true, composed: true }))}
-              >${printLabel(print, status?.actions.retryOriginal?.medium === "a4")}</wt-button
+              >${printLabel(print, status?.actions.retryOriginal?.medium === "a4" && status.originalPrinterId === print.printers[0]?.id)}</wt-button
             >`
           : nothing
       }

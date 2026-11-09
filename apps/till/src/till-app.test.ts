@@ -5129,7 +5129,7 @@ describe("till-app", () => {
     ): InvoiceDeliveryStatus => ({
       current,
       originalCompleted: current?.status === "sent",
-      originalPrinterId: null,
+      originalPrinterId: current?.medium === "a4" ? "p1" : null,
       actions: { ...none, ...actions },
       history: current === null ? [] : [current],
     });

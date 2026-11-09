@@ -3442,6 +3442,7 @@ export class TillApp extends LitElement {
   #invoicePrinterReads = 0;
   #invoiceDeliveryReads = 0;
   #invoicePrinterChoice?: EquipmentChange;
+  #invoicePrinterSaved = false;
   @state() private invoiceDeliveryBusy = false;
   @state() private invoiceDeliveryRefusal?: { code?: string };
   @state() private invoiceEmailOpen = false;
@@ -9683,22 +9684,26 @@ export class TillApp extends LitElement {
     }
   }
 
-  async #readInvoiceDeliveries(
-    id: string,
-    session: number,
-    visit: number,
-  ): Promise<InvoiceDeliveryStatus | null | undefined> {
+  async #readInvoiceDeliveries(id: string, session: number, visit: number): Promise<void> {
     const read = ++this.#invoiceDeliveryReads;
     try {
       const status = await this.api.getInvoiceDeliveries(id);
       if (!this.#ticketIsCurrent(id, session, visit) || read !== this.#invoiceDeliveryReads) return;
       this.invoiceDeliveries = status;
       this.invoiceDeliveriesReadFailed = false;
-      this.#scheduleDeliveryReread(id, session, visit);
-      return status;
+      if (this.invoicePrinterBlocked && this.#invoicePrinterSaved) {
+        const offered = status?.actions.print?.printers[0];
+        const confirmed =
+          status != null &&
+          (offered === undefined || offered.id === this.invoiceEquipment?.resolved?.id);
+        this.invoicePrinterBlocked = !confirmed;
+        this.invoicePrinterError = confirmed ? "" : t("invoice.delivery_read_failed");
+      }
     } catch {
       if (!this.#ticketIsCurrent(id, session, visit) || read !== this.#invoiceDeliveryReads) return;
       this.invoiceDeliveriesReadFailed = true;
+      if (this.invoicePrinterBlocked && this.#invoicePrinterSaved)
+        this.invoicePrinterError = t("invoice.delivery_read_failed");
     }
     this.#scheduleDeliveryReread(id, session, visit);
   }
@@ -9716,8 +9721,10 @@ export class TillApp extends LitElement {
     if (!this.#ticketIsCurrent(id, session, visit) || read !== this.#invoicePrinterReads) return;
     this.invoicePrinterLoading = false;
     this.invoicePrinterReadFailed = !answered;
-    if (answered && pick === this.#invoicePrinterPick)
+    if (answered && pick === this.#invoicePrinterPick) {
       this.invoiceEquipment = this.deviceEquipment?.roles.find((role) => role.role === "invoice");
+      if (!this.invoicePrinterBlocked) this.invoicePrinterValue = undefined;
+    }
   }
 
   async #chooseInvoicePrinter(change: EquipmentChange): Promise<void> {
@@ -9738,27 +9745,21 @@ export class TillApp extends LitElement {
     this.#invoicePrinterChoice = change;
     this.invoicePrinterValue = change.selection === "default" ? "" : change.selection.id;
     this.invoicePrinterBlocked = true;
+    this.#invoicePrinterSaved = false;
     this.invoicePrinterError = "";
     const stored = await this.#onEquipmentChange(
       new CustomEvent("equipment-change", { detail: change }),
     );
     if (!current()) return;
-    if (stored === undefined) {
-      this.invoicePrinterError = t("pay_equipment.not_saved");
+    if (stored === undefined || "error" in stored) {
+      this.invoicePrinterError = stored?.error ?? t("pay_equipment.not_saved");
+      await this.#readInvoicePrinters();
       return;
     }
     this.invoiceEquipment = stored.roles.find((role) => role.role === "invoice");
-    const status = await this.#readInvoiceDeliveries(id, session, visit);
-    if (!current()) return;
-    const offered = status?.actions.print?.printers[0];
-    if (
-      status == null ||
-      (offered !== undefined && offered.id !== this.invoiceEquipment?.resolved?.id)
-    ) {
-      this.invoicePrinterError = t("invoice.delivery_read_failed");
-      return;
-    }
-    this.invoicePrinterBlocked = false;
+    this.#invoicePrinterSaved = true;
+    this.invoicePrinterValue = undefined;
+    await this.#readInvoiceDeliveries(id, session, visit);
   }
 
   /** Follows the last status read, so a failed read of a waiting attempt is tried again. */
@@ -9781,7 +9782,7 @@ export class TillApp extends LitElement {
   }
 
   async #onPrintInvoice(): Promise<void> {
-    if (this.invoicePrinterBlocked || this.invoiceDeliveriesReadFailed) return;
+    if (this.invoicePrinterBlocked) return;
     const id = this.ticketWorkingOrderId;
     const printer = this.invoiceDeliveries?.actions.print?.printers[0];
     if (id === undefined || printer === undefined) return;
@@ -10602,7 +10603,7 @@ export class TillApp extends LitElement {
     event: CustomEvent<EquipmentChange>,
     nfc?: { session: number; name: string },
     sheet?: { role: PayEquipmentRole; sheet: string; pick: number },
-  ): Promise<DeviceEquipment | undefined> {
+  ): Promise<DeviceEquipment | { error: string } | undefined> {
     const opening = this.#equipmentOpenings;
     this.#equipmentWaiting++;
     this.#equipmentCounted();
@@ -10619,7 +10620,7 @@ export class TillApp extends LitElement {
     opening: number,
     nfc?: { session: number; name: string },
     sheet?: { role: PayEquipmentRole; sheet: string; pick: number },
-  ): Promise<DeviceEquipment | undefined> {
+  ): Promise<DeviceEquipment | { error: string } | undefined> {
     const current = () =>
       nfc === undefined ||
       (this.isConnected && nfc.session === this.#operatorSession && this.operatorName !== "");
@@ -10715,6 +10716,12 @@ export class TillApp extends LitElement {
             ? t("pay_equipment.not_saved")
             : codeMessage(typeof code === "string" ? code : "server.internal"),
         );
+      return {
+        error:
+          typeof status === "number"
+            ? codeMessage(typeof code === "string" ? code : "server.internal")
+            : t("pay_equipment.not_saved"),
+      };
     } finally {
       limit.done();
       this.#equipmentWaiting--;
@@ -20123,6 +20130,7 @@ export class TillApp extends LitElement {
     this.invoicePrinterBlocked = false;
     this.invoicePrinterError = "";
     this.#invoicePrinterChoice = undefined;
+    this.#invoicePrinterSaved = false;
     this.invoiceDeliveryBusy = false;
     this.invoiceDeliveryRefusal = undefined;
     this.invoiceEmailOpen = false;
@@ -20768,7 +20776,8 @@ export class TillApp extends LitElement {
             void this.#chooseInvoicePrinter(event.detail);
           }}
           @invoice-printer-retry=${() => {
-            if (this.#invoicePrinterChoice)
+            if (this.#invoicePrinterSaved) void this.#refreshReceiptPrint();
+            else if (this.#invoicePrinterChoice)
               void this.#chooseInvoicePrinter(this.#invoicePrinterChoice);
           }}
           .deliveryBusy=${this.invoiceDeliveryBusy}
@@ -21284,8 +21293,16 @@ export class TillApp extends LitElement {
                 .open=${true}
                 .equipment=${this.deviceEquipment}
                 .error=${this.equipmentError}
-                @equipment-change=${(event: CustomEvent<EquipmentChange>) =>
-                  void this.#onEquipmentChange(event)}
+                @equipment-change=${(event: CustomEvent<EquipmentChange>) => {
+                  if (
+                    event.detail.role === "invoice" &&
+                    this.capabilities.includes("print-receipt") &&
+                    this.result?.invoiceType === "F1" &&
+                    (this.drill?.kind === "ticket" || this.drill?.kind === "paid")
+                  )
+                    void this.#chooseInvoicePrinter(event.detail);
+                  else void this.#onEquipmentChange(event);
+                }}
                 @close=${() => (this.equipmentOpen = false)}
               ></till-equipment-dialog>`
             : nothing

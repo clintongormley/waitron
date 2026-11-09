@@ -41,7 +41,7 @@ del pedido lo muestra en el idioma de tu pantalla.
 ## Elegir la impresora de facturas {#invoice-printer}
 
 Para imprimir una factura completa en otro sitio, despliega **Impresora de facturas** en la vista
-de la factura y elige una impresora. La lista muestra las impresoras A4 y de papel de ticket
+de la factura y elige una impresora. La lista muestra las impresoras A4 y de papel de recibo
 permitidas para tu dispositivo. **Usar el predeterminado** vuelve a la predeterminada del perfil.
 La elección se guarda en **Equipo de este dispositivo** para este dispositivo.
 

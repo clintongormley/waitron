@@ -1985,7 +1985,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
   ): InvoiceDeliveryStatus => ({
     current,
     originalCompleted: current?.status === "sent",
-    originalPrinterId: null,
+    originalPrinterId: current?.medium === "a4" ? "p1" : null,
     actions: { ...noActions, ...actions },
     history: current === null ? [] : [current],
   });
@@ -2042,6 +2042,49 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     expect(opened[0]!.bubbles && opened[0]!.composed).toBe(true);
     expect(picks).toEqual([{ role: "invoice", selection: { id: "p2" }, via: "list" }]);
     expect(prints).toHaveLength(0);
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print on Office");
+  });
+
+  it("shows the default and paper while keeping controls outside delivery announcements", async () => {
+    const { el } = await mountF1({
+      invoicePrintersEnabled: true,
+      invoiceEquipment: {
+        role: "invoice",
+        selection: "default",
+        chosenId: null,
+        chosen: null,
+        resolved: { id: "p1", name: "Office", available: true },
+        default: { id: "p1", name: "Office", kind: "a4" },
+        choices: [],
+      },
+      deliveries: statusOf(attempt({ status: "failed" })),
+      deliveryRefusal: {},
+    });
+    expect(button(el, "invoice-printer-toggle")!.textContent).toContain("Office · A4");
+    await userEvent.click(button(el, "invoice-printer-toggle")!);
+    await el.updateComplete;
+    const field = el.shadowRoot!.querySelector("wt-combobox")!;
+    await field.updateComplete;
+    expect(field.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe(
+      "Use default: Office",
+    );
+    expect(button(el, "delivery-status")!.closest('[role="status"]')).not.toBeNull();
+    expect(
+      button(el, "delivery-refused")!.closest('[role="status"], [role="alert"]'),
+    ).not.toBeNull();
+    expect(field.closest('[role="status"], [role="alert"]')).toBeNull();
+  });
+
+  it("does not say again when the failed A4's destination differs from the offered printer", async () => {
+    const { el } = await mountF1({
+      deliveries: {
+        ...statusOf(attempt({ status: "failed" }), {
+          print: a4Offer,
+          retryOriginal: { medium: "a4" },
+        }),
+        originalPrinterId: "another",
+      },
+    });
     expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print on Office");
   });
 

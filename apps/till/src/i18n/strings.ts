@@ -406,9 +406,6 @@ export const en = {
   "invoice.delivery_hold_stopped": "stopped",
   "invoice.delivery_read_failed": "Could not check the invoice's delivery. Check again.",
   "invoice.delivery_error": "Could not send the invoice, try again",
-  "invoice.print_a4": "Print on A4",
-  "invoice.print_a4_copy": "Print a copy on A4",
-  "invoice.send_a4_again": "Send to the office printer again",
   "invoice.print_on": "Print on {printer}",
   "invoice.send_on_again": "Send to {printer} again",
   "invoice.printer_read_failed": "Could not read the invoice printers. Refresh to try again.",
@@ -2369,9 +2366,6 @@ export const es: Record<StringKey, string> = {
   "invoice.delivery_read_failed":
     "No se ha podido comprobar la entrega de la factura. Vuelve a comprobarla.",
   "invoice.delivery_error": "No se pudo enviar la factura, inténtalo de nuevo",
-  "invoice.print_a4": "Imprimir en A4",
-  "invoice.print_a4_copy": "Imprimir una copia en A4",
-  "invoice.send_a4_again": "Volver a enviar a la impresora de oficina",
   "invoice.print_on": "Imprimir en {printer}",
   "invoice.send_on_again": "Volver a enviar a {printer}",
   "invoice.printer_read_failed":
