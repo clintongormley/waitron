@@ -250,6 +250,14 @@ const inspectsAttempt = (session: FirstSetupSession, statusRefused: boolean) =>
   ((statusRefused || session.recoveryRequired) && !session.state) ||
   pastActivation(session.state) ||
   notCarriedOn(session.state);
+/** Activation's refusals: a stored series pick found taken is told apart by its reason. */
+function firstSetupErrorKey(error: unknown): StringKey | undefined {
+  const { code, params } = (error ?? {}) as { code?: unknown; params?: Record<string, unknown> };
+  if (typeof code !== "string") return undefined;
+  if (code === "sif.allocation_invalid" && params?.reason === "minute_in_use")
+    return "shell.first_setup.series_minute_taken";
+  return FIRST_SETUP_ERROR_MESSAGES[code];
+}
 /** Whether the page may ask the box what Start again would delete; the box decides the rest. */
 /** The box refused the stop from this page or over this connection, which deletes nothing. */
 const stopNotAccepted = (code: unknown) =>
@@ -1254,8 +1262,7 @@ export class SetupApp extends LitElement {
     }
   }
   #describeFirstError(error: unknown): Message {
-    const code = (error as { code?: string } | null)?.code;
-    const key = code === undefined ? undefined : FIRST_SETUP_ERROR_MESSAGES[code];
+    const key = firstSetupErrorKey(error);
     return key ? say(key) : () => initialOwnerStrings[setupLocale()].error;
   }
   #describeRepairError(error: unknown): Message {
@@ -1557,9 +1564,12 @@ export class SetupApp extends LitElement {
     }
   }
 
-  #mapFirstSetupError(code: string): boolean {
-    const held = firstSetupHeldWords(code, "shell.provisioning.first_setup_held");
-    const key = FIRST_SETUP_ERROR_MESSAGES[code];
+  #mapFirstSetupError(error: unknown): boolean {
+    const held = firstSetupHeldWords(
+      (error as { code?: unknown } | null)?.code,
+      "shell.provisioning.first_setup_held",
+    );
+    const key = firstSetupErrorKey(error);
     if (held === undefined && key === undefined) return false;
     this.#endAtReload(held ?? say(key!));
     return true;
@@ -1580,7 +1590,7 @@ export class SetupApp extends LitElement {
     // A network drop rejects with a bare `TypeError`, which carries no `code`.
     const code =
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
-    if (this.#mapFirstSetupError(code)) return;
+    if (this.#mapFirstSetupError(error)) return;
     if (code.startsWith("provisioning.") || code.startsWith("fiscal.")) {
       const key = VENUE_ERROR_MESSAGES[code];
       this.venueError = key === undefined ? sayWith("shell.venue_error.other", { code }) : say(key);
@@ -2070,7 +2080,7 @@ export class SetupApp extends LitElement {
   async #mapAdoptError(error: ApiError, body: AdoptBody): Promise<void> {
     const code =
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
-    if (this.#mapFirstSetupError(code)) return;
+    if (this.#mapFirstSetupError(error)) return;
     switch (code) {
       // Not read against the saved setup: an adopt still running on the server is past "started" too.
       case "setup.already_provisioning":
