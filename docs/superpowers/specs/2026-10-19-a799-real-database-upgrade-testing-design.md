@@ -1,3 +1,5 @@
+> **2026-11-09:** The owner folded A799 into [A950’s shorter route](../plans/2026-11-09-a950-shorter-upgrades.md). Its online migration trial is first-group step 4; retain real released starting points from go-live onwards. The earlier independent seven-cut build authority below is superseded. Runtime qualification remains unverified.
+
 ## 2026-10-23 build approval and first-cut execution contract
 
 The owner authorised building every published A799 plan cut on 23 October 2026

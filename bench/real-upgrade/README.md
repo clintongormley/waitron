@@ -1,3 +1,5 @@
+> **2026-11-09:** The owner folded A799 into [A950’s shorter route](../../docs/superpowers/plans/2026-11-09-a950-shorter-upgrades.md). Its online migration trial is first-group step 4; retain real released starting points from go-live onwards. The earlier independent seven-cut build authority below is superseded. Runtime qualification remains unverified.
+
 # Historical upgrade checks
 
 You need to keep records written by an older release exact when a new release starts.
