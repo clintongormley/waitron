@@ -836,15 +836,18 @@ describe("queued account mail primary admission at real boot", () => {
             },
             body: JSON.stringify(body),
           });
-        const reset = await request("/management-api/password-reset", {
-          email: "reset-boot@example.test",
-        });
-        expect(reset.status).toBe(role === "primary" ? 202 : 403);
-        if (role === "secondary")
-          expect(await reset.json()).toEqual({
-            error: { code: "account_mail.primary_required", params: { primaryDashboardUrl: null } },
-          });
-        else await reset.body?.cancel();
+        for (const email of ["reset-boot@example.test", "unknown-boot@example.test"]) {
+          const reset = await request("/management-api/password-reset", { email });
+          expect(reset.status).toBe(role === "primary" ? 202 : 403);
+          if (role === "secondary")
+            expect(await reset.json()).toEqual({
+              error: {
+                code: "account_mail.primary_required",
+                params: { primaryDashboardUrl: null },
+              },
+            });
+          else await reset.body?.cancel();
+        }
         const invitation = await request("/management-api/staff", {
           displayName: "Queued new member",
           firstNames: "New",

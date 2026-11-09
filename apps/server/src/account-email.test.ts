@@ -1,18 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { composeAccountEmail, type AccountEmail } from "./account-email.js";
 
-import { sendSmtpMessage, type SmtpConnection, type SmtpTransport } from "./smtp-send.js";
-function messageSender(
-  config: SmtpConnection & { timeZone: string; privacyNoticeUrl?: string },
-  transport: SmtpTransport,
-) {
-  return (message: AccountEmail) =>
-    sendSmtpMessage(
-      config,
-      { to: message.email, ...composeAccountEmail(message, config) },
-      { transport },
-    );
-}
+import { messageSender } from "./testing/account-mail.js";
 
 describe("account email", () => {
   it.each([

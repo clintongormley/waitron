@@ -178,7 +178,7 @@ async function startEmailBox(path: EmailPath, invitees: number) {
         "POST",
       );
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ invitationSent: true, delivery: "sent" });
+      expect(await response.json()).toEqual({ invitationSent: true, delivery: "queued" });
     } else if (path === "password_reset") {
       const response = await request("/management-api/password-reset", "POST", {
         email: `invitee-${index}@example.test`,
@@ -196,9 +196,9 @@ async function startEmailBox(path: EmailPath, invitees: number) {
         currentPassword: PASSWORD,
       });
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ emailVerificationSent: true, delivery: "sent" });
+      expect(await response.json()).toEqual({ emailVerificationSent: true, delivery: "queued" });
     }
-    expect(smtp.messages).toHaveLength(index + 1);
+    await expect.poll(() => smtp.messages.length).toBe(index + 1);
     return smtp.messages[index]!.replace(/=\n/g, "");
   };
   return { request, send, close };
@@ -331,7 +331,7 @@ describe("a running venue's account email privacy page", () => {
 });
 
 describe("a box with no email server", () => {
-  it("logs the profile route's failed send as email.unconfigured", async () => {
+  it("answers email.unconfigured without queueing a profile email", async () => {
     const venue = await setupVenue(suite.db);
     const [port] = await freePorts(1);
     const scratch = await mkdtemp(join(tmpdir(), "waitron-venue-email-"));
@@ -365,15 +365,7 @@ describe("a box with no email server", () => {
         problem: "email.unconfigured",
         uncertain: false,
       });
-      await vi.waitFor(async () => {
-        const failures = (await readFile(join(env.WAITRON_LOG_DIR!, "waitron.log"), "utf8"))
-          .split("\n")
-          .filter((line) => line.includes('"event":"account_email.send_failed"'))
-          .map((line) => JSON.parse(line) as Record<string, unknown>);
-        expect(failures.map(({ purpose, errorCode }) => ({ purpose, errorCode }))).toEqual([
-          { purpose: "email_change", errorCode: "email.unconfigured" },
-        ]);
-      });
+      expect(suite.db.all(sql`select id from outgoing_mail`)).toEqual([]);
     } finally {
       if (server !== undefined) await server.close();
       await rm(scratch, { recursive: true, force: true });

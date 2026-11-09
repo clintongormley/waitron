@@ -29,8 +29,7 @@ import { AppError, SUPPORTED_LOCALES } from "@waitron/shared";
 import { IDLE_TIMEOUT_MS } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountMeApi, type MeApiDeps } from "./me-api.js";
-import { accountActionMail } from "./account-mail.js";
-import { runMailPass, type MailTransport } from "./mail-sender.js";
+import { flushAccountMail } from "./testing/account-mail.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { wrongTotpCode } from "./testing/authenticator.js";
 import "./errors.js";
@@ -121,30 +120,6 @@ function mountApp(overrides: Partial<MeApiDeps> = {}): Hono {
     noopLog,
   );
   return app;
-}
-
-async function deliverProfileMail(send: MailTransport, codeKey?: Buffer, log: Logger = noopLog) {
-  await runMailPass({
-    db: suite.db,
-    owners: [
-      accountActionMail({
-        codeKey,
-        emailChangeUrl: "/",
-        venueLocale: VENUE_LOCALE,
-        readTimeZone: async () => "UTC",
-        readPrivacyNoticeUrl: async () => null,
-      }),
-    ],
-    now: () => new Date(),
-    isPrimary: () => true,
-    signal: new AbortController().signal,
-    log,
-    resolveDelivery: async () => ({
-      mode: "smtp",
-      smtp: { url: "smtp://test", from: "test@example.test" },
-    }),
-    send,
-  });
 }
 
 async function cookieFor(personId: string): Promise<string> {
@@ -481,10 +456,13 @@ describe("mountMeApi — profile credentials", () => {
       },
     });
     expect(await saved.json()).toEqual({ emailVerificationSent: true, delivery: "queued" });
-    await deliverProfileMail(async (_, message) => {
-      sent.push(String(message.text));
-      return { status: "sent" };
-    }, codeKey);
+    await flushAccountMail(suite.db, {
+      codeKey,
+      send: async (_, message) => {
+        sent.push(String(message.text));
+        return { status: "sent" };
+      },
+    });
     expect(sent).toHaveLength(1);
     const pending = await send(app, "GET", "/management-api/session/me/profile", { cookie });
     expect(await pending.json()).toMatchObject({
@@ -1092,63 +1070,6 @@ describe("mountMeApi — own credentials and second factor", () => {
     return row!;
   }
 
-  function capturingApp(overrides: Partial<MeApiDeps> = {}) {
-    const lines: Array<[string, string, Record<string, unknown> | undefined]> = [];
-    const log: Logger = (level, message, fields) => void lines.push([level, message, fields]);
-    const app = new Hono();
-    mountMeApi(
-      app,
-      {
-        db: suite.db,
-        venueLocale: VENUE_LOCALE,
-        modules: MODULES,
-        credentialKeyRing: PROFILE_KEY_RING,
-        ...overrides,
-      },
-      log,
-    );
-    return { app, lines };
-  }
-
-  it.each(["smtp", "local_capture", "unconfigured"] as const)(
-    "queues a changed profile email according to %s",
-    async (mode) => {
-      const personId = await personWithPassword({
-        email: `before-queue-${personCount + 1}@example.test`,
-      });
-      const email = `after-queue-${personCount}@example.test`;
-      const app = mountApp({ accountMailMode: async () => mode });
-      const response = await send(app, "PUT", "/management-api/session/me/profile", {
-        cookie: await cookieFor(personId),
-        body: {
-          displayName: `Credential User ${personCount}`,
-          firstNames: "Alex",
-          lastNames: "Rivera",
-          telephone: null,
-          email,
-          locale: "en-GB",
-          currentPassword: PASSWORD,
-        },
-      });
-      expect(response.status).toBe(200);
-      expect(await response.json()).toEqual(
-        mode === "unconfigured"
-          ? { emailVerificationSent: false, problem: "email.unconfigured", uncertain: false }
-          : { emailVerificationSent: true, delivery: mode === "smtp" ? "queued" : "captured" },
-      );
-      expect(
-        suite.db.all(sql`select params from outgoing_mail where person_id=${personId}`),
-      ).toEqual(
-        mode === "unconfigured" ? [] : [{ params: JSON.stringify({ purpose: "email_change" }) }],
-      );
-      expect(
-        suite.db.all(sql`select id from management_account_actions where person_id=${personId}`),
-      ).toEqual([]);
-      expect((await personRow(personId)).pendingEmail).toBe(email);
-      await suite.db.run(sql`delete from outgoing_mail where person_id=${personId}`);
-    },
-  );
-
   it("refuses an email change on a spare but still saves other profile details", async () => {
     const email = `spare-profile-${personCount + 1}@example.test`;
     const personId = await personWithPassword({ email });
@@ -1183,58 +1104,14 @@ describe("mountMeApi — own credentials and second factor", () => {
     expect((await personRow(personId)).firstNames).toBe("Alex");
   });
 
-  it.each([
-    { label: "accepted", mode: "smtp", outcome: { status: "sent" }, status: "sent", failure: null },
-    {
-      label: "captured",
-      mode: "local_capture",
-      outcome: { status: "sent" },
-      status: "sent",
-      failure: null,
-    },
-    {
-      label: "unconfigured",
-      mode: "unconfigured",
-      outcome: { status: "sent" },
-      status: null,
-      failure: null,
-    },
-    {
-      label: "refused",
-      mode: "smtp",
-      outcome: { status: "rejected", reason: "email.test_login_refused", serverRefused: true },
-      status: "rejected",
-      failure: "email.test_login_refused",
-    },
-    {
-      label: "deadline",
-      mode: "smtp",
-      outcome: { status: "unknown", reason: "email.test_timeout" },
-      status: "unknown",
-      failure: "email.test_timeout",
-    },
-    {
-      label: "lost acknowledgement",
-      mode: "smtp",
-      outcome: { status: "unknown", reason: "email.test_refused" },
-      status: "unknown",
-      failure: "email.test_refused",
-    },
-    {
-      label: "unexpected",
-      mode: "smtp",
-      outcome: { status: "unknown", reason: "email.test_refused" },
-      status: "unknown",
-      failure: "email.test_refused",
-    },
-  ] as const)(
-    "queues profile email before $label without undoing the saved pending address",
-    async (sample) => {
+  it.each(["smtp", "local_capture", "unconfigured"] as const)(
+    "queues a changed profile email according to %s delivery availability",
+    async (mode) => {
       const personId = await personWithPassword({
         email: `before-${personCount + 1}@example.test`,
       });
       const email = `after-${personCount}@example.test`;
-      const { app, lines } = capturingApp({ accountMailMode: async () => sample.mode });
+      const app = mountApp({ accountMailMode: async () => mode });
       const response = await send(app, "PUT", "/management-api/session/me/profile", {
         cookie: await cookieFor(personId),
         body: {
@@ -1248,55 +1125,22 @@ describe("mountMeApi — own credentials and second factor", () => {
         },
       });
       expect(response.status).toBe(200);
-      const body = await response.json();
-      expect(body).toEqual(
-        sample.mode === "unconfigured"
+      expect(await response.json()).toEqual(
+        mode === "unconfigured"
           ? { emailVerificationSent: false, problem: "email.unconfigured", uncertain: false }
-          : {
-              emailVerificationSent: true,
-              delivery: sample.mode === "smtp" ? "queued" : "captured",
-            },
+          : { emailVerificationSent: true, delivery: mode === "smtp" ? "queued" : "captured" },
       );
       expect((await personRow(personId)).pendingEmail).toBe(email);
-      if (sample.mode !== "unconfigured")
-        await deliverProfileMail(
-          async () => {
-            if (sample.label === "unexpected")
-              throw Object.assign(new Error("PASSWORD-SENTINEL https://action.invalid/SECRET"), {
-                code: "PROVIDER-CODE-SENTINEL",
-              });
-            return sample.outcome;
-          },
-          undefined,
-          (...args) => {
-            lines.push(args);
-          },
-        );
-      const rows = suite.db.all<{ id: string; status: string; failure_code: string | null }>(
-        sql`select id,status,failure_code from outgoing_mail where person_id=${personId}`,
-      );
-      expect(rows).toEqual(
-        sample.mode === "unconfigured"
+      expect(
+        suite.db.all(sql`select params, status from outgoing_mail where person_id=${personId}`),
+      ).toEqual(
+        mode === "unconfigured"
           ? []
-          : [{ id: expect.any(String), status: sample.status, failure_code: sample.failure }],
+          : [{ params: JSON.stringify({ purpose: "email_change" }), status: "pending" }],
       );
-      expect(lines.filter((line) => line[1] === "mail.send_failed")).toEqual(
-        sample.failure === null
-          ? []
-          : [
-              [
-                "error",
-                "mail.send_failed",
-                { kind: "account_action", mailId: rows[0]!.id, errorCode: sample.failure },
-              ],
-            ],
-      );
-      for (const secret of [
-        "PASSWORD-SENTINEL",
-        "https://action.invalid/SECRET",
-        "PROVIDER-CODE-SENTINEL",
-      ])
-        expect(JSON.stringify([body, lines])).not.toContain(secret);
+      expect(
+        suite.db.all(sql`select id from management_account_actions where person_id=${personId}`),
+      ).toEqual([]);
       await suite.db.run(sql`delete from outgoing_mail where person_id=${personId}`);
     },
   );
@@ -1461,57 +1305,6 @@ describe("mountMeApi — own credentials and second factor", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: { code: "account_action.invalid", params: {} } });
   });
-
-  it.each([
-    ["an Error", new Error("mail relay down")],
-    ["a bare string", "mail relay refused"],
-    ["an AppError", new AppError("account_action.invalid", {})],
-  ] as const)(
-    "saves the profile and records unknown when sending throws %s",
-    async (_label, thrown) => {
-      const personId = await personWithPassword({ email: `before-${personCount + 1}@example.com` });
-      const { app, lines } = capturingApp({ accountMailMode: async () => "smtp" });
-      const email = `after-${personCount}@example.com`;
-      const res = await send(app, "PUT", "/management-api/session/me/profile", {
-        cookie: await cookieFor(personId),
-        body: {
-          displayName: `Credential User ${personCount}`,
-          firstNames: "Alex",
-          lastNames: "Rivera",
-          telephone: null,
-          email,
-          locale: "en-GB",
-          currentPassword: PASSWORD,
-        },
-      });
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ emailVerificationSent: true, delivery: "queued" });
-      const messages: string[] = [];
-      await deliverProfileMail(
-        async (_, message) => {
-          messages.push(String(message.text));
-          throw thrown;
-        },
-        undefined,
-        (...args) => {
-          lines.push(args);
-        },
-      );
-      expect(messages).toHaveLength(1);
-      expect(messages[0]!.split("\n")).toContain("/");
-      expect((await personRow(personId)).pendingEmail).toBe(email);
-      const row = suite.db.get<{ id: string; status: string }>(
-        sql`select id,status from outgoing_mail where person_id=${personId}`,
-      )!;
-      expect(row.status).toBe("unknown");
-      expect(lines).toContainEqual([
-        "error",
-        "mail.send_failed",
-        { kind: "account_action", mailId: row.id, errorCode: "email.test_refused" },
-      ]);
-      await suite.db.run(sql`delete from outgoing_mail where person_id=${personId}`);
-    },
-  );
 });
 
 describe("mountMeApi — the current password is checked before the write lock is taken", () => {

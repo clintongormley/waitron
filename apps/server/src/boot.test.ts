@@ -3497,13 +3497,13 @@ describe("startServer — what a trading boot wires behind its management routes
 
       expect(await invite("second-invitee@example.test")).toEqual({
         invitationSent: true,
-        delivery: "sent",
+        delivery: "queued",
       });
       expect(await changeOwnEmail("second-change@example.test")).toEqual({
         emailVerificationSent: true,
-        delivery: "sent",
+        delivery: "queued",
       });
-      expect(smtp.messages).toHaveLength(2);
+      await expect.poll(() => smtp.messages.length).toBe(2);
       expect(smtp.messages[0]).toMatch(/^To: second-invitee@example\.test$/m);
       expect(smtp.messages[1]).toMatch(/^To: second-change@example\.test$/m);
     } finally {

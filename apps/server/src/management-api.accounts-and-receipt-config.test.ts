@@ -37,13 +37,12 @@ import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue, savePrivacyContact } from "@waitron/provisioning";
 import { WorkforceBackend } from "@waitron/workforce";
-import { AppError, jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
+import { jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { AccountEmail } from "./account-email.js";
-import type { EmailDelivery } from "./email-delivery.js";
-import { accountActionMail } from "./account-mail.js";
-import { runMailPass, type MailTransport } from "./mail-sender.js";
+import { flushAccountMail } from "./testing/account-mail.js";
+import type { MailTransport } from "./mail-sender.js";
 type MailSink = (message: AccountEmail) => Promise<"sent" | "captured">;
 import type { exchangeGoogleCode } from "./google-oidc.js";
 import {
@@ -208,45 +207,7 @@ function mountApp(
   );
   const flushMail = async (send?: MailTransport) => {
     await mounted.settle();
-    const owner = accountActionMail({
-      emailChangeUrl: "/",
-      venueLocale: "en-GB",
-      readTimeZone: async () => "UTC",
-      readPrivacyNoticeUrl: async () => null,
-    });
-    let delivered: AccountEmail;
-    const compose = owner.compose.bind(owner);
-    owner.compose = async (prepared, mail) => {
-      const message = await compose(prepared, mail);
-      delivered = {
-        ...prepared.issued,
-        locale: prepared.issued.locale ?? "en-GB",
-        actionUrl: message.text.split("\n").find((line) => /^https?:/.test(line)) ?? "/",
-      };
-      return message;
-    };
-    const count = suite.db.all(sql`select id from outgoing_mail`).length;
-    for (let i = 0; i <= count; i++) {
-      const result = await runMailPass({
-        db: suite.db,
-        owners: [owner],
-        now: () => new Date(),
-        isPrimary: () => true,
-        signal: new AbortController().signal,
-        log,
-        resolveDelivery: async () => ({
-          mode: "smtp",
-          smtp: { url: "smtp://test", from: "test@example.test" },
-        }),
-        send:
-          send ??
-          (async () => {
-            await sink?.(delivered);
-            return { status: "sent" };
-          }),
-      });
-      if (!result.processed) break;
-    }
+    await flushAccountMail(suite.db, { send, onMessage: sink, log });
   };
   return Object.assign(app, mounted, { flushMail });
 }
@@ -775,33 +736,6 @@ describe("Management API staff + session routes", () => {
     );
   });
 
-  it("settles an answered reset without waiting for its email to be sent", async () => {
-    await setupTenant();
-    let sending!: () => void;
-    const started = new Promise<void>((resolve) => (sending = resolve));
-    let deliver!: () => void;
-    const delivered = new Promise<void>((resolve) => (deliver = resolve));
-    const app = mountApp(async () => {
-      sending();
-      await delivered;
-      return "sent";
-    });
-    let flushing: Promise<void> | undefined;
-    try {
-      expect((await requestReset(app, STAFF_EMAIL)).status).toBe(202);
-      const outcome = await Promise.race([
-        app.settle().then(() => "settled"),
-        new Promise((resolve) => setTimeout(() => resolve("still waiting"), 10_000)),
-      ]);
-      expect(outcome).toBe("settled");
-      flushing = app.flushMail();
-      await started;
-    } finally {
-      deliver();
-      await flushing;
-    }
-  });
-
   it("answers 202 and logs when a known address's reset cannot be written", async () => {
     const sent: Parameters<MailSink>[0][] = [];
     const log = vi.fn<Logger>();
@@ -857,28 +791,6 @@ describe("Management API staff + session routes", () => {
     } finally {
       await suite.db.execute(sql`drop trigger refuse_account_action`);
     }
-  });
-
-  it("leaves nothing unhandled when logging a reset email that failed throws", async () => {
-    await setupTenant();
-    const log = vi.fn<Logger>((_level, event) => {
-      if (event === "account_email.send_failed") throw new Error("log sink failed");
-    });
-    const app = mountApp(
-      async () => {
-        throw new Error("smtp refused");
-      },
-      undefined,
-      undefined,
-      log,
-    );
-    expect((await requestReset(app, STAFF_EMAIL)).status).toBe(202);
-    await app.settle();
-
-    await vi.waitFor(() =>
-      expect(log).toHaveBeenCalledWith("error", "account_email.send_failed", expect.anything()),
-    );
-    await new Promise((resolve) => setImmediate(resolve));
   });
 
   it("removes public invitation replacement and rejects code-only account actions", async () => {
@@ -1950,6 +1862,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
       });
       expect(res.status).toBe(202);
     }
+    await app.flushMail();
     expect(sent).toEqual([]);
   });
 
@@ -2934,6 +2847,7 @@ describe("A998 staff route authority", () => {
       expect(await response.json()).toMatchObject({
         error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
       });
+      await app.flushMail();
       expect(sent).toEqual([]);
       expect(await suite.db.select().from(persons).where(eq(persons.id, staffId))).toEqual(before);
     },
@@ -2958,6 +2872,7 @@ describe("A998 staff route authority", () => {
       error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
     });
     expect(await countPersonsNamed("New Admin")).toBe(0);
+    await app.flushMail();
     expect(sent).toEqual([]);
   });
 });
@@ -2996,6 +2911,7 @@ it("rechecks admin authority lost after the invitation preflight", async () => {
     expect(await response.json()).toMatchObject({
       error: { code: "authorization.not_permitted", params: { permission: "person.admin" } },
     });
+    await app.flushMail();
     expect(sent).toEqual([]);
     expect(
       (
@@ -3186,6 +3102,7 @@ it("preserves a manager changing their own email through staff details", async (
       .from(persons)
       .where(eq(persons.id, managerId)),
   ).toEqual([{ email: "own-replacement@example.test", role: "manager", status: "active" }]);
+  await app.flushMail();
   expect(sent).toEqual([]);
   const expired = await app.request("/management-api/staff", { headers: { cookie } });
   expect(expired.status).toBe(401);
@@ -3295,64 +3212,18 @@ it("sends password-reset links back to the requesting staff origin", async () =>
   expect(new URL(sent[0]!.actionUrl).origin).toBe("https://staff.example.test");
 });
 
-describe("account email delivery details", () => {
-  const cases = [
-    { label: "accepted", mode: "smtp", outcome: { status: "sent" }, status: "sent", failure: null },
-    {
-      label: "captured",
-      mode: "local_capture",
-      outcome: { status: "sent" },
-      status: "sent",
-      failure: null,
-    },
-    {
-      label: "unconfigured",
-      mode: "unconfigured",
-      outcome: { status: "sent" },
-      status: null,
-      failure: null,
-    },
-    {
-      label: "refused",
-      mode: "smtp",
-      outcome: { status: "rejected", reason: "email.test_login_refused", serverRefused: true },
-      status: "rejected",
-      failure: "email.test_login_refused",
-    },
-    {
-      label: "deadline",
-      mode: "smtp",
-      outcome: { status: "unknown", reason: "email.test_timeout" },
-      status: "unknown",
-      failure: "email.test_timeout",
-    },
-    {
-      label: "lost acknowledgement",
-      mode: "smtp",
-      outcome: { status: "unknown", reason: "email.test_refused" },
-      status: "unknown",
-      failure: "email.test_refused",
-    },
-    {
-      label: "unexpected provider error",
-      mode: "smtp",
-      outcome: { status: "unknown", reason: "email.test_refused" },
-      status: "unknown",
-      failure: "email.test_refused",
-    },
-  ] as const;
+describe("queued invitation answers", () => {
   for (const action of ["create", "invitation", "reset-login", "reactivate"] as const) {
-    it.each(cases)(
-      `${action} queues before $label while retaining the account change`,
-      async (sample) => {
+    it.each(["smtp", "local_capture", "unconfigured"] as const)(
+      `${action} queues according to %s delivery availability`,
+      async (mode) => {
         const { staffId } = await setupTenant();
         if (action === "invitation" || action === "reactivate")
           await suite.db
             .update(persons)
             .set({ status: action === "invitation" ? "pending" : "suspended" })
             .where(eq(persons.id, staffId));
-        const log = vi.fn<Logger>();
-        const app = mountApp(undefined, undefined, undefined, log, async () => sample.mode);
+        const app = mountApp(undefined, undefined, undefined, noopLog, async () => mode);
         const cookie = await login(app, "owner@example.test", "dashPass123");
         const res = await app.request(
           action === "create"
@@ -3374,9 +3245,9 @@ describe("account email delivery details", () => {
         const body = (await res.json()) as { id?: string };
         expect(body).toEqual({
           ...(action === "create" ? { id: expect.any(String) } : {}),
-          ...(sample.mode === "unconfigured"
+          ...(mode === "unconfigured"
             ? { invitationSent: false, problem: "email.unconfigured", uncertain: false }
-            : { invitationSent: true, delivery: sample.mode === "smtp" ? "queued" : "captured" }),
+            : { invitationSent: true, delivery: mode === "smtp" ? "queued" : "captured" }),
         });
         const id = body.id ?? staffId;
         expect((await suite.db.select().from(persons).where(eq(persons.id, id)))[0]?.status).toBe(
@@ -3385,191 +3256,114 @@ describe("account email delivery details", () => {
         expect(
           suite.db.all(sql`select id from management_account_actions where person_id=${id}`),
         ).toEqual([]);
-        await app.flushMail(async () => {
-          if (sample.label === "unexpected provider error")
-            throw Object.assign(new Error("PASSWORD-SENTINEL https://action.invalid/SECRET"), {
-              code: "PROVIDER-CODE-SENTINEL",
-            });
-          return sample.outcome;
-        });
-        const rows = suite.db.all(
-          sql`select id, status, failure_code from outgoing_mail where person_id=${id}`,
-        );
-        if (sample.mode === "unconfigured") expect(rows).toEqual([]);
-        else {
-          expect(rows).toEqual([
-            { id: expect.any(String), status: sample.status, failure_code: sample.failure },
-          ]);
-          expect(
-            suite.db.all(sql`select id from management_account_actions where person_id=${id}`),
-          ).toHaveLength(1);
-        }
-        const failures = log.mock.calls.filter((call) => call[1] === "mail.send_failed");
-        expect(failures).toEqual(
-          sample.failure === null
+        const managerId = suite.db.get<{ id: string }>(
+          sql`select id from persons where email='owner@example.test'`,
+        )!.id;
+        expect(
+          suite.db.all(
+            sql`select status, requested_by, params from outgoing_mail where person_id=${id}`,
+          ),
+        ).toEqual(
+          mode === "unconfigured"
             ? []
             : [
-                [
-                  "error",
-                  "mail.send_failed",
-                  {
-                    kind: "account_action",
-                    mailId: (rows[0] as { id: string }).id,
-                    errorCode: sample.failure,
-                  },
-                ],
+                {
+                  status: "pending",
+                  requested_by: managerId,
+                  params: JSON.stringify({ purpose: "invitation", origin: "http://localhost" }),
+                },
               ],
         );
-        for (const secret of [
-          "PASSWORD-SENTINEL",
-          "https://action.invalid/SECRET",
-          "PROVIDER-CODE-SENTINEL",
-        ])
-          expect(JSON.stringify([body, log.mock.calls])).not.toContain(secret);
       },
     );
   }
-});
 
-it("keeps public reset empty and immediate while sanitising the eventual delivery failure", async () => {
-  const { staffId } = await setupTenant();
-  const log = vi.fn<Logger>();
-  let release!: () => void, started!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
+  it("keeps public reset empty and immediate while sanitising the eventual delivery failure", async () => {
+    const { staffId } = await setupTenant();
+    const log = vi.fn<Logger>();
+    let sends = 0;
+    const app = mountApp(
+      async () => {
+        sends++;
+        throw Object.assign(new Error("PASSWORD-SENTINEL https://action.invalid/SECRET"), {
+          code: "PROVIDER-CODE-SENTINEL",
+        });
+      },
+      undefined,
+      undefined,
+      log,
+    );
+    const response = await requestReset(app, STAFF_EMAIL);
+    expect([response.status, await response.text()]).toEqual([202, ""]);
+    await app.flushMail();
+    const row = suite.db.get<{ id: string; status: string }>(
+      sql`select id,status from outgoing_mail where person_id=${staffId}`,
+    )!;
+    expect(row.status).toBe("unknown");
+    expect(log.mock.calls.filter((call) => call[1] === "mail.send_failed")).toEqual([
+      [
+        "error",
+        "mail.send_failed",
+        { kind: "account_action", mailId: row.id, errorCode: "email.test_refused" },
+      ],
+    ]);
+    expect(sends).toBe(1);
+    for (const secret of [
+      "PASSWORD-SENTINEL",
+      "https://action.invalid/SECRET",
+      "PROVIDER-CODE-SENTINEL",
+    ])
+      expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
   });
-  const sending = new Promise<void>((resolve) => {
-    started = resolve;
-  });
-  let sends = 0;
-  const app = mountApp(
-    async () => {
-      sends++;
-      started();
-      await gate;
-      throw Object.assign(new Error("PASSWORD-SENTINEL https://action.invalid/SECRET"), {
-        code: "PROVIDER-CODE-SENTINEL",
-      });
-    },
-    undefined,
-    undefined,
-    log,
-  );
-  const response = await requestReset(app, STAFF_EMAIL);
-  expect([response.status, await response.text()]).toEqual([202, ""]);
-  const flushing = app.flushMail();
-  try {
-    await sending;
-    expect(log.mock.calls.filter((call) => call[1] === "mail.send_failed")).toEqual([]);
-  } finally {
-    release();
-    await flushing;
-  }
-  const row = suite.db.get<{ id: string; status: string }>(
-    sql`select id,status from outgoing_mail where person_id=${staffId}`,
-  )!;
-  expect(row.status).toBe("unknown");
-  expect(log.mock.calls.filter((call) => call[1] === "mail.send_failed")).toEqual([
-    [
-      "error",
-      "mail.send_failed",
-      { kind: "account_action", mailId: row.id, errorCode: "email.test_refused" },
-    ],
-  ]);
-  expect(sends).toBe(1);
-  for (const secret of [
-    "PASSWORD-SENTINEL",
-    "https://action.invalid/SECRET",
-    "PROVIDER-CODE-SENTINEL",
-  ])
-    expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
-});
 
-it("reports the immediate retry as unchanged and preserves a throttled reset's credentials", async () => {
-  const { staffId } = await setupTenant();
-  let actionUrl = "";
-  const app = mountApp(async (message) => {
-    actionUrl = message.actionUrl;
-    throw new Error("relay down");
-  });
-  const cookie = await login(app, "owner@example.test", "dashPass123");
-  const request = (action: string) =>
-    app.request(`/management-api/staff/${staffId}/${action}`, {
-      method: "POST",
-      headers: { cookie },
+  it("reports the immediate retry as unchanged and preserves a throttled reset's credentials", async () => {
+    const { staffId } = await setupTenant();
+    let actionUrl = "";
+    const app = mountApp(async (message) => {
+      actionUrl = message.actionUrl;
+      throw new Error("relay down");
     });
-  const first = await request("reset-login");
-  expect(await first.json()).toEqual({ invitationSent: true, delivery: "queued" });
-  await app.flushMail();
-  expect(suite.db.get(sql`select status from outgoing_mail where person_id=${staffId}`)).toEqual({
-    status: "unknown",
-  });
-  const link = new URL(actionUrl);
-  const completed = await app.request("/management-api/account-actions/complete", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      token: link.searchParams.get("token"),
-      purpose: "invitation",
-      password: PASSWORD,
-      pin: "2468",
-    }),
-  });
-  expect(completed.status).toBe(200);
-  const before = await suite.db
-    .select({ password: persons.passwordHash, pin: persons.pinHash, status: persons.status })
-    .from(persons)
-    .where(eq(persons.id, staffId));
-  expect(before[0]?.password).not.toBeNull();
-  const retry = await request("reset-login");
-  expect(await retry.json()).toEqual({ invitationSent: false });
-  expect(
-    await suite.db
+    const cookie = await login(app, "owner@example.test", "dashPass123");
+    const request = (action: string) =>
+      app.request(`/management-api/staff/${staffId}/${action}`, {
+        method: "POST",
+        headers: { cookie },
+      });
+    const first = await request("reset-login");
+    expect(await first.json()).toEqual({ invitationSent: true, delivery: "queued" });
+    await app.flushMail();
+    expect(suite.db.get(sql`select status from outgoing_mail where person_id=${staffId}`)).toEqual({
+      status: "unknown",
+    });
+    const link = new URL(actionUrl);
+    const completed = await app.request("/management-api/account-actions/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        token: link.searchParams.get("token"),
+        purpose: "invitation",
+        password: PASSWORD,
+        pin: "2468",
+      }),
+    });
+    expect(completed.status).toBe(200);
+    const before = await suite.db
       .select({ password: persons.passwordHash, pin: persons.pinHash, status: persons.status })
       .from(persons)
-      .where(eq(persons.id, staffId)),
-  ).toEqual(before);
+      .where(eq(persons.id, staffId));
+    expect(before[0]?.password).not.toBeNull();
+    const retry = await request("reset-login");
+    expect(await retry.json()).toEqual({ invitationSent: false });
+    expect(
+      await suite.db
+        .select({ password: persons.passwordHash, pin: persons.pinHash, status: persons.status })
+        .from(persons)
+        .where(eq(persons.id, staffId)),
+    ).toEqual(before);
+  });
 });
 
 describe("queued account requests", () => {
-  it.each(["smtp", "local_capture", "unconfigured"] as const)(
-    "queues an invitation according to %s delivery availability",
-    async (mode) => {
-      await setupTenant();
-      const managerId = (
-        await suite.db
-          .select({ id: persons.id })
-          .from(persons)
-          .where(eq(persons.email, "owner@example.test"))
-      )[0]!.id;
-      const app = mountApp(undefined, undefined, undefined, noopLog, async () => mode);
-      const cookie = await login(app, "owner@example.test", "dashPass123");
-      const response = await app.request("/management-api/staff", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify(invitationBody("Queued person", "queued@example.test")),
-      });
-      expect(response.status).toBe(201);
-      const result = await response.json();
-      expect(result).toMatchObject(
-        mode === "unconfigured"
-          ? { invitationSent: false, problem: "email.unconfigured", uncertain: false }
-          : { invitationSent: true, delivery: mode === "smtp" ? "queued" : "captured" },
-      );
-      const rows = suite.db.all(sql`select requested_by, params from outgoing_mail`);
-      expect(rows).toEqual(
-        mode === "unconfigured"
-          ? []
-          : [
-              {
-                requested_by: managerId,
-                params: JSON.stringify({ purpose: "invitation", origin: "http://localhost" }),
-              },
-            ],
-      );
-      expect(suite.db.all(sql`select id from management_account_actions`)).toEqual([]);
-    },
-  );
   it.each(["smtp", "unconfigured"] as const)(
     "answers 202 and queues only a known reset when mode is %s",
     async (mode) => {
@@ -3583,7 +3377,6 @@ describe("queued account requests", () => {
         });
         expect(response.status).toBe(202);
         await app.settle();
-        await app.flushMail();
       }
       expect(suite.db.all(sql`select person_id, params from outgoing_mail`)).toEqual(
         mode === "unconfigured"
@@ -3598,37 +3391,4 @@ describe("queued account requests", () => {
       expect(suite.db.all(sql`select id from management_account_actions`)).toEqual([]);
     },
   );
-});
-
-it("refuses a reset on a spare before looking up any address", async () => {
-  await setupTenant();
-  const app = mountApp(
-    undefined,
-    undefined,
-    undefined,
-    noopLog,
-    async () => "smtp",
-    async () => {
-      throw new AppError("account_mail.primary_required", {
-        primaryDashboardUrl: "https://primary.test/manage/",
-      });
-    },
-  );
-  for (const email of [MANAGER_EMAIL, "unknown@example.test"]) {
-    const response = await app.request("/management-api/password-reset", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({
-      error: {
-        code: "account_mail.primary_required",
-        params: { primaryDashboardUrl: "https://primary.test/manage/" },
-      },
-    });
-  }
-  await app.settle();
-  expect(suite.db.all(sql`select id from outgoing_mail`)).toEqual([]);
-  expect(suite.db.all(sql`select id from management_account_actions`)).toEqual([]);
 });

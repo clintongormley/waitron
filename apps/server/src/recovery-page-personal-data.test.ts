@@ -22,8 +22,8 @@ import "@waitron/payments-sumup";
 import { AppError, nodeId as brandNodeId } from "@waitron/shared";
 import { createErrorBoundary, MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
-import { accountActionMail } from "./account-mail.js";
-import { runMailPass } from "./mail-sender.js";
+import { flushAccountMail } from "./testing/account-mail.js";
+import { sql } from "drizzle-orm";
 import { createAttendanceEmailSender } from "./attendance-email.js";
 import { PERSONAL_LOG_KEYS } from "./log-personal-data.js";
 import { createLogger, type Logger, type LogLevel } from "./logger.js";
@@ -235,26 +235,6 @@ function me(log: Logger, configured = false): Hono {
     log,
   );
   return app;
-}
-
-async function deliverAccountMail(log: Logger, url: string) {
-  await runMailPass({
-    db: suite.db,
-    owners: [
-      accountActionMail({
-        codeKey: Buffer.alloc(32, 21),
-        emailChangeUrl: "/",
-        venueLocale: "en-GB",
-        readTimeZone: async () => "Europe/Madrid",
-        readPrivacyNoticeUrl: async () => null,
-      }),
-    ],
-    now: () => new Date(),
-    isPrimary: () => true,
-    signal: new AbortController().signal,
-    log,
-    resolveDelivery: async () => ({ mode: "smtp", smtp: { url, from: "venue@example.test" } }),
-  });
 }
 
 async function send(
@@ -786,7 +766,12 @@ describe("the recovery page, the log file and stdout carry no person's details",
           },
         });
         const personId = (answer.body as { id: string }).id;
-        await deliverAccountMail(r.log, relay.url);
+        await flushAccountMail(suite.db, {
+          log: r.log,
+          codeKey: Buffer.alloc(32, 21),
+          timeZone: "Europe/Madrid",
+          smtp: { url: relay.url, from: "venue@example.test" },
+        });
         expect(relay.recipients).toEqual([JORDI_EMAIL]);
         expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
         await expectLogged(
@@ -833,7 +818,12 @@ describe("the recovery page, the log file and stdout carry no person's details",
         status: 200,
         body: { emailVerificationSent: true, delivery: "queued" },
       });
-      await deliverAccountMail(r.log, relay.url);
+      await flushAccountMail(suite.db, {
+        log: r.log,
+        codeKey: Buffer.alloc(32, 21),
+        timeZone: "Europe/Madrid",
+        smtp: { url: relay.url, from: "venue@example.test" },
+      });
       expect(relay.recipients).toEqual([JORDI_EMAIL]);
       expect(await relayRefusal(relay)).toContain(JORDI_EMAIL);
       await expectLogged(
