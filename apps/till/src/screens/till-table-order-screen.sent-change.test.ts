@@ -1069,6 +1069,25 @@ it.each<[string, Partial<TillTableOrderScreen>]>([
   },
 );
 
+it("drops a staged change when the waiter's own draft recalls the dish, and opens fresh once that draft is cleared", async () => {
+  const draft = new DraftStore();
+  const el = await openRow({ lines: [line()], draftStore: draft });
+  await setQuantity(el, "3");
+  expect(titleCount(el)).toBeNull();
+  draft.loadFrom(draft.id, recalled().lines);
+  await el.updateComplete;
+  expect(q<WtDialog>(el, "[data-sent-line-dialog]")!.open).toBe(true);
+  expect(offered(el)).toBe(false);
+  expect(titleCount(el)).toBe("×2");
+  draft.clear();
+  await el.updateComplete;
+  expect(offered(el)).toBe(true);
+  await q<TillModifierPicker>(el, "till-modifier-picker")!.updateComplete;
+  await el.updateComplete;
+  expect(titleCount(el)).toBe("×2");
+  expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(true);
+});
+
 /** A live update in which another device changed the Flan: its bill line as `over` says, at revision 10. */
 async function changedElsewhere(el: TillTableOrderScreen, lines: TabLine[]) {
   el.lines = lines;
