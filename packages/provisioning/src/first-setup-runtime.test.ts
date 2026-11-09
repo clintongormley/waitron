@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -66,22 +65,18 @@ async function fixture(
     freezeConfiguration: async () => ({ digest: "b".repeat(64), newTaxpayer: false }),
   };
   const host = createFirstSetupModuleHost(args);
-  const nonce = randomBytes(32).toString("base64url");
-  const claim = await host.owner.claimFirstSetup(
-    {
-      environment: options.environment ?? "preproduction",
-      request: { ...request, seriesCode: options.standardBase ?? request.seriesCode },
-      ...(options.imported ? { configurationImport: true } : {}),
-    },
-    nonce,
-  );
+  const claim = await host.owner.claimFirstSetup({
+    environment: options.environment ?? "preproduction",
+    request: { ...request, seriesCode: options.standardBase ?? request.seriesCode },
+    ...(options.imported ? { configurationImport: true } : {}),
+  });
   const state = (await host.store.read())!;
   const context = firstSetupModuleContext(state, MODULE);
   const read = (binding = context.binding) =>
     host.coordinator.run(() =>
       bound.withPreparationState!(binding, () => bound.readSetupFacts!(binding)),
     );
-  return { host, bound, context, read, args, database, claim, nonce };
+  return { host, bound, context, read, args, database, claim };
 }
 
 it("reads the frozen setup scope and real module history under the preparation hold", async () => {
@@ -426,28 +421,6 @@ it.each(["readSetupFacts", "withPreparationState"] as const)(
   },
 );
 
-it("owner recovery invalidates the previously selected setup fingerprint", async () => {
-  const f = await fixture();
-  const selected = await selectThroughHost(f);
-  if (selected.status !== "selected") throw new Error("selection must be ready");
-  const before = await f.read();
-  await f.host.owner.resumeFirstSetup(f.nonce, { password: PASSWORD });
-  expect((await f.read()).contextKey).not.toBe(before.contextKey);
-  const preparation = hour.createHostedHourPreparation(f.bound, {
-    monotonicNow: () => 0,
-    readClock: async () => ({ clock: currentClock() }),
-  });
-  const run = vi.fn(async () => "must not run");
-  await expect(
-    f.host.coordinator.run(() =>
-      withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
-        preparation.prepare({ binding: f.context.binding, authority, input: selected.input }, run),
-      ),
-    ),
-  ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "event_mismatch" } });
-  expect(run).not.toHaveBeenCalled();
-});
-
 it("a clock provider cannot replace the host's scope or bases", async () => {
   const f = await fixture();
   const selection = await selectThroughHost(f, (instantMs) => async (context) => {
@@ -498,6 +471,37 @@ it("cannot retain an hour selection without a fresh owner password grant", async
   ).rejects.toMatchObject({ code: "setup.owner_required" });
   expect((await f.host.store.read())!.status).toBe("claimed");
   expect((await f.host.store.read())!.inputs).toEqual({});
+});
+
+it("an hour selection written outside the host's password scope is refused", async () => {
+  const f = await fixture();
+  const owner = { ...f.claim.state, capability: f.claim.capability };
+  let instantMs = Date.parse("2026-10-16T11:40:00Z");
+  let monotonic = 0;
+  const preparation = hour.createHostedHourPreparation(f.bound, {
+    monotonicNow: () => monotonic,
+    readClock: async () => ({ clock: currentClock(instantMs) }),
+  });
+  const select = () =>
+    withOperationAuthority(f.context.binding, f.context.administratorId, (authority) =>
+      preparation.select({ binding: f.context.binding, authority, comparisonId: "comparison" }),
+    );
+  const reconfirmation = await f.host.owner.reconfirm(owner, PASSWORD, "block-use");
+  const waiting = await f.host.coordinator.run((hold) =>
+    f.host.withPreparationAuthorization(
+      {
+        intent: () => f.host.owner.consumeReconfirmation(owner, reconfirmation, "block-use", hold),
+        wait: () => f.host.owner.checkReconfirmation(owner, reconfirmation, "block-use", hold),
+      },
+      select,
+    ),
+  );
+  if (waiting.status !== "waiting") throw new Error("the first round must wait");
+  monotonic += waiting.targetMs + 1 - instantMs;
+  instantMs = waiting.targetMs + 1;
+  await expect(f.host.coordinator.run(select)).rejects.toMatchObject({
+    code: "setup.owner_required",
+  });
 });
 
 it("a module cannot read setup facts or enter preparation during host initialization", async () => {

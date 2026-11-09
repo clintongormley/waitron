@@ -2,7 +2,6 @@
 // macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). Without one each case
 // is reported SKIPPED; with CI=true or WAITRON_REQUIRE_FULL_DISK=1 it FAILS instead (testing-guide.md,
 // "The full-disk start tests run on a small filesystem").
-import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { readdir, stat, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
@@ -10,11 +9,15 @@ import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import type { Hono } from "hono";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { SPARE_SPACE_FILE } from "@waitron/provisioning";
+import { SPARE_SPACE_FILE, openImmutable } from "@waitron/provisioning";
 import { heldSetup } from "../test/held-setup-database.js";
-import { diskSnapshot, expectStartAgainDeleted } from "../test/start-again-deleted.js";
+import { foreignHotJournal } from "../test/foreign-journal.js";
+import {
+  diskSnapshot,
+  expectStartAgainDeleted,
+  startAgainUnchanged,
+} from "../test/start-again-deleted.js";
 import "./testing/hour-test-clock.js";
-import { PASSWORD } from "../test/first-fiscal.js";
 import { loadBoxEnv } from "./box-env.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { runEntry } from "./node-entry.js";
@@ -70,43 +73,6 @@ const spareOption = (roots: { stateDir: string; venueDir: string }) => ({
 });
 
 type Inspection = { inspectionId: string; revision: number; ownerGeneration: number };
-
-it("on a full disk, Continue's password step answers 507 storage.disk_full", async (ctx) => {
-  const small = needDisk(ctx);
-  const f = await heldSetup();
-  const entry = await resolveFirstSetupEntry(
-    f.roots,
-    { WAITRON_ENV: "preproduction" },
-    undefined,
-    () => {},
-    spareOption(f.roots),
-  );
-  if (entry.kind !== "resolution") throw new Error("repair app missing");
-  const inspected = (await (await entry.app.request(ROUTE, {}, tls())).json()) as Inspection;
-  small.fill();
-  expect(small.free()).toBeLessThan(65_536);
-
-  const recovered = await entry.app.request(
-    `${ROUTE}/recover`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        inspectionId: inspected.inspectionId,
-        revision: inspected.revision,
-        ownerGeneration: inspected.ownerGeneration,
-        clientClaimNonce: randomBytes(32).toString("base64url"),
-        password: PASSWORD,
-      }),
-    },
-    tls(),
-  );
-
-  expect(recovered.status, await recovered.clone().text()).toBe(507);
-  expect(await recovered.json()).toEqual({
-    error: { code: "storage.disk_full", params: { restartDeletesLogs: true } },
-  });
-});
 
 it("in the held state, on a full disk with the box's spare file, the spare is not released, and the summary and Start again answer 507 storage.disk_full, deleting nothing", async (ctx) => {
   const small = needDisk(ctx);
@@ -172,7 +138,7 @@ describe("on a full disk, a restart", () => {
       exit: () => {},
     });
     expect(served).toHaveLength(1);
-    return { app: served[0]!, events: log.mock.calls.map((call) => call[1] as string) };
+    return { app: served[0]!, events: log.mock.calls.map((call) => call[1] as string), log };
   }
 
   it("with the box's spare file, releases it and serves the repair page, whose summary and Start again finish", async (ctx) => {
@@ -209,6 +175,86 @@ describe("on a full disk, a restart", () => {
     ).toEqual([]);
   });
 
+  /** A crashed setup restarted on a full disk with the box's spare file, and the repair page. */
+  async function crashedOnFullDisk(
+    small: SmallDisk,
+    crash: NonNullable<Parameters<typeof heldSetup>[0]>["crash"],
+  ) {
+    const f = await heldSetup({ crash });
+    await writeRecoveryState(f.roots.stateDir, FRESH);
+    const spare = join(f.roots.stateDir, SPARE_SPACE_FILE);
+    await writeFile(spare, Buffer.alloc(SPARE_SPACE_BYTES, 1));
+    small.fill(0);
+    expect(small.free()).toBeLessThan(65_536);
+    const { app, events } = await restart(f.roots);
+    expect(events).toContain("storage.spare_released");
+    await expect(stat(spare)).rejects.toMatchObject({ code: "ENOENT" });
+    const inspected = (await (await app.request(ROUTE, {}, tls())).json()) as Inspection;
+    const body = JSON.stringify({
+      inspectionId: inspected.inspectionId,
+      revision: inspected.revision,
+      ownerGeneration: inspected.ownerGeneration,
+    });
+    const ask = (path: string) =>
+      app.request(
+        `${ROUTE}${path}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body },
+        tls(),
+      );
+    return { f, ask };
+  }
+
+  // The read needs no disk space that grows with the database: a copy of these files (about
+  // 10 MiB) does not fit in the 8 MiB the spare gives back (A1379 P2-5).
+  it("with the box's spare file, the summary of a crashed setup database of about 10 MiB answers and leaves its folder unchanged, and Start again finishes", async (ctx) => {
+    const small = needDisk(ctx);
+    const { f, ask } = await crashedOnFullDisk(small, {
+      databaseBytes: 2_850_000,
+      walBytes: 3_000_000,
+    });
+    const venue = join(f.roots.venueDir, "venue.db");
+    const sizes = await Promise.all(
+      ["", "-wal", "-shm"].map(async (suffix) => (await stat(`${venue}${suffix}`)).size),
+    );
+    expect(sizes.reduce((a, b) => a + b)).toBeGreaterThan(9.5 * 1024 * 1024);
+    // Taken after the restart, which can itself write the -shm.
+    const before = (await diskSnapshot(f.roots)).venue;
+    const summary = await ask("/start-again/summary");
+    expect(summary.status, await summary.clone().text()).toBe(200);
+    expect((await diskSnapshot(f.roots)).venue).toEqual(before);
+    const startAgain = await ask("/start-again");
+    expect(startAgain.status, await startAgain.clone().text()).toBe(200);
+    await expectStartAgainDeleted(f.roots);
+    expect(
+      (await readdir(f.roots.venueDir)).filter((name) => !/^venue\.(lock|holder)/.test(name)),
+    ).toEqual([]);
+  });
+
+  it("with the box's spare file, refuses the summary and Start again kept-records for a crashed setup database whose invoice is only in the -wal, and its folder is unchanged afterwards", async (ctx) => {
+    const small = needDisk(ctx);
+    const { f, ask } = await crashedOnFullDisk(small, { walBytes: 100_000, invoices: 1 });
+    const venue = join(f.roots.venueDir, "venue.db");
+    const mainFileAlone = openImmutable(venue);
+    try {
+      expect(
+        mainFileAlone.prepare("select count(*) as n from registros_facturacion").get(),
+      ).toEqual({ n: 0 });
+    } finally {
+      mainFileAlone.close();
+    }
+    const before = await diskSnapshot(f.roots);
+    const unchanged = await startAgainUnchanged(f.roots);
+    for (const path of ["/start-again/summary", "/start-again"]) {
+      const answer = await ask(path);
+      expect(answer.status, path).toBe(409);
+      expect(await answer.json()).toEqual({
+        error: { code: "setup.start_again_refused", params: { cause: "kept-records" } },
+      });
+    }
+    await unchanged();
+    expect((await diskSnapshot(f.roots)).venue).toEqual(before.venue);
+  });
+
   it("without a spare file, serves the full-disk recovery page and no setup routes", async (ctx) => {
     const small = needDisk(ctx);
     const f = await heldSetup();
@@ -229,8 +275,10 @@ describe("on a full disk, a restart", () => {
 
 it("in the held state, a setup database read through a private copy on a full disk answers the summary 507 storage.disk_full, deleting nothing", async (ctx) => {
   const small = needDisk(ctx);
-  // A pending -wal sends the read through a private copy in TMPDIR, on the small disk.
-  const f = await heldSetup({ pendingWal: true });
+  // A -journal beside the database sends the read through a private copy in TMPDIR, on the small
+  // disk.
+  const f = await heldSetup();
+  foreignHotJournal(join(f.roots.venueDir, "venue.db-journal"), "rolls-back");
   const entry = await resolveFirstSetupEntry(
     f.roots,
     { WAITRON_ENV: "preproduction" },

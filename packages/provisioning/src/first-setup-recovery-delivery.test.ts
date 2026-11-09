@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -57,10 +56,7 @@ async function fixture() {
   };
   await mkdir(options.venueDir);
   const runtime = createFirstSetupRuntime(options);
-  const claim = await runtime.owner.claimFirstSetup(
-    { environment: "preproduction", request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await runtime.owner.claimFirstSetup({ environment: "preproduction", request });
   const prepared = await prepareCommandPastWaits(
     runtime,
     { ...claim.state, capability: claim.capability },
@@ -139,7 +135,7 @@ async function fixture() {
 it("recovers the exact public delivery from retained bytes without granting activation", async () => {
   const f = await fixture();
   expect(f.snapshot()).toEqual(f.manifest);
-  expect(await f.runtime.recoveryDelivery.readRecoveryDocument(f.owner, MODULE)).toEqual({
+  expect(JSON.parse(await readFile(f.path, "utf8"))).toMatchObject({
     ...f.reference,
     statement: f.statement,
   });
@@ -188,10 +184,9 @@ it("refuses replacement bytes for an already registered stage and preserves its 
   await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).resolves.toBeUndefined();
 });
 
-it("returns no document and refuses installation when the delivery record is absent", async () => {
+it("refuses installation when the delivery record is absent", async () => {
   const f = await fixture();
   await unlink(f.path);
-  expect(await f.runtime.recoveryDelivery.readRecoveryDocument(f.owner, MODULE)).toBeNull();
   await expect(
     f.runtime.coordinator.run((hold) =>
       f.runtime.recoveryDelivery.install(
@@ -203,11 +198,6 @@ it("returns no document and refuses installation when the delivery record is abs
       ),
     ),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
-  await writeFile(f.path, f.bytes);
-  expect(await f.runtime.recoveryDelivery.readRecoveryDocument(f.owner, MODULE)).toEqual({
-    ...f.reference,
-    statement: f.statement,
-  });
 });
 
 it("compares a module's rebuilt statement with retained and newly supplied statements", async () => {

@@ -25,7 +25,6 @@ import {
   createFirstSetupStore,
   type FirstSetupFrozen,
 } from "./first-setup-state.js";
-import { createFirstSetupResolutionStore } from "./first-setup-resolution.js";
 
 const dirs: string[] = [];
 async function stateDir() {
@@ -890,28 +889,8 @@ async function pendingDeletion(abandon: boolean) {
   const roots = { venueDir: join(base, "venue"), stateDir: join(base, "state") };
   const coordinator = createFirstSetupCoordinator();
   const store = createFirstSetupStore({ ...roots, coordinator });
-  const records = createFirstSetupResolutionStore({ ...roots, coordinator });
-  const claim = () =>
-    store.claim(frozenAttempt(), ownerVerifier, digestOf("capability"), digestOf("nonce"));
+  const claim = () => store.claim(frozenAttempt(), ownerVerifier, digestOf("capability"));
   const claimed = await claim();
-  const input = {
-    resolutionId: randomUUID(),
-    attemptId: claimed.frozen.attemptId,
-    observedRevision: 1,
-    observedOwnerGeneration: 1,
-    database: "empty-preactivation" as const,
-    authority: "original-password" as const,
-    register: {
-      kind: "current-master" as const,
-      status: "Consumed" as const,
-      custodian: "Elena",
-      reference: "b".repeat(64),
-      consultedAt: "2026-10-16T02:00:00.000Z",
-    },
-    action: "marker-repair" as const,
-  };
-  const originals = [{ name: "venue.db", bytes: null }];
-  const prepared = await records.prepare(input, originals);
   const current = abandon
     ? await store.update(claimed.frozen.attemptId, 1, { kind: "abandoned" })
     : claimed;
@@ -922,7 +901,7 @@ async function pendingDeletion(abandon: boolean) {
       frozenDigest: claimed.frozenDigest,
     }),
   );
-  return { roots, store, records, claim, current, input, originals, prepared };
+  return { roots, store, claim, current };
 }
 
 it.each<[string, boolean, (f: Awaited<ReturnType<typeof pendingDeletion>>) => Promise<unknown>]>([
@@ -932,22 +911,6 @@ it.each<[string, boolean, (f: Awaited<ReturnType<typeof pendingDeletion>>) => Pr
     false,
     (f) => f.store.update(f.current.frozen.attemptId, 1, { kind: "abandoned" }),
   ],
-  [
-    "an ownership recovery",
-    false,
-    (f) =>
-      f.store.update(f.current.frozen.attemptId, f.current.revision, {
-        kind: "recover",
-        capabilityHash: digestOf("recovered"),
-        claimNonceHash: digestOf("recovered-nonce"),
-      }),
-  ],
-  [
-    "a record-store prepare",
-    false,
-    (f) => f.records.prepare({ ...f.input, resolutionId: randomUUID() }, f.originals),
-  ],
-  ["a record-store apply", false, (f) => f.records.apply(f.prepared)],
   [
     "the venue check restore, reset and provisioning call",
     true,
@@ -962,33 +925,6 @@ it.each<[string, boolean, (f: Awaited<ReturnType<typeof pendingDeletion>>) => Pr
     expect(await snapshot(f.roots)).toEqual(before);
   },
 );
-
-it("while a deletion is pending, a marker repair is refused and the marked files are unchanged", async () => {
-  const base = await stateDir();
-  const roots = { venueDir: join(base, "venue"), stateDir: join(base, "state") };
-  const store = createFirstSetupStore({ ...roots, coordinator: createFirstSetupCoordinator() });
-  const claimed = await store.claim(
-    frozenAttempt(),
-    ownerVerifier,
-    digestOf("capability"),
-    digestOf("nonce"),
-  );
-  const claimPath = join(roots.venueDir, "first-setup-claim.json");
-  const claimMarker = JSON.parse(await readFile(claimPath, "utf8"));
-  await writeFile(claimPath, JSON.stringify({ ...claimMarker, status: "claiming" }));
-  const expected = (await store.readForRepair())!;
-  expect(expected.repairMarker).toBe("active");
-  await writeStartAgainMarker(
-    roots,
-    await startAgainMarkerFor(roots, {
-      attemptId: claimed.frozen.attemptId,
-      frozenDigest: claimed.frozenDigest,
-    }),
-  );
-  const before = await snapshot(roots);
-  await expect(store.repairMarker(expected, async () => {})).rejects.toMatchObject(incomplete);
-  expect(await snapshot(roots)).toEqual(before);
-});
 
 it("a listed file the marker cannot hash is refused as a failed check, naming the file", async () => {
   const roots = await attemptFolders();

@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,10 +36,7 @@ async function fixture(frozen: "production" | "preproduction" | null) {
       modules: ALL_MODULES,
       environment: {},
     });
-    await host.owner.claimFirstSetup(
-      { environment: frozen, request },
-      randomBytes(32).toString("base64url"),
-    );
+    await host.owner.claimFirstSetup({ environment: frozen, request });
   }
   return { root, stateDir, venueDir };
 }
@@ -130,7 +126,7 @@ it("the repair shell preserves API refusals and missing assets while serving its
 });
 
 it.each(["not JSON", "null"])(
-  "damaged module configuration %s leaves repair available without publication routes",
+  "damaged module configuration %s leaves repair available without the ordinary setup route",
   async (configuration) => {
     const f = await fixture(null);
     await writeFile(join(f.stateDir, "modules.json"), configuration);
@@ -139,12 +135,9 @@ it.each(["not JSON", "null"])(
     expect(admitted.kind).toBe("resolution");
     if (admitted.kind !== "resolution") throw new Error("expected repair");
     expect((await admitted.app.request("/setup-api/first-setup/resolution")).status).toBe(200);
-    for (const [path, method] of [
-      ["/setup-api/first-setup/resolution/publication", "GET"],
-      ["/setup-api/first-setup/resolution/finish", "POST"],
-      ["/setup-api/provision", "POST"],
-    ] as const)
-      expect((await admitted.app.request(path, { method })).status).toBe(404);
+    expect((await admitted.app.request("/setup-api/provision", { method: "POST" })).status).toBe(
+      404,
+    );
     expect(await readFile(join(f.stateDir, "modules.json"), "utf8")).toBe(configuration);
     expect(await readFile(join(f.venueDir, "first-setup-claim.json"))).toEqual(marker);
     await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });

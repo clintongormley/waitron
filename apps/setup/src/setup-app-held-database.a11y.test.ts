@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtButton } from "@waitron/ui";
 import { setLocale } from "./i18n/t.js";
@@ -7,8 +7,9 @@ import { initial } from "../test/first-setup-browser.js";
 import { q, click, namedSummary } from "../test/missing-database-browser.js";
 import { cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
-import { heldFixture, refusedCause, settled, tradingEnv } from "../test/held-database-browser.js";
+import { heldFixture, refusedCause, settled } from "../test/held-database-browser.js";
 
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   cleanupWidgets();
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
@@ -73,26 +74,20 @@ for (const locale of ["en-GB", "es-ES"] as const)
 
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
-    for (const view of ["trading-saved", "setup-finished"] as const)
-      it(`${locale} ${theme} ${view}: accessible refusal with a setup database holding records`, async () => {
-        const { app, host } = await heldFixture({
-          locale,
-          theme,
-          inspection: () => (view === "trading-saved" ? { artifacts: [tradingEnv] } : {}),
-          summary: () => refusedCause(view === "setup-finished" ? view : "trading-settings"),
-        });
-        const t = initialOwnerStrings[locale === "es-ES" ? "es" : "en"];
-        await settled(app);
-        await click(app, "start-again");
-        await expect
-          .poll(() => q(app, "start-again-refused")?.textContent?.trim())
-          .toBe(
-            view === "setup-finished"
-              ? t.setupFinished
-              : `${t.tradingSaved} ${t.tradingSavedPassword}`,
-          );
-        await settled(app);
-        await app.updateComplete;
-        await expectNoA11yViolations(host);
-        expect(q<WtButton>(app, "reconnect-first")!.disabled).toBe(false);
+    it(`${locale} ${theme} setup-finished: accessible refusal with a setup database holding records`, async () => {
+      const { app, host } = await heldFixture({
+        locale,
+        theme,
+        summary: () => refusedCause("setup-finished"),
       });
+      const t = initialOwnerStrings[locale === "es-ES" ? "es" : "en"];
+      await settled(app);
+      await click(app, "start-again");
+      await expect
+        .poll(() => q(app, "start-again-refused")?.textContent?.trim())
+        .toBe(t.setupFinished);
+      await settled(app);
+      await app.updateComplete;
+      await expectNoA11yViolations(host);
+      expect(q<WtButton>(app, "reconnect-first")!.disabled).toBe(false);
+    });

@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { readFile, readdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -131,14 +130,6 @@ async function abandonedWithMissingDatabase(
     firstSetupModuleContext((await f.store.read())!, f.module).request as { identity: string }
   ).identity;
   await rm(join(f.venueDir, "venue.db"));
-  const inspected = await f.host.resolution.inspectFirstSetupResolution();
-  await f.host.owner.recoverFirstSetupOwner({
-    inspectionId: inspected.inspectionId,
-    revision: inspected.revision!,
-    ownerGeneration: inspected.ownerGeneration!,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    password: f.password,
-  });
   const current = await f.host.resolution.inspectFirstSetupResolution();
   const ids = {
     inspectionId: current.inspectionId,
@@ -303,23 +294,13 @@ async function damageRecord(
     await writeFile(manifestPath, JSON.stringify(manifest));
   }
 }
-/** The setup password step, with the venue database left in place. */
-async function withPassword(f: Awaited<ReturnType<typeof fixture>>) {
-  const inspected = await f.host.resolution.inspectFirstSetupResolution();
-  await f.host.owner.recoverFirstSetupOwner({
-    inspectionId: inspected.inspectionId,
-    revision: inspected.revision!,
-    ownerGeneration: inspected.ownerGeneration!,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    password: f.password,
-  });
+/** The ids a page holds after reading the inspection, with the venue database left in place. */
+async function inspectionIds(f: Awaited<ReturnType<typeof fixture>>) {
   const current = await f.host.resolution.inspectFirstSetupResolution();
   return {
-    ids: {
-      inspectionId: current.inspectionId,
-      revision: current.revision!,
-      ownerGeneration: current.ownerGeneration!,
-    },
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
   };
 }
 it("a rehashed document with an invalid module confirmation is refused without the warning shown, and starts again with it", async () => {
@@ -342,7 +323,7 @@ it.each(["manifest", "binding", "rehashed"] as const)(
   async (why) => {
     const f = await fixture();
     await damageRecord(f, why);
-    const { ids } = await withPassword(f);
+    const ids = await inspectionIds(f);
     await expect(
       f.actions.startAgainFirstSetup({
         ...ids,
@@ -356,7 +337,7 @@ it.each(["manifest", "binding", "rehashed"] as const)(
 it("without the warning shown, a damaged record is refused, and nothing changes", async () => {
   const f = await fixture();
   await damageRecord(f, "manifest");
-  const { ids } = await withPassword(f);
+  const ids = await inspectionIds(f);
   const unchanged = await startAgainUnchanged(f);
   await expect(
     f.actions.startAgainFirstSetup({ ...ids, register: f.answer() }),
@@ -365,7 +346,7 @@ it("without the warning shown, a damaged record is refused, and nothing changes"
 });
 it("the warning flag on a box whose record reads cleanly is refused, and nothing changes", async () => {
   const f = await fixture();
-  const { ids } = await withPassword(f);
+  const ids = await inspectionIds(f);
   const unchanged = await startAgainUnchanged(f);
   await expect(
     f.actions.startAgainFirstSetup({
@@ -412,7 +393,7 @@ it.each(["key", "stage", "unknown-input", "orphan-document"] as const)(
       await writeFile(path, JSON.stringify(state));
     }
     if (why === "orphan-document") await writeFile(join(directory, "unknown.json"), "{}");
-    const { ids } = await withPassword(f);
+    const ids = await inspectionIds(f);
     const unchanged = await startAgainUnchanged(f);
     await expect(
       f.actions.startAgainFirstSetup({
@@ -428,7 +409,7 @@ it("a damaged record and no staged node key is refused setup.not_ready, and noth
   const f = await fixture();
   await damageRecord(f, "manifest");
   await rm(join(f.stateDir, "first-setup-node-key.json"));
-  const { ids } = await withPassword(f);
+  const ids = await inspectionIds(f);
   const unchanged = await startAgainUnchanged(f);
   const before = await readFile(join(f.stateDir, "first-setup.json"));
   await expect(

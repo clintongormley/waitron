@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,10 +27,7 @@ async function repairable(phase: "claimed" | "abandoned") {
     environment: {},
     database: () => suite.db,
   });
-  await host.owner.claimFirstSetup(
-    { environment: "production", request },
-    randomBytes(32).toString("base64url"),
-  );
+  await host.owner.claimFirstSetup({ environment: "production", request });
   if (phase === "abandoned") {
     const state = (await host.store.read())!;
     await host.store.update(state.frozen.attemptId, state.revision, { kind: "abandoned" });

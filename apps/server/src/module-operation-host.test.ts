@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
@@ -91,9 +93,14 @@ it("the bound runtime retains its recovery document after restart and prepares o
         );
       });
     const restarted = make();
-    expect(await restarted.recoveryDelivery.readRecoveryDocument(f.ownerAttempt, f.module)).toEqual(
-      { ...f.staged.ref, statement: f.staged.statement },
-    );
+    expect(
+      JSON.parse(
+        await readFile(
+          join(f.stateDir, "first-fiscal-documents", `${f.module}.recovery.json`),
+          "utf8",
+        ),
+      ),
+    ).toMatchObject({ ...f.staged.ref, statement: f.staged.statement });
     expect(await restarted.keys.readStage(f.ownerAttempt)).toEqual(f.staged.stage);
     await expect(attempt(restarted)).rejects.toMatchObject({ code: "setup.not_ready", params: {} });
     const fresh = await restarted.owner.reconfirm(f.ownerAttempt, f.password, "activation");
@@ -130,7 +137,6 @@ it("the bound runtime retains its recovery document after restart and prepares o
 it("freezes fresh planned identities and selected module versions before any public candidate export", async () => {
   const { firstFiscalFixture, request, MODULE } = await import("../test/first-fiscal.js");
   const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
-  const { randomBytes } = await import("node:crypto");
   const { join } = await import("node:path");
   const f = await firstFiscalFixture();
   try {
@@ -140,10 +146,7 @@ it("freezes fresh planned identities and selected module versions before any pub
       stateDir: join(f.root, "another-state"),
       venueDir: join(f.root, "another-venue"),
     });
-    const claimed = await host.owner.claimFirstSetup(
-      { environment: "production", request },
-      randomBytes(32).toString("base64url"),
-    );
+    const claimed = await host.owner.claimFirstSetup({ environment: "production", request });
     const state = (await host.store.read())!;
     expect(state.frozen.modules).toContainEqual({
       module: "core",
@@ -169,11 +172,10 @@ it("freezes fresh planned identities and selected module versions before any pub
   }
 });
 
-it("binds module-declared outside evidence and rejects prior password and document grants after ownership recovery", async () => {
+it("binds module-declared outside evidence into the inspection", async () => {
   const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
   const { writeFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
-  const { randomBytes } = await import("node:crypto");
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime("2026-10-16T11:40:00Z");
   time.clock = createFakeTimersHourClock();
@@ -203,40 +205,10 @@ it("binds module-declared outside evidence and rejects prior password and docume
         };
       }),
     });
-    await host.recoveryDelivery.confirmRecoveryDocumentKept(
-      f.ownerAttempt,
-      { ...f.staged.ref, kept: true },
-      await host.owner.reconfirm(f.ownerAttempt, f.password, "activation"),
-    );
-    await expect(host.recoveryDelivery.checkKept(f.ownerAttempt, f.module)).resolves.toMatch(
-      /^[a-f0-9]{64}$/,
-    );
-    const grant = await host.owner.reconfirm(f.ownerAttempt, f.password, "activation");
     const inspected = await host.resolution.inspectFirstSetupResolution();
     await writeFile(outside, '{"retained":43}');
     const fresh = await host.resolution.inspectFirstSetupResolution();
     expect(fresh.inspectionId).not.toBe(inspected.inspectionId);
-    const recovered = await host.owner.recoverFirstSetupOwner({
-      inspectionId: fresh.inspectionId,
-      revision: fresh.revision!,
-      ownerGeneration: fresh.ownerGeneration!,
-      password: f.password,
-      clientClaimNonce: randomBytes(32).toString("base64url"),
-    });
-    const owner = { ...recovered.state, capability: recovered.capability };
-    await expect(
-      host.owner.consumeReconfirmation(owner, grant, "activation"),
-    ).rejects.toMatchObject({ code: "setup.owner_required" });
-    await expect(host.recoveryDelivery.consume(owner, f.module)).rejects.toMatchObject({
-      code: "setup.not_ready",
-      params: {},
-    });
-    await expect(
-      host.keys.stageInitialNodeKey(
-        owner,
-        await host.owner.reconfirm(owner, f.password, "block-use"),
-      ),
-    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   } finally {
     await f.dispose();
   }

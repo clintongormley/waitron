@@ -69,6 +69,17 @@ export class SetupRecoveryCopy extends LitElement {
   #prepare: NonNullable<SetupRecoveryAllocation["prepare"]> = async (request) => {
     const current = this.#previewCurrent;
     if (!current?.()) throw new Error("Selected recovery copy changed");
+    try {
+      return await this.#stageAndPrepare(request, current);
+    } catch (cause) {
+      if (current()) this.#endIfSetupConflict(cause);
+      throw cause;
+    }
+  };
+  async #stageAndPrepare(
+    request: Parameters<NonNullable<SetupRecoveryAllocation["prepare"]>>[0],
+    current: () => boolean,
+  ): Promise<unknown> {
     if (this.bucketKit !== undefined || this.cloudPointId !== undefined) {
       const source =
         this.bucketKit !== undefined
@@ -93,7 +104,13 @@ export class SetupRecoveryCopy extends LitElement {
         if (this.#staged === staged) this.#staged = undefined;
       }
     }
-  };
+  }
+  /** Reviewing or preparing again meets the same refusal while another setup holds the server. */
+  #endIfSetupConflict(cause: unknown): boolean {
+    if ((cause as ApiError | undefined)?.code !== "setup.attempt_conflict") return false;
+    this.dispatchEvent(new CustomEvent("setup-conflict", { bubbles: true, composed: true }));
+    return true;
+  }
   #stage(eventId: string): StagedCopy {
     if (this.#staged?.eventId !== eventId) {
       this.#discardStaged();
@@ -241,7 +258,7 @@ export class SetupRecoveryCopy extends LitElement {
         this.#notifyPreview();
       }
     } catch (cause) {
-      if (current()) {
+      if (current() && !this.#endIfSetupConflict(cause)) {
         const error = cause as ApiError | undefined;
         const field = error?.params?.field;
         this.error =

@@ -1,5 +1,5 @@
 import { modulesWithSets } from "@waitron/module";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
   access,
   lstat,
@@ -145,18 +145,15 @@ async function startedAgain() {
     environment: {},
     database: () => suite.db,
   });
-  const claim = await next.owner.claimFirstSetup(
-    {
-      environment: "production",
-      request: {
-        ...request,
-        seriesCode: "B",
-        fullSeriesCode: "FULL",
-        rectificativeSeriesCode: "RECT",
-      },
+  const claim = await next.owner.claimFirstSetup({
+    environment: "production",
+    request: {
+      ...request,
+      seriesCode: "B",
+      fullSeriesCode: "FULL",
+      rectificativeSeriesCode: "RECT",
     },
-    randomBytes(32).toString("base64url"),
-  );
+  });
   const owner = { ...claim.state, capability: claim.capability };
   return { f, clock, name, folders, next, owner };
 }
@@ -226,10 +223,7 @@ async function claimedWithoutName() {
     environment: {},
     database: () => suite.db,
   });
-  await host.owner.claimFirstSetup(
-    { environment: "production", request },
-    randomBytes(32).toString("base64url"),
-  );
+  await host.owner.claimFirstSetup({ environment: "production", request });
   await suite.db.archiveTo(join(folders.venueDir, "venue.db"));
   const inspected = await host.resolution.inspectFirstSetupResolution();
   const startRequest = {
@@ -308,7 +302,6 @@ const CONFIRMATIONS = "first-setup-start-again-confirmations";
 async function missingDatabase(
   changes: readonly FirstSetupChange[] = [],
   afterRemove?: (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => Promise<void>,
-  stamp?: (f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]) => Promise<void>,
 ) {
   const base = await abandonedAttempt();
   const { f } = base;
@@ -317,28 +310,13 @@ async function missingDatabase(
     state = await f.store.update(state.frozen.attemptId, state.revision, change);
   await rm(join(f.venueDir, "venue.db"));
   await afterRemove?.(f);
-  const inspected = await f.host.resolution.inspectFirstSetupResolution();
-  const recovered = await f.host.owner.recoverFirstSetupOwner({
-    inspectionId: inspected.inspectionId,
-    revision: inspected.revision!,
-    ownerGeneration: inspected.ownerGeneration!,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    password: PASSWORD,
-  });
-  await stamp?.(f);
   const current = await f.host.resolution.inspectFirstSetupResolution();
-  const owner = {
-    attemptId: recovered.state.attemptId,
-    revision: recovered.state.revision,
-    ownerGeneration: recovered.state.ownerGeneration,
-    capability: recovered.capability,
-  };
   const ids = {
     inspectionId: current.inspectionId,
     revision: current.revision!,
     ownerGeneration: current.ownerGeneration!,
   };
-  return { ...base, owner, ids, request: { ...ids, register: base.startRequest.register } };
+  return { ...base, ids, request: { ...ids, register: base.startRequest.register } };
 }
 
 function tls() {
@@ -439,7 +417,7 @@ it("a confirmation whose summary differs from the box's own is refused, and noth
 });
 
 it("a confirmed Start again writes the confirmation record with who, when and what the record showed", async () => {
-  const { f, actions, owner, ids, request } = await missingDatabase();
+  const { f, actions, ids, request } = await missingDatabase();
   const app = routes(f, actions);
   const answered = await postSummary(app, ids, {});
   expect(answered.status, await answered.clone().text()).toBe(200);
@@ -464,7 +442,7 @@ it("a confirmed Start again writes the confirmation record with who, when and wh
     },
     confirmedOn: "repair-page",
     signedIn: false,
-    ownerGeneration: owner.ownerGeneration,
+    ownerGeneration: ids.ownerGeneration,
     shown,
   });
 });
@@ -1042,29 +1020,6 @@ async function expectRefusedUnchanged(
 }
 
 it.each(["first-setup.json", "first-setup-claim.json"])(
-  "with the database missing, a damaged %s beside a damaged picks file is refused setup.owner_required at the password step, and nothing changes",
-  async (file) => {
-    const { f } = await abandonedAttempt();
-    await damagePicks(f);
-    await rm(join(f.venueDir, "venue.db"));
-    await writeFile(join(file === "first-setup.json" ? f.stateDir : f.venueDir, file), "{damaged");
-    const inspected = await f.host.resolution.inspectFirstSetupResolution();
-    await expectRefusedUnchanged(
-      f,
-      () =>
-        f.host.owner.recoverFirstSetupOwner({
-          inspectionId: inspected.inspectionId,
-          revision: inspected.revision!,
-          ownerGeneration: inspected.ownerGeneration!,
-          clientClaimNonce: randomBytes(32).toString("base64url"),
-          password: PASSWORD,
-        }),
-      "setup.owner_required",
-    );
-  },
-);
-
-it.each(["first-setup.json", "first-setup-claim.json"])(
   "with the database present, a damaged %s beside a damaged picks file leaves the box reading no revision, so Start again is refused setup.attempt_conflict for the revision it sends, and nothing changes",
   async (file) => {
     const { f, actions, startRequest } = await abandonedAttempt();
@@ -1249,7 +1204,10 @@ it.each(["module-operation-public.json", "first-fiscal-documents/stray.json"])(
 );
 
 it("with the database missing, an outside evidence file configured beside a damaged picks file is refused setup.not_ready, and nothing changes", async () => {
-  const base = await missingDatabase([], damagePicks, stampAfterName);
+  const base = await missingDatabase([], async (f) => {
+    await damagePicks(f);
+    await stampAfterName(f);
+  });
   const { f, request: startAgain } = base;
   const outsidePath = join(f.root, "outside-history.json");
   await writeFile(outsidePath, "{}");
@@ -1345,14 +1303,6 @@ it("the Start again route passes recoveryRecordDamagedShown on: with a damaged r
 it("an attempt that never chose a name is summarised as claimed, with no name", async () => {
   const { folders, host } = await claimedWithoutName();
   await rm(join(folders.venueDir, "venue.db"));
-  const inspected = await host.resolution.inspectFirstSetupResolution();
-  await host.owner.recoverFirstSetupOwner({
-    inspectionId: inspected.inspectionId,
-    revision: inspected.revision!,
-    ownerGeneration: inspected.ownerGeneration!,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    password: PASSWORD,
-  });
   const current = await host.resolution.inspectFirstSetupResolution();
   await expect(
     createFirstSetupResolutionActions({ ...folders, host }).startAgainSummary({
@@ -1510,36 +1460,6 @@ it("start again is refused while a deletion marker exists, and the marker is unc
     code: "setup.start_again_incomplete",
   });
   expect(await folderTrees(f)).toEqual(before);
-});
-
-it("an attempt whose owner recovered the password twice can start again, and the next start finds nothing left", async () => {
-  const { f, actions } = await missingDatabase();
-  const again = await f.host.resolution.inspectFirstSetupResolution();
-  await f.host.owner.recoverFirstSetupOwner({
-    inspectionId: again.inspectionId,
-    revision: again.revision!,
-    ownerGeneration: again.ownerGeneration!,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    password: PASSWORD,
-  });
-  const steps = await readdir(join(f.stateDir, "first-setup-resolutions"), {
-    recursive: true,
-  });
-  expect(steps.some((entry) => entry.endsWith("step-000003"))).toBe(true);
-  const current = await f.host.resolution.inspectFirstSetupResolution();
-  const ids = {
-    inspectionId: current.inspectionId,
-    revision: current.revision!,
-    ownerGeneration: current.ownerGeneration!,
-  };
-  const shown = await actions.startAgainSummary(ids);
-  await actions.startAgainFirstSetup({
-    ...ids,
-    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
-  });
-  await expectAttemptGone(f);
-  await finishStartAgainDeletion(f);
-  await expectAttemptGone(f);
 });
 
 function cutAt(cut: number, before?: (call: number) => Promise<void>) {

@@ -695,8 +695,7 @@ PROBE 2/3, re-run on `b8a06f203`). With it missing, since A1131bc slice 2 the bo
 the page offers no Start again and says it cannot confirm that deleting is safe (read, not run:
 `wipeOffered`, `apps/setup/src/setup-app.ts`), and the summary and
 Start again sent with the page's last revision both answer `setup.attempt_conflict` and change
-nothing (a scratch case on the slice's branch, 2026-10-31, not committed). Continue's password step
-is `setup.owner_required` there, as before. Wanted: the same kind of warned way out A1042 gives a
+nothing (a scratch case on the slice's branch, 2026-10-31, not committed). Wanted: the same kind of warned way out A1042 gives a
 damaged recovery-key record.
 
 #### A1159: some setup databases the box cannot read still refuse Start again

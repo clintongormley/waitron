@@ -63,10 +63,7 @@ async function fixture(
     database: () => venue.db,
   };
   const host = createFirstSetupRuntime(settings);
-  const claim = await host.owner.claimFirstSetup(
-    { environment: "preproduction", request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await host.owner.claimFirstSetup({ environment: "preproduction", request });
   let owner = { ...claim.state, capability: claim.capability };
   let comparisonId = "no-comparison";
   const compare = async () => {
@@ -436,10 +433,7 @@ it.each(["key", "position"])("keeps a prior abandoned attempt's %s spent", async
   await f.select();
   const before = (await f.host.store.read())!;
   await f.host.store.update(before.frozen.attemptId, before.revision, { kind: "abandoned" });
-  const claim = await f.host.owner.claimFirstSetup(
-    { environment: "preproduction", request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await f.host.owner.claimFirstSetup({ environment: "preproduction", request });
   const owner = { ...claim.state, capability: claim.capability };
   const proof = await f.host.owner.reconfirm(owner, PASSWORD, "block-use");
   await expect(f.host.preparation.select(owner, MODULE, {}, proof)).rejects.toMatchObject({

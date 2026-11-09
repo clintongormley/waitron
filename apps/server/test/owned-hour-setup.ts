@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { expect } from "vitest";
 import type { InitialVenueInput, VenueRequest } from "@waitron/provisioning";
 import type { PublicFirstSetupState } from "../src/first-setup-owner.js";
@@ -54,7 +53,6 @@ export async function ownedHourSetup(
   };
   await send("claim", {
     venue,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
     ...claim,
   });
   const module = "fiscal-verifactu";

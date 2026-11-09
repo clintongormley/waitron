@@ -103,7 +103,7 @@ it.each([
   });
   await expect(f.evidence.read(f.context.binding)).rejects.toMatchObject(missing);
 });
-it.each(["restart", "invalidate", "resume", "revision", "expired"])(
+it.each(["restart", "invalidate", "revision", "expired"])(
   "cannot reuse current evidence after %s",
   async (why) => {
     const f = await fixture();
@@ -118,7 +118,6 @@ it.each(["restart", "invalidate", "resume", "revision", "expired"])(
         owner: createFirstSetupOwner({ ...f.ownerOptions, bootId: "boot-2" }),
       });
     if (why === "invalidate") evidence.invalidate(f.context.attemptId);
-    if (why === "resume") await f.owner.resumeFirstSetup(f.nonce, { password: PASSWORD });
     if (why === "revision")
       await f.store.update(f.context.attemptId, f.ownerAttempt.revision, {
         kind: "activation-started",

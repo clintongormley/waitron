@@ -1,9 +1,7 @@
-import { randomBytes } from "node:crypto";
 import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { Agent } from "undici";
-import { PASSWORD } from "../test/first-fiscal.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -78,15 +76,6 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
           headers: { "Content-Type": "application/json", Origin: origin, ...headers },
           body: JSON.stringify(body),
         } as RequestInit);
-      const snapshot = await (await get("/setup-api/first-setup/resolution")).json();
-      const recovered = await post("/setup-api/first-setup/resolution/recover", {
-        inspectionId: snapshot.inspectionId,
-        revision: snapshot.revision,
-        ownerGeneration: snapshot.ownerGeneration,
-        clientClaimNonce: randomBytes(32).toString("base64url"),
-        password: PASSWORD,
-      });
-      expect(recovered.status).toBe(200);
       await writeFile(join(f.stateDir, "restore-request.json"), "retired restore must not run");
       await writeFile(join(f.stateDir, "reset-request.json"), "retired reset must not run");
       const fresh = await (await get("/setup-api/first-setup/resolution")).json();

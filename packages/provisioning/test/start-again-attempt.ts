@@ -88,7 +88,6 @@ export async function startAgainAttempt(
     frozenAttempt(ownerVerifier),
     ownerVerifier,
     digestOf("capability"),
-    digestOf("nonce"),
   );
   const roots = await canonicalFirstSetupRoots({
     venueDir: join(base, "venue"),

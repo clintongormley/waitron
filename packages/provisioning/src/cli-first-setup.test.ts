@@ -1,5 +1,5 @@
 import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -23,8 +23,7 @@ import { initialVenueApplyInput } from "./initial-venue-input.js";
 import { readTenantIdentities } from "./tenant-guard.js";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
-import { moveFakeClockPast, printedWaitTarget } from "../test/settle-wait.js";
-import { randomBytes } from "node:crypto";
+import { moveFakeClock, STOPPED_DURING_WAIT, stopDuringWait } from "../test/settle-wait.js";
 
 const NOW = Date.parse("2026-10-16T11:40:00Z");
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
@@ -139,52 +138,116 @@ async function fixture(answer = "yes") {
     readDeploymentTable: deploymentTableExists,
     stampEnvironment: stampDeployment,
     readTenants: readTenantIdentities,
+    sleep: stopDuringWait,
   };
   return { root, args, deps, runtime, output, prompts };
 }
 
-/**
- * Runs the command, and when it stops at its settle wait, moves the faked clock past the printed
- * time and runs it again, as the operator is told to.
- */
-async function runCliPastWait(args: string[], deps: Parameters<typeof runCli>[1]) {
-  const printed: string[] = [];
-  const stdout = deps.io.stdout;
-  deps.io.stdout = (line) => {
-    printed.push(line);
-    stdout(line);
-  };
-  try {
-    const code = await runCli(args, deps);
-    const targetMs = printedWaitTarget(printed);
-    if (code !== 1 || targetMs === undefined) return code;
-    moveFakeClockPast(targetMs);
-  } finally {
-    deps.io.stdout = stdout;
-  }
-  return runCli(args, deps);
+/** Runs the command until the stand-in stop ends it during its wait. */
+async function stopsAtWait(args: string[], deps: Parameters<typeof runCli>[1]) {
+  await expect(runCli(args, deps)).rejects.toBe(STOPPED_DURING_WAIT);
 }
 
-it("the venue command claims ownership, retains its settle wait and says why and until when, before any venue write", async () => {
+/** Runs the command once, letting it wait out its settle wait on the faked clock. */
+async function runCliPastWait(args: string[], deps: Parameters<typeof runCli>[1]) {
+  const sleep = deps.sleep;
+  deps.sleep = moveFakeClock;
+  try {
+    return await runCli(args, deps);
+  } finally {
+    deps.sleep = sleep;
+  }
+}
+
+it("the venue command claims ownership, waits out its settle wait saying why and until when, before any venue write, and carries on in the same run", async () => {
   const f = await fixture();
+  let atWait: Awaited<ReturnType<typeof f.runtime.store.read>> | undefined;
+  let journalAtWait: { revisions: { value: { entries: unknown[] } }[] } | undefined;
+  let outputAtWait: string[] = [];
+  let writesAtWait: unknown[] | undefined;
+  let promptsAtWait: string[] = [];
+  f.deps.sleep = async (ms) => {
+    promptsAtWait = [...f.prompts];
+    atWait = await f.runtime.store.read();
+    journalAtWait = JSON.parse(
+      await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
+    );
+    outputAtWait = [...f.output];
+    writesAtWait = [
+      await readTenantIdentities(venue.db),
+      await readDeploymentEnvironment(venue.db),
+    ];
+    await moveFakeClock(ms);
+  };
   expect(await runCli(f.args, f.deps)).toBe(1);
-  const state = await f.runtime.store.read();
-  expect(state).toMatchObject({ status: "claimed", consumptionIntent: false, ownerGeneration: 1 });
-  expect(state!.inputs).toEqual({});
-  const journal = JSON.parse(
-    await readFile(join(f.root, "state/module-preparation-state.json"), "utf8"),
-  );
-  expect(journal.revisions.at(-1).value.entries).toMatchObject([
+  expect(atWait).toMatchObject({ status: "claimed", consumptionIntent: false, ownerGeneration: 1 });
+  expect(atWait!.inputs).toEqual({});
+  expect(journalAtWait!.revisions.at(-1)!.value.entries).toMatchObject([
     { kind: "wait", targetMs: Date.parse("2026-10-16T11:42:00Z") },
   ]);
-  expect(journal.revisions.at(-1).value.entries[0]).not.toHaveProperty("answer");
-  expect(f.output).toContain("Waiting to confirm the time, so no invoice series is ever repeated.");
-  expect(f.output).toContain(
-    "Continues at 2026-10-16T11:42:00.000Z; run the command again within a minute after that time (later, it waits again).",
+  expect(journalAtWait!.revisions.at(-1)!.value.entries[0]).not.toHaveProperty("answer");
+  expect(outputAtWait).toContain(
+    "Waiting to confirm the time, so no invoice series is ever repeated.",
   );
+  expect(outputAtWait).toContain(
+    "Waiting until 2026-10-16T11:42:00.000Z; it carries on by itself, so keep the command running.",
+  );
+  expect(writesAtWait).toEqual([[], null]);
+  const state = await f.runtime.store.read();
+  expect(state).toMatchObject({ status: "consumption-intent", ownerGeneration: 1 });
+  expect(state!.inputs[MODULE]).toMatchObject({ allocation: { installationIdentity: "0CNNY" } });
+  expect(promptsAtWait).toEqual(["Confirm setup password: "]);
+  expect(f.prompts).toEqual(promptsAtWait);
+  expect(f.output.join("\n")).not.toContain("run the command again");
   expect(f.output.join("\n")).not.toContain(PASSWORD);
   expect(await readTenantIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
+});
+
+it("a command whose time is still not confirmed after its wait is refused rather than waiting again", async () => {
+  const f = await fixture();
+  const sleep = vi.fn(async () => {});
+  f.deps.sleep = sleep;
+  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(sleep).toHaveBeenCalledTimes(1);
+  expect(f.output).toContain('sif.allocation_invalid {"reason":"clock_unconfirmed"}');
+  expect((await f.runtime.store.read())!.inputs).toEqual({});
+  expect(await readTenantIdentities(venue.db)).toEqual([]);
+});
+
+it("a wait that runs over until the kept password confirmation expires says so", async () => {
+  const f = await fixture();
+  f.deps.sleep = async (ms) => moveFakeClock(ms + 200_000);
+  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(f.prompts).toEqual(["Confirm setup password: "]);
+  expect(f.output.slice(-2)).toEqual([
+    "The command waited so long that the password confirmation expired, so the setup stopped before anything was chosen.",
+    "setup.owner_required {}",
+  ]);
+  expect(await f.runtime.store.read()).toMatchObject({ status: "claimed", inputs: {} });
+  expect(await readTenantIdentities(venue.db)).toEqual([]);
+});
+
+it("a setup stopped just before the overrun selection keeps its own refusal, not the expired-confirmation words", async () => {
+  const f = await fixture();
+  let waited = false;
+  const prepare = f.runtime.preparation.prepare;
+  f.runtime.preparation.prepare = async (...args) => {
+    const prepared = await prepare(...args);
+    if (waited && (args[2] as { action: string }).action === "selection") {
+      const held = (await f.runtime.store.read())!;
+      await f.runtime.store.update(held.frozen.attemptId, held.revision, { kind: "abandoned" });
+    }
+    return prepared;
+  };
+  f.deps.sleep = async (ms) => {
+    await moveFakeClock(ms + 200_000);
+    waited = true;
+  };
+  expect(await runCli(f.args, f.deps)).toBe(1);
+  expect(f.output.at(-1)).toBe("setup.owner_required {}");
+  expect(f.output.join("\n")).not.toContain("password confirmation expired");
+  expect((await f.runtime.store.read())!.status).toBe("abandoned");
 });
 
 it("the venue command imports selected module input but cannot skip unfinished publication", async () => {
@@ -198,57 +261,154 @@ it("the venue command imports selected module input but cannot skip unfinished p
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
-it("a restarted command recovers its original wait using the setup password", async () => {
-  const f = await fixture();
-  expect(await runCli(f.args, f.deps)).toBe(1);
-  const before = (await f.runtime.store.read())!;
-  const restarted = createFirstSetupRuntime({
-    stateDir: join(f.root, "state"),
-    venueDir: join(f.root, "venue"),
-    environment: {},
-    modules: ALL_MODULES,
-    database: () => venue.db,
-  });
-  f.deps.configureFirstSetup = () => restarted;
-  f.prompts.length = 0;
-  expect(await runCli(f.args, f.deps)).toBe(1);
-  const after = (await restarted.store.read())!;
-  expect(after.frozen).toEqual(before.frozen);
-  expect(after.ownerGeneration).toBe(2);
-  expect(after.status).toBe("claimed");
-  expect(f.prompts).toEqual([]);
-  expect(
-    f.output.filter(
-      (line) =>
-        line ===
-        "Continues at 2026-10-16T11:42:00.000Z; run the command again within a minute after that time (later, it waits again).",
-    ),
-  ).toHaveLength(2);
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
-});
+async function folderSnapshot(dir: string): Promise<Record<string, string> | null> {
+  const { readdir } = await import("node:fs/promises");
+  let entries;
+  try {
+    entries = await readdir(dir, { recursive: true, withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  const files: Record<string, string> = {};
+  for (const entry of entries) {
+    const path = join(entry.parentPath, entry.name);
+    files[path] = entry.isFile()
+      ? (await readFile(path)).toString("base64")
+      : entry.isDirectory()
+        ? "dir"
+        : "other";
+  }
+  return files;
+}
 
-it("a wrong setup password leaves the retained attempt unchanged and does not open it", async () => {
-  const f = await fixture();
-  await runCli(f.args, f.deps);
-  const before = await f.runtime.store.read();
-  f.deps.env.WAITRON_ADMIN_PASSWORD = "SYNTHETIC-wrong-password";
-  vi.mocked(f.deps.openVenue).mockClear();
-  expect(await runCli(f.args, f.deps)).toBe(1);
-  expect(f.output).toContain("setup.owner_required {}");
-  expect(await f.runtime.store.read()).toEqual(before);
-  expect(f.deps.openVenue).not.toHaveBeenCalled();
-});
+const START_AGAIN =
+  "Open the box's setup page in a browser and choose Start again. It deletes what this setup entered; if the setup already recorded something that must be kept, such as an invoice, or the box cannot confirm that deleting it is safe, it deletes nothing and the page says why. Then run the command again.";
+const STOPPED = [
+  "This setup stopped part way, so the command will not carry on with it. Nothing was changed.",
+  START_AGAIN,
+  "setup.attempt_conflict {}",
+];
 
-it("a changed frozen series set cannot take over an interrupted command", async () => {
-  const f = await fixture();
-  await runCli(f.args, f.deps);
-  const before = await f.runtime.store.read();
-  const args = [...f.args];
-  args[args.indexOf("--series-code") + 1] = "B";
-  expect(await runCli(args, f.deps)).toBe(1);
-  expect(f.output).toContain("setup.attempt_conflict {}");
-  expect(await f.runtime.store.read()).toEqual(before);
-});
+/** Leaves the retained attempt at `status` the way an earlier run, or the setup page, does. */
+async function retainAt(f: Awaited<ReturnType<typeof activationFixture>>, status: string) {
+  const { cp } = await import("node:fs/promises");
+  const factory = f.deps.firstSetupDeployment!;
+  const failProvision = (afterBeforeTransaction: () => Promise<void>) => {
+    f.deps.firstSetupDeployment = (context) => {
+      const deployment = factory(context);
+      return {
+        ...deployment,
+        provision: (request, beforeTransaction) =>
+          deployment.provision(request, async () => {
+            await beforeTransaction();
+            await afterBeforeTransaction();
+            throw new Error("synthetic stop during activation");
+          }),
+      };
+    };
+  };
+  const advance = async (kind: "publication" | "abandoned") => {
+    const state = (await f.runtime.store.read())!;
+    await f.runtime.store.update(state.frozen.attemptId, state.revision, { kind });
+  };
+  if (status === "claimed" || status === "abandoned") {
+    await stopsAtWait(f.args, f.deps);
+    if (status === "abandoned") await advance("abandoned");
+  } else if (status === "activation-started") {
+    const kept = join(f.root, "state-at-activation");
+    failProvision(async () => {
+      // The process is killed here: the copy is what the next run finds.
+      await cp(join(f.root, "state"), kept, { recursive: true });
+    });
+    await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow(
+      "synthetic stop during activation",
+    );
+    await rm(join(f.root, "state"), { recursive: true });
+    await cp(kept, join(f.root, "state"), { recursive: true });
+    await rm(kept, { recursive: true });
+  } else if (status === "uncertain") {
+    failProvision(async () => {});
+    await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow(
+      "synthetic stop during activation",
+    );
+  } else if (status === "committed" || status === "publication") {
+    f.interrupt(true);
+    await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow(
+      "synthetic publication interrupted",
+    );
+    f.interrupt(false);
+    if (status === "publication") await advance("publication");
+  } else expect(await runCliPastWait(f.args, f.deps)).toBe(0);
+  f.deps.firstSetupDeployment = factory;
+  expect((await f.runtime.store.read())!.status).toBe(status);
+}
+
+it.each([
+  ["claimed", STOPPED],
+  ["activation-started", STOPPED],
+  ["committed", STOPPED],
+  ["publication", STOPPED],
+  [
+    "uncertain",
+    [
+      "This setup stopped during activation, and the box could not tell whether activation finished, so the command will not carry on with it. Nothing was changed.",
+      START_AGAIN,
+      "setup.attempt_uncertain {}",
+    ],
+  ],
+  [
+    "abandoned",
+    [
+      "This setup was stopped on the box's setup page, so the command will not carry on with it. Nothing was changed.",
+      START_AGAIN,
+      "setup.attempt_conflict {}",
+    ],
+  ],
+  ["complete", ["setup.attempt_uncertain {}"]],
+] as const)(
+  "a retained setup (%s) is refused before any question, and nothing on disk changes",
+  async (status, words) => {
+    const f = await activationFixture();
+    await retainAt(f, status);
+    const before = {
+      state: await folderSnapshot(join(f.root, "state")),
+      venue: await folderSnapshot(join(f.root, "venue")),
+      tenants: await readTenantIdentities(venue.db),
+      environment: await readDeploymentEnvironment(venue.db),
+      series: await venue.db.select().from(invoiceSeries),
+    };
+    const restarted = createFirstSetupRuntime({
+      stateDir: join(f.root, "state"),
+      venueDir: join(f.root, "venue"),
+      environment: {},
+      modules: ALL_MODULES,
+      database: () => venue.db,
+    });
+    f.deps.configureFirstSetup = () => restarted;
+    f.prompts.length = 0;
+    f.output.length = 0;
+    f.calls.length = 0;
+    vi.mocked(f.deps.openVenue).mockClear();
+    expect(
+      await runCliPastWait(
+        f.args.filter((arg) => arg !== "--yes"),
+        f.deps,
+      ),
+    ).toBe(1);
+    expect(f.output).toEqual(words);
+    expect(f.prompts).toEqual([]);
+    expect(f.calls).toEqual([]);
+    expect(f.deps.openVenue).not.toHaveBeenCalled();
+    expect({
+      state: await folderSnapshot(join(f.root, "state")),
+      venue: await folderSnapshot(join(f.root, "venue")),
+      tenants: await readTenantIdentities(venue.db),
+      environment: await readDeploymentEnvironment(venue.db),
+      series: await venue.db.select().from(invoiceSeries),
+    }).toEqual(before);
+  },
+);
 
 it("JSON activation input cannot become owned preparation authority", async () => {
   const f = await fixture("no");
@@ -271,90 +431,6 @@ it("a differently stamped database is refused before recording a new setup attem
   expect(await readDeploymentEnvironment(venue.db)).toBe("preproduction");
 });
 
-it("declining a resumed plan does not rotate ownership or open the database", async () => {
-  const f = await fixture();
-  await runCli(f.args, f.deps);
-  const before = await f.runtime.store.read();
-  f.deps.io.prompt = async () => "no";
-  vi.mocked(f.deps.openVenue).mockClear();
-  expect(
-    await runCli(
-      f.args.filter((arg) => arg !== "--yes"),
-      f.deps,
-    ),
-  ).toBe(1);
-  expect(f.output).toContain("Nothing was applied.");
-  expect(await f.runtime.store.read()).toEqual(before);
-  expect(f.deps.openVenue).not.toHaveBeenCalled();
-});
-
-it("a changed module version cannot recover a retained command", async () => {
-  const f = await fixture();
-  await runCli(f.args, f.deps);
-  const before = await f.runtime.store.read();
-  const changed = createFirstSetupRuntime({
-    stateDir: join(f.root, "state"),
-    venueDir: join(f.root, "venue"),
-    environment: {},
-    modules: ALL_MODULES.map((module) =>
-      module.name === MODULE ? { ...module, version: "99.0.0" } : module,
-    ),
-    database: () => venue.db,
-  });
-  f.deps.configureFirstSetup = () => changed;
-  vi.mocked(f.deps.openVenue).mockClear();
-  expect(await runCli(f.args, f.deps)).toBe(1);
-  expect(f.output).toContain("setup.attempt_conflict {}");
-  expect(await f.runtime.store.read()).toEqual(before);
-  expect(f.deps.openVenue).not.toHaveBeenCalled();
-});
-
-it("ownership lost during open refuses before the command reads the opened database", async () => {
-  const f = await fixture();
-  await runCli(f.args, f.deps);
-  const { randomBytes } = await import("node:crypto");
-  const readEnvironment = vi.fn(readDeploymentEnvironment);
-  f.deps.readEnvironment = readEnvironment;
-  let closes = 0;
-  f.deps.openVenue = async () => {
-    await f.runtime.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
-      password: PASSWORD,
-    });
-    return {
-      venue: venue.db,
-      node: venue.node,
-      close: async () => {
-        closes++;
-      },
-    };
-  };
-  expect(await runCli(f.args, f.deps)).toBe(1);
-  expect(f.output).toContain("setup.owner_required {}");
-  expect(readEnvironment).not.toHaveBeenCalled();
-  expect(closes).toBe(1);
-  expect((await f.runtime.store.read())!.ownerGeneration).toBe(3);
-  expect((await f.runtime.store.read())!.inputs).toEqual({});
-});
-
-it("ownership lost after recovery refuses before opening the database", async () => {
-  const f = await fixture();
-  await runCli(f.args, f.deps);
-  const { randomBytes } = await import("node:crypto");
-  const recover = f.runtime.owner.recoverFirstSetupOwner;
-  f.runtime.owner.recoverFirstSetupOwner = async (request) => {
-    const recovered = await recover(request);
-    await f.runtime.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
-      password: PASSWORD,
-    });
-    return recovered;
-  };
-  vi.mocked(f.deps.openVenue).mockClear();
-  expect(await runCli(f.args, f.deps)).toBe(1);
-  expect(f.output).toContain("setup.owner_required {}");
-  expect(f.deps.openVenue).not.toHaveBeenCalled();
-  expect((await f.runtime.store.read())!.ownerGeneration).toBe(3);
-});
-
 it("the actual venue command saves its selected recovery PDF and asks for kept despite --yes", async () => {
   const f = await fixture("no");
   const path = join(f.root, "selected-recovery.pdf");
@@ -372,6 +448,25 @@ it("the actual venue command saves its selected recovery PDF and asks for kept d
   expect(f.output).toContain("setup.not_ready {}");
   expect(await readTenantIdentities(venue.db)).toEqual([]);
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
+});
+
+it("a recovery-pack path that already holds a file is refused, with what to do, before any wait or setup record", async () => {
+  const f = await fixture();
+  const path = join(f.root, "earlier-recovery.pdf");
+  await writeFile(path, "an earlier setup's pack");
+  const sleep = vi.fn(stopDuringWait);
+  f.deps.sleep = sleep;
+  expect(await runCli([...f.args, "--recovery-pdf", path], f.deps)).toBe(1);
+  expect(sleep).not.toHaveBeenCalled();
+  expect(f.deps.openVenue).not.toHaveBeenCalled();
+  expect(await f.runtime.store.read()).toBeNull();
+  expect(f.prompts).toEqual([]);
+  expect(await readFile(path, "utf8")).toBe("an earlier setup's pack");
+  expect(f.output).toEqual([
+    `A file already exists at ${path}, and the setup never writes over one: it may be an earlier setup's recovery pack, the only copy of that setup's keys. Name a file that does not exist yet, or move the existing file to another folder first.`,
+    "Nothing was changed, so you can run the command again straight away.",
+    "setup.not_ready {}",
+  ]);
 });
 
 it("declining kept in the actual venue command preserves the saved PDF and leaves setup unactivated", async () => {
@@ -498,36 +593,6 @@ it("the venue command activates its kept hour and completes checked publication"
   expect(await readDeploymentEnvironment(venue.db)).toBe("preproduction");
 });
 
-it("a restarted venue command finishes the exact commit without preparing or activating again", async () => {
-  const f = await activationFixture();
-  f.interrupt(true);
-  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow("synthetic publication interrupted");
-  const before = (await f.runtime.store.read())!;
-  expect(before.status).toBe("committed");
-  const seriesBefore = await venue.db.select().from(invoiceSeries);
-  f.interrupt(false);
-  f.calls.length = 0;
-  f.prompts.length = 0;
-  expect(
-    await runCliPastWait(
-      f.args.filter(
-        (arg, index, all) => arg !== "--recovery-pdf" && all[index - 1] !== "--recovery-pdf",
-      ),
-      f.deps,
-    ),
-    JSON.stringify(f.output),
-  ).toBe(0);
-  const after = (await f.runtime.store.read())!;
-  expect(after.status).toBe("complete");
-  expect(after.frozen).toEqual(before.frozen);
-  expect(after.ownerGeneration).toBe(before.ownerGeneration + 1);
-  expect(after.history.at(-1)?.kind).toBe("complete");
-  expect(after.inputs).toEqual(before.inputs);
-  expect(await venue.db.select().from(invoiceSeries)).toEqual(seriesBefore);
-  expect(f.calls).toEqual(["check", "selection", "identity", "settings", "trading"]);
-  expect(f.prompts).toEqual([]);
-});
-
 it("the real preproduction deployment adapter completes publication through the venue command", async () => {
   const f = await activationFixture();
   const { createFirstSetupCommandDeployment } = await import("./first-setup-command-deployment.js");
@@ -543,6 +608,79 @@ it("the real preproduction deployment adapter completes publication through the 
     });
   expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   expect((await f.runtime.store.read())!.status).toBe("complete");
+});
+
+it("a person who answers each recovery-pack question a minute late still completes the setup", async () => {
+  const f = await activationFixture();
+  const { createFirstSetupCommandDeployment } = await import("./first-setup-command-deployment.js");
+  f.deps.firstSetupDeployment = ({ runtime, db, node }) =>
+    createFirstSetupCommandDeployment({
+      runtime,
+      db,
+      node,
+      environment: {
+        WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
+      },
+    });
+  let waited = false;
+  const late =
+    <T extends unknown[], R>(answer: (...args: T) => Promise<R>) =>
+    async (...args: T) => {
+      if (waited) vi.advanceTimersByTime(60_000);
+      return answer(...args);
+    };
+  f.deps.io.prompt = late(f.deps.io.prompt);
+  f.deps.io.promptSecret = late(f.deps.io.promptSecret);
+  f.deps.sleep = async (ms) => {
+    await moveFakeClock(ms);
+    waited = true;
+  };
+  expect(await runCli(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  expect(f.prompts.slice(1)).toEqual([
+    "Confirm setup password: ",
+    "Have you kept this recovery pack? [y/N]: ",
+    "Confirm setup password: ",
+  ]);
+  expect((await f.runtime.store.read())!.status).toBe("complete");
+});
+
+it("a first setup password typed 31 seconds late still completes the setup without asking for it again", async () => {
+  const f = await activationFixture();
+  let beforeWait = 0;
+  const promptSecret = f.deps.io.promptSecret;
+  f.deps.io.promptSecret = async (question) => {
+    if (!f.output.some((line) => line.startsWith("Waiting until ")) && beforeWait++ === 0)
+      vi.advanceTimersByTime(31_000);
+    return promptSecret(question);
+  };
+  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
+  expect(beforeWait).toBe(1);
+  expect(f.output.join("\n")).not.toContain("out of date");
+  expect((await f.runtime.store.read())!.status).toBe("complete");
+});
+
+it("a command whose internet time is gone by activation stops before activating", async () => {
+  const f = await activationFixture();
+  const prompt = f.deps.io.prompt;
+  f.deps.io.prompt = async (question) => {
+    if (question.startsWith("Have you kept"))
+      external.internet.mockResolvedValue({
+        source: "internet",
+        result: "unavailable",
+        reason: "tls",
+      });
+    return prompt(question);
+  };
+  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
+  expect(f.output.slice(-3)).toEqual([
+    "internet: unavailable",
+    "No series is made without a confirmed time, so none is ever repeated.",
+    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+  ]);
+  expect(f.calls).toEqual([]);
+  expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
+  expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
 it("a configured deployment cannot activate without a kept recovery document", async () => {
@@ -574,41 +712,13 @@ it("a deployment readiness refusal leaves the kept attempt unactivated", async (
   expect(await readDeploymentEnvironment(venue.db)).toBeNull();
 });
 
-it("changed publication settings cannot finish a committed command", async () => {
-  const f = await activationFixture();
-  f.interrupt(true);
-  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow("synthetic publication interrupted");
-  const before = (await f.runtime.store.read())!;
-  f.calls.length = 0;
-  const factory = f.deps.firstSetupDeployment!;
-  f.deps.firstSetupDeployment = (context) => {
-    const deployment = factory(context);
-    const publication = deployment.publication;
-    return {
-      ...deployment,
-      publication: async (state) => ({ ...(await publication(state)), digest: "b".repeat(64) }),
-    };
-  };
-  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
-  expect(f.output).toContain("setup.attempt_uncertain {}");
-  expect(f.calls).toEqual([]);
-  const after = (await f.runtime.store.read())!;
-  expect(after.status).toBe("committed");
-  expect(after.frozen).toEqual(before.frozen);
-  expect(after.inputs).toEqual(before.inputs);
-});
-
 it("stale command ownership refuses before loading publication settings", async () => {
   const f = await activationFixture();
   const authorize = vi.spyOn(f.runtime.owner, "authorize");
   f.interrupt(true);
   await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow("synthetic publication interrupted");
   const state = (await f.runtime.store.read())!;
-  const owner = { ...authorize.mock.calls.at(-1)![0], revision: state.revision };
-  const recovered = await f.runtime.owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
-    password: PASSWORD,
-  });
-  expect(recovered.state.ownerGeneration).toBe(owner.ownerGeneration + 1);
+  const owner = { ...authorize.mock.calls.at(-1)![0], revision: state.revision - 1 };
   const deployment = f.deps.firstSetupDeployment!({
     runtime: f.runtime,
     db: venue.db,
@@ -711,104 +821,7 @@ it("the command can load its existing vault key from the selected state director
   expect((await f.runtime.store.read())!.status).toBe("complete");
 });
 
-it("a mismatched stored node key cannot finish interrupted command publication", async () => {
-  const f = await realActivationFixture();
-  f.interrupt(true);
-  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow(
-    "synthetic before trading publication",
-  );
-  const before = (await f.runtime.store.read())!;
-  const series = await venue.db.select().from(invoiceSeries);
-  const { setNodePublicKey, writeNodeMembership } = await import("@waitron/db");
-  const { generateNodeKeyPair, buildNextMembershipDocument } = await import("@waitron/membership");
-  const pair = generateNodeKeyPair();
-  await setNodePublicKey(venue.db, before.frozen.nodeId, pair.publicKey);
-  await writeNodeMembership(
-    venue.db,
-    buildNextMembershipDocument({
-      heldDocument: null,
-      signerNodeId: before.frozen.nodeId,
-      signerPrivateKey: pair.privateKey,
-      nodes: [
-        {
-          nodeId: before.frozen.nodeId,
-          contactUrl: "https://olivo.example.test:3443",
-          standing: "serving-primary",
-        },
-      ],
-    }),
-  );
-  f.interrupt(false);
-  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
-  expect(f.output).toContain("setup.attempt_uncertain {}");
-  expect((await f.runtime.store.read())!.status).toBe("committed");
-  expect(await venue.db.select().from(invoiceSeries)).toEqual(series);
-  await expect(readFile(join(f.root, "state/trading.env"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-});
-
-it("an altered signed membership cannot finish interrupted command publication", async () => {
-  const f = await realActivationFixture();
-  f.interrupt(true);
-  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow(
-    "synthetic before trading publication",
-  );
-  const { readNodeMembershipRow, writeNodeMembership } = await import("@waitron/db");
-  const { isMembershipDocument } = await import("@waitron/membership");
-  const membership = (await readNodeMembershipRow(venue.db))!;
-  if (!isMembershipDocument(membership.document)) throw new Error("invalid fixture membership");
-  const altered = {
-    ...membership.document,
-    body: {
-      ...membership.document.body,
-      nodes: membership.document.body.nodes.map((node) => ({
-        ...node,
-        contactUrl: "https://changed.example.test",
-      })),
-    },
-  };
-  await writeNodeMembership(venue.db, altered);
-  f.interrupt(false);
-  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
-  expect(f.output).toContain("setup.attempt_uncertain {}");
-  expect((await f.runtime.store.read())!.status).toBe("committed");
-  await expect(readFile(join(f.root, "state/trading.env"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-});
-
-it("the command refuses a retained configuration import when its staged material is unavailable", async () => {
-  const f = await realActivationFixture();
-  const runtime = createFirstSetupRuntime({
-    stateDir: join(f.root, "state"),
-    venueDir: join(f.root, "venue"),
-    modules: ALL_MODULES,
-    database: () => venue.db,
-    environment: {},
-    freezeConfiguration: async () => ({ digest: "c".repeat(64), newTaxpayer: false }),
-  });
-  f.deps.configureFirstSetup = () => runtime;
-  await runtime.owner.claimFirstSetup(
-    {
-      environment: "preproduction",
-      configurationImport: true,
-      request: {
-        ...request,
-        admin: { ...request.admin, firstNames: null, lastNames: null, locale: null },
-        addressLine2: "Local 2",
-      },
-    },
-    randomBytes(32).toString("base64url"),
-  );
-  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(1);
-  expect(f.output).toContain("setup.not_ready {}");
-  expect((await runtime.store.read())!.status).toBe("consumption-intent");
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
-  expect(await readDeploymentEnvironment(venue.db)).toBeNull();
-});
-
-it("a refusal after stamping retains the environment without writing the venue", async () => {
+it("a refusal before activation starts leaves no environment stamp and no venue", async () => {
   const f = await realActivationFixture();
   const factory = f.deps.firstSetupDeployment!;
   f.deps.firstSetupDeployment = (context) => {
@@ -824,10 +837,38 @@ it("a refusal after stamping retains the environment without writing the venue",
   };
   expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
-  expect(await readDeploymentEnvironment(venue.db)).toBe("preproduction");
+  expect(await readDeploymentEnvironment(venue.db)).toBeNull();
   expect(await readTenantIdentities(venue.db)).toEqual([]);
   expect(await venue.db.select().from(invoiceSeries)).toEqual([]);
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
+});
+
+it("a venue database already holding another node's membership is refused at publication, and no trading file is written", async () => {
+  const f = await realActivationFixture();
+  const { writeNodeMembership } = await import("@waitron/db");
+  const { generateNodeKeyPair, buildNextMembershipDocument } = await import("@waitron/membership");
+  const other = generateNodeKeyPair();
+  await writeNodeMembership(
+    venue.db,
+    buildNextMembershipDocument({
+      heldDocument: null,
+      signerNodeId: "other-node",
+      signerPrivateKey: other.privateKey,
+      nodes: [
+        {
+          nodeId: "other-node",
+          contactUrl: "https://other.example.test:3443",
+          standing: "serving-primary",
+        },
+      ],
+    }),
+  );
+  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
+  expect(f.output.at(-1)).toBe("setup.attempt_uncertain {}");
+  expect((await f.runtime.store.read())!.status).toBe("committed");
+  await expect(readFile(join(f.root, "state/trading.env"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
 });
 
 const certificateAuthority = makeCertificateAuthority();
@@ -963,39 +1004,6 @@ it.each(["certificate", "build", "key"] as const)(
   },
 );
 
-it.each([false, true])(
-  "production command Finish keeps its original settings and counters (change settings=%s)",
-  async (changed) => {
-    const f = await productionFixture(true);
-    f.interrupt(true);
-    await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow(
-      "synthetic before trading publication",
-    );
-    const before = (await f.runtime.store.read())!;
-    expect(before.status).toBe("committed");
-    const counters = await venue.db.select().from(invoiceSeries);
-    const { rm, writeFile } = await import("node:fs/promises");
-    await rm(join(f.root, "state/fiscal-readiness.json"));
-    if (changed)
-      await writeFile(
-        f.settingsPath,
-        JSON.stringify({
-          aeatCert: productionCertificate,
-          email: { ...productionEmail, password: "SYNTHETIC-changed" },
-        }),
-      );
-    f.interrupt(false);
-    f.prompts.length = 0;
-    const result = await runCliPastWait(f.args, f.deps);
-    expect(result, JSON.stringify(f.output)).toBe(changed ? 1 : 0);
-    expect((await f.runtime.store.read())!.status).toBe(changed ? "committed" : "complete");
-    if (changed) expect(f.output).toContain("setup.attempt_uncertain {}");
-    expect(await venue.db.select().from(invoiceSeries)).toEqual(counters);
-    expect((await f.runtime.store.read())!.frozen).toEqual(before.frozen);
-    expect(f.prompts).toEqual([]);
-  },
-);
-
 it("production activation seals the checked settings snapshot if its source file changes before readiness", async () => {
   const f = await productionFixture(true);
   const factory = f.deps.firstSetupDeployment!;
@@ -1093,41 +1101,6 @@ it.each([
   },
 );
 
-it("a refusal after stamping retains that environment and can retry the original kept hour", async () => {
-  const f = await realActivationFixture();
-  const factory = f.deps.firstSetupDeployment!;
-  let refused = true;
-  f.deps.firstSetupDeployment = (context) => {
-    const deployment = factory(context);
-    const provision = deployment.provision;
-    return {
-      ...deployment,
-      provision: (request, beforeTransaction) =>
-        provision(request, async () => {
-          if (refused) throw new AppError("setup.not_ready", {});
-          await beforeTransaction();
-        }),
-    };
-  };
-  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
-  expect(f.output).toContain("setup.not_ready {}");
-  expect(await readDeploymentEnvironment(venue.db)).toBe("preproduction");
-  expect(await readTenantIdentities(venue.db)).toEqual([]);
-  const before = (await f.runtime.store.read())!;
-  expect(before.status).toBe("consumption-intent");
-  refused = false;
-  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
-  const after = (await f.runtime.store.read())!;
-  expect(after.status).toBe("complete");
-  expect(after.frozen).toEqual(before.frozen);
-  expect(after.inputs[MODULE]).toEqual(before.inputs[MODULE]);
-  expect(
-    (await venue.db.select({ code: invoiceSeries.code }).from(invoiceSeries))
-      .map((row) => row.code)
-      .sort(),
-  ).toEqual(["A-0CNNY", "FF-0CNNY", "R-0CNNY"]);
-});
-
 async function commandReadinessFixture(answer = "yes") {
   const f = await productionFixture(false);
   const contribution = venueFiscalSelection(f.runtime.modules, "ES-common").contribution!;
@@ -1200,6 +1173,28 @@ it("the owned production command runs an explicitly confirmed isolated readiness
   }
 });
 
+it("a fiscal test question answered more than five minutes late still completes, because it is asked before the recovery pack", async () => {
+  const f = await commandReadinessFixture();
+  const prompt = f.deps.io.prompt;
+  f.deps.io.prompt = async (question) => {
+    if (question.startsWith("Send a preproduction fiscal test?")) vi.advanceTimersByTime(360_000);
+    return prompt(question);
+  };
+  try {
+    expect(
+      await runCliPastWait([...f.args, "--test-fiscal"], f.deps),
+      JSON.stringify(f.output),
+    ).toBe(0);
+    expect(f.prompts.filter((question) => !question.startsWith("Confirm setup password"))).toEqual([
+      "Send a preproduction fiscal test? [y/N]: ",
+      "Have you kept this recovery pack? [y/N]: ",
+    ]);
+    expect((await f.runtime.store.read())!.status).toBe("complete");
+  } finally {
+    f.drain.mockRestore();
+  }
+});
+
 it("an unreadable retained vault file refuses before command activation", async () => {
   const f = await realActivationFixture();
   const { mkdir } = await import("node:fs/promises");
@@ -1211,78 +1206,6 @@ it("an unreadable retained vault file refuses before command activation", async 
   await expect(readFile(join(f.root, "state/trading.env"))).rejects.toMatchObject({
     code: "ENOENT",
   });
-});
-
-it("a missing private node key cannot finish interrupted command publication", async () => {
-  const f = await realActivationFixture();
-  f.interrupt(true);
-  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow(
-    "synthetic before trading publication",
-  );
-  const before = (await f.runtime.store.read())!;
-  const counters = await venue.db.select().from(invoiceSeries);
-  const { nodeSigningKey } = await import("@waitron/node-db");
-  const { withNodeTransaction, readMembershipTrustSet } = await import("@waitron/db");
-  await withNodeTransaction(venue.node, (tx) => tx.delete(nodeSigningKey));
-  const trust = await readMembershipTrustSet(venue.db);
-  expect(trust[before.frozen.nodeId]).toEqual(expect.any(String));
-  f.interrupt(false);
-  expect(await runCliPastWait(f.args, f.deps)).toBe(1);
-  expect(f.output).toContain("setup.attempt_uncertain {}");
-  expect(await readMembershipTrustSet(venue.db)).toEqual(trust);
-  expect(await venue.db.select().from(invoiceSeries)).toEqual(counters);
-  expect((await f.runtime.store.read())!.status).toBe("committed");
-  await expect(readFile(join(f.root, "state/trading.env"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-});
-
-it("a setup interrupted after the key was sealed and before it was stamped stamps it on the next run, and the stamped key matches", async () => {
-  const f = await realActivationFixture();
-  const { loadKeyRing, readNodeSigningKey, sealNodeSigningKeyTx } =
-    await import("@waitron/credentials");
-  const { withNodeTransaction, readMembershipTrustSet, readNodeMembershipRow } =
-    await import("@waitron/db");
-  const { generateNodeKeyPair } = await import("@waitron/membership");
-  const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: f.env.WAITRON_CREDENTIALS_KEY });
-  const sealed = generateNodeKeyPair();
-  let interruptIdentity = true;
-  const real = f.deps.firstSetupDeployment!;
-  f.deps.firstSetupDeployment = (options) => {
-    const deployment = real(options);
-    const publication = deployment.publication;
-    return {
-      ...deployment,
-      publication: async (state) => {
-        const result = await publication(state);
-        const publishIdentity = result.deps.publishIdentity;
-        return {
-          ...result,
-          deps: {
-            ...result.deps,
-            publishIdentity: async (written, current) => {
-              if (!interruptIdentity) return publishIdentity(written, current);
-              interruptIdentity = false;
-              await withNodeTransaction(options.node, (tx) =>
-                sealNodeSigningKeyTx(tx, ring, written.nodeId, sealed.privateKey),
-              );
-              throw new Error("synthetic after seal");
-            },
-          },
-        };
-      },
-    };
-  };
-  await expect(runCliPastWait(f.args, f.deps)).rejects.toThrow("synthetic after seal");
-  const nodeId = (await f.runtime.store.read())!.frozen.nodeId;
-  expect((await readMembershipTrustSet(venue.db))[nodeId]).toBeUndefined();
-  expect(await readNodeMembershipRow(venue.db)).toBeNull();
-
-  expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
-
-  expect((await f.runtime.store.read())!.status).toBe("complete");
-  expect((await readMembershipTrustSet(venue.db))[nodeId]).toBe(sealed.publicKey);
-  expect(await readNodeSigningKey(venue.node, ring, nodeId)).toBe(sealed.privateKey);
 });
 
 it("a setup whose node.db refuses to seal the key stamps no public key in venue.db", async () => {
@@ -1306,10 +1229,7 @@ async function unpreparedDeploymentFixture(
   environment: "production" | "preproduction" = "preproduction",
 ) {
   const f = await realActivationFixture();
-  await f.runtime.owner.claimFirstSetup(
-    { environment, request },
-    randomBytes(32).toString("base64url"),
-  );
+  await f.runtime.owner.claimFirstSetup({ environment, request });
   const state = (await f.runtime.store.read())!;
   const deployment = f.deps.firstSetupDeployment!({
     runtime: f.runtime,
@@ -1456,69 +1376,6 @@ it("the readiness option refuses an unowned command before opening the venue", a
   expect(await runCliPastWait([...f.args, "--test-fiscal"], deps)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
   expect(f.deps.openVenue).not.toHaveBeenCalled();
-});
-
-it("an uncertain command readiness retry reuses its one isolated sample and then activates", async () => {
-  const f = await commandReadinessFixture();
-  f.drain.mockResolvedValueOnce(f.emptyDrainResult());
-  try {
-    expect(await runCliPastWait([...f.args, "--test-fiscal"], f.deps)).toBe(1);
-    const before = (await f.runtime.store.read())!;
-    const pdf = await readFile(join(f.root, "recovery.pdf"));
-    expect(
-      await runCliPastWait([...f.args, "--test-fiscal"], f.deps),
-      JSON.stringify(f.output),
-    ).toBe(0);
-    const after = (await f.runtime.store.read())!;
-    expect(after.inputs[MODULE]).toEqual(before.inputs[MODULE]);
-    expect(Object.keys(after.inputs).sort()).toEqual(["$publication", MODULE]);
-    expect(await readFile(join(f.root, "recovery.pdf"))).toEqual(pdf);
-    expect(f.drain).toHaveBeenCalledTimes(2);
-    const { fiscalReadinessBinding } = await import("./fiscal-readiness.js");
-    const { DatabaseSync } = await import("node:sqlite");
-    const sample = new DatabaseSync(
-      join(
-        f.root,
-        "state",
-        `fiscal-readiness-db-${fiscalReadinessBinding(f.readiness)}`,
-        "venue.db",
-      ),
-      { readOnly: true },
-    );
-    try {
-      expect(sample.prepare("select count(*) as n from sales").get()).toEqual({ n: 1 });
-    } finally {
-      sample.close();
-    }
-    expect((await venue.db.select().from(invoiceSeries)).map((row) => row.nextNumber)).toEqual([
-      1, 1, 1,
-    ]);
-  } finally {
-    f.drain.mockRestore();
-  }
-});
-
-it("exact command Finish ignores --test-fiscal and preserves the accepted sample and series", async () => {
-  const f = await commandReadinessFixture();
-  f.interrupt(true);
-  try {
-    await expect(runCliPastWait([...f.args, "--test-fiscal"], f.deps)).rejects.toThrow(
-      "synthetic before trading publication",
-    );
-    const before = await venue.db.select().from(invoiceSeries);
-    expect((await f.runtime.store.read())!.status).toBe("committed");
-    f.interrupt(false);
-    f.prompts.length = 0;
-    expect(
-      await runCliPastWait([...f.args, "--test-fiscal"], f.deps),
-      JSON.stringify(f.output),
-    ).toBe(0);
-    expect(f.prompts).toEqual([]);
-    expect(f.drain).toHaveBeenCalledOnce();
-    expect(await venue.db.select().from(invoiceSeries)).toEqual(before);
-  } finally {
-    f.drain.mockRestore();
-  }
 });
 
 it("the production command records a readable certificate against the committed setup node", async () => {

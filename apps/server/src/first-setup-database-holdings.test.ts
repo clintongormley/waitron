@@ -1,19 +1,23 @@
 import {
   ACTIVATION_ROWS,
   read,
+  readDatabase,
+  write,
   files,
   withHoldings,
   mainFile,
+  leaveHotJournal,
   PRIVATE_COPY,
 } from "../test/setup-holdings-fixture.js";
 import { heldSetup } from "../test/held-setup-database.js";
+import { cutAfterFirstPage } from "../test/damaged-database.js";
+import { DASHBOARD_CERTIFICATE, SETUP_CERTIFICATE } from "../test/certificate-rows.js";
 import * as fileSystem from "node:fs/promises";
-import { access, copyFile, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { DatabaseSync } from "node:sqlite";
+import { access, chmod, rename, rm, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
+import { MODULE } from "../test/first-fiscal.js";
 
 it("reads a legitimate held setup in place: every activation row, nothing kept, no invoice", async () => {
   const held = await heldSetup();
@@ -30,6 +34,54 @@ it("counts an invoice as a record and as a kept row", async () => {
   expect(result.kept).toBeGreaterThanOrEqual(1);
 });
 
+it("a setup certificate row is not kept; a dashboard one is", async () => {
+  const held = await heldSetup();
+  write(held, [SETUP_CERTIFICATE]);
+  expect(await read(held)).toMatchObject({ rows: ACTIVATION_ROWS + 1, kept: 0 });
+  write(held, [DASHBOARD_CERTIFICATE]);
+  expect(await read(held)).toMatchObject({ rows: ACTIVATION_ROWS + 2, kept: 1 });
+});
+
+// The invoice count failing must not lose the kept count, or Start again deletes the row.
+it.each(["envios", "registros_facturacion"])(
+  "a dashboard certificate row is still kept when another fiscal table is damaged (%s dropped)",
+  async (table) => {
+    const held = await heldSetup();
+    write(held, [DASHBOARD_CERTIFICATE, `drop table ${table}`]);
+    const answer = await readDatabase(held);
+    expect(answer).toMatchObject({ kind: "damaged", code: "no such table" });
+    expect((answer as Extract<typeof answer, { kind: "damaged" }>).seen.kept).toBe(1);
+  },
+);
+
+it("keeps a dashboard certificate row when the attempt's modules leave the fiscal module out", async () => {
+  const held = await heldSetup();
+  write(held, [DASHBOARD_CERTIFICATE]);
+  const modules = held.host.modules!.filter((module) => module.name !== MODULE);
+  expect(await read(held, modules)).toMatchObject({ kept: 1 });
+});
+
+it("a certificate table missing is damage only when the attempt's modules name the fiscal module", async () => {
+  const held = await heldSetup();
+  write(held, ["drop table fiscal_certificate_installs"]);
+  const modules = held.host.modules!.filter((module) => module.name !== MODULE);
+  expect(await readDatabase(held, modules)).toMatchObject({ kind: "read" });
+  expect(await readDatabase(held)).toMatchObject({ kind: "damaged", code: "no such table" });
+});
+
+it("a module the attempt does not name still refuses a read error other than a missing table", async () => {
+  const held = await heldSetup();
+  write(held, [
+    "drop table fiscal_certificate_installs",
+    "create table fiscal_certificate_installs (id integer primary key)",
+  ]);
+  const modules = held.host.modules!.filter((module) => module.name !== MODULE);
+  await expect(read(held, modules)).rejects.toMatchObject({
+    code: "setup.not_ready",
+    reason: "read failed: ERR_SQLITE_ERROR 1",
+  });
+});
+
 it("leaves the original files' names and bytes unchanged", async () => {
   const held = await heldSetup();
   const before = await files(held.roots.venueDir);
@@ -37,17 +89,69 @@ it("leaves the original files' names and bytes unchanged", async () => {
   expect(await files(held.roots.venueDir)).toEqual(before);
 });
 
-it("reads a row committed only in the -wal through a private copy, leaving the originals unchanged", async () => {
+it("reads a row committed only in the -wal in place, with no copy, leaving the originals unchanged", async () => {
   const held = await heldSetup({ pendingWal: true });
   const before = await files(held.roots.venueDir);
   expect(before.map(([name]) => name)).toContain("venue.db-wal");
+  vi.mocked(fileSystem.mkdtemp).mockClear();
   const result = await read(held);
+  expect(fileSystem.mkdtemp).not.toHaveBeenCalled();
   expect(result.rows).toBe(ACTIVATION_ROWS + 1);
   expect(await files(held.roots.venueDir)).toEqual(before);
 });
 
+it.each([
+  ["no -shm is beside it", (path: string) => rm(`${path}-shm`), ACTIVATION_ROWS + 1],
+  // SQLite ignores such a -wal, so its row is not read.
+  [
+    "its -wal holds only a header",
+    (path: string) => fileSystem.truncate(`${path}-wal`, 32),
+    ACTIVATION_ROWS,
+  ],
+] as const)(
+  "reads a -wal through a private copy when %s, leaving the originals unchanged",
+  async (_label, change, rows) => {
+    const held = await heldSetup({ pendingWal: true });
+    await change(join(held.roots.venueDir, "venue.db"));
+    const before = await files(held.roots.venueDir);
+    vi.mocked(fileSystem.mkdtemp).mockClear();
+    const result = await read(held);
+    expect(fileSystem.mkdtemp).toHaveBeenCalledTimes(1);
+    expect(result.rows).toBe(rows);
+    expect(await files(held.roots.venueDir)).toEqual(before);
+  },
+);
+
+it.each([0, 1, 99])(
+  "answers setup.not_ready for a %i-byte venue.db beside a -wal, which may hold an invoice, and changes no file",
+  async (size) => {
+    const held = await heldSetup({ pendingWal: true, invoices: 1 });
+    await fileSystem.truncate(join(held.roots.venueDir, "venue.db"), size);
+    const before = await files(held.roots.venueDir);
+    const outcome = await read(held).catch((error: unknown) => error);
+    expect(await files(held.roots.venueDir)).toEqual(before);
+    expect(outcome).toMatchObject({
+      code: "setup.not_ready",
+      reason: "database unreadable: shorter than its header beside a -wal",
+    });
+  },
+);
+
+it("answers setup.not_ready for a damaged venue.db beside a non-empty -wal, and changes no file", async () => {
+  const held = await heldSetup({ pendingWal: true, invoices: 1 });
+  cutAfterFirstPage(join(held.roots.venueDir, "venue.db"));
+  const before = await files(held.roots.venueDir);
+  const outcome = await read(held).catch((error: unknown) => error);
+  expect(await files(held.roots.venueDir)).toEqual(before);
+  expect(outcome).toMatchObject({
+    code: "setup.not_ready",
+    reason: expect.stringMatching(/^database unreadable: damaged beside a -wal: /),
+  });
+});
+
 it("answers setup.not_ready when the private copy cannot be written", async () => {
-  const held = await heldSetup({ pendingWal: true });
+  const held = await heldSetup();
+  await leaveHotJournal(held);
   vi.mocked(fileSystem.mkdtemp).mockRejectedValueOnce(
     Object.assign(new Error("i/o"), { code: "EIO" }),
   );
@@ -59,7 +163,8 @@ it("answers setup.not_ready when the private copy cannot be written", async () =
 });
 
 it("a copy that fails with ENOSPC answers storage.disk_full", async () => {
-  const held = await heldSetup({ pendingWal: true });
+  const held = await heldSetup();
+  await leaveHotJournal(held);
   vi.mocked(fileSystem.mkdtemp).mockRejectedValueOnce(
     Object.assign(new Error("no space"), { code: "ENOSPC" }),
   );
@@ -67,7 +172,8 @@ it("a copy that fails with ENOSPC answers storage.disk_full", async () => {
 });
 
 it("answers setup.not_ready when the private copy cannot be removed", async () => {
-  const held = await heldSetup({ pendingWal: true });
+  const held = await heldSetup();
+  await leaveHotJournal(held);
   let copy: string | undefined;
   const modules = withHoldings(held, async (db) => {
     // The seat also reads the main file alone, which is not the copy.
@@ -88,7 +194,8 @@ it("answers setup.not_ready when the private copy cannot be removed", async () =
 });
 
 it("keeps a failed read as the reason when the private copy then cannot be removed", async () => {
-  const held = await heldSetup({ pendingWal: true });
+  const held = await heldSetup();
+  await leaveHotJournal(held);
   let copy: string | undefined;
   const modules = withHoldings(held, async (db) => {
     copy = await mainFile(db);
@@ -118,7 +225,8 @@ it("passes on a module seat's error code, never its reason", async () => {
 });
 
 it("refuses a write through the private copy and through the main file read alone", async () => {
-  const held = await heldSetup({ pendingWal: true });
+  const held = await heldSetup();
+  await leaveHotJournal(held);
   const refusals: [string, unknown][] = [];
   const modules = withHoldings(held, async (db) => {
     const file = await mainFile(db);
@@ -138,6 +246,27 @@ it("refuses a write through the private copy and through the main file read alon
   for (const [, refusal] of refusals) expect(String(refusal)).toMatch(/readonly/);
 });
 
+it("refuses a write through the read in place and through the main file read alone", async () => {
+  const held = await heldSetup({ pendingWal: true });
+  const refusals: [string, unknown][] = [];
+  const modules = withHoldings(held, async (db) => {
+    const file = await mainFile(db);
+    try {
+      await db.execute("create table seat_write (a)");
+      refusals.push([file, undefined]);
+    } catch (error) {
+      refusals.push([file, error]);
+    }
+    return { records: 0, accepted: 0 };
+  });
+  await read(held, modules);
+  expect(refusals.map(([file]) => file)).toEqual([
+    expect.stringMatching(/\/venue\.db$/),
+    expect.stringMatching(/\/venue\.db$/),
+  ]);
+  for (const [, refusal] of refusals) expect(String(refusal)).toMatch(/readonly/);
+});
+
 it.each([
   ["succeeds", async () => ({ records: 0, accepted: 0 })],
   [
@@ -147,7 +276,8 @@ it.each([
     },
   ],
 ])("deletes its private copy when the read %s", async (outcome, answer) => {
-  const held = await heldSetup({ pendingWal: true });
+  const held = await heldSetup();
+  await leaveHotJournal(held);
   let copy: string | undefined;
   const modules = withHoldings(held, async (db) => {
     const file = await mainFile(db);
@@ -169,24 +299,7 @@ it.each([
 
 it("reads through a private copy, read-write, when a leftover -journal sits beside the database", async () => {
   const held = await heldSetup();
-  const path = join(held.roots.venueDir, "venue.db");
-  // A journal left by a writer that stopped mid-transaction: it must be rolled back to be read.
-  const aside = await mkdtemp(join(tmpdir(), "held-setup-journal-"));
-  try {
-    const db = new DatabaseSync(path);
-    // Spilling pages to the file writes the journal's header, which is what makes it hot.
-    db.exec("pragma journal_mode = delete; pragma cache_size = 2; begin");
-    db.exec(`create table filler (b blob); insert into filler select randomblob(4000) from
-      (with recursive c(x) as (select 1 union all select x + 1 from c where x < 200) select x from c)`);
-    await copyFile(path, join(aside, "venue.db"));
-    await copyFile(`${path}-journal`, join(aside, "venue.db-journal"));
-    db.exec("rollback");
-    db.close();
-    for (const name of ["venue.db", "venue.db-journal"])
-      await copyFile(join(aside, name), join(held.roots.venueDir, name));
-  } finally {
-    await rm(aside, { recursive: true, force: true });
-  }
+  await leaveHotJournal(held);
   const before = await files(held.roots.venueDir);
   vi.mocked(fileSystem.mkdtemp).mockClear();
   const result = await read(held);
@@ -208,5 +321,33 @@ it.each([
       params: { cause: "unexpected" },
       reason: "copy refused: not a plain file",
     });
+  },
+);
+
+it.each([
+  [
+    "venue.db is a link",
+    async (path: string) => {
+      await rename(path, `${path}.aside`);
+      await symlink(`${path}.aside`, path);
+    },
+    { code: "setup.not_ready", reason: "read refused: not a plain file" },
+  ],
+  [
+    "venue.db is gone",
+    (path: string) => rm(path),
+    { code: "setup.not_ready", reason: "database missing" },
+  ],
+  [
+    "the -wal cannot be opened",
+    (path: string) => chmod(`${path}-wal`, 0o000),
+    { code: "setup.not_ready", reason: "database unreadable: in place EACCES" },
+  ],
+] as const)(
+  "with a non-empty -wal, answers setup.not_ready when %s",
+  async (_label, change, answer) => {
+    const held = await heldSetup({ pendingWal: true });
+    await change(join(held.roots.venueDir, "venue.db"));
+    await expect(read(held)).rejects.toMatchObject(answer);
   },
 );

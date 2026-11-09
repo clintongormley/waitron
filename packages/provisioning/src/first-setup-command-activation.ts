@@ -1,9 +1,7 @@
 import type { VenueAndNodeHandles } from "@waitron/node-db";
-import { AppError } from "@waitron/shared";
 import {
   activateFirstSetup,
   checkedFirstSetupCommit,
-  finishFirstSetup,
   firstSetupProvisionRequest,
   publishCheckedFirstSetup,
   type FirstSetupPublicationDeps,
@@ -39,7 +37,7 @@ export async function completeFirstSetupCommand(
     runtime.coordinator.run(async (hold) => {
       const state = await runtime.owner.authorize(owner);
       runtime.assertSelection(state);
-      let publication: Awaited<ReturnType<FirstSetupCommandDeployment["publication"]>>;
+      const publication = await deployment.publication(state);
       const check = (current: FirstSetupState) =>
         checkedFirstSetupCommit(
           runtime,
@@ -49,7 +47,6 @@ export async function completeFirstSetupCommand(
       const publish = (
         current: FirstSetupState,
         checked: NonNullable<Awaited<ReturnType<typeof check>>>,
-        beforeComplete?: () => Promise<unknown>,
       ) =>
         publishCheckedFirstSetup(
           runtime,
@@ -59,20 +56,7 @@ export async function completeFirstSetupCommand(
           owner,
           publication.digest,
           hold,
-          beforeComplete,
         );
-      if (["activation-started", "committed", "publication"].includes(state.status))
-        return finishFirstSetup(
-          runtime,
-          { check, publish },
-          owner,
-          async (current) => {
-            publication = await deployment.publication(current);
-            return publication.digest;
-          },
-          hold,
-        );
-      publication = await deployment.publication(state);
       return activateFirstSetup(
         runtime,
         {
@@ -80,10 +64,6 @@ export async function completeFirstSetupCommand(
             deployment.provision(firstSetupProvisionRequest(state), beforeTransaction),
           check,
           assertReady: () => deployment.assertReady(state),
-          // Committed retries require password recovery and the exact-Finish audit above.
-          confirmCommitted: async () => {
-            throw new AppError("setup.attempt_uncertain", {});
-          },
           publish,
         },
         owner,

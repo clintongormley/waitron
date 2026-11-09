@@ -1196,9 +1196,8 @@ restructuring wider than a review fix:
   `ownerNode`, `nodeDatabase()`), with three near-identical pair types (`VenueDatabase`,
   `VenueAndNodeHandles`, `MigrationFiles`). Pass one pair type.
 - "Opening a staged folder must not create an empty `node.db`" is enforced by about fifteen
-  callers (`writeStagedNodeCopy`, `openStagedCopy`, `assertStagedNodeCopy`, and a hand-rolled
-  `lstat` in `first-setup-publication.ts`). Let `validateDatabaseEntries` write the copy, and give
-  the store an option that refuses a missing `node.db`.
+  callers (`writeStagedNodeCopy`, `openStagedCopy` and `assertStagedNodeCopy`). Let
+  `validateDatabaseEntries` write the copy, and give the store an option that refuses a missing `node.db`.
 - The rule "take `node.db`'s lock outside `venue.db`'s" lives only in comments at four nesting
   sites; one `withVenueAndNodeTransaction` helper would enforce it.
 - `collectStateParts`'s `snapshotNode` callback is the same expression at two of its callers

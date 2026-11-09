@@ -32,15 +32,11 @@ export function createFirstSetupModuleHost(options: {
   grantClock?: () => number;
 }) {
   const evidence: {
-    current?: {
-      read: ModuleOperationHost["readPublicEvidence"];
-      invalidate(attemptId: string): void;
-    };
+    current?: { read: ModuleOperationHost["readPublicEvidence"] };
   } = {};
   const runtime = createFirstSetupRuntime({
     ...options,
     readPublicEvidence: async (binding) => evidence.current?.read(binding),
-    onOwnershipRecovered: (attemptId) => evidence.current?.invalidate(attemptId),
   });
   const { coordinator, store, owner, resolution, modules, bootId, keys, recoveryDelivery } =
     runtime;
@@ -82,6 +78,7 @@ export function createFirstSetupModuleHost(options: {
   };
   evidence.current = configuredEvidence;
   return {
+    roots: { stateDir: options.stateDir, venueDir: options.venueDir },
     withPreparationAuthorization: runtime.withPreparationAuthorization,
     coordinator,
     store,

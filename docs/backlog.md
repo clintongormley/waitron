@@ -100,7 +100,6 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 **2. Go-live fixes that can start today.** They add no tables and no lane holds them. Till bundles
 run one after another, because they share `apps/till/src/till-app.ts`.
 
-- [A1379. A failed setup always offers Start again](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
 - [A1385. The A1207 leftovers in choosing a series name](backlog/setup.md#bundle-a1385-the-a1207-leftovers-in-choosing-a-series-name)
 - [A1398. Pack the other packages' test shards by measured time](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
 - [A1400. An older copy must not undo a save](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
@@ -379,8 +378,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   exact-content checks. Ordinary first-setup admission no longer uses these snapshots.
   [Detail](backlog/setup.md#recovery-operations-still-buffer-whole-database-files).
 
-- **A1379. A failed setup always offers Start again** (bundle of 4, 1 go-live, 2 important, size M). Holds A1322. [Detail](backlog/setup.md#bundle-a1379-a-failed-setup-always-offers-start-again)
-
 - **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).**
   **Build remains open**; Cloud's qualified trial journey is prerequisite G1 in the plan.
   [Detail](backlog/setup.md#a1186-the-setup-tour-offers-waitron-clouds-level-2-trial-owner-2026-10-29).
@@ -432,7 +429,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The recovery page's restart** (bundle of 2, 2 important, size S). Holds A1149, A1153. [Detail](backlog/setup.md#bundle-the-recovery-pages-restart)
 
-- **Restore paths run** (bundle of 2, 2 important, size S). [Detail](backlog/setup.md#bundle-restore-paths-run)
+- **Restore paths run** (bundle of 3, 3 important, size S). [Detail](backlog/setup.md#bundle-restore-paths-run)
 
 - **`restoreFromArtifact` has no production caller.** Only tests call it since A1131bc slice 4;
   decide whether they should place archives through `runStagedRestore`, then delete it.

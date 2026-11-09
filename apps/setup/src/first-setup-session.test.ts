@@ -1,7 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SetupApi, type ProvisionBody } from "./api/client.js";
 import type { FirstSetupState } from "./api/first-setup-types.js";
-import { FirstSetupSession, FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
+import {
+  FirstSetupSession,
+  FIRST_SETUP_SESSION_KEY,
+  startAgainRefusalCause,
+} from "./first-setup-session.js";
 
 const venue: ProvisionBody["venue"] = {
   country: "ES",
@@ -46,6 +50,7 @@ const initial: FirstSetupState = {
   modules: [{ module: "example-module", version: "1" }],
 };
 const sessions: FirstSetupSession[] = [];
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   for (const session of sessions.splice(0)) await session.dispose();
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
@@ -175,7 +180,7 @@ describe("first setup tab ownership", () => {
     expect(sent).toBe(false);
     await session.dispose();
     await second.open();
-    expect(second.recoveryRequired).toBe(true);
+    expect(second.recoveryRequired).toBe(false);
   });
 
   it("keeps the newest valid revision when an older status answer arrives", async () => {
@@ -213,49 +218,6 @@ describe("first setup tab ownership", () => {
     expect(saved.owner).toBeUndefined();
     expect(session.state).toBeUndefined();
   });
-
-  it("requires credential resume again after a lost resume answer rather than continuing with the old capability", async () => {
-    const { session, requests } = create((path) => {
-      if (ends(path, "claim")) return claim();
-      if (ends(path, "resume")) throw new TypeError("lost rotation");
-      return json({ state: initial });
-    });
-    await session.open();
-    await session.claim(venue);
-    await expect(session.resume("administrator password")).rejects.toThrow("lost rotation");
-    expect(session.recoveryRequired).toBe(true);
-    await expect(session.importInput("example-module", {})).rejects.toMatchObject({
-      code: "setup.owner_required",
-    });
-    expect(requests.map((r) => r.path)).toEqual([
-      "/setup-api/first-setup/claim",
-      "/setup-api/first-setup/resume",
-    ]);
-  });
-
-  it.each([
-    { revision: 2, ownerGeneration: 1 },
-    { revision: 1, ownerGeneration: 2 },
-  ])(
-    "refuses a resume response that did not advance both owner generation and revision: %j",
-    async (change) => {
-      const { session } = create((path) =>
-        ends(path, "claim")
-          ? claim()
-          : json({
-              state: { ...initial, ...change },
-              capability: "C".repeat(43),
-              ownerGeneration: change.ownerGeneration,
-            }),
-      );
-      await session.open();
-      await session.claim(venue);
-      await expect(session.resume("administrator password")).rejects.toMatchObject({
-        code: "setup.attempt_conflict",
-      });
-      expect(session.recoveryRequired).toBe(true);
-    },
-  );
 
   it("keeps public download, independent enrolment and publication settings on distinct owner-bound routes", async () => {
     const request = {
@@ -352,22 +314,25 @@ describe("first setup tab ownership", () => {
 
   it("persists the random client nonce before sending a claim, with only owner credentials retained afterwards", async () => {
     let sent: Record<string, unknown> | undefined;
+    let storedNonce: unknown;
     const { session, requests } = create((_path, body) => {
       sent = body as Record<string, unknown>;
-      expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!)).toEqual({
+      const stored = JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!);
+      storedNonce = stored.clientClaimNonce;
+      expect(stored).toEqual({
         version: 1,
-        clientClaimNonce: sent.clientClaimNonce,
+        clientClaimNonce: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
         claimPending: true,
       });
       return claim();
     });
     await session.open();
     await session.claim(venue, "es");
-    expect(sent).toEqual({ clientClaimNonce: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/), venue });
+    expect(sent).toEqual({ venue });
     expect(requests[0]!.headers.get("accept-language")).toBe("es");
     expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!)).toEqual({
       version: 1,
-      clientClaimNonce: sent!.clientClaimNonce,
+      clientClaimNonce: storedNonce,
       claimPending: false,
       owner: {
         attemptId: initial.attemptId,
@@ -379,7 +344,40 @@ describe("first setup tab ownership", () => {
     expect(session.state).toEqual(initial);
   });
 
-  it("does not claim again after a lost answer; reload requires the saved nonce and credential-proven resume", async () => {
+  it("a reload with a saved key carries on: the status read sends the saved key, and the next change is sent with no password", async () => {
+    const first = create(claim);
+    await first.session.open();
+    await first.session.claim(venue);
+    const stored = JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!);
+    await first.session.dispose();
+    const next = create((path) =>
+      ends(path, "status")
+        ? json({ claimed: true, state: { ...initial, revision: 2 } })
+        : json({ state: { ...initial, revision: 3, status: "consumption-intent" } }),
+    );
+    await next.session.open();
+    expect(next.requests).toEqual([]);
+    expect(next.session.recoveryRequired).toBe(false);
+    await next.session.refresh();
+    expect(next.requests.map((r) => r.path)).toEqual(["/setup-api/first-setup/status"]);
+    expect(next.requests[0]!.headers.get("X-Waitron-Setup-Owner")).toBe("A".repeat(43));
+    expect(next.session.state).toEqual({ ...initial, revision: 2 });
+    expect(next.session.recoveryRequired).toBe(false);
+    await next.session.importInput("example-module", { allocation: "public" });
+    expect(next.requests[1]!.path).toBe("/setup-api/first-setup/input");
+    expect(next.requests[1]!.body).toEqual({
+      module: "example-module",
+      input: { allocation: "public" },
+    });
+    expect(next.requests[1]!.headers.get("X-Waitron-Setup-Owner")).toBe("A".repeat(43));
+    expect(next.requests[1]!.headers.get("x-waitron-setup-revision")).toBe("2");
+    const saved = JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!);
+    expect(saved.clientClaimNonce).toBe(stored.clientClaimNonce);
+    expect(saved.owner.capability).toBe("A".repeat(43));
+    expect(saved.owner.revision).toBe(3);
+  });
+
+  it("a claim whose answer was lost: after a reload the tab holds no key, reports recoveryRequired, and refuses the changes that reach the key check setup.owner_required", async () => {
     const first = create(() => {
       throw new TypeError("network unavailable");
     });
@@ -391,26 +389,27 @@ describe("first setup tab ownership", () => {
     });
     expect(first.requests).toHaveLength(1);
     await first.session.dispose();
-    const next = create((path, body) => {
-      expect(path).toBe("/setup-api/first-setup/resume");
-      expect(body).toEqual({
-        clientClaimNonce: JSON.parse(stored).clientClaimNonce,
-        password: "administrator password",
-      });
-      return json({
-        state: { ...initial, ownerGeneration: 2, revision: 2 },
-        capability: "B".repeat(43),
-        ownerGeneration: 2,
-      });
+    const next = create(() => {
+      throw new Error("must not send");
     });
     await next.session.open();
-    expect(next.session.recoveryRequired).toBe(true);
     expect(next.requests).toEqual([]);
-    await next.session.resume("administrator password");
-    expect(next.session.state).toEqual({ ...initial, ownerGeneration: 2, revision: 2 });
-    expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner.capability).toBe(
-      "B".repeat(43),
-    );
+    expect(next.session.recoveryRequired).toBe(true);
+    expect(next.session.state).toBeUndefined();
+    const saved = JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!);
+    expect(saved).toEqual(JSON.parse(stored));
+    expect(saved.owner).toBeUndefined();
+    const email = {} as Parameters<FirstSetupSession["runEmailTest"]>[0];
+    for (const change of [
+      () => next.session.claim(venue),
+      () => next.session.abandon(),
+      () => next.session.request(),
+      () => next.session.runEmailTest(email),
+      () => next.session.runFiscalTest({ mode: "live" }),
+      () => next.session.provision({ mode: "live" }),
+    ])
+      await expect(change()).rejects.toMatchObject({ code: "setup.owner_required" });
+    expect(next.requests).toEqual([]);
   });
 
   it("refuses a duplicate tab's real Web Lock before any HTTP, and releases only its own hold", async () => {
@@ -426,6 +425,156 @@ describe("first setup tab ownership", () => {
     const third = create(claim);
     await third.session.open();
     expect(third.requests).toEqual([]);
+  });
+
+  it("a duplicated tab holding the same saved key is refused before any HTTP while the first holds it", async () => {
+    const first = create(claim);
+    await first.session.open();
+    await first.session.claim(venue);
+    const stored = sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!;
+    expect(JSON.parse(stored).owner.capability).toBe("A".repeat(43));
+    const second = create(claim);
+    await expect(second.session.open()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    expect(second.requests).toEqual([]);
+    expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).toBe(stored);
+    await second.session.dispose();
+    await first.session.dispose();
+    const third = create(() => json({ claimed: true, state: initial }));
+    await third.session.open();
+    expect(third.session.recoveryRequired).toBe(false);
+    await third.session.refresh();
+    expect(third.session.state).toEqual(initial);
+  });
+
+  it("a saved key the box answers from its repair page is dropped, and the tab reads as holding none", async () => {
+    const first = create(claim);
+    await first.session.open();
+    await first.session.claim(venue);
+    await first.session.dispose();
+    const next = create((path) => {
+      if (ends(path, "status")) return json({ claimed: true, resolution: true });
+      throw new Error("must not send");
+    });
+    await next.session.open();
+    await next.session.refresh();
+    expect(next.requests[0]!.headers.get("X-Waitron-Setup-Owner")).toBe("A".repeat(43));
+    expect(next.session.state).toBeUndefined();
+    expect(next.session.recoveryRequired).toBe(true);
+    const saved = JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!);
+    expect(saved).not.toHaveProperty("owner");
+    expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain("A".repeat(43));
+    await expect(next.session.claim(venue)).rejects.toMatchObject({
+      code: "setup.owner_required",
+    });
+    await expect(next.session.abandon()).rejects.toMatchObject({ code: "setup.owner_required" });
+    expect(next.requests).toHaveLength(1);
+    await next.session.dispose();
+    const reloaded = create(() => {
+      throw new Error("must not send");
+    });
+    await reloaded.session.open();
+    expect(reloaded.session.recoveryRequired).toBe(true);
+    await expect(reloaded.session.claim(venue)).rejects.toMatchObject({
+      code: "setup.owner_required",
+    });
+    expect(reloaded.requests).toEqual([]);
+  });
+
+  it("a tab holding a live state that the box then answers from its repair page holds no state and no key", async () => {
+    let repair = false;
+    const { session } = create((path) => {
+      if (!ends(path, "status")) return claim();
+      return json(repair ? { claimed: true, resolution: true } : { claimed: true, state: initial });
+    });
+    await session.open();
+    await session.claim(venue);
+    expect(session.state).toEqual(initial);
+    repair = true;
+    await session.refresh();
+    expect(session.state).toBeUndefined();
+    expect(session.recoveryRequired).toBe(true);
+    expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!)).not.toHaveProperty(
+      "owner",
+    );
+  });
+
+  it.each([
+    [{ claimed: true, resolution: true, state: initial }, undefined],
+    [{ claimed: false, resolution: true }, "setup.attempt_conflict"],
+  ])("a saved key is kept unless the answer is the repair page's: %j", async (answer, refused) => {
+    const first = create(claim);
+    await first.session.open();
+    await first.session.claim(venue);
+    await first.session.dispose();
+    const next = create(() => json(answer));
+    await next.session.open();
+    if (refused) await expect(next.session.refresh()).rejects.toMatchObject({ code: refused });
+    else await next.session.refresh();
+    expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner.capability).toBe(
+      "A".repeat(43),
+    );
+  });
+
+  it.each([
+    [false, false],
+    [true, true],
+  ])(
+    "a saved key the box refuses on the status read is dropped, and the tab reads again as holding none (claimed=%s)",
+    async (claimed, recoveryRequired) => {
+      const first = create(claim);
+      await first.session.open();
+      await first.session.claim(venue);
+      await first.session.dispose();
+      const next = create((_path, _body, headers) =>
+        headers.has("X-Waitron-Setup-Owner")
+          ? Response.json({ error: { code: "setup.owner_required", params: {} } }, { status: 403 })
+          : json({ claimed }),
+      );
+      await next.session.open();
+      await next.session.refresh();
+      expect(next.requests.map((r) => r.headers.has("X-Waitron-Setup-Owner"))).toEqual([
+        true,
+        false,
+      ]);
+      expect(next.session.state).toBeUndefined();
+      expect(next.session.recoveryRequired).toBe(recoveryRequired);
+      expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain("A".repeat(43));
+    },
+  );
+
+  it("a status read refused for another reason keeps the saved key", async () => {
+    const first = create(claim);
+    await first.session.open();
+    await first.session.claim(venue);
+    await first.session.dispose();
+    const next = create(() =>
+      Response.json({ error: { code: "setup.attempt_invalid", params: {} } }, { status: 409 }),
+    );
+    await next.session.open();
+    await expect(next.session.refresh()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner.capability).toBe(
+      "A".repeat(43),
+    );
+  });
+
+  it("a tab that dropped its saved key can claim the new attempt once the box reports none", async () => {
+    const replacement = { ...initial, attemptId: "46e8d046-783d-450b-a355-a6343d33f551" };
+    const first = create(claim);
+    await first.session.open();
+    await first.session.claim(venue);
+    await first.session.dispose();
+    let answers = 0;
+    const next = create((path) => {
+      if (ends(path, "status"))
+        return json(++answers === 1 ? { claimed: true, resolution: true } : { claimed: false });
+      return json({ state: replacement, capability: "B".repeat(43), ownerGeneration: 1 });
+    });
+    await next.session.open();
+    await next.session.refresh();
+    await next.session.refresh();
+    expect(next.session.recoveryRequired).toBe(false);
+    await next.session.claim(venue);
+    expect(next.session.state?.attemptId).toBe(replacement.attemptId);
   });
 
   it("rejects corrupt retained session data instead of silently starting a new event", async () => {
@@ -662,14 +811,20 @@ describe("explicit replacement after abandonment", () => {
     });
     await session.open();
     await session.claim(venue);
+    const firstNonce = JSON.parse(
+      sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!,
+    ).clientClaimNonce;
     await session.abandon();
     await session.replaceAbandoned(venue);
     expect(session.state?.attemptId).toBe(next.attemptId);
     expect(session.state?.nodeId).toBe(next.nodeId);
-    const bodies = requests
-      .filter((r) => ends(r.path, "claim"))
-      .map((r) => r.body as { clientClaimNonce: string });
-    expect(bodies[0]!.clientClaimNonce).toBe(bodies[1]!.clientClaimNonce);
+    expect(requests.filter((r) => ends(r.path, "claim")).map((r) => r.body)).toEqual([
+      { venue },
+      { venue },
+    ]);
+    expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).clientClaimNonce).toBe(
+      firstNonce,
+    );
     expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner.attemptId).toBe(
       next.attemptId,
     );
@@ -993,4 +1148,13 @@ describe("module preparation in the owned tab", () => {
       "/setup-api/first-setup/reconfirm",
     ]);
   });
+});
+
+it("a refused Start again cause the page has no words for is undefined", () => {
+  expect(
+    startAgainRefusalCause({
+      code: "setup.start_again_refused",
+      params: { cause: "trading-settings" },
+    }),
+  ).toBeUndefined();
 });

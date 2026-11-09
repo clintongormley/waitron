@@ -45,9 +45,7 @@ it("holds records, with the attempt at committed and no invoice", async () => {
   await expect(access(join(f.roots.stateDir, "trading.env"))).rejects.toMatchObject({
     code: "ENOENT",
   });
-  const { owner, ids } = await f.signIn();
-  expect((await f.host.store.read())?.frozen.attemptId).toBe(owner.attemptId);
-  expect(ids).toEqual({
+  expect(inspected).toMatchObject({
     inspectionId: expect.any(String),
     revision: expect.any(Number),
     ownerGeneration: expect.any(Number),
@@ -57,6 +55,19 @@ it("holds records, with the attempt at committed and no invoice", async () => {
 it("invoices: 1 leaves one invoice record, counted through the module's seat", async () => {
   const f = await heldSetup({ invoices: 1 });
   expect(await invoiceRecords(f)).toBe(1);
+});
+
+it("certificate: true leaves the setup's one certificate row", async () => {
+  const f = await heldSetup({ certificate: true });
+  const { nodeId } = (await f.host.store.read())!.frozen;
+  const venue = new DatabaseSync(join(f.roots.venueDir, "venue.db"), { readOnly: true });
+  try {
+    expect(
+      venue.prepare("select source, node_id as nodeId from fiscal_certificate_installs").all(),
+    ).toEqual([{ source: "setup", nodeId }]);
+  } finally {
+    venue.close();
+  }
 });
 
 it("status complete and saved trading settings are reached through real steps", async () => {

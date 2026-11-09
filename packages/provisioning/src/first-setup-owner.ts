@@ -2,7 +2,6 @@ import "./errors.js";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
 import {
   assertPasswordLength,
@@ -23,9 +22,7 @@ import type { VenueRequest } from "./venue-plan.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { inTurn } from "./attempt-turns.js";
-import type { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
-import { createFirstSetupOwnerAudit } from "./first-setup-owner-audit.js";
 
 export interface FirstSetupClaimPayload {
   environment: "production" | "preproduction";
@@ -59,16 +56,7 @@ export interface PublicFirstSetupState {
   };
   modules: { module: string; version: string }[];
 }
-export interface RecoverFirstSetupOwnerRequest {
-  inspectionId: string;
-  revision: number;
-  ownerGeneration: number;
-  clientClaimNonce: string;
-  password: string;
-}
 interface OwnerOptions {
-  resolution?: ReturnType<typeof createFirstSetupResolutionInspection>;
-  onOwnershipRecovered?(attemptId: string): void;
   stateDir: string;
   store: FirstSetupStore;
   coordinator: FirstSetupCoordinator;
@@ -81,7 +69,6 @@ interface OwnerOptions {
     intent?: Pick<FirstSetupClaimPayload, "configurationImport" | "newTaxpayer">,
   ): Promise<FirstSetupFrozen>;
   assertClaimAllowed?(hold: FirstSetupHold): Promise<void>;
-  assertRepairAllowed?(state: FirstSetupState, hold: FirstSetupHold): Promise<void>;
 }
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const token = () => randomBytes(32).toString("base64url");
@@ -92,7 +79,6 @@ const validToken = (value: unknown): value is string =>
 function refuse(): never {
   throw new AppError("setup.owner_required", {});
 }
-const dummyVerifier = hashPassword(token());
 const matches = (value: string, digest: string) =>
   timingSafeEqual(Buffer.from(hash(value), "hex"), Buffer.from(digest, "hex"));
 export function publicFirstSetupState(state: FirstSetupState): PublicFirstSetupState {
@@ -184,178 +170,8 @@ export function createFirstSetupOwner(options: OwnerOptions) {
       refuse();
     return state;
   };
-  const restoreOwnership = (
-    clientClaimNonce: string,
-    proof: { password: string },
-    recovery: boolean,
-    snapshot?: RecoverFirstSetupOwnerRequest,
-  ) => {
-    return inTurn(throttle, "resume", async () => {
-      const finish = passwordThrottle.begin("first-setup");
-      try {
-        const inspected =
-          snapshot === undefined
-            ? undefined
-            : await options.resolution?.inspectFirstSetupResolution();
-        const repair = recovery
-          ? await store.readForRepair().catch((error: unknown) => {
-              if (snapshot !== undefined) return null;
-              throw error;
-            })
-          : null;
-        const resumable = recovery
-          ? repair === null
-            ? null
-            : { state: repair.state, publicationComplete: repair.marker.status === "complete" }
-          : await store.readResumable();
-        const before = resumable?.state ?? null;
-        if (before?.status === "complete" && resumable?.publicationComplete) refuse();
-        if (typeof proof.password !== "string" || Buffer.byteLength(proof.password) > 1024)
-          refuse();
-        const correct = await verifyPassword(
-          proof.password,
-          before?.ownerVerifier ?? dummyVerifier,
-        );
-        if (
-          before === null ||
-          !correct ||
-          !validToken(clientClaimNonce) ||
-          (!recovery && !matches(clientClaimNonce, before.claimNonceHash))
-        )
-          refuse();
-        if (
-          snapshot !== undefined &&
-          (inspected === undefined ||
-            inspected.password !== "checkable" ||
-            snapshot.inspectionId !== inspected.inspectionId ||
-            snapshot.revision !== inspected.revision ||
-            snapshot.ownerGeneration !== inspected.ownerGeneration)
-        )
-          refuse();
-        const capability = token();
-        const rebind = () =>
-          coordinator.run(async (hold) => {
-            if (before !== null) await assertNoLegacyFirstSetupWorkspace(before);
-            if (
-              snapshot !== undefined &&
-              (await options.resolution!.inspectFirstSetupResolution()).inspectionId !==
-                snapshot.inspectionId
-            )
-              refuse();
-            let current;
-            const audit =
-              recovery && options.resolution !== undefined
-                ? createFirstSetupOwnerAudit(before, options.resolution)
-                : undefined;
-            if (recovery) {
-              const retained = await store.readForRepair();
-              if (retained === null || !isDeepStrictEqual(retained, repair)) refuse();
-              await audit?.reconcile(retained.state);
-              if (retained.repairMarker !== null) {
-                if (snapshot !== undefined) {
-                  if (inspected?.repairEligible !== true) throw new AppError("setup.not_ready", {});
-                  const repair = () =>
-                    store.repairMarker(
-                      retained,
-                      async () => {
-                        const currentInspection =
-                          await options.resolution!.inspectFirstSetupResolution();
-                        if (
-                          currentInspection.inspectionId !== snapshot.inspectionId ||
-                          !currentInspection.repairEligible
-                        )
-                          refuse();
-                      },
-                      hold,
-                    );
-                  if (audit === undefined) await repair();
-                  else await audit.perform("marker-repair", retained.state, repair);
-                } else {
-                  if (options.assertRepairAllowed === undefined)
-                    throw new AppError("setup.not_ready", {});
-                  const assertAllowed = options.assertRepairAllowed;
-                  const repair = () =>
-                    store.repairMarker(retained, () => assertAllowed(retained.state, hold), hold);
-                  if (audit === undefined) await repair();
-                  else await audit.perform("marker-repair", retained.state, repair);
-                }
-              }
-              current = retained.state;
-            } else current = (await store.readResumable())?.state ?? null;
-            if (
-              current?.revision !== before.revision ||
-              current.frozen.attemptId !== before.frozen.attemptId ||
-              current.ownerGeneration !== before.ownerGeneration
-            )
-              refuse();
-            const update = () =>
-              store.update(
-                current.frozen.attemptId,
-                current.revision,
-                recovery
-                  ? {
-                      kind: "recover",
-                      capabilityHash: hash(capability),
-                      claimNonceHash: hash(clientClaimNonce),
-                    }
-                  : { kind: "resume", capabilityHash: hash(capability) },
-                hold,
-              );
-            const updated =
-              audit === undefined
-                ? await update()
-                : await audit.perform("ownership-rebind", current, update);
-            invalidate(current.frozen.attemptId);
-            options.onOwnershipRecovered?.(current.frozen.attemptId);
-            return updated;
-          });
-        const state =
-          recovery && options.resolution !== undefined
-            ? await options.resolution.withVenueExclusion(rebind)
-            : await rebind();
-        finish?.("success");
-        return {
-          state: publicFirstSetupState(state),
-          capability,
-          ownerGeneration: state.ownerGeneration,
-        };
-      } catch (error) {
-        finish?.(
-          error instanceof AppError && error.code === "setup.owner_required" ? "invalid" : "error",
-        );
-        throw error;
-      }
-    });
-  };
   return {
     authorize,
-    withResolutionPassword<T>(
-      state: FirstSetupState,
-      password: string,
-      body: () => Promise<T>,
-    ): Promise<T> {
-      return inTurn(throttle, "resume", async () => {
-        const finish = passwordThrottle.begin("first-setup");
-        try {
-          if (
-            typeof password !== "string" ||
-            Buffer.byteLength(password) > 1024 ||
-            !(await verifyPassword(password, state.ownerVerifier))
-          )
-            refuse();
-          const result = await body();
-          finish("success");
-          return result;
-        } catch (error) {
-          finish(
-            error instanceof AppError && error.code === "setup.owner_required"
-              ? "invalid"
-              : "error",
-          );
-          throw error;
-        }
-      });
-    },
     async status(owner: FirstSetupOwnerAttempt): Promise<FirstSetupState> {
       const state = await store.read();
       if (state !== null) await assertNoLegacyFirstSetupWorkspace(state);
@@ -370,8 +186,7 @@ export function createFirstSetupOwner(options: OwnerOptions) {
       return state;
     },
     invalidate,
-    async claimFirstSetup(payload: FirstSetupClaimPayload, clientClaimNonce: string) {
-      if (!validToken(clientClaimNonce)) refuse();
+    async claimFirstSetup(payload: FirstSetupClaimPayload) {
       const { password, pin, ...admin } = payload.request.admin;
       if (
         typeof password !== "string" ||
@@ -408,33 +223,13 @@ export function createFirstSetupOwner(options: OwnerOptions) {
           frozen.environment !== payload.environment
         )
           throw new AppError("setup.attempt_invalid", {});
-        return store.claim(
-          frozen,
-          request.admin.passwordHash,
-          hash(capability),
-          hash(clientClaimNonce),
-          hold,
-        );
+        return store.claim(frozen, request.admin.passwordHash, hash(capability), hold);
       });
       return {
         state: publicFirstSetupState(state),
         capability,
         ownerGeneration: state.ownerGeneration,
       };
-    },
-    recoverFirstSetupOwner(request: RecoverFirstSetupOwnerRequest) {
-      return restoreOwnership(
-        request.clientClaimNonce,
-        { password: request.password },
-        true,
-        request,
-      );
-    },
-    resumeFirstSetup(clientClaimNonce: string, proof: { password: string }) {
-      return restoreOwnership(clientClaimNonce, proof, false);
-    },
-    recoverFirstSetup(clientClaimNonce: string, proof: { password: string }) {
-      return restoreOwnership(clientClaimNonce, proof, true);
     },
     reconfirm(owner: FirstSetupOwnerAttempt, password: string, purpose: ReconfirmationPurpose) {
       return inTurn(throttle, "reconfirm", async () => {

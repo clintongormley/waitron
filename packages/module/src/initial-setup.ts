@@ -25,19 +25,17 @@ export interface InitialSetupCommandActions {
   prompt(question: string): Promise<string>;
   prepare(proposal: unknown): Promise<unknown>;
   select(proposal: unknown): Promise<unknown>;
+  sleep(ms: number): Promise<void>;
 }
 
 export type InitialSetupCommandResult =
-  | { readonly status: "ready"; readonly input: unknown }
-  | { readonly status: "waiting" }
-  | { readonly status: "cancelled" };
+  { readonly status: "ready"; readonly input: unknown } | { readonly status: "cancelled" };
 
 export interface InitialSetupContribution {
-  commandResume?(
+  commandBeforeActivation?(
     context: InitialSetupContext,
     actions: InitialSetupCommandActions,
   ): Promise<InitialSetupCommandResult>;
-  resume?(context: InitialSetupContext, input: unknown, documentBinding: string): Promise<void>;
   commandRecoveryDocument?(
     context: InitialSetupContext,
     imported: InitialSetupImport,
@@ -78,6 +76,8 @@ export interface InitialSetupContribution {
   startAgainHoldings?(
     db: Pick<Database, "execute">,
   ): Promise<{ readonly records: number; readonly accepted: number }>;
+  /** Rows of a table this module lists in `startAgainDeletable` that Start again must still keep. */
+  startAgainKept?(db: Pick<Database, "execute">): Promise<number>;
 
   assignmentPositions?(
     context: InitialSetupContext,

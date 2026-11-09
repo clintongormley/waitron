@@ -8,7 +8,6 @@ import { resolve } from "node:path";
 import { mkdtemp, readFile, rm, symlink, cp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { Agent } from "undici";
 import { emptyDrainResult } from "@waitron/fiscal";
@@ -146,7 +145,6 @@ it.each(["trading", "completion-state", "completion-marker"])(
     try {
       ({ server, port } = await startRetainedServer(env, { testClock }));
       agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
-      const nonce = randomBytes(32).toString("base64url");
       let capability = "",
         state: { attemptId: string; revision: number; ownerGeneration: number };
       const headers = () =>
@@ -168,7 +166,6 @@ it.each(["trading", "completion-state", "completion-marker"])(
         return { status: response.status, body: await response.json() };
       };
       const claim = await post("/setup-api/first-setup/claim", {
-        clientClaimNonce: nonce,
         venue: request,
       });
       expect(claim.status).toBe(200);
@@ -403,19 +400,27 @@ it.each(["trading", "completion-state", "completion-marker"])(
       } as RequestInit);
       expect(resumedStatus.status).toBe(200);
       expect(await resumedStatus.json()).toEqual({ claimed: true });
-      const resumed = await post("/setup-api/first-setup/resume", {
-        clientClaimNonce: nonce,
-        password: PASSWORD,
-      });
-      expect(resumed.status).toBe(200);
-      expect(resumed.body.state.attemptId).toBe(claim.body.state.attemptId);
+      const ownerStatus = await fetch(`https://127.0.0.1:${port}/setup-api/first-setup/status`, {
+        dispatcher: agent,
+        headers: headers(),
+      } as RequestInit);
+      if (point === "completion-marker") {
+        // The store refuses to read a complete record whose claim mark was never written.
+        expect(ownerStatus.status).toBe(409);
+        expect((await ownerStatus.json()).error.code).toBe("setup.attempt_invalid");
+      } else {
+        expect(ownerStatus.status).toBe(200);
+        expect((await ownerStatus.json()).state.attemptId).toBe(claim.body.state.attemptId);
+      }
+      expect(
+        JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8")).frozen.attemptId,
+      ).toBe(claim.body.state.attemptId);
       await server.close();
       server = undefined;
       await rm(join(stateDir, "first-setup.json"));
       await rm(join(venueDir, "first-setup-claim.json"));
       ({ server, port } = await startRetainedServer(env, { testClock }));
       const lost = await post("/setup-api/first-setup/claim", {
-        clientClaimNonce: randomBytes(32).toString("base64url"),
         venue: request,
       });
       expect(lost.status).toBe(409);
@@ -481,7 +486,6 @@ it("refuses a fresh owner claim when only a taxpayer survives in the database", 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        clientClaimNonce: randomBytes(32).toString("base64url"),
         venue: request,
       }),
     } as RequestInit);

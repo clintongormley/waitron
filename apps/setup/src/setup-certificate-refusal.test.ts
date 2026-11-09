@@ -1,9 +1,9 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
-import { venue, initial, wizardApi } from "../test/first-setup-browser.js";
+import { venue, wizardApi } from "../test/first-setup-browser.js";
 import { setLocale, t } from "./i18n/t.js";
 import type { StringKey } from "./i18n/strings.js";
 import type { SetupCertScreen } from "./screens/cert-screen.js";
@@ -24,6 +24,7 @@ it.each(["en-GB", "es-ES"])(
     expect(link!.rel).toBe("noopener");
   },
 );
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   mounted.splice(0).forEach((host) => host.remove());
   cleanupWidgets();
@@ -98,94 +99,6 @@ for (const theme of ["light", "dark"] as const) {
     },
   );
 }
-
-it("requires fresh owner recovery after a Finish refusal, while keeping the corrected certificate draft", async () => {
-  const state = {
-    ...initial,
-    status: "committed",
-    consumptionIntent: true,
-    revision: 2,
-    ownerGeneration: 2,
-  };
-  let finished = 0;
-  const fixture = wizardApi({
-    claimed: true,
-    intercept(path) {
-      if (path.endsWith("/first-setup/status")) return Response.json({ claimed: true, state });
-      if (path.endsWith("/resolution"))
-        return Response.json({
-          version: 2,
-          inspectionId: "b".repeat(64),
-          pair: "valid",
-          database: "occupied",
-          password: "checkable",
-          revision: 2,
-          ownerGeneration: 2,
-          emptyDatabase: false,
-          repairEligible: false,
-          artifacts: [],
-        });
-      if (path.endsWith("/resolution/recover"))
-        return Response.json({ state, capability: "B".repeat(43), ownerGeneration: 2 });
-      if (path.endsWith("/finish")) {
-        finished++;
-        return Response.json(
-          {
-            error: {
-              code: "setup.certificate_refused",
-              params: { field: "passphrase", reason: "passphrase_wrong" },
-            },
-          },
-          { status: 422 },
-        );
-      }
-    },
-  });
-  const host = document.createElement("div");
-  document.body.append(host);
-  applyTokens(host);
-  mounted.push(host);
-  const app = new SetupApp();
-  app.api = fixture.api;
-  host.append(app);
-  const owner = await screen(app, "first-owner");
-  owner
-    .querySelector("[data-test=resume-password]")!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "SYNTHETIC-owner" } }));
-  await userEvent.click(owner.querySelector<HTMLElement>("[data-test=resume]")!);
-  await expect.poll(() => owner.querySelector("[data-test=finish-setup]")).not.toBeNull();
-  await userEvent.click(owner.querySelector<HTMLElement>("[data-test=finish-setup]")!);
-  await screen(app, "cert");
-  emit(app, "setup-patch", {
-    patch: {
-      aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC-wrong", certKind: "sello" },
-    },
-  });
-  emit(app, "setup-goto", { screen: "email" });
-  await screen(app, "email");
-  emit(app, "setup-goto", { screen: "review" });
-  await screen(app, "review");
-  emit(app, "provision-requested");
-  const refused = await screen(app, "cert");
-  expect(finished).toBe(1);
-  const passphrase = refused.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-    "[data-test=passphrase]",
-  )!;
-  expect(passphrase.error).toBe("The certificate passphrase is incorrect.");
-  passphrase.dispatchEvent(
-    new CustomEvent("wt-change", {
-      detail: { value: "SYNTHETIC-correct" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await userEvent.click(refused.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!);
-  await screen(app, "first-owner");
-  expect(finished).toBe(1);
-  expect(
-    (app as unknown as { draft: { aeatCert: { passphrase: string } } }).draft.aeatCert.passphrase,
-  ).toBe("SYNTHETIC-correct");
-});
 
 it("retires an earlier accepted readiness answer when provisioning refuses the certificate", async () => {
   const fixture = wizardApi({

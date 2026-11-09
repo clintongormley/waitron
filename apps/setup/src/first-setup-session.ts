@@ -4,7 +4,6 @@ import type {
   FirstSetupOwnership,
   FirstSetupProvisionBody,
   FirstSetupState,
-  FirstSetupResolutionSnapshot,
   StartAgainRefusalCause,
 } from "./api/first-setup-types.js";
 
@@ -61,7 +60,6 @@ function publicState(value: unknown): value is FirstSetupState {
   );
 }
 const REFUSAL_CAUSES: readonly string[] = [
-  "trading-settings",
   "setup-finished",
   "kept-records",
 ] satisfies StartAgainRefusalCause[];
@@ -136,6 +134,8 @@ export class FirstSetupSession {
   #generation = 0;
   #proofRequired = false;
   #needsRefresh = false;
+  #keyRefused = false;
+  #repairPage = false;
   #releases = new Set<() => void>();
   #lockTasks: Promise<void>[] = [];
   #attemptLock?: string;
@@ -148,6 +148,14 @@ export class FirstSetupSession {
   }
   get state(): FirstSetupState | undefined {
     return this.#state === undefined ? undefined : structuredClone(this.#state);
+  }
+  /** Whether the last refresh found the box refusing this tab's saved key; the key is then dropped. */
+  get keyRefused(): boolean {
+    return this.#keyRefused;
+  }
+  /** Whether the last status read came from the box's repair page, which alone deletes a setup. */
+  get repairPage(): boolean {
+    return this.#repairPage;
   }
   get recoveryRequired(): boolean {
     return this.#proofRequired || this.#needsRefresh || this.#saved?.claimPending === true;
@@ -163,7 +171,7 @@ export class FirstSetupSession {
           ? { version: 1, clientClaimNonce: nonce(), claimPending: false }
           : readSaved(text);
       this.#storage.setItem(FIRST_SETUP_SESSION_KEY, JSON.stringify(this.#saved));
-      this.#proofRequired = this.#saved.owner !== undefined || this.#saved.claimPending;
+      this.#proofRequired = this.#saved.claimPending;
       if (!this.#locks) failure("setup.owner_required");
       await this.#takeLock(`waitron:first-setup:nonce:${this.#saved.clientClaimNonce}`, generation);
       if (this.#saved.owner) await this.#holdAttempt(this.#saved.owner.attemptId, generation);
@@ -268,13 +276,6 @@ export class FirstSetupSession {
   #acceptOwnership(result: FirstSetupOwnership): void {
     if (!token(result.capability) || result.ownerGeneration !== result.state.ownerGeneration)
       failure("setup.attempt_conflict");
-    const previous = this.#saved?.owner;
-    if (
-      previous &&
-      (result.ownerGeneration <= previous.ownerGeneration ||
-        result.state.revision <= previous.revision)
-    )
-      failure("setup.attempt_conflict");
     this.#acceptState(result.state, result.ownerGeneration);
     this.#saved = {
       ...this.#saved!,
@@ -298,12 +299,7 @@ export class FirstSetupSession {
   ): Promise<void> {
     this.#saved!.claimPending = true;
     this.#save();
-    const result = await this.#api.claimFirstSetup(
-      this.#saved!.clientClaimNonce,
-      venue,
-      locale,
-      intent,
-    );
+    const result = await this.#api.claimFirstSetup(venue, locale, intent);
     current();
     if (!publicState(result.state)) failure("setup.attempt_conflict");
     await this.#holdAttempt(result.state.attemptId);
@@ -341,53 +337,55 @@ export class FirstSetupSession {
       await this.#claim(venue, current, locale, intent);
     });
   }
-  resume(password: string): Promise<void> {
-    return this.#run(async (current) => {
-      this.#proofRequired = true;
-      const result = await this.#api.resumeFirstSetup(this.#saved!.clientClaimNonce, password);
-      current();
-      if (!publicState(result.state)) failure("setup.attempt_conflict");
-      await this.#holdAttempt(result.state.attemptId);
-      current();
-      this.#acceptOwnership(result);
-    });
-  }
-  recover(snapshot: FirstSetupResolutionSnapshot, password: string): Promise<void> {
-    return this.#run(async (current) => {
-      this.#proofRequired = true;
-      const result = await this.#api.recoverFirstSetupOwner(
-        snapshot,
-        this.#saved!.clientClaimNonce,
-        password,
-      );
-      current();
-      if (!publicState(result.state)) failure("setup.attempt_conflict");
-      await this.#holdAttempt(result.state.attemptId);
-      current();
-      this.#acceptOwnership(result);
-    });
+  #forgetOwner(): void {
+    this.#saved = {
+      version: 1,
+      clientClaimNonce: this.#saved!.clientClaimNonce,
+      claimPending: true,
+    };
+    this.#state = undefined;
+    this.#attemptLock = undefined;
+    this.#save();
   }
   refresh(): Promise<void> {
     return this.#run(async (current) => {
-      if (this.#saved!.owner === undefined) {
-        const result = await this.#api.firstSetupStatus();
+      this.#keyRefused = false;
+      if (this.#saved!.owner !== undefined) {
+        const result = await this.#api
+          .firstSetupStatus(this.#owner(false))
+          .catch((error: unknown) => {
+            const code = (error as { code?: unknown } | null)?.code;
+            // The box can no longer read this attempt, so the state held here describes nothing.
+            if (code === "setup.attempt_invalid") this.#state = undefined;
+            if (code !== "setup.owner_required") throw error;
+            return undefined;
+          });
         current();
-        if (typeof result.claimed !== "boolean" || result.conflict || result.state !== undefined)
-          failure("setup.attempt_conflict");
-        this.#proofRequired = result.claimed;
-        this.#saved!.claimPending = result.claimed;
-        if (!result.claimed) {
-          this.#needsRefresh = false;
+        this.#repairPage = result?.resolution === true;
+        if (result?.claimed && result.resolution === true && result.state === undefined) {
+          this.#forgetOwner();
+          return;
         }
-        this.#save();
-        return;
+        if (result !== undefined) {
+          if (!result.claimed || !result.state) failure("setup.attempt_conflict");
+          this.#acceptState(result.state);
+          this.#needsRefresh = false;
+          return;
+        }
+        this.#keyRefused = true;
+        this.#forgetOwner();
       }
-      const owner = this.#owner(false);
-      const result = await this.#api.firstSetupStatus(owner);
+      const result = await this.#api.firstSetupStatus();
       current();
-      if (!result.claimed || !result.state) failure("setup.attempt_conflict");
-      this.#acceptState(result.state);
-      this.#needsRefresh = false;
+      this.#repairPage = result.resolution === true;
+      if (typeof result.claimed !== "boolean" || result.conflict || result.state !== undefined)
+        failure("setup.attempt_conflict");
+      this.#proofRequired = result.claimed;
+      this.#saved!.claimPending = result.claimed;
+      if (!result.claimed) {
+        this.#needsRefresh = false;
+      }
+      this.#save();
     });
   }
   #change(
@@ -557,42 +555,6 @@ export class FirstSetupSession {
       const result = await this.#api.runFirstSetupEmailTest(this.#owner(), email);
       current();
       return result;
-    });
-  }
-  finish(settings: Omit<FirstSetupProvisionBody, "firstSetup">) {
-    return this.#run(async (current) => {
-      if (
-        !this.#state ||
-        !["activation-started", "committed", "publication"].includes(this.#state.status)
-      )
-        failure("setup.attempt_conflict");
-      const owner = this.#owner();
-      try {
-        const inspection = await this.#api.inspectFirstSetupResolution();
-        current();
-        if (
-          inspection.pair !== "valid" ||
-          inspection.database !== "occupied" ||
-          inspection.password !== "checkable" ||
-          !/^[a-f0-9]{64}$/.test(inspection.inspectionId) ||
-          inspection.revision !== owner.revision ||
-          inspection.ownerGeneration !== owner.ownerGeneration
-        )
-          failure("setup.attempt_conflict");
-        const result = await this.#api.finishFirstSetup(
-          owner,
-          {
-            inspectionId: inspection.inspectionId,
-            revision: owner.revision,
-            ownerGeneration: owner.ownerGeneration,
-          },
-          settings,
-        );
-        current();
-        return result;
-      } finally {
-        this.#needsRefresh = true;
-      }
     });
   }
   runFiscalTest(settings: Omit<FirstSetupProvisionBody, "firstSetup">) {

@@ -1,5 +1,6 @@
-import { execFileSync } from "node:child_process";
-import { randomBytes, randomUUID } from "node:crypto";
+import { execFileSync, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { once } from "node:events";
 import {
   mkdtemp,
   mkdir,
@@ -62,10 +63,7 @@ async function fixture(
     }),
   };
   const owner = createFirstSetupOwner(ownerOptions);
-  const claim = await owner.claimFirstSetup(
-    { environment: "production", request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await owner.claimFirstSetup({ environment: "production", request });
   if (phase === "abandon") await store.update(claim.state.attemptId, 1, { kind: "abandoned" });
   const markerPath = join(roots.venueDir, "first-setup-claim.json");
   if (phase !== "active") {
@@ -80,15 +78,12 @@ async function fixture(
     store,
     ...serviceOptions,
   });
-  const recovering = createFirstSetupOwner({ ...ownerOptions, resolution: service });
   return {
     root,
     ...roots,
     store,
     coordinator,
     owner,
-    ownerOptions,
-    recovering,
     claim,
     markerPath,
     service,
@@ -108,8 +103,6 @@ it.each(["claim", "abandon"] as const)(
       version: 2,
       pair: "repairable",
       database: "no-venue-rows",
-      repairEligible: true,
-      password: "checkable",
       revision: phase === "claim" ? 1 : 2,
       ownerGeneration: 1,
     });
@@ -123,6 +116,22 @@ it.each(["claim", "abandon"] as const)(
     expect(JSON.stringify(inspected)).not.toContain("scrypt$");
   },
 );
+it("reports exactly the inspection's own fields", async () => {
+  const f = await fixture();
+  const inspected = await f.service.inspectFirstSetupResolution();
+  expect(Object.keys(inspected).sort()).toEqual(
+    [
+      "version",
+      "inspectionId",
+      "pair",
+      "database",
+      "revision",
+      "ownerGeneration",
+      "emptyDatabase",
+      "artifacts",
+    ].sort(),
+  );
+});
 it.each(["missing", "corrupt", "partial", "symlink"] as const)(
   "keeps %s databases unavailable without creating or repairing them",
   async (kind) => {
@@ -135,7 +144,7 @@ it.each(["missing", "corrupt", "partial", "symlink"] as const)(
     const before = await readdir(f.venueDir);
     const result = await f.service.inspectFirstSetupResolution();
     expect(result.database).toBe(kind === "symlink" ? "unreadable" : kind);
-    expect(result.repairEligible).toBe(false);
+    expect(result.emptyDatabase).toBe(false);
     expect(await readdir(f.venueDir)).toEqual(before);
     if (kind === "missing") await expect(readFile(path)).rejects.toMatchObject({ code: "ENOENT" });
   },
@@ -150,7 +159,6 @@ it.each([
   const f = await fixture();
   await writeFile(join(f.stateDir, name), "{incomplete");
   const inspected = await f.service.inspectFirstSetupResolution();
-  expect(inspected.repairEligible).toBe(false);
   expect(inspected.artifacts).toContainEqual(expect.objectContaining({ name, status: "invalid" }));
 });
 it("binds exact delivery chunks and retained outside evidence into the inspection ID", async () => {
@@ -161,7 +169,6 @@ it("binds exact delivery chunks and retained outside evidence into the inspectio
   await writeFile(join(root, "orphan-0.json"), JSON.stringify({ data: "YQ==" }));
   const second = await f.service.inspectFirstSetupResolution();
   expect(second.inspectionId).not.toBe(first.inspectionId);
-  expect(second.repairEligible).toBe(false);
   expect(second.artifacts).toContainEqual(
     expect.objectContaining({ name: "first-fiscal-documents/orphan-0.json", status: "present" }),
   );
@@ -171,7 +178,7 @@ it("binds exact delivery chunks and retained outside evidence into the inspectio
   );
 });
 it.each(["missing", "corrupt", "wrong-root"] as const)(
-  "reports %s retained ownership as uncheckable",
+  "reports %s retained ownership as an unusable pair with no revision",
   async (why) => {
     const f = await fixture();
     const path = join(f.stateDir, "first-setup.json");
@@ -184,99 +191,11 @@ it.each(["missing", "corrupt", "wrong-root"] as const)(
     }
     const inspected = await f.service.inspectFirstSetupResolution();
     expect(inspected.pair).toBe(why === "missing" ? "partial" : "invalid");
-    expect(inspected.password).toBe("uncheckable");
-    expect(inspected.repairEligible).toBe(false);
+    expect(inspected.revision).toBeNull();
+    expect(inspected.ownerGeneration).toBeNull();
   },
 );
 
-it.each(["claim", "abandon", "active"] as const)(
-  "recovers %s ownership only from a fresh exact inspection",
-  async (phase) => {
-    const f = await fixture(phase);
-    const before = JSON.parse(await readFile(join(f.stateDir, "first-setup.json"), "utf8"));
-    const inspected = await f.service.inspectFirstSetupResolution();
-    const nonce = randomBytes(32).toString("base64url");
-    const recovered = await f.recovering.recoverFirstSetupOwner({
-      inspectionId: inspected.inspectionId,
-      revision: inspected.revision!,
-      ownerGeneration: inspected.ownerGeneration!,
-      clientClaimNonce: nonce,
-      password: PASSWORD,
-    });
-    const after = (await f.store.read())!;
-    expect(after).toEqual({
-      ...before,
-      revision: before.revision + 1,
-      ownerGeneration: before.ownerGeneration + 1,
-      claimNonceHash: expect.stringMatching(/^[a-f0-9]{64}$/),
-      capabilityHash: expect.stringMatching(/^[a-f0-9]{64}$/),
-      history: [
-        ...before.history,
-        {
-          kind: "recover",
-          revision: before.revision + 1,
-          ownerGeneration: before.ownerGeneration + 1,
-        },
-      ],
-    });
-    expect(recovered.state.status).toBe(phase === "abandon" ? "abandoned" : "claimed");
-    await expect(
-      f.owner.status({ ...f.claim.state, capability: f.claim.capability }),
-    ).rejects.toMatchObject({ code: "setup.owner_required" });
-    const bytes = await readFile(join(f.stateDir, "first-setup.json"), "utf8");
-    for (const secret of [nonce, PASSWORD, recovered.capability])
-      expect(bytes).not.toContain(secret);
-  },
-);
-it.each(["password", "inspectionId", "revision", "ownerGeneration", "nonce", "artifact"])(
-  "refuses a wrong or changed %s without modifying retained state",
-  async (why) => {
-    const f = await fixture();
-    const inspected = await f.service.inspectFirstSetupResolution();
-    const body = {
-      inspectionId: inspected.inspectionId,
-      revision: inspected.revision!,
-      ownerGeneration: inspected.ownerGeneration!,
-      clientClaimNonce: randomBytes(32).toString("base64url"),
-      password: PASSWORD,
-    };
-    if (why === "password") body.password = "wrong-password";
-    if (why === "inspectionId") body.inspectionId = "0".repeat(64);
-    if (why === "revision") body.revision++;
-    if (why === "ownerGeneration") body.ownerGeneration++;
-    if (why === "nonce") body.clientClaimNonce = "bad";
-    if (why === "artifact")
-      await writeFile(join(f.stateDir, "first-setup-node-key.json"), "{broken");
-    const state = await readFile(join(f.stateDir, "first-setup.json"));
-    const marker = await readFile(f.markerPath);
-    await expect(f.recovering.recoverFirstSetupOwner(body)).rejects.toMatchObject({
-      code: "setup.owner_required",
-    });
-    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(state);
-    expect(await readFile(f.markerPath)).toEqual(marker);
-  },
-);
-it("lets only one of two recoveries with the same snapshot succeed", async () => {
-  const f = await fixture("active");
-  const inspected = await f.service.inspectFirstSetupResolution();
-  const body = {
-    inspectionId: inspected.inspectionId,
-    revision: inspected.revision!,
-    ownerGeneration: inspected.ownerGeneration!,
-    password: PASSWORD,
-  };
-  const attempts = await Promise.allSettled(
-    [1, 2].map(() =>
-      f.recovering.recoverFirstSetupOwner({
-        ...body,
-        clientClaimNonce: randomBytes(32).toString("base64url"),
-      }),
-    ),
-  );
-  expect(attempts.map((a) => a.status)).toEqual(["fulfilled", "rejected"]);
-  expect(attempts[1]).toMatchObject({ reason: { code: "setup.owner_required" } });
-  expect((await f.store.read())!.ownerGeneration).toBe(2);
-});
 it("binds an independently configured outside file and receipt directory without publishing its paths or granting trust", async () => {
   const f = await fixture("active");
   const outside = join(f.root, "outside.json");
@@ -301,31 +220,6 @@ it("binds an independently configured outside file and receipt directory without
   await rm(outside);
   const missing = await service.inspectFirstSetupResolution();
   expect(missing.artifacts).toContainEqual({ name: "outside-evidence-0", status: "missing" });
-  expect(missing.repairEligible).toBe(false);
-});
-it("throttles repeated wrong-password recovery across fresh nonces", async () => {
-  const f = await fixture("active");
-  const inspected = await f.service.inspectFirstSetupResolution();
-  const body = {
-    inspectionId: inspected.inspectionId,
-    revision: 1,
-    ownerGeneration: 1,
-    password: "wrong-password",
-  };
-  for (let i = 0; i < 4; i++)
-    await expect(
-      f.recovering.recoverFirstSetupOwner({
-        ...body,
-        clientClaimNonce: randomBytes(32).toString("base64url"),
-      }),
-    ).rejects.toMatchObject({ code: "setup.owner_required" });
-  await expect(
-    f.recovering.recoverFirstSetupOwner({
-      ...body,
-      clientClaimNonce: randomBytes(32).toString("base64url"),
-    }),
-  ).rejects.toMatchObject({ code: "password.throttled" });
-  expect((await f.store.read())!.ownerGeneration).toBe(1);
 });
 it("does not treat an absent independently configured register as proof of no register", async () => {
   const f = await fixture();
@@ -338,7 +232,6 @@ it("does not treat an absent independently configured register as proof of no re
   });
   const result = await service.inspectFirstSetupResolution();
   expect(result.artifacts).toContainEqual({ name: "outside-evidence-0", status: "missing" });
-  expect(result.repairEligible).toBe(false);
 });
 it("venue exclusion refuses an earlier Waitron's first-setup layout before its body runs", async () => {
   const f = await fixture();
@@ -349,50 +242,48 @@ it("venue exclusion refuses an earlier Waitron's first-setup layout before its b
   });
   expect(body).not.toHaveBeenCalled();
 });
-it("rereads auxiliary evidence after password checking under venue exclusion", async () => {
+it("venue exclusion refuses a venue held by another process before its body runs", async () => {
   const f = await fixture("active");
-  const inspected = await f.service.inspectFirstSetupResolution();
-  const locked = f.service.withVenueExclusion.bind(f.service);
-  f.service.withVenueExclusion = async (body) => {
-    await writeFile(join(f.stateDir, "module-operation-public.json"), '{"changed":true}');
-    return locked(body);
-  };
-  const before = await readFile(join(f.stateDir, "first-setup.json"));
-  await expect(
-    f.recovering.recoverFirstSetupOwner({
-      inspectionId: inspected.inspectionId,
-      revision: 1,
-      ownerGeneration: 1,
-      clientClaimNonce: randomBytes(32).toString("base64url"),
-      password: PASSWORD,
-    }),
-  ).rejects.toMatchObject({ code: "setup.owner_required" });
-  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
-});
-it("shares the recovery password throttle with the retained password-only endpoint", async () => {
-  const f = await fixture("active");
-  const inspected = await f.service.inspectFirstSetupResolution();
-  for (let i = 0; i < 4; i++)
-    await expect(
-      f.recovering.recoverFirstSetup(randomBytes(32).toString("base64url"), {
-        password: "wrong-password",
+  const child = spawn(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `
+    import { DatabaseSync } from "node:sqlite";
+    const lock = new DatabaseSync(process.argv[1]);
+    lock.exec("pragma busy_timeout=0; begin immediate");
+    process.stdout.write("held");
+    setInterval(() => lock, 1000);
+  `,
+      join(f.venueDir, "venue.lock"),
+    ],
+    { stdio: ["ignore", "pipe", "pipe"] },
+  );
+  try {
+    const [chunk] = await Promise.race([
+      once(child.stdout, "data"),
+      once(child, "exit").then(([code]) => {
+        throw new Error(`lock holder exited ${String(code)}`);
       }),
-    ).rejects.toMatchObject({ code: "setup.owner_required" });
-  await expect(
-    f.recovering.recoverFirstSetupOwner({
-      inspectionId: inspected.inspectionId,
-      revision: 1,
-      ownerGeneration: 1,
-      clientClaimNonce: randomBytes(32).toString("base64url"),
-      password: PASSWORD,
-    }),
-  ).rejects.toMatchObject({ code: "password.throttled" });
+    ]);
+    expect(String(chunk)).toBe("held");
+    const body = vi.fn(async () => "ran");
+    const outcome = await f.service.withVenueExclusion(body).catch((error: unknown) => error);
+    expect(outcome).toMatchObject({ code: "provisioning.database_in_use" });
+    expect(body).not.toHaveBeenCalled();
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = once(child, "exit");
+      child.kill("SIGKILL");
+      await exited;
+    }
+  }
 });
-it("does not repair a supposedly preactivation pair alongside trading configuration", async () => {
+it("records trading configuration beside a preactivation pair as evidence", async () => {
   const f = await fixture();
   await writeFile(join(f.stateDir, "trading.env"), "WAITRON_NODE_ID=synthetic\n");
   const inspected = await f.service.inspectFirstSetupResolution();
-  expect(inspected.repairEligible).toBe(false);
   expect(inspected.artifacts).toContainEqual(
     expect.objectContaining({ name: "trading.env", status: "present" }),
   );
@@ -419,7 +310,6 @@ it("retains an empty delivery directory as incomplete evidence", async () => {
   await mkdir(join(f.stateDir, "first-fiscal-documents"));
   const result = await f.service.inspectFirstSetupResolution();
   expect(result.artifacts).toContainEqual({ name: "first-fiscal-documents", status: "present" });
-  expect(result.repairEligible).toBe(false);
 });
 it("describes absent roots without creating a workspace", async () => {
   const root = await mkdtemp(join(tmpdir(), "first-resolution-empty-"));
@@ -435,30 +325,18 @@ it("describes absent roots without creating a workspace", async () => {
   ).toMatchObject({
     pair: "missing",
     database: "missing",
-    password: "uncheckable",
     revision: null,
     ownerGeneration: null,
-    repairEligible: false,
   });
   expect(await readdir(root)).toEqual([]);
 });
-it("refuses marker repair when the existing database carries a taxpayer", async () => {
+it("reports a database carrying a taxpayer as occupied and leaves the marker unchanged", async () => {
   const { seedTenant } = await import("@waitron/db/testing/seed.js");
   await seedTenant(suite.db);
   const f = await fixture();
+  const before = await readFile(f.markerPath);
   const result = await f.service.inspectFirstSetupResolution();
   expect(result.database).toBe("occupied");
-  expect(result.repairEligible).toBe(false);
-  const before = await readFile(f.markerPath);
-  await expect(
-    f.recovering.recoverFirstSetupOwner({
-      inspectionId: result.inspectionId,
-      revision: 1,
-      ownerGeneration: 1,
-      clientClaimNonce: randomBytes(32).toString("base64url"),
-      password: PASSWORD,
-    }),
-  ).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(await readFile(f.markerPath)).toEqual(before);
 });
 it.each(["symlink", "directory", "oversize", "array"] as const)(
@@ -477,7 +355,6 @@ it.each(["symlink", "directory", "oversize", "array"] as const)(
         status: kind === "array" ? "invalid" : "unreadable",
       }),
     );
-    expect(inspected.repairEligible).toBe(false);
   },
 );
 it("does not follow a symlinked delivery directory", async () => {
@@ -489,7 +366,6 @@ it("does not follow a symlinked delivery directory", async () => {
   const result = await f.service.inspectFirstSetupResolution();
   expect(result.artifacts).toContainEqual({ name: "first-fiscal-documents", status: "unreadable" });
   expect(JSON.stringify(result)).not.toContain("hidden.json");
-  expect(result.repairEligible).toBe(false);
 });
 it.each(["missing", "symlink", "invalid-file"] as const)(
   "retains %s independently configured receipt evidence",
@@ -518,7 +394,6 @@ it.each(["missing", "symlink", "invalid-file"] as const)(
         status: kind === "missing" ? "missing" : kind === "symlink" ? "unreadable" : "invalid",
       }),
     );
-    expect(result.repairEligible).toBe(false);
   },
 );
 it("keeps an unreadable database result unknown instead of calling it empty", async () => {
@@ -529,7 +404,7 @@ it("keeps an unreadable database result unknown instead of calling it empty", as
     connection.exec("begin exclusive");
     const result = await f.service.inspectFirstSetupResolution();
     expect(result.database).toBe("unknown");
-    expect(result.repairEligible).toBe(false);
+    expect(result.emptyDatabase).toBe(false);
   } finally {
     connection.exec("rollback");
     connection.close();
@@ -557,7 +432,6 @@ it.each(["delivery", "outside"] as const)(
       name: kind === "delivery" ? "first-fiscal-documents" : "outside-receipts-0",
       status: "unreadable",
     });
-    expect(result.repairEligible).toBe(false);
   },
 );
 
@@ -654,8 +528,8 @@ it.each(["file", "symlink"] as const)(
     });
     const inspected = await service.inspectFirstSetupResolution();
     expect(inspected.artifacts).toContainEqual({ name: "first-setup.json", status: "unreadable" });
-    expect(inspected.repairEligible).toBe(false);
-    expect(inspected.password).toBe("uncheckable");
+    expect(inspected.revision).toBeNull();
+    expect(inspected.ownerGeneration).toBeNull();
   },
 );
 
@@ -756,88 +630,15 @@ it.each([
   expect(changed).toBe(true);
 });
 
-it.each([false, true])(
-  "refuses damaged ownership state through inspected=%s recovery",
-  async (inspected) => {
-    const f = await fixture("active");
-    const snapshot = await f.service.inspectFirstSetupResolution();
-    const path = join(f.stateDir, "first-setup.json");
-    await writeFile(path, "{damaged setup state");
-    const before = await readFile(path);
-    const marker = await readFile(f.markerPath);
-    const nonce = randomBytes(32).toString("base64url");
-    const recovery = inspected
-      ? f.recovering.recoverFirstSetupOwner({
-          inspectionId: snapshot.inspectionId,
-          revision: snapshot.revision!,
-          ownerGeneration: snapshot.ownerGeneration!,
-          clientClaimNonce: nonce,
-          password: PASSWORD,
-        })
-      : f.recovering.recoverFirstSetup(nonce, { password: PASSWORD });
-    await expect(recovery).rejects.toMatchObject({
-      code: inspected ? "setup.owner_required" : "setup.attempt_invalid",
-    });
-    expect(await readFile(path)).toEqual(before);
-    expect(await readFile(f.markerPath)).toEqual(marker);
-  },
-);
-
-it("audits legacy password recovery's marker repair before rebinding ownership", async () => {
-  const f = await fixture("claim");
-  const before = (await f.store.readForRepair())!.state;
-  const owner = createFirstSetupOwner({
-    ...f.ownerOptions,
-    resolution: f.service,
-    assertRepairAllowed: async () => {
-      expect((await f.service.inspectFirstSetupResolution()).repairEligible).toBe(true);
-    },
-  });
-  const recovered = await owner.recoverFirstSetup(randomBytes(32).toString("base64url"), {
-    password: PASSWORD,
-  });
-  expect(recovered.state).toMatchObject({ status: "claimed", ownerGeneration: 2, revision: 2 });
-  expect((await f.store.read())!.frozen).toEqual(before.frozen);
-  const ids = await readdir(join(f.stateDir, "first-setup-resolutions"));
-  expect(ids).toHaveLength(1);
-  const records = await import("./first-setup-resolution.js").then(
-    ({ createFirstSetupResolutionStore }) =>
-      createFirstSetupResolutionStore({ ...f, coordinator: createFirstSetupCoordinator() }).read(
-        ids[0]!,
-      ),
-  );
-  expect(records.map(({ action, phase }) => [action, phase])).toEqual([
-    ["marker-repair", "prepared"],
-    ["marker-repair", "applied"],
-    ["ownership-rebind", "prepared"],
-    ["ownership-rebind", "applied"],
-  ]);
-});
-
-it("does not repair the marker after evidence changes immediately before its unused check", async () => {
-  const f = await fixture("claim");
-  const snapshot = await f.service.inspectFirstSetupResolution();
-  const repair = f.store.repairMarker.bind(f.store);
-  let changed = false;
-  f.store.repairMarker = async (...args) => {
-    changed = true;
-    await writeFile(join(f.stateDir, "module-operation-public.json"), '{"changed":true}');
-    return repair(...args);
-  };
-  const before = await readFile(f.markerPath);
-  const state = await readFile(join(f.stateDir, "first-setup.json"));
-  await expect(
-    f.recovering.recoverFirstSetupOwner({
-      inspectionId: snapshot.inspectionId,
-      revision: snapshot.revision!,
-      ownerGeneration: snapshot.ownerGeneration!,
-      clientClaimNonce: randomBytes(32).toString("base64url"),
-      password: PASSWORD,
-    }),
-  ).rejects.toMatchObject({ code: "setup.owner_required" });
-  expect(changed).toBe(true);
-  expect(await readFile(f.markerPath)).toEqual(before);
-  expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(state);
+it("leaves a damaged ownership record and its marker as they are when inspected", async () => {
+  const f = await fixture("active");
+  const path = join(f.stateDir, "first-setup.json");
+  await writeFile(path, "{damaged setup state");
+  const before = await readFile(path);
+  const marker = await readFile(f.markerPath);
+  await f.service.inspectFirstSetupResolution();
+  expect(await readFile(path)).toEqual(before);
+  expect(await readFile(f.markerPath)).toEqual(marker);
 });
 
 it("classifies a valid database above 128 MiB without treating the snapshot budget as unreadability", async () => {
@@ -864,7 +665,7 @@ it.each(["directory", "fifo"] as const)("rejects a %s before SQLite admission", 
   });
 });
 
-it("refuses over-budget ownership repair without changing either record or creating an audit", async () => {
+it("inspects a pair whose database is over the snapshot budget and changes neither record", async () => {
   const f = await fixture("claim");
   await truncate(join(f.venueDir, "venue.db"), 128 * 1024 * 1024 + 4096);
   const before = await readFile(join(f.stateDir, "first-setup.json"));
@@ -875,17 +676,7 @@ it("refuses over-budget ownership repair without changing either record or creat
     pair: "repairable",
     database: "no-venue-rows",
     emptyDatabase: true,
-    repairEligible: false,
   });
-  await expect(
-    f.recovering.recoverFirstSetupOwner({
-      inspectionId: inspected.inspectionId,
-      revision: inspected.revision!,
-      ownerGeneration: inspected.ownerGeneration!,
-      clientClaimNonce: randomBytes(32).toString("base64url"),
-      password: PASSWORD,
-    }),
-  ).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
   expect(await readFile(f.markerPath)).toEqual(marker);
   expect((await readdir(f.stateDir)).sort()).toEqual(entries);

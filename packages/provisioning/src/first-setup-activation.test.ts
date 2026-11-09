@@ -1,5 +1,4 @@
-import { randomBytes } from "node:crypto";
-import { mkdtemp, rm, readdir } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -18,12 +17,12 @@ import { planVenue } from "./venue-plan.js";
 import { applyVenue, type VenueResult } from "./venue-apply.js";
 import {
   activateFirstSetup,
-  finishFirstSetup,
   checkedFirstSetupCommit,
   firstSetupProvisionRequest,
   publishCheckedFirstSetup,
 } from "./first-setup-activation.js";
 import { MODULE, PASSWORD, request } from "../test/first-setup-request.js";
+import { readRecoveryDocumentFile } from "../test/recovery-document-file.js";
 
 const NOW = Date.parse("2026-10-16T11:40:00Z");
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
@@ -66,10 +65,7 @@ async function fixture(kept = true) {
     environment: {},
     database: () => venue.db,
   });
-  const claim = await runtime.owner.claimFirstSetup(
-    { environment: "preproduction", request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await runtime.owner.claimFirstSetup({ environment: "preproduction", request });
   const io = {
     stdout() {},
     stderr() {},
@@ -410,6 +406,35 @@ it("an uncertain attempt cannot reach activation dependencies", async () => {
   expect(f.deps.publish).not.toHaveBeenCalled();
 });
 
+it.each(["activation-started", "committed"] as const)(
+  "without a way to confirm a commit, an attempt left %s is refused before it is checked, and nothing changes",
+  async (status) => {
+    const f = await fixture();
+    let state = (await f.runtime.store.read())!;
+    state = await f.runtime.store.update(state.frozen.attemptId, state.revision, {
+      kind: "activation-started",
+    });
+    if (status === "committed")
+      state = await f.runtime.store.update(state.frozen.attemptId, state.revision, {
+        kind: "committed",
+        result: { venue: { nodeId: "n" }, modules: {} },
+      });
+    f.owner.revision = state.revision;
+    const { provision, check, assertReady, publish } = f.deps;
+    const deps = { provision, check, assertReady, publish };
+    await expect(
+      f.runtime.resolution.withVenueExclusion(() =>
+        f.runtime.coordinator.run((hold) =>
+          activateFirstSetup(f.runtime, deps, f.owner, f.digest, hold),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
+    expect(await f.runtime.store.read()).toEqual(state);
+    expect(f.deps.check).not.toHaveBeenCalled();
+    expect(f.deps.publish).not.toHaveBeenCalled();
+  },
+);
+
 it("an adapter cannot publish without reporting its transaction boundary", async () => {
   const f = await fixture();
   const before = await f.runtime.store.read();
@@ -433,7 +458,15 @@ it("continues a retained publication binding only after renewed kept consent", a
   f.owner.revision = bound.revision;
   await expect(f.activate()).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(f.deps.provision).not.toHaveBeenCalled();
-  await f.runtime.commandDelivery.deliver(f.owner, f.io, join(f.root, "recovery.pdf"), "en");
+  const reference = await readRecoveryDocumentFile(join(f.root, "state"), MODULE);
+  await f.runtime.recoveryDelivery.registerRecoveryDocumentDelivery(f.owner, reference);
+  const { statement: _, ...publicReference } = reference;
+  void _;
+  await f.runtime.recoveryDelivery.confirmRecoveryDocumentKept(
+    f.owner,
+    { ...publicReference, kept: true },
+    await f.runtime.owner.reconfirm(f.owner, PASSWORD, "activation"),
+  );
   await f.activate();
   const after = (await f.runtime.store.read())!;
   expect(after.status).toBe("committed");
@@ -464,39 +497,26 @@ async function publicationFixture() {
       steps.push("clear");
     }),
   };
-  const audit = vi.fn(async () => {
-    steps.push("audit");
-    expect((await f.runtime.store.read())!.status).toBe("publication");
-  });
   const publish = (
     state: Awaited<ReturnType<typeof f.runtime.owner.authorize>>,
     checked: { venue: VenueResult; modules: Record<string, unknown> },
   ) =>
     f.runtime.coordinator.run((hold) =>
-      publishCheckedFirstSetup(
-        f.runtime,
-        publication,
-        state,
-        checked,
-        f.owner,
-        f.digest,
-        hold,
-        audit,
-      ),
+      publishCheckedFirstSetup(f.runtime, publication, state, checked, f.owner, f.digest, hold),
     );
   await f.activate();
   const state = (await f.runtime.store.read())!;
   f.owner.revision = state.revision;
   const checked = state.result as { venue: VenueResult; modules: Record<string, unknown> };
-  return { ...f, steps, publication, audit, publish, state, checked };
+  return { ...f, steps, publication, publish, state, checked };
 }
 
-it("publishes only an exact checked commit, installs its retained verifier and audits before completion", async () => {
+it("publishes only an exact checked commit and installs its retained verifier", async () => {
   const f = await publicationFixture();
   const stage = await f.runtime.keys.readStage(f.owner);
   expect(await venue.node.select().from(nodeRecoveryKey)).toEqual([]);
   await expect(f.publish(f.state, f.checked)).resolves.toEqual(f.checked.venue);
-  expect(f.steps).toEqual(["selection", "identity", "settings", "trading", "clear", "audit"]);
+  expect(f.steps).toEqual(["selection", "identity", "settings", "trading", "clear"]);
   expect((await f.runtime.store.read())!.status).toBe("complete");
   expect(await venue.node.select().from(nodeRecoveryKey)).toMatchObject([
     {
@@ -507,7 +527,7 @@ it("publishes only an exact checked commit, installs its retained verifier and a
   ]);
 });
 
-it.each(["selection", "identity", "settings", "trading", "clear", "audit"])(
+it.each(["selection", "identity", "settings", "trading", "clear"])(
   "a %s refusal keeps publication incomplete and allows a checked retry without another activation",
   async (step) => {
     const f = await publicationFixture();
@@ -517,16 +537,15 @@ it.each(["selection", "identity", "settings", "trading", "clear", "audit"])(
       settings: f.publication.sealSettings,
       trading: f.publication.persistTrading,
       clear: f.publication.clearConfiguration,
-      audit: f.audit,
     }[step]!;
     selected.mockRejectedValueOnce(new AppError("setup.not_ready", {}));
     await expect(f.publish(f.state, f.checked)).rejects.toMatchObject({ code: "setup.not_ready" });
     const after = (await f.runtime.store.read())!;
-    expect(after.status).toBe(step === "audit" ? "publication" : "committed");
+    expect(after.status).toBe("committed");
     expect(f.steps).toEqual(
-      ["selection", "identity", "settings", "trading", "clear", "audit"].slice(
+      ["selection", "identity", "settings", "trading", "clear"].slice(
         0,
-        ["selection", "identity", "settings", "trading", "clear", "audit"].indexOf(step),
+        ["selection", "identity", "settings", "trading", "clear"].indexOf(step),
       ),
     );
     f.owner.revision = after.revision;
@@ -694,279 +713,4 @@ it("a module without the recovery-document seat records no recovery pack", async
   );
   expect((await f.runtime.store.read())!.status).toBe("complete");
   expect(await readRecoveryPacks(venue.db, f.checked.venue.nodeId)).toEqual([]);
-});
-
-async function finishFixture(recover = true) {
-  const f = await publicationFixture();
-  let owner = f.owner;
-  const recoveryNonce = randomBytes(32).toString("base64url");
-  if (recover) {
-    const inspection = await f.runtime.resolution.inspectFirstSetupResolution();
-    const recovered = await f.runtime.owner.recoverFirstSetupOwner({
-      inspectionId: inspection.inspectionId,
-      revision: f.state.revision,
-      ownerGeneration: f.state.ownerGeneration,
-      clientClaimNonce: recoveryNonce,
-      password: PASSWORD,
-    });
-    owner = { ...recovered.state, capability: recovered.capability };
-  }
-  const check = vi.fn(f.deps.check.getMockImplementation()!);
-  const finish = (digest = f.digest) =>
-    f.runtime.resolution.withVenueExclusion(() =>
-      f.runtime.coordinator.run((hold) =>
-        finishFirstSetup(
-          f.runtime,
-          {
-            check,
-            publish: (state, checked, beforeComplete) =>
-              publishCheckedFirstSetup(
-                f.runtime,
-                f.publication,
-                state,
-                checked,
-                owner,
-                digest,
-                hold,
-                beforeComplete,
-              ),
-          },
-          owner,
-          digest,
-          hold,
-        ),
-      ),
-    );
-  return { ...f, owner, check, finish, recoveryNonce };
-}
-
-it("shared Finish publishes a recovered exact commit and durably records password authority", async () => {
-  const f = await finishFixture();
-  const before = await venue.db.execute("select * from invoice_series order by id");
-  await expect(f.finish()).resolves.toEqual(f.checked.venue);
-  expect((await f.runtime.store.read())!.status).toBe("complete");
-  expect(await venue.db.execute("select * from invoice_series order by id")).toEqual(before);
-  expect(await venue.db.execute("select count(*) as count from registro_sif")).toMatchObject({
-    rows: [{ count: 1 }],
-  });
-  expect(f.deps.provision).toHaveBeenCalledOnce();
-  expect(f.steps).toEqual(["selection", "identity", "settings", "trading", "clear"]);
-  const { createFirstSetupResolutionStore } = await import("./first-setup-resolution.js");
-  const { createFirstSetupCoordinator } = await import("./first-setup-state.js");
-  const records = createFirstSetupResolutionStore({
-    stateDir: join(f.root, "state"),
-    venueDir: join(f.root, "venue"),
-    coordinator: createFirstSetupCoordinator(),
-  });
-  const ids = await readdir(join(f.root, "state", "first-setup-resolutions"));
-  const audits = (await Promise.all(ids.map((id) => records.read(id)))).flat();
-  expect(audits).toContainEqual(
-    expect.objectContaining({
-      action: "finish-publication",
-      phase: "applied",
-      database: "committed-exact",
-      authority: "original-password",
-      register: null,
-      observedOwnerGeneration: f.owner.ownerGeneration,
-    }),
-  );
-});
-
-it("shared Finish refuses an unrecovered owner before reading the commit or publishing", async () => {
-  const f = await finishFixture(false);
-  const before = await f.runtime.store.read();
-  await expect(f.finish()).rejects.toMatchObject({ code: "setup.owner_required" });
-  expect(await f.runtime.store.read()).toEqual(before);
-  expect(f.check).not.toHaveBeenCalled();
-  expect(f.steps).toEqual([]);
-});
-
-it("shared Finish refuses a different publication digest without reading or changing the commit", async () => {
-  const f = await finishFixture();
-  const before = await f.runtime.store.read();
-  await expect(f.finish("b".repeat(64))).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-  expect(await f.runtime.store.read()).toEqual(before);
-  expect(f.check).not.toHaveBeenCalled();
-  expect(f.steps).toEqual([]);
-});
-
-it("shared Finish requires a real committed module receipt", async () => {
-  const f = await finishFixture();
-  const before = await f.runtime.store.read();
-  const audits = await readdir(join(f.root, "state", "first-setup-resolutions"));
-  f.check.mockResolvedValue(null);
-  await expect(f.finish()).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-  expect(await f.runtime.store.read()).toEqual(before);
-  expect(f.steps).toEqual([]);
-  expect(await readdir(join(f.root, "state", "first-setup-resolutions"))).toEqual(audits);
-});
-
-it("shared Finish rejects a different recovered venue before publication", async () => {
-  const f = await finishFixture();
-  const before = await f.runtime.store.read();
-  f.recover.mockResolvedValue({ ...f.checked.venue, seriesIds: [] });
-  await expect(f.finish()).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
-  expect(await f.runtime.store.read()).toEqual(before);
-  expect(f.steps).toEqual([]);
-});
-
-it("shared Finish keeps failed publication retryable without activation or another recovery PDF", async () => {
-  const f = await finishFixture();
-  f.publication.persistTrading.mockRejectedValueOnce(new AppError("setup.not_ready", {}));
-  await expect(f.finish()).rejects.toMatchObject({ code: "setup.not_ready" });
-  const interrupted = (await f.runtime.store.read())!;
-  expect(interrupted.status).toBe("committed");
-  f.owner.revision = interrupted.revision;
-  await expect(f.finish()).resolves.toEqual(f.checked.venue);
-  expect((await f.runtime.store.read())!.status).toBe("complete");
-  expect(f.deps.provision).toHaveBeenCalledOnce();
-  expect(f.check).toHaveBeenCalledTimes(2);
-  expect(await venue.db.execute("select count(*) as count from registro_sif")).toMatchObject({
-    rows: [{ count: 1 }],
-  });
-});
-
-it("shared Finish derives the publication digest only after recovering and checking selection", async () => {
-  const f = await finishFixture();
-  let derived = 0;
-  await expect(
-    f.runtime.coordinator.run((hold) =>
-      finishFirstSetup(
-        f.runtime,
-        {
-          check: f.check,
-          publish: (state, checked, beforeComplete) =>
-            publishCheckedFirstSetup(
-              f.runtime,
-              f.publication,
-              state,
-              checked,
-              f.owner,
-              f.digest,
-              hold,
-              beforeComplete,
-            ),
-        },
-        f.owner,
-        (state) => {
-          derived++;
-          expect(state.ownerGeneration).toBe(f.owner.ownerGeneration);
-          return f.digest;
-        },
-        hold,
-      ),
-    ),
-  ).resolves.toEqual(f.checked.venue);
-  expect(derived).toBe(1);
-});
-
-it("shared Finish rejects stale ownership before deriving publication secrets", async () => {
-  const f = await finishFixture();
-  const before = await f.runtime.store.read();
-  const digest = vi.fn(() => f.digest);
-  await expect(
-    f.runtime.coordinator.run((hold) =>
-      finishFirstSetup(
-        f.runtime,
-        { check: f.check, publish: vi.fn() },
-        { ...f.owner, revision: f.owner.revision + 1 },
-        digest,
-        hold,
-      ),
-    ),
-  ).rejects.toMatchObject({ code: "setup.owner_required" });
-  expect(digest).not.toHaveBeenCalled();
-  expect(f.check).not.toHaveBeenCalled();
-  expect(await f.runtime.store.read()).toEqual(before);
-});
-
-it("shared Finish rejects an ordinary resumed owner even after a password recovery", async () => {
-  const f = await finishFixture();
-  const resumed = await f.runtime.owner.resumeFirstSetup(f.recoveryNonce, {
-    password: PASSWORD,
-  });
-  const owner = { ...resumed.state, capability: resumed.capability };
-  const digest = vi.fn(() => f.digest);
-  await expect(
-    f.runtime.coordinator.run((hold) =>
-      finishFirstSetup(f.runtime, { check: f.check, publish: vi.fn() }, owner, digest, hold),
-    ),
-  ).rejects.toMatchObject({ code: "setup.owner_required" });
-  expect(digest).not.toHaveBeenCalled();
-  expect(f.check).not.toHaveBeenCalled();
-});
-
-it.each(["revision", "ownerGeneration"] as const)(
-  "shared Finish refuses an audit snapshot with another %s before publishing",
-  async (field) => {
-    const f = await finishFixture();
-    const capture = f.runtime.resolution.captureFirstSetupOriginals;
-    f.runtime.resolution.captureFirstSetupOriginals = async () => {
-      const snapshot = await capture();
-      return { ...snapshot, inspection: { ...snapshot.inspection, [field]: f.owner[field] - 1 } };
-    };
-    const before = await f.runtime.store.read();
-    await expect(f.finish()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-    expect(f.steps).toEqual([]);
-    expect(await f.runtime.store.read()).toEqual(before);
-  },
-);
-
-it("shared Finish completes a lost host result write without a second activation", async () => {
-  const f = await fixture();
-  f.deps.check.mockRejectedValueOnce(new Error("synthetic lost result read"));
-  await expect(f.activate()).rejects.toThrow("synthetic lost result read");
-  const before = (await f.runtime.store.read())!;
-  expect(before.status).toBe("activation-started");
-  const series = await venue.db.execute("select * from invoice_series order by id");
-  const inspection = await f.runtime.resolution.inspectFirstSetupResolution();
-  const recovered = await f.runtime.owner.recoverFirstSetupOwner({
-    inspectionId: inspection.inspectionId,
-    revision: before.revision,
-    ownerGeneration: before.ownerGeneration,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    password: PASSWORD,
-  });
-  const owner = { ...recovered.state, capability: recovered.capability };
-  const states: string[] = [];
-  await f.runtime.resolution.withVenueExclusion(() =>
-    f.runtime.coordinator.run((hold) =>
-      finishFirstSetup(
-        f.runtime,
-        {
-          check: f.deps.check,
-          publish: (state, checked, beforeComplete) => {
-            states.push(state.status);
-            return publishCheckedFirstSetup(
-              f.runtime,
-              {
-                db: venue.db,
-                node: venue.node,
-                publishSelection: async () => {},
-                publishIdentity: async () => {},
-                sealSettings: async () => {},
-                persistTrading: async () => {},
-              },
-              state,
-              checked,
-              owner,
-              f.digest,
-              hold,
-              beforeComplete,
-            );
-          },
-        },
-        owner,
-        f.digest,
-        hold,
-      ),
-    ),
-  );
-  expect(states).toEqual(["committed"]);
-  expect((await f.runtime.store.read())!.status).toBe("complete");
-  expect(f.deps.provision).toHaveBeenCalledOnce();
-  expect(await venue.db.execute("select * from invoice_series order by id")).toEqual(series);
-  expect(await venue.db.execute("select count(*) as count from registro_sif")).toMatchObject({
-    rows: [{ count: 1 }],
-  });
 });

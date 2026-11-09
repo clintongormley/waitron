@@ -1,6 +1,7 @@
 // Imported first: its `vi.mock` of the internet clock must be in place before any fiscal module loads.
 import { heldSetup } from "./held-setup-database.js";
-import { readFile, readdir } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { afterEach, vi } from "vitest";
@@ -64,6 +65,32 @@ function write(held: Held, statements: readonly string[]) {
   }
 }
 
+/**
+ * Leaves beside the database the hot `-journal` of a writer that stopped mid-transaction, its
+ * spilled pages in the main file; reading it needs a roll-back, so a private copy.
+ */
+async function leaveHotJournal(held: Held) {
+  const path = venueDb(held);
+  const aside = await mkdtemp(join(tmpdir(), "held-setup-journal-"));
+  try {
+    const db = new DatabaseSync(path);
+    // The table is committed empty, so the main file's schema stays readable without the journal.
+    db.exec("pragma journal_mode = delete; create table filler (b blob)");
+    // Spilling pages to the file writes the journal's header, which is what makes it hot.
+    db.exec("pragma cache_size = 2; begin");
+    db.exec(`insert into filler select randomblob(4000) from
+      (with recursive c(x) as (select 1 union all select x + 1 from c where x < 200) select x from c)`);
+    await copyFile(path, join(aside, "venue.db"));
+    await copyFile(`${path}-journal`, join(aside, "venue.db-journal"));
+    db.exec("rollback");
+    db.close();
+    for (const name of ["venue.db", "venue.db-journal"])
+      await copyFile(join(aside, name), join(held.roots.venueDir, name));
+  } finally {
+    await rm(aside, { recursive: true, force: true });
+  }
+}
+
 /** The fiscal module with its holdings seat replaced. */
 function withHoldings(
   held: Held,
@@ -98,5 +125,6 @@ export {
   write,
   withHoldings,
   mainFile,
+  leaveHotJournal,
   PRIVATE_COPY,
 };

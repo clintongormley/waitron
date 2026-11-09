@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import {
   mkdtemp,
   mkdir,
@@ -23,7 +22,7 @@ import type { WaitronModule } from "@waitron/module";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { ALL_MODULES } from "./modules.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
-import { request, PASSWORD } from "../test/first-fiscal.js";
+import { request } from "../test/first-fiscal.js";
 import {
   diskSnapshot,
   expectStartAgainDeleted,
@@ -61,10 +60,7 @@ async function fixture(phase: "claim" | "abandon" | "active" = "claim") {
     }),
   };
   const owner = createFirstSetupOwner(ownerOptions);
-  const claim = await owner.claimFirstSetup(
-    { environment: "production", request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await owner.claimFirstSetup({ environment: "production", request });
   if (phase === "abandon") await store.update(claim.state.attemptId, 1, { kind: "abandoned" });
   const markerPath = join(roots.venueDir, "first-setup-claim.json");
   if (phase !== "active") {
@@ -74,15 +70,12 @@ async function fixture(phase: "claim" | "abandon" | "active" = "claim") {
   }
   await suite.db.archiveTo(join(roots.venueDir, "venue.db"));
   const service = createFirstSetupResolutionInspection({ modules: ALL_MODULES, ...roots, store });
-  const recovering = createFirstSetupOwner({ ...ownerOptions, resolution: service });
   return {
     root,
     ...roots,
     store,
     coordinator,
     owner,
-    ownerOptions,
-    recovering,
     claim,
     markerPath,
     service,
@@ -96,7 +89,7 @@ async function actionsFixture({ modules }: { modules?: readonly WaitronModule[] 
     ...f,
     host: {
       resolution: f.service,
-      owner: f.recovering,
+      owner: f.owner,
       store: f.store,
       coordinator: f.coordinator,
       evidence: { invalidate: () => {} },
@@ -214,7 +207,7 @@ it.each(["file", "directory"] as const)(
         resolution,
         store: f.store,
         coordinator: f.coordinator,
-        owner: f.recovering,
+        owner: f.owner,
         evidence: { invalidate: () => {} },
         delivery: { invalidate: () => {} },
       },
@@ -236,14 +229,6 @@ it.each(["file", "directory"] as const)(
 it("a missing-database Start again, once confirmed, deletes first-setup.json and its documents", async () => {
   const f = await actionsFixture();
   await f.store.update(f.claim.state.attemptId, 1, { kind: "consumption-intent" });
-  const inspection = await f.service.inspectFirstSetupResolution();
-  await f.recovering.recoverFirstSetupOwner({
-    inspectionId: inspection.inspectionId,
-    revision: inspection.revision!,
-    ownerGeneration: inspection.ownerGeneration!,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    password: PASSWORD,
-  });
   await rm(join(f.venueDir, "venue.db"));
   await mkdir(join(f.stateDir, "first-fiscal-documents"));
   await writeFile(
@@ -396,10 +381,7 @@ it("Start again deletes two attempts in turn in the same folders", async () => {
     venueDir: f.venueDir,
     modules: [],
   });
-  const claim = await host.owner.claimFirstSetup(
-    { environment: "production", request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await host.owner.claimFirstSetup({ environment: "production", request });
   await suite.db.archiveTo(join(f.venueDir, "venue.db"));
   const inspection = await host.resolution.inspectFirstSetupResolution();
   const actions = createFirstSetupResolutionActions({ ...f, host });
@@ -517,24 +499,13 @@ it("requires the configured module schema for empty-only restart", async () => {
   ).rejects.toMatchObject({ code: "setup.not_ready" });
 });
 
-it("refuses empty-only marker repair with retained catalogue rows", async () => {
+it("does not call a database with retained catalogue rows empty", async () => {
   const { catalogues } = await import("@waitron/db");
   await suite.db.insert(catalogues).values({ name: "Restaurant retained menu" });
   const f = await fixture();
   const inspection = await f.service.inspectFirstSetupResolution();
   expect(inspection.database).toBe("no-venue-rows");
-  expect(inspection.repairEligible).toBe(false);
-  const before = await readFile(f.markerPath);
-  await expect(
-    f.recovering.recoverFirstSetupOwner({
-      inspectionId: inspection.inspectionId,
-      revision: inspection.revision!,
-      ownerGeneration: inspection.ownerGeneration!,
-      clientClaimNonce: randomBytes(32).toString("base64url"),
-      password: PASSWORD,
-    }),
-  ).rejects.toMatchObject({ code: "setup.not_ready" });
-  expect(await readFile(f.markerPath)).toEqual(before);
+  expect(inspection.emptyDatabase).toBe(false);
 });
 
 it.each(["missing-table", "missing-column", "short-journal", "foreign-journal"])(

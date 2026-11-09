@@ -1,5 +1,4 @@
 import { nodeDumpEntry } from "./testing/node-copy.js";
-import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -1549,7 +1548,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           body: JSON.stringify({
             venue: provisionVenueBody(TAX_ID),
             configurationImport: true,
-            clientClaimNonce: randomBytes(32).toString("base64url"),
           }),
         });
         expect(unstaged.status).toBe(400);
@@ -1572,7 +1570,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           body: JSON.stringify({
             venue: provisionVenueBody("60000012G"),
             configurationImport: true,
-            clientClaimNonce: randomBytes(32).toString("base64url"),
           }),
         });
         expect(otherBusiness.status).toBe(400);
@@ -1789,7 +1786,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           body: JSON.stringify({
             ...JSON.parse(newTaxpayer("60000011-a")),
             mode: undefined,
-            clientClaimNonce: randomBytes(32).toString("base64url"),
           }),
         });
         expect(sameTaxId.status).toBe(400);

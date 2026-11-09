@@ -4,7 +4,6 @@ import { AppError } from "@waitron/shared";
 import {
   activateFirstSetup,
   firstSetupPublicationDigest,
-  finishFirstSetup,
   publishCheckedFirstSetup,
   checkedFirstSetupCommit,
   firstSetupProvisionRequest as firstFiscalProvisionRequest,
@@ -164,38 +163,6 @@ export async function activateFirstFiscal(
   );
 }
 
-export async function finishFirstFiscalSetup(
-  host: FirstFiscalHost,
-  deps: SetupDeps,
-  owner: FirstSetupOwnerAttempt,
-  body: Record<string, unknown>,
-  hold: FirstSetupHold,
-): Promise<VenueResult> {
-  let publication: ReturnType<typeof firstFiscalPayload>;
-  return finishFirstSetup(
-    host,
-    {
-      check: (state) => checkedFirstFiscalCommit(host, deps, state),
-      publish: (state, checked, applyAudit) =>
-        publishCheckedFirstFiscal(
-          host,
-          deps,
-          state,
-          checked,
-          { owner, body, payload: publication },
-          hold,
-          applyAudit,
-        ),
-    },
-    owner,
-    (state) => {
-      publication = firstFiscalPayload(host, state, body);
-      return publication.digest;
-    },
-    hold,
-  );
-}
-
 export async function publishCheckedFirstFiscal(
   host: FirstFiscalHost,
   deps: SetupDeps,
@@ -207,7 +174,6 @@ export async function publishCheckedFirstFiscal(
     payload: ReturnType<typeof firstFiscalPayload>;
   },
   hold: FirstSetupHold,
-  beforeComplete?: () => Promise<unknown>,
 ): Promise<VenueResult> {
   if (
     deps.db === undefined ||
@@ -300,6 +266,5 @@ export async function publishCheckedFirstFiscal(
     owner,
     payload.digest,
     hold,
-    beforeComplete,
   );
 }

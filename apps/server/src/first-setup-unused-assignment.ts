@@ -11,6 +11,8 @@ export async function firstSetupUnusedAssignment(
   state: FirstSetupState,
   originals: readonly FirstSetupOriginal[],
   modules: readonly WaitronModule[],
+  /** The current attempt may also have begun activation, and have been marked uncertain. */
+  cutOff = false,
 ): Promise<false | { recoveryRecordDamaged: boolean }> {
   if (
     Object.keys(state.inputs).some(
@@ -27,8 +29,6 @@ export async function firstSetupUnusedAssignment(
           (event) =>
             ![
               "claim",
-              "resume",
-              "recover",
               "candidates",
               "checked",
               "input",
@@ -36,6 +36,7 @@ export async function firstSetupUnusedAssignment(
               "consumption-intent",
               "publication-binding",
               "abandoned",
+              ...(cutOff && attempt === state ? ["activation-started", "uncertain"] : []),
             ].includes(event.kind),
         ),
     )

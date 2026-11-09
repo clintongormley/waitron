@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { expect, it } from "vitest";
@@ -18,7 +17,7 @@ import {
   startAgainAttempt,
 } from "@waitron/provisioning/testing/start-again-attempt";
 
-import { PASSWORD, request } from "../test/first-fiscal.js";
+import { request } from "../test/first-fiscal.js";
 import { BACKUP_KEY_PREFIX } from "./backup-keys.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
@@ -80,10 +79,7 @@ async function kept(roots: { venueDir: string; stateDir: string }) {
 
 async function claimed(roots: { venueDir: string; stateDir: string }) {
   const host = createFirstSetupModuleHost({ ...roots, modules: ALL_MODULES, environment: {} });
-  await host.owner.claimFirstSetup(
-    { environment: "production", request },
-    randomBytes(32).toString("base64url"),
-  );
+  await host.owner.claimFirstSetup({ environment: "production", request });
   return host;
 }
 
@@ -129,14 +125,6 @@ it("lifetime: clearing replaced databases and freeing space at start leave the m
 it("lifetime: that setup's own Start again leaves the moved files", async () => {
   const { roots, before } = await movedBox();
   const host = await claimed(roots);
-  const inspected = await host.resolution.inspectFirstSetupResolution();
-  await host.owner.recoverFirstSetupOwner({
-    inspectionId: inspected.inspectionId,
-    revision: inspected.revision!,
-    ownerGeneration: inspected.ownerGeneration!,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    password: PASSWORD,
-  });
   const current = await host.resolution.inspectFirstSetupResolution();
   const ids = {
     inspectionId: current.inspectionId,

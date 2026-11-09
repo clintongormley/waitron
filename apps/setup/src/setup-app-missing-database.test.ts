@@ -1,8 +1,8 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { WtButton, WtInput } from "@waitron/ui";
+import type { WtButton } from "@waitron/ui";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
-import { initial, venue } from "../test/first-setup-browser.js";
+import { initial } from "../test/first-setup-browser.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
@@ -21,6 +21,7 @@ const reached = (app: Element) =>
     li.textContent!.trim(),
   );
 
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   cleanupWidgets();
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
@@ -30,24 +31,55 @@ it.each([
   { locale: "en", browser: "en-GB" },
   { locale: "es", browser: "es-ES" },
 ] as const)(
-  "with the database missing, the page offers Start again and no Continue; pressing it draws what the setup reached and the missing-database tick, with no password ($locale)",
+  "with the database missing, the page offers Start again; pressing it draws what the setup reached and the missing-database tick, with no password ($locale)",
   async ({ locale, browser }) => {
     const t = initialOwnerStrings[locale];
     const { app, requests } = await missingDatabaseFixture({ locale: browser });
     expect(q(app, "missing-database")!.textContent!.trim()).toBe(t.missingDatabase);
     expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
-    for (const name of ["resume", "resume-password"]) expect(q(app, name), name).toBeNull();
     await openMissing(app);
     expect(reached(app)).toEqual([t.reachedNotStarted]);
     const box = q<HTMLInputElement>(app, "retire-confirmed")!;
     expect(box.name).toBe("missing-database-confirmed");
     expect(box.closest("label")!.textContent!.trim()).toBe(t.missingConfirm);
-    for (const name of ["resume", "resume-password"]) expect(q(app, name), name).toBeNull();
-    expect(app.shadowRoot!.querySelector("input[type=password]")).toBeNull();
+    expect(
+      app.shadowRoot!.querySelector("wt-input[type=password], input[type=password]"),
+    ).toBeNull();
     expect(requests.some((r) => r.path.endsWith("/recover"))).toBe(false);
     expect(requests.some((r) => r.headers.has("X-Waitron-Setup-Owner"))).toBe(false);
   },
 );
+
+it("a tab holding the setup's key, with the box on its repair page and the database missing, drops the key and offers Start again", async () => {
+  sessionStorage.setItem(
+    FIRST_SETUP_SESSION_KEY,
+    JSON.stringify({
+      version: 1,
+      clientClaimNonce: "N".repeat(43),
+      claimPending: false,
+      owner: {
+        attemptId: initial.attemptId,
+        revision: 1,
+        ownerGeneration: 1,
+        capability: "A".repeat(43),
+      },
+    }),
+  );
+  const { app, requests } = await missingDatabaseFixture({
+    intercept(path) {
+      if (path.endsWith("/first-setup/status"))
+        return Response.json({ claimed: true, resolution: true });
+    },
+  });
+  expect(q(app, "missing-database")).not.toBeNull();
+  expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+  expect(q(app, "abandon-attempt")).toBeNull();
+  expect(q(app, "screen-cert")).toBeNull();
+  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toBeUndefined();
+  expect(requests.some((r) => /\/(resume|recover|claim|provision|start-again)$/.test(r.path))).toBe(
+    false,
+  );
+});
 
 it("with the database missing and the setup finished, pressing Start again draws setupFinished and no Start again, with Reconnect still drawn", async () => {
   const t = initialOwnerStrings.en;
@@ -77,29 +109,6 @@ it("pressing Start again with the database missing keeps the page on repair and 
   expect(q(app, "confirm-start-again")).not.toBeNull();
   expect(requests.some((r) => /\/(resume|recover|claim|provision|start-again)$/.test(r.path))).toBe(
     false,
-  );
-});
-
-it("in a tab that signed in before, Continue with the database missing sends no password, keeps the page on repair and offers Start again", async () => {
-  const { app, requests } = await missingDatabaseFixture({
-    sameTab: true,
-    ready: (app) => q(app, "resume-password") !== null,
-  });
-  await userEvent.fill(
-    q<WtInput>(app, "resume-password")!.shadowRoot!.querySelector("input")!,
-    venue.admin.password,
-  );
-  await click(app, "resume");
-  await expect.poll(() => q(app, "start-again")).not.toBeNull();
-  expect(q(app, "missing-database")).not.toBeNull();
-  expect(q(app, "resume-password")).toBeNull();
-  expect(q(app, "screen-cert")).toBeNull();
-  expect(q(app, "screen-first-owner")).not.toBeNull();
-  expect(requests.some((r) => /\/(resume|recover|claim|provision|start-again)$/.test(r.path))).toBe(
-    false,
-  );
-  expect(requests.every((r) => !JSON.stringify(r.body ?? "").includes(venue.admin.password))).toBe(
-    true,
   );
 });
 
@@ -232,11 +241,9 @@ it("a setup read on pressing Start again that outlives its page opens no confirm
       inspectionId: "a".repeat(64),
       pair: "valid",
       database: "missing",
-      password: "checkable",
       revision: 1,
       ownerGeneration: 1,
       emptyDatabase: false,
-      repairEligible: false,
       artifacts: [],
     }),
   );

@@ -79,45 +79,17 @@ afterEach(() => {
 
 type Held = Awaited<ReturnType<typeof heldSetup>>;
 
-/**
- * Signs the setup owner in, then answers a call that asks for the summary. A setup whose
- * publication completed cannot be signed into again, so with `signIn: false` it asks without
- * signing in.
- */
-async function signedIn(f: Held, host: Held["host"] = f.host, signIn = true) {
-  const request = signIn
-    ? await f.signIn().then(({ ids }) => ids)
-    : await host.resolution.inspectFirstSetupResolution().then((current) => ({
-        inspectionId: current.inspectionId,
-        revision: current.revision!,
-        ownerGeneration: current.ownerGeneration!,
-      }));
-  const actions = createFirstSetupResolutionActions({
-    ...f.roots,
-    host,
-  });
-  return () => actions.startAgainSummary(request);
-}
-
 /** Asks for the summary, and checks the refusal changed nothing on disk. */
-async function expectRefused(
-  f: Held,
-  refusal: object,
-  { host, signIn = true }: { host?: Held["host"]; signIn?: boolean } = {},
-) {
-  const ask = await signedIn(f, host, signIn);
+async function expectRefused(f: Held, refusal: object, { host }: { host?: Held["host"] } = {}) {
+  const { ids, actions } = await withoutSignIn(f, host);
   const before = await snapshot(f);
-  await expect(ask()).rejects.toMatchObject(refusal);
+  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject(refusal);
   expect(await snapshot(f)).toEqual(before);
 }
 
 /** Asks for the summary through its route; answers the kept-records refusal's log reason. */
 async function keptRecordsLogReason(f: Held) {
-  const { ids } = await f.signIn();
-  const actions = createFirstSetupResolutionActions({
-    ...f.roots,
-    host: f.host,
-  });
+  const { ids, actions } = await withoutSignIn(f);
   const lines: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
   const app = new Hono();
   mountFirstSetupResolutionApi(
@@ -159,13 +131,9 @@ const notReadyBecause = (cause: "may-have-filed" | "unexpected" | "too-large" | 
   params: { cause },
 });
 
-/** Signs the owner in and asks for the summary; `run` sends Start again confirming it. */
+/** Asks for the summary; `run` sends Start again confirming it. */
 async function askStartAgain(f: Held, host: Held["host"] = f.host) {
-  const { ids } = await f.signIn();
-  const actions = createFirstSetupResolutionActions({
-    ...f.roots,
-    host,
-  });
+  const { ids, actions } = await withoutSignIn(f, host);
   const shown = await actions.startAgainSummary({ ...ids });
   return {
     shown,
@@ -187,21 +155,9 @@ const damageRecoveryRecord = (f: Held) =>
   );
 
 /** Start again sent with only the inspection ids, for a setup whose summary is refused. */
-async function handMade(f: Held, signIn: boolean) {
-  const ids = signIn
-    ? await f.signIn()
-    : {
-        ids: await f.host.resolution.inspectFirstSetupResolution().then((current) => ({
-          inspectionId: current.inspectionId,
-          revision: current.revision!,
-          ownerGeneration: current.ownerGeneration!,
-        })),
-      };
-  const actions = createFirstSetupResolutionActions({
-    ...f.roots,
-    host: f.host,
-  });
-  return () => actions.startAgainFirstSetup(ids.ids);
+async function handMade(f: Held) {
+  const { ids, actions } = await withoutSignIn(f);
+  return () => actions.startAgainFirstSetup(ids);
 }
 
 /** The ids a page holds after reading the inspection, with nobody signed in. */
@@ -216,13 +172,18 @@ async function withoutSignIn(f: Held, host: Held["host"] = f.host) {
   return { ids, actions };
 }
 
+/** Removes a setup's venue.db and its journals, leaving every other file the setup wrote. */
+async function loseVenueDatabase(f: Held) {
+  for (const name of ["venue.db", "venue.db-wal", "venue.db-shm"])
+    await rm(join(f.roots.venueDir, name), { force: true });
+  expect((await f.host.resolution.inspectFirstSetupResolution()).database).toBe("missing");
+}
+
 /** A held setup with its venue.db gone, and the modules.json activation wrote, which the missing path refuses. */
 async function missingHeldDatabase(): Promise<Held> {
   const f = await heldSetup();
-  for (const name of ["venue.db", "venue.db-wal", "venue.db-shm"])
-    await rm(join(f.roots.venueDir, name), { force: true });
   await rm(join(f.roots.stateDir, "modules.json"));
-  expect((await f.host.resolution.inspectFirstSetupResolution()).database).toBe("missing");
+  await loseVenueDatabase(f);
   return f;
 }
 
@@ -354,6 +315,7 @@ export {
   damageRecoveryRecord,
   handMade,
   withoutSignIn,
+  loseVenueDatabase,
   missingHeldDatabase,
   startAgainMissing,
   stageFreshRestore,

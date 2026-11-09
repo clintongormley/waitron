@@ -537,7 +537,6 @@ export class SetupApi {
   }
 
   claimFirstSetup(
-    clientClaimNonce: string,
     venue: ProvisionBody["venue"],
     locale?: string,
     intent?: Pick<ProvisionBody, "configurationImport" | "newTaxpayer">,
@@ -545,33 +544,21 @@ export class SetupApi {
     return this.#request(
       "/setup-api/first-setup/claim",
       "POST",
-      { clientClaimNonce, venue, ...intent },
+      { venue, ...intent },
       locale === undefined ? {} : { "accept-language": locale },
     );
-  }
-
-  resumeFirstSetup(clientClaimNonce: string, password: string): Promise<FirstSetupOwnership> {
-    return this.#request("/setup-api/first-setup/resume", "POST", { clientClaimNonce, password });
   }
 
   inspectFirstSetupResolution(): Promise<FirstSetupInspection> {
     return this.#request("/setup-api/first-setup/resolution", "GET");
   }
 
-  recoverFirstSetupOwner(
-    snapshot: FirstSetupResolutionSnapshot,
-    clientClaimNonce: string,
-    password: string,
-  ): Promise<FirstSetupOwnership> {
-    return this.#request("/setup-api/first-setup/resolution/recover", "POST", {
-      ...snapshot,
-      clientClaimNonce,
-      password,
-    });
-  }
-
   startAgainSummary(snapshot: FirstSetupResolutionSnapshot): Promise<StartAgainSummary> {
     return this.#request("/setup-api/first-setup/resolution/start-again/summary", "POST", snapshot);
+  }
+
+  stopFirstSetup(snapshot: FirstSetupResolutionSnapshot): Promise<{ restarting: true }> {
+    return this.#request("/setup-api/first-setup/resolution/stop", "POST", snapshot);
   }
 
   startAgainFirstSetup(
@@ -582,22 +569,6 @@ export class SetupApi {
       ...snapshot,
       ...confirm,
     });
-  }
-
-  finishFirstSetup(
-    owner: FirstSetupOwner,
-    snapshot: FirstSetupResolutionSnapshot,
-    publication: Omit<FirstSetupProvisionBody, "firstSetup">,
-  ): Promise<ProvisionResult> {
-    return this.#request(
-      "/setup-api/first-setup/resolution/finish",
-      "POST",
-      {
-        ...snapshot,
-        publication,
-      },
-      firstSetupHeaders(owner),
-    );
   }
 
   reconfirmFirstSetup(

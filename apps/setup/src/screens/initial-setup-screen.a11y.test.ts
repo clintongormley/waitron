@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { SetupApi } from "../api/client.js";
 import { FirstSetupSession, FIRST_SETUP_SESSION_KEY } from "../first-setup-session.js";
 import { initial, venue } from "../../test/first-setup-browser.js";
@@ -6,6 +6,7 @@ import { mountWidget, cleanupWidgets, expectNoA11yViolations } from "../widgets/
 import { SETUP_MODULES } from "@waitron/dashboard-modules/setup";
 import { InitialSetupScreen } from "./initial-setup-screen.js";
 const sessions: FirstSetupSession[] = [];
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   cleanupWidgets();
   for (const session of sessions.splice(0)) await session.dispose();

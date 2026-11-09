@@ -53,10 +53,8 @@ export interface FirstSetupInspection {
   pair: "missing" | "partial" | "invalid" | "valid" | "repairable";
   database:
     "missing" | "unreadable" | "corrupt" | "partial" | "unknown" | "no-venue-rows" | "occupied";
-  password: "checkable" | "uncheckable";
   revision: number | null;
   ownerGeneration: number | null;
-  repairEligible: boolean;
   emptyDatabase: boolean;
   artifacts: {
     name: string;
@@ -103,4 +101,4 @@ export interface StartAgainConfirm {
   confirmUnreadableDatabase?: { shown: StartAgainSummary };
 }
 /** Why the server refused Start again with `setup.start_again_refused`. */
-export type StartAgainRefusalCause = "trading-settings" | "setup-finished" | "kept-records";
+export type StartAgainRefusalCause = "setup-finished" | "kept-records";

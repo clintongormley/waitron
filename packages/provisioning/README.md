@@ -49,7 +49,7 @@ usage: waitron-provision <command> [options]
            [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]
            [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]
            [--admin-first-names <names>] [--admin-last-names <names>]
-           [--recovery-pdf <absolute external path>] [--yes]
+           [--recovery-pdf <absolute external path of a new file>] [--yes]
 ```
 
 Most venue options are prompted for when omitted. `--full-series-code` defaults to `FF` without a prompt.
@@ -95,21 +95,39 @@ The interactive Live flow owns its setup attempt and compares the box's clock wi
 with only the box's own clock it explains why and stops
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal with only the box's
 clock explains and cancels without a question"). It asks nothing about the clock or recent setups.
-When the name must wait, it prints why and the time it continues at, and stops; run it again
-within a minute after that time (same file, "the terminal asks nothing, prints why it waits and
-until when, and keeps the wait"). The name is five symbols for the UTC minute. Pass an absolute
-`--recovery-pdf` destination outside both host state and the venue. Confirm the password and that
+When the name must wait, it prints why and the time it carries on at, and waits in the same run;
+keep it running (`packages/provisioning/src/cli-first-setup.test.ts`, "the venue command claims
+ownership, waits out its settle wait saying why and until when, before any venue write, and carries
+on in the same run"). A setup that stops part way, because the command was stopped or refused after
+it began, is not carried on by a later run: that run asks nothing, changes nothing, says what
+happened, and is refused with `setup.attempt_conflict`, or `setup.attempt_uncertain` when activation
+stopped and the box could not tell whether it finished (same file, "a retained setup (%s) is refused
+before any question, and nothing on disk changes"). Start again on the box's setup page deletes what
+the setup entered. It deletes nothing, and the page says why, if the setup already recorded
+something that must be kept, such as an invoice, or if the box cannot confirm that deleting it is
+safe. A setup whose activation began but stopped before it wrote anything to the venue database is
+deleted too, when nothing else of it is left beyond what Start again deletes for a setup refused
+before activation (`apps/server/src/first-setup-command-start-again.test.ts`, "a command cut off at
+%s before its stamp, with an empty database and nothing outside it: Start again deletes it, and the
+next command run completes"). The name is five
+symbols for the UTC minute. Pass an absolute
+`--recovery-pdf` destination outside both host state and the venue, naming a file that does not
+exist yet: the command never writes over one, and refuses before it records anything. Confirm the password and that
 you kept the resulting recovery pack. `--yes` does not answer the retention question. The [setup procedure](../../docs/operations/first-live-fiscal-setup.md)
 explains the sequence and limits.
 
 For an accepted production readiness test, set `WAITRON_SETUP_SETTINGS_FILE` to
 your certificate/email JSON and add `--test-fiscal` to the same `venue` invocation. For the bundled
 command, `WAITRON_MIGRATIONS_DIR` points to the packaged migration sets, as it does in the box
-image. The command asks separately before submitting its preproduction sample, even with `--yes`.
+image. The command asks separately before submitting its preproduction sample, even with `--yes`,
+and asks before it saves the recovery pack, so the five-minute confirmation that you kept the pack
+cannot run out while you answer (`src/cli-first-setup.test.ts`, "a fiscal test question answered
+more than five minutes late still completes, because it is asked before the recovery pack").
 An ordinary invocation uses an existing matching accepted receipt. A rejected or uncertain test
-leaves production unactivated; retrying uses the same isolated sample. Finishing a committed setup
-submits no further sample. See the [checkpoint inventory](../../docs/operations/a679-changed-checks.md#command-owned-readiness-2026-10-17)
-for qualification and remaining A679 work.
+leaves production unactivated, and the setup stops part way like any other refusal. See the [checkpoint inventory](../../docs/operations/a679-changed-checks.md#command-owned-readiness-2026-10-17)
+for qualification and remaining A679 work. That record predates 8 November 2026, when the command
+stopped carrying on a setup that stopped part way: where it says to repeat the command, choose
+Start again on the box's setup page first.
 
 The directory must already be **migrated** — boot does that (`apps/server/src/boot.ts` →
 `applyMigrations`). This command migrates only its separate readiness sample. An unmigrated venue is refused

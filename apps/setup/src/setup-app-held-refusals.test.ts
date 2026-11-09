@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { WtButton } from "@waitron/ui";
 import type { SetupApp } from "./setup-app.js";
@@ -8,9 +8,10 @@ import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { initial } from "../test/first-setup-browser.js";
 import { click, namedSummary, q } from "../test/missing-database-browser.js";
-import { heldFixture, refusedCause, settled, tradingEnv } from "../test/held-database-browser.js";
+import { heldFixture, refusedCause, settled } from "../test/held-database-browser.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   cleanupWidgets();
   setLocale("en-GB");
@@ -85,63 +86,31 @@ for (const locale of locales) {
     expect(q(app, "reconnect-first")).not.toBeNull();
     expect(startAgainSends(requests)).toEqual([]);
   });
-
-  it(`${locale}: saved trading settings draw nothing on load; pressing Start again draws the box's words beside the password`, async () => {
-    const t = stringsFor(locale);
-    const { app, requests } = await heldFixture({
-      locale,
-      inspection: () => ({ artifacts: [tradingEnv] }),
-      summary: () => refusedCause("trading-settings"),
-    });
-    await settled(app);
-    expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
-    expect(text(app)).not.toContain(t.tradingSaved);
-    expect(q(app, "start-again-refused")).toBeNull();
-    await click(app, "start-again");
-    await expect.poll(() => refusalWords(app)).toBe(`${t.tradingSaved} ${t.tradingSavedPassword}`);
-    await settled(app);
-    expect(text(app)).not.toContain(t.wipeUnavailable);
-    expect(q(app, "start-again")).toBeNull();
-    expect(q(app, "resume-password")).not.toBeNull();
-    expect(startAgainSends(requests)).toEqual([]);
-  });
 }
 
-it("saved trading settings and a database with rows but no venue's say the same once Start again is pressed", async () => {
-  const t = stringsFor("en-GB");
-  const { app } = await heldFixture({
-    inspection: () => ({
-      database: "no-venue-rows",
-      emptyDatabase: false,
-      artifacts: [tradingEnv],
-    }),
-    summary: () => refusedCause("trading-settings"),
-  });
-  await settled(app);
-  expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
-  expect(text(app)).not.toContain(t.tradingSaved);
-  await click(app, "start-again");
-  await expect.poll(() => refusalWords(app)).toBe(`${t.tradingSaved} ${t.tradingSavedPassword}`);
-  expect(text(app)).not.toContain(t.wipeUnavailable);
-});
-
-it("saved trading settings where the setup record cannot be read: no Start again, and the page says the password cannot be checked and deleting is not offered", async () => {
+it("where the setup record's revision cannot be read: no Start again, and the page says deleting is not offered", async () => {
   const t = stringsFor("en-GB");
   const { app, requests } = await heldFixture({
     inspection: () => ({
-      artifacts: [tradingEnv],
-      password: "uncheckable",
       revision: null,
       ownerGeneration: null,
     }),
   });
   await settled(app);
   expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
-  expect(text(app)).toContain(t.uncheckable);
   expect(refusalWords(app)).toBe(t.wipeUnavailable);
-  expect(text(app)).not.toContain(t.tradingSaved);
-  expect(q(app, "resume-password")).toBeNull();
   expect(requests.filter((r) => r.path.endsWith("/start-again/summary"))).toEqual([]);
+});
+
+it("a setup that saved its trading settings still offers Start again and Recover from backup", async () => {
+  const { app } = await heldFixture({
+    inspection: () => ({
+      artifacts: [{ name: "trading.env", status: "present", digest: "c".repeat(64) }],
+    }),
+  });
+  await settled(app);
+  expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+  expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(false);
 });
 
 for (const locale of locales) {
@@ -160,38 +129,19 @@ for (const locale of locales) {
     expect(q(app, "reconnect-first")).not.toBeNull();
     expect(startAgainSends(requests)).toEqual([]);
   });
-
-  it(`${locale}: the summary refused because trading settings were saved since the page loaded: says so beside the password`, async () => {
-    const t = stringsFor(locale);
-    const { app } = await heldFixture({
-      locale,
-      summary: () => refusedCause("trading-settings"),
-    });
-    await click(app, "start-again");
-    await expect.poll(() => text(app)).toContain(`${t.tradingSaved} ${t.tradingSavedPassword}`);
-    await settled(app);
-    expect(q(app, "start-again")).toBeNull();
-    expect(q(app, "resume-password")).not.toBeNull();
-    expect(shown(app)).not.toContain(shellFor(locale)["shell.not_ready"]);
-  });
 }
 
-it.each(["setup-finished", "trading-settings"] as const)(
-  "Start again refused at the send with %s: the page says why, and Start again is no longer offered",
-  async (cause) => {
-    const t = stringsFor("en-GB");
-    const { app, requests } = await heldFixture({ startAgain: () => refusedCause(cause) });
-    await confirmAndSend(app, requests);
-    await expect
-      .poll(() => text(app))
-      .toContain(cause === "setup-finished" ? t.setupFinished : t.tradingSaved);
-    await settled(app);
-    expect(q(app, "start-again")).toBeNull();
-    expect(q(app, "retire-confirmed")).toBeNull();
-    expect(shown(app)).not.toContain(t.error);
-    expect(shown(app)).not.toContain(shellEn["shell.not_ready"]);
-  },
-);
+it("Start again refused at the send with setup-finished: the page says why, and Start again is no longer offered", async () => {
+  const t = stringsFor("en-GB");
+  const { app, requests } = await heldFixture({ startAgain: () => refusedCause("setup-finished") });
+  await confirmAndSend(app, requests);
+  await expect.poll(() => text(app)).toContain(t.setupFinished);
+  await settled(app);
+  expect(q(app, "start-again")).toBeNull();
+  expect(q(app, "retire-confirmed")).toBeNull();
+  expect(shown(app)).not.toContain(t.error);
+  expect(shown(app)).not.toContain(shellEn["shell.not_ready"]);
+});
 
 it("Start again refused at the send with a cause the page has no words for keeps the confirmation and the generic refusal", async () => {
   const t = stringsFor("en-GB");
@@ -201,7 +151,6 @@ it("Start again refused at the send with a cause the page has no words for keeps
   expect(q(app, "retire-confirmed")).not.toBeNull();
   expect(formErrors(app)).toContain(t.error);
   expect(text(app)).not.toContain(t.setupFinished);
-  expect(text(app)).not.toContain(t.tradingSaved);
   expect(q(app, "start-again-refused")).toBeNull();
 });
 

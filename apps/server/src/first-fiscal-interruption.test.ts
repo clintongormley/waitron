@@ -2,22 +2,16 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { Agent } from "undici";
-import { ensureBoxSecrets } from "./box-secrets.js";
-import { serveRecovery } from "./node-entry.js";
-import { freePorts } from "./testing/free-ports.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { invoiceSeries, tenants, nodes } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
-import { parseModuleConfig } from "@waitron/module";
+import { parseModuleConfig, type ModuleConfig } from "@waitron/module";
 import { loadKeyRing } from "@waitron/credentials";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { publicFirstSetupState } from "./first-setup-owner.js";
-import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
@@ -52,41 +46,34 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(fixtures.splice(0).map((f) => f.dispose()));
 });
-async function fixture(fault?: string) {
+async function fixture(fault?: string, moduleConfig?: ModuleConfig) {
   // The fiscal schema is real; unrelated optional product seeds are disabled in this focused venue.
-  const available = ALL_MODULES.filter((m) => ["core", MODULE, "fiscal-none"].includes(m.name)).map(
-    (m) =>
-      m.name !== MODULE
-        ? m
-        : {
-            ...m,
-            fiscal: {
-              ...m.fiscal!,
-              provisioningSecret: {
-                required: () => true,
-                validate: () => {},
-                seal: async () => {},
-              },
+  const installed =
+    moduleConfig === undefined
+      ? ALL_MODULES.filter((m) => ["core", MODULE, "fiscal-none"].includes(m.name))
+      : ALL_MODULES;
+  const available = installed.map((m) =>
+    m.name !== MODULE
+      ? m
+      : {
+          ...m,
+          fiscal: {
+            ...m.fiscal!,
+            provisioningSecret: {
+              required: () => true,
+              validate: () => {},
+              seal: async () => {},
             },
           },
+        },
   );
   const f = await hourFirstFiscalFixture({
     clock: createFakeTimersHourClock(),
     database: () => suite.db,
     modules: available,
+    ...(moduleConfig === undefined ? {} : { moduleConfig }),
   });
-  let server: Awaited<ReturnType<typeof serveRecovery>> | undefined;
-  let agent: Agent | undefined;
-  fixtures.push({
-    dispose: async () => {
-      if (server)
-        await new Promise<void>((resolve, reject) =>
-          server!.close((error) => (error ? reject(error) : resolve())),
-        );
-      await agent?.close();
-      await f.dispose();
-    },
-  });
+  fixtures.push(f);
   const { host, stateDir } = f;
   let applied = 0,
     publication = 0,
@@ -111,7 +98,7 @@ async function fixture(fault?: string) {
           stateDir,
           database: "synthetic",
           moduleConfig: venueModuleConfig(
-            parseModuleConfig({}, ALL_MODULES),
+            moduleConfig ?? parseModuleConfig({}, ALL_MODULES),
             req.venue.fiscalTerritory,
           ),
           beforeTransaction,
@@ -154,14 +141,9 @@ async function fixture(fault?: string) {
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify(body),
     });
-  mountFirstSetupResolutionApi(app, host, () => {}, {
-    withPublication: async (run) => run(deps),
-    requestRestart: () => {},
-  });
   const initial = (await host.store.read())!;
   const claim = { state: publicFirstSetupState(initial), capability: f.ownerAttempt.capability };
   let state = claim.state;
-  let finishing = false;
   const headers = () => ({
     "X-Waitron-Setup-Owner": claim.capability,
     "X-Waitron-Setup-Attempt": state.attemptId,
@@ -170,23 +152,9 @@ async function fixture(fault?: string) {
   });
   const owner = () => ({ ...state, capability: claim.capability });
   const refresh = async () => {
-    const inspection = await host.resolution.inspectFirstSetupResolution();
-    const next = await host.owner.recoverFirstSetupOwner({
-      inspectionId: inspection.inspectionId,
-      revision: inspection.revision!,
-      ownerGeneration: inspection.ownerGeneration!,
-      clientClaimNonce: randomBytes(32).toString("base64url"),
-      password: PASSWORD,
-    });
-    state = next.state;
-    claim.capability = next.capability;
+    state = publicFirstSetupState((await host.store.read())!);
   };
-  const confirm = async (prior = "none") => {
-    if (prior === "committed") {
-      await refresh();
-      finishing = true;
-    } else await keepHourRecoveryDocument(host, owner(), PASSWORD);
-  };
+  const confirm = () => keepHourRecoveryDocument(host, owner(), PASSWORD);
   const activate = async (overrides: Record<string, unknown> = {}) => {
     const publication = {
       mode: "live",
@@ -201,34 +169,6 @@ async function fixture(fault?: string) {
       },
       ...overrides,
     };
-    if (finishing) {
-      const inspected = await host.resolution.inspectFirstSetupResolution();
-      if (server === undefined) {
-        await ensureBoxSecrets({
-          stateDir,
-          hostnames: ["localhost", "waitron.local"],
-          now: () => new Date(),
-          listIpv4: () => ["127.0.0.1"],
-        });
-        const [port] = await freePorts(1);
-        server = await serveRecovery(app, { stateDir, port, httpHost: "127.0.0.1", log: () => {} });
-        agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
-      }
-      const address = server.address();
-      if (address === null || typeof address === "string") throw new Error("missing test listener");
-      const origin = `https://127.0.0.1:${address.port}`;
-      return fetch(`${origin}/setup-api/first-setup/resolution/finish`, {
-        dispatcher: agent,
-        method: "POST",
-        headers: { "Content-Type": "application/json", Origin: origin, ...headers() },
-        body: JSON.stringify({
-          inspectionId: inspected.inspectionId,
-          revision: inspected.revision,
-          ownerGeneration: inspected.ownerGeneration,
-          publication,
-        }),
-      } as RequestInit);
-    }
     return post("/setup-api/provision", publication, headers());
   };
   return {
@@ -261,25 +201,6 @@ it("activates the frozen assignment once and completes only after host publicati
   const disk = await readFile(join(f.stateDir, "first-setup.json"), "utf8");
   expect(disk).not.toContain('"password":"test"');
 });
-it.each(["identity", "publication"])(
-  "replays a checked committed result after %s without another activation",
-  async (fault) => {
-    const f = await fixture(fault);
-    await f.confirm();
-    expect((await f.activate()).status).toBe(500);
-    expect(await f.db.select().from(fiscalAllocations)).toHaveLength(1);
-    const before = await f.db.select().from(invoiceSeries);
-    const beforeNodes = await f.db.select().from(nodes);
-    await f.refresh();
-    expect((await f.activate()).status).toBe(400);
-    await f.confirm("committed");
-    expect((await f.activate()).status).toBe(200);
-    expect(f.counts().applied).toBe(1);
-    expect(await f.db.select().from(invoiceSeries)).toEqual(before);
-    expect(await f.db.select().from(nodes)).toEqual(beforeNodes);
-    expect((await f.host.store.read())?.status).toBe("complete");
-  },
-);
 it("retains a consumed uncertain assignment after rollback and refuses blind activation", async () => {
   const f = await fixture("rollback");
   await f.confirm();
@@ -318,65 +239,6 @@ it.each([null, [], "smtp.example.test"])(
     expect((await f.host.store.read())?.status).toBe("consumption-intent");
   },
 );
-it("freezes publication secrets across a committed retry", async () => {
-  const f = await fixture("publication");
-  await f.confirm();
-  expect((await f.activate()).status).toBe(500);
-  await f.refresh();
-  await f.confirm("committed");
-  expect((await f.activate({ aeatCert: { synthetic: "changed" } })).status).toBe(409);
-  expect(f.counts().applied).toBe(1);
-  expect((await f.host.store.read())?.status).toBe("committed");
-});
-it.each(["committed", "complete"] as const)(
-  "checks the actual commit after a failed %s host write",
-  async (point) => {
-    const f = await fixture();
-    const update = f.host.store.update.bind(f.host.store);
-    let failed = false;
-    vi.spyOn(f.host.store, "update").mockImplementation(async (...args) => {
-      if (!failed && args[2].kind === point) {
-        failed = true;
-        throw new Error(`before ${point} file`);
-      }
-      return update(...args);
-    });
-    await f.confirm();
-    expect((await f.activate()).status).toBe(500);
-    expect(failed).toBe(true);
-    expect(await f.db.select().from(fiscalAllocations)).toHaveLength(1);
-    await f.refresh();
-    await f.confirm("committed");
-    expect((await f.activate()).status).toBe(200);
-    expect(f.counts().applied).toBe(1);
-    expect((await f.host.store.read())?.status).toBe("complete");
-  },
-);
-
-it("repairs a module-config write lost after commit without another activation", async () => {
-  const f = await fixture();
-  const configuration = await import("./module-config.js");
-  vi.spyOn(configuration, "writeModuleConfig").mockRejectedValueOnce(
-    new Error("module-config write failed"),
-  );
-  await f.confirm();
-  expect((await f.activate()).status).toBe(500);
-  await expect(readFile(join(f.stateDir, "modules.json"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-  expect(await f.db.select().from(fiscalAllocations)).toHaveLength(1);
-  await f.refresh();
-  await f.confirm("committed");
-  expect((await f.activate()).status).toBe(200);
-  expect(f.counts().applied).toBe(1);
-  const { enabledModules } = await import("@waitron/module");
-  const config = await configuration.readModuleConfig(f.stateDir);
-  expect(
-    enabledModules(ALL_MODULES, config)
-      .filter((module) => module.fiscal !== undefined)
-      .map((module) => module.fiscal!.id),
-  ).toEqual(["verifactu"]);
-});
 it("accepts the wizard's exact attempt/revision reference and refuses an edited one", async () => {
   const f = await fixture();
   await f.confirm();
@@ -496,4 +358,78 @@ it("an uncertain attempt with a retained fiscal commit publishes nothing even wi
   expect((await f.host.store.read())?.status).toBe("uncertain");
   expect(await f.db.select().from(invoiceSeries)).toEqual(before);
   expect(await f.db.select().from(fiscalAllocations)).toHaveLength(1);
+});
+
+it("an ordinary retry with a changed certificate is refused before anything is written", async () => {
+  const f = await fixture("publication");
+  await f.confirm();
+  expect((await f.activate()).status).toBe(500);
+  await f.refresh();
+  const before = await f.host.store.read();
+  const response = await f.activate({ aeatCert: { synthetic: "changed" } });
+  expect({ status: response.status, body: await response.json() }).toMatchObject({
+    status: 409,
+    body: { error: { code: "setup.attempt_conflict" } },
+  });
+  expect(await f.host.store.read()).toEqual(before);
+  expect(f.counts()).toEqual({ applied: 1, publication: 1 });
+});
+
+it("an ordinary retry with a changed email is refused before anything is written", async () => {
+  const f = await fixture("publication");
+  await f.confirm();
+  expect((await f.activate()).status).toBe(500);
+  await f.refresh();
+  const before = await f.host.store.read();
+  const response = await f.activate({
+    email: {
+      server: "smtp.changed.example.test",
+      port: 465,
+      encryption: "tls",
+      user: "test",
+      password: "test",
+      from: "owner@example.test",
+    },
+  });
+  expect({ status: response.status, body: await response.json() }).toMatchObject({
+    status: 409,
+    body: { error: { code: "setup.attempt_conflict" } },
+  });
+  expect(await f.host.store.read()).toEqual(before);
+  expect(f.counts()).toEqual({ applied: 1, publication: 1 });
+});
+
+it("an ordinary activation keeps a module switched off in the saved settings off in modules.json", async () => {
+  const f = await fixture(
+    undefined,
+    parseModuleConfig({ modules: { bookings: false } }, ALL_MODULES),
+  );
+  await f.confirm();
+  expect((await f.activate()).status).toBe(200);
+  expect(
+    JSON.parse(await readFile(join(f.stateDir, "modules.json"), "utf8")).modules.bookings,
+  ).toBe(false);
+});
+
+it("an ordinary retry from the publication step finishes without another activation", async () => {
+  const f = await fixture();
+  const update = f.host.store.update.bind(f.host.store);
+  let failed = false;
+  vi.spyOn(f.host.store, "update").mockImplementation(async (...args) => {
+    if (!failed && args[2].kind === "complete") {
+      failed = true;
+      throw new Error("before complete file");
+    }
+    return update(...args);
+  });
+  await f.confirm();
+  expect((await f.activate()).status).toBe(500);
+  expect((await f.host.store.read())?.status).toBe("publication");
+  await f.refresh();
+  vi.spyOn(f.host.evidence, "read").mockResolvedValue({
+    current: { priorActivation: "committed" },
+  } as never);
+  expect((await f.activate()).status).toBe(200);
+  expect(f.counts().applied).toBe(1);
+  expect((await f.host.store.read())?.status).toBe("complete");
 });

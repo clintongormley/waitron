@@ -17,7 +17,6 @@ import {
   type SmtpTestCode,
   type EmailSettingsDraft,
 } from "../api/client.js";
-import { initialOwnerStrings } from "./initial-owner-strings.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import { t, format, currentLocale } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
@@ -48,8 +47,7 @@ export class SetupEmailScreen extends LitElement {
   @property() errorMessage?: string;
   @property() adminEmail = "";
   @property() mode: "live" | "prepare" = "live";
-  @property() backScreen: "venue" | "fiscal-test" | "cert" | "first-owner" = "venue";
-  @property({ type: Boolean }) publicationOnly = false;
+  @property() backScreen: "venue" | "fiscal-test" = "venue";
   @property({ attribute: false }) api: Pick<SetupApi, "runEmailTest"> = new SetupApi();
   @state() private values: Values = {
     server: "",
@@ -135,8 +133,6 @@ export class SetupEmailScreen extends LitElement {
     return invalid;
   }
   #canContinue(): boolean {
-    if (this.publicationOnly)
-      return !this.running && (!this.attempted || this.#errors().size === 0);
     return (
       !this.running &&
       this.#errors().size === 0 &&
@@ -209,12 +205,7 @@ export class SetupEmailScreen extends LitElement {
     };
   }
   #next(): void {
-    if (this.publicationOnly) this.attempted = true;
-    if (!this.isConnected || !this.#canContinue()) {
-      if (this.publicationOnly && this.isConnected)
-        void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
-      return;
-    }
+    if (!this.isConnected || !this.#canContinue()) return;
     dispatchSetupPatch(this, { email: this.#settings() });
     this.#baseline = { ...this.values };
     this.#scope?.commit(this.#baseline);
@@ -235,7 +226,7 @@ export class SetupEmailScreen extends LitElement {
       ?required=${["server", "port", "from"].includes(field)}
       ?invalid=${invalid}
       error=${this.refusedField === field && this.outcome && this.outcome !== "accepted" && this.outcome !== "failed" ? t(this.outcome) : invalid ? t(`email.${field}.error`) : ""}
-      @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(this.publicationOnly ? "[data-test=next]" : "[data-test=test]"))}
+      @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=test]"))}
       @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(field, event)}
     >
       ${
@@ -263,9 +254,7 @@ export class SetupEmailScreen extends LitElement {
           ? t(this.outcome === "failed" ? "email.failed" : this.outcome)
           : (this.errorMessage ?? "");
     return html`<h1>${t("email.heading")}</h1>
-      <p class="intro">
-        ${this.publicationOnly ? initialOwnerStrings[currentLocale().startsWith("es") ? "es" : "en"].finishEmail : format("email.intro", { recipient: this.adminEmail })}
-      </p>
+      <p class="intro">${format("email.intro", { recipient: this.adminEmail })}</p>
       ${this.#field("server", errors)}
       <div class="pair">
         ${this.#field("port", errors)}
@@ -287,7 +276,7 @@ export class SetupEmailScreen extends LitElement {
       </div>
       <div class="pair">${this.#field("user", errors)}${this.#field("password", errors)}</div>
       ${this.#field("from", errors)}
-      ${!this.publicationOnly && this.#canContinue() ? html`<p class="success" role="status">${t("email.accepted")}</p>` : nothing}
+      ${this.#canContinue() ? html`<p class="success" role="status">${t("email.accepted")}</p>` : nothing}
       <p>
         <a
           href=${`/help/${currentLocale().startsWith("es") ? "es" : "en"}/email#test-results`}
@@ -304,18 +293,14 @@ export class SetupEmailScreen extends LitElement {
           @click=${() => dispatchSetupGoto(this, this.backScreen)}
           >${t("email.back")}</wt-button
         >
-        ${
-          this.publicationOnly
-            ? nothing
-            : html`<wt-button
-                slot="secondary"
-                variant=${this.attempted || !this.#errors().size ? "primary" : "secondary"}
-                data-test="test"
-                ?disabled=${this.running || errors.size > 0}
-                @click=${() => void this.#test()}
-                >${t(this.running ? "email.testing" : "email.test")}</wt-button
-              >`
-        }
+        <wt-button
+          slot="secondary"
+          variant=${this.attempted || !this.#errors().size ? "primary" : "secondary"}
+          data-test="test"
+          ?disabled=${this.running || errors.size > 0}
+          @click=${() => void this.#test()}
+          >${t(this.running ? "email.testing" : "email.test")}</wt-button
+        >
         <wt-button
           data-test="next"
           variant=${this.#canContinue() ? "primary" : "secondary"}

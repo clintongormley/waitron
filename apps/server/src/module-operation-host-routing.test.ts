@@ -1,7 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
 import { afterEach, expect, it } from "vitest";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { InitialSetupContribution } from "@waitron/module";
@@ -64,11 +63,7 @@ it.each([false, true])(
       environment: {},
       modules: [fakeModule("test-regime", { provisioning: { initialSetup: seat } })],
     });
-    const claim = () =>
-      host.owner.claimFirstSetup(
-        { environment: "preproduction", request },
-        randomBytes(32).toString("base64url"),
-      );
+    const claim = () => host.owner.claimFirstSetup({ environment: "preproduction", request });
     await claim();
     let state = (await host.store.read())!;
     state = await host.store.update(state.frozen.attemptId, state.revision, {

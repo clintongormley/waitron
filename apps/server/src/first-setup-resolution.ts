@@ -28,6 +28,8 @@ import {
   type SetupDatabaseHoldings,
   type SetupDatabaseRead,
 } from "./first-setup-database-holdings.js";
+import { SetupDatabaseReadFailed } from "./setup-database-read-failed.js";
+import type { Logger } from "./logger.js";
 
 export interface StartAgainFirstSetupRequest {
   inspectionId: string;
@@ -48,10 +50,7 @@ type NotReadyCause = "may-have-filed" | "unexpected" | "too-large" | "unreadable
 function unavailable(cause?: NotReadyCause): never {
   throw new AppError("setup.not_ready", cause === undefined ? {} : { cause });
 }
-function refused(
-  cause: "setup-finished" | "kept-records" | "trading-settings",
-  reason?: string,
-): never {
+function refused(cause: "setup-finished" | "kept-records", reason?: string): never {
   throw new AppError(
     "setup.start_again_refused",
     { cause },
@@ -76,19 +75,22 @@ function conflict(): never {
 const DAMAGED_LABELS: readonly string[] = ["corrupt", "unknown", "partial"];
 /** The held state's refusals made before what its database holds is read, in this order. */
 function assertHeldStartAgainOffered(
-  inspection: Pick<FirstSetupInspection, "database" | "emptyDatabase" | "artifacts">,
-  status: FirstSetupState["status"],
+  inspection: Pick<FirstSetupInspection, "database" | "emptyDatabase">,
+  finished: boolean,
 ): void {
   const holdsRecords =
     inspection.database === "occupied" ||
     (inspection.database === "no-venue-rows" && !inspection.emptyDatabase) ||
     DAMAGED_LABELS.includes(inspection.database);
   if (!holdsRecords) unavailable("may-have-filed");
-  if (
-    inspection.artifacts.find((artifact) => artifact.name === "trading.env")?.status !== "missing"
-  )
-    refused("trading-settings");
-  if (status === "complete") refused("setup-finished");
+  if (finished) refused("setup-finished");
+}
+/**
+ * A setup is finished only once its claim mark says so too: a record saved `complete` beside a
+ * mark still `active` is a completion cut off between the store's two saves, and never traded.
+ */
+function setupFinished(retained: { state: FirstSetupState; marker: { status: string } }): boolean {
+  return retained.state.status === "complete" && retained.marker.status === "complete";
 }
 function unused(state: FirstSetupState) {
   const attempts = [state, ...state.previous];
@@ -98,7 +100,7 @@ function unused(state: FirstSetupState) {
       attempt.result === null &&
       Object.keys(attempt.inputs).length === 0 &&
       attempt.history.every((event) =>
-        ["claim", "resume", "recover", "candidates", "checked", "abandoned"].includes(event.kind),
+        ["claim", "candidates", "checked", "abandoned"].includes(event.kind),
       ),
   );
 }
@@ -145,6 +147,7 @@ async function presentAttemptEligibility(
   originals: Parameters<typeof firstSetupUnusedAssignment>[1],
   modules: readonly WaitronModule[] | undefined,
   register: RegisterAnswer | undefined,
+  cutOff: boolean,
 ) {
   const noOtherHistory = inspection.artifacts.every(
     (artifact) =>
@@ -159,7 +162,7 @@ async function presentAttemptEligibility(
     (register === undefined || register.kind === "current-master") &&
     modules !== undefined &&
     ((register === undefined && emptyWorkspace) ||
-      (await firstSetupUnusedAssignment(state, originals, modules)));
+      (await firstSetupUnusedAssignment(state, originals, modules, cutOff)));
   return { emptyWorkspace, assignment, eligible: emptyWorkspace || Boolean(assignment) };
 }
 function summaryOf(
@@ -187,6 +190,11 @@ export function markerRefusal(error: unknown): unknown {
   return new AppError("setup.not_ready", { cause }, { reason });
 }
 
+/**
+ * Activation began but its database is still empty: a command that stopped before its stamp
+ * (owner, 2026-11-08 13:38). Start again tests it as it tests `consumption-intent`.
+ */
+const CUT_OFF_STATUSES: readonly string[] = ["activation-started", "uncertain"];
 export function createFirstSetupResolutionActions(
   options: FirstSetupRoots & {
     host: Pick<FirstFiscalHost, "resolution" | "owner" | "store" | "coordinator"> & {
@@ -197,6 +205,7 @@ export function createFirstSetupResolutionActions(
     remove?: (path: string, kind: "file" | "folder") => Promise<void>;
     /** Tests only: the deletion marker's size limit. */
     markerLimit?: number;
+    log?: Logger;
   },
 ) {
   const { host } = options;
@@ -244,6 +253,8 @@ export function createFirstSetupResolutionActions(
   const assessStartAgain = async (
     request: StartAgainFirstSetupRequest,
     kind: "summary" | "start-again",
+    /** A database that cannot be copied or read is left to the repair page to judge. */
+    readFailureLeftToRepair = false,
   ) => {
     await assertNoLegacyFirstSetupWorkspace(options);
     const inspection = await host.resolution.inspectFirstSetupResolution();
@@ -257,12 +268,17 @@ export function createFirstSetupResolutionActions(
     const label = inspection.database;
     const presentStatus = PRESENT_START_AGAIN_STATUSES.includes(state.status);
     if (label === "unreadable") unavailable("unreadable");
-    const held = !missing && (label === "occupied" || !presentStatus);
+    const cutOff =
+      CUT_OFF_STATUSES.includes(state.status) &&
+      label === "no-venue-rows" &&
+      inspection.emptyDatabase;
+    const held = !missing && (label === "occupied" || !(presentStatus || cutOff));
     // An unused setup's database the inspection could not show empty (D3 row c).
     const readFirst = !missing && !held && !(label === "no-venue-rows" && inspection.emptyDatabase);
-    if (held) assertHeldStartAgainOffered(inspection, state.status);
+    const finished = setupFinished(retained);
+    if (held) assertHeldStartAgainOffered(inspection, finished);
     else if (missing) {
-      if (state.status === "complete") refused("setup-finished");
+      if (finished) refused("setup-finished");
       if (kind === "start-again" && request.confirmMissingDatabase === undefined) unavailable();
     }
     const snapshot = await host.resolution.captureFirstSetupOriginals();
@@ -276,6 +292,7 @@ export function createFirstSetupResolutionActions(
           snapshot.originals,
           host.modules,
           request.register,
+          cutOff,
         );
     if (present === undefined) {
       if (request.register?.kind === "no-current-master") unavailable();
@@ -294,16 +311,30 @@ export function createFirstSetupResolutionActions(
     let databaseUnreadable = false;
     if (held || readFirst) {
       if (host.modules === undefined) unavailable();
-      const read = await readSetupDatabase(roots, host.modules);
-      // An unused setup's database read whole is not empty, so it is not unused.
-      if (readFirst && read.kind === "read") unavailable("unexpected");
-      assertNoKeptRecords(read);
-      if (read.kind === "read") {
-        // Not empty yet no rows (a view, a part-applied setup), or read whole where the
-        // inspection could not: not what the held state names.
-        if (read.holdings.rows === 0) unavailable("may-have-filed");
-        if (DAMAGED_LABELS.includes(label)) unavailable("unreadable");
-      } else databaseUnreadable = true;
+      const read = await readSetupDatabase(roots, host.modules).catch((error: unknown) => {
+        // The read answers a copy that ran out of space as a full disk.
+        const failed =
+          error instanceof SetupDatabaseReadFailed ||
+          (error instanceof AppError && error.code === "storage.disk_full");
+        if (readFailureLeftToRepair && failed) {
+          options.log?.("warn", "setup.stop_database_read_failed", {
+            reason: error.reason ?? error.code,
+          });
+          return undefined;
+        }
+        throw error;
+      });
+      if (read !== undefined) {
+        // An unused setup's database read whole is not empty, so it is not unused.
+        if (readFirst && read.kind === "read") unavailable("unexpected");
+        assertNoKeptRecords(read);
+        if (read.kind === "read") {
+          // Not empty yet no rows (a view, a part-applied setup), or read whole where the
+          // inspection could not: not what the held state names.
+          if (read.holdings.rows === 0) unavailable("may-have-filed");
+          if (DAMAGED_LABELS.includes(label)) unavailable("unreadable");
+        } else databaseUnreadable = true;
+      }
     }
     const recordDamaged = recoveryRecordDamagedOf(state, snapshot.originals, host.modules);
     // With the database present and not held, Start again compares the assignment's own reading.
@@ -330,6 +361,38 @@ export function createFirstSetupResolutionActions(
             "summary",
           );
           return summaryOf(state, recoveryRecordDamaged, databaseUnreadable);
+        }),
+      );
+    },
+    /**
+     * Stops an unfinished setup so the box restarts into Start again, refusing what the repair
+     * page's summary would refuse. A claimed or consumption-intent setup is marked abandoned; any
+     * later step is left as it is, and the restart's own admission sends it to the repair page.
+     * For such a step, a database the summary's read cannot copy or read is left to the repair
+     * page, which reads it again after the restart.
+     */
+    stopForStartAgain(request: StartAgainSummaryRequest): Promise<void> {
+      return host.resolution.withVenueExclusion(() =>
+        host.coordinator.run(async (hold) => {
+          exactKeys(request, ["inspectionId", "revision", "ownerGeneration"]);
+          // Not `read()`: it refuses a record saved complete whose mark still says active.
+          const pair = await host.store.readResumable();
+          if (pair === null) conflict();
+          const { status } = pair.state;
+          if (status === "complete" && pair.publicationComplete) conflict();
+          const writes = status === "claimed" || status === "consumption-intent";
+          const { state } = await assessStartAgain(request, "summary", !writes);
+          if (writes) {
+            await host.store.update(
+              state.frozen.attemptId,
+              state.revision,
+              { kind: "abandoned" },
+              hold,
+            );
+            host.owner.invalidate(state.frozen.attemptId);
+            host.evidence.invalidate(state.frozen.attemptId);
+            host.delivery.invalidate(state.frozen.attemptId);
+          }
         }),
       );
     },

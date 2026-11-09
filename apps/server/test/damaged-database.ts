@@ -1,4 +1,4 @@
-import { closeSync, openSync, statSync, writeSync } from "node:fs";
+import { closeSync, ftruncateSync, openSync, readSync, statSync, writeSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { expect } from "vitest";
 
@@ -56,6 +56,20 @@ function damageRoots(database: string, query: [string, ...string[]] | null, what
   const fd = openSync(database, "r+");
   try {
     for (const page of pages) writeSync(fd, Buffer.alloc(size, 0xab), 0, size, size * (page - 1));
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Cuts `venue.db` after its first page, leaving any `-wal` and `-shm` beside it untouched. */
+export function cutAfterFirstPage(database: string): void {
+  const header = Buffer.alloc(18);
+  const fd = openSync(database, "r+");
+  try {
+    readSync(fd, header, 0, 18, 0);
+    // Bytes 16-17 hold the page size; 1 stands for 65536.
+    const size = header.readUInt16BE(16);
+    ftruncateSync(fd, size === 1 ? 65536 : size);
   } finally {
     closeSync(fd);
   }

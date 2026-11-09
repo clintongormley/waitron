@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import type { WtButton } from "@waitron/ui";
@@ -25,6 +25,7 @@ import {
 } from "../test/wipe-browser.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   cleanupWidgets();
   setLocale("en-GB");
@@ -134,11 +135,6 @@ it("switching the language while Recover's confirmation is open redraws it in Sp
 
 const refusals: [string, () => Response, string][] = [
   ["setup-finished", () => refusedCause("setup-finished"), t.setupFinished],
-  [
-    "trading-settings",
-    () => refusedCause("trading-settings"),
-    `${t.tradingSaved} ${t.tradingSavedPassword}`,
-  ],
   ["kept-records", () => refusedCause("kept-records"), t.keptFault],
   [
     "setup.not_ready",
@@ -173,14 +169,13 @@ it.each(refusals)(
   },
 );
 
-it("where the wipe is not offered (uncheckable), Recover from backup is drawn disabled like Start again", async () => {
+it("where the wipe is not offered (a record that cannot be read), Recover from backup is drawn disabled like Start again", async () => {
   const { app, requests } = await wipeFixture({
-    inspection: { password: "uncheckable", revision: null, ownerGeneration: null },
+    inspection: { pair: "invalid", revision: null, ownerGeneration: null },
   });
   expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
   expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(true);
   expect(q(app, "start-again-refused")!.textContent).toBe(t.wipeUnavailable);
-  expect(text(app)).toContain(t.uncheckable);
   expect(oldRecoveryRequests(requests)).toEqual([]);
 });
 

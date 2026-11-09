@@ -1,5 +1,6 @@
 import { assertVenueFirstSetupAllowed } from "./first-setup-state.js";
-import { parseArgs, isDeepStrictEqual } from "node:util";
+import { parseArgs } from "node:util";
+import { setTimeout as delay } from "node:timers/promises";
 import { AppError, isAppError } from "@waitron/shared";
 import {
   deploymentTableExists,
@@ -17,7 +18,6 @@ import {
   hashPassword,
   hashPin,
   normalizeAndValidateEmail,
-  verifyPin,
 } from "@waitron/identity";
 import {
   enabledModules,
@@ -25,14 +25,12 @@ import {
   type ModuleConfig,
   type WaitronModule,
 } from "@waitron/module";
-import { randomBytes } from "node:crypto";
 import type { createFirstSetupRuntime } from "./first-setup-runtime.js";
-import { prepareFirstSetupCommand, resumeFirstSetupCommand } from "./first-setup-command.js";
+import { prepareFirstSetupCommand, recheckFirstSetupCommand } from "./first-setup-command.js";
 import {
   completeFirstSetupCommand,
   type FirstSetupCommandDeployment,
 } from "./first-setup-command-activation.js";
-import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import { resolveEnvironment } from "./environment.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import type { ProvisioningIo } from "./io.js";
@@ -70,6 +68,8 @@ export interface CliDeps {
    * `apps/server/src/provision.ts`). */
   stampEnvironment: typeof stampDeployment;
   readTenants: typeof readTenantIdentities;
+  /** Absent, a real timer. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /** The variable `apps/server` reads the venue directory from, so the tool and the server open the
@@ -94,7 +94,7 @@ const USAGE = [
   "           [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]",
   "           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]",
   "           [--admin-first-names <names>] [--admin-last-names <names>] [--yes] [--test-fiscal]",
-  "           [--recovery-pdf <absolute path outside box state and venue directories>]",
+  "           [--recovery-pdf <absolute path of a new file, outside box state and venue directories>]",
   "",
   "Missing venue details are prompted for. --full-series-code defaults to FF.",
   "The admin's real name is left unset when --admin-first-names and --admin-last-names",
@@ -306,192 +306,164 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       runtime !== undefined && modules.some((module) => initialSetupFor(modules, module.name));
     if ((values["recovery-pdf"] !== undefined || values["test-fiscal"]) && !owned)
       throw new AppError("setup.not_ready", {});
-    let owner: FirstSetupOwnerAttempt | undefined;
     if (owned) {
       if (deps.initialVenue !== undefined || deps.env.WAITRON_INITIAL_VENUE_INPUT?.trim())
         throw new AppError("provisioning.initial_input_invalid", {});
       const retained = await runtime.store.readForRepair();
       if (retained !== null) {
-        const state = retained.state;
-        if (
-          ![
-            "claimed",
-            "consumption-intent",
-            "activation-started",
-            "committed",
-            "publication",
-          ].includes(state.status)
-        )
-          throw new AppError("setup.attempt_uncertain", {});
-        runtime.assertSelection(state);
-        if (
-          state.frozen.environment !== requested ||
-          !isDeepStrictEqual(
-            withoutCredentials(state.frozen.request),
-            withoutCredentials(request),
-          ) ||
-          !(await verifyPin(adminPin, state.frozen.request.admin.pinHash))
-        )
-          throw new AppError("setup.attempt_conflict", {});
-        if (!(await confirmVenuePlan(actions, venueDir, requested, requested, values.yes, deps)))
-          return 1;
-        const inspection = await runtime.resolution.inspectFirstSetupResolution();
-        const recovered = await runtime.owner.recoverFirstSetupOwner({
-          inspectionId: inspection.inspectionId,
-          revision: state.revision,
-          ownerGeneration: state.ownerGeneration,
-          clientClaimNonce: randomBytes(32).toString("base64url"),
-          password: adminPassword,
-        });
-        owner = { ...recovered.state, capability: recovered.capability };
+        const { status } = retained.state;
+        if (status === "complete") throw new AppError("setup.attempt_uncertain", {});
+        deps.io.stderr(
+          status === "uncertain"
+            ? "This setup stopped during activation, and the box could not tell whether activation finished, so the command will not carry on with it. Nothing was changed."
+            : status === "abandoned"
+              ? "This setup was stopped on the box's setup page, so the command will not carry on with it. Nothing was changed."
+              : "This setup stopped part way, so the command will not carry on with it. Nothing was changed.",
+        );
+        deps.io.stderr(
+          "Open the box's setup page in a browser and choose Start again. It deletes what this setup entered; if the setup already recorded something that must be kept, such as an invoice, or the box cannot confirm that deleting it is safe, it deletes nothing and the page says why. Then run the command again.",
+        );
+        throw new AppError(
+          status === "uncertain" ? "setup.attempt_uncertain" : "setup.attempt_conflict",
+          {},
+        );
       }
+      if (values["recovery-pdf"] !== undefined)
+        await runtime.commandDelivery.checkDestination(values["recovery-pdf"], deps.io);
     }
 
-    return await withVenueState(
-      venueDir,
-      deps,
-      async (target, node) => {
-        let environment: DeploymentEnvironment | null;
-        let migrated: boolean;
-        try {
-          // Only the state reads are classified as unreadable; the stamp and the apply keep their own
-          // errors.
-          environment = await deps.readEnvironment(target);
-          // A stamp is itself proof the table is there.
-          migrated = environment !== null || (await deps.readDeploymentTable(target));
-        } catch (error) {
-          throw asUnreadable(error, venueDir);
-        }
-        if (!migrated) {
-          // Opening a virgin directory succeeds — the store creates it — so a mistyped path lands here.
-          throw new AppError("provisioning.database_unmigrated", { database: venueDir });
-        }
-        if (owned && environment !== null && environment !== requested)
-          throw new AppError("deployment.already_stamped", {
-            stamped: environment,
-            requested,
-          });
+    return await withVenueState(venueDir, deps, async (target, node) => {
+      let environment: DeploymentEnvironment | null;
+      let migrated: boolean;
+      try {
+        // Only the state reads are classified as unreadable; the stamp and the apply keep their own
+        // errors.
+        environment = await deps.readEnvironment(target);
+        // A stamp is itself proof the table is there.
+        migrated = environment !== null || (await deps.readDeploymentTable(target));
+      } catch (error) {
+        throw asUnreadable(error, venueDir);
+      }
+      if (!migrated) {
+        // Opening a virgin directory succeeds — the store creates it — so a mistyped path lands here.
+        throw new AppError("provisioning.database_unmigrated", { database: venueDir });
+      }
+      if (owned && environment !== null && environment !== requested)
+        throw new AppError("deployment.already_stamped", {
+          stamped: environment,
+          requested,
+        });
 
-        // `provisionVenue` and `adoptFromPrimary` run the same guard.
-        const ensure = actions.find((a) => a.kind === "ensure-tenant");
-        if (ensure !== undefined && ensure.kind === "ensure-tenant") {
-          assertNoForeignTenant(
-            await deps.readTenants(target),
-            { country: ensure.country, taxId: ensure.taxId },
-            venueDir,
-          );
+      // `provisionVenue` and `adoptFromPrimary` run the same guard.
+      const ensure = actions.find((a) => a.kind === "ensure-tenant");
+      if (ensure !== undefined && ensure.kind === "ensure-tenant") {
+        assertNoForeignTenant(
+          await deps.readTenants(target),
+          { country: ensure.country, taxId: ensure.taxId },
+          venueDir,
+        );
+      }
+
+      if (!(await confirmVenuePlan(actions, venueDir, environment, requested, values.yes, deps)))
+        return 1;
+
+      if (owned) {
+        const claim = await runtime.owner.claimFirstSetup({
+          environment: requested,
+          request: {
+            ...withoutCredentials(request),
+            admin: {
+              ...withoutCredentials(request).admin,
+              password: adminPassword,
+              pin: adminPin,
+            },
+          },
+        });
+        const prepared = await prepareFirstSetupCommand(
+          runtime,
+          { ...claim.state, capability: claim.capability },
+          deps.io,
+          deps.sleep ?? ((ms) => delay(ms)),
+        );
+        if (prepared.status !== "ready") return 1;
+        const owner = prepared.owner;
+        const destination = values["recovery-pdf"];
+        const deployment = deps.firstSetupDeployment?.({ runtime, db: target, node });
+        // Asked before the recovery pack: the kept-pack confirmation lasts five minutes, and only
+        // the clock check and activation follow it.
+        if (values["test-fiscal"]) {
+          if (deployment?.runReadiness === undefined) throw new AppError("setup.not_ready", {});
+          const answer = (await deps.io.prompt("Send a preproduction fiscal test? [y/N]: "))
+            .trim()
+            .toLowerCase();
+          if (!["y", "yes"].includes(answer)) return 1;
+          const result = await deployment.runReadiness(await runtime.owner.authorize(owner));
+          deps.io.stdout(`Fiscal test: ${result.status}`);
+          if (!["accepted", "not-applicable"].includes(result.status)) return 1;
         }
-
-        if (
-          owner === undefined &&
-          !(await confirmVenuePlan(actions, venueDir, environment, requested, values.yes, deps))
-        )
-          return 1;
-
-        if (owned) {
-          if (owner === undefined) {
-            const claim = await runtime.owner.claimFirstSetup(
-              {
-                environment: requested,
-                request: {
-                  ...withoutCredentials(request),
-                  admin: {
-                    ...withoutCredentials(request).admin,
-                    password: adminPassword,
-                    pin: adminPin,
-                  },
-                },
-              },
-              randomBytes(32).toString("base64url"),
-            );
-            owner = { ...claim.state, capability: claim.capability };
-          }
-          const state = await runtime.owner.authorize(owner);
-          if (["claimed", "consumption-intent"].includes(state.status)) {
-            const prepared = await prepareFirstSetupCommand(runtime, owner, deps.io);
-            if (prepared.status !== "ready") return 1;
-            owner = prepared.owner;
-            const destination = values["recovery-pdf"];
-            if (destination !== undefined) {
-              const delivered = await runtime.commandDelivery.deliver(
-                owner,
-                deps.io,
-                destination,
-                invoiceLocales[0]?.startsWith("es") ? "es" : "en",
-              );
-              if (delivered.status !== "ready") return 1;
-            }
-            const ownership = [...state.history]
-              .reverse()
-              .find((event) => ["claim", "resume", "recover"].includes(event.kind));
-            if (ownership?.kind === "recover") {
-              const resumed = await resumeFirstSetupCommand(runtime, owner, deps.io);
-              if (resumed.status !== "ready") return 1;
-            }
-          }
-          if (deps.firstSetupDeployment === undefined) throw new AppError("setup.not_ready", {});
-          const deployment = deps.firstSetupDeployment({ runtime, db: target, node });
-          if (values["test-fiscal"] && ["claimed", "consumption-intent"].includes(state.status)) {
-            if (deployment.runReadiness === undefined) throw new AppError("setup.not_ready", {});
-            const answer = (await deps.io.prompt("Send a preproduction fiscal test? [y/N]: "))
-              .trim()
-              .toLowerCase();
-            if (!["y", "yes"].includes(answer)) return 1;
-            const result = await deployment.runReadiness(await runtime.owner.authorize(owner));
-            deps.io.stdout(`Fiscal test: ${result.status}`);
-            if (!["accepted", "not-applicable"].includes(result.status)) return 1;
-          }
-          const result = await completeFirstSetupCommand(
-            runtime,
-            { venue: target, node },
+        if (destination !== undefined) {
+          const delivered = await runtime.commandDelivery.deliver(
             owner,
-            deployment,
+            deps.io,
+            destination,
+            invoiceLocales[0]?.startsWith("es") ? "es" : "en",
           );
-          deps.io.stdout("");
-          deps.io.stdout(`node:     ${result.nodeId}`);
-          for (const s of result.seeded) deps.io.stdout(`seeded:   ${s.module} — ${s.report}`);
-          return 0;
+          if (delivered.status !== "ready") return 1;
         }
+        if (deployment === undefined) throw new AppError("setup.not_ready", {});
+        // A module's readings go stale while the person answers questions, so take them again
+        // just before activation reads them.
+        const rechecked = await recheckFirstSetupCommand(runtime, owner, deps.io);
+        if (rechecked.status !== "ready") return 1;
+        const result = await completeFirstSetupCommand(
+          runtime,
+          { venue: target, node },
+          owner,
+          deployment,
+        );
+        deps.io.stdout("");
+        deps.io.stdout(`node:     ${result.nodeId}`);
+        for (const s of result.seeded) deps.io.stdout(`seeded:   ${s.module} — ${s.report}`);
+        return 0;
+      }
 
-        // Refuses a directory stamped for the other environment (CLAUDE.md §5). After the confirmation:
-        // stamping is permanent, so declining must leave the directory exactly as it was found.
-        const inputPath = deps.env.WAITRON_INITIAL_VENUE_INPUT;
-        const initialVenue =
-          deps.initialVenue ??
-          (inputPath?.trim()
-            ? initialVenueApplyInput(await readInitialVenueFile(inputPath))
-            : undefined);
-        if (
-          [...(initialVenue?.moduleInputs?.keys() ?? [])].some(
-            (name) =>
-              !modules.some(
-                (module) => module.name === name && module.provisioning?.seed !== undefined,
-              ),
-          )
+      // Refuses a directory stamped for the other environment (CLAUDE.md §5). After the confirmation:
+      // stamping is permanent, so declining must leave the directory exactly as it was found.
+      const inputPath = deps.env.WAITRON_INITIAL_VENUE_INPUT;
+      const initialVenue =
+        deps.initialVenue ??
+        (inputPath?.trim()
+          ? initialVenueApplyInput(await readInitialVenueFile(inputPath))
+          : undefined);
+      if (
+        [...(initialVenue?.moduleInputs?.keys() ?? [])].some(
+          (name) =>
+            !modules.some(
+              (module) => module.name === name && module.provisioning?.seed !== undefined,
+            ),
         )
-          throw new AppError("provisioning.initial_input_invalid", {});
-        await deps.stampEnvironment(target, requested);
+      )
+        throw new AppError("provisioning.initial_input_invalid", {});
+      await deps.stampEnvironment(target, requested);
 
-        try {
-          const result = await deps.applyVenue(actions, {
-            ...initialVenue,
-            db: target,
-            modules,
-          });
-          if (deps.writeModuleConfig !== undefined) await deps.writeModuleConfig(fiscalConfig);
-          deps.io.stdout("");
-          deps.io.stdout(`node:     ${result.nodeId}`);
-          for (const s of result.seeded) deps.io.stdout(`seeded:   ${s.module} — ${s.report}`);
-          return 0;
-        } catch (error) {
-          if (isUniqueViolation(error)) {
-            throw new AppError("provisioning.venue_conflict", { database: venueDir });
-          }
-          throw error;
+      try {
+        const result = await deps.applyVenue(actions, {
+          ...initialVenue,
+          db: target,
+          modules,
+        });
+        if (deps.writeModuleConfig !== undefined) await deps.writeModuleConfig(fiscalConfig);
+        deps.io.stdout("");
+        deps.io.stdout(`node:     ${result.nodeId}`);
+        for (const s of result.seeded) deps.io.stdout(`seeded:   ${s.module} — ${s.report}`);
+        return 0;
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          throw new AppError("provisioning.venue_conflict", { database: venueDir });
         }
-      },
-      owner === undefined ? undefined : () => runtime!.owner.authorize(owner!),
-    );
+        throw error;
+      }
+    });
   } catch (error) {
     return reportFailure(error, deps);
   }
@@ -505,10 +477,8 @@ async function withVenueState(
   venueDir: string,
   deps: CliDeps,
   body: (target: Database, node: NodeDatabase) => Promise<number>,
-  authorize?: () => Promise<unknown>,
 ): Promise<number> {
-  if (authorize === undefined) await assertVenueFirstSetupAllowed(venueDir);
-  else await authorize();
+  await assertVenueFirstSetupAllowed(venueDir);
   let store: VenueDatabase;
   try {
     store = await deps.openVenue(venueDir);
@@ -516,8 +486,7 @@ async function withVenueState(
     throw asUnreadable(error, venueDir);
   }
   try {
-    if (authorize === undefined) await assertVenueFirstSetupAllowed(venueDir);
-    else await authorize();
+    await assertVenueFirstSetupAllowed(venueDir);
     return await body(store.venue, store.node);
   } finally {
     await store.close();

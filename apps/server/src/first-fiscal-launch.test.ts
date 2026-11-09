@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, cp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -224,7 +224,6 @@ it.each(["direct", "supervised"])(
         return result;
       };
       const claim = await post("claim", {
-        clientClaimNonce: randomBytes(32).toString("base64url"),
         venue: request,
       });
       capability = claim.capability;
@@ -365,8 +364,11 @@ it("the built owned CLI refuses JSON authority, prints why it waits and until wh
   await writeFile(
     clock,
     `import https from "node:https";
+import timers from "node:timers/promises";
 import { EventEmitter } from "node:events";
 import { syncBuiltinESMExports } from "node:module";
+timers.setTimeout = () =>
+  new Promise(() => process.stdout.write("", () => process.kill(process.pid, "SIGINT")));
 const RealDate = Date;
 const date = new RealDate("2026-10-16T11:40:00Z").toUTCString();
 https.request = (_url, _options, respond) => {
@@ -451,12 +453,13 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     ["address line 2 (blank if none): ", ""],
     ["Confirm setup password: ", "synthetic-password"],
   ]).catch((error: { code: number; stdout: string; stderr: string }) => error);
+  // The clock preload ends the command as Ctrl-C would once it starts to wait.
   expect({ code: (waited as { code?: number }).code, stderr: waited.stderr }).toEqual({
-    code: 1,
+    code: null,
     stderr: "",
   });
   expect(waited.stdout).toContain(
-    "Waiting to confirm the time, so no invoice series is ever repeated.\nContinues at 2026-10-16T11:42:00.000Z; run the command again within a minute after that time (later, it waits again).\n",
+    "Waiting to confirm the time, so no invoice series is ever repeated.\nWaiting until 2026-10-16T11:42:00.000Z; it carries on by itself, so keep the command running.\n",
   );
   expect(waited.stdout).not.toContain("[no/yes/unknown]");
   const stored = await openVenueDatabase(f.base.WAITRON_VENUE_DIR);

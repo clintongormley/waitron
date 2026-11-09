@@ -3,10 +3,6 @@ export const initialOwnerStrings = {
     heading: "First setup",
     recoverBackup: "Recover from backup",
     waiting: "Saving setup ownership…",
-    resume: "Continue with your setup password",
-    password: "Administrator password",
-    required: "Enter your password.",
-    resumeHelp: "Enter the administrator password you chose during setup.",
     interrupted: "First setup was interrupted",
     missingDatabase: "The setup database is missing.",
     missingAsk:
@@ -16,16 +12,22 @@ export const initialOwnerStrings = {
     reachedFiscalFinished: "finished activation",
     missingBackup: "If you have a backup, recover from it.",
     missingConfirm: "Nothing was filed to AEAT and nothing was sold.",
-    uncheckable: "This box cannot check the original setup password, so Continue is not offered.",
-    finish: "Finish setup",
-    finishReview: "Check the saved details.",
-    finishEmail: "Re-enter the email settings used for this setup.",
-    finishHelp: "Re-enter the certificate and email settings used for this setup.",
     startAgain: "Start again",
     recoveryRecordDamaged: "This setup's recovery-key record is damaged and cannot be read.",
     retireConfirmed: "Delete the old attempt and start again.",
     cancel: "Cancel",
     restarting: "The old attempt is deleted. Reconnect to continue.",
+    stopAsk:
+      "First this setup must be stopped. Stopping cannot be undone: it ends the setup for whoever is doing it, but deletes nothing. After Reconnect, Start again and Recover from backup show what they would delete before they delete anything. Cancel keeps everything as it is.",
+    stopConfirm: "Stop this setup",
+    stopped:
+      "This setup is stopped, and nothing is deleted. Reconnect: then Start again and Recover from backup show what they would delete before they delete anything.",
+    stopNotAccepted:
+      "The box did not accept a stop from this page, so nothing changed. It stops a setup only from its own page over a secure connection, so from this page Start again and Recover from backup are refused the same way. Reconnect keeps everything as it is.",
+    stopUnanswered:
+      "This page got no answer it could read from the stop. The box may have restarted: Reconnect reads the setup again and shows where it stands.",
+    stopReadUnanswered:
+      "This page got no answer it could read from the box, so nothing was stopped. Start again and Recover from backup ask the box again; Reconnect reads the setup again and shows where it stands.",
     heldLost: "Start again deletes what was entered in the setup that stopped part way.",
     noInvoiceSent: "No invoice was sent to AEAT.",
     recoverDeletes:
@@ -50,31 +52,26 @@ export const initialOwnerStrings = {
     wipeInsecure:
       "Deleting this setup needs the box's secure connection. Set it up, then open this page over it.",
     setupDatabaseUnreadable: "The previous setup process was unsuccessful.",
-    tradingSaved:
-      "This setup already saved the settings the box sells with, so deleting it is not offered.",
-    tradingSavedPassword: "To finish it, continue with your setup password.",
     setupFinished:
       "This setup already finished, so deleting it is not offered. Reconnect to check the saved result.",
     abandon: "Abandon this attempt",
     replace: "Enter new setup details",
     retired: "This attempt is abandoned. Its history is retained.",
-    consumed:
-      "This assignment may have been used. Keep it consumed and resolve the incident before starting again.",
+    consumed: "This assignment may have been used. Keep it consumed.",
     complete: "Setup is complete. Reconnect to the box.",
     reconnect: "Reconnect",
     secureConnection: "Set up secure connection",
     error: "Reconnect to check the saved result. Do not repeat activation.",
     scope: "Setup details are frozen. Abandon this attempt before changing them.",
-    fix: "Correct the highlighted field.",
+    scopeCarryOn:
+      "Setup details are frozen. Reconnect goes on with them; Abandon this attempt to change them.",
+    carryOnFailed:
+      "This page could not read the next step of this setup. Reconnect tries again and goes on with this setup.",
   },
   es: {
     heading: "Primera configuración",
     recoverBackup: "Recuperar desde una copia",
     waiting: "Guardando titularidad de configuración…",
-    resume: "Continuar con tu contraseña de configuración",
-    password: "Contraseña de administrador",
-    required: "Introduce tu contraseña.",
-    resumeHelp: "Introduce la contraseña de administrador que elegiste al configurar.",
     interrupted: "La configuración inicial se interrumpió",
     missingDatabase: "Falta la base de datos de configuración.",
     missingAsk:
@@ -84,19 +81,23 @@ export const initialOwnerStrings = {
     reachedFiscalFinished: "terminó la activación",
     missingBackup: "Si tienes una copia, recupera desde ella.",
     missingConfirm: "No se envió nada a la AEAT ni se vendió nada.",
-    uncheckable:
-      "Este equipo no puede comprobar la contraseña original de configuración, así que no se ofrece Continuar.",
-    finish: "Finalizar configuración",
-    finishReview: "Comprueba los datos guardados.",
-    finishEmail: "Vuelve a introducir los ajustes de correo usados en esta configuración.",
-    finishHelp:
-      "Vuelve a introducir el certificado y los ajustes de correo usados en esta configuración.",
     startAgain: "Empezar de nuevo",
     recoveryRecordDamaged:
       "El registro de la clave de recuperación de esta configuración está dañado y no se puede leer.",
     retireConfirmed: "Borrar el intento anterior y empezar de nuevo.",
     cancel: "Cancelar",
     restarting: "El intento anterior se ha borrado. Reconecta para continuar.",
+    stopAsk:
+      "Primero hay que detener esta configuración. Detenerla no se puede deshacer: termina la configuración para quien la esté haciendo, pero no borra nada. Después de reconectar, Empezar de nuevo y Recuperar desde una copia muestran lo que borrarían antes de borrar nada. Cancelar lo deja todo como está.",
+    stopConfirm: "Detener esta configuración",
+    stopped:
+      "Esta configuración está detenida y no se ha borrado nada. Reconecta: después, Empezar de nuevo y Recuperar desde una copia muestran lo que borrarían antes de borrar nada.",
+    stopNotAccepted:
+      "El equipo no aceptó detener la configuración desde esta página, así que no cambió nada. Solo la detiene desde su propia página con una conexión segura, así que desde esta página Empezar de nuevo y Recuperar desde una copia se rechazan igual. Reconectar lo deja todo como está.",
+    stopUnanswered:
+      "Esta página no recibió una respuesta que pudiera leer al detener la configuración. Puede que el equipo se haya reiniciado: Reconectar vuelve a leer la configuración y muestra en qué punto está.",
+    stopReadUnanswered:
+      "Esta página no recibió una respuesta que pudiera leer del equipo, así que no se ha detenido nada. Empezar de nuevo y Recuperar desde una copia vuelven a preguntar al equipo; Reconectar vuelve a leer la configuración y muestra en qué punto está.",
     heldLost:
       "Empezar de nuevo borra lo que se introdujo en la configuración que se detuvo a medias.",
     noInvoiceSent: "No se envió ninguna factura a la AEAT.",
@@ -123,21 +124,20 @@ export const initialOwnerStrings = {
     wipeInsecure:
       "Para borrar esta configuración hace falta la conexión segura del equipo. Configúrala y abre esta página con ella.",
     setupDatabaseUnreadable: "El proceso de configuración anterior no tuvo éxito.",
-    tradingSaved:
-      "Esta configuración ya guardó los ajustes con los que vende el equipo, así que no se ofrece borrarla.",
-    tradingSavedPassword: "Para terminarla, continúa con tu contraseña de configuración.",
     setupFinished:
       "Esta configuración ya terminó, así que no se ofrece borrarla. Reconecta para comprobar el resultado guardado.",
     abandon: "Abandonar este intento",
     replace: "Introducir nuevos datos",
     retired: "Intento abandonado. Su historial se conserva.",
-    consumed:
-      "Esta asignación puede haberse usado. Consérvala como consumida y resuelve la incidencia antes de empezar de nuevo.",
+    consumed: "Esta asignación puede haberse usado. Consérvala como consumida.",
     complete: "Configuración completa. Reconecta con el equipo.",
     reconnect: "Reconectar",
     secureConnection: "Configurar conexión segura",
     error: "Reconecta para comprobar el resultado guardado. No repitas la activación.",
     scope: "Los datos están fijados. Abandona este intento antes de cambiarlos.",
-    fix: "Corrige el campo señalado.",
+    scopeCarryOn:
+      "Los datos están fijados. Reconectar sigue con ellos; abandona este intento para cambiarlos.",
+    carryOnFailed:
+      "Esta página no pudo leer el siguiente paso de esta configuración. Reconectar lo vuelve a intentar y sigue con esta configuración.",
   },
 } as const;

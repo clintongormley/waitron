@@ -15,7 +15,7 @@ import {
 import { bookings } from "@waitron/bookings";
 import { absences } from "@waitron/workforce";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { randomBytes, randomUUID, X509Certificate } from "node:crypto";
+import { randomUUID, X509Certificate } from "node:crypto";
 import { createServer } from "node:net";
 import {
   chmod,
@@ -1922,7 +1922,6 @@ describe("startServer, against a migrated venue directory", () => {
       const draft = provisionVenueBody("60000013M");
       await send("claim", {
         venue: draft,
-        clientClaimNonce: randomBytes(32).toString("base64url"),
       });
       const challenge = await send("preparation", {
         module,

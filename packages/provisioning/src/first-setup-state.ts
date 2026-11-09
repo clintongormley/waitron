@@ -1,7 +1,6 @@
 import { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { lstat, realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { isDeepStrictEqual } from "node:util";
 import { basename, dirname, join, resolve } from "node:path";
 import { AppError, isUuid } from "@waitron/shared";
 import type { DeploymentEnvironment } from "@waitron/db";
@@ -71,8 +70,6 @@ export type FirstSetupChange =
   | { kind: "candidates"; module: string; request: unknown }
   | { kind: "publication-binding"; digest: string }
   | { kind: "checked"; module: string }
-  | { kind: "resume"; capabilityHash: string }
-  | { kind: "recover"; capabilityHash: string; claimNonceHash: string }
   | { kind: "committed"; result: unknown }
   | {
       kind:
@@ -90,7 +87,6 @@ interface Attempt {
   ownerGeneration: number;
   ownerVerifier: string;
   capabilityHash: string;
-  claimNonceHash: string;
   status: FirstSetupStatus;
   consumptionIntent: boolean;
   inputs: Record<string, unknown>;
@@ -114,16 +110,10 @@ export interface FirstSetupStore {
   read(): Promise<FirstSetupState | null>;
   readResumable(): Promise<{ state: FirstSetupState; publicationComplete: boolean } | null>;
   readForRepair(): Promise<FirstSetupRepair | null>;
-  repairMarker(
-    expected: FirstSetupRepair,
-    assertUnused: () => Promise<void>,
-    hold?: FirstSetupHold,
-  ): Promise<FirstSetupState>;
   claim(
     frozen: FirstSetupFrozen,
     ownerVerifier: string,
     capabilityHash: string,
-    claimNonceHash: string,
     hold?: FirstSetupHold,
   ): Promise<FirstSetupState>;
   update(
@@ -337,7 +327,6 @@ const ATTEMPT_KEYS = [
   "ownerGeneration",
   "ownerVerifier",
   "capabilityHash",
-  "claimNonceHash",
   "status",
   "consumptionIntent",
   "inputs",
@@ -352,7 +341,6 @@ function validateAttempt(value: unknown): asserts value is Attempt {
     !Number.isSafeInteger(value.ownerGeneration) ||
     Number(value.ownerGeneration) < 1 ||
     !HASH.test(String(value.capabilityHash)) ||
-    !HASH.test(String(value.claimNonceHash)) ||
     !VERIFIER.test(String(value.ownerVerifier)) ||
     ![
       "claimed",
@@ -387,8 +375,6 @@ function validateAttempt(value: unknown): asserts value is Attempt {
         "candidates",
         "publication-binding",
         "checked",
-        "resume",
-        "recover",
         "consumption-intent",
         "activation-started",
         "committed",
@@ -624,7 +610,7 @@ export function createFirstSetupStore(options: {
       Object.keys(attempt.inputs).length === 0 &&
       attempt.result === null &&
       attempt.history.every((event) =>
-        ["claim", "resume", "recover", "candidates", "checked", "abandoned"].includes(event.kind),
+        ["claim", "candidates", "checked", "abandoned"].includes(event.kind),
       );
     const eligible =
       (state.status === "claimed" && currentMarker.status === "claiming") ||
@@ -640,36 +626,12 @@ export function createFirstSetupStore(options: {
     read,
     readResumable,
     readForRepair,
-    repairMarker(expected, assertUnused, hold) {
-      return inside(hold, async () => {
-        const current = await readForRepair();
-        if (
-          current === null ||
-          current.repairMarker === null ||
-          !isDeepStrictEqual(current, expected)
-        )
-          conflict();
-        await assertUnused();
-        if (!isDeepStrictEqual(await readForRepair(), current)) conflict();
-        await assertNoStartAgainDeletion(venueDir);
-        await writeDurableHostJson(
-          markerPath,
-          { ...current.marker, status: current.repairMarker },
-          MARKER_LIMIT,
-        );
-        return structuredClone(current.state);
-      });
-    },
-    claim(frozen, ownerVerifier, capabilityHash, claimNonceHash, hold) {
+    claim(frozen, ownerVerifier, capabilityHash, hold) {
       return inside(hold, async () => {
         await bindRoots();
         await assertNoStartAgainDeletion(venueDir);
         validateFrozen(frozen);
-        if (
-          ownerVerifier !== frozen.request.admin.passwordHash ||
-          !HASH.test(capabilityHash) ||
-          !HASH.test(claimNonceHash)
-        )
+        if (ownerVerifier !== frozen.request.admin.passwordHash || !HASH.test(capabilityHash))
           invalid();
         const old = await read();
         await assertNoLegacyFirstSetupWorkspace({ venueDir, stateDir });
@@ -711,7 +673,6 @@ export function createFirstSetupStore(options: {
           ownerGeneration: 1,
           ownerVerifier,
           capabilityHash,
-          claimNonceHash,
           status: "claimed",
           consumptionIntent: false,
           inputs: {},
@@ -727,9 +688,8 @@ export function createFirstSetupStore(options: {
     },
     update(attemptId, revision, change, hold) {
       return inside(hold, async () => {
-        const ownership = change.kind === "resume" || change.kind === "recover";
-        const pair = ownership ? await readResumable() : null;
-        const state = ownership ? (pair?.state ?? null) : await read();
+        // Resumable, so an interrupted completion reaches the status check below as a conflict.
+        const state = (await readResumable())?.state ?? null;
         await assertNoLegacyFirstSetupWorkspace({ venueDir, stateDir });
         if (state === null || state.frozen.attemptId !== attemptId || state.revision !== revision)
           conflict();
@@ -742,19 +702,11 @@ export function createFirstSetupStore(options: {
                 ? ["kind", "digest"]
                 : change.kind === "checked"
                   ? ["kind", "module"]
-                  : change.kind === "resume"
-                    ? ["kind", "capabilityHash"]
-                    : change.kind === "recover"
-                      ? ["kind", "capabilityHash", "claimNonceHash"]
-                      : change.kind === "committed"
-                        ? ["kind", "result"]
-                        : ["kind"];
+                  : change.kind === "committed"
+                    ? ["kind", "result"]
+                    : ["kind"];
         if (!keys(change, allowed)) invalid();
-        if (
-          (state.status === "complete" && !(ownership && pair?.publicationComplete === false)) ||
-          (state.status === "abandoned" && change.kind !== "recover")
-        )
-          conflict();
+        if (state.status === "complete" || state.status === "abandoned") conflict();
         switch (change.kind) {
           case "publication-binding":
             if (
@@ -786,17 +738,6 @@ export function createFirstSetupStore(options: {
               invalid();
             publicValue(change.input);
             state.inputs[change.module] = structuredClone(change.input);
-            break;
-          case "resume":
-          case "recover":
-            if (state.status === "complete") state.status = "publication";
-            if (!HASH.test(change.capabilityHash)) invalid();
-            if (change.kind === "recover") {
-              if (!HASH.test(change.claimNonceHash)) invalid();
-              state.claimNonceHash = change.claimNonceHash;
-            }
-            state.ownerGeneration++;
-            state.capabilityHash = change.capabilityHash;
             break;
           case "input":
           case "checked":

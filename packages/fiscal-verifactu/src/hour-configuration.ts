@@ -15,7 +15,7 @@ import {
 } from "./hour-dormant-standby.js";
 import { hostedHourRecovery } from "./hosted-hour-recovery.js";
 import { readHourRecoveryHistory, readHourRecoveryState } from "./hour-recovery-state.js";
-import { startAgainHoldings } from "./start-again-holdings.js";
+import { startAgainHoldings, startAgainKept } from "./start-again-holdings.js";
 
 function snapshot(input: unknown): unknown {
   try {
@@ -96,6 +96,7 @@ export const FISCAL_INITIAL_SETUP: InitialSetupContribution = {
   confirmation: unconfiguredSetup,
   documentConfirmation: unconfiguredSetup,
   startAgainHoldings,
+  startAgainKept,
   configure(host) {
     return createHourInitialSetup(host, historicalInitialSetup);
   },

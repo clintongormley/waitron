@@ -1,4 +1,3 @@
-import { TLSSocket } from "node:tls";
 import * as filesystem from "node:fs/promises";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -92,7 +91,6 @@ async function fixture(
     },
     () => {},
   );
-  const nonce = randomBytes(32).toString("base64url");
   const post = (path: string, body: unknown, headers: Record<string, string> = {}, env?: unknown) =>
     app.request(
       path,
@@ -104,7 +102,6 @@ async function fixture(
       env,
     );
   const claimed = await post("/setup-api/first-setup/claim", {
-    clientClaimNonce: nonce,
     venue: staffLanguage === undefined ? request : { ...request, staffLanguage },
   });
   const claim = claimed.status === 200 ? await claimed.json() : {};
@@ -174,7 +171,6 @@ async function fixture(
     post,
     claim,
     claimed,
-    nonce,
     headers,
     stateDir,
     settle,
@@ -259,32 +255,6 @@ it("claims only the validated wizard identity and conceals all owner state from 
   const disk = await readFile(join(f.stateDir, "first-setup.json"), "utf8");
   expect(disk).not.toContain(PASSWORD);
   expect(disk).not.toContain(f.claim.capability);
-  expect(disk).not.toContain(f.nonce);
-});
-it("rotates a lost-response owner without minting another assignment and rejects a stale tab", async () => {
-  const f = await fixture();
-  expect(f.claimed.status).toBe(200);
-  const resumed = await f.post("/setup-api/first-setup/resume", {
-    clientClaimNonce: f.nonce,
-    password: PASSWORD,
-  });
-  expect(resumed.status).toBe(200);
-  const next = await resumed.json();
-  expect(next.state.nodeId).toBe(f.claim.state.nodeId);
-  expect(next.state.administratorId).toBe(f.claim.state.administratorId);
-  expect(next.state.ownerGeneration).toBe(2);
-  const stale = await f.post(
-    "/setup-api/first-setup/reconfirm",
-    { password: PASSWORD, purpose: "block-use" },
-    f.headers(),
-  );
-  expect(stale.status).toBe(403);
-  expect((await stale.json()).error.code).toBe("setup.owner_required");
-  const competing = await f.post("/setup-api/first-setup/claim", {
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    venue: request,
-  });
-  expect(competing.status).toBe(409);
 });
 it("never counts a browser on the box itself as the second clock", async () => {
   internet.offline = true;
@@ -358,7 +328,6 @@ it("durably selects one hour before export and preserves its IDs after outside u
   const abandoned = await f.post("/setup-api/first-setup/abandon", {}, f.headers(state));
   expect(abandoned.status).toBe(200);
   const later = await f.post("/setup-api/first-setup/claim", {
-    clientClaimNonce: randomBytes(32).toString("base64url"),
     venue: request,
   });
   expect(later.status).toBe(409);
@@ -367,13 +336,26 @@ it("durably selects one hour before export and preserves its IDs after outside u
 it.each([
   null,
   [],
-  { clientClaimNonce: "x", venue: request, privateKey: "SECRET-SENTINEL" },
-  { clientClaimNonce: "x", venue: { ...request, admin: { ...request.admin, password: [] } } },
+  { venue: request, privateKey: "SECRET-SENTINEL" },
+  { venue: { ...request, admin: { ...request.admin, password: [] } } },
 ])("refuses malformed claims without echoing secrets: %j", async (body) => {
   const f = await fixture();
   const result = await f.post("/setup-api/first-setup/claim", body);
   expect(result.status).toBe(400);
   expect(await result.text()).not.toContain("SECRET-SENTINEL");
+});
+it("refuses a claim that still sends the retired client nonce, without changing the record", async () => {
+  const f = await fixture();
+  expect(f.claimed.status).toBe(200);
+  expect((await f.post("/setup-api/first-setup/abandon", {}, f.headers())).status).toBe(200);
+  const before = await f.host.store.read();
+  const refused = await f.post("/setup-api/first-setup/claim", {
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    venue: request,
+  });
+  expect(refused.status).toBe(400);
+  expect((await refused.json()).error.code).toBe("setup.request_invalid");
+  expect(await f.host.store.read()).toEqual(before);
 });
 it("rejects over-limit streaming bodies before any claim or import side effect", async () => {
   const f = await fixture();
@@ -491,7 +473,6 @@ it.each(["legalName", "password", "country"])(
     if (field === "password") venue.admin.password = "x".repeat(1025);
     else venue[field as "legalName" | "country"] = "x".repeat(257);
     const res = await f.post("/setup-api/first-setup/claim", {
-      clientClaimNonce: randomBytes(32).toString("base64url"),
       venue,
     });
     expect(res.status).toBe(400);
@@ -508,7 +489,6 @@ it.each(["name", "city", "addressLine1", "addressLine2"] as const)(
     const before = await f.host.store.read();
     const venue = { ...structuredClone(request), [field]: "é".repeat(129) };
     const refused = await f.post("/setup-api/first-setup/claim", {
-      clientClaimNonce: randomBytes(32).toString("base64url"),
       venue,
     });
     expect(refused.status).toBe(400);
@@ -516,7 +496,6 @@ it.each(["name", "city", "addressLine1", "addressLine2"] as const)(
     expect(await f.host.store.read()).toEqual(before);
     const acceptedVenue = { ...venue, [field]: "é".repeat(128) };
     const accepted = await f.post("/setup-api/first-setup/claim", {
-      clientClaimNonce: randomBytes(32).toString("base64url"),
       venue: acceptedVenue,
     });
     expect(accepted.status).toBe(200);
@@ -530,7 +509,6 @@ it("fills the filing module's operation description into a claim that leaves it 
   expect((await f.post("/setup-api/first-setup/abandon", {}, f.headers())).status).toBe(200);
   const before = await f.host.store.read();
   const refused = await f.post("/setup-api/first-setup/claim", {
-    clientClaimNonce: randomBytes(32).toString("base64url"),
     venue: { ...structuredClone(request), operationDescription: "" },
   });
   expect(refused.status).toBe(400);
@@ -542,7 +520,6 @@ it("fills the filing module's operation description into a claim that leaves it 
   const { operationDescription: _, ...venue } = structuredClone(request);
   void _;
   const accepted = await f.post("/setup-api/first-setup/claim", {
-    clientClaimNonce: randomBytes(32).toString("base64url"),
     venue,
   });
   expect(accepted.status).toBe(200);
@@ -571,44 +548,6 @@ it("rejects a missing reconfirmation and an invalid answer before any outside-us
   expect(
     (await f.host.store.read())?.frozen.modules.find((m) => m.module === MODULE)?.request,
   ).toBeNull();
-});
-
-it("rejects a delayed old-tab request after the owner resumes in another tab", async () => {
-  const f = await fixture();
-  expect(f.claimed.status).toBe(200);
-  let controller!: ReadableStreamDefaultController<Uint8Array>;
-  const stream = new ReadableStream<Uint8Array>({
-    start(value) {
-      controller = value;
-    },
-  });
-  const pending = f.app.request(
-    new Request("http://localhost/setup-api/first-setup/candidates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...f.headers() },
-      body: stream,
-      duplex: "half",
-    } as RequestInit),
-  );
-  const resumed = await f.post("/setup-api/first-setup/resume", {
-    clientClaimNonce: f.nonce,
-    password: PASSWORD,
-  });
-  expect(resumed.status).toBe(200);
-  controller.enqueue(
-    new TextEncoder().encode(
-      JSON.stringify({
-        module: MODULE,
-        proposal: { comparisonId: "old" },
-        reconfirmation: "old",
-      }),
-    ),
-  );
-  controller.close();
-  const rejected = await pending;
-  expect(rejected.status).toBe(403);
-  expect((await rejected.json()).error.code).toBe("setup.owner_required");
-  expect((await f.host.store.read())?.consumptionIntent).toBe(false);
 });
 
 it("returns the locked public venue and selected module versions only to its owner", async () => {
@@ -790,7 +729,6 @@ it.each([
     const f = await fixture();
     const before = await readFile(join(f.stateDir, "first-setup.json"), "utf8");
     const response = await f.post("/setup-api/first-setup/claim", {
-      clientClaimNonce: f.nonce,
       venue: request,
       ...intent,
     });
@@ -926,73 +864,6 @@ it("refuses a take with an expired grant, spending nothing, and takes the name w
   const taken = await f.candidates(await f.reconfirm());
   expect(taken.status).toBe(200);
   expect((await taken.json()).state.status).toBe("consumption-intent");
-});
-
-it("a takeover in the middle of a wait keeps the recorded wait, and the first browser's grant dies", async () => {
-  const f = await fixture();
-  const grantA = await f.reconfirm();
-  const first = await f.candidates(grantA);
-  const { preparation } = (await first.json()) as Preparation;
-  expect(preparation.status).toBe("waiting");
-  const snapshot = await (await f.app.request("/setup-api/first-setup/resolution")).json();
-  const recovered = await f.post(
-    "/setup-api/first-setup/resolution/recover",
-    {
-      inspectionId: snapshot.inspectionId,
-      revision: snapshot.revision,
-      ownerGeneration: snapshot.ownerGeneration,
-      clientClaimNonce: randomBytes(32).toString("base64url"),
-      password: PASSWORD,
-    },
-    {},
-    // The route accepts only a TLS socket; this stands in for the HTTPS listener.
-    {
-      incoming: { socket: Object.assign(Object.create(TLSSocket.prototype), { encrypted: true }) },
-    },
-  );
-  expect(recovered.status).toBe(200);
-  const owner = (await recovered.json()) as {
-    state: Parameters<typeof f.headers>[0];
-    capability: string;
-  };
-  const headersB = f.headers(owner.state, owner.capability);
-  internet.clock.set(preparation.targetMs + 1);
-  const challenge = await f.post(
-    "/setup-api/first-setup/preparation",
-    { module: MODULE, proposal: { action: "clock-challenge" } },
-    headersB,
-  );
-  const compared = await f.post(
-    "/setup-api/first-setup/preparation",
-    {
-      module: MODULE,
-      proposal: {
-        action: "compare-clocks",
-        browser: {
-          challengeId: (await challenge.json()).preparation.id,
-          instantMs: internet.clock.wall(),
-        },
-      },
-    },
-    headersB,
-  );
-  const comparisonB = ((await compared.json()) as { preparation: { id: string } }).preparation.id;
-  const token = await f.post(
-    "/setup-api/first-setup/reconfirm",
-    { password: PASSWORD, purpose: "block-use" },
-    headersB,
-  );
-  const grantB = ((await token.json()) as { reconfirmation: string }).reconfirmation;
-  const taken = await f.post(
-    "/setup-api/first-setup/candidates",
-    { module: MODULE, proposal: { comparisonId: comparisonB }, reconfirmation: grantB },
-    headersB,
-  );
-  expect(taken.status).toBe(200);
-  expect((await taken.json()).state.status).toBe("consumption-intent");
-  const late = await f.candidates(grantA);
-  expect(late.status).toBe(403);
-  expect((await late.json()).error.code).toBe("setup.owner_required");
 });
 
 it("refuses a claimed-owner sender that named delivery cannot use before SMTP contact", async () => {

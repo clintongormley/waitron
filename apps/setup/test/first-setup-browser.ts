@@ -51,6 +51,8 @@ export function wizardApi(
     offering?: boolean;
     developmentMode?: boolean;
     claimed?: boolean;
+    /** Whether a claimed box answers from its repair page; by default it does when it starts claimed. */
+    resolution?: boolean;
     intercept?: (
       path: string,
       body: unknown,
@@ -60,6 +62,7 @@ export function wizardApi(
 ) {
   const requests: { path: string; body: unknown; headers: Headers }[] = [];
   let claimed = options.claimed ?? false;
+  const resolution = options.resolution ?? options.claimed === true;
   const api = new SetupApi("", async (url, init) => {
     const path = String(url),
       body = init?.body ? (JSON.parse(String(init.body)) as unknown) : undefined,
@@ -86,16 +89,16 @@ export function wizardApi(
         inspectionId: "a".repeat(64),
         pair: "valid",
         database: "no-venue-rows",
-        password: "checkable",
         revision: 1,
         ownerGeneration: 1,
-        repairEligible: false,
         emptyDatabase: true,
         artifacts: [],
       });
     if (path.endsWith("/first-setup/status"))
       return Response.json(
-        headers.has("X-Waitron-Setup-Owner") ? { claimed: true, state: initial } : { claimed },
+        headers.has("X-Waitron-Setup-Owner")
+          ? { claimed: true, state: initial }
+          : { claimed, ...(claimed && resolution && { resolution: true }) },
       );
     if (path.endsWith("/claim")) {
       claimed = true;

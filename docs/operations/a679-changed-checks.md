@@ -3378,6 +3378,9 @@ driver completed it with explicit argument arrays in the independent checkout. R
 `await stampDeployment(db, request.environment)` fails the existing refusal-after-stamping
 case at its exact assertion: expected preproduction, received null. Restoring the bytes passes
 that same selected case, with 66 intentionally unselected cases. No earlier test changed.
+(2026-11-08, A1379 P2-9: the command now stamps only once activation has started, so that case
+became "a refusal before activation starts leaves no environment stamp and no venue" and expects
+`null`; see that branch's PR.)
 
 The release-floor concern was also followed to its consumer. A missing/null embedded timestamp
 sets `releaseBlocked` in `hour-clock.ts:122–126`; it does not permit an earlier clock. The

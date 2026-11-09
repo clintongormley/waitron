@@ -7,11 +7,6 @@ import { wizardApi } from "./first-setup-browser.js";
 import { namedSummary, q } from "./missing-database-browser.js";
 import { mountWidget } from "../src/widgets/test-helpers.js";
 
-export const tradingEnv = {
-  name: "trading.env",
-  status: "present",
-  digest: "c".repeat(64),
-} as const;
 export const refusedCause = (cause: string) =>
   Response.json(
     { error: { code: "setup.start_again_refused", params: { cause } } },
@@ -43,8 +38,6 @@ export async function heldFixture(
           pair: "valid",
           database: "occupied",
           emptyDatabase: false,
-          password: "checkable",
-          repairEligible: false,
           artifacts: [],
           revision: 1,
           ownerGeneration: 1,

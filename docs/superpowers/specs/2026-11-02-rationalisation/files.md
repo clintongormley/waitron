@@ -102,6 +102,8 @@ read, not run:
     fiscal-verifactu's two implementations (`packages/fiscal-verifactu/src/initial-hour-setup.ts:143`,
     `:149`). `preparation.resume` is the only caller of the seat's `resume`
     (`first-setup-preparation.ts:144`). That last change is in the fiscal package, so the owner lands it.
+    As built (A1379 part 2, P2-23, 2026-11-09): the seat's `resume` is deleted, and `commandResume`
+    is renamed `commandBeforeActivation`, the command's last check before activation, not deleted.
 
 **A backup recovery cut off during setup is redone, not resumed** (owner, 2026-11-04). The approved
 A1131bc already removes the folder that recovery ran from: since its slice 3 the repair page's

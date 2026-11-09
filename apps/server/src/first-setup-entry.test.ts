@@ -344,7 +344,6 @@ async function abandonedConsumedClaim(kind = "consumed-abandoned") {
     },
     verifier,
     createHash("sha256").update("capability").digest("hex"),
-    createHash("sha256").update("nonce").digest("hex"),
   );
   if (kind === "pre-consumption-abandoned")
     await store.update(attemptId, state.revision, { kind: "abandoned" });

@@ -311,11 +311,6 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
   the redirect.
   [Detail](#the-setup-apps-catch-all-redirect-was-not-proven-by-deleting-it)
 
-## The repair page's Continue sits tight against the password field at phone width
-
-On the setup app's repair page, on main since 4e318802f (#1752), Continue sits tight against the
-password field at phone width (`apps/setup/src/setup-app.ts`, the first-owner screen).
-
 ## The recovery page's operator texts send the person to whoever installed the box
 
 Left open by A1384 (#2527). The recovery page's operator texts
@@ -339,14 +334,6 @@ filesystem: 4 KiB blocks, its journal, root-reserved blocks), copy-on-write file
 snapshots or compression (btrfs, zfs), and whether the `logs` volume shares the state folder's disk
 on every box. Detail:
 A1127's design, "Open, not measured".
-
-## The repair page draws a Start-again error twice
-
-On the Start-again confirmation, a refusal's message appears under the password field and again
-under the tick box; with A1127's longer full-disk words that is about half a phone screen at 375 px
-(`~/waitron-campaign/a1127-measure/look/`). Believed to predate A1127: both slots show the same
-stored error, and a plain 500 also shows twice (look check of 2026-10-28, run on the branch, not on
-`main`).
 
 ## A boot test's disk assertion reads the checkout's path
 
@@ -489,8 +476,8 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
 ## No Recover from backup when the setup's own record cannot be read
 
 - **No Recover from backup when the setup's own record cannot be read.** Since A1131bc slice 3,
-  Recover from backup is drawn disabled wherever Start again is disabled, including a setup record
-  whose password cannot be checked; before, it opened the old recovery. The only way out is then a
+  Recover from backup is drawn disabled wherever Start again is disabled; before, it opened the old
+  recovery. The only way out is then a
   reinstall. Left open by A1131bc slice 3 (plan, N2).
 
 ## The bucket and Waitron Cloud restores have not been run after Start again's deletion
@@ -523,9 +510,8 @@ whole-file reads are separate work:
 - `packages/provisioning/src/first-setup-resolution-inspection.ts` fingerprints `venue.db` and its
   WAL for the repair inspection and captures originals with `readFile`. Each database artifact is
   capped at 128 MiB. The unused `recheckEmptyDatabase` reader also retains its whole-file
-  128 MiB check. The resolution archive in `first-setup-resolution.ts` also caps total original
-  bytes at 128 MiB. Keep content-change detection and the archive's validation when replacing
-  those buffers. A1159's Start again work remains open.
+  128 MiB check. Keep content-change detection when replacing those buffers. A1159's Start again
+  work remains open.
 - `packages/provisioning/src/first-setup-start-again-deletion.ts` (`sha256`) reads whole files for
   deletion markers, including `venue.db`, `node.db` and their WALs. `fingerprintAgainst` avoids the
   read when the size differs; equal-size files are still hashed through a whole buffer. Preserve
@@ -555,7 +541,7 @@ that operation's reader. Do not remove exact-content checks to make a large file
 
 ## Bundle: Restore paths run
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **The bucket and Waitron Cloud restores have not been run after Start again's deletion.** Left
   open by A1131bc slice 3.
@@ -563,20 +549,6 @@ that operation's reader. Do not remove exact-content checks to make a large file
 - **Loose ends left by SQLite slice 2 Task 9c (#646, "Restore from my bucket" in the setup
   wizard).**
   [Detail](setup.md#loose-ends-left-by-sqlite-slice-2-task-9c-646-restore-from-my-bucket-in-the-setup-wizard)
-
-## Bundle A1379: A failed setup always offers Start again
-
-4 entries, size M. From the backlog review of 2026-11-06.
-
-- **A1322. A failed setup always offers Start again; remove "Continue with your setup password" (owner, 2026-11-04).**
-  Today, once a setup has saved the settings the box sells with, Start again is refused and Continue is the only choice, so a lost password means reinstalling.
-  Remove Continue and its password step, and let Start again delete such a setup, still refusing when the database holds an invoice or another record Waitron never deletes.
-  This replaces the owner's 16 October order (Continue first). Not yet checked: what else depends on Continue, including its repair of a damaged setup record.
-  Part 1 landed as #2521 (2026-11-07): Start again is offered for a record whose claim mark needs repair. Part 2, removing Continue, waits for the owner's answers to the three questions in [the plan](../superpowers/plans/2026-11-06-a1379-setup-start-again.md).
-- **The repair page's Continue sits tight against the password field at phone width.**
-  [Detail](setup.md#the-repair-pages-continue-sits-tight-against-the-password-field-at-phone-width)
-- **The repair page draws a Start-again error twice**, under the password and under the tick box.
-  [Detail](setup.md#the-repair-page-draws-a-start-again-error-twice)
 - **No Recover from backup when the setup's own record cannot be read.** The only way out is a
   reinstall. Left open by A1131bc slice 3.
   [Detail](setup.md#no-recover-from-backup-when-the-setups-own-record-cannot-be-read)

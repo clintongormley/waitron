@@ -40,35 +40,45 @@ afterAll(async () => {
   if (directory !== undefined) await rm(directory, { recursive: true, force: true });
 });
 
-it("the built command waits, then takes its name in another process and resumes its kept name and PDF after a preactivation refusal", async () => {
-  const target = join(directory!, "venue");
-  const stateDir = join(directory!, "state");
-  const pdfPath = join(directory!, "kept.pdf");
-  await mkdir(target);
+/** Copies the migrated test databases into a venue folder of its own and builds a runner for the
+ * built command against it. */
+async function builtCommand(name: string) {
+  const target = join(directory!, name, "venue");
+  const stateDir = join(directory!, name, "state");
+  const pdfPath = join(directory!, name, "kept.pdf");
+  await mkdir(target, { recursive: true });
   const databases = await venue.db.execute<{ name: string; file: string }>("pragma database_list");
   const source = databases.rows.find((row) => row.name === "main")!.file;
   for (const name of ["venue.db", "venue.db-wal", "node.db", "node.db-wal"])
     await copyFile(join(dirname(source), name), join(target, name));
+  /** A preload that starts the child's clock at `instant`, with the internet's clock agreeing, and
+   * lets a wait pass by moving that clock forward instead of sleeping. */
   async function clockAt(instant: string) {
-    const preload = join(directory!, `clock-${instant.replaceAll(":", "")}.mjs`);
+    const preload = join(directory!, name, `clock-${instant.replaceAll(":", "")}.mjs`);
     await writeFile(
       preload,
       `import https from "node:https";
+import timers from "node:timers/promises";
 import { EventEmitter } from "node:events";
 import { syncBuiltinESMExports } from "node:module";
+let passed = 0;
+timers.setTimeout = async (ms, value) => {
+  passed += ms;
+  return value;
+};
 const RealDate = Date;
-const date = new RealDate(${JSON.stringify(instant)}).toUTCString();
 https.request = (_url, _options, respond) => {
   const request = new EventEmitter();
+  const date = new Date().toUTCString();
   request.end = () => queueMicrotask(() => respond({ statusCode: 200, headers: { date }, destroy() {} }));
   return request;
 };
 syncBuiltinESMExports();
 globalThis.Date = class extends RealDate {
-  constructor(...args) { super(...(args.length ? args : [${JSON.stringify(instant)}])); }
-  static now() { return RealDate.parse(${JSON.stringify(instant)}); }
+  constructor(...args) { super(...(args.length ? args : [RealDate.parse(${JSON.stringify(instant)}) + passed])); }
+  static now() { return RealDate.parse(${JSON.stringify(instant)}) + passed; }
 };
-Object.defineProperty(performance, "now", { value: () => 0 });
+Object.defineProperty(performance, "now", { value: () => passed });
 `,
     );
     return preload;
@@ -149,24 +159,63 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     });
     return { code, errors, childError, output };
   }
-  const waited = await run("", await clockAt("2026-10-18T11:38:00Z"));
+  return { target, stateDir, pdfPath, clockAt, run };
+}
+
+it("the built command waits and takes its name in the same run, and completes the setup", async () => {
+  const { target, stateDir, pdfPath, clockAt, run } = await builtCommand("complete");
+  const result = await run(
+    "https://olivo.example.test:3443",
+    await clockAt("2026-10-18T11:38:00Z"),
+  );
   expect(
-    { code: waited.code, errors: waited.errors, childError: waited.childError },
-    waited.output,
-  ).toEqual({ code: 1, errors: "", childError: undefined });
-  expect(waited.output).toContain(
-    "Waiting to confirm the time, so no invoice series is ever repeated.\nContinues at 2026-10-18T11:40:00.000Z; run the command again within a minute after that time (later, it waits again).\n",
+    { code: result.code, errors: result.errors, childError: result.childError },
+    result.output,
+  ).toEqual({ code: 0, errors: "", childError: undefined });
+  expect(result.output).toContain(
+    "Waiting to confirm the time, so no invoice series is ever repeated.\nWaiting until 2026-10-18T11:40:00.000Z; it carries on by itself, so keep the command running.\n",
   );
-  expect(waited.output).not.toContain("[no/yes/unknown]");
-  expect(JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8")).status).toBe(
-    "claimed",
+  expect(result.output).not.toContain("SYNTHETIC-owner-password");
+  const after = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
+  expect(after.status).toBe("complete");
+  expect(after.ownerGeneration).toBe(1);
+  await expect(readFile(pdfPath)).resolves.toBeInstanceOf(Buffer);
+  const journal = JSON.parse(
+    await readFile(join(stateDir, "module-preparation-state.json"), "utf8"),
   );
-  const first = await run("", await clockAt("2026-10-18T11:40:00Z"));
+  expect(journal.revisions.at(-1).value.entries).toMatchObject([
+    { kind: "wait", targetMs: Date.parse("2026-10-18T11:40:00Z") },
+    { kind: "intent", identity: "0CRFW" },
+  ]);
+  const stored = await openVenueDatabase(target);
+  try {
+    expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
+    const series = await stored.venue.select().from(invoiceSeries);
+    expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFW", "FF-0CRFW", "R-0CRFW"]);
+    expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
+  } finally {
+    await stored.close();
+  }
+});
+
+it("the built command waits and takes its name in the same run, and a run after a refusal before activation is refused with nothing changed", async () => {
+  const { target, stateDir, pdfPath, clockAt, run } = await builtCommand("refused");
+  const first = await run("", await clockAt("2026-10-18T11:38:00Z"));
   expect(
     { code: first.code, errors: first.errors, childError: first.childError },
     first.output,
   ).toEqual({ code: 1, errors: "setup.not_ready {}\n", childError: undefined });
-  expect(first.errors).toBe("setup.not_ready {}\n");
+  expect(first.output).toContain(
+    "Waiting to confirm the time, so no invoice series is ever repeated.\nWaiting until 2026-10-18T11:40:00.000Z; it carries on by itself, so keep the command running.\n",
+  );
+  expect(first.output).not.toContain("[no/yes/unknown]");
+  // The time check takes its one password before the wait and asks nothing after it; the two
+  // later confirmations are the recovery pack's own (staging it, then kept).
+  const waitAt = first.output.indexOf("Waiting until");
+  const confirmations = (text: string) => text.split("Confirm setup password: ").length - 1;
+  expect(confirmations(first.output.slice(0, waitAt))).toBe(1);
+  expect(first.output.slice(waitAt)).toContain("box: 2026-10-18T11:40:01.000Z");
+  expect(confirmations(first.output.slice(waitAt))).toBe(2);
   const before = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
   expect(before.status).toBe("consumption-intent");
   const pdf = await readFile(pdfPath);
@@ -180,33 +229,25 @@ Object.defineProperty(performance, "now", { value: () => 0 });
   }
   const second = await run(
     "https://olivo.example.test:3443",
-    await clockAt("2026-10-18T11:40:00Z"),
+    await clockAt("2026-10-18T11:40:01Z"),
   );
   expect(
     { code: second.code, errors: second.errors, childError: second.childError },
     second.output,
-  ).toEqual({ code: 0, errors: "", childError: undefined });
-  expect(second.output).not.toContain("SYNTHETIC-owner-password");
-  const after = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
-  expect(after.status).toBe("complete");
-  expect(after.frozen).toEqual(before.frozen);
-  expect(after.inputs["fiscal-verifactu"]).toEqual(before.inputs["fiscal-verifactu"]);
-  expect(after.ownerGeneration).toBe(before.ownerGeneration + 1);
+  ).toEqual({
+    code: 1,
+    errors:
+      "This setup stopped part way, so the command will not carry on with it. Nothing was changed.\nOpen the box's setup page in a browser and choose Start again. It deletes what this setup entered; if the setup already recorded something that must be kept, such as an invoice, or the box cannot confirm that deleting it is safe, it deletes nothing and the page says why. Then run the command again.\nsetup.attempt_conflict {}\n",
+    childError: undefined,
+  });
+  expect(second.output).not.toContain("Confirm setup password: ");
+  expect(JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"))).toEqual(before);
   expect(await readFile(pdfPath)).toEqual(pdf);
-  const journal = JSON.parse(
-    await readFile(join(stateDir, "module-preparation-state.json"), "utf8"),
-  );
-  expect(journal.revisions.at(-1).value.entries).toMatchObject([
-    { kind: "wait", targetMs: Date.parse("2026-10-18T11:40:00Z") },
-    { kind: "intent", identity: "0CRFW" },
-    { kind: "resume", identity: "0CRFW" },
-  ]);
   const stored = await openVenueDatabase(target);
   try {
-    expect(await readDeploymentEnvironment(stored.venue)).toBe("preproduction");
-    const series = await stored.venue.select().from(invoiceSeries);
-    expect(series.map((row) => row.code).sort()).toEqual(["A-0CRFW", "FF-0CRFW", "R-0CRFW"]);
-    expect(series.map((row) => row.nextNumber)).toEqual([1, 1, 1]);
+    expect(await readTenantIdentities(stored.venue)).toEqual([]);
+    expect(await readDeploymentEnvironment(stored.venue)).toBeNull();
+    expect(await stored.venue.select().from(invoiceSeries)).toEqual([]);
   } finally {
     await stored.close();
   }

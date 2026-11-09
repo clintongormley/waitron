@@ -1,5 +1,5 @@
 import * as filesystem from "node:fs/promises";
-import { randomBytes, createHash } from "node:crypto";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -94,7 +94,6 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
   try {
     server = await startServer(env, {}, { testClock });
     agent = new Agent({ connect: { ca: await readFile(join(stateDir, "tls/ca.crt")) } });
-    const nonce = randomBytes(32).toString("base64url");
     let capability = "",
       state: { attemptId: string; revision: number; ownerGeneration: number };
     const headers = () =>
@@ -116,7 +115,6 @@ it("keeps starting after a real first setup grows beyond 128 MiB", async () => {
       return { status: response.status, body: await response.json() };
     };
     const claim = await post("/setup-api/first-setup/claim", {
-      clientClaimNonce: nonce,
       venue: request,
     });
     expect(claim.status).toBe(200);

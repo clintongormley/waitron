@@ -13,13 +13,6 @@ const NEARLY_FULL = 1024 * 1024;
 const ROOM = 4 * FULL_DISK_BYTES;
 const IDS = { inspectionId: "inspection", revision: 1, ownerGeneration: 1 };
 const JSON_HEADERS = { "Content-Type": "application/json" };
-const OWNER_HEADERS = {
-  "Content-Type": "application/json",
-  "X-Waitron-Setup-Owner": "capability",
-  "X-Waitron-Setup-Attempt": "attempt",
-  "X-Waitron-Setup-Revision": "1",
-  "X-Waitron-Setup-Generation": "1",
-};
 
 const sockets: TLSSocket[] = [];
 afterEach(() => {
@@ -44,7 +37,6 @@ function appWith(options: {
   free: number | null | Error;
   refusal?: unknown;
   database?: string;
-  authorize?: () => Promise<never>;
   log?: Parameters<typeof mountFirstSetupResolutionApi>[2];
   onFreeRead?: () => void;
   inspect?: () => Promise<unknown>;
@@ -62,13 +54,12 @@ function appWith(options: {
           database: options.database ?? "missing",
         })),
     },
-    owner: { recoverFirstSetupOwner: refuse, authorize: options.authorize ?? refuse },
+    owner: { authorize: refuse },
   } as unknown as Host;
   const app = new Hono();
   mountFirstSetupResolutionApi(app, host, options.log ?? (() => {}), {
     startAgain: refuse,
     summary: refuse,
-    withPublication: refuse,
     freeSpace: async () => {
       options.onFreeRead?.();
       if (options.free instanceof Error) throw options.free;
@@ -80,16 +71,6 @@ function appWith(options: {
 }
 
 const STEPS = {
-  password: (app: Hono) =>
-    app.request(
-      `${ROUTE}/recover`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...IDS, clientClaimNonce: "nonce", password: "secret" }),
-      },
-      tls(),
-    ),
   summary: (app: Hono) =>
     app.request(
       `${ROUTE}/start-again/summary`,
@@ -277,9 +258,9 @@ it.each(Object.entries(STEPS))(
   },
 );
 
-it("a wrong password on a nearly full disk still answers setup.owner_required", async () => {
+it("an owner refusal on a nearly full disk still answers setup.owner_required", async () => {
   const refusal = new AppError("setup.owner_required", {});
-  expect(await answer(await STEPS.password(appWith({ free: NEARLY_FULL, refusal })))).toEqual({
+  expect(await answer(await STEPS.summary(appWith({ free: NEARLY_FULL, refusal })))).toEqual({
     status: 403,
     code: "setup.owner_required",
   });
@@ -312,33 +293,18 @@ it("GET /resolution answers a readable database as today on a nearly full disk",
   expect(await response.json()).toMatchObject({ database: "missing" });
 });
 
-it("the activation routes keep their answer on a nearly full disk", async () => {
-  const refusal = new AppError("setup.attempt_invalid", {});
-  const app = appWith({ free: NEARLY_FULL, authorize: async () => Promise.reject(refusal) });
-  const response = await app.request(
-    `${ROUTE}/reconfirm`,
-    {
-      method: "POST",
-      headers: OWNER_HEADERS,
-      body: JSON.stringify({ password: "secret", purpose: "activation" }),
-    },
-    tls(),
-  );
-  expect(await answer(response)).toEqual({ status: 409, code: "setup.attempt_invalid" });
-});
-
 it("GET /resolution answers database unknown as today when free space cannot be read", async () => {
   const response = await appWith({ free: null, database: "unknown" }).request(ROUTE, {}, tls());
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ database: "unknown" });
 });
 
-it("a free-space reader that throws leaves a wrong password as setup.owner_required", async () => {
-  const refusal = new AppError("setup.owner_required", {});
+it("a free-space reader that throws leaves a refusal a full disk could explain as it was", async () => {
+  const refusal = new AppError("setup.attempt_invalid", {});
   const app = appWith({ free: new Error("statfs failed"), refusal });
-  expect(await answer(await STEPS.password(app))).toEqual({
-    status: 403,
-    code: "setup.owner_required",
+  expect(await answer(await STEPS.summary(app))).toEqual({
+    status: 409,
+    code: "setup.attempt_invalid",
   });
 });
 
@@ -352,7 +318,7 @@ it("a refusal reported as a full disk logs what it was", async () => {
     errcode: null,
   });
   log.mockClear();
-  await STEPS.password(appWith({ free: NEARLY_FULL, refusal: cannotOpen(), log }));
+  await STEPS.summary(appWith({ free: NEARLY_FULL, refusal: cannotOpen(), log }));
   expect(log).toHaveBeenCalledWith("warn", "storage.disk_full_reported", {
     errorCode: null,
     errno: "ERR_SQLITE_ERROR",

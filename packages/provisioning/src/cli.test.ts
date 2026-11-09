@@ -204,6 +204,12 @@ describe("runCli", () => {
     expect(h.lines.join("\n")).toContain("usage: waitron-provision");
   });
 
+  it("the usage says the recovery PDF must be a new file", async () => {
+    const h = harness();
+    await runCli([], h.deps);
+    expect(h.lines.join("\n")).toContain("--recovery-pdf <absolute path of a new file,");
+  });
+
   it("prints usage and exits 2 when no command is given at all", async () => {
     const h = harness();
     expect(await runCli([], h.deps)).toBe(2);

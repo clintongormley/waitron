@@ -42,12 +42,7 @@ it.each(["claim", "abandon", "completed-abandon"] as const)(
         });
       };
       const claim = () =>
-        store.claim(
-          template.frozen,
-          template.ownerVerifier,
-          template.capabilityHash,
-          template.claimNonceHash,
-        );
+        store.claim(template.frozen, template.ownerVerifier, template.capabilityHash);
       if (phase === "claim") {
         interrupt("active");
         await expect(claim()).rejects.toMatchObject({ code: "setup.attempt_invalid" });

@@ -5,8 +5,6 @@ import {
   files,
   write,
   withHoldings,
-  mainFile,
-  PRIVATE_COPY,
 } from "../test/setup-holdings-fixture.js";
 import { heldSetup } from "../test/held-setup-database.js";
 import { chmod, readFile, writeFile } from "node:fs/promises";
@@ -214,16 +212,17 @@ it.each([
   },
 );
 
-it("a damaged database with no invoice and its own pending -wal still reads as damaged with nothing kept", async () => {
+it("a damaged database with no invoice and its own pending -wal is not ready, and changes no file", async () => {
   const held = await heldSetup({ pendingWal: true });
   const wal = await readFile(`${venueDb(held)}-wal`);
   damagePages(venueDb(held), "department_days");
   await writeFile(`${venueDb(held)}-wal`, wal);
-  expect(await readDatabase(held)).toMatchObject({
-    kind: "damaged",
-    code: "errcode 11",
-    seen: { kept: 0, records: 0, accepted: 0 },
+  const before = await files(held.roots.venueDir);
+  await expect(readDatabase(held)).rejects.toMatchObject({
+    code: "setup.not_ready",
+    reason: "database unreadable: damaged beside a -wal: errcode 11",
   });
+  expect(await files(held.roots.venueDir)).toEqual(before);
 });
 
 it.each([
@@ -234,7 +233,11 @@ it.each([
   async (failure, code) => {
     const held = await heldSetup({ pendingWal: true });
     const modules = withHoldings(held, async (db) => {
-      if (!PRIVATE_COPY.test(await mainFile(db))) throw failure;
+      // Only the main file read alone misses the row in the -wal.
+      const { rows } = await db.execute<{ n: number }>(
+        "select count(*) as n from adjustment_settings",
+      );
+      if (rows[0]!.n === 0) throw failure;
       return { records: 0, accepted: 0 };
     });
     await expect(readDatabase(held, modules)).rejects.toMatchObject({

@@ -47,13 +47,17 @@ error as it starts, not silently.
 
 If your first setup is interrupted, direct and supervised startup can serve a restricted recovery
 API before ordinary database opens or staged restore/reset work. It offers inspection
-(`GET /setup-api/first-setup/resolution`), ownership recovery with the setup password, Start again and
-publication-only Finish (`apps/server/src/setup-first-fiscal-api.ts`). Start again runs
+(`GET /setup-api/first-setup/resolution`), Start again's summary and Start again
+(`apps/server/src/first-setup-entry.ts`, `mountFirstSetupResolutionApi`). Start again runs
 over HTTPS only: it deletes the interrupted attempt, keeping no record of the invoice series names
 it chose, and ends the process so its supervisor starts it again.
 It needs no password. With the venue database missing it needs a confirmation that nothing was
-filed or sold; with it partly unreadable, it needs the summary the page showed sent back unchanged. To finish over HTTPS, recover ownership, retrieve the staged publication
-reference, confirm the current document and submit the unchanged publication inputs.
+filed or sold; with it partly unreadable, it needs the summary the page showed sent back unchanged.
+The ordinary setup server serves only the stop (`POST /setup-api/first-setup/resolution/stop`,
+`apps/server/src/setup-first-fiscal-api.ts`), over HTTPS: it refuses what Start again's summary
+would refuse, marks a setup still at its `claimed` or `consumption-intent` step abandoned, deletes
+nothing, and restarts the server, which then serves the repair page
+(`stopForStartAgain`, `apps/server/src/first-setup-resolution.ts`).
 
 Ordinary boot failures exit non-zero, but not all of them reach stdout the same way. A port that will
 not bind logs a structured `server.listen_failed` JSON line (see ["Log events"](#log-events)) and
@@ -191,8 +195,9 @@ writes the stamp" above for why that file was removed).
 On the A679 candidate, set `WAITRON_STATE_DIR` and choose an absolute `--recovery-pdf`
 destination outside state and venue storage. The command owns the setup attempt and compares the box's
 clock with the internet's; it asks nothing about the clock or recent setups, and when the name
-must wait it prints the time to run it again and stops. It requires password and kept-PDF
-confirmation; `--yes` does not answer the retention question, and a supplied JSON allocation is
+must wait it prints the time it carries on at and waits in the same run. The destination must not
+already hold a file: the command never writes over one, and refuses before it records anything. It
+requires password and kept-PDF confirmation; `--yes` does not answer the retention question, and a supplied JSON allocation is
 not Live authority.
 Follow the [current setup procedure](../../docs/operations/first-live-fiscal-setup.md).
 

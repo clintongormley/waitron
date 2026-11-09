@@ -20,11 +20,11 @@ import { heldSetup } from "../test/held-setup-database.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { expect, it } from "vitest";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 
-import { damageIndexes, damagePages } from "../test/damaged-database.js";
+import { cutAfterFirstPage, damageIndexes, damagePages } from "../test/damaged-database.js";
 
 it("a held database with a damaged table: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
   const f = await heldSetup();
@@ -189,4 +189,65 @@ it("damaged indexes beside an intact sale and invoice refuse kept-records, and d
   const f = await heldSetup({ invoices: 1 });
   damageIndexes(venueDb(f));
   await expectHeldRefused(f, keptRecords);
+});
+
+const damagedBesideWal = {
+  code: "setup.not_ready",
+  reason: "database unreadable: damaged beside a -wal: errcode 11",
+};
+
+/** Start again sent as the page sends it after showing "cannot be read", expected refused. */
+async function expectConfirmedRefused(f: Held, refusal: object) {
+  const { ids, actions } = await withoutSignIn(f);
+  await expectStartAgainRefused(
+    f,
+    () =>
+      actions.startAgainFirstSetup({
+        ...ids,
+        confirmUnreadableDatabase: {
+          shown: { reached: "fiscal-finished", databaseUnreadable: true },
+        },
+      }),
+    refusal,
+  );
+}
+
+it("a damaged database beside a non-empty -wal: the summary and Start again confirming it cannot be read both answer setup.not_ready, and no file changes", async () => {
+  const f = await heldSetup({ pendingWal: true });
+  cutAfterFirstPage(venueDb(f));
+  await expectHeldRefused(f, damagedBesideWal);
+  await expectConfirmedRefused(f, damagedBesideWal);
+});
+
+it("an invoice saved only into the -wal beside a main file cut after its first page: the summary and a confirmed Start again answer setup.not_ready, and no file changes", async () => {
+  const f = await heldSetup({ crash: { walBytes: 8000, invoices: 1 } });
+  cutAfterFirstPage(venueDb(f));
+  await expectHeldRefused(f, damagedBesideWal);
+  await expectConfirmedRefused(f, damagedBesideWal);
+});
+
+it("a damaged database beside its own -wal, with an invoice the read can see: a confirmed Start again is refused kept-records, and no file changes", async () => {
+  const f = await heldSetup({ pendingWal: true, invoices: 1 });
+  const wal = await readFile(`${venueDb(f)}-wal`);
+  damagePages(venueDb(f), "department_days");
+  await writeFile(`${venueDb(f)}-wal`, wal);
+  await expectHeldRefused(f, keptRecords);
+  await expectConfirmedRefused(f, keptRecords);
+});
+
+it("control: the same damaged database with no -wal: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
+  const f = await heldSetup();
+  cutAfterFirstPage(venueDb(f));
+  const shown = await unreadableSummary(f);
+  expect(shown).toEqual({ reached: "fiscal-finished", databaseUnreadable: true });
+  await expectUnreadableDeleted(f, shown);
+});
+
+it("control: the same damaged database beside an empty -wal: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
+  const f = await heldSetup();
+  cutAfterFirstPage(venueDb(f));
+  await writeFile(`${venueDb(f)}-wal`, "");
+  const shown = await unreadableSummary(f);
+  expect(shown).toEqual({ reached: "fiscal-finished", databaseUnreadable: true });
+  await expectUnreadableDeleted(f, shown);
 });
