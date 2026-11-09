@@ -1115,6 +1115,26 @@ it("keeps a staged change through an update that leaves its dish as it was", asy
   expect(seen).toMatchObject([{ revision: 10, patch: { note: "warm", quantity: "3" } }]);
 });
 
+it("keeps a staged change, saying nothing, when the menu stops offering the dish's extras list but the dish is as it was", async () => {
+  const lines = [line({ productId: "burger", menuItemId: "offer-burger" }), bacon];
+  const el = await openRow({
+    lines,
+    products: [flan, { ...burger, offeredModifiers: [extrasList] }],
+    revision: 9,
+    billEdit,
+  });
+  const seen = changes(el);
+  await editNote(el, "warm, no cream");
+  el.products = [flan, { ...burger, offeredModifiers: [] }];
+  await el.updateComplete;
+  await q<TillModifierPicker>(el, "till-modifier-picker")!.updateComplete;
+  await el.updateComplete;
+  expect(footerSentence(el)?.textContent?.trim() ?? "").toBe("");
+  expect(await noteShown(el)).toBe("warm, no cream");
+  await pressChange(el);
+  expect(seen).toMatchObject([{ patch: { note: "warm, no cream" } }]);
+});
+
 it("moves focus to the count when Change dish is pressed with a lower one", async () => {
   const el = await openRow({ lines: [line()] });
   await setQuantity(el, "1");

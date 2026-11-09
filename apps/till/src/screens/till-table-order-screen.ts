@@ -556,10 +556,11 @@ type ActionStep = "closed" | "pick" | "move-dishes" | "split-table" | "split-tab
  * were not. */
 const splitRowsUnreadSentence = (): string => t("table.split_updated_elsewhere");
 
-/** What a Sent window's fields start from: the product and selection, and its dishes' counts. */
+/** What a Sent window's fields start from: the product and selection, and its dishes' stored facts. */
 type SentChangeSeed<Pending> = {
   pending: Pending;
-  counts: string[];
+  /** Each member's count, note, answers and extras rows as stored, never through the live menu. */
+  stored: string;
   product: TillProduct;
   selection: LineSelection;
 };
@@ -567,6 +568,8 @@ type SentChangeSeed<Pending> = {
 interface LinesIndex {
   lines: readonly TabLine[];
   byNo: Map<number, TabLine>;
+  /** Each dish's extras rows, by the dish's line number. */
+  children: Map<number, TabLine[]>;
   /** The dishes an extra's station keeps from changing. */
   extraForbidsChange: Set<number>;
 }
@@ -592,15 +595,6 @@ function stationAllowsChange(row: TabLine): boolean {
   );
 }
 
-/** Whether two seeds of one Sent window describe the same stored dish. */
-function sameSentFacts<P>(a: SentChangeSeed<P>, b: SentChangeSeed<P>): boolean {
-  return (
-    a.selection.note === b.selection.note &&
-    sameOptionSelections(a.selection.options ?? [], b.selection.options ?? []) &&
-    sameExtraSelections(a.selection.extras ?? [], b.selection.extras ?? []) &&
-    a.counts.join() === b.counts.join()
-  );
-}
 
 const isAnswer = (read: SplitSources | "failed" | null): read is SplitSources =>
   read !== null && read !== "failed";
@@ -2332,7 +2326,7 @@ export class TillTableOrderScreen extends LitElement {
     const members = pending === null ? undefined : this.#sentLineMembers();
     const lines = members === undefined ? undefined : this.#sentChangeLines(members);
     if (lines !== undefined && seed?.pending === pending) {
-      if (sameSentFacts(seed, this.#sentChangeSeedOf(pending!, lines))) return;
+      if (seed.stored === this.#storedSentFacts(lines)) return;
       if (this.#sentChangeHeld(pending!)) this.sentChangeOvertaken = pending;
       this.sentChangeRefused = null;
     }
@@ -2582,12 +2576,18 @@ export class TillTableOrderScreen extends LitElement {
   #linesIndex(): LinesIndex {
     if (this.#linesIndexed?.lines !== this.lines) {
       const extraForbidsChange = new Set<number>();
-      for (const row of this.lines)
-        if (row.parentLineNo != null && !stationAllowsChange(row))
-          extraForbidsChange.add(row.parentLineNo);
+      const children = new Map<number, TabLine[]>();
+      for (const row of this.lines) {
+        if (row.parentLineNo == null) continue;
+        if (!stationAllowsChange(row)) extraForbidsChange.add(row.parentLineNo);
+        const kept = children.get(row.parentLineNo);
+        if (kept === undefined) children.set(row.parentLineNo, [row]);
+        else kept.push(row);
+      }
       this.#linesIndexed = {
         lines: this.lines,
         byNo: new Map(this.lines.map((line) => [line.lineNo, line])),
+        children,
         extraForbidsChange,
       };
     }
@@ -2685,7 +2685,7 @@ export class TillTableOrderScreen extends LitElement {
     const offered = offeredListsOf(live);
     const sendsExtras = offered.some((entry) => entry.kind === "extras");
     const extras: SelectedExtra[] = [];
-    for (const child of this.lines.filter((row) => row.parentLineNo === line.lineNo)) {
+    for (const child of this.#linesIndex().children.get(line.lineNo) ?? []) {
       const held = {
         productId: child.productId,
         listId: child.listId,
@@ -2703,7 +2703,7 @@ export class TillTableOrderScreen extends LitElement {
     }
     return {
       pending,
-      counts: lines.map((each) => each.quantity),
+      stored: this.#storedSentFacts(lines),
       product: {
         ...live,
         name: this.#nameForLine(line),
@@ -2716,6 +2716,20 @@ export class TillTableOrderScreen extends LitElement {
         note: line.note ?? "",
       },
     };
+  }
+
+  #storedSentFacts(lines: readonly TabLine[]): string {
+    const children = this.#linesIndex().children;
+    return JSON.stringify(
+      lines.map((each) => [
+        each.quantity,
+        each.note ?? "",
+        JSON.stringify(each.optionSnapshots ?? []),
+        (children.get(each.lineNo) ?? [])
+          .map((row) => JSON.stringify([row.listId, row.productId, row.quantity]))
+          .sort(),
+      ]),
+    );
   }
 
   /** A bill with no party is adjusted from the counter's basket, not from this screen. */
