@@ -137,9 +137,12 @@ are tests (the one production caller, `apps/server/src/cancel-credit.ts:68`, pas
 1.5 times the size for an outside opinion, and the AEAT preproduction run belongs to the
 staff-usable slice; owner (19:57, relayed) let this slice land on its own. The review found that an
 earlier correction naming no invoice line used up a rate's budget but no line's, so an exact split
-could take a line already credited; such history is now refused with
+could take a line already credited; such history, at a rate the split uses, is now refused with
 `sale.correction_history_unusable`, as are an invoice line or earlier correction line with no
 stored gross and an invoice with not exactly one stored group at a rate. Written lines after review:
-code 321 added, 32 removed; tests 770 (the refusal table, refusal-order cases and one helper that
-also checks the corrective series' next number did not move). Tests are about 2.4 times the code,
-past the plan's "about twice", because the plan requires every refusal as its own case.
+code 321 added, 32 removed; tests 816 (the refusal table, refusal-order cases, one helper that also
+checks the corrective series' next number did not move, and cases the review's deletion probes
+showed were missing). Tests are about 2.5 times the code, past the plan's "about twice", because
+the plan requires every refusal as its own case. At about 1,140 written lines the slice is about 1.9
+times the planned 600, past the watcher's 1.5 times stop; the growth came from the review's fixes,
+and the PR says so for the owner.

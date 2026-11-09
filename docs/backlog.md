@@ -347,7 +347,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A802 — correct part of a paid invoice: build the approved design.**
   **2026-11-09:** The first arithmetic foundation and cumulative base/VAT bounds follow the [approved cash-first extraction plan](superpowers/plans/2026-11-09-a802-cash-first-extraction.md); staff correction preview/acceptance remains a later slice.
-  **2026-11-09:** Slice 2 ([plan](superpowers/plans/2026-11-09-a802-exact-vat-writer.md)): `recordCorrection` files an exact `partialVatBreakdown` and refuses any other. Next, slice 3 reads an invoice's correction history for the calculator; an AEAT preproduction run of the final-cent shape comes before the slice staff can use.
+  **2026-11-09:** Slice 2 ([plan](superpowers/plans/2026-11-09-a802-exact-vat-writer.md)): `recordCorrection` files a supplied `partialVatBreakdown` only when it follows slice 1's rule given every earlier correction, and refuses any other supplied split; without the field nothing changes. Next, slice 3 reads an invoice's correction history for the calculator; an AEAT preproduction run of the final-cent shape comes before the slice staff can use.
 
   Follow the [build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md), including its separate protected-writer approval
   and exact-gross qualification. The fiscal PR waits for the owner to land it.

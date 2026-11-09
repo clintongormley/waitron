@@ -1187,8 +1187,9 @@ literals and does not file a whole-invoice credit, so it says nothing about that
 
 _2026-11-09 (A802 slice 2):_ a partial correction may supply its breakdown (`partialVatBreakdown`).
 It is not rounded: it is refused with `sale.correction_breakdown_invalid` unless every amount is at
-the cent and agrees with the lines and the earlier corrections, and with
-`sale.correction_history_unusable` when the stored invoice or earlier corrections lack what that check needs.
+the cent and agrees with its own total and lines, the invoice and the corrections already recorded
+against it, and with `sale.correction_history_unusable` when what is stored about the invoice or
+those corrections cannot be checked.
 
 **A guard got quietly weaker and had to be shored up.** With `quantity` and `rate` converted, the
 vocabulary stopped importing `numeric` at all — and `scripts/column-vocabulary.test.ts` DERIVES its
