@@ -977,8 +977,8 @@ product failures.
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".
   The server's adjustment venue gives English customer-facing and kitchen dish names and English
   category, printer, device, location and administrator names; its locale, street address,
-  reasons' Spanish translations and setup's default station "Cocina" stay, and its Spanish staff
-  dish names, legal name and operation description remain.
+  reasons' Spanish translations and setup's default station "Cocina" stay, and its legal name
+  and operation description remain.
   The server's kitchen-ticket renderer suite uses English station, table, dish, note and place
   names; it keeps the Spanish ticket words its es-ES cases print, its accented wrapping and
   character samples and one French sample.
