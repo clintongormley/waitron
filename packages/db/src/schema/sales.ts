@@ -278,8 +278,6 @@ export const tenders = table(
       foreignColumns: [sales.id],
       name: "tenders_sale_fk",
     }).onDelete("restrict"),
-    // No delete rule: the column's `REFERENCES` in `drizzle/0000_baseline.sql` names none, so the
-    // table holds `no action`, and a declared `restrict` would not match it.
     foreignKey({
       columns: [t.billPaymentId],
       foreignColumns: [billPayments.id],

@@ -35,7 +35,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
  * `products.image`, `sections.image`, `section_members.folder_overrides`'s `image` key and
  * `menu_version_images.filename` may only name a photo that exists, and a photo one of the first
  * three still names cannot be deleted or renamed. Nor can a photo a LIVE menu version or a queued
- * edition names. The rules are triggers in core's set (`packages/db/drizzle/0000_baseline.sql`),
+ * edition names. The rules are triggers in core's set (`packages/db/triggers/core.sql`),
  * not keys.
  *
  * READING `sqlite_master` IS NOT ENOUGH, so the names are pinned AND every rule has a real

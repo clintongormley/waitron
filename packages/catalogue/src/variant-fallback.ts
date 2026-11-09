@@ -58,7 +58,7 @@ export const parentJoin = eq(parentProducts.id, products.parentId);
  *
  * Typed non-null, for a column `products_top_level_owns_ck` requires on every product with no
  * parent: a variant's parent exists (the composite foreign key, `on delete restrict`) and has no
- * parent of its own (the `products_variant_*` triggers in `packages/db/drizzle/0000_baseline.sql`),
+ * parent of its own (the `products_variant_*` triggers in `packages/db/triggers/core.sql`),
  * so the value is never null.
  */
 function owned<C extends AnyColumn>(column: C, parentColumn: AnyColumn): SQL<C["_"]["data"]> {

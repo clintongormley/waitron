@@ -30,7 +30,7 @@ export const billPaymentRefundState = enumType(["pending", "completed", "failed"
  * Its state moves only pending → received, pending → failed, and received → declined while no
  * tender names it. Only the pending-to-received card transition can revise applied money and tip;
  * received amounts stay fixed. `bill_payments_guard_update` and `bill_payments_no_delete` enforce
- * these rules.
+ * these rules (`triggers/core.sql`).
  *
  * `requested_by` and `attested_by` are plain person ids with no key.
  */
@@ -134,7 +134,7 @@ export const billPaymentLines = table(
  * one, the provider's refund id once, and the outcome — with an attestation when a manager records
  * it — may be written; after the outcome nothing changes, and a refund is never deleted. Those
  * rules are the `bill_payment_refunds_guard_update` and `bill_payment_refunds_no_delete` triggers
- * (`drizzle/0000_baseline.sql`).
+ * (`triggers/core.sql`).
  *
  * `authorized_by`, `requested_by` and `attested_by` are plain person ids, as `requested_by` is on
  * `bill_payments`.
