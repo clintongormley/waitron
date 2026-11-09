@@ -161,16 +161,6 @@ jobs:
           node-version-file: ".nvmrc"
           package-manager-cache: false
 
-      - id: server-route
-        name: Choose a responsive CI route
-        if: vars.DISPOSABLE_TESTS_MODE == 'server'
-        timeout-minutes: 2
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-          LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
-        run: node scripts/ci-server-health.mjs route
-
       - id: classify
         env:
           FULL: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
@@ -304,6 +294,18 @@ jobs:
             pnpm "$@" ls --depth -1 --json \
               | node scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
           fi
+
+      - id: server-route
+        name: Choose a responsive CI route
+        if: vars.DISPOSABLE_TESTS_MODE == 'server'
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          CLASSIFIED: ${{ toJSON(steps.classify.outputs) }}
+          GATES: ${{ toJSON(steps.gates.outputs) }}
+          GH_TOKEN: ${{ github.token }}
+          LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
+        run: node scripts/ci-server-health.mjs route
 
       # These two stay last so the outputs are set even when one fails: `lint`, `root-guards` and
       # `server-queue-watchdog` still run then and read them. Set outputs no longer show a failure,

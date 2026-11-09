@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { appendFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { appendFileSync, readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
+import { URL, pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
 class InventoryUnavailable extends Error {}
@@ -132,6 +133,43 @@ export async function serverHealth(options, unavailable) {
   return { stuck: running || progressing ? [] : stuck, running, recent };
 }
 
+export function initialJobs(
+  outputs,
+  workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
+) {
+  assert.ok(outputs?.code === "true" || outputs?.code === "false", "Unknown CI selection");
+  let count = 0;
+  for (const [, id, body] of workflow.matchAll(
+    /^ {2}([\w-]+):\n([\s\S]*?)(?=^ {2}[\w-]+:|$(?![\s\S]))/gm,
+  )) {
+    if (!/^ {4}needs: (changes|\[changes\])$/m.test(body) || id === "server-queue-watchdog")
+      continue;
+    const condition = body.match(/^ {4}if: (.+)$/m)?.[1];
+    assert.ok(condition, `Missing initial job condition: ${id}`);
+    const enabled = runInNewContext(
+      condition.replace(/^\$\{\{ | \}\}$/g, ""),
+      {
+        needs: { changes: { outputs, result: "success" } },
+        inputs: { server_probe: false },
+        always: () => true,
+      },
+      { timeout: 100 },
+    );
+    assert.equal(typeof enabled, "boolean", `Unknown initial job condition: ${id}`);
+    if (!enabled) continue;
+    if (/^ {6}matrix:/m.test(body)) {
+      const matrix = body.match(/^ {6}matrix:\n((?: {8}[^\n]*\n)+)/m)?.[1] ?? "";
+      const dimensions = [...matrix.matchAll(/^ {8}([\w-]+):/gm)].map(([, name]) => name);
+      assert.deepEqual(dimensions, ["shard"], `Unsupported initial job matrix: ${id}`);
+      const shards = JSON.parse(matrix.match(/^ {8}shard: (\[[^\n]+\])$/m)?.[1] ?? "null");
+      assert.ok(Array.isArray(shards) && shards.length > 0, `Unknown initial job matrix: ${id}`);
+      count += shards.length;
+    } else count++;
+  }
+  assert.ok(count >= 2, "Missing initial workflow jobs");
+  return count;
+}
+
 export async function serverRoute(options) {
   const { runId, attempt = 1, request, repository, repositoryId } = options;
   const unavailable = [];
@@ -166,6 +204,11 @@ export async function serverRoute(options) {
       route: "server",
       reason: `CI inventory could not be verified; using the server: ${unavailable.join("; ")}`,
     };
+  const selectedJobs =
+    typeof options.selectedJobs === "function"
+      ? options.selectedJobs()
+      : (options.selectedJobs ?? 1);
+  assert.ok(Number.isSafeInteger(selectedJobs) && selectedJobs > 0, "Unknown selected job count");
   const runs = new Map();
   for (const status of ["queued", "in_progress"]) {
     for (const run of await inventory(
@@ -187,8 +230,8 @@ export async function serverRoute(options) {
     }
   }
   return {
-    route: !queued && running < 20 ? "hosted" : "server",
-    reason: `Waitron hosted jobs: ${running} running, ${queued} queued; no stalled server queue was observed.`,
+    route: !queued && running + selectedJobs <= 20 ? "hosted" : "server",
+    reason: `Waitron hosted jobs: ${running} running, ${queued} queued; ${selectedJobs} selected initial jobs; no stalled server queue was observed.`,
   };
 }
 
@@ -278,7 +321,7 @@ export async function healthCommand(command, options, { report, output }) {
       } catch (error) {
         answer = {
           route: "server",
-          reason: `CI inventory could not be verified; using the server: ${error.message}`,
+          reason: `CI routing inputs could not be verified; using the server: ${error.message}`,
         };
       }
       output(`server_route=${answer.route}`);
@@ -327,6 +370,7 @@ export async function main(command, env = process.env, request = githubRequest) 
       repositoryId: Number(env.GITHUB_REPOSITORY_ID),
       runId: Number(env.GITHUB_RUN_ID),
       attempt: Number(env.GITHUB_RUN_ATTEMPT),
+      selectedJobs: () => initialJobs({ ...JSON.parse(env.CLASSIFIED), ...JSON.parse(env.GATES) }),
       prefix: env.LABEL_PREFIX || "dt",
       ref: "main",
     },

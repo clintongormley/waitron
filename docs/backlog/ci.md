@@ -567,7 +567,8 @@ The original entries retain their text from the index (backlog review, 2026-11-0
 A1424's live qualification was added on 7 November 2026.
 
 - **A1424 / A1440: finish qualifying server routing and recovery on real workloads.**
-  CI prefers GitHub when Waitron has no hosted queue and fewer than 20 hosted jobs running;
+  CI prefers GitHub when Waitron has no hosted queue and the selected initial jobs fit
+  within 20 minus its running hosted count;
   otherwise ordinary same-repository jobs are eligible for the measured global pool. Family caps
   have been removed, and routing, recovery, image smoke, the final aggregate and publication stay hosted.
   Image smoke remains hosted until a disposable guest is qualified (watcher, 2026-11-09 08:20);
@@ -581,9 +582,9 @@ A1424's live qualification was added on 7 November 2026.
   The successful stream job in main run 42506794616 applied loopback MTU 1500 and
   `TMPDIR=/dev/shm`; this is that job’s receipt, not a full guest qualification.
   Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
-  drills. Keep the corrected v40 controller; the existing routing job uses the hosted
-  approximation above (watcher, 2026-11-09 10:01). A1454 is parked with six slots retained (watcher,
-  2026-11-09 08:20); A1461 reduces run sizes. Per-job
+  drills. Keep the corrected v41 controller; the existing routing job uses the hosted
+  approximation above (watcher, 2026-11-09 10:01). A1454 is dropped with six slots retained (watcher,
+  2026-11-09 10:24); A1461 reduces run sizes. Per-job
   overflow, the remaining workflows, second-host registration and queue measurements remain open. Lane I reports
   existing-record observations on 15 November; episodic status reads cannot prove the full-day
   no-avoidable-wait target. Never drain other lanes' work for a drill.
@@ -739,11 +740,13 @@ A1424's live qualification was added on 7 November 2026.
   illustrative replay, not measured alternate outcomes. Its fit-only rules leave more modeled
   capacity idle; no snapshot-freshness limit was validated. Keep the deployed controller,
   advance A1454 and A1461, and report existing-record observations on 15 November. **2026-11-09:** the watcher
-  parked A1454 and retained six slots after its measurement-only cut; A1461 reduces run sizes. No new
+  dropped A1454 and retained six slots after its measurement-only cut; A1461 reduces run sizes. No new
   collector, workflow, reservation service or credential carrier is approved. **2026-11-09 10:01:**
   the owner approved the repository-only GitHub-first approximation in the existing router: no
   hosted queue and fewer than 20 running hosted jobs chooses GitHub; otherwise the server-health
-  check applies. This supersedes parking that routing rule; v40 and six guest slots stay unchanged.
+  check applies. This supersedes parking that routing rule; v40 and six guest slots stay unchanged. **2026-11-09 12:05:**
+  hosted routing additionally requires the selected initial job wave to fit the remaining room.
+  Cloud PR #1115 publishes the matching 30-record reader in v41; six slots remain.
 
 - **A1459: measured shared startup, with child internals still unknown (2026-11-08).**
 
