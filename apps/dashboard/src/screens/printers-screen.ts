@@ -91,6 +91,14 @@ function hasErrors(errors: DetailEditErrors): boolean {
   return Object.values(errors).some((error) => error !== "");
 }
 
+function pageSize(media: PagePrinterRow["media"]): string {
+  return t(
+    media === "iso_a4_210x297mm"
+      ? "printers.invoice_printer_a4"
+      : "printers.invoice_printer_letter",
+  );
+}
+
 function detailsSection(section: {
   id: string;
   heading: string;
@@ -2747,13 +2755,13 @@ export class PrintersScreen extends LitElement {
     else proceed();
   }
 
-  #detailEditErrors(printer: Printer): DetailEditErrors {
+  /** Only a network receipt printer has an address and port to check. */
+  #detailEditErrors(id: string, network: boolean): DetailEditErrors {
     const draft = this.detailEdit;
-    if (draft?.id !== printer.id) return { name: "", host: "", port: "" };
+    if (draft?.id !== id) return { name: "", host: "", port: "" };
     const port = draft.port.trim();
-    const network = printer.transport === "network_tcp";
     return {
-      name: draft.name.trim() ? "" : t("form.name_required"),
+      name: draft.name.trim() ? (draft.nameRefusal ?? "") : t("form.name_required"),
       host: network && !draft.host.trim() ? t("printers.host_required") : "",
       port:
         network && port && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
@@ -2767,7 +2775,7 @@ export class PrintersScreen extends LitElement {
     if (!scope || saveActionState(scope).unchanged) return;
     const draft = this.detailEdit;
     if (draft?.id !== printer.id || draft.saving) return;
-    if (hasErrors(this.#detailEditErrors(printer))) return;
+    if (hasErrors(this.#detailEditErrors(printer.id, printer.transport === "network_tcp"))) return;
     const values = this.#detailEditValues();
     const baseline = this.#detailEditBaseline!;
     const saved = this.#savedEditValues(printer);
@@ -2790,45 +2798,60 @@ export class PrintersScreen extends LitElement {
       this.detailEdit = { ...this.detailEdit!, saving: false, error: codeMessage(codeOf(error)) };
       return;
     }
+    await this.#afterDetailSave(scope, values, () => this.#load());
+  }
+
+  /** The form stays open while this person typed more during the save. */
+  async #afterDetailSave(
+    scope: DraftScope<DetailEditValues>,
+    values: DetailEditValues,
+    reload: () => Promise<void>,
+  ): Promise<void> {
     if (!this.isConnected || scope !== this.#detailEditScope) return;
     scope.commit(values);
     this.#detailEditBaseline = values;
     if (scope.isDirty()) this.detailEdit = { ...this.detailEdit!, saving: false, error: null };
     else this.#disposeDetailDrafts();
-    await this.#load();
+    await reload();
   }
 
-  async #setDetailActive(printer: Printer, active: boolean): Promise<void> {
+  /** The details' Active switch, for either kind: a refusal puts the switch back and shows under it. */
+  async #setDetailActive(
+    printer: { id: string; active: boolean },
+    active: boolean,
+    how: { switchName: string; write: () => Promise<unknown>; reload: () => Promise<void> },
+  ): Promise<void> {
     if (this.detailActiveSavingIds.has(printer.id) || active === printer.active) return;
-    this.detailActiveSavingIds = new Set([...this.detailActiveSavingIds, printer.id]);
     this.detailActiveError = null;
+    const written = await this.#writeActive(printer.id, how.write, (code) => {
+      if (this.selectedPrinterId !== printer.id) return;
+      this.detailActiveError = code;
+      const toggle = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+        `[name="${how.switchName}"]`,
+      );
+      if (toggle) toggle.checked = printer.active;
+    });
+    if (written) await how.reload();
+  }
+
+  /** Writes a printer's Active state while it counts as saving; false when it was refused. */
+  async #writeActive(
+    id: string,
+    write: () => Promise<unknown>,
+    refused: (code: string) => void,
+  ): Promise<boolean> {
+    this.detailActiveSavingIds = new Set([...this.detailActiveSavingIds, id]);
     try {
-      await this.api.updatePrinter(printer.id, { active });
+      await write();
+      return true;
     } catch (error) {
-      if (this.selectedPrinterId === printer.id) {
-        this.detailActiveError = codeOf(error);
-        const toggle = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-switch"]>(
-          '[name="printer-detail-active"]',
-        );
-        if (toggle) toggle.checked = printer.active;
-      }
-      return;
+      refused(codeOf(error));
+      return false;
     } finally {
       this.detailActiveSavingIds = new Set(
-        [...this.detailActiveSavingIds].filter((id) => id !== printer.id),
+        [...this.detailActiveSavingIds].filter((saving) => saving !== id),
       );
     }
-    await this.#load();
-  }
-
-  #pagePrinterEditErrors(row: PagePrinterRow): DetailEditErrors {
-    const draft = this.detailEdit;
-    if (draft?.id !== row.id) return { name: "", host: "", port: "" };
-    return {
-      name: draft.name.trim() ? (draft.nameRefusal ?? "") : t("form.name_required"),
-      host: "",
-      port: "",
-    };
   }
 
   async #savePagePrinterEdit(row: PagePrinterRow): Promise<void> {
@@ -2836,7 +2859,7 @@ export class PrintersScreen extends LitElement {
     if (!scope || saveActionState(scope).unchanged) return;
     const draft = this.detailEdit;
     if (draft?.id !== row.id || draft.saving || !this.canManage) return;
-    if (hasErrors(this.#pagePrinterEditErrors(row))) return;
+    if (hasErrors(this.#detailEditErrors(row.id, false))) return;
     const values = this.#detailEditValues();
     this.detailEdit = { ...draft, saving: true, error: null, nameRefusal: null };
     this.detailActiveError = null;
@@ -2855,12 +2878,7 @@ export class PrintersScreen extends LitElement {
       };
       return;
     }
-    if (!this.isConnected || scope !== this.#detailEditScope) return;
-    scope.commit(values);
-    this.#detailEditBaseline = values;
-    if (scope.isDirty()) this.detailEdit = { ...this.detailEdit!, saving: false, error: null };
-    else this.#disposeDetailDrafts();
-    await this.#refreshPagePrinters();
+    await this.#afterDetailSave(scope, values, () => this.#refreshPagePrinters());
   }
 
   /** Closing the details asks first when a detail draft is dirty, through the address change. */
@@ -2879,10 +2897,12 @@ export class PrintersScreen extends LitElement {
     const p = this.printers.find(({ id }) => id === this.selectedPrinterId);
     const a4 = p ? undefined : this.pagePrinters.find(({ id }) => id === this.selectedPrinterId);
     const editing = p !== undefined && this.detailEdit?.id === p.id;
-    const errors = editing ? this.#detailEditErrors(p) : undefined;
+    const errors = editing
+      ? this.#detailEditErrors(p.id, p.transport === "network_tcp")
+      : undefined;
     const a4Errors =
       a4 && this.canManage && this.detailEdit?.id === a4.id
-        ? this.#pagePrinterEditErrors(a4)
+        ? this.#detailEditErrors(a4.id, false)
         : undefined;
     return html`<wt-modal
       size="standard"
@@ -2999,30 +3019,6 @@ export class PrintersScreen extends LitElement {
     </div>`;
   }
 
-  /** Switches an A4 printer off; the server refuses switching one back on, which Add a printer does. */
-  async #setPagePrinterInactive(row: PagePrinterRow): Promise<void> {
-    if (this.detailActiveSavingIds.has(row.id) || !row.active || !this.canManage) return;
-    this.detailActiveSavingIds = new Set([...this.detailActiveSavingIds, row.id]);
-    this.detailActiveError = null;
-    try {
-      await this.api.updatePagePrinter(row.id, { active: false });
-    } catch (error) {
-      if (this.selectedPrinterId === row.id) {
-        this.detailActiveError = codeOf(error);
-        const toggle = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-switch"]>(
-          '[name="page-printer-detail-active"]',
-        );
-        if (toggle) toggle.checked = row.active;
-      }
-      return;
-    } finally {
-      this.detailActiveSavingIds = new Set(
-        [...this.detailActiveSavingIds].filter((id) => id !== row.id),
-      );
-    }
-    await this.#refreshPagePrinters();
-  }
-
   #renderPagePrinterDetails(row: PagePrinterRow): TemplateResult {
     const saving = this.detailActiveSavingIds.has(row.id);
     return html`<section data-test="page-printer-status">
@@ -3039,7 +3035,13 @@ export class PrintersScreen extends LitElement {
                 ?disabled=${!row.active || !this.canManage || saving}
                 @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
                   event.stopPropagation();
-                  if (!event.detail.checked) void this.#setPagePrinterInactive(row);
+                  // The server refuses switching an A4 printer back on; Add a printer does that.
+                  if (event.detail.checked || !this.canManage) return;
+                  void this.#setDetailActive(row, false, {
+                    switchName: "page-printer-detail-active",
+                    write: () => this.api.updatePagePrinter(row.id, { active: false }),
+                    reload: () => this.#refreshPagePrinters(),
+                  });
                 }}
               ></wt-switch>
             </div>
@@ -3083,11 +3085,7 @@ export class PrintersScreen extends LitElement {
           rows: [
             {
               label: t("printers.invoice_printer_paper"),
-              value: t(
-                row.media === "iso_a4_210x297mm"
-                  ? "printers.invoice_printer_a4"
-                  : "printers.invoice_printer_letter",
-              ),
+              value: pageSize(row.media),
               dataTest: "page-printer-detail-paper",
             },
           ],
@@ -3316,7 +3314,12 @@ export class PrintersScreen extends LitElement {
                 ?disabled=${this.detailActiveSavingIds.has(p.id)}
                 @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
                   event.stopPropagation();
-                  void this.#setDetailActive(p, event.detail.checked);
+                  const active = event.detail.checked;
+                  void this.#setDetailActive(p, active, {
+                    switchName: "printer-detail-active",
+                    write: () => this.api.updatePrinter(p.id, { active }),
+                    reload: () => this.#load(),
+                  });
                 }}
               ></wt-switch>
             </div>
@@ -3490,11 +3493,7 @@ export class PrintersScreen extends LitElement {
                 )}</span
               >`
             : html`<span data-test=${`page-printer-paper-${r.row.id}`}
-                >${t(
-                  r.row.media === "iso_a4_210x297mm"
-                    ? "printers.invoice_printer_a4"
-                    : "printers.invoice_printer_letter",
-                )}</span
+                >${pageSize(r.row.media)}</span
               >`,
       },
       {
@@ -3662,18 +3661,12 @@ export class PrintersScreen extends LitElement {
   async #disablePagePrinterFromRow(row: PagePrinterRow): Promise<void> {
     if (!row.active || this.detailActiveSavingIds.has(row.id) || !this.canManage) return;
     this.#testPages.setActionError(null);
-    this.detailActiveSavingIds = new Set([...this.detailActiveSavingIds, row.id]);
-    try {
-      await this.api.updatePagePrinter(row.id, { active: false });
-    } catch (error) {
-      this.#testPages.setActionError(codeOf(error));
-      return;
-    } finally {
-      this.detailActiveSavingIds = new Set(
-        [...this.detailActiveSavingIds].filter((id) => id !== row.id),
-      );
-    }
-    await this.#refreshPagePrinters();
+    const written = await this.#writeActive(
+      row.id,
+      () => this.api.updatePagePrinter(row.id, { active: false }),
+      (code) => this.#testPages.setActionError(code),
+    );
+    if (written) await this.#refreshPagePrinters();
   }
 
   #renderTabActions(): TemplateResult {

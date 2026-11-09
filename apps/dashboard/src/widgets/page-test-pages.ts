@@ -42,7 +42,6 @@ export class PageTestPages implements ReactiveController {
   /** One poll per printer; a read that returns after its poll was replaced is dropped. */
   readonly #polls = new Map<string, { timer: ReturnType<typeof setTimeout> }>();
   readonly #host: ReactiveControllerHost & HTMLElement;
-  readonly #viewers = new Set<ReactiveControllerHost>();
   readonly #api: () => PageTestPagesApi | undefined;
   readonly #pollMs: () => number;
 
@@ -56,12 +55,6 @@ export class PageTestPages implements ReactiveController {
     host.addController(this);
   }
 
-  /** Another element drawing this state, redrawn with the host. Returns the way to stop. */
-  watch(viewer: ReactiveControllerHost): () => void {
-    this.#viewers.add(viewer);
-    return () => this.#viewers.delete(viewer);
-  }
-
   hostConnected(): void {
     for (const [id, page] of this.testPages) if (isOut(page)) this.#poll(id);
   }
@@ -73,7 +66,6 @@ export class PageTestPages implements ReactiveController {
 
   #changed(): void {
     this.#host.requestUpdate();
-    for (const viewer of this.#viewers) viewer.requestUpdate();
   }
 
   /** Whether the row's Print test page is unavailable: disabled, being sent, or its page still out. */
@@ -84,11 +76,6 @@ export class PageTestPages implements ReactiveController {
   setActionError(code: string | null): void {
     this.actionError = code;
     this.actionErrorFrom = null;
-    this.#changed();
-  }
-
-  clearReadError(): void {
-    this.readError = null;
     this.#changed();
   }
 
