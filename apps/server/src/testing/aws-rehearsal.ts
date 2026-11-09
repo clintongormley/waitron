@@ -31,6 +31,8 @@ import {
 import {
   type BucketConfig,
   createBucketClient,
+  prepareBucketEncryption as prepareStreamBucketEncryption,
+  type ProbeResult,
   LITESTREAM_VERSION,
   nameOf,
   statusOf,
@@ -293,6 +295,7 @@ export interface AwsRehearsal {
   /** Makes and returns `<scratchBase>/waitron-aws-rehearsal-<runId>/<label>/`; teardown removes the root. */
   scratch(label: string): Promise<string>;
   bucketConfig(prefix: string): BucketConfig;
+  prepareBucketEncryption(prefix: string): Promise<ProbeResult>;
   reserveUpload(bytes: number, role: string): void;
   reserveObjects(count: number): void;
   trackChild(pid: number): void;
@@ -323,6 +326,7 @@ export interface TeardownDeps {
 export interface AwsRehearsalDeps extends TeardownDeps, RehearsalProfileDeps {
   env: Env;
   createAdminClient(profile: RehearsalProfile, endpoint: string | undefined): AdminClient;
+  createScenarioClient?: typeof createBucketClient;
   randomSuffix(): string;
   runId(): string;
   commit(): string;
@@ -1323,6 +1327,37 @@ async function runOwned<T>(
         accessKeyId: profile.accessKeyId,
         secretAccessKey: profile.secretAccessKey,
       };
+    },
+    async prepareBucketEncryption(prefix) {
+      refuseOnceTearingDown();
+      const settings = ctx.bucketConfig(prefix);
+      const objects = (deps.createScenarioClient ?? createBucketClient)(settings);
+      const sendObject = objects.send.bind(objects);
+      // Runner object requests are marker-only, so probe objects keep the scenario client.
+      objects.send = (async (
+        command: object & { input: object },
+        options?: { abortSignal?: AbortSignal },
+      ) => {
+        const api = apiOf(command);
+        if (api === "GetBucketEncryption" || api === "PutBucketEncryption") {
+          const answer = await call(
+            client,
+            command,
+            api,
+            "prepare-encryption",
+            callDeps,
+            {},
+            signal,
+          );
+          if (answer.error !== undefined) throw answer.error;
+          return answer.output;
+        }
+        return sendObject(command as Parameters<typeof sendObject>[0], {
+          ...options,
+          abortSignal: signal,
+        });
+      }) as typeof objects.send;
+      return prepareStreamBucketEncryption(settings, () => objects);
     },
     reserveUpload,
     reserveObjects,

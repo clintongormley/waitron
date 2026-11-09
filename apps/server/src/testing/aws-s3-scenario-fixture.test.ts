@@ -31,6 +31,7 @@ function standIn() {
         secretAccessKey: "secret",
       };
     },
+    prepareBucketEncryption: async () => ({ ok: true }),
     reserveUpload: (bytes, role) => calls.push(["reserveUpload", bytes, role]),
     reserveObjects: (count) => calls.push(["reserveObjects", count]),
     trackChild: (pid) => calls.push(["trackChild", pid]),
