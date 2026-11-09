@@ -1,5 +1,12 @@
-import { openVenueDatabase, readActivityForSubject, withTransaction } from "@waitron/db";
-import { importSettingsDocuments } from "../../../packages/provisioning/src/settings-transfer.js";
+import {
+  openVenueDatabase,
+  nodes,
+  persons,
+  readActivityForSubject,
+  withTransaction,
+} from "@waitron/db";
+import { buildConfigurationBundle, importConfigurationTables } from "./configuration-transfer.js";
+import { schemaVersionsByModule } from "./backup-manifest.js";
 import {
   holdingsRead,
   askStartAgain,
@@ -261,11 +268,28 @@ it("imported settings history does not block Start again for a held setup", asyn
   const f = await heldSetup();
   const held = await openVenueDatabase(f.roots.venueDir);
   try {
+    const versions = await schemaVersionsByModule(held, f.host.modules);
+    const [node] = await held.venue.select({ id: nodes.id }).from(nodes).limit(1);
+    const [operator] = await held.venue.select({ id: persons.id }).from(persons).limit(1);
+    const bundle = await buildConfigurationBundle(
+      held.venue,
+      { nodeId: node!.id, sourceOperatorId: operator!.id },
+      f.host.modules,
+      new Date("2026-11-09T12:00:00.000Z"),
+      versions,
+    );
     await withTransaction(held.venue, (tx) =>
-      importSettingsDocuments(
+      importConfigurationTables(
         tx,
-        { adjustments: { version: 1, doc: { maxBillComp: 4000, billApproverRoles: ["manager"] } } },
+        {
+          ...bundle,
+          settings: {
+            ...bundle.settings,
+            adjustments: { version: 1, doc: { maxBillComp: 4000, billApproverRoles: ["manager"] } },
+          },
+        },
         f.host.modules,
+        versions,
       ),
     );
     expect(
