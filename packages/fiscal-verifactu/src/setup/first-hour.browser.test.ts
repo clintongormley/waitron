@@ -398,6 +398,11 @@ it("a reload during the box's wait makes the series by itself at zero, with no p
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
     );
+    const sent = calls.length;
+    vi.advanceTimersByTime(120_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(calls).toHaveLength(sent);
   } finally {
     vi.useRealTimers();
   }

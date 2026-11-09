@@ -735,6 +735,11 @@ it("a recorded wait shown by Compare clocks makes the series by itself at zero, 
     vi.advanceTimersByTime(61_000);
     await vi.waitFor(() => expect(selects(prepare)).toHaveLength(1));
     await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
+    const sent = prepare.mock.calls.length;
+    vi.advanceTimersByTime(120_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(prepare.mock.calls).toHaveLength(sent);
   } finally {
     vi.useRealTimers();
   }
