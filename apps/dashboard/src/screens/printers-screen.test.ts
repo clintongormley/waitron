@@ -12049,7 +12049,9 @@ describe("one table for every printer", () => {
         .mockResolvedValue({ id: "tp1", status: "waiting" }),
       ...overrides,
     } as Partial<DashboardApi>);
+    // Live re-reads go through the passive client, so it answers with the same stubs.
     const background = {
+      ...api,
       readPagePrinterTestPage: vi
         .fn<(id: string) => Promise<PageTestPage | null>>()
         .mockResolvedValue({ id: "tp1", status: "sent" }),
@@ -12417,7 +12419,9 @@ describe("an A4 printer's details", () => {
         .mockResolvedValue({ id: "tp1", status: "waiting" }),
       ...overrides,
     } as Partial<DashboardApi>);
+    // Live re-reads go through the passive client, so it answers with the same stubs.
     const background = {
+      ...api,
       readPagePrinterTestPage: vi.fn<(id: string) => Promise<PageTestPage | null>>(),
     };
     Object.assign(api, { background });
@@ -12557,15 +12561,23 @@ describe("an A4 printer's details", () => {
 
   it("keeps a refused disable's message through a new list, which is a read", async () => {
     const liveData = new LiveData();
+    const listPagePrinters = vi.fn().mockResolvedValue([pagePrinter]);
     const { el } = await openA4({
       liveData,
+      listPagePrinters,
       updatePagePrinter: vi.fn().mockRejectedValueOnce({ code: "connection.failed" }),
     } as Partial<DashboardApi>);
     toggleSwitch(el, '[name="page-printer-detail-active"]', false);
     await flush(el);
+    expect(detailText(el, "[data-test=printer-detail-active-error]")).toBe(
+      codeMessage("connection.failed"),
+    );
+    const reads = listPagePrinters.mock.calls.length;
+    listPagePrinters.mockResolvedValue([{ ...pagePrinter, name: "Upstairs office" }]);
     liveData.invalidate([{ type: "page_printers", id: "pp1" }]);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await vi.waitFor(() => expect(listPagePrinters.mock.calls.length).toBeGreaterThan(reads));
     await flush(el);
+    expect(detailsHeading(el)).toBe("Upstairs office");
     expect(detailText(el, "[data-test=printer-detail-active-error]")).toBe(
       codeMessage("connection.failed"),
     );
