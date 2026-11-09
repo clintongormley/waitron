@@ -1,11 +1,20 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   EPOCH_FILE,
   rebuildBaseline,
+  rebuildSets,
   readTriggers,
   splitStatements,
   updateEpochText,
@@ -101,6 +110,42 @@ function fold(f: ReturnType<typeof fixture>, tag = "0001_more") {
 }
 
 describe("rebuilding starting migrations", () => {
+  it("real drizzle-kit gives the same migration whatever the folder held, and nothing changes the second time", async () => {
+    const bookings = rebuildSets().find((set) => set.name === "bookings");
+    expect(bookings).toBeDefined();
+    const a = fixture("bookings"),
+      b = fixture("bookings");
+    for (const f of [a, b]) {
+      cpSync(bookings!.folder, f.set.folder, { recursive: true });
+      put(f.epochFile, readFileSync(EPOCH_FILE, "utf8"));
+    }
+    put(join(b.set.folder, "0000_baseline.sql"), "CREATE TABLE junk (id integer);");
+    const snap = JSON.parse(readFileSync(join(b.set.folder, "meta/0000_snapshot.json"), "utf8"));
+    snap.tables = {};
+    json(join(b.set.folder, "meta/0000_snapshot.json"), snap);
+    const rebuild = (f: typeof a, mode: "write" | "check" = "write") =>
+      rebuildBaseline({
+        set: { ...f.set, packageDir: bookings!.packageDir },
+        epochFile: f.epochFile,
+        mode,
+      });
+    await rebuild(a);
+    await rebuild(b);
+    expect(readFileSync(join(a.set.folder, "0000_baseline.sql"), "utf8")).toBe(
+      readFileSync(join(b.set.folder, "0000_baseline.sql"), "utf8"),
+    );
+    const snapshotAt = (f: typeof a) => {
+      const { id: _id, ...rest } = JSON.parse(
+        readFileSync(join(f.set.folder, "meta/0000_snapshot.json"), "utf8"),
+      );
+      return rest;
+    };
+    expect(snapshotAt(a)).toEqual(snapshotAt(b));
+    const before = bytes(a);
+    expect((await rebuild(a, "check")).outcome).toBe("unchanged");
+    expect((await rebuild(a)).outcome).toBe("unchanged");
+    expect(bytes(a)).toEqual(before);
+  }, 330_000);
   it.each(["core", "payments"])("rebuilds %s and appends its hand-written SQL", async (name) => {
     const f = fixture(name);
     put(join(f.set.packageDir, `triggers/${name}.sql`), TRIGGER + "\n");

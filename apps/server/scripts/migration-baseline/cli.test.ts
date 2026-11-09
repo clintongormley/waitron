@@ -22,6 +22,23 @@ function captured() {
 }
 
 describe("the migration-baseline command line", () => {
+  it.each(["rebuild", "rebuild-check"])(
+    "%s refuses a set outside the manifest",
+    async (command) => {
+      await expect(runCli([command, "--set", "nowhere"], () => {})).rejects.toThrow(
+        "The manifest has no set named nowhere",
+      );
+    },
+  );
+  it("rebuild takes only its required and optional flags", async () => {
+    await expect(runCli(["rebuild"], () => {})).rejects.toThrow("Usage:");
+    await expect(
+      runCli(["rebuild", "--set", "nowhere", "--fold-generated", "0001_x"], () => {}),
+    ).rejects.toThrow("The manifest has no set named nowhere");
+    await expect(runCli(["rebuild", "--set", "core", "--bogus", "x"], () => {})).rejects.toThrow(
+      "Usage:",
+    );
+  });
   it("refuses relative paths and an unknown command", async () => {
     await expect(
       runCli(["preserve", "--reference", "ref", "--set", "core", "--from", "core"], () => {}),
