@@ -95,9 +95,16 @@ it.each(["not-json", "null", "[]", '"wrong"', '{"secret":"-----BEGIN PRIVATE KEY
     const { el, fetcher } = await mount();
     await key(el);
     await file(el, content);
-    await create(el);
-    await vi.waitFor(() => expect(q(el, "file-error")?.textContent).toBeTruthy());
-    expect(fetcher).not.toHaveBeenCalled();
+    const read = vi.spyOn(File.prototype, "text");
+    try {
+      await create(el);
+      expect(read).toHaveBeenCalledTimes(1);
+      await read.mock.results[0]!.value;
+      await vi.waitFor(() => expect(q(el, "file-error")?.textContent?.trim()).toBeTruthy());
+      expect(fetcher).not.toHaveBeenCalled();
+    } finally {
+      read.mockRestore();
+    }
   },
 );
 
