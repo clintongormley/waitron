@@ -70,7 +70,7 @@ export async function setupVenue(db: Database): Promise<Venue> {
         country: "ES",
         taxId: nextNif(),
         legalName: "Deli Test SL",
-        name: "Sala principal",
+        name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
         operationDescription: "Venta en establecimiento",

@@ -40,7 +40,7 @@ async function setupTenant(adminPassword: string = OLD_PASSWORD): Promise<{ admi
         country: "ES",
         taxId: NIF,
         legalName: "Deli Test SL",
-        name: "Sala principal",
+        name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
         operationDescription: "Venta en establecimiento",

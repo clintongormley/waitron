@@ -214,7 +214,7 @@ export function provisionVenueBody(taxId: string) {
     taxId,
     legalName: "Deli Test SL",
     taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
-    name: "Sala principal",
+    name: "Main room",
     fiscalTerritory: "ES-common",
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
