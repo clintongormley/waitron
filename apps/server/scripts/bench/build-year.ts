@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+  appendFileSync,
   existsSync,
   readdirSync,
   readFileSync,
@@ -22,6 +23,7 @@ export const WORKING_DIR = "venue";
 export const COPY_DIR = "last-day";
 export const SESSION_FILE = "bench-session.json";
 export const VOLUME_FILE = "volume.json";
+export const REQUEST_TIMINGS_FILE = "request-timings.jsonl";
 const VENUE_FILE = "venue.db";
 
 export interface BuildYearOptions {
@@ -60,6 +62,7 @@ export async function buildYear(options: BuildYearOptions): Promise<void> {
   if (session !== undefined && session.seed !== seed)
     throw new Error(`bench: ${options.out} was built with seed ${session.seed}, not ${seed}`);
 
+  dropUncountedTimings(options.out, session?.day ?? 0);
   rmSync(working, { recursive: true, force: true });
   if (session !== undefined) copyFolder(copyFor(options.out, session), working);
 
@@ -77,14 +80,33 @@ export async function buildYear(options: BuildYearOptions): Promise<void> {
         const result = await tradeDay(venue, dateOf(day), billsPerDay, {
           beforeBill: (index) => options.beforeBill?.(day, index),
         });
-        await checkpoint(options.out, venue, {
-          day,
-          date: dateOf(day),
-          seed,
-          clockAt: clock.now().toISOString(),
-          deviceCookies: venue.deviceCookies(),
-        });
-        options.onDay?.(day, result, performance.now() - started);
+        const copying = performance.now();
+        let dayMs = 0;
+        await checkpoint(
+          options.out,
+          venue,
+          {
+            day,
+            date: dateOf(day),
+            seed,
+            clockAt: clock.now().toISOString(),
+            deviceCookies: venue.deviceCookies(),
+          },
+          () => {
+            const now = performance.now();
+            dayMs = now - started;
+            const line = {
+              day,
+              date: dateOf(day),
+              bills: result.bills.length,
+              dayMs,
+              checkpointMs: now - copying,
+              routes: result.requestTimings,
+            };
+            appendFileSync(join(options.out, REQUEST_TIMINGS_FILE), `${JSON.stringify(line)}\n`);
+          },
+        );
+        options.onDay?.(day, result, dayMs);
       }
     } finally {
       await venue.close();
@@ -106,6 +128,24 @@ function dayBounds(date: string) {
     { timeZone: BENCH_PROFILE.timeZone, dayCutover: BENCH_PROFILE.dayCutover, cutoverChanges: [] },
     date,
   );
+}
+
+/**
+ * A day's timing line is written just before the session counts that day, so a stop between the
+ * two leaves a line for a day the resume trades again. Only then is the file rewritten.
+ */
+function dropUncountedTimings(out: string, lastDay: number): void {
+  const path = join(out, REQUEST_TIMINGS_FILE);
+  if (!existsSync(path)) return;
+  const whole = readFileSync(path, "utf8")
+    .split("\n")
+    .filter((line) => line !== "");
+  const counted = whole.filter(
+    (line) => Number(/^\{"day":(\d+),/.exec(line)?.[1] ?? Infinity) <= lastDay,
+  );
+  if (counted.length === whole.length) return;
+  writeFileSync(`${path}.tmp`, counted.map((line) => `${line}\n`).join(""));
+  renameSync(`${path}.tmp`, path);
 }
 
 function readSession(out: string): BenchSession | undefined {
@@ -157,7 +197,12 @@ export function copyFolder(from: string, to: string): void {
  * point leaves either the old pair or the new one: the copy is made under another name first, and
  * the session names the day the copy holds only once the copy is in place.
  */
-async function checkpoint(out: string, venue: BenchVenue, session: BenchSession): Promise<void> {
+async function checkpoint(
+  out: string,
+  venue: BenchVenue,
+  session: BenchSession,
+  beforeSession: () => void,
+): Promise<void> {
   const copy = join(out, COPY_DIR);
   const next = `${copy}.next`;
   const old = `${copy}.old`;
@@ -171,6 +216,7 @@ async function checkpoint(out: string, venue: BenchVenue, session: BenchSession)
   rmSync(old, { recursive: true, force: true });
   if (existsSync(copy)) renameSync(copy, old);
   renameSync(next, copy);
+  beforeSession();
   writeAtomically(join(out, SESSION_FILE), session);
   rmSync(old, { recursive: true, force: true });
 }

@@ -1,9 +1,17 @@
-import { mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildYear, COPY_DIR, SESSION_FILE, VOLUME_FILE, WORKING_DIR } from "./build-year.js";
+import {
+  buildYear,
+  COPY_DIR,
+  REQUEST_TIMINGS_FILE,
+  SESSION_FILE,
+  VOLUME_FILE,
+  WORKING_DIR,
+} from "./build-year.js";
+import type { RouteTiming } from "./trading-day.js";
 
 // Each run migrates and seeds a venue (about 1.3 s locally) and trades a few bills a day.
 const CASE_TIMEOUT_MS = 180_000;
@@ -21,6 +29,22 @@ function salesIn(dir: string): number {
   } finally {
     db.close();
   }
+}
+
+interface TimingLine {
+  day: number;
+  date: string;
+  bills: number;
+  dayMs: number;
+  checkpointMs: number;
+  routes: Record<string, RouteTiming>;
+}
+
+function timingLines(out: string): TimingLine[] {
+  return readFileSync(join(out, REQUEST_TIMINGS_FILE), "utf8")
+    .trimEnd()
+    .split("\n")
+    .map((line) => JSON.parse(line) as TimingLine);
 }
 
 describe("buildYear", () => {
@@ -81,6 +105,85 @@ describe("buildYear", () => {
         rows: Record<string, number>;
       };
       expect(volume.rows.sales).toBe(2);
+    },
+    CASE_TIMEOUT_MS,
+  );
+
+  it(
+    "writes each finished day's request timings once and in order, across a stop and a resume",
+    async () => {
+      const out = mkdtempSync(join(tmpdir(), "wt-bench-build-"));
+      made.push(out);
+      const bills = 12;
+      const options = { out, days: 3, billsPerDay: bills, seed: 1 };
+      const reported = new Map<number, { requests: number; ms: number }>();
+      const onDay = (day: number, result: { requests: number }, ms: number) =>
+        reported.set(day, { requests: result.requests, ms });
+
+      await expect(
+        buildYear({
+          ...options,
+          onDay,
+          beforeBill: (day, index) => {
+            if (day === 2 && index === 5) throw new Error("stopped mid-day");
+          },
+        }),
+      ).rejects.toThrow("stopped mid-day");
+      expect(timingLines(out).map((line) => line.day)).toEqual([1]);
+
+      await buildYear({ ...options, onDay });
+
+      const lines = timingLines(out);
+      expect(lines.map((line) => line.day)).toEqual([1, 2, 3]);
+      expect(lines.map((line) => line.date)).toEqual(["2025-11-03", "2025-11-04", "2025-11-05"]);
+      for (const line of lines) {
+        const routes = Object.entries(line.routes);
+        const sent = reported.get(line.day)!;
+        expect(line.bills).toBe(bills);
+        expect(line.dayMs).toBe(sent.ms);
+        expect(line.checkpointMs).toBeGreaterThan(0);
+        expect(routes.reduce((sum, [, route]) => sum + route.count, 0)).toBe(sent.requests);
+        for (const [name, route] of routes) {
+          // The ids a real run sends are UUIDs; anything left of one fails the shape below too.
+          expect(name).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i);
+          expect(name).toMatch(/^(GET|POST|PUT|DELETE)( |\/(:id|[a-z-]+))+$/);
+          expect(route.count).toBeGreaterThan(0);
+          expect(route.totalMs).toBeGreaterThan(0);
+          expect(route.medianMs).toBeGreaterThan(0);
+          expect(route.p95Ms).toBeGreaterThanOrEqual(route.medianMs);
+        }
+        expect(line.dayMs).toBeGreaterThanOrEqual(
+          line.checkpointMs + routes.reduce((sum, [, route]) => sum + route.totalMs, 0),
+        );
+      }
+      const names = new Set(lines.flatMap((line) => Object.keys(line.routes)));
+      for (const known of [
+        "POST /api/tables/:id/seat",
+        "POST /print-api/agent/jobs/:id/result",
+        "GET /api/working-orders/:id/payments",
+        "PUT /api/parties/:id/drafts",
+        "POST /api/parties/:id/groups/:id/fire",
+      ])
+        expect(names).toContain(known);
+    },
+    CASE_TIMEOUT_MS,
+  );
+
+  it(
+    "drops a timing line for a day the session does not count, so the resumed day appears once",
+    async () => {
+      const out = mkdtempSync(join(tmpdir(), "wt-bench-build-"));
+      made.push(out);
+      await buildYear({ out, days: 1, billsPerDay: 1, seed: 1 });
+      const path = join(out, REQUEST_TIMINGS_FILE);
+      // What a stop leaves between a day's line and the session that counts the day.
+      appendFileSync(path, `${JSON.stringify({ day: 2, dayMs: -1 })}\n{"da`);
+
+      await buildYear({ out, days: 2, billsPerDay: 1, seed: 1 });
+
+      const lines = timingLines(out);
+      expect(lines.map((line) => line.day)).toEqual([1, 2]);
+      expect(lines[1]!.dayMs).toBeGreaterThan(0);
     },
     CASE_TIMEOUT_MS,
   );

@@ -64,11 +64,18 @@ export async function runCli(argv: readonly string[], print: (text: string) => v
     days,
     billsPerDay,
     seed,
-    onDay: (day, result, ms) =>
+    onDay: (day, result, ms) => {
       print(
         `day ${day}/${days} ${result.day}: ${result.bills.length} bills in ` +
           `${(ms / 1000).toFixed(1)} s, ${(ms / 1000 / result.bills.length).toFixed(3)} s a bill`,
-      ),
+      );
+      print(
+        `  ${Object.entries(result.requestTimings)
+          .sort(([, a], [, b]) => b.totalMs - a.totalMs)
+          .map(([name, route]) => `${name} ${route.count} x ${route.medianMs.toFixed(1)} ms`)
+          .join("; ")}`,
+      );
+    },
   });
   print(`built ${days} days into ${out}`);
 }

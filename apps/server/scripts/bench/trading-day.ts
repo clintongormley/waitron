@@ -42,11 +42,20 @@ export interface BillResult {
   route: PaymentRoute;
 }
 
+export interface RouteTiming {
+  count: number;
+  totalMs: number;
+  medianMs: number;
+  p95Ms: number;
+}
+
 export interface DayResult {
   day: string;
   bills: BillResult[];
   routes: Record<PaymentRoute, number>;
   requests: number;
+  /** Keyed by `METHOD /path` with each id in the path written `:id`. */
+  requestTimings: Record<string, RouteTiming>;
   filed: { submitted: number; accepted: number; halted: number };
   attendancePasses: number;
 }
@@ -132,12 +141,23 @@ export async function tradeDay(
     collect: 0,
   };
   let requests = 0;
+  const durations = new Map<string, number[]>();
+  const timedRequest = async (path: string, init: RequestInit & { method: string }) => {
+    const started = performance.now();
+    const response = await venue.app.request(path, init);
+    const text = await response.text();
+    const elapsed = performance.now() - started;
+    const name = routeName(init.method, path);
+    durations.set(name, durations.get(name) ?? []);
+    durations.get(name)!.push(elapsed);
+    return { response, text };
+  };
   // Keyed by the session's cookie; a till's own cookie, which signs in, names nobody.
   const waiterOf = new Map<string, string>();
   const call = async (cookie: string, method: string, path: string, body?: unknown) => {
     requests += 1;
     const person = waiterOf.get(cookie);
-    const response = await venue.app.request(path, {
+    const { response, text } = await timedRequest(path, {
       method,
       headers: {
         cookie,
@@ -146,19 +166,17 @@ export async function tradeDay(
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    const text = await response.text();
     if (!response.ok) throw new BenchRefusal(method, path, response.status, text);
     return { json: (text === "" ? null : JSON.parse(text)) as Record<string, unknown>, response };
   };
 
   const agentCall = async (path: string, body: unknown) => {
     requests += 1;
-    const response = await venue.app.request(path, {
+    const { response, text } = await timedRequest(path, {
       method: "POST",
       headers: { authorization: venue.printAgentAuthorization, "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-    const text = await response.text();
     if (!response.ok) throw new BenchRefusal("POST", path, response.status, text);
     return (text === "" ? null : JSON.parse(text)) as Record<string, unknown>;
   };
@@ -329,7 +347,35 @@ export async function tradeDay(
 
   const overnight = await closeDay(venue, day, new Date(Date.parse(bounds.endAt) + 30 * MINUTE));
   await printQueued();
-  return { day, bills: results, routes, requests, ...overnight };
+  return {
+    day,
+    bills: results,
+    routes,
+    requests,
+    requestTimings: Object.fromEntries(
+      [...durations].map(([name, times]) => [name, routeTiming(times)]),
+    ),
+    ...overnight,
+  };
+}
+
+const ID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function routeName(method: string, path: string): string {
+  const named = path.split("/").map((segment) => (ID_SEGMENT.test(segment) ? ":id" : segment));
+  return `${method} ${named.join("/")}`;
+}
+
+function routeTiming(times: readonly number[]): RouteTiming {
+  const sorted = [...times].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return {
+    count: sorted.length,
+    totalMs: sorted.reduce((sum, ms) => sum + ms, 0),
+    medianMs:
+      sorted.length % 2 === 1 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2,
+    p95Ms: sorted[Math.ceil(sorted.length * 0.95) - 1]!,
+  };
 }
 
 /** The bill's ticket items not yet assigned to any of its rounds; a held round's exist unfired. */

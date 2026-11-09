@@ -3436,18 +3436,30 @@ cd apps/server && C=$(git rev-parse --short HEAD) && mkdir -p ~/waitron-bench/$C
   pnpm bench build --out ~/waitron-bench/$C --days 360 --bills-per-day 250 --seed 1
 ```
 
-It prints one line a day. On a small build, `--days 2 --bills-per-day 4`, it printed:
+It prints two lines a day: the day's total, then each kind of request that day, largest total time
+first, with how many were sent and their median time. On a small build, `--days 2 --bills-per-day 30
+--seed 7`, it printed, cut short here:
 
 ```text
-day 1/2 2025-11-03: 4 bills in 1.9 s, 0.478 s a bill
-day 2/2 2025-11-04: 4 bills in 1.6 s, 0.399 s a bill
-built 2 days into /var/folders/…/tmp.QRcGMCh4CZ
+day 1/2 2025-11-03: 30 bills in 5.8 s, 0.195 s a bill
+  POST /api/parties/:id/drafts/:id/submit 76 x 19.3 ms; PUT /api/parties/:id/drafts 76 x 6.1 ms; …
+day 2/2 2025-11-04: 30 bills in 4.1 s, 0.137 s a bill
+  POST /api/parties/:id/drafts/:id/submit 73 x 14.5 ms; PUT /api/parties/:id/drafts 73 x 4.5 ms; …
+built 2 days into /tmp/bench-new7-FKz5
 ```
 
 The folder holds `venue/`, the venue being traded, and `last-day/`, a copy taken after each finished
 day. `bench-session.json` records the last finished day, and `volume.json`, written only when the
 build finishes, holds the row count of every table, the size of `venue.db`, the seed, the commit and
 the profile.
+
+`request-timings.jsonl` holds one line of JSON for each finished day: `day`, `date`, `bills`,
+`dayMs`, `checkpointMs` and `routes`. `routes` gives, for each kind of request (`METHOD /path` with
+every id written `:id`), its `count`, `totalMs`, `medianMs` and `p95Ms`, so a request whose cost grows
+with history shows by name across the days. `checkpointMs` is the time spent copying the venue to
+`last-day/`, measured apart because that copy grows with the database. `dayMs - checkpointMs -
+sum(totalMs)` is the time outside requests: the overnight filing, the attendance passes and the
+daily close. A resumed build adds to the file and keeps each day once.
 
 If a build stops, run the same command again. It throws away `venue/`, because a half-traded day
 cannot be removed from the append-only tables, and carries on from `last-day/`. Running it again with
