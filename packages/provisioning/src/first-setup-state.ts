@@ -13,12 +13,8 @@ import type { DeploymentEnvironment } from "@waitron/db";
 import { VENUE_FIELDS, type VenueRequest } from "./venue-plan.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.js";
-import { START_AGAIN_CONFIRMATIONS_DIR } from "./first-setup-start-again-confirmation.js";
-import {
-  START_AGAIN_CHOICES_DIR,
-  START_AGAIN_GUESSES_FILE,
-  START_AGAIN_SET_ASIDE_DIR,
-} from "./first-setup-start-again-names.js";
+import { RECORDS_DIR } from "@waitron/store";
+import { START_AGAIN_GUESSES_FILE } from "./first-setup-start-again-names.js";
 import "./errors.js";
 
 export interface FirstSetupHold {
@@ -146,9 +142,7 @@ export const FIRST_SETUP_HOST_FILES = [
   "first-setup-retirement.json",
   "first-setup-workspace.json",
   "first-setup-deleting.json",
-  START_AGAIN_CONFIRMATIONS_DIR,
-  START_AGAIN_CHOICES_DIR,
-  START_AGAIN_SET_ASIDE_DIR,
+  RECORDS_DIR,
   START_AGAIN_GUESSES_FILE,
 ] as const;
 export function isFirstSetupHostPath(path: string): boolean {

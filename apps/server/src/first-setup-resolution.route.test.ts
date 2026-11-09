@@ -76,7 +76,6 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
           headers: { "Content-Type": "application/json", Origin: origin, ...headers },
           body: JSON.stringify(body),
         } as RequestInit);
-      const before = (await f.store.read())!;
       const current = await get();
       const ids = {
         inspectionId: current.inspectionId,
@@ -108,30 +107,12 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
           },
         ),
       ).toEqual([]);
-      const at = new Date().toISOString();
       const response = await post("start-again", {
         ...ids,
         register,
         confirmMissingDatabase: { nothingFiledOrSold: true, shown },
       });
       expect(response.status).toBe(200);
-      const confirmations = join(f.stateDir, "first-setup-start-again-confirmations");
-      const written = await readdir(confirmations);
-      expect(written).toEqual([`${Date.parse(at)}-${before.frozen.attemptId}.json`]);
-      expect(JSON.parse(await readFile(join(confirmations, written[0]!), "utf8"))).toEqual({
-        version: 2,
-        at,
-        attemptId: before.frozen.attemptId,
-        database: "missing",
-        setupAdministrator: {
-          displayName: before.frozen.request.admin.displayName,
-          email: before.frozen.request.admin.email,
-        },
-        confirmedOn: "repair-page",
-        signedIn: false,
-        ownerGeneration: ids.ownerGeneration,
-        shown,
-      });
       const selected = await response.json();
       expect(selected).toEqual({ restarting: true });
       expect(JSON.stringify(selected)).not.toContain(f.root);

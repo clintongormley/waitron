@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { access, lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { START_AGAIN_CONFIRMATIONS_DIR, readStartAgainMarker } from "@waitron/provisioning";
+import { readStartAgainMarker } from "@waitron/provisioning";
+import { RECORDS_DIR } from "@waitron/store";
 
 type Roots = { stateDir: string; venueDir: string };
 
@@ -42,14 +43,14 @@ export async function expectStartAgainDeleted(roots: Roots): Promise<void> {
 
 async function confirmations(stateDir: string): Promise<string[] | null> {
   try {
-    return (await readdir(join(stateDir, START_AGAIN_CONFIRMATIONS_DIR))).sort();
+    return (await readdir(join(stateDir, RECORDS_DIR))).sort();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
 }
 
-/** For a refused Start again: no marker, and the confirmation folder's entries as they were. */
+/** For a refused Start again: no marker, and the records folder's entries as they were. */
 export async function startAgainUnchanged(roots: Roots): Promise<() => Promise<void>> {
   const before = await confirmations(roots.stateDir);
   return async () => {
@@ -82,35 +83,20 @@ export async function diskSnapshot(roots: Roots) {
 
 export const snapshot = (f: Pick<Held, "roots">) => diskSnapshot(f.roots);
 
-export async function heldConfirmationRecords(stateDir: string) {
-  const folder = join(stateDir, START_AGAIN_CONFIRMATIONS_DIR);
-  return Promise.all(
-    (await readdir(folder)).map(
-      async (name) =>
-        JSON.parse(await readFile(join(folder, name), "utf8")) as {
-          at: string;
-          database: string;
-          shown: unknown;
-        },
-    ),
-  );
-}
-
 /** Sends Start again, and checks the refusal changed nothing: files, marker, records. */
 export async function expectStartAgainRefused(f: Held, send: () => Promise<void>, refusal: object) {
   const before = await snapshot(f);
   await expect(send()).rejects.toMatchObject(refusal);
   expect(await snapshot(f)).toEqual(before);
   expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
-  await expect(access(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))).rejects.toMatchObject(
-    { code: "ENOENT" },
-  );
+  await expect(access(join(f.roots.stateDir, RECORDS_DIR))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
 }
 
-export const LEFT_STATE =
-  /^(first-setup-start-again-confirmations\/(\w|[-.])*|first-setup-resolutions\/)$/;
+export const LEFT_STATE = /^(records(?:\/.*)?|first-setup-resolutions\/)$/;
 
 export const noConfirmations = (f: Held) =>
-  expect(access(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))).rejects.toMatchObject({
+  expect(access(join(f.roots.stateDir, RECORDS_DIR))).rejects.toMatchObject({
     code: "ENOENT",
   });

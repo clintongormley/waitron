@@ -1389,7 +1389,7 @@ describe("a start refused before it began", () => {
         ...text,
         more: text.more(3),
         throttled: `${text.throttled(1)} ${text.throttled(5)}`,
-        moved: text.moved("state/first-setup-set-aside/2026-10-27T10-00-00Z"),
+        moved: text.moved("state/records/set-aside/2026-10-27T10-00-00Z"),
       });
     const checked = { "en-GB": NEVER_DELETE_EN, "es-ES": NEVER_DELETE_ES } as const;
     for (const lang of ["en-GB", "es-ES"] as const) {
@@ -1495,8 +1495,8 @@ describe("recoveryApp's Start again choice", () => {
     Promise.resolve({
       choice: "move" as const,
       setAside: {
-        state: "first-setup-set-aside/s1/state",
-        venue: "first-setup-set-aside/s1/venue",
+        state: "records/set-aside/s1/state",
+        venue: "records/set-aside/s1/venue",
       },
     });
   const throwingOnChoice: RecoveryDeps["log"] = (_level, event) => {
@@ -1576,15 +1576,15 @@ describe("recoveryApp's Start again choice", () => {
       Promise.resolve({
         choice: "move" as const,
         setAside: {
-          state: "first-setup-set-aside/s1/state",
-          venue: "first-setup-set-aside/s1/venue",
+          state: "records/set-aside/s1/state",
+          venue: "records/set-aside/s1/venue",
         },
       }),
     );
     const answer = await choose(surface, "move");
     expect(answer.status).toBe(200);
     const page = await answer.text();
-    expect(page).toContain(escapeHtml(WORDS.moved("state/first-setup-set-aside/s1")));
+    expect(page).toContain(escapeHtml(WORDS.moved("state/records/set-aside/s1")));
     expect(page).not.toContain(FORM_ACTION);
     expect(onFinished).toHaveBeenCalledOnce();
   });
@@ -1713,7 +1713,7 @@ describe("recoveryApp's Start again choice", () => {
       );
       expect(answer.status, locale).toBe(200);
       const page = await answer.text();
-      const moved = page.indexOf(escapeHtml(words.moved("state/first-setup-set-aside/s1")));
+      const moved = page.indexOf(escapeHtml(words.moved("state/records/set-aside/s1")));
       expect(moved, locale).toBeGreaterThan(-1);
       expect(page.indexOf("<li>venue/venue.db</li>"), locale).toBeGreaterThan(moved);
       expect(page, locale).not.toContain(escapeHtml(found.title));
@@ -1731,7 +1731,7 @@ describe("recoveryApp's Start again choice", () => {
       expect((await choose(surface, "move")).status, locale).toBe(200);
       const after = await surface.request("/", { headers: { "Accept-Language": locale } }, tls());
       const page = await after.text();
-      expect(page, locale).toContain(escapeHtml(words.moved("state/first-setup-set-aside/s1")));
+      expect(page, locale).toContain(escapeHtml(words.moved("state/records/set-aside/s1")));
       expect(page, locale).not.toContain(escapeHtml(found.title));
       expect(page, locale).not.toContain(escapeHtml(found.action));
       expect(page, locale).not.toContain(RETRY_ACTION);
@@ -1744,7 +1744,7 @@ describe("recoveryApp's Start again choice", () => {
     const { app: surface } = app(MOVED, throwingOnChoice);
     await choose(surface, "move");
     const page = await (await surface.request("/", {}, tls())).text();
-    expect(page).toContain(escapeHtml(WORDS.moved("state/first-setup-set-aside/s1")));
+    expect(page).toContain(escapeHtml(WORDS.moved("state/records/set-aside/s1")));
     expect(page).not.toContain(FORM_ACTION);
     expect(page).not.toContain('type="password"');
   });
@@ -1757,7 +1757,7 @@ describe("recoveryApp's Start again choice", () => {
       const again = await choose(surface, choice);
       expect(again.status, choice).toBe(409);
       const page = await again.text();
-      expect(page, choice).toContain(escapeHtml(WORDS.moved("state/first-setup-set-aside/s1")));
+      expect(page, choice).toContain(escapeHtml(WORDS.moved("state/records/set-aside/s1")));
       expect(page, choice).not.toContain(escapeHtml(KEPT.title));
       expect(page, choice).not.toContain(escapeHtml(FOUND.title));
       expect(page, choice).not.toContain(FORM_ACTION);

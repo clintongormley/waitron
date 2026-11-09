@@ -362,7 +362,7 @@ it("on one filesystem venue units go under the state folder's set-aside folder; 
   });
   expect(await setAsideDestinations(roots, stem, destinationsIo)).toEqual({
     state: `${START_AGAIN_SET_ASIDE_DIR}/${stem}/state`,
-    venue: `${START_AGAIN_SET_ASIDE_DIR}/${stem}`,
+    venue: `first-setup-set-aside/${stem}`,
   });
 
   const record = await prepared(roots, attempt.administratorId, { destinationsIo });
@@ -370,7 +370,7 @@ it("on one filesystem venue units go under the state folder's set-aside folder; 
 
   const stem2 = stemOf(record);
   expect(
-    await readFile(join(roots.venueDir, START_AGAIN_SET_ASIDE_DIR, stem2, "venue.db"), "utf8"),
+    await readFile(join(roots.venueDir, "first-setup-set-aside", stem2, "venue.db"), "utf8"),
   ).toBe("found database");
   expect(
     await readFile(
@@ -392,14 +392,14 @@ it("a leftover probe folder from a cut is removed by the next prepare, and nothi
     join(roots.venueDir, `${PROBE}${old}`),
     join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, old, "state", `${PROBE}${old}`),
     join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, old, "venue", `${PROBE}${old}`),
-    join(roots.venueDir, START_AGAIN_SET_ASIDE_DIR, old, `${PROBE}${old}`),
+    join(roots.venueDir, "first-setup-set-aside", old, `${PROBE}${old}`),
   ];
   for (const path of leftovers) await mkdir(path, { recursive: true });
   const kept = [
     join(roots.stateDir, `${PROBE}not-a-stem`),
     join(roots.stateDir, "an-empty-folder"),
     join(roots.stateDir, START_AGAIN_SET_ASIDE_DIR, old, "state"),
-    join(roots.venueDir, START_AGAIN_SET_ASIDE_DIR, old),
+    join(roots.venueDir, "first-setup-set-aside", old),
   ];
   for (const path of kept) await mkdir(path, { recursive: true });
   const full = join(roots.venueDir, `${PROBE}1700000000001-${attempt.attemptId}`);
@@ -507,7 +507,7 @@ it("after a move, finishStartAgainDeletion deletes only the marked files", async
   expect(await readFile(join(roots.stateDir, record.setAside!.venue, "venue.db"), "utf8")).toBe(
     "found database",
   );
-  expect(await readdir(join(roots.stateDir, "first-setup-start-again-choices"))).toEqual([
+  expect(await readdir(join(roots.stateDir, "records/choices"))).toEqual([
     `${stemOf(record)}.json`,
   ]);
 });
@@ -1536,7 +1536,7 @@ it("on two filesystems the ring's copy is in the stem folder on the state root, 
   const record = await prepared(roots, attempt.administratorId, {
     destinationsIo: { ...realIo, lstat: venueDev },
   });
-  expect(record.setAside!.venue).toBe(`${START_AGAIN_SET_ASIDE_DIR}/${stemOf(record)}`);
+  expect(record.setAside!.venue).toBe(`first-setup-set-aside/${stemOf(record)}`);
   // Only a venue unit: prepare made no stem folder on the state root.
   await expect(lstat(stemFolderOnState(roots, record))).rejects.toMatchObject({ code: "ENOENT" });
 
@@ -1547,12 +1547,12 @@ it("on two filesystems the ring's copy is in the stem folder on the state root, 
   expect(await readFile(join(stemFolderOnState(roots, record), "secrets.env"), "utf8")).toBe(RING);
   expect(
     await readFile(
-      join(roots.venueDir, START_AGAIN_SET_ASIDE_DIR, stemOf(record), "venue.db"),
+      join(roots.venueDir, "first-setup-set-aside", stemOf(record), "venue.db"),
       "utf8",
     ),
   ).toBe("found database");
   await expect(
-    lstat(join(roots.venueDir, START_AGAIN_SET_ASIDE_DIR, stemOf(record), "secrets.env")),
+    lstat(join(roots.venueDir, "first-setup-set-aside", stemOf(record), "secrets.env")),
   ).rejects.toMatchObject({ code: "ENOENT" });
 });
 

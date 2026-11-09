@@ -175,13 +175,10 @@ export * from "./backup-archive.js";
 export * from "./scrypt-kdf.js";
 export * from "./kitchen-timing.js";
 export {
-  START_AGAIN_CONFIRMATIONS_DIR,
   isCanonicalInstant,
   startAgainSummary,
-  writeStartAgainConfirmation,
-  type StartAgainConfirmation,
   type StartAgainSummary,
-} from "./first-setup-start-again-confirmation.js";
+} from "./first-setup-start-again-summary.js";
 export {
   START_AGAIN_MARKER_FILE,
   START_AGAIN_MARKER_LIMIT,

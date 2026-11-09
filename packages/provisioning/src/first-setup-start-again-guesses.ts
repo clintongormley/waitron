@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { AppError, isUuid } from "@waitron/shared";
 import { inTurn } from "./attempt-turns.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
-import { isCanonicalInstant } from "./first-setup-start-again-confirmation.js";
+import { isCanonicalInstant } from "./first-setup-start-again-summary.js";
 import { START_AGAIN_GUESSES_FILE } from "./first-setup-start-again-names.js";
 import "./errors.js";
 

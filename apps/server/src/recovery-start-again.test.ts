@@ -750,8 +750,8 @@ describe("mountStartAgainChoice", () => {
         Promise.resolve({
           choice: "move" as const,
           setAside: {
-            state: "first-setup-set-aside/s1/state",
-            venue: "first-setup-set-aside/s1/venue",
+            state: "records/set-aside/s1/state",
+            venue: "records/set-aside/s1/venue",
           },
         }),
     });
@@ -760,7 +760,7 @@ describe("mountStartAgainChoice", () => {
       code: "setup.start_again_files_found",
       locale: "en-GB",
       secure: true,
-      message: { kind: "moved", folder: "state/first-setup-set-aside/s1" },
+      message: { kind: "moved", folder: "state/records/set-aside/s1" },
     });
   });
 
@@ -769,7 +769,7 @@ describe("mountStartAgainChoice", () => {
       choose: () =>
         Promise.resolve({
           choice: "move" as const,
-          setAside: { state: "first-setup-set-aside/s1/state", venue: "first-setup-set-aside/s1" },
+          setAside: { state: "records/set-aside/s1/state", venue: "first-setup-set-aside/s1" },
         }),
     });
     await post(app, { ...FORM, choice: "move" });
@@ -777,7 +777,7 @@ describe("mountStartAgainChoice", () => {
       expect.objectContaining({
         message: {
           kind: "moved",
-          folder: "state/first-setup-set-aside/s1/state, venue/first-setup-set-aside/s1",
+          folder: "state/records/set-aside/s1/state, venue/first-setup-set-aside/s1",
         },
       }),
     );
@@ -790,8 +790,8 @@ describe("mountStartAgainChoice", () => {
         Promise.resolve({
           choice: "move" as const,
           setAside: {
-            state: "first-setup-set-aside/s1/state",
-            venue: "first-setup-set-aside/s1/venue",
+            state: "records/set-aside/s1/state",
+            venue: "records/set-aside/s1/venue",
           },
         }),
     });
@@ -808,8 +808,8 @@ describe("mountStartAgainChoice", () => {
     Promise.resolve({
       choice: "move" as const,
       setAside: {
-        state: "first-setup-set-aside/s1/state",
-        venue: "first-setup-set-aside/s1/venue",
+        state: "records/set-aside/s1/state",
+        venue: "records/set-aside/s1/venue",
       },
     });
 
@@ -857,8 +857,8 @@ describe("mountStartAgainChoice", () => {
         Promise.resolve({
           choice: "move" as const,
           setAside: {
-            state: "first-setup-set-aside/s1/state",
-            venue: "first-setup-set-aside/s1/venue",
+            state: "records/set-aside/s1/state",
+            venue: "records/set-aside/s1/venue",
           },
         }),
       status: 200,
@@ -899,8 +899,8 @@ describe("mountStartAgainChoice", () => {
         Promise.resolve({
           choice: "move" as const,
           setAside: {
-            state: "first-setup-set-aside/s1/state",
-            venue: "first-setup-set-aside/s1/venue",
+            state: "records/set-aside/s1/state",
+            venue: "records/set-aside/s1/venue",
           },
         }),
     });
@@ -972,8 +972,8 @@ describe("mountStartAgainChoice", () => {
           Promise.resolve({
             choice: "move" as const,
             setAside: {
-              state: "first-setup-set-aside/s1/state",
-              venue: "first-setup-set-aside/s1/venue",
+              state: "records/set-aside/s1/state",
+              venue: "records/set-aside/s1/venue",
             },
           }),
         now: () => NOW,
@@ -1007,8 +1007,8 @@ describe("mountStartAgainChoice", () => {
         Promise.resolve({
           choice: "move" as const,
           setAside: {
-            state: "first-setup-set-aside/s1/state",
-            venue: "first-setup-set-aside/s1/venue",
+            state: "records/set-aside/s1/state",
+            venue: "records/set-aside/s1/venue",
           },
         }),
       ),

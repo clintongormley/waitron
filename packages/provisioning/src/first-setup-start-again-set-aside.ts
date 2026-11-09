@@ -1,3 +1,5 @@
+import { RECORDS_DIR } from "@waitron/store";
+import { mkdirDurable } from "./fs-atomic.js";
 import { SECRETS_ENV_FILE } from "@waitron/store";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
@@ -40,6 +42,9 @@ const PROBE = ".first-setup-set-aside-probe-";
 const LEFTOVER_PROBE =
   /^\.first-setup-set-aside-probe-\d+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MODE = 0o700;
+const VENUE_SET_ASIDE_DIR = "first-setup-set-aside";
+const setAsideName = (roots: Roots, root: string) =>
+  root === roots.stateDir ? START_AGAIN_SET_ASIDE_DIR : VENUE_SET_ASIDE_DIR;
 const RING = SECRETS_ENV_FILE;
 const RING_TEMP = ".secrets.env.set-aside-";
 const LEFTOVER_RING_TEMP =
@@ -74,8 +79,12 @@ const failed = (code: string, label: string) =>
  * What stands at a root's set-aside name when it is not a real folder: `symlink`, `file` or
  * `other`; null when nothing is there or a real folder is. A Move never puts files through one.
  */
-async function notASetAsideFolder(root: string, io: SetAsideIo): Promise<string | null> {
-  return notAFolder(join(root, START_AGAIN_SET_ASIDE_DIR), io);
+async function notASetAsideFolder(
+  roots: Roots,
+  root: string,
+  io: SetAsideIo,
+): Promise<string | null> {
+  return notAFolder(join(root, setAsideName(roots, root)), io);
 }
 
 async function notAFolder(path: string, io: SetAsideIo): Promise<string | null> {
@@ -91,7 +100,7 @@ async function notAFolder(path: string, io: SetAsideIo): Promise<string | null> 
 }
 
 const setAsideLabel = (roots: Roots, root: string) =>
-  `${root === roots.stateDir ? "state" : "venue"}/${START_AGAIN_SET_ASIDE_DIR}`;
+  `${root === roots.stateDir ? "state" : "venue"}/${setAsideName(roots, root)}`;
 
 /**
  * Folders relative to their roots, for the choice record. Venue units go beside the state units
@@ -106,7 +115,10 @@ export async function setAsideDestinations(
 ): Promise<{ state: string; venue: string }> {
   const one = (await io.lstat(roots.stateDir)).dev === (await io.lstat(roots.venueDir)).dev;
   const folder = `${START_AGAIN_SET_ASIDE_DIR}/${stem}`;
-  return { state: `${folder}/state`, venue: one ? `${folder}/venue` : folder };
+  return {
+    state: `${folder}/state`,
+    venue: one ? `${folder}/venue` : `${VENUE_SET_ASIDE_DIR}/${stem}`,
+  };
 }
 
 const venueBesideState = (destinations: Destinations) =>
@@ -152,8 +164,8 @@ async function removeLeftoverProbes(roots: Roots, io: SetAsideIo): Promise<void>
   const stemFolders: string[] = [];
   for (const root of [roots.stateDir, roots.venueDir]) {
     folders.push(root);
-    if ((await notASetAsideFolder(root, io)) !== null) continue;
-    const base = join(root, START_AGAIN_SET_ASIDE_DIR);
+    if ((await notASetAsideFolder(roots, root, io)) !== null) continue;
+    const base = join(root, setAsideName(roots, root));
     for (const stem of await list(base)) {
       const stemFolder = join(base, stem);
       if ((await notAFolder(stemFolder, io)) !== null) continue;
@@ -198,7 +210,7 @@ export async function prepareSetAside(
   );
   const under = destinationRoots(roots, destinations);
   for (const root of used) {
-    const found = await notASetAsideFolder(under[root], io);
+    const found = await notASetAsideFolder(roots, under[root], io);
     if (found !== null)
       throw new AppError(
         "setup.start_again_set_aside_unavailable",
@@ -209,6 +221,16 @@ export async function prepareSetAside(
   const made: string[] = [];
   let probeAt: string | null = null;
   try {
+    const records = join(roots.stateDir, RECORDS_DIR);
+    const existed = await fs.lstat(records).then(
+      () => true,
+      (error: unknown) => {
+        if (codeOf(error) === "ENOENT") return false;
+        throw error;
+      },
+    );
+    await mkdirDurable(records, MODE);
+    if (!existed) made.push(records);
     await removeLeftoverProbes(roots, io);
     for (const root of used) {
       const stemFolder = stemFolderOf(root, folders, destinations);

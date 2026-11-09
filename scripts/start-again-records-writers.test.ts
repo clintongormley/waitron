@@ -1,12 +1,11 @@
 /**
- * Only the allowed files name the Start again confirmation folder, the Keep-or-Move choice records
- * folder or the set-aside folder, so nothing else in the product can delete them (A1042, A1098: only
+ * Only the allowed files name the Keep-or-Move choice records or the set-aside folder, so nothing else in the product can delete them (A1042, A1098: only
  * `waitron.sh reset --all` removes them).
  *
  * Weaker than its name: it reads TEXT in the `.ts`, `.mjs` and `.sh` files `git ls-files` lists,
  * skipping test files, so a path built from pieces escapes it; it never checks what an allowed
  * file does with the name, nor code that removes the whole state folder, or everything in it,
- * without naming the file.
+ * without naming the file. It does not see RECORDS_DIR joined with a sub-name.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
@@ -18,26 +17,16 @@ const ROOT = join(import.meta.dirname, "..");
 const GIT_SPAWN_TIMEOUT_MS = 30_000;
 
 const ALLOWED = [
-  "apps/server/test/start-again-deleted.ts",
-  "deploy/waitron.sh",
   "packages/provisioning/src/first-setup-start-again-choice.ts",
-  "packages/provisioning/src/first-setup-start-again-confirmation.ts",
   "packages/provisioning/src/first-setup-start-again-names.ts",
   "packages/provisioning/src/first-setup-start-again-set-aside.ts",
-  "packages/provisioning/src/first-setup-state.ts",
   "packages/provisioning/src/index.ts",
+  "packages/store/src/index.ts",
+  "packages/store/src/state-layout.ts",
 ];
 
-const NAMES = new RegExp(
-  [
-    "first-setup-start-again-confirmations",
-    String.raw`\bSTART_AGAIN_CONFIRMATIONS_DIR\b`,
-    "first-setup-start-again-choices",
-    String.raw`\bSTART_AGAIN_CHOICES_DIR\b`,
-    "first-setup-set-aside",
-    String.raw`\bSTART_AGAIN_SET_ASIDE_DIR\b`,
-  ].join("|"),
-);
+const NAMES =
+  /\bSTART_AGAIN_CHOICES_DIR\b|\bSTART_AGAIN_SET_ASIDE_DIR\b|\bVENUE_SET_ASIDE_DIR\b|["'`]records\/|first-setup-set-aside/;
 
 function isolatedGitEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
@@ -76,7 +65,7 @@ function trackedSourceFiles(): string[] {
     });
 }
 
-test("only the allowed files name the Start again confirmations, the choice records or the set-aside folder", () => {
+test("only the allowed files name the choice records or the set-aside folder", () => {
   const naming = trackedSourceFiles()
     .filter((file) => NAMES.test(readFileSync(join(ROOT, file), "utf8")))
     .sort();

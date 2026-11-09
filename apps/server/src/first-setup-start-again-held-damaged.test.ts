@@ -13,7 +13,7 @@ import {
 } from "../test/start-again-held-fixture.js";
 import {
   expectStartAgainDeleted,
-  heldConfirmationRecords as confirmations,
+  noConfirmations,
   expectStartAgainRefused,
 } from "../test/start-again-deleted.js";
 import { heldSetup } from "../test/held-setup-database.js";
@@ -70,7 +70,7 @@ it("confirmUnreadableDatabase beside a readable database is refused setup.attemp
   );
 });
 
-it("a damaged recovery-key record beside a damaged database: Start again needs both acknowledgements, and the record carries both", async () => {
+it("a damaged recovery-key record beside a damaged database: Start again needs both acknowledgements, and deletes the setup", async () => {
   const f = await heldSetup();
   await damageRecoveryRecord(f);
   damagePages(venueDb(f), "department_days");
@@ -99,8 +99,7 @@ it("a damaged recovery-key record beside a damaged database: Start again needs b
     }),
   ).resolves.toBeUndefined();
   await expectStartAgainDeleted(f.roots);
-  const records = await confirmations(f.roots.stateDir);
-  expect(records.map((record) => [record.database, record.shown])).toEqual([["unreadable", shown]]);
+  await noConfirmations(f);
 });
 
 it("the Start again route passes confirmUnreadableDatabase on: confirming a damaged database over HTTPS starts again", async () => {

@@ -348,7 +348,7 @@ describe("restoreFromArtifact", () => {
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it.each(["first-setup-start-again-confirmations/1-earlier.json"])(
+  it.each(["records/choices/1-earlier.json"])(
     "refuses a backup entry for %s and leaves the box's own file unchanged",
     async (path) => {
       const kept = Buffer.from('{"kept":"the box\'s own bytes"}');
