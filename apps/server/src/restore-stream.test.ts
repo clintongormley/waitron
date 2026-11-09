@@ -477,7 +477,7 @@ describe("prepareStreamRestore", () => {
         {
           level: "warn",
           event: "restore.stream_key_check_failed",
-          fields: { errorCode: "backup.stream_request_failed", status, errorName: name },
+          fields: { errorCode: "backup.stream_request_failed", status, failureKind: name },
         },
       ]);
       await expectStateUntouched(deps.stateDir);

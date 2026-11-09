@@ -317,7 +317,7 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
         deps.log("warn", "restore.stream_key_check_failed", {
           errorCode: error.code,
           status: error.params.status,
-          errorName: error.params.name,
+          failureKind: error.params.name,
         });
         throw new AppError("restore.stream_pointer_unverified", { reason: "key_or_access" });
       }
