@@ -2028,10 +2028,11 @@ both saved. A counter order sent with Send did not reach it: once placed, a save
   keeps its unsaved changes, the added dish among them, and hides Cancel. Each later save gets the
   same answer. The owner chose (2026-11-07) to replace this path with a separate action for changing
   a sent dish (A1426); A1426 built it, but the whole-order save is unchanged, so this stays open.
-- A staff name changed: "An item's choices have changed — open the line and choose again". The line's
-  window is read-only on a dish already sent (run on a started dish; the check reads only whether it
-  was sent), so nobody can. The box refuses each save `options.label_required`, started or not, and
-  the till says "Could not park the order, try again".
+- A staff name changed: "An item's choices have changed — open the line and choose again". The
+  basket's line window is read-only on a dish already sent (run on a started dish), and Change dish
+  refuses a started dish, so nobody can; whether Change dish clears a dish not yet started was not
+  run. The box refuses each save `options.label_required`, started or not, and the till says "Could
+  not park the order, try again".
 
 **The ways out that ran:** cancel the started dish, then save; or rename it back and publish. Sending
 the order unchanged still works, so a dish added meanwhile has to go on another order (not run).
