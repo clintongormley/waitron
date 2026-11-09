@@ -262,18 +262,19 @@ it("offers no Change dish on a paid row", async () => {
   ).toBe(false);
 });
 
+const balance = (paidLines: BillBalance["paidLines"]): BillBalance => ({
+  workingOrderId: "wo-4",
+  status: "open",
+  total: "10.00",
+  received: "2.00",
+  reserved: "0.00",
+  outstanding: "8.00",
+  tips: "0.00",
+  payments: [],
+  paidLines,
+});
+
 it("shows a partly paid row read-only, its dish or an extra paid, keeping its other actions", async () => {
-  const balance = (paidLines: BillBalance["paidLines"]): BillBalance => ({
-    workingOrderId: "wo-4",
-    status: "open",
-    total: "10.00",
-    received: "2.00",
-    reserved: "0.00",
-    outstanding: "8.00",
-    tips: "0.00",
-    payments: [],
-    paidLines,
-  });
   const cream = line({
     id: "l-cream",
     name: "Cream",
@@ -302,6 +303,15 @@ it("shows a partly paid row read-only, its dish or an extra paid, keeping its ot
       billBalance: balance([{ lineId: "l-flan", lineNo: 1, paidQuantity: "0.000" }]),
     }),
   ).toBe(true);
+});
+
+it("withdraws Change dish when a payment for the dish lands while its window is open", async () => {
+  const paid = (paidQuantity: string) => balance([{ lineId: "l-flan", lineNo: 1, paidQuantity }]);
+  const el = await openRow({ lines: [line()], billBalance: paid("0.000") });
+  expect(offered(el)).toBe(true);
+  el.billBalance = paid("1.000");
+  await el.updateComplete;
+  expect(offered(el)).toBe(false);
 });
 
 it("keeps Change dish quiet and disabled until the dish changes, and again once it is put back", async () => {
