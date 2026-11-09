@@ -227,7 +227,8 @@ function checkFold(set: RebuildSet, journal: Journal, fold: string): void {
   }
 }
 function withoutId(snapshot: Snapshot): unknown {
-  const { id: _id, ...rest } = snapshot;
+  const rest: Partial<Snapshot> = { ...snapshot };
+  delete rest.id;
   return rest;
 }
 

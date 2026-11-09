@@ -136,9 +136,8 @@ describe("rebuilding starting migrations", () => {
       readFileSync(join(b.set.folder, "0000_baseline.sql"), "utf8"),
     );
     const snapshotAt = (f: typeof a) => {
-      const { id: _id, ...rest } = JSON.parse(
-        readFileSync(join(f.set.folder, "meta/0000_snapshot.json"), "utf8"),
-      );
+      const rest = JSON.parse(readFileSync(join(f.set.folder, "meta/0000_snapshot.json"), "utf8"));
+      delete rest.id;
       return rest;
     };
     expect(snapshotAt(a)).toEqual(snapshotAt(b));

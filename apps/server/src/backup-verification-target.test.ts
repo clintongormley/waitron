@@ -421,12 +421,17 @@ describe("current binary backup target", () => {
 });
 
 function steadyTarget(target: ReturnType<typeof buildBackupVerificationTarget>) {
-  const { migrationDigest: _migrationDigest, digest: _digest, ...rest } = target;
+  const rest: Record<string, unknown> = { ...target };
+  delete rest.migrationDigest;
+  delete rest.digest;
   return {
     ...rest,
-    modules: target.modules.map(
-      ({ migrationDigest: _moduleDigest, schema: _schema, ...module }) => module,
-    ),
+    modules: target.modules.map((module) => {
+      const steady: Record<string, unknown> = { ...module };
+      delete steady.migrationDigest;
+      delete steady.schema;
+      return steady;
+    }),
   };
 }
 const steadyHash = (target: ReturnType<typeof buildBackupVerificationTarget>) =>
