@@ -824,6 +824,57 @@ it("sends a dish's extras when they change, and its whole set with any other cha
   expect(sent[0]!.patch).toEqual({ note: "warm, no salt", portionLineNos: [], extras: [] });
 });
 
+/** The open window's title count ("×2"), or null when it shows none. */
+function titleCount(el: TillTableOrderScreen): string | null {
+  const title = q(el, "[data-sent-line-dialog] .move-dish")!.textContent!;
+  return /×\S+/.exec(title)?.[0] ?? null;
+}
+
+/** The open window's Total amount, or null when it shows none. */
+function windowTotal(el: TillTableOrderScreen): string | null {
+  const total = [...el.shadowRoot!.querySelectorAll("[data-sent-line-dialog] .total-row")].find(
+    (rowEl) => rowEl.firstElementChild?.textContent?.trim() === t("label.total"),
+  );
+  return total?.querySelector(".amount")?.textContent?.trim() ?? null;
+}
+
+it("shows no count or Total while the fields raise the count, and both again once it is put back", async () => {
+  const el = await openRow({ lines: [line()] });
+  const [count, total] = [titleCount(el), windowTotal(el)];
+  expect(count).toBe("×2");
+  expect(total).not.toBeNull();
+  await setQuantity(el, "3");
+  expect(titleCount(el)).toBeNull();
+  expect(windowTotal(el)).toBeNull();
+  await setQuantity(el, "");
+  expect([titleCount(el), windowTotal(el)]).toEqual([null, null]);
+  await setQuantity(el, "2");
+  expect([titleCount(el), windowTotal(el)]).toEqual([count, total]);
+});
+
+it("keeps the count and Total while only the note or an answer changes, and hides them for an added extra", async () => {
+  const lines = [
+    line({ productId: "burger", menuItemId: "offer-burger", optionSnapshots: [rare] }),
+  ];
+  const withExtras = { ...burger, offeredModifiers: [doneness, extrasList] };
+  const el = await openRow({ lines, products: [flan, withExtras] });
+  const shown = [titleCount(el), windowTotal(el)];
+  expect(shown[1]).not.toBeNull();
+  await editNote(el, "warm, no salt");
+  const picker = q<TillModifierPicker>(el, "till-modifier-picker")!;
+  picker.shadowRoot!.querySelector<HTMLInputElement>("#label-list-cooked-label-medium")!.click();
+  await picker.updateComplete;
+  await el.updateComplete;
+  expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(false);
+  expect([titleCount(el), windowTotal(el)]).toEqual(shown);
+  picker
+    .shadowRoot!.querySelector<HTMLElement>('[data-test="pick-list-extras-p-bacon-inc"]')!
+    .click();
+  await picker.updateComplete;
+  await el.updateComplete;
+  expect([titleCount(el), windowTotal(el)]).toEqual([null, null]);
+});
+
 const startedFlan = "The kitchen has already started Flan, so it can't be changed.";
 
 /** The note box's text inside the open window's fields. */

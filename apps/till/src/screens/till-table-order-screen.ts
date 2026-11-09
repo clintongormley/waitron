@@ -3439,6 +3439,30 @@ export class TillTableOrderScreen extends LitElement {
     return lineTotal(before, amount);
   }
 
+  /** Whether Change dish would move the bill: another count, or other extras. What the server
+   * charges for what a change adds depends on the dish's kitchen state and adjustments
+   * (`applyLineEdits`), which the window does not know, so it shows no count or Total then. */
+  #sentChangeMovesPrice(
+    selection: ModifierConfirmDetail,
+    shown: Decimal,
+    before: LineSelection,
+  ): boolean {
+    if (selection.quantity !== undefined) {
+      try {
+        if (compareDecimal(decimal(selection.quantity), shown) !== 0) return true;
+      } catch {
+        return true;
+      }
+    }
+    const picks = (extras: LineSelection["extras"]) =>
+      JSON.stringify(
+        (extras ?? [])
+          .map(({ listId, productId, quantity }) => JSON.stringify([listId, productId, quantity]))
+          .sort(),
+      );
+    return picks(selection.extras) !== picks(before.extras);
+  }
+
   #sentLineDialog(): TemplateResult {
     const pending = this.sentLinePending;
     const members = this.#sentLineMembers();
@@ -3472,6 +3496,9 @@ export class TillTableOrderScreen extends LitElement {
       changeLines === undefined ? undefined : this.#sentChangeSeedFor(pending!, changeLines[0]!);
     const change = this.sentChange?.pending === pending ? this.sentChange.detail : undefined;
     const changeReady = change?.changed === true && change.savable && !disabled;
+    const priceMoves =
+      change?.changed === true &&
+      this.#sentChangeMovesPrice(change.selection, decimal(shownQuantity), seed!.selection);
     const refused =
       this.sentChangeRefused?.pending === pending ? this.sentChangeRefused : undefined;
     const refusedVoid = refused !== undefined && slice !== undefined && this.#canVoidSent(slice);
@@ -3504,7 +3531,7 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`
               <p class="move-dish">
-                ${row.name}${this.#nutrition(row)} ×${this.#displayQty(shownQuantity)}
+                ${row.name}${this.#nutrition(row)}${priceMoves ? nothing : ` ×${this.#displayQty(shownQuantity)}`}
                 ${seed === undefined ? this.#sentDetails(row) : nothing}
                 ${allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: row.lineId })}
               </p>
@@ -3563,10 +3590,14 @@ export class TillTableOrderScreen extends LitElement {
               </p>
               ${group === undefined ? nothing : html`<p data-sent-line-origin>${this.#sentOf(group)}</p>`}
               ${partlyServed ? html`<p data-sent-line-served>${this.#servedOf(row)}</p>` : nothing}
-              <div class="total-row">
-                <span>${t("label.total")}</span
-                ><span class="amount">${this.#money(times(decimal(row.netAmount)))}</span>
-              </div>
+              ${
+                priceMoves
+                  ? nothing
+                  : html`<div class="total-row">
+                      <span>${t("label.total")}</span
+                      ><span class="amount">${this.#money(times(decimal(row.netAmount)))}</span>
+                    </div>`
+              }
             `
       }
       <wt-form-actions
