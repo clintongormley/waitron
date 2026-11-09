@@ -9,6 +9,9 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "sale.correction_amount_invalid": Record<string, never>;
+    "sale.correction_scope_invalid": { reason: "empty" | "missing" | "duplicate" | "required" };
+    "sale.correction_history_unusable": Record<string, never>;
     /** A tender still has `settledAt: null`, so `settleSale` settles nothing and the sale stays
      * retryable. `recordSale`'s immediate settlement runs the same `settleSale`. */
     "sale.tender_unsettled": { deviceId: string | null; saleId: string; unsettledCount: number };
