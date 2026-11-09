@@ -1,58 +1,59 @@
 # A653-l: keep a whole row on short landscape phones
 
-**Proposal.** The driver's real-page probe leaves 4px of rows at 667×375 and none at 844×390
-in Structure selection. Receipts: Lane D `archive/questions-resolved-2026-11-09.md`, watcher
-23:32 and preceding question; `receipts/a653-cap-run-it/review.md`, finding 1. Approval covers
-the cap, not this design. Build after PR #2674 lands, using candidate
-`220e7166d0a60c54bff5b08efdfd7033a3e0b81b` and `2026-11-09-a653-shared-table-cap.md` meanwhile.
-Driver inspects and signs off this plan, obtains one Claude read and at most one reread,
-then watcher approval before code.
+**Proposal; no build approval yet.** A653 landed in PR #2674 (`8d7ee8c42c`). Its real-page
+Structure selection probe left 4px of row space at 667×375 and none at 844×390. The watcher's
+2026-11-09 23:32 instruction, in Lane D `archive/questions-resolved-2026-11-09.md`, was:
+“after this lands, take it as your next item, A653-l: a one-page plan for the smallest fix
+(for example, the cap stands aside below a viewport height, or selection keeps one whole row).”
+That approves planning, not this rule. One Claude read and at most one reread precede watcher
+approval; no code starts before it.
 
-**Shared rule.** In `dashboard-app` CSS, set `.main`'s `--wt-table-max` to `none` only when
-the viewport is landscape, at most **400 CSS pixels high**, and its primary pointer is coarse
-(the browser's touch-oriented input classification). Every dashboard table grows naturally;
-the content column scrolls rows, toolbar and headings together. You can scroll a whole product
-row into view during selection without rotating. This gives up held controls/headings in that
-mode. Above 400px, in portrait, or with a fine primary pointer, retain A653's cap.
-Short and empty tables still grow only to their content. Dialogs retain their existing reset.
+**Shared rule and decision.** After the existing shell cap declaration, add
+`@media (orientation: landscape) and (max-height: 25rem)` and set `.main`'s existing
+`--wt-table-max` to `none`. The shell owns that inherited value. All dashboard tables then
+use natural height; the content column scrolls rows, toolbar and headings together. This is
+a deliberate exception to A653's held-controls/headings rule. Selection actions scroll away
+while you pick lower rows; you scroll back to use them. Approval must accept that tradeoff.
 
-Approval settles the 400px boundary, coarse-pointer scope and scrolling-controls tradeoff.
-Leave out row-height floors, selection-specific rules, per-screen exceptions, APIs, new state,
-measurements, observers and timers. Keep `wt-data-table.ts` and `wt-dialog.ts` unchanged.
+The cutoff is a chosen round boundary, nominally 400px, just above the two target heights;
+it is not a measured universal minimum. Above it the cap stays, with no whole-row guarantee.
+Portrait and desktop targets retain their cap. Short/empty tables retain natural height and
+dialogs their nearer reset. No pointer condition, row-height floor, selection-specific rule,
+per-screen exception, API, state, measurement, observer or timer. Leave the shared table and
+dialog implementations unchanged.
 
-**Exact files and size.** One medium PR; estimate two hours build-to-open, hard limit three
-hours. Stop for the watcher before scope changes or growth beyond about 1.5× this estimate.
+**Exact files and build size.** One small PR, about one hour build-to-open, hard limit three.
+Stop for the watcher before scope changes or growth beyond about 1.5× the estimate.
 
-| Kind | Changed files | Estimated added / removed lines |
+| Kind | Changed files | Added / removed lines |
 | --- | --- | --- |
-| Production | `apps/dashboard/src/dashboard-app.ts` | +8 / −0 |
-| Tests | `apps/dashboard/src/dashboard-app.touch.test.ts` | +65 / −5 |
-| Test support | None; reuse the native fixture and drag helper in that test | +0 / −0 |
-| Docs | `docs/developers/design-system.md`, `docs/backlog.md`, `docs/backlog/dashboard.md`, this plan | +80 / −15 |
+| Production | `apps/dashboard/src/dashboard-app.ts` | +6 / −0 |
+| Tests | `apps/dashboard/src/dashboard-app.touch.test.ts` | +45 / −5 |
+| Test support | None; reuse the native fixture and drag helper | +0 / −0 |
+| Docs | `docs/developers/design-system.md`, `docs/backlog.md`, `docs/backlog/dashboard.md` | +10 / −15 |
 
-**Build and test responsibility.** Reproduce both selection screenshots in the real page frame.
-Extend the existing native Structure fixture with normal-mode landscape cases at
-667×375 and 844×390: a native row drag moves the content column while the table's row scroll
-position stays zero; a heading/toolbar drag also moves the column. Observe the expected failure
-under the cap, apply the CSS override, then pass. Retain the portrait gesture cases and their
-existing row-count assertions unchanged. Reuse native `scrollend` completion, not timing waits.
-Existing UI suites own capped/uncapped height, focus/reveal and headings. Add no geometry suite,
-private-style assertions or duplicated selection tests.
+This already-committed plan is separate from those build estimates. Both backlog entries exist
+on the landed cap base. Do not rewrite the historical A653 plan.
 
-**Focused checks and visual boundaries.** Run `pnpm --filter @waitron/dashboard exec vitest run
-src/dashboard-app.touch.test.ts` and `pnpm --filter @waitron/ui exec vitest run
-src/components/wt-data-table.test.ts src/components/wt-data-table.head-and-cells.test.ts
-src/components/wt-data-table.lifecycle.test.ts`. Manually inspect screenshots of real-page
-40-product Structure, normal and selection, at both target sizes in EN/ES and both themes.
-Require a whole product row after page scrolling, separate from the root, plus access to the
-last row and selection controls. Inspect touch landscape 844×400/401 across the cutoff,
-portrait 375×667 and 390×844, desktop 1280×800 for retained cap behaviour. At fine-pointer 844×390, check the same landscape
-page-scrolling rule.
-Check Products too, short/empty tables with a following action, and a dialog table. Screenshots
-own this geometry evidence and stay local; gesture tests own scroll interaction.
+**Test responsibility.** Extend the existing native Structure fixture with normal-mode cases
+at 667×375 and 844×390. A native row drag must move the main column while the table's own row
+scroll stays zero; observe the failing capped case first, then apply the override. Wait for
+native `scrollend` before the absence assertion and prove it with one deliberate forbidden
+movement. Keep portrait gestures and their behavioural assertions. No extra heading gesture:
+it already moves the column. Existing UI suites retain capped/uncapped, focus/reveal and heading
+responsibilities; add no private-style mirror, duplicate selection or geometry test.
 
-**Finish line.** Update the design-system contract and remove A653-l from both backlogs.
-After the normal hook, branch review and current-head CI, staff can select landscape Structure
-rows at both sizes. Reusing natural height and page scrolling keeps this simple. The cutoff
-is proposed policy; screenshots must establish its boundaries. If they fail, return to the
-watcher rather than add row measurement.
+Run dashboard's `vitest run src/dashboard-app.touch.test.ts` and UI's
+`vitest run src/components/wt-data-table.test.ts src/components/wt-data-table.head-and-cells.test.ts
+src/components/wt-data-table.lifecycle.test.ts`, through `pnpm --filter @waitron/<package> exec`.
+
+**Visual checks and finish line.** Inspect real-page 40-product Structure normal/selection in
+EN/ES at both target sizes; both themes at one size. After page scrolling, a whole product row
+and the last row's checkbox must be fully visible. Select the last row, scroll back, and check
+the correct count and working selection actions. Check the chosen cutoff and record 844×401's
+row area without making it a row-count gate. Retain portrait 375×667/390×844 and desktop
+1280×800 behaviour; also inspect Products, short/empty tables with a following action, and a
+dialog table. Screenshots own geometry and stay local; native tests own scrolling. If a target
+fails, return to the watcher. Update the contract and remove A653-l from both backlogs. After
+review, the normal hook and current-head CI, staff can select rows at both landscape targets
+and return to the actions without rotating the phone.
