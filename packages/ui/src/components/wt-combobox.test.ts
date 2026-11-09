@@ -3818,3 +3818,103 @@ describe.each(["light", "dark"] as const)("a muted option (%s theme)", (theme) =
     expect(getComputedStyle(fieldParts(el).value).color).not.toBe(colour);
   });
 });
+
+describe("field stays clear of its open list", () => {
+  test.each(["never", "always"] as const)(
+    "search=%s opens above a field near the bottom",
+    async (search) => {
+      await page.viewport(390, 400);
+      try {
+        const { el, trigger, popup } = await mountCombobox();
+        el.search = search;
+        el.options = Array.from({ length: 20 }, (_, index) => ({
+          value: String(index),
+          label: `Option ${index}`,
+        }));
+        el.style.cssText = "position: fixed; left: 20px; bottom: 12px; width: 250px";
+        await el.updateComplete;
+        trigger.focus();
+        await userEvent.keyboard("{ArrowDown}");
+        const anchor = trigger.getBoundingClientRect();
+        const box = popup.getBoundingClientRect();
+        expect(box.bottom).toBeLessThanOrEqual(anchor.top);
+        expect(box.top).toBeGreaterThanOrEqual(8);
+        await userEvent.keyboard("{End}");
+        await vi.waitFor(() => {
+          const last = el.shadowRoot!.querySelectorAll<HTMLElement>(".option")[19]!;
+          expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+            popup.getBoundingClientRect().bottom,
+          );
+        });
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
+  test("an above search panel stays above the field as matches shrink and grow", async () => {
+    const { el, trigger, popup } = await mountWithManyOptions();
+    el.style.cssText = "position: fixed; left: 20px; bottom: 12px; width: 250px";
+    await el.updateComplete;
+    trigger.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+    await userEvent.fill(search, "Option 19");
+    expect(el.shadowRoot!.querySelectorAll(".option")).toHaveLength(1);
+    expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      trigger.getBoundingClientRect().top,
+    );
+    await userEvent.fill(search, "");
+    expect(el.shadowRoot!.querySelectorAll(".option").length).toBeGreaterThan(10);
+    expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      trigger.getBoundingClientRect().top,
+    );
+  });
+
+  test("when neither side fits, the list scrolls below without covering a middle field or its search", async () => {
+    await page.viewport(390, 320);
+    try {
+      const { el, trigger, popup } = await mountWithManyOptions();
+      el.style.cssText = "position: fixed; left: 20px; top: 100px; width: 250px";
+      await el.updateComplete;
+      trigger.focus();
+      await userEvent.keyboard("{ArrowDown}");
+      const box = popup.getBoundingClientRect();
+      const list = el.shadowRoot!.querySelector<HTMLElement>(".list")!;
+      expect(box.top).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
+      expect(box.bottom).toBeLessThanOrEqual(innerHeight - 8);
+      expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
+      const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+      expect(search.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom);
+      await userEvent.keyboard("{End}");
+      await vi.waitFor(() => expect(list.scrollTop).toBeGreaterThan(0));
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  test("resize keeps the active last row visible and stops placing a removed field", async () => {
+    await page.viewport(900, 800);
+    try {
+      const { el, trigger, popup } = await mountWithManyOptions();
+      el.style.cssText = "position: fixed; right: 12px; top: 24px; width: 250px";
+      await el.updateComplete;
+      trigger.focus();
+      await userEvent.keyboard("{ArrowDown}{End}");
+      await page.viewport(390, 400);
+      await vi.waitFor(() => {
+        const box = popup.getBoundingClientRect();
+        expect(box.right).toBeLessThanOrEqual(innerWidth - 8);
+        expect(box.bottom).toBeLessThanOrEqual(innerHeight - 8);
+        const last = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".option")].at(-1)!;
+        expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom);
+      });
+      el.remove();
+      const placed = popup.style.cssText;
+      window.dispatchEvent(new Event("resize"));
+      expect(popup.style.cssText).toBe(placed);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+});

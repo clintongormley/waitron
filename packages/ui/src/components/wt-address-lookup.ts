@@ -1,3 +1,4 @@
+import { popupIndex } from "../popup-helpers.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
@@ -247,9 +248,7 @@ export class WtAddressLookup extends LitElement {
     if (count === 0) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
-      const step = event.key === "ArrowDown" ? 1 : -1;
-      this.activeIndex =
-        this.activeIndex < 0 && step < 0 ? count - 1 : (this.activeIndex + step + count) % count;
+      this.activeIndex = popupIndex(event.key, this.activeIndex, count)!;
     } else if (event.key === "Escape") {
       // Stopped so an Escape that closes the list does not also close a dialog around the field.
       event.preventDefault();

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
@@ -296,3 +296,30 @@ describe.each(["light", "dark"] as const)(
     });
   },
 );
+
+it("switches the mounted bill by keyboard, updates its label and returns focus to the trigger", async () => {
+  const el = await mountScreen(three, "wo-1");
+  const host = switcher(el)!;
+  const trigger = host.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+  const popup = host.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  const picked = capture(el, "switch-bill");
+  el.addEventListener("switch-bill", (event) => {
+    el.orderId = (event as CustomEvent<{ workingOrderId: string }>).detail.workingOrderId;
+  });
+  await userEvent.click(trigger);
+  expect(trigger.getAttribute("aria-haspopup")).toBe("menu");
+  expect(el.shadowRoot!.activeElement).toBe(host.querySelector('[data-switch-bill="wo-1"]'));
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+  await el.updateComplete;
+  expect(picked).toEqual([{ workingOrderId: "wo-2" }]);
+  expect(closedLabel(el)).toBe("Bill 2 · 3 bills · Clint · €54.00");
+  expect(host.querySelector('[data-switch-bill="wo-2"]')!.getAttribute("aria-checked")).toBe(
+    "true",
+  );
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(host.shadowRoot!.activeElement).toBe(trigger);
+  await userEvent.keyboard("{Enter}{End}{ArrowDown}");
+  expect(el.shadowRoot!.activeElement).toBe(host.querySelector('[data-switch-bill="wo-1"]'));
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
+});

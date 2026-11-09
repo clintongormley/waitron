@@ -268,6 +268,9 @@ bill opens too, so you can name it or, when it has a receipt, print a copy, but 
 dishes. **+ New bill** is always last in the list: it starts a new, empty bill at the table and puts
 it on screen.
 
+With a keyboard, press Enter to open the switcher, use Up and Down to reach a bill, then press
+Enter to show it. Home and End reach the first and last choices. Escape closes the list.
+
 Everything else you do at the table is in the **⋮** menu beside the switcher, in two parts. The
 first, headed with the bill on screen, such as **Bill 2 · Clint**, acts on that bill alone: **Name
 this bill**, **Move dishes…**, **Merge bills**, **Move this bill**, **Comp the bill**, **Full

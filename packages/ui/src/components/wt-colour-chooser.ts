@@ -1,3 +1,4 @@
+import { popupIndex, popupPlacement } from "../popup-helpers.js";
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { styleMap } from "lit/directives/style-map.js";
@@ -229,7 +230,7 @@ export class WtColourChooser extends LitElement {
     const box = popup.getBoundingClientRect();
     const maxLeft = Math.max(0, innerWidth - box.width - 8);
     popup.style.left = `${Math.max(0, Math.min(anchor.left, maxLeft))}px`;
-    popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - box.height - 8))}px`;
+    popup.style.top = `${popupPlacement(anchor, box.height, innerHeight, "fit").top}px`;
   }
 
   private readonly onWindowResize = (): void => this.positionPopup();
@@ -262,15 +263,10 @@ export class WtColourChooser extends LitElement {
     }
     const tiles = [...this.popup!.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
     const current = tiles.indexOf(this.shadowRoot!.activeElement as HTMLButtonElement);
-    const last = tiles.length - 1;
-    let next: number;
-    if (event.key === "ArrowRight" || event.key === "ArrowDown")
-      next = current >= last ? 0 : current + 1;
-    else if (event.key === "ArrowLeft" || event.key === "ArrowUp")
-      next = current <= 0 ? last : current - 1;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = last;
-    else return;
+    const key =
+      event.key === "ArrowRight" ? "ArrowDown" : event.key === "ArrowLeft" ? "ArrowUp" : event.key;
+    const next = popupIndex(key, current, tiles.length);
+    if (next === undefined) return;
     event.preventDefault();
     const value = tiles[next]!.dataset.value!;
     if (value === this.value) {

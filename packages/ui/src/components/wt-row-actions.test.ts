@@ -558,6 +558,39 @@ describe("opens-below", () => {
     }
   });
 
+  it.each([false, true])(
+    "repositions an open list (opens-below=%s) on resize and keeps its focused last action in view without observer loops",
+    async (opensBelow) => {
+      const errors: string[] = [];
+      const onError = (event: ErrorEvent) => errors.push(event.message);
+      window.addEventListener("error", onError);
+      await page.viewport(900, 800);
+      try {
+        const { el, trigger, popup, actions } = await longMenu(opensBelow ? 15 : 5);
+        el.opensBelow = opensBelow;
+        el.style.insetInlineStart = "auto";
+        el.style.right = "8px";
+        await el.updateComplete;
+        await userEvent.click(trigger);
+        const last = actions.at(-1)!;
+        last.focus();
+        await page.viewport(390, 400);
+        await vi.waitFor(() => {
+          const box = popup.getBoundingClientRect();
+          expect(box.right).toBeLessThanOrEqual(innerWidth - 8 + 0.5);
+          expect(box.bottom).toBeLessThanOrEqual(innerHeight - 8 + 0.5);
+          if (opensBelow) expect(box.top).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
+          expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom);
+        });
+        expect(last.shadowRoot!.activeElement).toBe(last.shadowRoot!.querySelector("button"));
+        expect(errors.filter((message) => message.includes("ResizeObserver"))).toEqual([]);
+      } finally {
+        window.removeEventListener("error", onError);
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
   it("does not open over its own trigger, so a second tap there reaches the trigger, not an action", async () => {
     await page.viewport(600, 400);
     try {
@@ -1367,4 +1400,28 @@ describe("role-menu navigation", () => {
     expect(popup.matches(":popover-open")).toBe(false);
     expect(document.activeElement).toBe(outside);
   });
+});
+
+it("opens on the first enabled menu item when a checked choice is disabled or invisible", async () => {
+  const el = (await mount(`<wt-row-actions label="Bills"><div role="menu">
+    <button role="menuitemradio" aria-checked="true" disabled>Unavailable</button>
+    <button role="menuitem" style="visibility:hidden">Invisible</button>
+    <button role="menuitem">New bill</button>
+  </div></wt-row-actions>`)) as WtRowActions;
+  el.show();
+  expect(document.activeElement).toBe(el.querySelectorAll("button")[2]);
+  await userEvent.keyboard("{ArrowDown}");
+  expect(document.activeElement).toBe(el.querySelectorAll("button")[2]);
+});
+
+it("an empty menu tolerates navigation and Escape still closes it", async () => {
+  const el = (await mount(
+    '<wt-row-actions label="Bills"><div role="menu"></div></wt-row-actions>',
+  )) as WtRowActions;
+  const trigger = el.shadowRoot!.querySelector("button")!;
+  await userEvent.click(trigger);
+  await userEvent.keyboard("{ArrowDown}{ArrowUp}{Home}{End}");
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+  await userEvent.keyboard("{Escape}");
+  expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
 });

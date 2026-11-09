@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
-import { popupIndex } from "../popup-helpers.js";
+import { popupIndex, popupPlacement } from "../popup-helpers.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import "./wt-icon.js";
 import type { WtIconSize } from "./wt-icon.js";
@@ -106,12 +106,16 @@ export class WtRowActions extends LitElement {
   override disconnectedCallback(): void {
     this.expanded = false;
     this.#resize.disconnect();
+    window.removeEventListener("resize", this.onWindowResize);
     super.disconnectedCallback();
   }
 
   private onToggle(): void {
     this.expanded = this.popup.matches(":popover-open");
-    if (!this.expanded) this.#resize.unobserve(this.popup);
+    if (!this.expanded) {
+      this.#resize.unobserve(this.popup);
+      window.removeEventListener("resize", this.onWindowResize);
+    }
   }
 
   private onTriggerClick(event: MouseEvent): void {
@@ -128,6 +132,7 @@ export class WtRowActions extends LitElement {
     popup.showPopover();
     this.positionPopup();
     this.#resize.observe(popup);
+    window.addEventListener("resize", this.onWindowResize);
     const options = this.menuRows();
     (options.find((row) => row.getAttribute("aria-checked") === "true") ?? options[0])?.focus();
   }
@@ -137,40 +142,50 @@ export class WtRowActions extends LitElement {
     if (popup?.matches(":popover-open")) popup.hidePopover();
   }
 
+  private readonly onWindowResize = (): void => this.positionPopup();
+
   private positionPopup(): void {
+    if (!this.popup.matches(":popover-open")) return;
     const anchor = this.trigger.getBoundingClientRect();
-    if (!this.opensBelow) this.popup.style.maxHeight = "";
-    const below = this.opensBelow && this.capBelow(innerHeight - anchor.bottom - 8);
+    const style = getComputedStyle(this.popup);
+    const border = this.popup.offsetHeight - this.popup.clientHeight;
+    const height =
+      this.popup.querySelector(".actions")!.getBoundingClientRect().height +
+      parseFloat(style.paddingTop) +
+      parseFloat(style.paddingBottom) +
+      border;
+    const room = Math.max(0, innerHeight - anchor.bottom - 8);
+    let cap = room;
+    let below = this.opensBelow;
+    if (below && height > room) {
+      const rows = this.rows();
+      const contentTop =
+        this.popup.getBoundingClientRect().top + this.popup.clientTop - this.popup.scrollTop;
+      if (
+        rows.length > 0 &&
+        rows.at(-1)!.getBoundingClientRect().bottom - contentTop > room - border
+      ) {
+        const middles = rows
+          .map((row) => {
+            const box = row.getBoundingClientRect();
+            return box.top + box.height / 2 - contentTop;
+          })
+          .filter((middle) => middle <= room - border);
+        below = middles.length >= 2;
+        if (below) cap = Math.max(...middles) + border;
+      }
+    }
+    const placement = popupPlacement(anchor, height, innerHeight, below ? "below" : "fit");
+    const scrollTop = this.popup.scrollTop;
+    this.popup.style.maxHeight = this.opensBelow ? `${below ? cap : placement.maxHeight}px` : "";
     const popup = this.popup.getBoundingClientRect();
     const desiredLeft = this.align === "end" ? anchor.right - popup.width : anchor.left;
     this.popup.style.left = `${Math.max(8, Math.min(desiredLeft, innerWidth - popup.width - 8))}px`;
-    this.popup.style.top = below
-      ? `${anchor.bottom}px`
-      : `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;
-  }
-
-  /** Caps the popup's height to `room`. A list cut short is cut through the middle of an action, so
-   * the half that shows says the list goes on even where no scrollbar is drawn. False, capped to the
-   * window less 8px above and below, when `room` cannot show one whole action and half of the next. */
-  private capBelow(room: number): boolean {
-    const popup = this.popup;
-    popup.style.maxHeight = `${Math.max(0, room)}px`;
-    if (popup.scrollHeight <= popup.clientHeight) return true;
-    const rows = this.rows();
-    if (rows.length === 0) return true;
-    const contentTop = popup.getBoundingClientRect().top + popup.clientTop - popup.scrollTop;
-    if (rows.at(-1)!.getBoundingClientRect().bottom - contentTop <= popup.clientHeight) return true;
-    const middles = rows.map((row) => {
-      const box = row.getBoundingClientRect();
-      return box.top + box.height / 2 - contentTop;
-    });
-    const shown = middles.filter((middle) => middle <= popup.clientHeight);
-    if (shown.length < 2) {
-      popup.style.maxHeight = `${Math.max(0, innerHeight - 16)}px`;
-      return false;
-    }
-    popup.style.maxHeight = `${room - (popup.clientHeight - Math.max(...shown))}px`;
-    return true;
+    this.popup.style.top = `${placement.top}px`;
+    this.popup.scrollTop = scrollTop;
+    this.rows()
+      .find((row) => row.matches(":focus-within"))
+      ?.scrollIntoView({ block: "nearest" });
   }
 
   /** The menu's drawn actions, slotted directly or inside a slotted group. */
@@ -258,7 +273,8 @@ export class WtRowActions extends LitElement {
     ].filter(
       (row) =>
         !row.matches(':disabled, [disabled], [aria-disabled="true"]') &&
-        row.getClientRects().length > 0,
+        row.getClientRects().length > 0 &&
+        getComputedStyle(row).visibility !== "hidden",
     );
   }
 
