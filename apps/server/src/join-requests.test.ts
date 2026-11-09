@@ -488,7 +488,7 @@ describe("readJoinStatus", () => {
     expect(status).toBe("not_approved");
   });
 
-  it("is not_approved for a request still holding its token's old scrypt hash, so the device asks again", async () => {
+  it("is not_approved for a request still holding its token's old scrypt hash", async () => {
     const venue = await setupVenue(suite.db);
     const window = openWindow();
     const made = await withTransaction(suite.db, async (tx) => {
@@ -1662,7 +1662,7 @@ describe("readAgentJoinStatus", () => {
     expect(await readAgentJoinStatus(suite.db, cfg, randomUUID(), made.token)).toBe("not_approved");
   });
 
-  it("is not_approved for a request still holding its token's old scrypt hash, so the agent asks again", async () => {
+  it("is not_approved for a request still holding its token's old scrypt hash", async () => {
     const cfg = (await setupVenue(suite.db)).cfg;
     const made = await asApp((tx) =>
       createJoinRequest(tx, cfg, { kind: "print_agent", label: "a" }),

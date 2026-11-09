@@ -22,15 +22,21 @@ export function deviceTokenMatches(token: string, stored: string): boolean {
   return presented.length === held.length && timingSafeEqual(presented, held);
 }
 
-// `last_seen_at` is text, so `<` compares strings, which orders two instants correctly only for
-// the one `toISOString()` spelling every writer uses.
-/** Whether nothing is stored yet, or `lastSeenAt` is more than a minute older than `seenAt`. */
-export function sightingDue(lastSeenAt: string | null, seenAt: string): boolean {
-  const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
-  return lastSeenAt === null || lastSeenAt < staleBefore;
+/**
+ * The instant a minute before `seenAt`; a stored sighting before it is stale. The stamps are text
+ * and `<` compares them as strings, which orders two instants correctly only for the one
+ * `toISOString()` spelling every writer uses.
+ */
+export function staleBefore(seenAt: string): string {
+  return new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
 }
 
-export interface TokenRow {
+/** Whether nothing is stored yet, or `lastSeenAt` is more than a minute older than `seenAt`. */
+export function sightingDue(lastSeenAt: string | null, seenAt: string): boolean {
+  return lastSeenAt === null || lastSeenAt < staleBefore(seenAt);
+}
+
+interface TokenRow {
   tokenHash: string;
   lastSeenAt: string | null;
 }

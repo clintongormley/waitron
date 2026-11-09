@@ -14,7 +14,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorizeManager, profilesAdmitting, sessions } from "@waitron/identity";
+import { authorizeManager, profilesAdmitting, sessions, sightingDue } from "@waitron/identity";
 import {
   chosenPrinterOf,
   kindOfFormFactor,
@@ -35,7 +35,6 @@ import {
   requireDevice,
   requireDeviceProof,
   setDeviceCookie,
-  sightingDue,
   type DeviceBinding,
 } from "./device-session.js";
 import {

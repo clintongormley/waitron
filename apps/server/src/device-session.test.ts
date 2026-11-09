@@ -440,7 +440,7 @@ describe("requireDevice (venue database)", () => {
     expect(await lastSeenAt(deviceId)).toBeNull();
   });
 
-  it("rejects a cookie whose row still holds the token's old scrypt hash, so the device pairs again", async () => {
+  it("rejects a cookie whose row still holds the token's old scrypt hash", async () => {
     const { deviceId, token } = await enrolDeviceFixture();
     await suite.db
       .update(devices)

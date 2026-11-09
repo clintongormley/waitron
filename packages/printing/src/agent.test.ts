@@ -176,7 +176,7 @@ describe("authenticateAgent", () => {
     expect(await codeOf(() => authenticateAgent(suite.db, forged))).toBe("agent.unauthorized");
   });
 
-  it("a row still holding the token's old scrypt hash → agent.unauthorized, so the agent enrols again", async () => {
+  it("a row still holding the token's old scrypt hash → agent.unauthorized", async () => {
     const { agentId, token } = await enrolled();
     const secret = token.slice(token.indexOf(".") + 1);
     await suite.db

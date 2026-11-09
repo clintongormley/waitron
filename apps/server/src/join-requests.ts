@@ -401,18 +401,20 @@ export async function challengeFor(
 
 type JoinStatus = "pending" | "approved" | "not_approved";
 
-/** The token hash a poller's selector names: its pending request's, or, only when there is none, its
- * accepted row's. */
-type StoredJoinHash = { pending: string } | { accepted: string } | null;
-
 /** A pending request whose token does not verify is `not_approved`; it never falls through to an
  * accepted row. */
-function statusFor(token: string, stored: StoredJoinHash): JoinStatus {
-  if (stored === null) return "not_approved";
-  if ("pending" in stored) {
-    return deviceTokenMatches(token, stored.pending) ? "pending" : "not_approved";
-  }
-  return deviceTokenMatches(token, stored.accepted) ? "approved" : "not_approved";
+async function pendingStatus(
+  tx: Transaction,
+  cfg: TradingContext,
+  joinId: string,
+  token: string,
+): Promise<JoinStatus | undefined> {
+  const [pending] = await tx
+    .select({ tokenHash: joinRequests.tokenHash })
+    .from(joinRequests)
+    .where(and(ownedBy(cfg), eq(joinRequests.id, joinId)));
+  if (pending === undefined) return undefined;
+  return deviceTokenMatches(token, pending.tokenHash) ? "pending" : "not_approved";
 }
 
 /**
@@ -431,22 +433,21 @@ export async function readJoinStatus(
   window: DeviceRequestWindow & Pick<PairingMode, "dropClaim">,
 ): Promise<JoinStatus> {
   let dropped: string[] = [];
-  const stored = await withTransaction(db, async (tx): Promise<StoredJoinHash> => {
+  const status = await withTransaction(db, async (tx): Promise<JoinStatus> => {
     await sweepLapsed(tx, cfg);
     dropped = await discardLapsedDeviceRequests(tx, cfg, window);
-    const [pending] = await tx
-      .select({ tokenHash: joinRequests.tokenHash })
-      .from(joinRequests)
-      .where(and(ownedBy(cfg), eq(joinRequests.id, joinId)));
-    if (pending !== undefined) return { pending: pending.tokenHash };
+    const pending = await pendingStatus(tx, cfg, joinId, token);
+    if (pending !== undefined) return pending;
     const [accepted] = await tx
       .select({ tokenHash: devices.tokenHash })
       .from(devices)
       .where(and(eq(devices.id, joinId), eq(devices.active, true)));
-    return accepted === undefined ? null : { accepted: accepted.tokenHash };
+    return accepted !== undefined && deviceTokenMatches(token, accepted.tokenHash)
+      ? "approved"
+      : "not_approved";
   });
   for (const id of dropped) window.dropClaim(id);
-  return statusFor(token, stored);
+  return status;
 }
 
 /**
@@ -621,20 +622,18 @@ export async function readAgentJoinStatus(
   joinId: string,
   token: string,
 ): Promise<JoinStatus> {
-  const stored = await withTransaction(db, async (tx): Promise<StoredJoinHash> => {
+  return withTransaction(db, async (tx): Promise<JoinStatus> => {
     await sweepLapsed(tx, cfg);
-    const [pending] = await tx
-      .select({ tokenHash: joinRequests.tokenHash })
-      .from(joinRequests)
-      .where(and(ownedBy(cfg), eq(joinRequests.id, joinId)));
-    if (pending !== undefined) return { pending: pending.tokenHash };
+    const pending = await pendingStatus(tx, cfg, joinId, token);
+    if (pending !== undefined) return pending;
     const [accepted] = await tx
       .select({ tokenHash: printAgents.tokenHash })
       .from(printAgents)
       .where(and(eq(printAgents.id, joinId), eq(printAgents.active, true)));
-    return accepted === undefined ? null : { accepted: accepted.tokenHash };
+    return accepted !== undefined && deviceTokenMatches(token, accepted.tokenHash)
+      ? "approved"
+      : "not_approved";
   });
-  return statusFor(token, stored);
 }
 
 /** Refuse a request. Deleting the row is the whole of it — there is no denied state to carry, because

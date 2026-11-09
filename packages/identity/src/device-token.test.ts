@@ -10,6 +10,7 @@ import {
   hashDeviceToken,
   sightingDue,
   signInWithToken,
+  staleBefore,
 } from "./device-token.js";
 import { hashSecret } from "./secret-hash.js";
 import { seedSessionDevice } from "../test/fixtures.js";
@@ -47,6 +48,12 @@ describe("deviceTokenMatches", () => {
 
   it("refuses the stored hash presented as the token", () => {
     expect(deviceTokenMatches(hashDeviceToken(TOKEN), hashDeviceToken(TOKEN))).toBe(false);
+  });
+});
+
+describe("staleBefore", () => {
+  it("is the instant a minute before, in the toISOString spelling", () => {
+    expect(staleBefore("2026-11-09T12:00:00.000Z")).toBe("2026-11-09T11:59:00.000Z");
   });
 });
 

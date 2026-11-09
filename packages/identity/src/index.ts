@@ -36,13 +36,12 @@ export {
 export type { ManagementSession } from "./management-session.js";
 export { hashSessionToken, mintSessionToken } from "./session-token.js";
 export {
-  SIGHTING_INTERVAL_MS,
   deviceTokenMatches,
   hashDeviceToken,
   sightingDue,
   signInWithToken,
+  staleBefore,
 } from "./device-token.js";
-export type { TokenRow } from "./device-token.js";
 export { encryptTotpSecret } from "./mfa.js";
 export type { TotpKeyEntry, TotpKeyRing } from "./mfa.js";
 export {

@@ -6,7 +6,7 @@ import { deviceProfiles, devices } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { profileAllows } from "@waitron/layouts";
 import type { CapabilityFlag, FormFactor, ProfileAction } from "@waitron/layouts";
-import { SIGHTING_INTERVAL_MS, signInWithToken, sightingDue } from "@waitron/identity";
+import { signInWithToken, staleBefore } from "@waitron/identity";
 // Side-effect only: keeps `device.unauthorized` (errors.ts) reachable from the file that throws it.
 import "./errors.js";
 
@@ -194,21 +194,11 @@ async function readDeviceProof(
   return { device: toDeviceBinding(deviceId, row), tokenHash: row.tokenHash };
 }
 
-// At most one sighting write a minute: it is checked on every authenticated request, and the
-// dashboard shows last-seen only to the minute (`devices-screen.ts`'s `#lastSeen`).
-//
-// `last_seen_at` and `battery_reported_at` are text, so `<` on them compares strings, which orders
-// two instants correctly only for one spelling: `toISOString()`, which both their writers use
-// (`nowIso` here, and the battery route in `device-api.ts`).
-const staleBefore = (seenAt: string): string =>
-  new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
-
-export { sightingDue };
-
 /**
  * Records that `deviceId` was seen at `seenAt`, unless a sighting inside the last minute is already
  * recorded: the same check in the update keeps concurrent requests that all read a stale row to one
- * write.
+ * write. At most one a minute because it is checked on every authenticated request, and the
+ * dashboard shows last-seen only to the minute (`devices-screen.ts`'s `#lastSeen`).
  */
 export async function recordSighting(
   tx: Transaction,

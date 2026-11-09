@@ -4,7 +4,7 @@ import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { AppError, isUuid } from "@waitron/shared";
 import { printAgents } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { SIGHTING_INTERVAL_MS, signInWithToken } from "@waitron/identity";
+import { signInWithToken, staleBefore } from "@waitron/identity";
 
 /**
  * Resolves a bearer token `${agentId}.${secret}` to its agent id. The id selects the row and the
@@ -31,7 +31,6 @@ export async function authenticateAgent(db: Database, token: string): Promise<{ 
     // The staleness check on the row read spares a call the write lock; the same check in this
     // update keeps calls that all read a stale row to one write.
     recordSighting: async (tx, seenAt) => {
-      const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
       await tx
         .update(printAgents)
         .set({ lastSeenAt: seenAt })
@@ -39,7 +38,7 @@ export async function authenticateAgent(db: Database, token: string): Promise<{ 
           and(
             eq(printAgents.id, agentId),
             // `<` is UNKNOWN for NULL, so a never-seen agent needs its own alternative.
-            or(isNull(printAgents.lastSeenAt), lt(printAgents.lastSeenAt, staleBefore)),
+            or(isNull(printAgents.lastSeenAt), lt(printAgents.lastSeenAt, staleBefore(seenAt))),
           ),
         );
     },
