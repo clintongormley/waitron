@@ -100,6 +100,7 @@ export class WtSegmentedControl extends LitElement {
 
   @property() name = "";
   @property() label = "";
+  @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
   @property() value = "";
   @property({ attribute: false }) options: readonly SegmentedOption[] = [];
   @property({ type: Boolean, reflect: true }) disabled = false;
@@ -208,7 +209,7 @@ export class WtSegmentedControl extends LitElement {
       .filter(Boolean)
       .join(" ");
     return html`
-      <span class="label">${this.label}</span>
+      ${this.hideLabel ? nothing : html`<span class="label">${this.label}</span>`}
       <div
         role="radiogroup"
         aria-label=${this.label}
@@ -218,6 +219,7 @@ export class WtSegmentedControl extends LitElement {
         ${this.options.map(
           (option, index) =>
             html`<button
+              part="button"
               type="button"
               role="radio"
               aria-checked=${option.value === this.value}

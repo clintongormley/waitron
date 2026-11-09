@@ -213,7 +213,8 @@ describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it("renders the courses window over the product editor accessibly", async () => {
+  it("renders the courses window over the product editor accessibly at phone width", async () => {
+    await page.viewport(390, 900);
     const { el, host } = await mountWidget<CatalogueScreen>(
       "dashboard-catalogue-screen",
       { api: stubApi() },

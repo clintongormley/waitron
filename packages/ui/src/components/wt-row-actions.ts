@@ -99,6 +99,7 @@ export class WtRowActions extends LitElement {
   @property({ type: Boolean, attribute: "opens-below" }) opensBelow = false;
   @state() private expanded = false;
   @state() private isMenu = false;
+  @state() private directDelete: HTMLElement | null = null;
   @query("button") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
 
@@ -122,6 +123,12 @@ export class WtRowActions extends LitElement {
 
   private onTriggerClick(event: MouseEvent): void {
     event.preventDefault();
+    if (this.directDelete) {
+      event.stopPropagation();
+      const action = this.directDelete;
+      (action.shadowRoot?.querySelector<HTMLButtonElement>("button") ?? action).click();
+      return;
+    }
     if (this.popup.matches(":popover-open")) this.hide();
     else this.show();
   }
@@ -130,7 +137,8 @@ export class WtRowActions extends LitElement {
    * before the first render or while the host is off the page, where a popover cannot open. */
   show(): void {
     const popup = this.popup as HTMLElement | null;
-    if (popup === null || !this.isConnected || popup.matches(":popover-open")) return;
+    if (this.directDelete || popup === null || !this.isConnected || popup.matches(":popover-open"))
+      return;
     popup.showPopover();
     this.positionPopup();
     this.#resize.observe(popup);
@@ -283,6 +291,12 @@ export class WtRowActions extends LitElement {
 
   private onSlotChange(): void {
     this.isMenu = this.menuContent() !== undefined;
+    const actions = this.popup.querySelector("slot")!.assignedElements({ flatten: true });
+    this.directDelete =
+      actions.length === 1 &&
+      actions[0]!.matches('wt-button[data-action="delete"], button[data-action="delete"]')
+        ? (actions[0] as HTMLElement)
+        : null;
   }
 
   private onKeydown(event: KeyboardEvent): void {
@@ -314,14 +328,16 @@ export class WtRowActions extends LitElement {
       <button
         type="button"
         part="trigger"
-        aria-label=${this.label}
-        aria-expanded=${this.expanded}
-        aria-haspopup=${this.isMenu ? "menu" : nothing}
-        popovertarget="actions"
+        aria-label=${this.directDelete?.getAttribute("aria-label") ?? this.label}
+        aria-expanded=${this.directDelete ? nothing : this.expanded}
+        aria-haspopup=${!this.directDelete && this.isMenu ? "menu" : nothing}
+        popovertarget=${this.directDelete ? nothing : "actions"}
         @click=${this.onTriggerClick}
         @keydown=${this.onKeydown}
       >
-        <slot name="trigger"><wt-icon name=${this.icon} size=${this.iconSize}></wt-icon></slot>
+        <slot name="trigger"
+          ><wt-icon name=${this.directDelete ? "bin" : this.icon} size=${this.iconSize}></wt-icon
+        ></slot>
         <slot name="badge"></slot>
       </button>
       <div id="actions" part="popup" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>

@@ -1,12 +1,19 @@
-import { ReorderController, baseStyles, reorder, type ReorderModel } from "@waitron/ui";
+import {
+  ReorderController,
+  baseStyles,
+  reorder,
+  type ReorderModel,
+  type WtSegmentedControl,
+} from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
+import { guard } from "lit/directives/guard.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-switch.js";
+import "@waitron/ui/src/components/wt-segmented-control.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
 import type { DeleteImpact } from "@waitron/shared";
 import { courseDeleteCopy } from "./course-delete-copy.js";
@@ -14,7 +21,9 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type { Course, DashboardApi } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+import { guideHref } from "../help-guide.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { ListWriteQueue } from "./section-writes.js";
 
 const NEW = "new";
@@ -93,25 +102,38 @@ export class CourseList extends LitElement {
       .open-name:hover {
         opacity: var(--wt-opacity-hover);
       }
-      .held-control {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
+      td.timing-cell {
+        width: 1%;
       }
-      .held-note {
-        color: var(--wt-color-text-muted);
+      wt-segmented-control {
+        width: calc(4 * var(--wt-tap-min) - var(--wt-space-3));
+      }
+      wt-segmented-control::part(button) {
+        padding-inline: var(--wt-space-2);
+      }
+      td.handle-cell {
+        padding-inline-start: var(--wt-space-3);
+      }
+      td.actions-cell {
+        padding-inline-end: var(--wt-space-3);
       }
       th.held-heading {
+        position: relative;
         text-align: start;
-        padding-inline: var(--wt-space-2);
+        padding-inline: var(--wt-space-1);
+      }
+      th wt-help-tooltip {
+        margin-block-start: 0;
+        margin-inline-end: 0;
       }
       .empty {
         margin: 0;
+        padding: var(--wt-space-3);
         color: var(--wt-color-text-muted);
       }
       .error {
-        margin: var(--wt-space-2) 0 0;
+        margin: 0;
+        padding: var(--wt-space-3);
         color: var(--wt-color-danger);
       }
       .add {
@@ -219,7 +241,7 @@ export class CourseList extends LitElement {
   }
 
   #show(rows: Course[]): void {
-    this.#readDropped = this.#movesOut > 0;
+    this.#readDropped = this.#movesOut > 0 || this.#reorder.dragging;
     if (this.#readDropped) return;
     this.courses = rows.filter((course) => course.active);
     const edit = this.edit;
@@ -259,6 +281,7 @@ export class CourseList extends LitElement {
     this.#dragFrom = null;
     const to = this.courses.findIndex((course) => course.id === id);
     if (from !== null && to >= 0 && to !== from) this.#saveMove(id, to);
+    else if (this.#readDropped) void this.#load();
   }
 
   #saveMove(id: string, to: number): void {
@@ -361,7 +384,8 @@ export class CourseList extends LitElement {
     return html`<wt-input
       name="course-name"
       label=${label}
-      hide-label
+      ?hide-label=${edit.id !== NEW}
+      hint=${edit.id === NEW ? t("courses.name_hint") : ""}
       required
       ?readonly=${edit.saving}
       .value=${edit.name}
@@ -505,6 +529,8 @@ export class CourseList extends LitElement {
         <wt-button
           align="start"
           variant="ghost"
+          data-action="delete"
+          aria-label=${`${t("action.delete")}: ${course.name}`}
           data-test=${`remove-${course.id}`}
           @click=${(event: Event) => {
             event.stopPropagation();
@@ -542,25 +568,28 @@ export class CourseList extends LitElement {
               </button>`
         }
       </td>
-      <td>
-        <div class="held-control">
-          <wt-switch
-            name="heldUntilFired"
-            label=${`${t("courses.held_until_fired")}: ${course.name}`}
-            hide-label
-            .checked=${this.#heldPending.get(course.id) ?? course.heldUntilFired}
-            .disabled=${this.#heldPending.has(course.id)}
-            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-              event.stopPropagation();
-              this.#setHeld(course, event.detail.checked);
-            }}
-          ></wt-switch>
-          ${
-            !(this.#heldPending.get(course.id) ?? course.heldUntilFired)
-              ? html`<span class="held-note">${t("courses.goes_to_fire_now")}</span>`
-              : nothing
-          }
-        </div>
+      <td class="timing-cell">
+        <wt-segmented-control
+          name="heldUntilFired"
+          label=${`${t("courses.on_the_till")}: ${course.name}`}
+          hide-label
+          .options=${guard([currentLocale()], () => [
+            { value: "false", label: t("courses.fire_now") },
+            { value: "true", label: t("courses.hold_for_later") },
+          ])}
+          .value=${String(this.#heldPending.get(course.id) ?? course.heldUntilFired)}
+          @wt-change=${async (event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            const pending = this.#heldPending.has(course.id);
+            const control = event.currentTarget as WtSegmentedControl;
+            this.#setHeld(course, event.detail.value === "true");
+            control.value = String(this.#heldPending.get(course.id) ?? course.heldUntilFired);
+            if (pending) {
+              await control.updateComplete;
+              control.focus();
+            }
+          }}
+        ></wt-segmented-control>
       </td>
       ${this.#actions(course)}
     </tr>`;
@@ -606,7 +635,7 @@ export class CourseList extends LitElement {
           (course) =>
             html`<li data-course=${course.id}>
               ${course.name} ·
-              ${t(course.heldUntilFired ? "courses.held_until_fired" : "courses.goes_to_fire_now")}
+              ${t(course.heldUntilFired ? "courses.hold_for_later" : "courses.fire_now")}
             </li>`,
         )}
       </ul>`;
@@ -621,7 +650,20 @@ export class CourseList extends LitElement {
           <tr>
             <th scope="col"><span class="visually-hidden">${t("kitchen.reorder_course")}</span></th>
             <th scope="col"><span class="visually-hidden">${t("kitchen.course_name")}</span></th>
-            <th scope="col" class="held-heading">${t("courses.held_until_fired")}</th>
+            <th scope="col" class="held-heading">
+              ${
+                this.courses.length
+                  ? html`<span class="timing-title">${t("courses.on_the_till")}</span
+                      ><wt-help-tooltip
+                        mode="help-mode"
+                        aria-label=${t("courses.help_label")}
+                        guide-href=${guideHref("products.course")}
+                        guide-label=${t("courses.help_guide")}
+                        >${t("courses.help")}</wt-help-tooltip
+                      >`
+                  : html`<span class="visually-hidden">${t("courses.on_the_till")}</span>`
+              }
+            </th>
             <th scope="col"><span class="visually-hidden">${t("kitchen.course_actions")}</span></th>
           </tr>
         </thead>

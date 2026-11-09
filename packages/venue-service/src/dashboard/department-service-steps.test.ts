@@ -122,7 +122,6 @@ async function remove(el: DepartmentServiceSteps, key: string): Promise<void> {
   const button = q(el, `[data-test="remove-${key}"]`)!;
   const menu = button.closest("wt-row-actions")!;
   await userEvent.click(menu.shadowRoot!.querySelector("button")!);
-  await userEvent.click(button);
   await settle(el);
 }
 
@@ -411,5 +410,7 @@ it("reads a course or step name holding a replacement pattern literally", async 
   expect(startBox(el, 0).shadowRoot!.querySelector(".value")!.textContent).toBe(
     "Mains $& $' $` served",
   );
-  expect(q(el, "wt-row-actions")!.getAttribute("label")).toBe("Actions: Dessert $& $' $`");
+  expect(
+    q(el, "wt-row-actions")!.shadowRoot!.querySelector("button")!.getAttribute("aria-label"),
+  ).toBe("Delete: Dessert $& $' $`");
 });

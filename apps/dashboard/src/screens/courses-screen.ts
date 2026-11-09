@@ -31,17 +31,12 @@ export class CoursesScreen extends LitElement {
         gap: var(--wt-space-3);
         align-items: center;
       }
-      .description {
-        margin: 0 0 var(--wt-space-4);
-        color: var(--wt-color-text-muted);
-      }
       /* Centres the one-line empty message; rows are taller than this. */
       .card {
         display: flex;
         flex-direction: column;
         justify-content: center;
         min-height: calc(var(--wt-tap-min) + 2 * var(--wt-space-2));
-        padding-inline: var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface);
@@ -75,9 +70,6 @@ export class CoursesScreen extends LitElement {
               </div>`
         }
       </div>
-      <p class="description">
-        ${t(this.readOnly ? "courses.description_read_only" : "courses.description")}
-      </p>
       <div class="card">
         <dashboard-course-list
           .api=${this.api}

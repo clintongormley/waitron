@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import type { WtRowActions } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import type { Course, DashboardApi } from "../api/client.js";
+import { t } from "../i18n/t.js";
 import { CourseList } from "./course-list.js";
 
 afterEach(async () => {
@@ -27,7 +28,7 @@ function stubApi(state: State): DashboardApi {
       state === "load failed"
         ? vi.fn().mockRejectedValue({ code: "connection.failed" })
         : vi.fn().mockResolvedValue(
-            state === "empty"
+            state === "empty" || state === "first course"
               ? []
               : COURSES.map((c) => ({
                   ...c,
@@ -63,7 +64,8 @@ const states = [
   "load failed",
   "renaming, refused blank",
   "adding",
-  "menu open at phone width",
+  "first course",
+  "direct Delete at phone width",
   "Delete dialog, products",
   "Delete dialog, loading",
   "Delete dialog, read failed",
@@ -89,10 +91,14 @@ describe.each(["light", "dark"] as const)("course list (%s)", (theme) => {
     const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector)!;
     if (state === "load failed") expect(q("[role=alert]")).not.toBeNull();
     if (state === "populated") {
-      const switches = el.shadowRoot!.querySelectorAll("wt-switch");
+      const switches = el.shadowRoot!.querySelectorAll("wt-segmented-control");
       expect(switches).toHaveLength(2);
-      expect(switches[0]!.shadowRoot!.querySelector("input")!.checked).toBe(false);
-      expect(switches[1]!.shadowRoot!.querySelector("input")!.checked).toBe(true);
+      expect(
+        switches[0]!.shadowRoot!.querySelector('[aria-checked="true"]')!.textContent!.trim(),
+      ).toBe(t("courses.fire_now"));
+      expect(
+        switches[1]!.shadowRoot!.querySelector('[aria-checked="true"]')!.textContent!.trim(),
+      ).toBe(t("courses.hold_for_later"));
     }
 
     if (state === "renaming, refused blank") {
@@ -107,12 +113,14 @@ describe.each(["light", "dark"] as const)("course list (%s)", (theme) => {
       await settle(el);
       expect(q('wt-input[name="course-name"]').getAttribute("error")).not.toBe("");
     }
-    if (state === "adding") {
+    if (state === "adding" || state === "first course") {
       q('[data-test="add-course"]').click();
       await settle(el);
     }
-    if (state === "menu open at phone width") {
-      (q('tr[data-course="c2"] wt-row-actions') as unknown as WtRowActions).show();
+    if (state === "direct Delete at phone width") {
+      const actions = q('tr[data-course="c2"] wt-row-actions') as unknown as WtRowActions;
+      actions.show();
+      expect(actions.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
       await settle(el);
     }
     if (state.startsWith("Delete dialog")) {

@@ -1,3 +1,4 @@
+import { registerIcons } from "./wt-icon.js";
 import axe from "axe-core";
 import { afterEach, describe, expect, test } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -6,9 +7,23 @@ import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import "./wt-row-actions.js";
 import "./wt-button.js";
 
+registerIcons({
+  bin: "M6 1.75H10V3.25H13.5V4.75H2.5V3.25H6ZM3.75 4.75H12.25V13a1 1 0 0 1-1 1H4.75a1 1 0 0 1-1-1ZM5 4.75V12.75H11V4.75ZM6.5 6.5H7.5V11H6.5ZM8.5 6.5H9.5V11H8.5Z",
+});
+
 afterEach(cleanup);
 
 describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (theme) => {
+  test.each([false, true])("direct Delete, disabled=%s", async (disabled) => {
+    const el = await mountThemed(
+      `<wt-row-actions label="Actions: Starters"><wt-button data-action="delete" aria-label="Delete: Starters" ${disabled ? "disabled" : ""}>Delete</wt-button></wt-row-actions>`,
+      theme,
+    );
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("button")!.getAttribute("aria-label"))
+      .toBe("Delete: Starters");
+    await expectNoA11yViolations(host);
+  });
   test.each(["Ann: Working", "Ann: Trabajando"])(
     "a named trigger (%s), closed and open",
     async (label) => {
