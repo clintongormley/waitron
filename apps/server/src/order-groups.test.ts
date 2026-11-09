@@ -12,10 +12,10 @@ import {
   updateOrderLine,
 } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
-import { placeFor, type PlaceContext } from "../../till/src/state/draft-place.js";
 import { fireDishesAtPayment } from "./till-sale.js";
 import { VENUE_SERVICE_PROVISIONING, setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -970,17 +970,29 @@ describe("country starter courses in service", () => {
     const productCourses = await db
       .select({ id: products.id, courseId: products.courseId })
       .from(products);
-    const placed: PlaceContext["placed"][number][] = [];
+    const context = {
+      courses,
+      held: [],
+      firstOrder: true,
+      placed: [] as { courseId: string | null; place: { kind: "fire" | "new" | "join" } }[],
+    };
+    const path = fileURLToPath(new URL("../../till/src/state/draft-place.ts", import.meta.url));
+    const { placeFor } = (await import(/* @vite-ignore */ path)) as {
+      placeFor: (
+        courseId: string | null,
+        ctx: typeof context,
+      ) => { place: (typeof context.placed)[number]["place"] };
+    };
     const groups = (["beer", "cold", "steak", "flan"] as const).map((dish) => {
       const courseId = productCourses.find((product) => product.id === v.productId[dish])!.courseId;
-      const { place } = placeFor(courseId, { courses, held: [], firstOrder: true, placed });
-      placed.push({ courseId, place });
+      const { place } = placeFor(courseId, context);
+      context.placed.push({ courseId, place });
       return {
         release: place.kind === "fire" ? ("fire" as const) : ("hold" as const),
         lines: [line(v, dish)],
       };
     });
-    expect(placed.map(({ place }) => place.kind)).toEqual(["fire", "fire", "new", "new"]);
+    expect(context.placed.map(({ place }) => place.kind)).toEqual(["fire", "fire", "new", "new"]);
     await submit(v, s.partyId, groups);
     const rows = await linesOf(s.partyId);
     const fired = await firedTicketLineIds(s.partyId);
