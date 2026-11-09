@@ -134,8 +134,8 @@ async function configurationArtifact() {
 }
 
 it.each([
-  { newTaxpayer: false, change: "none", launch: "direct" },
-  { newTaxpayer: false, change: "none", launch: "supervised" },
+  { newTaxpayer: false, change: "none", launch: "direct", staffLanguage: "en" },
+  { newTaxpayer: false, change: "none", launch: "supervised", staffLanguage: "es" },
   { newTaxpayer: true, change: "none", launch: "direct" },
   { newTaxpayer: true, change: "none", launch: "supervised" },
   { newTaxpayer: false, change: "replacement", launch: "direct" },
@@ -144,7 +144,7 @@ it.each([
   { newTaxpayer: false, change: "none", launch: "direct", claimFrom: "preview" },
 ])(
   "$launch owned Live setup binds staged menu: new taxpayer $newTaxpayer, $change, readiness after import $readinessAfterImport, claim from $claimFrom",
-  async ({ newTaxpayer, change, launch, readinessAfterImport, claimFrom }) => {
+  async ({ newTaxpayer, change, launch, readinessAfterImport, claimFrom, staffLanguage }) => {
     const artifact = await configurationArtifact();
     const root = await mkdtemp(join(tmpdir(), "first-fiscal-joint-"));
     dirs.push(root);
@@ -272,7 +272,7 @@ it.each([
       }
       const claim = await post("/setup-api/first-setup/claim", {
         clientClaimNonce: randomBytes(32).toString("base64url"),
-        venue,
+        venue: { ...venue, ...(staffLanguage === undefined ? {} : { staffLanguage }) },
         configurationImport: true,
         newTaxpayer,
       });

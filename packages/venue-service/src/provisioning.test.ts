@@ -42,6 +42,45 @@ beforeAll(() => {
 });
 
 describe("VENUE_SERVICE_PROVISIONING", () => {
+  it.each(["en", "es"] as const)(
+    "uses the chosen %s names for fresh service starters",
+    async (staffLanguage) => {
+      const [menu] = await db
+        .insert(catalogues)
+        .values({ name: "House menu" })
+        .returning({ id: catalogues.id });
+      await seedVenue(db, {
+        invoiceLocales: [staffLanguage === "en" ? "es-ES" : "en-GB"],
+        defaultCatalogueId: menu!.id,
+      });
+      const node = { nodeId: await seedNode(db) };
+      await withTransaction(db, (tx) =>
+        VENUE_SERVICE_PROVISIONING.seed!.run(tx, node, undefined, { staffLanguage }),
+      );
+      const rows = (query: Parameters<typeof db.all>[0]) => db.all(query);
+      const names = (english: string, translations: Record<string, { es: string }>) => ({
+        name: staffLanguage === "en" ? english : translations[english]!.es,
+      });
+      expect(rows(sql`select name from service_steps order by position`)).toEqual(
+        ["Set up", "Take order", "Anything else?"].map((name) => names(name, STARTER_STEP_NAMES)),
+      );
+      expect(rows(sql`select name from floor_zones`)).toEqual([
+        names("Counter", STARTER_ZONE_NAMES),
+      ]);
+      expect(rows(sql`select name from seasons order by starts_on`)).toEqual(
+        ["Spring", "Summer", "Autumn", "Winter"].map((name) => names(name, STARTER_SEASON_NAMES)),
+      );
+      expect(rows(sql`select name from menu_periods`)).toEqual([
+        names("Open", STARTER_PERIOD_NAMES),
+      ]);
+      expect(rows(sql`select name from kitchen_courses order by display_order`)).toEqual(
+        ["Sharing plates", "Starters", "Mains", "Desserts"].map((name) =>
+          names(name, STARTER_COURSE_NAMES),
+        ),
+      );
+    },
+  );
+
   describe("country starter courses", () => {
     it.each([
       [

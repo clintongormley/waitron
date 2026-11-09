@@ -1,10 +1,14 @@
 import { applyVenue as realApplyVenue } from "./venue-apply.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
+import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
+import { stampDeployment } from "@waitron/db";
+import { nodeId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
+import type { WaitronModule } from "@waitron/module";
 import {
   deviceProfiles,
   locationDayCutoverChanges,
@@ -156,6 +160,107 @@ it("a new venue's first station starts at the default late flags and keeps a sta
     },
   ]);
 });
+
+it("keeps authored starters and profiles when a retry changes the working language", async () => {
+  const initial = { ...request("B10000015"), staffLanguage: "en" as const };
+  await applyVenue(planVenue(initial, ALL_MODULES), { db: suite.db, modules: ALL_MODULES });
+  await suite.db.execute(
+    sql`update device_profiles set name = 'House counter' where name = 'Counter'`,
+  );
+  await suite.db.execute(sql`update catalogues set name = 'House menu'`);
+  await suite.db.execute(
+    sql`update kitchen_courses set name = 'House mains' where display_order = 2`,
+  );
+  const profiles = await suite.db.select().from(deviceProfiles).orderBy(deviceProfiles.id);
+  const result = await applyVenue(planVenue({ ...initial, staffLanguage: "es" }, ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  expect(await suite.db.select().from(deviceProfiles).orderBy(deviceProfiles.id)).toEqual(profiles);
+  expect(suite.db.all(sql`select name from catalogues`)).toEqual([{ name: "House menu" }]);
+  expect(suite.db.all(sql`select name from kitchen_courses order by display_order`)).toEqual(
+    ["Sharing plates", "Starters", "House mains", "Desserts"].map((name) => ({ name })),
+  );
+  expect(result.seeded).toEqual([]);
+});
+
+it.each([undefined, "en", "es"] as const)(
+  "passes the original fiscal seed input without starter options for choice %s",
+  async (staffLanguage) => {
+    const initialNodeId = "f58d395b-c9c5-474a-bf11-d19293934055";
+    const initialAdministratorId = "80b2ab2b-ed9b-49eb-8fa2-6c55d6640d7f";
+    const setup = allocationFixture({
+      node: { nodeId: nodeId(initialNodeId) },
+      operatorId: initialAdministratorId,
+      identity: "S000001",
+      taxpayerNif: "B10000015",
+      bases: [
+        { code: "A", purpose: "standard" },
+        { code: "FF", purpose: "full" },
+        { code: "R", purpose: "rectificative" },
+      ],
+    }).request("setup");
+    const calls: unknown[][] = [];
+    const rawInputs: unknown[] = [];
+    const preparedInputs: unknown[] = [];
+    const modules = ALL_MODULES.map((module): WaitronModule => {
+      if (module.name !== "fiscal-verifactu") return module;
+      const seed = module.provisioning!.seed!;
+      return {
+        ...module,
+        operations: {
+          prepare(operation, run) {
+            rawInputs.push(structuredClone(operation.input));
+            return setup.preparation.prepare(operation, (prepared) => {
+              preparedInputs.push(prepared.input);
+              return run(prepared);
+            });
+          },
+        },
+        provisioning: {
+          ...module.provisioning!,
+          seed: {
+            ...seed,
+            run: (...args: Parameters<typeof seed.run>) => {
+              calls.push(args);
+              return seed.run(...args);
+            },
+          },
+        },
+      };
+    });
+    await stampDeployment(suite.db, "preproduction");
+    await realApplyVenue(
+      planVenue(
+        { ...request("B10000015"), ...(staffLanguage === undefined ? {} : { staffLanguage }) },
+        modules,
+      ),
+      {
+        db: suite.db,
+        modules,
+        initialNodeId,
+        initialAdministratorId,
+        moduleInputs: new Map([
+          [
+            "fiscal-verifactu",
+            {
+              eventId: setup.binding.eventId,
+              sourceId: setup.binding.sourceId,
+              input: setup.input,
+            },
+          ],
+        ]),
+      },
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toHaveLength(3);
+    expect(rawInputs).toEqual([setup.input]);
+    expect(preparedInputs).toHaveLength(1);
+    expect((calls[0]![2] as { input: unknown }).input).toBe(preparedInputs[0]);
+    expect(calls[0]![2]).toMatchObject({ binding: setup.binding });
+    expect(Object.keys(calls[0]![2] as object).sort()).toEqual(["authority", "binding", "input"]);
+  },
+);
 
 describe("applyVenue: the one taxpayer row", () => {
   it("stores the taxpayer domicile without copying the location address", async () => {

@@ -42,6 +42,26 @@ function reasons() {
 }
 
 describe("ADJUSTMENTS_PROVISIONING", () => {
+  it.each(["en", "es"] as const)(
+    "uses the chosen %s reason names without changing customer maps",
+    async (staffLanguage) => {
+      const node = await provisionedNode({
+        country: "ES",
+        province: "Madrid",
+        invoiceLocales: [staffLanguage === "en" ? "es-ES" : "en-GB"],
+      });
+      await withTransaction(db, (tx) =>
+        ADJUSTMENTS_PROVISIONING.seed!.run(tx, node, undefined, { staffLanguage }),
+      );
+      expect((await reasons()).map(({ name, names }) => ({ name, names }))).toEqual(
+        Object.keys(STARTER_REASON_NAMES).map((english) => ({
+          name: staffLanguage === "en" ? english : expected[english]!.es,
+          names: { en: english, es: expected[english]!.es },
+        })),
+      );
+    },
+  );
+
   it("gives a new venue the nine starter reasons, in order, named in the staff language with a name in each content language", async () => {
     const node = await provisionedNode({
       country: "ES",

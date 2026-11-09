@@ -458,9 +458,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A237. Nothing guards the hint-or-"?" rule across screens (owner 2026-10-03)** — OPEN.
 
 - **A1458. Setup asks which language the venue works in, and starts each country with its own
-  courses (owner, 2026-11-08)** (3 remaining entries, size L). Country courses seed at first
-  setup; regional demos follow their English/Spanish seed language. Left: setup's explicit
-  working-language choice and request plumbing, plus course words beyond Spanish and English
+  courses (owner, 2026-11-08)** (2 remaining entries, size M). Country courses seed at first
+  setup; requests can supply an English/Spanish working language for fresh starters and demos.
+  Left: the wizard's working-language picker, plus course words beyond Spanish and English
   with C125. [Detail](backlog/setup.md#bundle-a1458-setup-asks-which-language-the-venue-works-in-and-starts-each-country-with-its-own-courses-owner-2026-11-08)
 
 - **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03)** — OPEN, partly designed,
