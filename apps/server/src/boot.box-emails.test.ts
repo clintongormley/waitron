@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { incidents, locations, withTransaction } from "@waitron/db";
+import { incidents, locations, stampDeployment, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import type { AccountEmailSender } from "./account-email.js";
@@ -37,6 +37,7 @@ const holder = vi.hoisted(() => ({
   managementSend: undefined as AccountEmailSender | undefined,
   profileSend: undefined as AccountEmailSender | undefined,
   attendance: undefined as Parameters<typeof runAttendanceEmailLoop>[0] | undefined,
+  smtp: [] as Parameters<typeof import("./smtp-send.js").sendSmtpMessage>[0][],
 }));
 
 vi.mock("./management-api.js", async (load) => {
@@ -71,7 +72,13 @@ vi.mock("./attendance-email-worker.js", async (load) => {
 });
 vi.mock("./smtp-send.js", async (load) => {
   const actual = await load<typeof import("./smtp-send.js")>();
-  return { ...actual, sendSmtpMessage: async () => ({ status: "sent" as const }) };
+  return {
+    ...actual,
+    sendSmtpMessage: async (smtp: Parameters<typeof actual.sendSmtpMessage>[0]) => {
+      holder.smtp.push(smtp);
+      return { status: "sent" as const };
+    },
+  };
 });
 
 // The backup run's memory of its last stop, the one boot hands both the bell and the email duty.
@@ -134,7 +141,7 @@ interface Booted {
 async function bootServer(
   booted: Booted,
   venue: Awaited<ReturnType<typeof setupVenue>>,
-  email?: { intent: "demo" | "prepare"; development: boolean },
+  email?: { intent: "demo" | "prepare" | "live"; development: boolean },
 ): Promise<void> {
   const [port] = await freePorts(1);
   booted.scratch = await mkdtemp(join(tmpdir(), "waitron-boot-box-emails-"));
@@ -158,9 +165,17 @@ async function bootServer(
     WAITRON_VENUE_DIR: dirname(database),
     WAITRON_NODE_ID: venue.cfg.nodeId,
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_ENV: email?.development === true ? "dev" : "preproduction",
+    WAITRON_ENV:
+      email?.development === true
+        ? "dev"
+        : email?.intent === "live"
+          ? "production"
+          : "preproduction",
+    WAITRON_MANAGEMENT_RP_ID: "localhost",
+    WAITRON_MANAGEMENT_ORIGIN: "http://localhost:5191",
     ...(email === undefined ? {} : { WAITRON_ONBOARDING_INTENT: email.intent }),
   };
+  if (email?.intent === "live") await stampDeployment(suite.db, "production");
   booted.server = await startServer(env, env);
   await vi.waitFor(async () => {
     expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
@@ -176,6 +191,7 @@ async function shutDown(booted: Booted): Promise<void> {
   holder.attendance = undefined;
   holder.armed.length = 0;
   holder.sent.length = 0;
+  holder.smtp.length = 0;
   if (booted.scratch !== undefined) await rm(booted.scratch, { recursive: true, force: true });
 }
 
@@ -190,6 +206,8 @@ async function venueName(venue: Awaited<ReturnType<typeof setupVenue>>): Promise
 describe("the running server's managers' email check", () => {
   it.each([
     ["demo", false, false, "local_capture"],
+    ["demo", false, true, "local_capture"],
+    ["demo", true, true, "smtp"],
     ["prepare", false, false, "unconfigured"],
     ["prepare", false, true, "smtp"],
     ["prepare", true, false, "local_capture"],
@@ -342,6 +360,80 @@ describe("the running server's managers' email check", () => {
       await shutDown(booted);
     }
   });
+
+  it.each([
+    ["demo", false, false, "venue@example.test", "captured"],
+    ["demo", false, true, "venue@example.test", "captured"],
+    ["demo", false, false, "broken\r\nFrom", "captured"],
+    ["demo", true, false, "venue@example.test", "sent"],
+    ["live", false, false, "venue@example.test", "sent"],
+  ] as const)(
+    "%s development=%s repair=%s uses %s and reports %s for account mail",
+    async (intent, development, repair, from, outcome) => {
+      const venue = await setupVenue(suite.db);
+      await withTransaction(suite.db, (tx) =>
+        putCredential(
+          tx,
+          loadKeyRing({
+            WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+            WAITRON_CREDENTIALS_KEY_VERSION: "1",
+          }),
+          { purpose: "email.smtp", value: { url: "smtp://smtp.example.test:2525", from } },
+        ),
+      );
+      if (repair)
+        await suite.db
+          .update(locations)
+          .set({ timeZone: "Invalid/Zone" })
+          .where(eq(locations.id, venue.cfg.locationId));
+      const booted: Booted = {};
+      try {
+        await bootServer(booted, venue, { intent, development });
+        const message = {
+          purpose: "invitation" as const,
+          email: "invitee@example.test",
+          displayName: "Invitee",
+          actionUrl: "https://dashboard.example.test/manage/account",
+          expiresAt: "2026-11-08T12:00:00Z",
+          locale: "en-GB",
+        };
+        await expect(holder.managementSend!(message)).resolves.toBe(outcome);
+        await expect(
+          holder.profileSend!({ ...message, purpose: "email_change", code: "123456" }),
+        ).resolves.toBe(outcome);
+        const delivery =
+          outcome === "captured"
+            ? {
+                mode: "local_capture",
+                smtp: { url: "smtp://127.0.0.1:1025", from: "Waitron <no-reply@waitron.test>" },
+              }
+            : {
+                mode: "smtp",
+                smtp: {
+                  url: "smtp://smtp.example.test:2525",
+                  from: { name: await venueName(venue), address: "venue@example.test" },
+                },
+              };
+        expect(holder.smtp.slice(-2).map(({ url, from }) => ({ url, from }))).toEqual([
+          delivery.smtp,
+          delivery.smtp,
+        ]);
+        if (!repair) {
+          expect(await holder.attendance!.resolveDelivery()).toEqual(delivery);
+          expect((await holder.deps!.context()).delivery).toEqual(delivery);
+          if (outcome === "captured") {
+            const inbox = await fetch(`http://127.0.0.1:${httpPort()}/management-api/email`, {
+              headers: { cookie: venue.managerCookie },
+            });
+            expect(inbox.status).toBe(200);
+            expect(await inbox.json()).toEqual({ mode: "local_capture", count: 0, messages: [] });
+          }
+        }
+      } finally {
+        await shutDown(booted);
+      }
+    },
+  );
 
   it("boot emails the managers when the disk is full, once", async () => {
     const venue = await setupVenue(suite.db);
