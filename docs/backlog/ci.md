@@ -520,15 +520,15 @@ The original entries retain their text from the index (backlog review, 2026-11-0
 A1424's live qualification was added on 7 November 2026.
 
 - **A1424 / A1440: finish qualifying server routing and recovery on real workloads.**
-  CI prefers GitHub when Waitron has no hosted queue and the selected initial jobs fit
-  within 20 minus its running hosted count;
-  otherwise ordinary same-repository jobs are eligible for the measured global pool. Family caps
+  CI compares server and GitHub `(running + waiting) / slots`, with server ties
+  and the owner’s stipulated 20 hosted slots;
+  ordinary same-repository jobs are eligible for the measured global pool. Family caps
   have been removed, and routing, recovery, image smoke, the final aggregate and publication stay hosted.
   Image smoke remains hosted until a disposable guest is qualified (watcher, 2026-11-09 08:20);
   both retained failures, runs 42550200310 and 42525659420, stop at the Bluetooth check
   with `dbus_unreachable`. Guest diagnosis remains open.
   The health check chooses hosted while the server queue is stuck, and the independent
-  watchdog cancels and reruns one oldest stuck workflow per invocation. Trusted-main
+  watchdog cancels and reruns at most one eligible first attempt per invocation. Trusted-main
   health run 42509853431 cancelled and retried the deliberately unassignable probe
   42506969127; its hosted attempt 2 passed. Qualify the idle probe, browser guest
   requirements and current-head coverage/aggregate results.
@@ -699,7 +699,8 @@ A1424's live qualification was added on 7 November 2026.
   hosted queue and fewer than 20 running hosted jobs chooses GitHub; otherwise the server-health
   check applies. This supersedes parking that routing rule; v40 and six guest slots stay unchanged. **2026-11-09 12:05:**
   hosted routing additionally requires the selected initial job wave to fit the remaining room.
-  Cloud PR #1115 publishes the matching 30-record reader in v41; six slots remain.
+  Cloud PR #1115 publishes the matching 30-record reader in v41; six slots remain. **2026-11-09 17:19:**
+  the owner replaced initial-wave fit with whole-run queue pressure; qualify the count variable and route before activation.
 
 - **A1459: measured shared startup, with child internals still unknown (2026-11-08).**
 

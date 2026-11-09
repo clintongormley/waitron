@@ -141,7 +141,7 @@ External provenance, read 2026-11-06:
 
 Set `DISPOSABLE_TESTS_MODE=server` to route CI jobs to Lane I's disposable Linux
 runners. Same-repository pull requests, main pushes, tags, schedules, manual runs and
-ordinary reruns are eligible for the server route when the hosted-capacity check below selects it. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
+ordinary reruns are eligible for the server route when the queue-pressure comparison below selects it. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
 GitHub so routing, recovery and the required result can still run when server assignment
 stops (watcher, 2026-11-08 16:00). Image smoke always uses `ubuntu-latest` until a
 disposable guest is qualified (watcher, 2026-11-09 08:20). CI still passes
@@ -173,21 +173,18 @@ setup retries and execution limits remain unchanged.
 The routing job uses its existing read-only Actions token. With no stuck server queue,
 it reads this repository's queued and running workflows, including fork pull requests,
 and their current-attempt jobs. Jobs with nonempty labels that do not include
-`self-hosted` count as hosted. Only jobs with status `queued` or `in_progress` count; completed, pending, waiting and unlabelled jobs do not.
-With no queued hosted job, the run uses GitHub only when its selected initial jobs fit
-within 20 minus the running hosted count; otherwise it is eligible for the server.
-Routing runs after classification and scope gates. It reads the workflow's jobs that
-need only `changes`, evaluates their existing conditions against those outputs, and
-counts every selected matrix shard. This includes the hosted image job when selected;
-it excludes the server watchdog and later merge, summary and publication jobs.
-The summary records the running, queued and selected counts. A selection the routing script cannot read
-uses the server. If an earlier classification or gate step fails, routing is skipped and the
-two always-running lint/root jobs retain the empty-route hosted fallback. This repository-only snapshot neither measures account-wide capacity
-nor reserves slots; simultaneous routing decisions can observe the same room. The routing
-run's own hosted `changes` job counts while running. The cutoff of 20 remains the owner's
-approximation (watcher, 2026-11-09 10:01; initial-wave fit correction 12:05), not a measured
-account limit. A run with 29 initial jobs uses the server even with an empty hosted pool;
-this decision does not split a run between the pools.
+`self-hosted` count as hosted. Running jobs and `queued`, `pending`, `waiting` or `requested` jobs count.
+The controller publishes `DISPOSABLE_TESTS_CAPACITY`: observed time, usable server slots,
+occupied slots and waiting jobs, plus hosted counts. Preparation and manual work occupy slots;
+quarantined slots and retained runners are excluded, and admitted jobs are not counted twice.
+A failed health check publishes zero usable slots. The router refreshes hosted counts through
+its existing read-only API scan and compares `(running + waiting) / slots` with the server
+snapshot, using the owner's stipulated 20 hosted slots. Ties select the server; zero server
+slots select hosted. Unknown inputs retain the existing server preference and readable-stall checks.
+The summary prints both counts, snapshot age and the chosen side, including in hosted mode. This repository snapshot reserves no capacity;
+simultaneous decisions can choose the same side. The run's own `changes` job counts while running.
+Repository-variable arrival and actual route/labels still need qualification before activation;
+there is no new snapshot expiry rule. The decision routes a whole run.
 `scripts/ci-hosted-route.test.mjs` exercises these decisions with controlled API replies,
 including pagination and incomplete inventories; it does not measure live capacity.
 
@@ -197,7 +194,9 @@ External provenance, read 2026-11-09:
 | --- | --- | --- |
 | The repository run list uses the existing read permission | [GitHub workflow runs](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository): “Anyone with read access to the repository can use this endpoint” | Routing reads this repository without another credential. |
 
-The existing health check reads CI's queued and running workflows. If a server job has waited five minutes and no server job is
+The existing health check reads CI's queued and running workflows. A job's wait is dated from its own
+`started_at`, or its own `created_at` when no start is reported; neither available means its age is unknown.
+If a server job has waited five minutes and no server job is
 assigned or running, and no assigned job in those runs started or finished within five
 minutes, this run uses GitHub and records the reason in its summary. An unverifiable
 inventory makes routing continue with the other readable runs and choose the server unless
@@ -226,10 +225,14 @@ server work is assigned or running, and no assigned job in active CI runs starte
 finished within five minutes. It also checks the latest 100 completed CI runs for server
 work finished within five minutes, skipping job reads for runs whose `updated_at` is over
 five minutes old; missing or invalid update times still get job reads. It selects only the
-oldest stuck run, repeats the global
-active-work check, force-cancels that run, waits for cancellation to complete, then reruns
-the whole workflow so routing runs again. Other candidates wait for the next invocation.
-It reports the affected run ID in its summary. A refused force-cancel names that run for
+oldest eligible stuck run, repeats the global
+active-work check, then reads that attempt's complete job inventory immediately before cancellation.
+Started or completed work in either pool prevents a move, except exact successful completed
+`changes` and exact `server-queue-watchdog`. Unassigned skipped/cancelled jobs are not work.
+Only first attempts may move. The watchdog is allowed so its recovery request can finish.
+It reports preserved run IDs and considers younger candidates, then force-cancels at most one
+eligible run, waits for cancellation to complete, and reruns the whole workflow so routing runs again.
+Remaining candidates wait for the next invocation. It reports the retried run ID in its summary. A refused force-cancel names that run for
 intervention; until it is resolved, younger candidates wait. A changed run identity or an incomplete
 inventory refuses recovery. Short non-final pages continue until the advertised count; an
 early empty page, duplicate ID or changed count stops the read. For these incomplete inventories,
