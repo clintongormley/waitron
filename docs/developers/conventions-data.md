@@ -1886,8 +1886,10 @@ Short id lists owned by one row use `jsonReferences` (rationalisation design R4)
 names a column and paths made of object keys and `*` steps, which visit every object value or array
 element. Export removes an id when no exported row has it: an array loses that element, and an
 object field becomes null. Import rewrites each id through the bundle's id map and refuses a
-missing id with `setup.request_invalid`, naming the table and column. Both export and import refuse
-malformed JSON or a non-string id. String values outside the declared paths are not remapped;
+missing id with `setup.request_invalid`, naming the table and column. An id naming the source
+operator or a row skipped with that operator is refused too. Both export and import refuse
+malformed JSON, a non-string id, or a non-null container of the wrong kind at the root or after a
+named key. Unrelated scalar values selected by a wildcard are skipped. String values outside the declared paths are not remapped;
 parsing and serialization can normalize whitespace or numeric values. Whole-column nulls, nulls along a path,
 null id fields and missing keys are skipped. Fixed-key rows that an import keeps must be put in
 the id map by their owning module; this helper does not add them. It does not check target kinds.

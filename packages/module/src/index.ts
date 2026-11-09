@@ -31,6 +31,7 @@ export type {
   FloorPlanSets,
   CoreServices,
   ConfigurationTransferTable,
+  JsonReference,
   ModuleConfigurationTransfer,
   OrderServiceContext,
   ServiceZoneSummary,

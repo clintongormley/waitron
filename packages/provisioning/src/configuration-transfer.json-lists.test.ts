@@ -237,3 +237,51 @@ it.each([
     await suite.db.execute(sql`drop table zz_targets`);
   }
 });
+
+it.each(['{"r":{"ids":"old-A"}}', '{"r":["old-A"]}'])("refuses malformed path %s", async (doc) => {
+  await prepareVenue();
+  await scratch(async (tx) => {
+    const bundle = bundleWith('["old-A"]', doc);
+    await expect(
+      importConfigurationTables(tx, bundle, [module], bundle.modules),
+    ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "zz_owners.doc" } });
+  });
+});
+
+it("refuses an id naming a skipped target", async () => {
+  await prepareVenue();
+  await scratch(async (tx) => {
+    await tx.execute(sql`alter table zz_targets add column person_id text`);
+    const bundle = bundleWith('["old-A"]');
+    bundle.tables.zz_targets![0]!.person_id = bundle.sourceOperatorId;
+    await expect(
+      importConfigurationTables(tx, bundle, [module], bundle.modules),
+    ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "zz_owners.ids" } });
+  });
+});
+
+it.each(['"gone"', '{"r":{"ids":"gone"}}', '{"r":["gone"]}'])(
+  "export refuses malformed path %s",
+  async (doc) => {
+    await scratch(async (tx) => {
+      await tx.execute(sql`insert into zz_owners values ('owner','[]',${doc})`);
+      await expect(exportConfigurationTables(tx, [module])).rejects.toMatchObject({
+        code: "setup.request_invalid",
+        params: { field: "zz_owners.doc" },
+      });
+    }, false);
+  },
+);
+
+it("keeps unrelated scalar values selected by a wildcard", async () => {
+  await prepareVenue();
+  await scratch(async (tx) => {
+    const doc = '{"note":"old-A","r":{"ids":["old-A"]}}';
+    const bundle = bundleWith('["old-A"]', doc);
+    await importConfigurationTables(tx, bundle, [module], bundle.modules);
+    const exported = await exportConfigurationTables(tx, [module]);
+    const row = exported.tables.zz_owners![0]!;
+    const target = exported.tables.zz_targets![0]!;
+    expect(JSON.parse(row.doc as string)).toEqual({ note: "old-A", r: { ids: [target.id] } });
+  });
+});

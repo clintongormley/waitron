@@ -244,24 +244,30 @@ function mapJsonPath(
   path: readonly string[],
   map: (id: string) => string | undefined,
   field: string,
+  wildcardSelected = false,
 ): unknown {
   if (value === null) return null;
   if (path.length === 0) {
     if (typeof value !== "string") throw new AppError("setup.request_invalid", { field });
     return map(value);
   }
-  if (typeof value !== "object") return value;
+  if (typeof value !== "object") {
+    if (wildcardSelected) return value;
+    throw new AppError("setup.request_invalid", { field });
+  }
   const [step, ...rest] = path;
   if (Array.isArray(value)) {
-    if (step !== "*") return value;
+    if (step !== "*") throw new AppError("setup.request_invalid", { field });
     return value
-      .map((item) => mapJsonPath(item, rest, map, field))
+      .map((item) => mapJsonPath(item, rest, map, field, true))
       .filter((item) => item !== undefined);
   }
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [
       key,
-      step === "*" || step === key ? (mapJsonPath(item, rest, map, field) ?? null) : item,
+      step === "*" || step === key
+        ? (mapJsonPath(item, rest, map, field, step === "*") ?? null)
+        : item,
     ]),
   );
 }
@@ -782,9 +788,16 @@ export async function importConfigurationTables(
     bundle.sourceOperatorId === "" ? [] : [bundle.sourceOperatorId],
   );
   const idMap = new Map<string, string>();
-  for (const [, rows] of checked) {
+  const jsonIdMap = new Map<string, string>();
+  for (const [declaration, rows] of checked) {
     for (const row of rows) {
-      if (typeof row.id === "string") idMap.set(row.id, randomUUID());
+      if (typeof row.id === "string") {
+        const mapped = randomUUID();
+        idMap.set(row.id, mapped);
+        if (declaration.name === "persons" && row.id === bundle.sourceOperatorId) continue;
+        if (typeof row.person_id === "string" && sourceOperatorIds.has(row.person_id)) continue;
+        jsonIdMap.set(row.id, mapped);
+      }
     }
   }
   for (const [declaration, rows] of checked) {
@@ -793,7 +806,7 @@ export async function importConfigurationTables(
       if (typeof source.person_id === "string" && sourceOperatorIds.has(source.person_id)) continue;
       const row: Record<string, unknown> = { ...source };
       rewriteJsonReferences(row, declaration, (id, field) => {
-        const mapped = idMap.get(id);
+        const mapped = jsonIdMap.get(id);
         if (mapped === undefined) throw new AppError("setup.request_invalid", { field });
         return mapped;
       });
