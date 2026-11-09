@@ -1074,7 +1074,7 @@ it("drops a staged change when the waiter's own draft recalls the dish, and open
   const el = await openRow({ lines: [line()], draftStore: draft });
   await setQuantity(el, "3");
   expect(titleCount(el)).toBeNull();
-  draft.loadFrom(draft.id, recalled().lines);
+  draft.loadFrom(draft.id, [...recalled().lines]);
   await el.updateComplete;
   expect(q<WtDialog>(el, "[data-sent-line-dialog]")!.open).toBe(true);
   expect(offered(el)).toBe(false);
