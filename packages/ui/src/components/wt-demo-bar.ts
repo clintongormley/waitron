@@ -22,10 +22,15 @@ export class WtDemoBar extends LitElement {
 
       nav {
         display: flex;
-        flex-wrap: wrap;
         align-items: center;
+        overflow-x: auto;
+        white-space: nowrap;
         gap: var(--wt-space-2) var(--wt-space-4);
         padding: var(--wt-space-2) var(--wt-space-3);
+      }
+
+      nav > * {
+        flex: 0 0 auto;
       }
 
       strong {

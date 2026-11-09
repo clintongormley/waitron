@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanup, host, mount } from "../test-helpers.js";
 import type { WtDemoBar } from "./wt-demo-bar.js";
 import "./wt-demo-bar.js";
@@ -29,4 +30,27 @@ test("paints the raised surface, border and text from tokens", async () => {
   expect(getComputedStyle(el).backgroundColor).toBe("rgb(1, 2, 3)");
   expect(getComputedStyle(el).borderBottomColor).toBe("rgb(4, 5, 6)");
   expect(getComputedStyle(el).color).toBe("rgb(7, 8, 9)");
+});
+
+test("scrolls the last destination into view when reached by keyboard", async () => {
+  const el = (await mount("<wt-demo-bar></wt-demo-bar>")) as WtDemoBar;
+  host.style.width = "240px";
+  el.modeLabel = "Preparation";
+  el.navigationLabel = "Preparation navigation";
+  el.links = [
+    { label: "Dashboard", href: "/manage", current: true },
+    { label: "Device", href: "/" },
+    { label: "Email inbox", href: "/manage/email" },
+  ];
+  await el.updateComplete;
+  const nav = el.shadowRoot!.querySelector("nav")!;
+  const links = el.shadowRoot!.querySelectorAll("a");
+  links[0]!.focus();
+  await userEvent.tab();
+  expect(el.shadowRoot!.activeElement).toBe(links[1]);
+  expect(nav.scrollLeft).toBeGreaterThan(0);
+  const last = links[1]!.getBoundingClientRect();
+  const port = nav.getBoundingClientRect();
+  expect(last.left).toBeGreaterThanOrEqual(port.left);
+  expect(last.right).toBeLessThanOrEqual(port.right);
 });
