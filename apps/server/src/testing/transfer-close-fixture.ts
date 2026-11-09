@@ -154,20 +154,9 @@ function transferCloseKit(venue: BillVenue, counterZone: string) {
     return new Date(row!.at).getTime();
   }
 
-  /**
-   * A clock fixed no earlier than now or the latest record, two hours later when that falls
-   * between 04:00 and 06:00 in Madrid, so the 05:00 day change cannot fall between its closes.
-   */
+  /** One fixed instant, no earlier than now or the latest record, for every close in a case. */
   function sameDayClock(): TrustedClock {
-    const at = Math.max(Date.now(), latestRecordMs());
-    const hour = Number(
-      new Intl.DateTimeFormat("en-GB", {
-        timeZone: "Europe/Madrid",
-        hour: "numeric",
-        hourCycle: "h23",
-      }).format(at),
-    );
-    return clockAt(hour === 4 || hour === 5 ? at + 120 * MINUTE : at);
+    return clockAt(Math.max(Date.now(), latestRecordMs()));
   }
 
   /** Freeze this node's business day by its daily close, counting each drawer as expected. */

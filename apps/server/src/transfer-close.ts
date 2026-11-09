@@ -311,7 +311,10 @@ async function finishParty(
   deps: TransferCloseDeps,
   cfg: DeviceRequestConfig,
   partyId: string | null,
-  /** The named party's family, when the request names one. */
+  /**
+   * The named party's family, when the request names one. It is also the bill's own party's
+   * family: merging moves every open and presented bill to the surviving party.
+   */
   family: string[] | null,
   request: CloseByTransferRequest,
   actorId: string,

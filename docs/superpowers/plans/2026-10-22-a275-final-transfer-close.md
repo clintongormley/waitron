@@ -85,6 +85,8 @@ All entries in this table are **READ ONLY / runtime UNVERIFIED at the pin above*
 
 **Proposed interfaces/storage:** Export `transferClosures`. One row has `id` (operation UUID, primary key), unique `workingOrderId`, unique `saleId`, `intent` (canonical JSON text), `actorId`, `source/deviceId`, `nodeId`, `locationId`, `closedAt` (ISO), `businessDay` (YYYY-MM-DD), `currency` (fixed `EUR` for this path), and `result` (typed JSON below). Declare ordinary references for core-owned order/sale/device/node/location ids, named origin/day checks and `(nodeId,businessDay,closedAt,id)` index. Actor is a plain id with the same cross-module explanation as `sales.operatorId`. Classify `appendOnly("transfer_closures","ledger",...)` and wire both append-only migration inputs. Core ownership is deliberate: this is a terminal sale operation beside settlement, not a new debt product. Explain this reason in the later commit.
 
+_2026-11-09: as built, the request uses `BillInvoiceDelivery` from `apps/server/src/parties.ts`, which has this shape; there is no `TransferDeliveryIntent`._
+
 `TransferDeliveryIntent = {medium:"receipt"} | {medium:"a4"; pagePrinterId:string} | {medium:"email"; recipient:string}` is a proposed public type. It deliberately has no `personId`; reject that unknown request field rather than accepting internal actor metadata.
 
 `CloseByTransferRequest = { id: string; operationId: string; expectedRevision: number; expectedEdit: BillEditExpected | null; expectedTotal: string; invoiceType: "F1" | "F2"; recipient: InvoiceRecipient | null; receiptLanguage: string; delivery: TransferDeliveryIntent | null; partyFinish: null | {partyId: string; expectedPartyRevision: number; expectedEdits: BillEditExpected[]} }`.
