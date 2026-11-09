@@ -249,6 +249,8 @@ const jobs: PrintJobRow[] = [
     lastError: "printer offline",
     createdAt: "2026-08-25T14:00:00.000Z",
     deliveredAt: null,
+    reprintRule: "own",
+    reprintPrinterIds: [],
   },
   {
     id: "j2",
@@ -260,6 +262,8 @@ const jobs: PrintJobRow[] = [
     lastError: null,
     createdAt: "2026-08-25T13:00:00.000Z",
     deliveredAt: "2026-08-25T13:00:05.000Z",
+    reprintRule: "own",
+    reprintPrinterIds: [],
   },
 ];
 
@@ -9389,6 +9393,8 @@ describe("Bluetooth calibration transport outcomes", () => {
     lastError: null,
     createdAt: "2026-09-29T17:00:00.000Z",
     deliveredAt: null,
+    reprintRule: "own",
+    reprintPrinterIds: [],
     ...over,
   });
   const ended = job({
@@ -9733,6 +9739,8 @@ describe("A job ended because its printer was unpaired", () => {
     lastError: "printer.unpaired",
     createdAt: "2026-09-29T17:00:00.000Z",
     deliveredAt: null,
+    reprintRule: "own",
+    reprintPrinterIds: [],
   };
 
   async function mountWithUnpaired() {
@@ -10952,6 +10960,8 @@ describe("Deleting a printer", () => {
           lastError: "printer.deleted",
           createdAt: "2026-10-09T17:00:00.000Z",
           deliveredAt: null,
+          reprintRule: "own",
+          reprintPrinterIds: [],
         };
         const { el } = await mounted({ listRecentJobs: vi.fn().mockResolvedValue([ended]) });
         await selectTab(el, "queue");
@@ -11008,6 +11018,8 @@ describe("Deleting a printer", () => {
           lastError: "printer.deleted",
           createdAt: "2026-10-09T17:00:00.000Z",
           deliveredAt: null,
+          reprintRule: "own",
+          reprintPrinterIds: [],
         };
         const { el } = await mounted({ listRecentJobs: vi.fn().mockResolvedValue([ended]) });
         await selectTab(el, "queue");

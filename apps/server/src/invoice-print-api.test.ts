@@ -174,6 +174,7 @@ async function setup(bluetooth = false) {
       pairingMode: createPairingMode(),
       readMembership: async () => null,
       readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+      layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
       venueLocale: "es-ES",
       now: () => now,
     },

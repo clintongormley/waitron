@@ -100,6 +100,7 @@ function mountApp(): Hono {
       pairingMode,
       readMembership: async () => signedMembershipDoc(1, { signerNodeId: "box", nodes: [] }),
       readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+      layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
       venueLocale: "es-ES",
     },
     noopLog,

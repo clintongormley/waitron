@@ -2385,10 +2385,14 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
   it("resendPrintJob POSTs the selected job with management credentials", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ jobId: "new-job" }));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.resendPrintJob("j1")).toEqual({ jobId: "new-job" });
+    expect(await api.resendPrintJob("j1", "p2")).toEqual({ jobId: "new-job" });
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/print-jobs/j1/resend",
-      expect.objectContaining({ method: "POST", credentials: "include" }),
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({ printerId: "p2" }),
+      }),
     );
   });
 

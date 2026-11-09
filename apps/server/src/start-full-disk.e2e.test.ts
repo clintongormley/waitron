@@ -1283,6 +1283,7 @@ describe("a start on a real full disk", () => {
             pairingMode: createPairingMode(),
             readMembership: () => Promise.resolve(null),
             readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+            layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
             venueLocale: "en-GB",
           },
           () => {},

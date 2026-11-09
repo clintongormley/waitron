@@ -123,6 +123,8 @@ const jobs: PrintJobRow[] = [
     lastError: "printer offline",
     createdAt: "2026-08-25T14:00:00.000Z",
     deliveredAt: null,
+    reprintRule: "own",
+    reprintPrinterIds: [],
   },
 ];
 

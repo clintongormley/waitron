@@ -1405,6 +1405,10 @@ export interface PrintJobRow {
   waitReason?: "printer.not_visible";
   createdAt: string;
   deliveredAt: string | null;
+  /** `any` receipt printer, one `wide_enough` for the printout, or only its `own`. */
+  reprintRule: "any" | "wide_enough" | "own";
+  /** The other active printers the server would take this printout on. */
+  reprintPrinterIds: string[];
 }
 
 export interface StationPrinter {
@@ -4017,8 +4021,13 @@ export class DashboardApi {
     return this.#request(`/management-api/printers/${id}`, "DELETE");
   }
 
-  resendPrintJob(id: string): Promise<{ jobId: string }> {
-    return this.#request<{ jobId: string }>(`/management-api/print-jobs/${id}/resend`, "POST");
+  /** With no `printerId` the job is resent on its own printer. */
+  resendPrintJob(id: string, printerId?: string): Promise<{ jobId: string }> {
+    return this.#request<{ jobId: string }>(
+      `/management-api/print-jobs/${id}/resend`,
+      "POST",
+      printerId === undefined ? undefined : { printerId },
+    );
   }
 
   getPrintJobPreview(id: string): Promise<PrintJobPreview> {

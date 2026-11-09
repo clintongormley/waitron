@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
+import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
   kitchenPrintJobs,
@@ -26,6 +27,8 @@ import {
 import { AppError } from "@waitron/shared";
 import { setZoneSalePolicyOverride } from "@waitron/venue-service";
 import { deletePrinter } from "./printer-delete.js";
+import { createPairingMode } from "./pairing-mode.js";
+import { mountPrintApi } from "./print-api.js";
 import { layOutSaleReceipt, reprintJobOn } from "./print-job-reprint.js";
 import { enqueueSaleReceipt, readOriginalReceiptPrint } from "./receipt-print.js";
 import { readSettledTicket } from "./till-sale.js";
@@ -373,5 +376,111 @@ describe("reprintJobOn", () => {
       resendOf: page,
       payload: Uint8Array.of(7, 8),
     });
+  });
+});
+
+describe("the print queue's resend to another printer", () => {
+  function printApi(): Hono {
+    const app = new Hono();
+    mountPrintApi(
+      app,
+      {
+        db: venue.db,
+        cfg: venue.cfg,
+        pairingMode: createPairingMode(),
+        readMembership: async () => null,
+        readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+        layOutSaleReceipt: layOut,
+        venueLocale: "es-ES",
+      },
+      () => {},
+    );
+    return app;
+  }
+
+  function resend(jobId: string, printerId: string) {
+    return printApi().request(`/management-api/print-jobs/${jobId}/resend`, {
+      method: "POST",
+      headers: { cookie: venue.adminDashboard, "content-type": "application/json" },
+      body: JSON.stringify({ printerId }),
+    });
+  }
+
+  it("queues a receipt laid out on the printer the request names", async () => {
+    const { saleId, original } = await paidSale(at80);
+    await setJob(original.id, exhausted);
+    const target = await printerAt(at58);
+    const response = await resend(original.id, target);
+    expect(response.status).toBe(202);
+    const { jobId } = (await response.json()) as { jobId: string };
+    const expected = await inTx(venue, (tx) => layOut(tx, saleId, false, at58));
+    expect(await jobRow(jobId)).toMatchObject({
+      printerId: target,
+      resendOf: original.id,
+      payload: expected,
+    });
+  });
+
+  it("answers a printout's or a printer's refusal as a conflict", async () => {
+    const page = await inTx(venue, async (tx) => {
+      const { jobId } = await enqueuePrintJob(tx, venue.printerId, ticketAt(at80), "document");
+      await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, jobId));
+      return jobId;
+    });
+    const ownOnly = await resend(page, await printerAt(at80));
+    expect(ownOnly.status).toBe(409);
+    expect(await ownOnly.json()).toMatchObject({ error: { code: "print_job.own_printer_only" } });
+    const narrower = await resend(await kitchenTicket(at80), await printerAt(at58));
+    expect(narrower.status).toBe(409);
+    expect(await narrower.json()).toMatchObject({
+      error: { code: "print_job.printer_unsuitable" },
+    });
+  });
+
+  it("lists which printers each printout may go to", async () => {
+    const { original: receipt } = await paidSale(at80);
+    const ticket = await kitchenTicket(at80);
+    const refund = await refundReceipt(ticketAt(at80fine));
+    const page = await inTx(venue, async (tx) => {
+      const { jobId } = await enqueuePrintJob(tx, venue.printerId, ticketAt(at58), "document");
+      await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, jobId));
+      return jobId;
+    });
+    const narrow = await printerAt(at58);
+    const wide = await printerAt(at80);
+    const wider = await printerAt(at80fine);
+    const disabled = await printerAt(at80fine);
+    await inTx(venue, (tx) => deactivatePrinter(tx, disabled));
+
+    const response = await printApi().request("/management-api/print-jobs", {
+      headers: { cookie: venue.adminDashboard },
+    });
+    expect(response.status).toBe(200);
+    const rows = (await response.json()) as {
+      id: string;
+      reprintRule: string;
+      reprintPrinterIds: string[];
+    }[];
+    const row = (id: string) => rows.find((each) => each.id === id)!;
+
+    expect(row(receipt.id).reprintRule).toBe("any");
+    expect(row(receipt.id).reprintPrinterIds).toEqual(
+      expect.arrayContaining([narrow, wide, wider, kitchenPrinterId]),
+    );
+    expect(row(ticket).reprintRule).toBe("wide_enough");
+    expect(row(ticket).reprintPrinterIds).toEqual(expect.arrayContaining([wide, wider]));
+    expect(row(refund).reprintRule).toBe("wide_enough");
+    expect(row(refund).reprintPrinterIds).toContain(wider);
+    for (const id of [narrow, wide]) expect(row(refund).reprintPrinterIds).not.toContain(id);
+    expect(row(ticket).reprintPrinterIds).not.toContain(narrow);
+    for (const [id, own] of [
+      [receipt.id, venue.printerId],
+      [ticket, kitchenPrinterId],
+      [refund, venue.printerId],
+    ] as const) {
+      expect(row(id).reprintPrinterIds).not.toContain(own);
+      expect(row(id).reprintPrinterIds).not.toContain(disabled);
+    }
+    expect(row(page)).toMatchObject({ reprintRule: "own", reprintPrinterIds: [] });
   });
 });

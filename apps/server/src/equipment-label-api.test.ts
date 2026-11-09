@@ -81,6 +81,7 @@ beforeEach(async () => {
       pairingMode: createPairingMode(),
       venueLocale: "en-GB",
       readInvoiceDocument: () => Promise.reject(new Error("No invoice")),
+      layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
     },
     () => {},
   );

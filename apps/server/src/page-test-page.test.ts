@@ -123,6 +123,7 @@ async function venue(opts: { render?: Render } = {}) {
         return state.now;
       },
       readInvoiceDocument: (tx, saleId) => readInvoiceDocument(backend, tx, cfg, saleId),
+      layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
       ...(opts.render === undefined ? {} : { renderInvoicePage: opts.render }),
     },
     () => {},

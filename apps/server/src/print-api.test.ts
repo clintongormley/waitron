@@ -154,6 +154,7 @@ function mountApp(
       pairingMode,
       readMembership: async () => MEMBERSHIP,
       readInvoiceDocument: () => Promise.reject(new Error("No invoice is read here")),
+      layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
       enrolRateLimiter: opts.enrolRateLimiter,
       venueLocale: opts.venueLocale ?? "es-ES",
       listIpv4: opts.listIpv4,
@@ -5037,6 +5038,8 @@ describe("a deleted printer's job history", () => {
         "lastError",
         "printerId",
         "printerName",
+        "reprintPrinterIds",
+        "reprintRule",
         "status",
       ].sort(),
     );

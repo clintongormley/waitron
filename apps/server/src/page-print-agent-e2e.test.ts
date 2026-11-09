@@ -312,6 +312,7 @@ async function venue() {
       venueLocale: "es-ES",
       now: () => new Date(Date.now() + serverClock.ahead),
       readInvoiceDocument: (tx, saleId) => readInvoiceDocument(backend, tx, cfg, saleId),
+      layOutSaleReceipt: () => Promise.reject(new Error("No receipt is laid out here")),
     },
     () => {},
   );
