@@ -66,7 +66,7 @@ the journal/date/rollback checks, and documents that rebuilds run serially. No S
 or concurrency controller is added.
 
 **As built after A790, 2026-11-09:** #2455 landed as `650929c73215f62ef5a8f0c21b2be581bd30ab4c`
-before 1a. Under the watcher’s 11:20 and 11:30 decisions, its six tables are folded into core’s
+before 1a. Under the watcher’s 11:20, 11:30 and 11:56 decisions, its six tables are folded into core’s
 starting migration with the earlier in-flight changes, then `--fold-generated` and its API are
 removed. The one-off rebuild uses the already-approved `de3a1d847e^` generated input and current
 TypeScript schema, retaining #2536’s final trigger source; no journal or snapshot is hand edited.
