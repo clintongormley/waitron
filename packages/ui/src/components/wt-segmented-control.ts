@@ -219,6 +219,7 @@ export class WtSegmentedControl extends LitElement {
         ${this.options.map(
           (option, index) =>
             html`<button
+              part="button"
               type="button"
               role="radio"
               aria-checked=${option.value === this.value}

@@ -1838,24 +1838,38 @@ it("opens the course's confirmation directly from its named trash button and ret
   expect(actions.shadowRoot!.activeElement).toBe(trigger);
 });
 
-it.each([390, 1280])(
-  "keeps each timing choice within two readable lines at %ipx",
-  async (width) => {
+it.each([
+  [390, "default", ""],
+  [1280, "default", ""],
+  [390, "wider", "Verdana, sans-serif"],
+  [1280, "wider", "Verdana, sans-serif"],
+] as const)(
+  "keeps each timing choice within two readable lines at %ipx with the %s font",
+  async (width, _, font) => {
     const locale = currentLocale();
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
     try {
       await page.viewport(width, 900);
       for (const language of ["en", "es"] as const) {
         setLocale(language);
-        const { el } = await mount(stubApi());
+        const { el, host } = await mount(stubApi());
+        host.style.paddingInline = "var(--wt-space-2)";
+        if (font) host.style.setProperty("--wt-font-family", font);
         const control = q<WtSegmentedControl>(el, "wt-segmented-control")!;
         await control.updateComplete;
         await vi.waitFor(() => {
+          expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
+          expect(textLines(nameButton(el, "c1")!).length).toBe(1);
           for (const button of control.shadowRoot!.querySelectorAll("button"))
-            expect(textLines(button).length).toBeLessThanOrEqual(2);
+            expect(
+              textLines(button).length,
+              `${language}: ${button.textContent!.trim()}`,
+            ).toBeLessThanOrEqual(2);
         });
       }
     } finally {
       setLocale(locale);
+      await page.viewport(viewport.width, viewport.height);
     }
   },
 );

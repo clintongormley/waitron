@@ -830,7 +830,8 @@ this floor — removing the `min-width` regresses that guard.
 
 `wt-segmented-control` shows a short single-choice list as joined buttons. Give it `name`,
 `label`, `options` (`{ value, label }`), and `value`. Use `hide-label` in a labelled table column;
-the group keeps its accessible name. The chosen button uses the primary colour;
+the group keeps its accessible name. Each choice exposes the `button` part for spacing adjustments.
+The chosen button uses the primary colour;
 `disabled`, `hint` and `error` carry the group state. A different choice emits `wt-change` with
 `{ value }`. Tab reaches the selected choice, arrow keys move and select, and Home/End select
 the first/last choice. Enter and Space activate without reaching an enclosing form's save handler.

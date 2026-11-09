@@ -108,6 +108,9 @@ export class CourseList extends LitElement {
       wt-segmented-control {
         width: calc(4 * var(--wt-tap-min) - var(--wt-space-3));
       }
+      wt-segmented-control::part(button) {
+        padding-inline: var(--wt-space-2);
+      }
       td.handle-cell {
         padding-inline-start: var(--wt-space-3);
       }
