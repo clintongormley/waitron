@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { runInNewContext } from "node:vm";
 import { URL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { healthCommand, main, serverRoute } from "./ci-server-health.mjs";
+import { githubRequest, healthCommand, main, serverRoute } from "./ci-server-health.mjs";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 function workflowEnvironment(capacity) {
@@ -77,6 +77,54 @@ describe("queue-pressure routing", () => {
       f.options.capacity = { observedAt: 1, slots, serverRunning, serverWaiting };
       expect((await serverRoute(f.options)).route).toBe(route);
       expect(f.calls.every(([, options]) => !options?.method)).toBe(true);
+    },
+  );
+
+  it("uses measured hosted capacity after one transient API failure", async () => {
+    const f = fixture(),
+      request = f.options.request,
+      outputs = [],
+      reports = [];
+    let failed = false;
+    f.options.request = async (path, options) => {
+      const body = await request(path, options);
+      return githubRequest(path, options, () => {
+        if (!failed) {
+          failed = true;
+          throw Object.assign(new Error("HTTP 502"), { stderr: "gh: Bad Gateway (HTTP 502)" });
+        }
+        return JSON.stringify(body);
+      });
+    };
+    await healthCommand("route", f.options, {
+      output: (line) => outputs.push(line),
+      report: (line) => reports.push(line),
+    });
+    expect(outputs).toEqual(["server_route=hosted"]);
+    expect(reports.join("\n")).toContain("6 running, 0 queued / 6 slots");
+    expect(reports.join("\n")).not.toContain("could not be verified");
+  });
+
+  it.each([
+    ["health", 2, ["CI_ROUTE_BLIND run=51 attempt=2"]],
+    ["capacity", 1, ["CI_ROUTE_BLIND run=51 attempt=1"]],
+    ["measured", 1, []],
+  ])(
+    "logs one identified BLIND decision only for unreadable %s inputs",
+    async (fault, attempt, expected) => {
+      const f = fixture(),
+        reports = [];
+      f.options.attempt = attempt;
+      if (fault === "health")
+        f.options.request = async () => {
+          throw new Error("HTTP 502");
+        };
+      if (fault === "capacity") f.options.capacity = undefined;
+      await healthCommand("route", f.options, {
+        output: () => {},
+        report: (line) => reports.push(line),
+      });
+      expect(reports.filter((line) => line.startsWith("CI_ROUTE_BLIND "))).toEqual(expected);
     },
   );
 

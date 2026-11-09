@@ -542,9 +542,8 @@ A1424's live qualification was added on 7 November 2026.
   both retained failures, runs 42550200310 and 42525659420, stop at the Bluetooth check
   with `dbus_unreachable`. Guest diagnosis remains open.
   The health check chooses hosted while the server queue is stuck, and the independent
-  watchdog cancels and reruns at most one eligible first attempt per invocation. Trusted-main
-  health run 42509853431 cancelled and retried the deliberately unassignable probe
-  42506969127; its hosted attempt 2 passed. Qualify the idle probe, browser guest
+  watchdog dispatches a read-only check that alarms on stopped pickup without moving runs.
+  Qualify the idle probe, browser guest
   requirements and current-head coverage/aggregate results.
   The successful stream job in main run 42506794616 applied loopback MTU 1500 and
   `TMPDIR=/dev/shm`; this is that job’s receipt, not a full guest qualification.

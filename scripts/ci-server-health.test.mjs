@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { URL } from "node:url";
+import { performance } from "node:perf_hooks";
 import * as health from "./ci-server-health.mjs";
 
 const now = Date.parse("2026-11-08T17:00:00Z");
@@ -101,6 +102,66 @@ function sibling(f, fields, after = 0) {
 }
 
 describe("server health recovery", () => {
+  it.each(["free", "zero", "stale", "future", "text-running", "missing", "invalid", "full"])(
+    "checks a stalled queue without writes when capacity is %s",
+    async (state) => {
+      const f = fixture(),
+        reports = [];
+      f.options.capacity =
+        state === "missing"
+          ? undefined
+          : state === "invalid"
+            ? () => {
+                throw new SyntaxError("bad capacity");
+              }
+            : {
+                observedAt:
+                  state === "stale" ? now - 300_000 : state === "future" ? now + 2000 : now,
+                slots: state === "zero" ? 0 : 6,
+                serverRunning: state === "free" ? 5 : state === "text-running" ? "6" : 6,
+              };
+      const check = health.healthCommand("check", f.options, {
+        report: (line) => reports.push(line),
+      });
+      if (state === "full") {
+        await check;
+        expect(reports.join("\n")).toContain("No stalled");
+      } else await expect(check).rejects.toThrow(/SERVER STUCK.*12/);
+      expect(f.calls.every(([, options]) => !options.method)).toBe(true);
+    },
+  );
+
+  it("keeps a recent completed server job from raising the stalled alarm", async () => {
+    const f = fixture(),
+      request = f.request,
+      reports = [];
+    f.options.request = async (path, options) =>
+      path.includes("status=completed")
+        ? {
+            total_count: 1,
+            workflow_runs: [{ ...f.run, id: 14, updated_at: date(1) }],
+          }
+        : path.includes("/runs/14/attempts/1/jobs?")
+          ? {
+              total_count: 1,
+              jobs: [
+                {
+                  ...f.job,
+                  id: 140,
+                  run_id: 14,
+                  labels: ["self-hosted", "dt-42-14-1-lint-1"],
+                  status: "completed",
+                  runner_id: 9,
+                  completed_at: date(1),
+                },
+              ],
+            }
+          : request(path, options);
+    f.options.capacity = undefined;
+    await health.healthCommand("check", f.options, { report: (line) => reports.push(line) });
+    expect(reports.join("\n")).toContain("No stalled");
+    expect(f.calls.every(([, options]) => !options.method)).toBe(true);
+  });
   it.each([
     ["changes", "success", 7, true],
     ["changes", "failure", 7, false],
@@ -379,6 +440,53 @@ describe("server health recovery", () => {
     ]);
     expect(health.githubRequest("/repos/o/r", undefined, () => '{"id":42}')).toEqual({ id: 42 });
   }, 20_000);
+
+  it("retries one transient GitHub read with the same bounded request", () => {
+    const calls = [],
+      times = [],
+      failure = Object.assign(new Error("gh: Bad Gateway (HTTP 502)"), {
+        stderr: "gh: Bad Gateway (HTTP 502)",
+      });
+    const answer = health.githubRequest("/repos/o/r", undefined, (...args) => {
+      calls.push(args);
+      times.push(performance.now());
+      if (calls.length === 1) throw failure;
+      return '{"id":42}';
+    });
+    expect(answer).toEqual({ id: 42 });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toEqual(calls[0]);
+    expect(calls[1][2].timeout).toBe(15000);
+    expect(times[1] - times[0]).toBeGreaterThanOrEqual(1000);
+  });
+
+  it.each([
+    ["GET", "HTTP 503", 2],
+    ["GET", "HTTP 403", 1],
+    ["GET", "ETIMEDOUT", 1],
+    ["POST", "HTTP 502", 1],
+  ])("keeps the final %s %s failure after %i attempts", (method, message, attempts) => {
+    const failure = Object.assign(new Error(message), { stderr: message });
+    let calls = 0;
+    expect(() =>
+      health.githubRequest("/repos/o/r", { method }, () => {
+        calls++;
+        throw failure;
+      }),
+    ).toThrow(failure);
+    expect(calls).toBe(attempts);
+  });
+
+  it("does not replay a successful request with invalid JSON", () => {
+    let calls = 0;
+    expect(() =>
+      health.githubRequest("/repos/o/r", undefined, () => {
+        calls++;
+        return "{";
+      }),
+    ).toThrow(SyntaxError);
+    expect(calls).toBe(1);
+  });
 
   it("uses the server when the health read fails and never changes shared settings", async () => {
     const outputs = [],

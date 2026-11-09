@@ -82,11 +82,15 @@ describe("server-first workflow routing", () => {
     expect(route(selected, { attempt: 1 })).toEqual(["self-hosted", "dt-42-1234-1-server-probe-1"]);
     expect(route(selected, { attempt: 2 })).toBe("ubuntu-latest");
   });
-  it("runs the recovery workflow only from trusted main", () => {
+  it("runs the read-only health check only from trusted main", () => {
     const workflow = readFileSync(
       new URL("../.github/workflows/server-health.yml", import.meta.url),
       "utf8",
     );
+    expect(workflow).toContain("node scripts/ci-server-health.mjs check");
+    expect(workflow).not.toContain("node scripts/ci-server-health.mjs recover");
+    expect(workflow).toContain("CAPACITY: ${{ vars.DISPOSABLE_TESTS_CAPACITY }}");
+    expect(workflow).toContain("node scripts/ci-server-health.mjs probe");
     const expression = workflow.match(/^ {4}if: \$\{\{ (.+) \}\}$/m)[1];
     for (const event_name of ["schedule", "workflow_dispatch", "pull_request"]) {
       for (const ref of ["refs/heads/main", "refs/heads/feature"]) {
@@ -155,7 +159,7 @@ describe("server-first workflow routing", () => {
   });
 });
 
-it.each([false, true])(
+it.each([false, true, "transient"])(
   "keeps the workflow router beside an old checkout (fetch refused: %s)",
   (refused) => {
     const root = mkdtempSync(join(tmpdir(), "workflow-router-"));
@@ -176,7 +180,8 @@ it.each([false, true])(
 [ "$1" = api ] && [ "$2" = 'repos/fixture/waitron/contents/scripts/ci-server-health.mjs?ref=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' ] || exit 41
 [ "$3" = -H ] && [ "$4" = 'Accept: application/vnd.github.raw+json' ] || exit 42
 [ "$GH_TOKEN" = fixture ] || exit 43
-if [ "$FETCH_REFUSED" = true ]; then echo "HTTP 502" >&2; exit 22; fi
+echo request >> "$FETCH_CALLS"
+if [ "$FETCH_REFUSED" = true ] || { [ "$FETCH_REFUSED" = transient ] && [ "$(wc -l < "$FETCH_CALLS")" -eq 1 ]; }; then echo "HTTP 502" >&2; exit 22; fi
 cat "$FIXTURE_ROUTER"
 `,
         { mode: 0o755 },
@@ -199,6 +204,9 @@ cat "$FIXTURE_ROUTER"
           GITHUB_STEP_SUMMARY: join(root, "summary"),
           GH_TOKEN: runInNewContext(token, { github: { token: "fixture" } }),
           FETCH_REFUSED: String(refused),
+          FETCH_CALLS: join(root, "fetch-calls"),
+          GITHUB_RUN_ID: "1234",
+          GITHUB_RUN_ATTEMPT: "1",
           GITHUB_REPOSITORY: "fixture/waitron",
           GITHUB_WORKFLOW_SHA: "b".repeat(40),
           FIXTURE_ROUTER: fresh,
@@ -206,8 +214,15 @@ cat "$FIXTURE_ROUTER"
         },
       });
       expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout.trim()).toBe(refused ? "" : 'workflow router route {"slots":6}');
-      if (refused)
+      expect(result.stdout.trim()).toBe(
+        refused === true
+          ? "CI_ROUTE_BLIND run=1234 attempt=1"
+          : 'workflow router route {"slots":6}',
+      );
+      expect(readFileSync(join(root, "fetch-calls"), "utf8").trim().split("\n")).toHaveLength(
+        refused === false ? 1 : 2,
+      );
+      if (refused === true)
         expect(readFileSync(join(root, "outputs"), "utf8")).toBe("server_route=server\n");
     } finally {
       rmSync(root, { recursive: true, force: true });
