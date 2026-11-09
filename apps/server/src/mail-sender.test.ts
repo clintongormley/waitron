@@ -488,21 +488,21 @@ describe("one mail sender", () => {
     await queue();
     deps.resolveDelivery = async () => ({ mode: "unconfigured" });
     let passes = 0;
+    const sleeps: number[] = [];
     await runMailLoop({
       ...deps,
       sleep: async (ms) => {
+        sleeps.push(ms);
         if (++passes === 1) {
-          expect(ms).toBe(60000);
           time = new Date(time.getTime() + 7200000);
         } else if (passes === 2) {
-          expect(ms).toBe(500);
           await queue("later");
         } else {
-          expect(ms).toBe(60000);
           controller.abort();
         }
       },
     });
+    expect(sleeps).toEqual([60000, 500, 60000]);
     expect(
       vi.mocked(deps.log).mock.calls.filter((c) => c[1] === "mail.waiting_for_email_setup"),
     ).toHaveLength(1);
