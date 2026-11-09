@@ -105,14 +105,9 @@ After that, the next change saved to a parked counter order takes off any extra 
 list, and its charge with it, and drops any answer to a deleted options list.
 
 To change a dish already sent at a table, open its details in **Sent**, change it and press
-**Change dish**. Only that dish is saved, and the kitchen gets the change. You can do this until
-the bill is presented or the dish paid, while the stations of the dish and its extras allow changes
-after sending. A row of identical dishes changes together; to change only one of them, recall it
-(**Recall** asks how many) and change it in **New order**. Once the kitchen has started a dish you
-cannot change it, but you can add more of it. You cannot lower the count here: to take one off, use
-**Void…**.
-**Recall**, under the window's **More**, takes the dish back to **New order**, to send again with
-dishes not yet sent.
+**Change dish**. Only that dish is saved, and the kitchen gets the change. A row of identical dishes
+changes together; to change only one, **Recall** it and change it in **New order**. Once the kitchen
+has started a dish it can no longer be changed: use **Void…** to take it off the bill.
 The dish keeps the price it was sold at.
 
 To stop a list being asked without deleting it, turn its **Active** switch off, or remove it from

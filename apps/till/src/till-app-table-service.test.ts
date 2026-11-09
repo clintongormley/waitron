@@ -1908,7 +1908,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(
-      "Burger is already being made and can no longer be changed. To take it off the bill, open it in Sent and use Void… under More.",
+      "Burger is already being made and can no longer be changed. Use Void… to take it off the bill.",
     );
     expect(tableOrder(el)!.changeRefusal).toBeNull();
   });
@@ -2005,7 +2005,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await expect
         .poll(() => banner(el)?.textContent ?? "")
         .toContain(
-          "Burger ya se está preparando y no se puede cambiar. Para quitarlo de la cuenta, ábrelo en Enviado y usa Cancelar… en Más.",
+          "Burger ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
         );
       expect(flan.open).toBe(true);
       expect(flan.textContent).toContain("Flan");
@@ -2032,7 +2032,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await expect
         .poll(() => banner(el)?.textContent ?? "")
         .toContain(
-          "Flan ya se está preparando y no se puede cambiar. Para quitarlo de la cuenta, ábrelo en Enviado y usa Cancelar… en Más.",
+          "Flan ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
         );
       expect(windowSentence(dialog)).toBe(started.es);
       expect((await noteBox(screen)).value).toBe("no onions");
@@ -2094,7 +2094,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await flush(el);
 
       expect(banner(el)!.textContent).toContain(
-        "Tu cambio en Burger de la mesa 2 no se ha guardado. Burger ya se está preparando y no se puede cambiar. Para quitarlo de la cuenta, ábrelo en Enviado y usa Cancelar… en Más.",
+        "Tu cambio en Burger de la mesa 2 no se ha guardado. Burger ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
       );
       expect(banner(el)!.textContent).not.toContain("Tarta");
       await flush(el);
@@ -2212,7 +2212,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     }
 
     const startedRefusal =
-      "Tu cambio en Burger de la mesa 2 no se ha guardado. Burger ya se está preparando y no se puede cambiar. Para quitarlo de la cuenta, ábrelo en Enviado y usa Cancelar… en Más.";
+      "Tu cambio en Burger de la mesa 2 no se ha guardado. Burger ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.";
 
     it("names the refused change, and offers nothing on the next table, when the refusal lands while that table is still opening", async () => {
       const { el, settle, release, reads } = await changeThenLeave();
@@ -2499,7 +2499,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await flush(el);
 
       expect(banner(el)!.textContent!.trim()).toBe(
-        "Tu cambio en Burger no se ha guardado. Burger ya se está preparando y no se puede cambiar. Para quitarlo de la cuenta, ábrelo en Enviado y usa Cancelar… en Más.",
+        "Tu cambio en Burger no se ha guardado. Burger ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
       );
     });
 
@@ -2700,7 +2700,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       const text = banner(el)!.textContent!;
       expect(text).not.toContain("Tu cambio");
       expect(text).toContain(
-        "Burger ya se está preparando y no se puede cambiar. Para quitarlo de la cuenta, ábrelo en Enviado y usa Cancelar… en Más.",
+        "Burger ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
       );
       expect(reads()).toBe(readsBack + 1);
       expect(tableOrder(el)!.orderId).toBe("wo-7");
@@ -3006,7 +3006,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(
-      "Burger ya ha ido a cocina y no se puede cambiar. Para quitarlo de la cuenta, ábrelo en Enviado y usa Cancelar… en Más.",
+      "Burger ya ha ido a cocina y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
     );
     expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
   });

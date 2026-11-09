@@ -1187,11 +1187,11 @@ export const en = {
   "table.change_dish": "Change dish",
   "table.change_dish_lower": "To take one off, use Void…",
   "table.change_dish_started": "The kitchen has already started {dish}, so it can't be changed.",
-  // The banner's words when the dish's Sent window cannot say it: Void… is under that window's More.
+  // The banner's words when the dish's Sent window cannot say it.
   "table.change_dish_started_void":
-    "{dish} is already being made and can no longer be changed. To take it off the bill, open it in Sent and use Void… under More.",
+    "{dish} is already being made and can no longer be changed. Use Void… to take it off the bill.",
   "table.change_dish_fired_void":
-    "{dish} has already gone to the kitchen and can no longer be changed. To take it off the bill, open it in Sent and use Void… under More.",
+    "{dish} has already gone to the kitchen and can no longer be changed. Use Void… to take it off the bill.",
   "table.recall_line": "Recall",
   "table.recall_n": "Recall {n}",
   "table.void_line": "Void…",
@@ -3125,9 +3125,9 @@ export const es: Record<StringKey, string> = {
   "table.change_dish_started":
     "La cocina ya ha empezado a preparar {dish}, así que no se puede cambiar.",
   "table.change_dish_started_void":
-    "{dish} ya se está preparando y no se puede cambiar. Para quitarlo de la cuenta, ábrelo en Enviado y usa Cancelar… en Más.",
+    "{dish} ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
   "table.change_dish_fired_void":
-    "{dish} ya ha ido a cocina y no se puede cambiar. Para quitarlo de la cuenta, ábrelo en Enviado y usa Cancelar… en Más.",
+    "{dish} ya ha ido a cocina y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
   "table.recall_line": "Retirar",
   "table.recall_n": "Retirar {n}",
   "table.void_line": "Cancelar…",
