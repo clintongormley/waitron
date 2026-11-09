@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { runInNewContext } from "node:vm";
 import { URL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { healthCommand, main, serverRoute } from "./ci-server-health.mjs";
+import { githubRequest, healthCommand, main, serverRoute } from "./ci-server-health.mjs";
 
 const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 function workflowEnvironment(capacity) {
@@ -79,6 +79,31 @@ describe("queue-pressure routing", () => {
       expect(f.calls.every(([, options]) => !options?.method)).toBe(true);
     },
   );
+
+  it("uses measured hosted capacity after one transient API failure", async () => {
+    const f = fixture(),
+      request = f.options.request,
+      outputs = [],
+      reports = [];
+    let failed = false;
+    f.options.request = async (path, options) => {
+      const body = await request(path, options);
+      return githubRequest(path, options, () => {
+        if (!failed) {
+          failed = true;
+          throw Object.assign(new Error("HTTP 502"), { stderr: "gh: Bad Gateway (HTTP 502)" });
+        }
+        return JSON.stringify(body);
+      });
+    };
+    await healthCommand("route", f.options, {
+      output: (line) => outputs.push(line),
+      report: (line) => reports.push(line),
+    });
+    expect(outputs).toEqual(["server_route=hosted"]);
+    expect(reports.join("\n")).toContain("6 running, 0 queued / 6 slots");
+    expect(reports.join("\n")).not.toContain("could not be verified");
+  });
 
   it("includes its own running changes job when resolving a tie", async () => {
     const f = fixture(19),

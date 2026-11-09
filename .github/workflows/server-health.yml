@@ -18,6 +18,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
+      CAPACITY: ${{ vars.DISPOSABLE_TESTS_CAPACITY }}
     steps:
       - id: checkout
         name: Check out the code
@@ -59,9 +60,9 @@ jobs:
           node-version-file: ".nvmrc"
           package-manager-cache: false
 
-      - name: Recover a stalled server queue
+      - name: Check for a stalled server queue
         timeout-minutes: 5
-        run: node scripts/ci-server-health.mjs recover
+        run: node scripts/ci-server-health.mjs check
       - name: Probe an idle server
         if: github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *' && vars.DISPOSABLE_TESTS_MODE == 'server'
         timeout-minutes: 3

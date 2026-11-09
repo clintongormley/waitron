@@ -323,6 +323,26 @@ export async function healthCommand(command, options, { report, output }) {
       }
       output(`server_route=${answer.route}`);
       report(`CI route: ${answer.route}; ${answer.reason}`);
+    } else if (command === "check") {
+      const state = await serverHealth(options);
+      let capacity;
+      try {
+        capacity = typeof options.capacity === "function" ? options.capacity() : options.capacity;
+      } catch {}
+      const age = (options.now ?? Date.now()) - capacity?.observedAt;
+      const full =
+        Number.isSafeInteger(capacity?.slots) &&
+        capacity.slots > 0 &&
+        Number.isSafeInteger(capacity.serverRunning) &&
+        capacity.serverRunning >= capacity.slots &&
+        Number.isSafeInteger(capacity.observedAt) &&
+        age >= 0 &&
+        age < 300_000;
+      assert.ok(
+        !state.stuck.length || full || (await completedServerTraffic(options)),
+        `SERVER STUCK: runs ${state.stuck.map((run) => run.id).join(", ")} have waited five minutes without server progress.`,
+      );
+      report("No stalled server queue needs attention.");
     } else if (command === "recover") {
       const { retried, preserved = [] } = await recoverServer(options);
       if (preserved.length)
@@ -354,12 +374,27 @@ export async function healthCommand(command, options, { report, output }) {
 export function githubRequest(path, { method = "GET", body } = {}, execute = execFileSync) {
   const args = ["api", path, "--method", method];
   if (body !== undefined) args.push("--input", "-");
-  const result = execute("gh", args, {
+  const options = {
     encoding: "utf8",
     timeout: 15000,
     maxBuffer: 2 * 1024 * 1024,
     input: body === undefined ? undefined : JSON.stringify(body),
-  });
+  };
+  let result;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      result = execute("gh", args, options);
+      break;
+    } catch (error) {
+      if (
+        method !== "GET" ||
+        attempt ||
+        !/\bHTTP 5\d\d\b/.test(String(error.stderr ?? error.message))
+      )
+        throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
+    }
+  }
   return result.trim() ? JSON.parse(result) : null;
 }
 

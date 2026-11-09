@@ -82,11 +82,15 @@ describe("server-first workflow routing", () => {
     expect(route(selected, { attempt: 1 })).toEqual(["self-hosted", "dt-42-1234-1-server-probe-1"]);
     expect(route(selected, { attempt: 2 })).toBe("ubuntu-latest");
   });
-  it("runs the recovery workflow only from trusted main", () => {
+  it("runs the read-only health check only from trusted main", () => {
     const workflow = readFileSync(
       new URL("../.github/workflows/server-health.yml", import.meta.url),
       "utf8",
     );
+    expect(workflow).toContain("node scripts/ci-server-health.mjs check");
+    expect(workflow).not.toContain("node scripts/ci-server-health.mjs recover");
+    expect(workflow).toContain("CAPACITY: ${{ vars.DISPOSABLE_TESTS_CAPACITY }}");
+    expect(workflow).toContain("node scripts/ci-server-health.mjs probe");
     const expression = workflow.match(/^ {4}if: \$\{\{ (.+) \}\}$/m)[1];
     for (const event_name of ["schedule", "workflow_dispatch", "pull_request"]) {
       for (const ref of ["refs/heads/main", "refs/heads/feature"]) {
