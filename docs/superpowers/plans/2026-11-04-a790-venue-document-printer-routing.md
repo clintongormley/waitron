@@ -1,3 +1,9 @@
+> **Supersession, 9 November 2026, owner20:34:** “Drop it, small slices” drops G4,
+> the recovery-origin file, browser operation journal and two-stage prepare/accept exchange
+> entirely for remaining A790. Nothing waits on A947. The [current proposed slice plan](2026-11-09-a790-till-document-printer.md)
+> awaits the normal Claude read and watcher approval before implementation. Already landed
+> foundations are not cleanup authority. The historical contents below are preserved.
+
 # A790 venue document and printer routing implementation plan
 
 > **For agentic workers:** Execute natively, inline, one task at a time under the recorded build approval and the interface gates below. Use `superpowers:executing-plans` and read the TDD skill before writing implementation or tests. Do not dispatch automatic implementer/reviewer pairs. Checkboxes describe future work; none is completed by publishing this plan.

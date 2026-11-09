@@ -1295,13 +1295,18 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **Guest count** (bundle of 2, size S, needs the owner). [Detail](backlog/printers.md#bundle-guest-count)
 
-- **A790. Connect document and printer routing to the remaining live entries.** The invoice view
-  now saves its folded printer choice to Equipment and prints on the named destination. Build the
-  larger Cut B from the
-  [venue-only plan](superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md), using the
-  unmounted offers and browser recovery foundation. Qualify the live node/restore origin before
-  enabling its request services; then connect Orders, till history and Equipment. A739's payment
-  window follows the complete live routing cut; Cut C verifies that integration.
+- **A790. Till document and printer choice, then the remaining entries.** The folded Invoice
+  chooser landed in #2640. Owner20:34 on 9 November: “Drop it, small slices”. The
+  [proposed next slice](superpowers/plans/2026-11-09-a790-till-document-printer.md) puts one
+  Print/Reprint entry on the till ticket view: recorded Receipt/Invoice first, then that role's
+  device-profile printers, default first, with explicit named Print and the existing Equipment
+  save/holder/delivery rules. It covers live sales and history with a working-order id using
+  today's routes; normal Claude read and watcher approval are still required. A739 follows this
+  usable till slice, then A840/A842/A848 together; orderless F1 Invoice delivery and dashboard
+  routing remain unfinished. G4, recovery-origin file, browser operation journal and prepare/accept
+  are dropped entirely; no A947 dependency or new duplicate-print protection. Landed foundations
+  grant no cleanup authority. Keep the mixed-printer payment choice and Devices A4 marker as later
+  A790 work; fiscal issuance and F2 replacement stay outside this slice.
   [Detail](backlog/printers.md#a790-document-and-printer-routing-plan)
 
 - **Loose ends left by A661 (#1745).**

@@ -107,41 +107,39 @@ the cause was not found.
 
 ## A790: document and printer routing plan
 
-The invoice view's folded Invoice printer row now saves through Equipment and prints on the named
-destination. The [first slice](../superpowers/plans/2026-11-09-a790-cut-b-shortest-route.md) adds no
-journal or origin adapter; the physical G4 qualification below stays on the larger live Cut B.
+Owner20:34 on 9 November 2026: “Drop it, small slices”. The
+[current proposed till slice](../superpowers/plans/2026-11-09-a790-till-document-printer.md)
+needs the normal Claude read and watcher approval before implementation. The folded Invoice
+printer chooser is already on main (#2640); extend it rather than rebuild it.
 
-Build the complete live Cut B from the
-[venue-only plan](../superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md)
-before A739's payment-window integration. Cut A supplies unmounted authorized offers, routing
-tables and shared browser recovery/form models; it mounts no route or screen and changes no
-Equipment writer. Before live Invoice writers create revision rows, include device deletion in
-that writer audit: the new revision table has a restrictive device foreign key, and local save
-journal identities must remain recoverable. Its four new requester columns join the existing
-pending actions-download classification; qualify their export before enabling live writers.
-The page-print transport claim holder is classified separately from a human requester. The owner
-approved the routing plan and build on 23 October; the 4 November revision applies the later removal of
-locations. It introduces no location field, partition or cross-location fixture. Overlapping
-files and migration numbers require inventory and rebase/regeneration, not a release wait.
+Next, use one Print/Reprint entry on the till ticket view: choose the recorded Receipt or Invoice,
+then that document's device-profile printer list, default first, and explicitly Print on the named
+printer. Preserve successful selection saving the same Equipment setting, Receipt holding and
+takeover, Invoice's lack of a holder, existing permissions and delivery/original/copy/handover rules.
+F1 Receipt is the compact rendering of the recorded full invoice; Invoice uses the Invoice list,
+including receipt-paper and A4 printers. F2 offers only Receipt. The proposed slice covers live
+sales and history with a working-order id through today's receipt/reprint/delivery routes.
+These are planned changes, not shipped common-chooser behavior.
 
-Keep device Invoice selection in the same Equipment Invoice setting, Receipt holding under
-A796 and the dashboard's separate browser memory by appliance and document. Every accepted
-print keeps its fixed intent; original/copy and active-delivery checks cover both renderings
-of the recorded full invoice. Preserve person/session/device/profile/zone authority, node and
-recovery-generation binding, request replay, unknown-outcome recovery and fixed destinations.
-The print queue's separate Resend policy remains an open owner decision under A661, outside A790.
+Once landed, the proposed till slice releases A739's current order-linked prerequisite. A739 owns its payment
+window and final-entry changes, including the separate handheld paid view; A840/A842/A848 follow
+as one change. A790 remains open for orderless historical F1 Invoice delivery, dashboard routing
+and its separate browser preference, and subsequent integration checks. Today's orderless path
+prints Receipt copies but has no Invoice delivery route. A later small slice extends that sale-id
+path using existing delivery actions; it does not add another protocol. F2 A4/email are absent
+and are not offered by the till slice. F2-to-F1 replacement remains separate fiscal work.
 
-A739's agreed contract remains separate: dismissal means None, no durable unanswered document
-choice or fallback, separate final Print/Email, eligible card slips and no cash/manual-card slip.
-Its live final-entry adapter follows A790's complete routing Cut B; A790 Cut C verifies the
-integration afterwards. Live activation/restore-origin qualification still gates the dependent
-routing services. F2 replacement remains A556's separate fiscal work; preserve A948's released
-F1 capability rather than restoring a historical blanket refusal.
+The payment-time mixed-printer choice remains in A790: a printed full invoice should offer the
+profile's Invoice list, including receipt-paper printers, using the device's saved choice and then
+the profile default. Do not mistake #2640's ticket-view chooser for that payment change. Also retain
+the queued Devices-table A4 marker follow-up for its Invoice printer value. Keep the Printers tab's A4
+printers wording and A661's separate print-queue Resend policy question.
 
-The [design's dated precedence](../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
-and the original plan preserve earlier proposals as history. Cut A uses an injected origin and
-typed protocol seats: live activation/restore, HTTP admission, printing and physical handover
-remain unqualified by that foundation.
+G4, the recovery-origin file, browser operation journal and two-stage prepare/accept exchange are
+dropped entirely for remaining A790; nothing here or in A739/A840–A848 waits on A947. Do not plan a
+new table, ledger, all-writer revision or duplicate-print protection. Already landed foundations
+are not cleanup authority. The historical design and plans carry dated supersession pointers;
+their old machinery and release gates do not govern this proposed slice.
 
 ## Show a failed automatic invoice copy to staff
 
