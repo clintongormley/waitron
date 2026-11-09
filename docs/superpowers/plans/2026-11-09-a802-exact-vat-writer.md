@@ -1,6 +1,7 @@
 # A802 slice 2: the correction writer files the exact VAT split it is given
 
-**Plan for watcher approval; no code until approved.** Lane L, 2026-11-09. Slice 1 (the pure amount
+**Approved for build: watcher 2026-11-09 19:42; owner, relayed by the watcher at 19:57: lands on its own.**
+Records: lane L `questions.md`, same times. Lane L, 2026-11-09. Slice 1 (the pure amount
 calculator, `packages/core/src/correction-allocation.ts`) landed as #2653 (`604fdde31a`).
 
 ## Authority
@@ -118,7 +119,7 @@ legacy partial path (field absent) keeps filing the cent-out records shown above
 are tests (the one production caller, `apps/server/src/cancel-credit.ts:68`, passes
 `wholeInvoice`). Retiring it is a separate question for the PR thread, not this slice.
 
-## Two points for the watcher
+## Two points for the watcher (answered 19:42 and 19:57)
 
 1. **Landing.** The owner's 16:45 rule is "The first slice to land must be usable by staff"; the
    18:06 answer let "A802's arithmetic slice" land on its own and names no other. This slice is a
@@ -131,3 +132,14 @@ are tests (the one production caller, `apps/server/src/cancel-credit.ts:68`, pas
    double correction on 2026-11-02, `docs/superpowers/specs/2026-11-02-aeat-double-correction-evidence.json`)
    as a prerequisite of the slice that lets staff file it, not of this one, because nothing files a
    partial split in production until then.
+
+**Build receipt, 2026-11-09.** Watcher 19:42 answered both points: build as planned, stop at about
+1.5 times the size for an outside opinion, and the AEAT preproduction run belongs to the
+staff-usable slice; owner (19:57, relayed) let this slice land on its own. The review found that an
+earlier correction naming no invoice line used up a rate's budget but no line's, so an exact split
+could take a line already credited; such history is now refused with
+`sale.correction_history_unusable`, as are an invoice line or earlier correction line with no
+stored gross and an invoice with not exactly one stored group at a rate. Written lines after review:
+code 321 added, 32 removed; tests 770 (the refusal table, refusal-order cases and one helper that
+also checks the corrective series' next number did not move). Tests are about 2.4 times the code,
+past the plan's "about twice", because the plan requires every refusal as its own case.

@@ -138,8 +138,8 @@ them only when a lane has nothing better.
 
 **Features the owner ranked on 2026-10-16 that are still open:** A803 bills and tables, A646 the
 Modules page, A664 archiving or deleting old data, and A802 correcting part of a paid invoice, whose
-[build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md) still needs its
-protected-writer approval.
+[build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md) has had its
+protected-writer approval since 2026-10-22.
 
 **Remote access unblocks the customer-facing features, so it comes first among them (owner,
 2026-10-22).** Online booking (A1013), the table's QR code (A508), online ordering for collection
@@ -347,6 +347,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A802 — correct part of a paid invoice: build the approved design.**
   **2026-11-09:** The first arithmetic foundation and cumulative base/VAT bounds follow the [approved cash-first extraction plan](superpowers/plans/2026-11-09-a802-cash-first-extraction.md); staff correction preview/acceptance remains a later slice.
+  **2026-11-09:** Slice 2 ([plan](superpowers/plans/2026-11-09-a802-exact-vat-writer.md)): `recordCorrection` files an exact `partialVatBreakdown` and refuses any other. Next, slice 3 reads an invoice's correction history for the calculator; an AEAT preproduction run of the final-cent shape comes before the slice staff can use.
 
   Follow the [build plan](superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md), including its separate protected-writer approval
   and exact-gross qualification. The fiscal PR waits for the owner to land it.

@@ -920,7 +920,7 @@ asesor Q31 (2026-09-30), not decided.
   The owner approved correction before connected refund, both permissions with explicit refund
   links, and the proposed source-history gates. The
   [build plan](../superpowers/plans/2026-10-22-a802-partial-paid-invoice-correction.md) identifies
-  the protected-writer approval needed before implementation and the exact-gross qualification
+  the protected-writer approval (granted 2026-10-22) and the exact-gross qualification
   required before the dependent money workflow.
   The owner's 2026-10-18 scope follows:
   - A server route that issues a partial correction through `recordCorrection`
