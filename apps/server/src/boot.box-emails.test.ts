@@ -19,8 +19,11 @@ import type { DiskFullState } from "./disk-full-state.js";
 import type { TextEmailSender } from "./text-email.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
+import { useTestProducer } from "./testing/test-producer.js";
 import { readVenueLocale } from "./venue-locale.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
+
+useTestProducer();
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
