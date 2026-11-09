@@ -105,6 +105,26 @@ describe("queue-pressure routing", () => {
     expect(reports.join("\n")).not.toContain("could not be verified");
   });
 
+  it.each(["health", "capacity", "measured"])(
+    "logs one identified BLIND decision only for unreadable %s inputs",
+    async (fault) => {
+      const f = fixture(),
+        reports = [];
+      if (fault === "health")
+        f.options.request = async () => {
+          throw new Error("HTTP 502");
+        };
+      if (fault === "capacity") f.options.capacity = undefined;
+      await healthCommand("route", f.options, {
+        output: () => {},
+        report: (line) => reports.push(line),
+      });
+      expect(reports.filter((line) => line.startsWith("CI_ROUTE_BLIND "))).toEqual(
+        fault === "measured" ? [] : ["CI_ROUTE_BLIND run=51 attempt=1"],
+      );
+    },
+  );
+
   it("includes its own running changes job when resolving a tie", async () => {
     const f = fixture(19),
       request = f.options.request;

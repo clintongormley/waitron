@@ -233,6 +233,9 @@ The explicit `recover` helper is retained for manual tools and is not scheduled.
 The health reader requests job inventories in pages of 30 and run inventories in pages of 100.
 GET failures reporting HTTP 5xx get two 15-second attempts, one second apart. Writes and
 JSON parse errors are not retried; the final request error remains visible.
+A server route chosen without readable inputs logs `CI_ROUTE_BLIND run=ID attempt=N`
+once, including a failed routing-module fetch. Use those lines to count daily blind
+routes after deployment; this change does not reconsider or move them.
 On 9 November, the attempt-job endpoints for runs `42580703144` (84 jobs) and `42584158356`
 (87 jobs) returned HTTP 502 with 100-record pages and returned 30 records with 30-record pages.
 The reader keeps its complete-count, unique-ID and run/attempt/head checks across those pages.

@@ -163,6 +163,7 @@ export async function serverRoute(options) {
   if (unavailable.length)
     return {
       route: "server",
+      blind: true,
       reason: `CI inventory could not be verified; using the server: ${unavailable.join("; ")}`,
     };
   const capacity = typeof options.capacity === "function" ? options.capacity() : options.capacity;
@@ -318,11 +319,13 @@ export async function healthCommand(command, options, { report, output }) {
       } catch (error) {
         answer = {
           route: "server",
+          blind: true,
           reason: `CI routing inputs could not be verified; using the server: ${error.message}`,
         };
       }
       output(`server_route=${answer.route}`);
       report(`CI route: ${answer.route}; ${answer.reason}`);
+      if (answer.blind) report(`CI_ROUTE_BLIND run=${options.runId} attempt=${options.attempt}`);
     } else if (command === "check") {
       const state = await serverHealth(options);
       let capacity;

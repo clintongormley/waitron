@@ -203,6 +203,8 @@ cat "$FIXTURE_ROUTER"
           GITHUB_STEP_SUMMARY: join(root, "summary"),
           GH_TOKEN: runInNewContext(token, { github: { token: "fixture" } }),
           FETCH_REFUSED: String(refused),
+          GITHUB_RUN_ID: "1234",
+          GITHUB_RUN_ATTEMPT: "1",
           GITHUB_REPOSITORY: "fixture/waitron",
           GITHUB_WORKFLOW_SHA: "b".repeat(40),
           FIXTURE_ROUTER: fresh,
@@ -210,7 +212,9 @@ cat "$FIXTURE_ROUTER"
         },
       });
       expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout.trim()).toBe(refused ? "" : 'workflow router route {"slots":6}');
+      expect(result.stdout.trim()).toBe(
+        refused ? "CI_ROUTE_BLIND run=1234 attempt=1" : 'workflow router route {"slots":6}',
+      );
       if (refused)
         expect(readFileSync(join(root, "outputs"), "utf8")).toBe("server_route=server\n");
     } finally {
