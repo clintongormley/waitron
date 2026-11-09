@@ -1380,7 +1380,7 @@ it("lets a passed row's slide run on when a later move leaves that row where it 
   pointer(document, "pointermove", 1, rowCentre(el, "c"));
   await el.updateComplete;
   expect(order(el)).toEqual(["b", "c", "a", "d"]);
-  await nextFrame();
+  await vi.waitFor(() => expect(box(el, "b").top).toBeLessThan(drawn));
   // The same slide, still running, not one started again from where the row was drawn.
   expect(row(el, "b").getAnimations()).toHaveLength(1);
   expect(row(el, "b").getAnimations()[0]).toBe(slide);

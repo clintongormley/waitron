@@ -102,6 +102,46 @@ describe("fitPlaceholder, measuring one unit per character", () => {
 });
 
 describe("PlaceholderFit", () => {
+  it("fills the padded text box without clipping or dropping a character that fits", async () => {
+    const { el } = await mountWidget<PlaceholderFitProbe>("placeholder-fit-probe", {
+      text: "W".repeat(40),
+    });
+    const input = el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+    for (const padding of ["8px", "20px"]) {
+      input.style.paddingInline = padding;
+      document.fonts.dispatchEvent(new Event("loadingdone"));
+      await measured();
+      const { placeholder, width, textBox } = drawn(el);
+      expect(placeholder).toMatch(/^W+…$/);
+      expect(width(placeholder)).toBeLessThanOrEqual(textBox);
+      expect(width(`W${placeholder}`)).toBeGreaterThan(textBox - 1);
+    }
+  });
+
+  it("fits text between unequal padding and borders, leaving the spare pixel", async () => {
+    const { el } = await mountWidget<PlaceholderFitProbe>("placeholder-fit-probe", {
+      text: "i".repeat(120),
+    });
+    const field = el.shadowRoot!.querySelector("wt-input")!;
+    const input = field.shadowRoot!.querySelector("input")!;
+    input.style.cssText = "padding: 0 41px 0 3px; border-style: solid; border-width: 0 1px 0 7px";
+    document.fonts.dispatchEvent(new Event("loadingdone"));
+    await measured();
+    const { placeholder, width, textBox } = drawn(el);
+    expect(placeholder).toMatch(/^i+…$/);
+    expect(width(placeholder)).toBeLessThanOrEqual(textBox);
+    expect(width(`i${placeholder}`)).toBeGreaterThan(textBox - 1);
+
+    el.text = "i".repeat(40);
+    field.style.width = `${width(el.text) + 52.5}px`;
+    await el.updateComplete;
+    await measured();
+    const fitted = drawn(el);
+    expect(fitted.textBox).toBeCloseTo(width(el.text) + 0.5, 1);
+    expect(fitted.placeholder).not.toBe(el.text);
+    expect(fitted.width(fitted.placeholder)).toBeLessThanOrEqual(fitted.textBox);
+  });
+
   it("leaves no font listener or resize observer behind when removed with an update queued", async () => {
     const attached = watchAttachments();
     const { el, host } = await mountWidget<PlaceholderFitProbe>("placeholder-fit-probe", {

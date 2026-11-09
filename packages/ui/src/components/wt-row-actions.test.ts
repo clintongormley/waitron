@@ -953,6 +953,7 @@ describe("a link entry", () => {
 
   it("paints its border, background, text, corners and size from the tokens", async () => {
     const { link } = await mountLinkAndButton();
+    link.style.width = "200px";
     host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
     host.style.setProperty("--wt-color-surface", "rgb(4, 5, 6)");
     host.style.setProperty("--wt-color-text", "rgb(7, 8, 9)");
@@ -973,7 +974,12 @@ describe("a link entry", () => {
     expect([style.paddingTop, style.paddingLeft]).toEqual(["9px", "13px"]);
     expect(style.fontWeight).toBe("800");
     expect(style.textDecorationLine).toBe("none");
-    expect(style.justifyContent).toBe("flex-start");
+    const label = document.createRange();
+    label.selectNodeContents(link);
+    expect(label.getBoundingClientRect().left - link.getBoundingClientRect().left).toBeCloseTo(
+      parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth),
+      0,
+    );
   });
 
   it("shows the token focus ring when reached by keyboard, as the button does", async () => {

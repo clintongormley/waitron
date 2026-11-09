@@ -31,7 +31,13 @@ test("centers its label by default, but left-aligns it when used as a menu item"
     '<wt-button align="start" style="width:200px">Account settings</wt-button>',
   );
   const startButton = startEl.shadowRoot!.querySelector("button")!;
-  expect(getComputedStyle(startButton).justifyContent).toBe("flex-start");
+  const label = document.createRange();
+  label.selectNodeContents(startEl);
+  expect(label.getBoundingClientRect().left - startButton.getBoundingClientRect().left).toBeCloseTo(
+    parseFloat(getComputedStyle(startButton).paddingLeft) +
+      parseFloat(getComputedStyle(startButton).borderLeftWidth),
+    0,
+  );
 });
 
 test("meets the minimum tap target at default size on both axes", async () => {

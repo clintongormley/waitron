@@ -2238,7 +2238,12 @@ describe("the receipt's guests field", () => {
     probe.style.whiteSpace = "pre";
     document.body.append(probe);
     onTestFinished(() => probe.remove());
-    const room = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const room =
+      input.getBoundingClientRect().width -
+      parseFloat(style.borderLeftWidth) -
+      parseFloat(style.borderRightWidth) -
+      parseFloat(style.paddingLeft) -
+      parseFloat(style.paddingRight);
     expect(probe.getBoundingClientRect().width).toBeLessThanOrEqual(room);
   });
 

@@ -512,7 +512,6 @@ export class MenuPricesTable extends LitElement {
     context.font = style.font;
     context.letterSpacing = style.letterSpacing;
     const widest = Math.max(...this.#ranges.map((range) => context.measureText(range).width));
-    // A pixel to spare, as a box's reported width (`clientWidth`) is rounded to a whole pixel.
     const width = `${Math.ceil(widest) + 1}px`;
     if (this.style.getPropertyValue("--range-text-width") !== width)
       this.style.setProperty("--range-text-width", width);

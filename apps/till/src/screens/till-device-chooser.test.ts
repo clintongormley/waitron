@@ -129,9 +129,12 @@ describe("till-device-chooser", () => {
       hostBounds.right - screenBounds.right,
       0,
     );
-    expect(
-      getComputedStyle(el.shadowRoot!.querySelector<HTMLElement>(".setup")!).justifyContent,
-    ).toBe("flex-end");
+    const setup = el.shadowRoot!.querySelector<HTMLElement>(".setup")!;
+    const action = setup.querySelector("wt-button")!;
+    expect(setup.getBoundingClientRect().right - action.getBoundingClientRect().right).toBeCloseTo(
+      0,
+      0,
+    );
   });
 
   it("opens the new-device join screen in a modal with Cancel on the left", async () => {

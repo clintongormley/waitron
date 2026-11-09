@@ -7686,7 +7686,12 @@ it.each([
         key,
         shown,
         needed: context.measureText(shown).width,
-        room: field.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+        room:
+          field.getBoundingClientRect().width -
+          parseFloat(style.borderLeftWidth) -
+          parseFloat(style.borderRightWidth) -
+          parseFloat(style.paddingLeft) -
+          parseFloat(style.paddingRight),
       };
       expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
       const fieldOf = () => rowOf(key).querySelector("wt-price-input")!.getBoundingClientRect();
