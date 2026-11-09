@@ -371,22 +371,17 @@ mediodía**. **Ensalada** usa el nombre de cocina **ENSALADA · MENÚ** y una un
 **CAFÉ · BAR DE ABAJO**. Los nombres para el cliente conservan los idiomas de contenido del
 local, por lo que cambiar los nombres internos no sustituye las palabras del ticket.
 
-Una demostración en Cataluña o las Islas Baleares empieza como **Can Delgado**. La sección
-**Especialitats de la casa** incluye **Botifarra amb mongetes**, y la carta de bebidas incluye
-**Copa de cava**. Los nombres internos y de cocina están en catalán aunque las pantallas estén
-en español o inglés. Los textos para el cliente conservan el catalán, el español y el inglés.
-En la Comunitat Valenciana, la demostración empieza como **Casa Delgado de l'Horta**.
-Su sección **Especialitats de l'Horta** incluye **All i pebre** y **Paella valenciana**,
-y Bebidas incluye **Copa de vi de Requena**. Los nombres internos y de cocina están
-en valenciano mientras las pantallas siguen en español o inglés. Los textos para
-el cliente empiezan en valenciano, español e inglés; los tiques salen en español
-por defecto.
+Una demostración en Cataluña o las Islas Baleares empieza como **Can Delgado**, con
+platos regionales y cava. En la Comunitat Valenciana empieza como **Casa Delgado de
+l'Horta**, con all i pebre, paella y vino de Requena. En Galicia empieza como
+**A Casa Delgado**, con empanada, lacón con grelos, filloas y Albariño.
 
-En Galicia, la demostración empieza como **A Casa Delgado**. Su sección
-**Especialidades da casa** incluye **Empanada galega**, **Lacón con grelos** y
-**Filloas**, y Bebidas incluye **Copa de Albariño**. Los nombres internos y de cocina
-están en gallego aunque las pantallas estén en español o inglés. Los textos para
-el cliente empiezan en gallego, español e inglés; los tiques salen en español por defecto.
+Los nombres internos y de cocina, las cartas, los departamentos, las estaciones y
+los pasos de servicio siguen el inglés o español usado para preparar la demostración.
+Cambiar después el idioma de las pantallas no cambia esos nombres. Los textos para
+el cliente conservan el catalán, valenciano o gallego de la región, además del español
+y el inglés. En Cataluña los tiques salen en catalán; en las demostraciones de Baleares,
+Valencia y Galicia salen en español por defecto.
 
 Durante la preparación, el nombre sugerido sigue el código postal o la provincia hasta que lo editas.
 Después de escribir un nombre, Waitron lo conserva al cambiar de región, también al revisar y volver.

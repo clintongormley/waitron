@@ -7,17 +7,12 @@ Tus productos, secciones, [modificadores](modifiers.md) y unidades comparten est
 La biblioteca de imágenes también los usa, pero una fotografía necesita un nombre en el idioma
 predeterminado al subirla o editarla.
 
-En Cataluña y las Islas Baleares, la biblioteca de demostración usa nombres internos en catalán,
-como **Botifarra amb mongetes**, tanto en las pantallas en español como en inglés. Las imágenes
-regionales pertenecen a ese restaurante de práctica; las eliges y sustituyes de la misma manera.
-
-En la Comunitat Valenciana, la biblioteca de fotografías de demostración usa nombres
-internos en valenciano, como **All i pebre** y **Orxata amb fartons**, con sus imágenes
-regionales.
-
-En Galicia, la biblioteca de fotografías de demostración usa nombres internos
-en gallego, como **Empanada galega** y **Filloas**, con sus imágenes regionales.
-Las eliges y sustituyes de la misma manera.
+La biblioteca de fotografías de demostración conserva los nombres para el cliente.
+En Cataluña y las Islas Baleares incluyen **Botifarra amb mongetes**; en la Comunitat
+Valenciana, **All i pebre** y **Orxata amb fartons**; en Galicia, **Empanada galega**
+y **Filloas**. Estos nombres conservan el idioma regional aunque los nombres internos
+de la demostración estén en inglés o español. Eliges y sustituyes las imágenes de
+la misma manera.
 
 ## Elige los idiomas de tu contenido {#languages}
 
