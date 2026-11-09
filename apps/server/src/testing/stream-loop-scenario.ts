@@ -3,7 +3,7 @@
 // installation number and chain, streams into a generation of its own and moves the pointer, and a
 // restore of B's generation holds exactly what B's database holds. `stream-loop.e2e.test.ts` runs it
 // against versitygw; `aws-stream-loop.aws-rehearsal.test.ts` against Amazon S3, by opt-in only.
-import { X509Certificate } from "node:crypto";
+import { randomBytes, randomUUID, X509Certificate } from "node:crypto";
 import { copyFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -31,13 +31,23 @@ import {
   registroSif,
   registrosFacturacion,
 } from "@waitron/fiscal-verifactu";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack";
 import { verifySecretAsync } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { nodeId } from "@waitron/shared";
-import { planVenue, quoteIdent } from "@waitron/provisioning";
+import {
+  applyVenue as applyMinuteVenue,
+  mergeModulePreparationRevisions,
+  planVenue,
+  quoteIdent,
+} from "@waitron/provisioning";
+import { withOperationAuthority } from "@waitron/module";
+import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
+import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
+import { createHourTestClock, selectPastWaits } from "./hour-test-clock.js";
 import { mintBreakGlassSecret } from "../break-glass.js";
 import {
   createRecoveryRestoreRunner,
@@ -48,6 +58,7 @@ import {
   createS3ObjectStore,
   encodeRecoveryKit,
   probeBucket,
+  parseRecoveryKit,
   readPointer,
   restoreGeneration,
   venuePrefix,
@@ -67,6 +78,7 @@ import { establishNodeIdentity } from "../node-identity.js";
 import { runRestore } from "../restore-command.js";
 import { unsealNodeState } from "../sealed-state.js";
 import { streamSettingsPayload, type StreamHostDeps } from "../stream-host.js";
+import { httpsVia } from "./boot-harness.js";
 import { freePort } from "./free-ports.js";
 import { stageClock, waitUntil } from "./scenario-stages.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
@@ -120,6 +132,8 @@ export interface StreamLoopEvent {
 
 export interface StreamLoopFixture {
   bucket: BucketConfig;
+  /** Rotate the bucket key and rebuild from the production PDF instead of a text kit. */
+  useRecoveryPack?: boolean;
   /** An existing folder the scenario may fill; the caller removes it. */
   scratch: string;
   litestreamBin: string;
@@ -214,8 +228,83 @@ function differingTables(a: Map<string, string[]>, b: Map<string, string[]>): st
     .sort();
 }
 
+function applyWithFirstSetup(stateDir: string): typeof applyMinuteVenue {
+  return async (actions, deps) => {
+    // Leave room for selection's minute wait before the real-time sales.
+    const clock = createHourTestClock(Date.now() - 10 * 60_000);
+    const taxpayer = actions.find((action) => action.kind === "ensure-tenant")!;
+    const initialNodeId = randomUUID();
+    const initialAdministratorId = randomUUID();
+    const binding = {
+      module: "fiscal-verifactu",
+      action: "setup",
+      eventId: randomUUID(),
+      sourceId: randomUUID(),
+      targetNodeId: initialNodeId,
+    } as const;
+    let kept: unknown = null;
+    const preparation = createHourPreparation({
+      monotonicNow: () => clock.monotonic(),
+      withState: async (_binding, run) =>
+        run({
+          get value() {
+            return structuredClone(kept);
+          },
+          history: [],
+          async replace(next) {
+            kept = structuredClone(next);
+          },
+        }),
+      read: async () => ({
+        scope: { taxpayerNif: taxpayer.taxId, environment: "preproduction" },
+        bases: actions
+          .filter((action) => action.kind === "create-series")
+          .map(({ code, purpose }) => ({ code, purpose })),
+        contextKey: "first",
+        history: [{ reference: "empty", complete: true, records: [] }],
+        clock: compareHourClocks(
+          ["box", "browser"].map((source) => ({
+            source: source as "box" | "browser",
+            result: "usable",
+            instantMs: clock.wall(),
+            uncertaintyMs: 0,
+            wallStartedMs: clock.wall(),
+            wallFinishedMs: clock.wall(),
+            monotonicStartedMs: clock.monotonic(),
+            monotonicFinishedMs: clock.monotonic(),
+          })),
+          Date.parse("2026-10-15T00:00:00Z"),
+        ),
+      }),
+    });
+    const held = await selectPastWaits(clock, () =>
+      withOperationAuthority(binding, initialAdministratorId, (authority) =>
+        preparation.select({ binding, authority, comparisonId: "comparison" }),
+      ),
+    );
+    if (held.status !== "selected") throw new Error(`first setup answered ${held.status}`);
+    const result = await applyMinuteVenue(actions, {
+      ...deps,
+      initialNodeId,
+      initialAdministratorId,
+      moduleInputs: new Map([
+        [
+          "fiscal-verifactu",
+          { eventId: binding.eventId, sourceId: binding.sourceId, input: held.input },
+        ],
+      ]),
+      modules: deps.modules.map((module) =>
+        module.name === "fiscal-verifactu" ? { ...module, operations: preparation } : module,
+      ),
+    });
+    await mergeModulePreparationRevisions({ stateDir }, [{ binding, value: kept }]);
+    return result;
+  };
+}
+
 export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise<void> {
   const { bucket, scratch, litestreamBin, signal } = fixture;
+  let recoveryKey = RECOVERY_KEY;
   const clock = stageClock(fixture.record, signal);
   const waitFor = <T>(what: string, timeoutMs: number, probe: () => Promise<T | undefined>) =>
     waitUntil(what, timeoutMs, probe, signal, POLL_MS);
@@ -283,7 +372,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     };
     try {
       await stampDeployment(seeding.venue, "preproduction");
-      const venue = await applyVenue(
+      const venue = await (fixture.useRecoveryPack ? applyWithFirstSetup(dirsA.state) : applyVenue)(
         planVenue(
           {
             country: "ES",
@@ -383,7 +472,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     const venueId = await waitFor("a pointer in the bucket", POINTER_WAIT_MS, () =>
       venueIdInBucket(store),
     );
-    const pointerA = await waitFor(
+    let pointerA = await waitFor(
       "the pointer to name box A's generation",
       POINTER_WAIT_MS,
       async () => {
@@ -398,6 +487,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     const saleInGeneration = async (
       generation: string,
       saleId: string,
+      serverSecret?: string,
     ): Promise<true | undefined> => {
       const folder = await mkdtemp(join(scratch, "probe-"));
       try {
@@ -405,7 +495,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         await restoreGeneration({
           litestreamBin,
           bucket,
-          streamKey: deriveStreamKey(RECOVERY_KEY, venueId),
+          streamKey: deriveStreamKey(recoveryKey, venueId),
           venueId,
           generation,
           outPath: out,
@@ -413,9 +503,30 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         });
         const db = new DatabaseSync(out);
         try {
-          return db.prepare("select 1 as hit from sales where id = ?").get(saleId) === undefined
-            ? undefined
-            : true;
+          if (db.prepare("select 1 as hit from sales where id = ?").get(saleId) === undefined)
+            return undefined;
+          if (serverSecret === undefined) return true;
+          const row = db
+            .prepare("select sealed from node_sealed_state where node_id = ?")
+            .get(a.nodeId) as { sealed: Uint8Array } | undefined;
+          if (row === undefined) return undefined;
+          const nodeCopy = unsealNodeState(row.sealed, recoveryKey).find(
+            (entry) => entry.name === "node.dump",
+          );
+          if (nodeCopy === undefined) return undefined;
+          const nodePath = join(folder, "node.db");
+          await writeFile(nodePath, nodeCopy.bytes);
+          const node = new DatabaseSync(nodePath, { readOnly: true });
+          try {
+            const held = node
+              .prepare("select verifier from node_recovery_key where node_id = ?")
+              .get(a.nodeId) as { verifier: string } | undefined;
+            return held !== undefined && (await verifySecretAsync(serverSecret, held.verifier))
+              ? true
+              : undefined;
+          } finally {
+            node.close();
+          }
         } finally {
           db.close();
         }
@@ -445,6 +556,104 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       saleInGeneration(pointerA.pointer.body.generation, saleA.saleId),
     );
 
+    const kitPath = join(
+      scratch,
+      fixture.useRecoveryPack ? "rotated-recovery-pack.pdf" : "recovery-kit.txt",
+    );
+    if (fixture.useRecoveryPack) {
+      const originalGeneration = pointerA.pointer.body.generation;
+      const { via, close } = httpsVia(await readFile(join(dirsA.state, "tls", "ca.crt")));
+      const origin = `https://127.0.0.1:${portA}`;
+      try {
+        const login = await fetch(`${origin}/management-api/session`, {
+          ...via,
+          method: "POST",
+          headers: { "content-type": "application/json", origin },
+          body: JSON.stringify({ email: "owner@example.test", password: "dashPass123" }),
+        });
+        expect(login.status).toBe(200);
+        await login.arrayBuffer();
+        const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
+        const headers = { "content-type": "application/json", origin, cookie };
+        const proof = await fetch(`${origin}/management-api/session/me/fresh-sign-in`, {
+          ...via,
+          method: "POST",
+          headers,
+          body: JSON.stringify({ method: "password", password: "dashPass123" }),
+        });
+        expect(proof.status).toBe(204);
+        await proof.arrayBuffer();
+        recoveryKey = randomBytes(32).toString("base64");
+        const rotated = await fetch(`${origin}/api/backup/rotate`, {
+          ...via,
+          method: "POST",
+          headers,
+          body: JSON.stringify({ recoveryKey }),
+        });
+        expect(rotated.status).toBe(200);
+        await rotated.arrayBuffer();
+        pointerA = await waitFor("the rotated generation's pointer", POINTER_WAIT_MS, async () => {
+          const read = await readPointer(store, venueId);
+          return read !== null && read.pointer.body.generation !== originalGeneration
+            ? read
+            : undefined;
+        });
+        await waitFor("the sale in the rotated generation", UPLOAD_WAIT_MS, () =>
+          saleInGeneration(pointerA.pointer.body.generation, saleA.saleId),
+        );
+        const checkFolder = await mkdtemp(join(scratch, "rotation-control-"));
+        try {
+          const restore = (generation: string, key: string, file: string) =>
+            restoreGeneration({
+              litestreamBin,
+              bucket,
+              venueId,
+              generation,
+              streamKey: deriveStreamKey(key, venueId),
+              outPath: join(checkFolder, file),
+              ceilingMs: RESTORE_MS,
+            });
+          await expect(
+            restore(pointerA.pointer.body.generation, RECOVERY_KEY, "wrong.db"),
+          ).rejects.toMatchObject({
+            code: "backup.stream_request_failed",
+            params: { operation: "get", status: 403 },
+          });
+          await restore(originalGeneration, RECOVERY_KEY, "old.db");
+          const old = new DatabaseSync(join(checkFolder, "old.db"));
+          try {
+            expect(
+              old.prepare("select 1 as hit from sales where id = ?").get(saleA.saleId),
+            ).toBeDefined();
+          } finally {
+            old.close();
+          }
+        } finally {
+          await rm(checkFolder, { recursive: true, force: true });
+        }
+        const made = await fetch(`${origin}/api/backup/recovery-pack`, {
+          ...via,
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            locale: "es",
+            newServerKey: true,
+          }),
+        });
+        expect(made.status).toBe(200);
+        const pdf = new Uint8Array(await made.arrayBuffer());
+        const pack = await readRecoveryPackPdf(pdf);
+        expect(parseRecoveryKit(pack.bucketCode!).recoveryKey === recoveryKey).toBe(true);
+        nodeSecret = (pack.serverKey as { nodeKey: { secret: string } }).nodeKey.secret;
+        await writeFile(kitPath, pdf);
+        await waitFor("the PDF's server key to reach the bucket", UPLOAD_WAIT_MS, () =>
+          saleInGeneration(pointerA.pointer.body.generation, saleA.saleId, nodeSecret),
+        );
+      } finally {
+        await close();
+      }
+    }
+
     clock.begin("rebuild");
     // 5. A dies: its server stops and its whole folder is gone.
     running.delete(serverA);
@@ -453,17 +662,17 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       await readFile(join(dirsA.state, "tls", "server.crt"), "utf8"),
     );
     await rm(dirsA.root, { recursive: true, force: true });
-    const kitPath = join(scratch, "recovery-kit.txt");
-    await writeFile(
-      kitPath,
-      encodeRecoveryKit({
-        version: 1,
-        venueId,
-        bucket,
-        recoveryKey: RECOVERY_KEY,
-        pointerSignerPublicKey: a.publicKey,
-      }),
-    );
+    if (!fixture.useRecoveryPack)
+      await writeFile(
+        kitPath,
+        encodeRecoveryKit({
+          version: 1,
+          venueId,
+          bucket,
+          recoveryKey: RECOVERY_KEY,
+          pointerSignerPublicKey: a.publicKey,
+        }),
+      );
 
     // 6. B is rebuilt from the bucket through the command line. A changed within the last ten
     //    minutes, so the owner's confirmation that it is gone is required, and given.
@@ -580,7 +789,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         .select({ sealed: nodeSealedState.sealed })
         .from(nodeSealedState)
         .where(eq(nodeSealedState.nodeId, a.nodeId));
-      const leafInRow = unsealNodeState(row!.sealed, RECOVERY_KEY).find(
+      const leafInRow = unsealNodeState(row!.sealed, recoveryKey).find(
         (entry) => entry.name === "secrets/tls/server.crt",
       );
       expect(new X509Certificate(Buffer.from(leafInRow!.bytes)).serialNumber).toBe(
@@ -672,7 +881,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     await restoreGeneration({
       litestreamBin,
       bucket,
-      streamKey: deriveStreamKey(RECOVERY_KEY, venueId),
+      streamKey: deriveStreamKey(recoveryKey, venueId),
       venueId,
       generation: pointerB.pointer.body.generation,
       outPath: restoredB,

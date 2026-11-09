@@ -35,3 +35,29 @@ A later provider policy change appearing as a stream failure is also untested.
 | --- | --- | --- |
 | [Amazon: blocking or unblocking customer keys](https://docs.aws.amazon.com/AmazonS3/latest/userguide/blocking-unblocking-s3-c-encryption-gpb.html), read 8 November 2026 | `s3:PutEncryptionConfiguration`; `"EncryptionType": ["NONE"]` | Save changes the existing blocking setting when it can read its current rules; actual object controls still decide support. |
 | [Amazon: GetBucketEncryption](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html), read 8 November 2026 | “Returns the default encryption configuration” | Reading before writing preserves default encryption and bucket-key settings. |
+
+
+## Amazon rotation and production PDF, 9 November 2026
+
+The Lane K driver ran the single-file command in
+[the rehearsal guide](../../developers/aws-backup-rehearsal.md#run-only-the-encryption-and-recovery-pack-trial),
+with the documented `waitron-rehearsal` profile in `eu-north-1`. Litestream was the pinned 0.5.18.
+Run `036eedae-4ddd-4ff3-8ab8-87ef838822ee` passed one test in 63.44 seconds.
+Its small JSON receipt and log remain under Lane K's `receipts/a1404-amazon-20261109/`.
+
+| Experiment | Observed result |
+| --- | --- |
+| Keyed PUT before enabling customer keys | HTTP403 after 170.51ms |
+| Shared Save preparation function | Passed its right-key, valid-length wrong-key and keyless controls |
+| Rotate, then read new generation with old key | HTTP403, `backup.stream_request_failed` |
+| Restore old generation with its matching old key | Original sale row present |
+| Production HTTPS recovery PDF and fresh-target restore | Bucket and server-key pages included; restore accepted the PDF; row comparison, TLS secret and server-key verifier checks passed |
+| Owned-resource teardown | Remaining bucket null, upload IDs empty, cleanup command null |
+
+The runner bypassed the HTTP Save route and used its owned administrator client for bucket settings;
+the preparation logic and ordinary prefix-checked object client were the production ones.
+The trial's valid-minute setup uses the existing hour preparation and provisioning code. It does
+not change fiscal builders, identifiers in the ordinary loop or their assertions.
+
+**UNRUN:** a crash followed by a key change while the box is down; a provider changing encryption
+policy after Save. This trial supplies no per-start capability check and no old-key history.

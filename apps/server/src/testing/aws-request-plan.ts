@@ -26,6 +26,7 @@ export const LIFECYCLE_APIS = [
   "PutObject",
   "GetObject",
   "GetBucketEncryption",
+  "PutBucketEncryption",
   "GetBucketVersioning",
   "PutBucketPolicy",
   "DeleteBucketPolicy",

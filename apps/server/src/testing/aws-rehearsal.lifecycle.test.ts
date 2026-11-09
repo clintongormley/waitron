@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { Readable } from "node:stream";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { LITESTREAM_VERSION } from "@waitron/stream";
+import { createBucketClient, LITESTREAM_VERSION } from "@waitron/stream";
 import {
   type Answer,
   BUCKET,
@@ -128,6 +129,113 @@ describe("withAwsRehearsal — before any bucket", () => {
 });
 
 describe("withAwsRehearsal — the happy path", () => {
+  it("uses Save to enable encryption with owned admin calls and prefix-checked objects", async () => {
+    let uploaded = Buffer.alloc(0);
+    let reads = 0;
+    const h = harness(
+      {
+        GetBucketEncryption: () => ({
+          ...ok(),
+          ServerSideEncryptionConfiguration: {
+            Rules: [
+              {
+                ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" },
+                BlockedEncryptionTypes: { EncryptionType: ["SSE-C"] },
+              },
+            ],
+          },
+        }),
+        PutBucketEncryption: () => ok(),
+      },
+      {
+        apis: ["PutObject", "GetObject", "DeleteObject"],
+        createScenarioClient: (bucket) =>
+          createBucketClient(bucket, {
+            requestHandler: {
+              async handle(request: { method: string; body?: unknown }) {
+                if (request.method === "PUT") uploaded = Buffer.from(request.body as Uint8Array);
+                const refused = request.method === "GET" && reads++ > 0;
+                const body = refused
+                  ? Buffer.from("<Error><Code>AccessDenied</Code></Error>")
+                  : uploaded;
+                return {
+                  response: {
+                    statusCode: refused ? 403 : request.method === "DELETE" ? 204 : 200,
+                    headers: { etag: '"v1"' },
+                    body: Readable.from([body]),
+                  },
+                };
+              },
+            },
+          }),
+      },
+    );
+    expect(
+      await withAwsRehearsal(
+        (ctx) => ctx.prepareBucketEncryption(ctx.prefix("encryption")),
+        h.deps,
+      ),
+    ).toEqual({ ok: true });
+    const { parsed } = await receipt();
+    expect(parsed.actions.find((row) => row.api === "PutBucketEncryption")).toEqual({
+      api: "PutBucketEncryption",
+      status: "observed",
+    });
+    expect(parsed.remaining).toEqual({ bucket: null, uploadIds: [] });
+  });
+
+  it("aborts an encryption probe object when the run stops", async () => {
+    const stop = new AbortController();
+    let began!: () => void;
+    const started = new Promise<void>((resolve) => {
+      began = resolve;
+    });
+    let aborted = false;
+    const h = harness(
+      {},
+      {
+        signal: stop.signal,
+        apis: ["PutObject", "GetObject", "DeleteObject"],
+        createScenarioClient: (bucket) =>
+          createBucketClient(bucket, {
+            requestHandler: {
+              handle(_request: unknown, options?: { abortSignal?: AbortSignal }) {
+                began();
+                return new Promise<never>((_resolve, reject) => {
+                  options?.abortSignal?.addEventListener(
+                    "abort",
+                    () => {
+                      aborted = true;
+                      reject(Object.assign(new Error("probe aborted"), { name: "AbortError" }));
+                    },
+                    { once: true },
+                  );
+                });
+              },
+            },
+          }),
+      },
+    );
+    const done = rejection(
+      withAwsRehearsal((ctx) => ctx.prepareBucketEncryption(ctx.prefix("encryption")), h.deps),
+    );
+    await started;
+    stop.abort();
+    await done;
+    expect(aborted).toBe(true);
+    expect((await receipt()).parsed.remaining).toEqual({ bucket: null, uploadIds: [] });
+  });
+
+  it("refuses encryption setup for a prefix the run did not issue", async () => {
+    const h = harness();
+    await withAwsRehearsal(async (ctx) => {
+      await expect(ctx.prepareBucketEncryption("not-issued/")).rejects.toMatchObject({
+        reason: "prefix-not-issued",
+      });
+    }, h.deps);
+    expect(h.fake.names()).not.toContain("PutBucketEncryption");
+  });
+
   it("creates, proves, preflights, runs the scenario and tears the bucket down", async () => {
     const h = harness();
     let seen: { bucket: string; config: Record<string, unknown>; callsAtStart: number } | undefined;
@@ -871,6 +979,9 @@ describe("fix round 1", () => {
       }
       expect((refusal as AwsRehearsalRefused).reason).toBe("teardown-started");
     }
+    await expect(ctx!.prepareBucketEncryption("not-issued/")).rejects.toMatchObject({
+      reason: "teardown-started",
+    });
   });
 
   it("does not call a written receipt unwritten when printing its path fails", async () => {

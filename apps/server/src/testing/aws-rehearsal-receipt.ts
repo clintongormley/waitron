@@ -102,6 +102,7 @@ export const RECEIPT_APIS = [
   "DeleteBucketPolicy",
   "ListMultipartUploads",
   "GetBucketEncryption",
+  "PutBucketEncryption",
   "GetBucketVersioning",
 ] as const;
 

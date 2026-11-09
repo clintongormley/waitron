@@ -249,6 +249,8 @@ by the answers):
 
 ## Decisions and deliberate limits
 
+- **2026-11-09, A1404 Amazon acceptance:** the trial passed key rotation, the production recovery PDF and a fresh-target restore with row and sealed-secret checks; owned-resource cleanup left no bucket or uploads. [Receipt](../receipts/a1404/README.md#amazon-rotation-and-production-pdf-9-november-2026).
+
 - **2026-11-09, A1404 encryption slice:** Litestream and recovery now receive a separate key derived from the backup key. Rotation reloads the stream after resealing. The provider still receives the database and customer key; the box’s local database is unencrypted. Real Amazon recovery-pack qualification after rotation remains in A1404; the A1324 paragraph below records the earlier decision.
 
 - **A1324. The box does not encrypt the bucket copy, until A1404 lands.** The owner accepted this on

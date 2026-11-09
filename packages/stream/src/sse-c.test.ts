@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import type { BucketConfig } from "./s3-client.js";
+import { createBucketClient, type BucketConfig } from "./s3-client.js";
 import { prepareBucketEncryption } from "./sse-c.js";
 
 const closers: (() => Promise<void>)[] = [];
@@ -140,6 +140,16 @@ async function provider(behavior: Behavior = {}) {
 }
 
 describe("Save's encryption capability check over the real S3 client", () => {
+  it("uses the supplied client for Save instead of creating another client", async () => {
+    const unused = await provider();
+    const owned = await provider();
+    expect(
+      await prepareBucketEncryption(unused.bucket, () => createBucketClient(owned.bucket)),
+    ).toEqual({ ok: true });
+    expect(unused.seen.length).toBe(0);
+    expect(owned.seen.length).toBeGreaterThan(0);
+  });
+
   it("unblocks customer keys while preserving the bucket's KMS and bucket-key settings", async () => {
     const { bucket, seen, objects } = await provider();
     expect(await prepareBucketEncryption(bucket)).toEqual({ ok: true });

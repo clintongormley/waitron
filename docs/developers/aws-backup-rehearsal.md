@@ -85,9 +85,8 @@ pnpm --filter @waitron/server test:aws-rehearsal
 ```
 
 This runs every `*.aws-rehearsal.test.ts` file in `apps/server/src`, one at a time. Each scenario
-file is its own run, with its own bucket, deadline and receipt, so the loop, pause, delete and
-archive files make four buckets and four receipts; the profile file only reads the profile and
-creates no bucket.
+file is its own run, with its own bucket, deadline and receipt. The encryption, loop, pause, delete
+and archive scenarios each create a bucket; the profile file only reads the profile.
 
 The variables the rehearsal's own code reads:
 
@@ -108,6 +107,27 @@ never reaches a receipt: every string in a receipt is checked against both halve
 receipt is written. If a row the runner records would carry part of the key pair, the receipt holds
 a fixed `record-refused` row in its place (a teardown step keeps only its name and outcome), and the
 run, or the cleanup, fails. A scenario's own such row fails the scenario where it is recorded.
+
+### Run only the encryption and recovery-pack trial
+
+Use the same profile variables above and select one file:
+
+```sh
+pnpm --filter @waitron/server exec vitest run --config vitest.aws-rehearsal.config.ts src/aws-stream-encryption.aws-rehearsal.test.ts
+```
+
+This trial creates one owned bucket. It times a keyed write refused by the bucket's initial
+settings, then calls the same encryption preparation function as Save. The runner bypasses the
+HTTP Save route: bucket-setting requests use its owned administrator client, while probe objects
+keep the ordinary scenario client's prefix checks. It does not grant bucket-setting APIs to scenarios.
+The helper checks matching-key access and wrong-key/keyless refusals before continuing.
+
+The existing loop then uses a valid-minute setup fixture, rotates the backup key and checks that
+the old key cannot read the new generation while the matching old key still restores its old one.
+It downloads the production recovery PDF over HTTPS and passes that PDF to the restore command
+for a fresh box. The loop checks restored rows, sealed TLS material and the server-key verifier.
+The ordinary loop keeps its existing fixture. Teardown removes the trial's PDF with its scratch
+folder; a leftover PDF carries the rehearsal's credentials and keys, so treat it as a secret.
 
 ## What a run leaves behind
 
@@ -147,8 +167,8 @@ checked against the run's plan before it leaves the process
 (`apps/server/src/testing/aws-send-gate.ts`, which wraps the SDK's shared `send`). A request that
 fails the check is refused locally and never reaches Amazon S3. The plan:
 
-- **The runner's own requests** may be only the ones it needs to create, check and tear down the
-  bucket (CreateBucket, the encryption and versioning reads, the policy calls, listing and cancelling
+- **The runner's own requests** may be only the ones it needs to create, check, prepare encryption and tear down the
+  bucket (CreateBucket, encryption read/write, the versioning read, the policy calls, listing and cancelling
   uploads, listing and deleting objects, DeleteBucket), only on the run's bucket; it may put and read
   only the ownership marker.
 - **Every other request** may use only the APIs its scenario declares

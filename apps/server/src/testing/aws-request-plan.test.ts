@@ -60,6 +60,7 @@ describe("the API lists", () => {
         "PutObject",
         "GetObject",
         "GetBucketEncryption",
+        "PutBucketEncryption",
         "GetBucketVersioning",
         "PutBucketPolicy",
         "DeleteBucketPolicy",
@@ -87,20 +88,23 @@ describe("createRequestPlan", () => {
     expect(() => plan(["GetObject", "PutObject"])).not.toThrow();
   });
 
-  it.each(["CreateBucket", "DeleteBucket", "PutBucketPolicy", "GetBucketEncryption"])(
-    "refuses a declared bucket-level API (%s) when the plan is made",
-    (api) => {
-      let caught: unknown;
-      try {
-        plan(["GetObject", api]);
-      } catch (error) {
-        caught = error;
-      }
-      expect(caught).toBeInstanceOf(AwsRehearsalRefused);
-      expect((caught as AwsRehearsalRefused).reason).toBe("plan-refused");
-      expect((caught as Error).message).toContain(api);
-    },
-  );
+  it.each([
+    "CreateBucket",
+    "DeleteBucket",
+    "PutBucketPolicy",
+    "GetBucketEncryption",
+    "PutBucketEncryption",
+  ])("refuses a declared bucket-level API (%s) when the plan is made", (api) => {
+    let caught: unknown;
+    try {
+      plan(["GetObject", api]);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(AwsRehearsalRefused);
+    expect((caught as AwsRehearsalRefused).reason).toBe("plan-refused");
+    expect((caught as Error).message).toContain(api);
+  });
 
   it("refuses a declared API that is no S3 API the receipt knows, without naming it", () => {
     let caught: unknown;
@@ -146,6 +150,10 @@ describe("planRefusal — any sender", () => {
 });
 
 describe("planRefusal — the runner", () => {
+  it("permits changing encryption settings on the owned bucket", () => {
+    expect(planRefusal(plan(), "runner", "PutBucketEncryption", { Bucket: BUCKET })).toBeNull();
+  });
+
   it("allows each lifecycle API on the run's bucket", () => {
     for (const api of LIFECYCLE_APIS) {
       const input: Record<string, unknown> = { Bucket: BUCKET };

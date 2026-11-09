@@ -299,6 +299,7 @@ describe("actionTable", () => {
       "DeleteBucketPolicy",
       "ListMultipartUploads",
       "GetBucketEncryption",
+      "PutBucketEncryption",
       "GetBucketVersioning",
     ]);
   });

@@ -69,8 +69,11 @@ export async function verifyStreamKey(
 }
 
 /** A failed settings read must never be followed by replacing unknown bucket rules. */
-export async function prepareBucketEncryption(bucket: BucketConfig): Promise<ProbeResult> {
-  const client = createBucketClient(bucket);
+export async function prepareBucketEncryption(
+  bucket: BucketConfig,
+  clientFor: typeof createBucketClient = createBucketClient,
+): Promise<ProbeResult> {
+  const client = clientFor(bucket);
   const key = bucketKey(bucket, `${PROBE_PREFIX}encryption-${randomUUID()}`);
   const bytes = randomBytes(32);
   const headers = (secret: Buffer) => ({
