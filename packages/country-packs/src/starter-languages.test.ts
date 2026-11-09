@@ -16,6 +16,19 @@ const FILE: StarterTranslations<string> = {
 
 describe("resolveInstalledStarterLanguages", () => {
   it.each([
+    ["Madrid", "es-ES", "en", ["es", "en"]],
+    ["Madrid", "en-GB", "es", ["es", "en"]],
+    ["A Coruña", "gl-ES", "en", ["gl", "es", "en"]],
+  ] as const)(
+    "%s keeps content languages with %s receipts and explicit %s working language",
+    (area, receiptLocale, staffLanguage, languages) => {
+      expect(
+        resolveInstalledStarterLanguages({ country: "ES", area, receiptLocale, staffLanguage }),
+      ).toEqual({ staffLanguage, languages });
+    },
+  );
+
+  it.each([
     ["ES", "Madrid", "es-ES", "es", ["es", "en"]],
     ["ES", "Barcelona", "ca-ES", "es", ["ca", "es", "en"]],
     ["ES", "Valencia", "es-ES", "es", ["ca-ES-valencia", "es", "en"]],

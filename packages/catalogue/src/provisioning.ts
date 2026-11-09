@@ -58,7 +58,7 @@ const NEW_VENUE_DEFAULT_COLOR = "#abcced";
 export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the venue's initial menu and content languages",
-    async run(tx) {
+    async run(tx, _node, _operation, options) {
       const venue = await readVenue(tx);
       const country = (await readTenant(tx))?.country;
       const area = venue.province;
@@ -96,6 +96,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         country,
         area,
         receiptLocale: venue.invoiceLocales[0],
+        staffLanguage: options?.staffLanguage,
       });
       if (claimed.length > 0) {
         await tx.insert(units).values(

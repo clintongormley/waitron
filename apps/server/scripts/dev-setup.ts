@@ -219,6 +219,7 @@ async function provisionVenue(
         name: preset.venueName,
         fiscalTerritory: DEV_VENUE_TERRITORY,
         invoiceLocales: [receiptLocale],
+        staffLanguage: seedLocale,
         operationDescription: "In-store sales",
         addressLine1: preset.addressLine1,
         addressLine2: preset.addressLine2,

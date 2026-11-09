@@ -21,7 +21,10 @@ export interface StarterLanguages {
 }
 
 export function resolveInstalledStarterLanguages(
-  input: VenueGeography & { readonly receiptLocale?: string | null },
+  input: VenueGeography & {
+    readonly receiptLocale?: string | null;
+    readonly staffLanguage?: StarterStaffLanguage;
+  },
 ): StarterLanguages {
   const { country, area, receiptLocale } = input;
   const locale = resolveInstalledCountryLocale(SUPPORTED_LOCALE_CODES, {
@@ -32,7 +35,7 @@ export function resolveInstalledStarterLanguages(
   });
   return {
     languages: resolveInstalledStartingContentLanguages({ country, area }).languages,
-    staffLanguage: locale.split("-")[0] as StarterStaffLanguage,
+    staffLanguage: input.staffLanguage ?? (locale.split("-")[0] as StarterStaffLanguage),
   };
 }
 

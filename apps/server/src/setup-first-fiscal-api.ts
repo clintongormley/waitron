@@ -383,7 +383,7 @@ export function mountSetupFirstFiscalApi(
           "rectificativeSeriesCode",
           "admin",
         ],
-        ["operationDescription"],
+        ["operationDescription", "staffLanguage"],
       );
       const admin = exact(
         raw.admin,

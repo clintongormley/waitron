@@ -239,7 +239,8 @@ export async function applyVenue(
           break;
         }
         case "seed-device-profiles":
-          await seedDeviceProfiles(tx, action.profiles);
+          if ((await tx.select({ id: locations.id }).from(locations).limit(1)).length === 0)
+            await seedDeviceProfiles(tx, action.profiles);
           break;
         case "create-venue": {
           const existing = await tx
@@ -375,7 +376,7 @@ export async function applyVenue(
           const input = inputs.get(action.module);
           let report: string;
           if (input === undefined) {
-            report = await seed.run(tx, node);
+            report = await seed.run(tx, node, undefined, { staffLanguage: action.staffLanguage });
           } else {
             const [operator] =
               createdAdministrator === undefined
@@ -545,7 +546,6 @@ async function seedDeviceProfiles(
     inactivityTimeoutSeconds: number | null;
   }[],
 ): Promise<void> {
-  // Find-or-create by NAME, so a re-run re-creates a seeded profile the owner has since renamed.
   const existing = new Set((await listDeviceProfiles(tx)).map((p) => p.name));
   const toCreate = profiles.filter((p) => !existing.has(p.name));
   if (toCreate.length === 0) return;

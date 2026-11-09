@@ -10,6 +10,20 @@ const suite = useVenueDb({
 });
 
 describe("the demo scripts' test venue", () => {
+  it("passes an explicit English working language to the first department with Spanish receipts", async () => {
+    await createDemoVenueProvisioner(() => suite.db, {
+      nifBase: 82_000_000,
+      invoiceLocale: "es-ES",
+      staffLanguage: "en",
+    })();
+    expect(suite.db.all(sql`select name from service_steps order by position`)).toEqual(
+      ["Set up", "Take order", "Anything else?"].map((name) => ({ name })),
+    );
+    expect(suite.db.all(sql`select invoice_locales from locations`)).toEqual([
+      { invoice_locales: '["es-ES"]' },
+    ]);
+  });
+
   it("stores an English operation description", async () => {
     await createDemoVenueProvisioner(() => suite.db, {
       nifBase: 82_000_000,

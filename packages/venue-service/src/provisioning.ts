@@ -27,8 +27,8 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary:
       "Create the default department with its starter service steps, country courses, counter zone and four seasons, and give each profile that takes orders that department",
-    async run(tx) {
-      const staffLanguage = await readStarterStaffLanguage(tx);
+    async run(tx, _node, _operation, options) {
+      const staffLanguage = options?.staffLanguage ?? (await readStarterStaffLanguage(tx));
       const venue = await readVenue(tx);
       let venueId: string | undefined;
       const venueRowId = async () => (venueId ??= await venueLocationId(tx));

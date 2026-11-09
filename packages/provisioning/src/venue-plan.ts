@@ -21,6 +21,7 @@ export interface VenueRequest {
   name: string;
   fiscalTerritory: string;
   invoiceLocales: string[];
+  staffLanguage?: "en" | "es";
   operationDescription: string;
   addressLine1: string;
   addressLine2: string | null;
@@ -110,7 +111,7 @@ export type VenueAction =
   | { kind: "create-series"; code: string; purpose: "standard" | "full" | "rectificative" }
   /** Runs `modules[module].provisioning.seed` inside the venue transaction, after every core row.
    * `summary` is the seed's own one-line description, so the plan summary reads without the list. */
-  | { kind: "seed-module"; module: string; summary: string };
+  | { kind: "seed-module"; module: string; summary: string; staffLanguage?: "en" | "es" };
 
 /** The default kitchen station's English name; `src/starter-content.ts` holds its others. */
 export const DEFAULT_STATION_NAME = "Kitchen";
@@ -170,6 +171,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
     country,
     area: request.province,
     receiptLocale: locales[0],
+    staffLanguage: request.staffLanguage,
   });
 
   return [
@@ -227,7 +229,16 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
     ...modules.flatMap((m) =>
       m.provisioning?.seed === undefined
         ? []
-        : [{ kind: "seed-module", module: m.name, summary: m.provisioning.seed.summary } as const],
+        : [
+            {
+              kind: "seed-module",
+              module: m.name,
+              summary: m.provisioning.seed.summary,
+              ...(request.staffLanguage === undefined
+                ? {}
+                : { staffLanguage: request.staffLanguage }),
+            } as const,
+          ],
     ),
   ];
 }

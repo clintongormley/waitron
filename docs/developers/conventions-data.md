@@ -119,15 +119,15 @@ English in its code and translated at setup from a translation file in the writi
 (`packages/adjustments/src/starter-content.ts`), for the default kitchen station and the device
 profiles (`packages/provisioning/src/starter-content.ts`), and for the service steps, the default
 seasons, the counter zone and the starter menu period
-(`packages/venue-service/src/starter-content.ts`), these four written in the staff language
-whenever they are written, a department added later included; and for the units and the first
+(`packages/venue-service/src/starter-content.ts`); and for the units and the first
 menu (`packages/catalogue/src/starter-content.ts`), A918.
 A language map, such as a reason's names, gets the venue's starting content languages (the area's
 default content language, the languages the area requires every venue to keep, then English) that
 the file carries, plus English. A field holding one name, such as a reason's plain name, the
-station's, a profile's, the first menu's or a unit's staff name, gets the staff language: the
-receipt language when the staff screens have it, `es-ES` or `en-GB`, otherwise the area's screen
-language, cut to `es` or `en`. So a file of one-name rows carries only the staff languages other
+station's, a profile's, the first menu's or a unit's staff name, gets the explicit English or Spanish
+working language chosen at initial setup. Without that choice, and for a department added later,
+it uses the receipt language when the staff screens have it, `es-ES` or `en-GB`, otherwise the area's
+screen language, cut to `es` or `en`. So a file of one-name rows carries only the staff languages other
 than English (`es`). A starter unit's abbreviation is the same letters in every language, so it is
 not in the file: its map holds the staff abbreviation under each language its name holds. The
 first menu's root section takes the menu's name and starts with no customer-facing names; the home

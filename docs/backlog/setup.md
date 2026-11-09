@@ -656,24 +656,19 @@ that operation's reader. Do not remove exact-content checks to make a large file
 
 ## Bundle A1458: Setup asks which language the venue works in, and starts each country with its own courses (owner, 2026-11-08)
 
-3 entries, size L. Spanish and English can be built now; every other language waits for C125
+2 entries, size M. Spanish and English can be built now; every other language waits for C125
 ([languages.md](languages.md#bundle-regional-languages)).
 
-- **Setup asks which language the venue works in.** Today `resolveInstalledStarterLanguages`
-  (`packages/country-packs/src/starter-languages.ts`) derives the staff language from the country,
-  area and receipt language, and it can only be Spanish or English. Setup asks instead, offering the
-  derived language as the default. Every starter holding one name is written in it (A918's rule in
+- **Setup asks which language the venue works in.** The setup request now accepts an optional
+  English/Spanish working language for fresh starters and demo names. Add the wizard's picker,
+  offering the language derived from the country, area and receipt language as the default.
+  Every starter holding one name is written in the choice (A918's rule in
   [architecture.md](architecture.md), unchanged: a one-name row takes the staff language). Today
   those are the table states (the service steps "Set up", "Take order", "Anything else?"), seasons,
   the Counter zone and the "Open" period (`packages/venue-service/src/starter-content.ts`), the
   first menu, the kitchen station and the device profiles, plus the courses below. Their
   `StaffNames` files carry Spanish only, so each needs words for every language C125 adds, Valencian
   as a variant of Catalan. Until C125 lands, setup offers Spanish and English.
-- **Pass the setup choice to the demo** (owner, 2026-11-08). Regional demos now write their
-  single staff/kitchen, menu, department, group and station names in the seed's English/Spanish
-  language. Their customer maps and regional translations remain. The setup request still needs
-  to supply the explicit choice instead of the demo seed's current language. It must also
-  align the first department's service steps, which provisioning creates before the demo seed.
 - **Remaining course words.** Initial setup now creates Spain’s four courses and Great Britain’s
   three in the existing English/Spanish starter language. Catalan, Valencian, Galician and Basque
   course words still wait for C125; include them in the Native speaker review.

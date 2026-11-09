@@ -133,6 +133,29 @@ it("accepts the flat request", async () => {
   expect((await f.store.read())?.frozen.request).toEqual(request);
 });
 
+it.each(["en", "es"] as const)(
+  "retains explicit %s working language across a setup restart",
+  async (staffLanguage) => {
+    const f = await fixture();
+    const input = frozen();
+    input.request.staffLanguage = staffLanguage;
+    await f.claim(input);
+    const restarted = createFirstSetupStore(f.options);
+    expect((await restarted.read())?.frozen.request).toEqual(input.request);
+  },
+);
+
+it.each([null, "en-GB", "fr", ["en"]])(
+  "refuses an invalid frozen working language %j before saving the claim",
+  async (staffLanguage) => {
+    const f = await fixture();
+    const input = frozen();
+    input.request.staffLanguage = staffLanguage as never;
+    await expect(f.claim(input)).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    expect(await f.store.read()).toBeNull();
+  },
+);
+
 it.each([null, "es-ES", []])(
   "refuses a frozen receipt-language value of %j before saving the claim",
   async (invoiceLocales) => {

@@ -349,6 +349,55 @@ it("the context fingerprint survives the expected input-freezing state transitio
   expect((await f.read()).contextKey).toBe(before.contextKey);
 });
 
+it.each(["en", "es"] as const)(
+  "keeps the fiscal continuation key unchanged by a %s working-language choice",
+  async (staffLanguage) => {
+    const f = await fixture();
+    const before = await f.read();
+    const state = (await f.host.store.read())!;
+    const root = await mkdtemp(join(tmpdir(), "first-language-facts-"));
+    roots.push(root);
+    let bound!: ModuleOperationHost;
+    const modules = ALL_MODULES.map((module) => {
+      if (module.name !== MODULE) return module;
+      const seat = module.provisioning!.initialSetup!;
+      return {
+        ...module,
+        provisioning: {
+          ...module.provisioning!,
+          initialSetup: {
+            ...seat,
+            configure(host: ModuleOperationHost) {
+              bound = host;
+              return seat.configure!(host);
+            },
+          },
+        },
+      };
+    });
+    const host = createFirstSetupModuleHost({
+      ...f.args,
+      modules,
+      stateDir: join(root, "state"),
+      venueDir: join(root, "venue"),
+    });
+    await host.store.claim(
+      { ...state.frozen, request: { ...state.frozen.request, staffLanguage } },
+      state.ownerVerifier,
+      state.capabilityHash,
+      state.claimNonceHash,
+    );
+    const after = await host.coordinator.run(() =>
+      bound.withPreparationState!(f.context.binding, () =>
+        bound.readSetupFacts!(f.context.binding),
+      ),
+    );
+    expect(after.continuationKey).toBe(before.continuationKey);
+    expect(after.contextKey).toBe(before.contextKey);
+    expect(after.context).toEqual(before.context);
+  },
+);
+
 it.each(["readSetupFacts", "withPreparationState"] as const)(
   "there is no ambient preparation fallback when the host omits %s",
   (missing) => {

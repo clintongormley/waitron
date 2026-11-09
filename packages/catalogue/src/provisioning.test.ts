@@ -285,6 +285,28 @@ const STARTER_UNIT_ROWS = [
   { seedKey: "ml", english: "Millilitre", abbreviation: "ml" },
 ];
 
+it.each(["en", "es"] as const)(
+  "uses the chosen %s staff names without changing unit customer maps",
+  async (staffLanguage) => {
+    const node = await venue("ES", "Madrid", staffLanguage === "en" ? "es-ES" : "en-GB");
+    await withTransaction(suite.db, (tx) =>
+      CATALOGUE_PROVISIONING.seed!.run(tx, node, undefined, { staffLanguage }),
+    );
+    expect(
+      (await seededUnits()).map(({ seedKey, staffName, name }) => ({ seedKey, staffName, name })),
+    ).toEqual(
+      STARTER_UNIT_ROWS.map(({ seedKey, english }) => ({
+        seedKey,
+        staffName: staffLanguage === "en" ? english : expected[english]!.es,
+        name: { en: english, es: expected[english]!.es },
+      })),
+    );
+    expect(await suite.db.select({ name: catalogues.name }).from(catalogues)).toEqual([
+      { name: staffLanguage === "en" ? "Menu" : STARTER_MENU_NAMES.Menu.es },
+    ]);
+  },
+);
+
 async function seededUnits() {
   return suite.db
     .select({

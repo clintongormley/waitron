@@ -246,6 +246,7 @@ function validateFrozen(value: unknown): asserts value is FirstSetupFrozen {
         ...VENUE_FIELDS,
         "seriesCode",
         "fullSeriesCode",
+        "staffLanguage",
         "rectificativeSeriesCode",
         "admin",
       ],
@@ -266,6 +267,12 @@ function validateFrozen(value: unknown): asserts value is FirstSetupFrozen {
     ) ||
     !VERIFIER.test(String(request.admin.pinHash)) ||
     !VERIFIER.test(String(request.admin.passwordHash))
+  )
+    invalid();
+  if (
+    request.staffLanguage !== undefined &&
+    request.staffLanguage !== "en" &&
+    request.staffLanguage !== "es"
   )
     invalid();
   const admin = { ...request.admin };

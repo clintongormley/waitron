@@ -1,10 +1,14 @@
 import { applyVenue as realApplyVenue } from "./venue-apply.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
+import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
+import { stampDeployment } from "@waitron/db";
+import { nodeId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
+import type { WaitronModule } from "@waitron/module";
 import {
   deviceProfiles,
   locationDayCutoverChanges,
@@ -80,6 +84,51 @@ it("an English venue's default kitchen station is named in English", async () =>
   ).toEqual([{ name: "Kitchen", is_default: 1 }]);
 });
 
+it("uses the explicit English working language for module starters while keeping Spanish receipts", async () => {
+  await applyVenue(planVenue({ ...request("B10000015"), staffLanguage: "en" }, ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  expect.soft(suite.db.all(sql`select name from catalogues`)).toEqual([{ name: "Menu" }]);
+  expect
+    .soft(
+      suite.db.all(sql`select staff_name from units where seed_key is not null order by seed_key`),
+    )
+    .toEqual(
+      ["Gram", "Kilogram", "Litre", "Milligram", "Millilitre"].map((staff_name) => ({
+        staff_name,
+      })),
+    );
+  expect
+    .soft(suite.db.all(sql`select name from service_steps order by position`))
+    .toEqual(["Set up", "Take order", "Anything else?"].map((name) => ({ name })));
+  expect
+    .soft(suite.db.all(sql`select name from kitchen_courses order by display_order`))
+    .toEqual(["Sharing plates", "Starters", "Mains", "Desserts"].map((name) => ({ name })));
+  expect.soft(suite.db.all(sql`select name from floor_zones`)).toEqual([{ name: "Counter" }]);
+  expect
+    .soft(suite.db.all(sql`select name from seasons order by name`))
+    .toEqual(["Autumn", "Spring", "Summer", "Winter"].map((name) => ({ name })));
+  expect
+    .soft(suite.db.all(sql`select name from adjustment_reasons order by name`))
+    .toEqual(
+      [
+        "Complaint",
+        "Customer changed mind",
+        "Discount",
+        "Entry error",
+        "Item not available",
+        "Not served",
+        "On the house",
+        "Other",
+        "Staff meal",
+      ].map((name) => ({ name })),
+    );
+  expect(suite.db.all(sql`select invoice_locales from locations`)).toEqual([
+    { invoice_locales: '["es-ES"]' },
+  ]);
+});
+
 it("a new venue's first station starts at the default late flags and keeps a station's edit when the plan is retried", async () => {
   const plan = planVenue(request("B10000007"), ALL_MODULES);
   await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
@@ -110,6 +159,132 @@ it("a new venue's first station starts at the default late flags and keeps a sta
       forgotten_after_minutes: 15,
     },
   ]);
+});
+
+it("keeps authored starters and profiles when a retry changes the working language", async () => {
+  const initial = { ...request("B10000015"), staffLanguage: "en" as const };
+  await applyVenue(planVenue(initial, ALL_MODULES), { db: suite.db, modules: ALL_MODULES });
+  await suite.db.execute(
+    sql`update device_profiles set name = 'House counter' where name = 'Counter'`,
+  );
+  await suite.db.execute(sql`update catalogues set name = 'House menu'`);
+  await suite.db.execute(
+    sql`update kitchen_courses set name = 'House mains' where display_order = 2`,
+  );
+  const profiles = await suite.db.select().from(deviceProfiles).orderBy(deviceProfiles.id);
+  const result = await applyVenue(planVenue({ ...initial, staffLanguage: "es" }, ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  expect(await suite.db.select().from(deviceProfiles).orderBy(deviceProfiles.id)).toEqual(profiles);
+  expect(suite.db.all(sql`select name from catalogues`)).toEqual([{ name: "House menu" }]);
+  expect(suite.db.all(sql`select name from kitchen_courses order by display_order`)).toEqual(
+    ["Sharing plates", "Starters", "House mains", "Desserts"].map((name) => ({ name })),
+  );
+  expect(result.seeded).toEqual([]);
+});
+
+it.each([undefined, "en", "es"] as const)(
+  "passes the original fiscal seed input without starter options for choice %s",
+  async (staffLanguage) => {
+    const initialNodeId = "f58d395b-c9c5-474a-bf11-d19293934055";
+    const initialAdministratorId = "80b2ab2b-ed9b-49eb-8fa2-6c55d6640d7f";
+    const setup = allocationFixture({
+      node: { nodeId: nodeId(initialNodeId) },
+      operatorId: initialAdministratorId,
+      identity: "S000001",
+      taxpayerNif: "B10000015",
+      bases: [
+        { code: "A", purpose: "standard" },
+        { code: "FF", purpose: "full" },
+        { code: "R", purpose: "rectificative" },
+      ],
+    }).request("setup");
+    const calls: unknown[][] = [];
+    const rawInputs: unknown[] = [];
+    const preparedInputs: unknown[] = [];
+    const modules = ALL_MODULES.map((module): WaitronModule => {
+      if (module.name !== "fiscal-verifactu") return module;
+      const seed = module.provisioning!.seed!;
+      return {
+        ...module,
+        operations: {
+          prepare(operation, run) {
+            rawInputs.push(structuredClone(operation.input));
+            return setup.preparation.prepare(operation, (prepared) => {
+              preparedInputs.push(prepared.input);
+              return run(prepared);
+            });
+          },
+        },
+        provisioning: {
+          ...module.provisioning!,
+          seed: {
+            ...seed,
+            run: (...args: Parameters<typeof seed.run>) => {
+              calls.push(args);
+              return seed.run(...args);
+            },
+          },
+        },
+      };
+    });
+    await stampDeployment(suite.db, "preproduction");
+    await realApplyVenue(
+      planVenue(
+        { ...request("B10000015"), ...(staffLanguage === undefined ? {} : { staffLanguage }) },
+        modules,
+      ),
+      {
+        db: suite.db,
+        modules,
+        initialNodeId,
+        initialAdministratorId,
+        moduleInputs: new Map([
+          [
+            "fiscal-verifactu",
+            {
+              eventId: setup.binding.eventId,
+              sourceId: setup.binding.sourceId,
+              input: setup.input,
+            },
+          ],
+        ]),
+      },
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toHaveLength(3);
+    expect(rawInputs).toEqual([setup.input]);
+    expect(preparedInputs).toHaveLength(1);
+    expect((calls[0]![2] as { input: unknown }).input).toBe(preparedInputs[0]);
+    expect(calls[0]![2]).toMatchObject({ binding: setup.binding });
+    expect(Object.keys(calls[0]![2] as object).sort()).toEqual(["authority", "binding", "input"]);
+  },
+);
+
+it("keeps starter options out of an operation without a preparation seat", async () => {
+  const calls: unknown[][] = [];
+  const input = { chosen: "existing operation input" };
+  const recorder = fakeModule("probe", {
+    provisioning: {
+      seed: {
+        summary: "record operation",
+        run: async (...args) => {
+          calls.push(args);
+          return "recorded";
+        },
+      },
+    },
+  });
+  const modules = [...ALL_MODULES, recorder];
+  await applyVenue(planVenue({ ...request("B10000015"), staffLanguage: "en" }, modules), {
+    db: suite.db,
+    modules,
+    moduleInputs: new Map([["probe", { eventId: "probe-event", sourceId: "probe-source", input }]]),
+  });
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toHaveLength(3);
+  expect((calls[0]![2] as { input: unknown }).input).toBe(input);
 });
 
 describe("applyVenue: the one taxpayer row", () => {

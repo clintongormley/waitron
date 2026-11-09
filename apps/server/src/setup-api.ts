@@ -441,6 +441,9 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
   const taxIdInput = asString(v.taxId, "taxId");
   const fiscalTerritoryInput = asString(v.fiscalTerritory, "fiscalTerritory");
   const invoiceLocales = asStringArray(v.invoiceLocales, "invoiceLocales");
+  const staffLanguage = v.staffLanguage;
+  if (staffLanguage !== undefined && staffLanguage !== "en" && staffLanguage !== "es")
+    invalidRequest("staffLanguage");
   const postalCodeInput = asString(v.postalCode, "postalCode");
   const provinceInput = asString(v.province, "province");
   const timeZoneInput = asString(v.timeZone, "timeZone");
@@ -501,6 +504,7 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
     name: asString(v.name, "name"),
     fiscalTerritory: jurisdiction.id,
     invoiceLocales,
+    ...(staffLanguage === undefined ? {} : { staffLanguage }),
     operationDescription: asString(
       v.operationDescription === undefined
         ? venueFiscalSelection(ALL_MODULES, jurisdiction.id).contribution?.venueFields?.defaults

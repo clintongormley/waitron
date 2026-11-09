@@ -75,7 +75,7 @@ const STARTERS: readonly Starter[] = [
 export const ADJUSTMENTS_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the starter void and comp reasons",
-    async run(tx) {
+    async run(tx, _node, _operation, options) {
       if ((await listAdjustmentReasons(tx)).length > 0) {
         return "reasons already present";
       }
@@ -85,6 +85,7 @@ export const ADJUSTMENTS_PROVISIONING: ModuleProvisioning = {
         country: tenant?.country,
         area: venue.province,
         receiptLocale: venue.invoiceLocales[0],
+        staffLanguage: options?.staffLanguage,
       });
       for (const { english, ...starter } of STARTERS) {
         await createAdjustmentReason(tx, {
