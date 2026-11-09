@@ -154,11 +154,6 @@ export class ProductList extends LitElement {
     treeDragStyles,
     swatchPartStyles,
     css`
-      :host([sticky-header]) {
-        display: flex;
-        flex: 1 1 0;
-        flex-direction: column;
-      }
       /* Cell templates are rendered in wt-data-table's shadow root, so ::part is the one boundary
          crossing used for their presentation. */
       /* Laid out as a product's cell is, so a wrapped name keeps its grip and swatch beside its
@@ -371,8 +366,6 @@ export class ProductList extends LitElement {
     productMediaStyles,
   ];
 
-  /** Fills a bounded flex column, with the table's rows scrolling under its headings. */
-  @property({ type: Boolean, reflect: true, attribute: "sticky-header" }) stickyHeader = false;
   @property({ type: Boolean }) selecting = false;
   /** Whether rows carry grips and can be dragged. On by default, so a mount that wants a tree
    * without them passes `.reordering=${false}`. */
@@ -1585,7 +1578,6 @@ export class ProductList extends LitElement {
         viewKey="waitron.products.table"
         rememberExpanded
         flatTreeSearch
-        .stickyHeader=${this.stickyHeader}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}
         restoreColumnsLabel=${t("table.restore_columns")}

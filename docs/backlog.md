@@ -1462,10 +1462,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Theme logo** (bundle of 2, size M). [Detail](backlog/dashboard.md#bundle-theme-logo)
 
-- **A653 — every long dashboard table scrolls the same way, with less above it (owner, 2026-10-14;
-  open).**
-  [Detail](backlog/dashboard.md#a653--every-long-dashboard-table-scrolls-the-same-way-with-less-above-it)
-
 - **A657 — Cancel leaves without asking (owner, 2026-10-14; open).**
   [Detail](backlog/dashboard.md#a657--cancel-leaves-without-asking)
 

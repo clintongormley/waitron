@@ -87,7 +87,6 @@ test("a fresh table with filters and choosable columns starts with Filters and C
   const el = await itemTable();
   expect(part(el, ".filters-trigger").getAttribute("aria-expanded")).toBe("false");
   expect(part(el, ".columns-trigger").getAttribute("aria-expanded")).toBe("false");
-  expect(el.hasAttribute("sticky-header")).toBe(false);
   await userEvent.click(part(el, ".columns-trigger"));
   await el.updateComplete;
   expect(part(el, ".column-move-status").textContent!.trim()).toBe("");
@@ -170,8 +169,8 @@ test("removing the table mid column drag gives the page its cursor back", async 
 });
 
 async function stickyTable(): Promise<{ el: WtDataTable<Item>; scroll: HTMLElement }> {
-  const el = await itemTable({ columns: [nameColumn], stickyHeader: true });
-  el.style.height = "400px";
+  const el = await itemTable({ columns: [nameColumn] });
+  el.style.setProperty("--wt-table-max", "400px");
   await frames();
   return { el, scroll: part(el, ".scroll") };
 }

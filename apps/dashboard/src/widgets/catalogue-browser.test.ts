@@ -4188,7 +4188,7 @@ it("draws the Select tooltip over the sticky headings", async () => {
     height = window.innerHeight;
   await page.viewport(1280, 720);
   try {
-    const el = await mountBrowser({ stickyHeader: true });
+    const el = await mountBrowser();
     const host = el.parentElement!;
     host.style.display = "flex";
     host.style.flexDirection = "column";
@@ -4214,7 +4214,7 @@ it("a click on the Select tooltip, where it lies over the sticky headings, leave
     height = window.innerHeight;
   await page.viewport(1280, 720);
   try {
-    const el = await mountBrowser({ stickyHeader: true });
+    const el = await mountBrowser();
     const host = el.parentElement!;
     host.style.display = "flex";
     host.style.flexDirection = "column";
@@ -4400,24 +4400,6 @@ it("shows no routing line while routing is read, or when there are no categories
   await tableOf(bare);
   expect(routingLine(bare)).toBeNull();
 });
-
-it.each([false, true])(
-  "hands stickyHeader (%s) to the Products table, which fills a bounded column only when it is set",
-  async (sticky) => {
-    const el = await mountBrowser({ stickyHeader: sticky });
-    const host = el.parentElement!;
-    host.style.display = "flex";
-    host.style.flexDirection = "column";
-    host.style.height = "600px";
-    const table = await tableOf(el);
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    expect(el.hasAttribute("sticky-header")).toBe(sticky);
-    expect(table.stickyHeader).toBe(sticky);
-    const scroll = table.shadowRoot!.querySelector(".scroll")!.getBoundingClientRect();
-    if (sticky) expect(scroll.bottom).toBeCloseTo(host.getBoundingClientRect().bottom, 0);
-    else expect(scroll.bottom).toBeLessThan(host.getBoundingClientRect().bottom - 100);
-  },
-);
 
 it.each(
   [390, 1280].flatMap((width) =>

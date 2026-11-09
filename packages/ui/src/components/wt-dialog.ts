@@ -57,6 +57,10 @@ export class WtDialog extends LitElement {
     baseStyles,
     formMessageStyles,
     css`
+      :host {
+        --wt-table-max: none;
+      }
+
       dialog {
         padding: 0;
         border: 1px solid var(--wt-color-border);

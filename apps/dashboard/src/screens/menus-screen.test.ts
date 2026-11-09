@@ -7646,6 +7646,7 @@ it.each([
       { api: client },
       "light",
     );
+    host.style.height = `${innerHeight}px`;
     if (font !== "") {
       const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
       expect(family).not.toBe("");
@@ -13075,3 +13076,56 @@ it.each(retirementLooks)(
     }
   },
 );
+
+it("drags a Structure row under held headings with its preview at the pointer", async () => {
+  await page.viewport(1280, 800);
+  onTestFinished(() => page.viewport(1280, 844));
+  const client = api();
+  const el = await mountLunch(client);
+  await click(el, "select");
+  await settleStructure(el);
+  const host = el.parentElement!;
+  host.style.cssText = "height:600px;container-type:size;margin-top:40px";
+  host.style.setProperty("--wt-table-max", "360px");
+  const widget = structure(el);
+  const table = widget.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+  const from = inStructure<HTMLButtonElement>(el, '[data-test="drag-m-burger"]');
+  from.scrollIntoView({ block: "nearest" });
+  const start = from.getBoundingClientRect();
+  const send = (type: string, x: number, y: number) =>
+    from.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        pointerId: 73,
+        clientX: x,
+        clientY: y,
+      }),
+    );
+  send("pointerdown", start.left + 8, start.top + start.height / 2);
+  const target = rowOf(el, "m-drinks")!.querySelector<HTMLElement>('[data-test="name"]')!;
+  target.scrollIntoView({ block: "nearest" });
+  const point = target.getBoundingClientRect();
+  const x = point.left + 8,
+    y = point.top + point.height / 2;
+  send("pointermove", x, y);
+  await widget.updateComplete;
+  const ghost = widget.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-ghost"]')!;
+  expect(ghost.textContent).toContain("Burger");
+  const rect = ghost.getBoundingClientRect();
+  const style = getComputedStyle(ghost);
+  expect(rect.left).toBeCloseTo(x + parseFloat(style.marginLeft), 0);
+  expect(rect.top).toBeCloseTo(y + parseFloat(style.marginTop), 0);
+  send("pointerup", x, y);
+  await expect.poll(() => client.moveSectionMembersInto.mock.calls.length).toBe(1);
+  expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith(
+    "s-drinks",
+    [{ listId: "root-lunch", memberId: "m-burger" }],
+    undefined,
+  );
+  expect(widget.shadowRoot!.querySelector('[data-test="drag-ghost"]')).toBeNull();
+});

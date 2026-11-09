@@ -984,41 +984,6 @@ The owner reversed the disabled-zone ruling on 2026-10-08.
 
 The per-form classifications remain in the [A331 plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md).
 
-## A653 — every long dashboard table scrolls the same way, with less above it
-
-Owner, 2026-10-14, from two screenshots of the Santet venue at desktop width: "the products table scrolls
-independently of the page, but the menu table doesn't. these (and other similar tables) should be
-consistent. the problem is the amount of space that is used above the table which needs to be
-minimised, especially for use on mobiles".
-
-- **Today.** Products (`apps/dashboard/src/widgets/product-list.ts`, through `catalogue-screen.ts`
-  and `catalogue-browser.ts`) sets `wt-data-table`'s `stickyHeader`: the toolbar and column
-  headings stay at the top of the table's box and only the rows scroll
-  (`docs/developers/design-system.md`, `stickyHeader`). No other screen sets it, so a menu's
-  Structure tab (`widgets/menu-structure-table.ts`) and the other long tables (Orders, Staff,
-  Payments and the rest) scroll with the content column. A screen that opts in has to give the
-  table a bounded height, as Products does.
-- **Which way.** The owner's note reads as Products' way being the one to keep, with its cost —
-  the height above the table — being what to fix; confirm that at the plan before converting
-  screens. Settle which tables count as "long" (a tree such as Structure, a list that grows with the
-  venue's data) and which stay page-scrolled.
-- **The height to win back.** Above a menu's Structure rows, in order: the dashboard banner, the
-  Menus breadcrumb, the menu's name with its "Live: version …" status line, the tab strip
-  (Structure, Price overrides, Home page, Preview), the toolbar row (Filters, Select, search box),
-  and the column headings. Products has no breadcrumb or tabs but the same toolbar. Phones first;
-  measure the row area at 375×667 and 390×844 before and after.
-- **W80's open points, now part of this item** (detail: [catalogue.md, W80](catalogue.md#products-table-toolbar-and-headings-stay-in-view-w80-1187-left-open)).
-  At 375×667 Products' box held the All products row and one whole product row after W83, which
-  the item that built it called short of "enough rows to remain usable"; Select and move mode
-  overflowed there, and A303 changed that layout without the measurement being retaken.
-- **Phone side margins and the demo link strip** (owner, 2026-10-14, from a phone screenshot of the
-  Routes tab):
-  "the mobile view still has a lot of margin on the sides which narrows the page width
-  considerably". The phone-space slice removes the outer frame at the drawer breakpoint and uses
-  `--wt-space-2` inline content gutters. Demo and Preparation links stay on one horizontally
-  scrolling row; Live draws no strip. The shared scrolling work and the row-space target above
-  remain open, including Structure’s short-phone selection view.
-
 ## A657 — Cancel leaves without asking
 
 Owner, 2026-10-14: "when you click cancel you shouldn't get the 'discard changes' warning. just

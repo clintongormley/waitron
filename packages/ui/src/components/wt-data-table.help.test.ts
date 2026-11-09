@@ -113,8 +113,8 @@ test("a sortable column's badge is beside the sort button, not inside it", async
   expect(th.getAttribute("aria-sort")).toBe(sortBefore);
 });
 
-test("with sticky-header the badge is not cut off", async () => {
-  const el = await table([nameColumn, availability()], "sticky-header");
+test("with held headings the badge is not cut off", async () => {
+  const el = await table([nameColumn, availability()], 'style="--wt-table-max: 400px"');
   await turnHelp(true, el);
   const scroll = el.shadowRoot!.querySelector(".scroll")!.getBoundingClientRect();
   expect(badgeButton(el).getBoundingClientRect().top).toBeGreaterThanOrEqual(scroll.top);

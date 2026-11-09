@@ -2113,7 +2113,8 @@ describe("dashboard-app", () => {
         permissions: ["venue.view", "schedule.manage"],
       }),
     });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
+    host.style.height = `${innerHeight}px`;
     await flush(el);
     expect(navItem(el, "opening-hours")).not.toBeNull();
     expect(navRoster(el)).toBeNull();
@@ -8215,17 +8216,19 @@ describe("the Products screen in the shell", () => {
     return { el, screen, table, main, scroll };
   }
 
-  it("fills the main column at desktop size, keeping its title, the table's toolbar and its headings in view while the rows scroll", async () => {
+  it("caps a long desktop table, letting the page title leave while the table controls and headings stay above scrolling rows", async () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     try {
       const { screen, table, main, scroll } = await openProducts(1280, 800);
-      expect(screen.stickyHeader).toBe(true);
-      expect(screen.hasAttribute("sticky-header")).toBe(true);
-      expect(main.scrollHeight).toBe(main.clientHeight);
+      expect(main.scrollHeight).toBeGreaterThan(main.clientHeight);
+      const title = screen.shadowRoot!.querySelector("h1")!;
+      const titleTop = title.getBoundingClientRect().top;
+      main.scrollTop = table.getBoundingClientRect().top - main.getBoundingClientRect().top;
+      await frame();
+      expect(title.getBoundingClientRect().top).toBeLessThan(titleTop);
       expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
       const fixed = [
-        screen.shadowRoot!.querySelector("h1")!,
         table.shadowRoot!.querySelector(".table-toolbar")!,
         table.shadowRoot!.querySelector("thead th")!,
       ];
@@ -8239,12 +8242,6 @@ describe("the Products screen in the shell", () => {
         expect(item.getBoundingClientRect().top).toBeGreaterThanOrEqual(port.top);
         expect(item.getBoundingClientRect().bottom).toBeLessThanOrEqual(port.bottom);
       }
-      // The box reaches down to the body's padding: the rows use the whole column.
-      const body = main.querySelector<HTMLElement>(".body")!;
-      expect(scroll.getBoundingClientRect().bottom).toBeCloseTo(
-        port.bottom - parseFloat(getComputedStyle(body).paddingBottom),
-        0,
-      );
     } finally {
       await page.viewport(width, height);
     }
@@ -8254,13 +8251,15 @@ describe("the Products screen in the shell", () => {
     [390, 844],
     [375, 667],
   ])(
-    "at %i×%i the content column does not overflow, the table's box does, and the toolbar and headings stay inside the column with the rows scrolled to the end",
+    "at %i×%i the page heading can leave and the toolbar and headings stay inside the column with rows scrolled to the end",
     async (w, h) => {
       const width = window.innerWidth,
         height = window.innerHeight;
       try {
         const { table, main, scroll } = await openProducts(w, h);
-        expect(main.scrollHeight).toBeLessThanOrEqual(main.clientHeight);
+        expect(main.scrollHeight).toBeGreaterThan(main.clientHeight);
+        main.scrollTop = table.getBoundingClientRect().top - main.getBoundingClientRect().top;
+        await frame();
         expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
         scroll.scrollTop = scroll.scrollHeight;
         await frame();
