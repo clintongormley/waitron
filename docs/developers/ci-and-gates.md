@@ -383,13 +383,21 @@ by hand on a local `origin/main` that the remote lacked passed the hook. A succe
 closes that; a failed one does not for a new branch. `scripts/pre-push.test.mjs` holds the
 already-pushed case.
 
-Licence.yml's `dco` job checks every pull request's commits, and since A411 every push to `main`
-too, from the push's previous tip to its new one. That run is the one that sees a direct push to
+The sign-off step of `ci.yml`'s `changes` job checks every pull request's commits, and every push
+to `main` too, from the push's previous tip to its new one. Scheduled runs, manual runs and release
+tags skip it: they name no range. That run is the one that sees a direct push to
 `main` (documentation goes that way) made with the hook skipped, and the squash commit GitHub
 writes when a pull request merges, which no hook ever sees: `6797bc03a` reached `main` unsigned
 that way. A push that creates `main` (its previous tip is all zeros), and one whose previous tip
 the checkout does not have, name no range the job can list, and each fails rather than passing
-unchecked; `scripts/check-signoff.test.mjs` runs the step against both.
+unchecked; `scripts/check-signoff.test.mjs` runs the step against both. The LICENSE step's hash
+and both steps' place after `gates` are held by “the licence and sign-off checks” in
+`scripts/ci-workflow.test.mjs`, weaker than its name: it reads text and runs neither step.
+Because they come last, `changes` can fail with every scope output set, so the two jobs that would
+otherwise act on that scope after a failure check `needs.changes.result` as well: the queue watchdog
+then watches only `lint` and `root-guards`, and `mutation-shared-aggregate` does not run. Two cases in the same file hold this,
+weaker than the rule: they evaluate each job's condition against a hand-written model of GitHub's
+implicit `success()`, not a real run.
 
 ### Built applications in `bundle-smoke`
 
@@ -717,10 +725,11 @@ full report cannot contribute results outside a shard's selected files. The ordi
 Each CI shard writes one JSON report and has no separate score floor. The five-minute
 `mutation-shared-aggregate` job requires four report directories and enforces 90% on their combined
 score. Both jobs report to `ci`; the aggregate uses the same shared-package conditions
-as the shards, and still runs after a failed shard to refuse incomplete reports. The final `ci`
+as the shards and runs only when `changes` succeeded, but still runs after a failed shard to refuse
+incomplete reports. The final `ci`
 verdict refuses a skipped mutation aggregate when shared was selected. Its executable jq cases cover that refusal and the unselected,
 documentation paths. The workflow guard also requires the aggregate's condition
-to be `always() && ` followed by the shards' condition. Downloads and
+to be `always() && needs.changes.result == 'success' && ` followed by the shards' condition. Downloads and
 uploads use the existing bounded two-attempt patterns. The download action keeps each artifact
 in its own directory because the aggregate counts those directories. No new Actions cache is added.
 
@@ -2444,8 +2453,6 @@ the `mutation-shared` row below records the earlier unsharded job.
 | ci.yml             | ci                                | 0.7                            | 15    |
 | ci.yml             | publish                           | 3.2                            | 10    |
 | image-smoke.yml    | smoke                             | 5.7 (run 37629651848)          | 15    |
-| licence.yml        | licence-integrity                 | 0.2                            | 5     |
-| licence.yml        | dco                               | 0.3                            | 5     |
 | mutation.yml       | select                            | not yet measured               | 5     |
 | mutation.yml       | mutation-ui-core (matrix shards)  | not yet measured in CI; 10.7 locally (shard 1; shards 2 and 3 not timed) | 25    |
 | mutation.yml       | mutation-ui-core-aggregate        | not yet measured               | 5     |
@@ -2957,8 +2964,8 @@ git alone, in `ubuntu:24.04` (git 2.43.0, libcurl 8.5.0 OpenSSL), each under `ti
 
 Margin for a full-history fetch: `git fetch` of all of `clintongormley/waitron` (292 MB `.git`)
 from this Mac took 14 s with limit 1000/20, and 15 s and 13 s with the window cut to 2 s — the
-2-second window never fired. (Since A1316, 3 November 2026, the two full-history checkouts are
-blobless: see [the section on them](#the-two-full-history-checkouts-skip-old-file-contents-a1316).)
+2-second window never fired. (Since A1316, 3 November 2026, the full-history checkout is
+blobless: see [the section on it](#the-full-history-checkout-skips-old-file-contents-a1316).)
 
 #### Why the stop step's pattern is not `pgrep -x git`
 
@@ -3127,6 +3134,7 @@ deleted from `licence.yml`'s first job, `pnpm exec vitest run scripts/ci-workflo
 
 — the first attempt, and the second attempt judged on its own once no stop step sits between them.
 The same command on the unedited file printed `Tests  1 passed | 221 skipped (222)`.
+(`licence.yml` was folded into `ci.yml`'s `changes` job on 2026-11-08, A1455.)
 
 #### Checkout stage diagnostics (28 October 2026, A1178)
 
@@ -3142,7 +3150,7 @@ produced pack files of 398,612,993 and 404,557,773 bytes, a 1.49% increase, in 1
 15.171 seconds. These are development-machine controls, not the original hosted transfers.
 They did not reproduce the timeout.
 
-In `ci.yml` and `licence.yml`, both checkout attempts set `GIT_TRACE2_EVENT=1` at step
+In `ci.yml`, both checkout attempts set `GIT_TRACE2_EVENT=1` at step
 scope. Read the JSON events in the checkout log to locate the last entered region and its
 matching exit, or an unfinished child process. After a successful checkout, **Measure checkout
 objects** prints whether the repository is shallow and each pack file's byte count. Those counts describe
@@ -3164,8 +3172,8 @@ timeout.
 #### Checkout history belongs to the job that reads it (A1178)
 
 The `changes` job needs history for `scripts/ci-diff-paths.sh`'s merge-base and range
-comparisons. The licence workflow's `dco` job enumerates the push or pull-request range with
-`git rev-list`. Both keep `fetch-depth: 0` on both attempts. The suite jobs use depth one;
+comparisons, and its sign-off step enumerates the push or pull-request range with
+`git rev-list`. It keeps `fetch-depth: 0` on both attempts. The suite jobs use depth one;
 their commands take fixed package filters or scope values supplied by `changes` rather than
 calculating a Git range themselves. This reduces the history requested by those jobs. It does
 not establish the cause of a hosted checkout timeout, including the shallow-checkout failure
@@ -3173,12 +3181,13 @@ in main run `40750935978`, till shard 3 (`123038600113`).
 
 The “uses full history, without old file contents, only for change classification and
 sign-off” case in `scripts/ci-workflow.test.mjs` checks each literal checkout step in the workflow files.
-Since A1316 it also checks that both attempts in the two full-history jobs set
+Since A1316 it also checks that both attempts in the full-history job set
 `filter: blob:none` and that no other checkout sets a `filter` (see
-[the next section](#the-two-full-history-checkouts-skip-old-file-contents-a1316)). It is
+[the next section](#the-full-history-checkout-skips-old-file-contents-a1316)). It is
 weaker than its name: it reads text, assumes omitted depth means one, and does not inspect
 external reusable workflows, composite actions or dynamically selected actions. It names the
-two full-history jobs and checks both attempts. Local controls reverted each of the 22 changed
+one full-history job, `ci.yml`'s `changes`, and checks both attempts. A1316's local
+controls, when there were two such jobs, reverted each of the 22 changed
 suite checkout inputs independently and deleted each of the four required full-history inputs;
 all 26 changes failed this guard, and the restored candidate passed. Existing behavioral
 assertions are unchanged.
@@ -3207,20 +3216,19 @@ attempt, so this conversion reduces requested history without eliminating checko
 | --- | --- | --- |
 | [Git Trace2 API](https://git-scm.com/docs/api-trace2#_enabling_a_target), checked 28 October 2026 | “`1` or `true` - Writes to `STDERR`.” | Send the event target to the existing step log without a separate artifact upload. |
 
-#### The two full-history checkouts skip old file contents (A1316)
+#### The full-history checkout skips old file contents (A1316)
 
-Both attempts of the `changes` job's checkout in `ci.yml` and the `dco` job's checkout in
-`licence.yml` set `filter: blob:none` beside `fetch-depth: 0`. That makes each a blobless
-partial clone: git downloads every commit and tree, and only the files of the checked-out
-commit. The `dco` job needs no file contents from history; the `changes` job needs them only
-for rename detection (see below). `changes` runs
-`scripts/ci-diff-paths.sh`, which reads commit ancestry (`git merge-base --is-ancestor`) and
-changed-file names (`git diff --name-only`); `dco` reads commit messages through
-`git rev-list` and `scripts/check-signoff.sh`. The two-minute attempt limits, low-speed
+Both attempts of the `changes` job's checkout in `ci.yml` set `filter: blob:none` beside
+`fetch-depth: 0`. That makes it a blobless partial clone: git downloads every commit and tree,
+and only the files of the checked-out commit. The job needs file contents from history only for
+rename detection (see below). It runs `scripts/ci-diff-paths.sh`, which reads commit ancestry
+(`git merge-base --is-ancestor`) and changed-file names (`git diff --name-only`), and its sign-off
+step reads commit messages through `git rev-list` and `scripts/check-signoff.sh`. The two-minute attempt limits, low-speed
 settings, leftover-git stop and second attempt are unchanged.
 
 **What was measured on GitHub's runners** (licence workflow, job "Every commit is signed off",
-first checkout attempt, 3 November 2026):
+first checkout attempt, 3 November 2026; that job became a step of `ci.yml`'s `changes` on
+2026-11-08, A1455):
 
 - 27 October, 22:36–23:51 UTC, 8 runs: 12–17 seconds.
 - 3 November, 09:41–16:19 UTC, 26 runs: 18–39 seconds (most 18–24).
@@ -3286,8 +3294,8 @@ requests that step already made a network call, `git fetch --no-tags origin "$BA
 | [git partial clone design](https://git-scm.com/docs/partial-clone), checked 3 November 2026 | “Missing objects can later be "demand fetched" if/when needed.” | The checkout and rename detection fetch the files they need. |
 
 The guard is the “uses full history, without old file contents, only for change classification
-and sign-off” case, with the limits stated in the section above. Deleting the filter from each
-of the four steps in turn, and adding it to the `lint` job's two checkout attempts, each failed
+and sign-off” case, with the limits stated in the section above. In A1316's controls (3 November
+2026, when four steps carried the filter), deleting the filter from each of the four steps in turn, and adding it to the `lint` job's two checkout attempts, each failed
 it: `pnpm exec vitest run scripts/ci-workflow.test.mjs -t "full history"` exited 1 for each of
 the six edits and passed on the unedited file (2 passed, 411 skipped; the other case that name
 filter matches, “reads a full history on the first attempt only”, reads a made-up snippet).

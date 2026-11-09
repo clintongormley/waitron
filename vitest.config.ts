@@ -27,7 +27,7 @@ import { rootGuardWorkers } from "./scripts/root-test-budget.mjs";
 //   and migrations-match-schema runs each package's `drizzle-kit generate` into a copy of its
 //   migration set and fails when that changes anything;
 //   `scripts/check-signoff.test.mjs`, which covers the sign-off predicate both gates share and
-//   runs licence.yml's `dco` step extracted from the workflow file.
+//   runs ci.yml's sign-off step extracted from the workflow file.
 //
 // The guards lived in `packages/db` until then, and both gates had stopped running them on most
 // pushes: they only load when `packages/db` is in scope, and the scoping ships two shapes that do

@@ -5,16 +5,9 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // The sign-off (DCO) predicate, and the walk over a push's commits, in ONE place both gates call:
-// `.husky/pre-push`'s `check_signoff` and licence.yml's `dco` job.
+// `.husky/pre-push`'s `check_signoff` and the sign-off step of ci.yml's `changes` job.
 //
-// Shell rather than `.mjs`, decided on how the two callers invoke it:
-//
-//   * The hook runs this step FIRST, before `pnpm install` and before the classifier.
-//   * licence.yml's `dco` job installs no pnpm and no setup-node — nothing installed. A `.mjs`
-//     script would make a REQUIRED status check depend either on whatever node the runner image
-//     happens to ship or on a setup step.
-//
-// So it is exercised the way both callers exercise it: spawned as a program, against throwaway git
+// It is exercised the way both callers exercise it: spawned as a program, against throwaway git
 // repositories built here. Nothing measures its coverage — v8 sees JavaScript in this process, and
 // this is `sh` in a child — so these assertions are the whole of the evidence.
 const script = join(import.meta.dirname, "check-signoff.sh");
@@ -180,36 +173,48 @@ describe("check-signoff.sh", () => {
   });
 
   // Both callers read the failing commits off STDOUT and wrap them in their own reporting —
-  // licence.yml in `::error::` annotations, the hook in an indented list — so anything the script
+  // ci.yml in `::error::` annotations, the hook in an indented list — so anything the script
   // wants to say to a human has to go to stderr or the annotations come out malformed.
   it("puts nothing but the failing commits on stdout", () => {
     const result = checkSignoff(repo, `${sha.signed}\n${sha.unsigned}\n`);
     expect(result.stdout.trim().split("\n")).toHaveLength(1);
   });
 
-  // The step's shell is EXTRACTED FROM licence.yml rather than transcribed here — a transcription
+  // The step's shell is EXTRACTED FROM ci.yml rather than transcribed here — a transcription
   // tests this file's copy of a workflow. What cannot be run locally is the `${{ }}` interpolation,
   // so the extraction refuses a block that has any: both shas reach that step as environment
   // variables, and this asserts they still do.
-  describe("licence.yml's dco step", () => {
+  describe("ci.yml's sign-off step", () => {
+    let workflow;
+    let stepBlock;
     let step;
 
     beforeAll(() => {
-      const workflow = readFileSync(
-        join(import.meta.dirname, "..", ".github", "workflows", "licence.yml"),
+      workflow = readFileSync(
+        join(import.meta.dirname, "..", ".github", "workflows", "ci.yml"),
         "utf8",
       );
-      // Anchored on the STEP NAME, not on the first `run: |` in the file — that one belongs to the
-      // licence-integrity job.
+      // Anchored inside the `changes` job, so a same-named step in another job cannot satisfy it.
       const lines = workflow.split("\n");
-      const named = lines.findIndex((line) => line.includes("name: Check Signed-off-by trailers"));
-      expect(named).toBeGreaterThan(-1);
-      const start = lines.findIndex((line, index) => index > named && line.trim() === "run: |");
-      expect(start).toBeGreaterThan(named);
+      const jobStart = lines.indexOf("  changes:");
+      expect(jobStart).toBeGreaterThan(-1);
+      const jobEnd = lines.findIndex((line, index) => index > jobStart && /^ {2}\S/.test(line));
+      const job = lines.slice(jobStart, jobEnd === -1 ? undefined : jobEnd);
 
-      const indent = " ".repeat(lines[start].indexOf("run:") + 2);
+      const named = job.findIndex((line) => line.trim() === "- name: Check Signed-off-by trailers");
+      expect(named).toBeGreaterThan(-1);
+      const dash = job[named].indexOf("-");
+      const next = job.findIndex(
+        (line, index) => index > named && line.trim() !== "" && line.search(/\S/) <= dash,
+      );
+      const block = job.slice(named, next === -1 ? undefined : next);
+      stepBlock = block.join("\n");
+
+      const start = block.findIndex((line) => line.trim() === "run: |");
+      expect(start).toBeGreaterThan(-1);
+      const indent = " ".repeat(block[start].indexOf("run:") + 2);
       const body = [];
-      for (const line of lines.slice(start + 1)) {
+      for (const line of block.slice(start + 1)) {
         if (line.trim() !== "" && !line.startsWith(indent)) break;
         body.push(line.slice(indent.length));
       }
@@ -290,34 +295,21 @@ describe("check-signoff.sh", () => {
       expect(result.status).toBe(1);
     });
 
-    // These read licence.yml as TEXT; GitHub's own evaluation of the expressions is not run here.
-    describe("what triggers the job, read as text", () => {
-      let workflow;
-      let dcoJob;
-
-      beforeAll(() => {
-        workflow = readFileSync(
-          join(import.meta.dirname, "..", ".github", "workflows", "licence.yml"),
-          "utf8",
+    // These read ci.yml as TEXT; GitHub's own evaluation of the expressions is not run here.
+    describe("what runs the step, read as text", () => {
+      // `changes` also runs on schedules, manual runs and release tags, which have no range: there
+      // `github.event.before` is empty or names no earlier main tip, and the step would fail closed.
+      it("runs on pull requests and on pushes to main, and on nothing else", () => {
+        expect(stepBlock).toMatch(
+          /^ {8}if: github\.event_name == 'pull_request' \|\| \(github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'\)$/m,
         );
-        const lines = workflow.split("\n");
-        const start = lines.findIndex((line) => line === "  dco:");
-        expect(start).toBeGreaterThan(-1);
-        const end = lines.findIndex((line, index) => index > start && /^ {2}\S/.test(line));
-        dcoJob = lines.slice(start, end === -1 ? undefined : end).join("\n");
-        expect(dcoJob).toContain("name: Every commit is signed off");
-      });
-
-      it("does not restrict the dco job to pull requests", () => {
-        expect(dcoJob).not.toMatch(/^ {4}if:/m);
-        expect(dcoJob).not.toContain("github.event_name == 'pull_request'");
       });
 
       it("falls back to the push's own tips when there is no pull request", () => {
-        expect(dcoJob).toContain(
+        expect(stepBlock).toContain(
           "BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}",
         );
-        expect(dcoJob).toContain(
+        expect(stepBlock).toContain(
           "HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}",
         );
       });

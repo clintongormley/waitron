@@ -24,8 +24,8 @@ import {
 
 // Two properties of .github/workflows/ci.yml that nothing else can check:
 //
-//   * every job reports to `ci`. `ci` is the ONLY context branch protection requires, so a job
-//     missing from its `needs` can fail while the pull request stays green.
+//   * every job reports to `ci`. `ci` is the only job in ci.yml that branch protection requires,
+//     so a job missing from its `needs` can fail while the pull request stays green.
 //   * the test shards PARTITION the workspace. A package can fall through every shard's
 //     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
@@ -100,6 +100,7 @@ function routingContext(family = "server") {
     },
     needs: {
       changes: {
+        result: "success",
         outputs: {
           code: "true",
           server_route: "server",
@@ -128,6 +129,34 @@ function expressionValue(line, context) {
 function jobCondition(body, context) {
   const expression = body.find((line) => /^ {4}if:/.test(line)).slice(8);
   return runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ""), context);
+}
+function neededJobs(body) {
+  const inline = body.find((line) => /^ {4}needs:\s*\S/.test(line));
+  if (inline === undefined) return needsOf(body);
+  return inline
+    .replace(/^ {4}needs:\s*/, "")
+    .replace(/^\[|\]$/g, "")
+    .split(",")
+    .map((entry) => entry.trim());
+}
+// GitHub puts `success() &&` in front of an `if:` that calls no status function, and `success()`
+// is false once any needed job did not succeed.
+function runsAtGitHub(body, context) {
+  let expression = body
+    .find((line) => /^ {4}if:/.test(line))
+    .slice(8)
+    .replace(/^\$\{\{\s*|\s*\}\}$/g, "");
+  if (!/\b(success|always|failure|cancelled)\(\)/.test(expression))
+    expression = `success() && (${expression})`;
+  const results = neededJobs(body).map((id) => context.needs[id]?.result);
+  return runInNewContext(expression, {
+    ...context,
+    success: () => results.every((result) => result === "success"),
+    failure: () => results.some((result) => result === "failure"),
+    always: () => true,
+    cancelled: () => false,
+    startsWith: (text, prefix) => String(text ?? "").startsWith(prefix),
+  });
 }
 function watchFamilies(context) {
   const body = job("server-queue-watchdog").body;
@@ -214,6 +243,31 @@ describe("disposable family routing", () => {
       context.needs.changes.outputs = {};
       if (jobCondition(body, context))
         expect(jobCondition(job("server-queue-watchdog").body, context)).toBe(false);
+    }
+  });
+
+  // The licence and sign-off steps run after `gates`, so `changes` can fail with every output set.
+  it("watches only the families whose jobs still run when changes failed with outputs intact", () => {
+    const context = routingContext();
+    for (const key of Object.keys(context.needs.changes.outputs))
+      context.needs.changes.outputs[key] = "true";
+    for (const { id } of watchFamilies(context))
+      for (const match of job(id)
+        .body.join("\n")
+        .matchAll(/needs\.changes\.outputs\.(\w+)/g))
+        context.needs.changes.outputs[match[1]] = "true";
+    context.needs.changes.outputs.server_route = "server";
+    for (const result of ["success", "failure"]) {
+      context.needs.changes.result = result;
+      expect(jobCondition(job("server-queue-watchdog").body, context), result).toBe(true);
+      const rows = watchFamilies(context);
+      for (const row of rows)
+        expect(row.enabled, `${row.id} after ${result}`).toBe(
+          runsAtGitHub(job(row.id).body, context),
+        );
+      const enabled = rows.filter((row) => row.enabled).map((row) => row.id);
+      if (result === "success") expect(enabled).toHaveLength(rows.length);
+      else expect(enabled.sort()).toEqual(["lint", "root-guards"]);
     }
   });
 
@@ -2930,13 +2984,38 @@ describe("the test shards", () => {
         .split("\n")
         .find((line) => line.startsWith("    if: "))
         .slice(8);
-    expect(condition(aggregate)).toBe(`always() && ${condition(shard)}`);
+    expect(condition(aggregate)).toBe(
+      `always() && needs.changes.result == 'success' && ${condition(shard)}`,
+    );
     expect(aggregate).toContain("pattern: mutation-report-shared-shard-*");
     expect(aggregate).not.toContain("merge-multiple: true");
     expect(aggregate).toContain(
       "run: node scripts/mutation-aggregate.mjs mutation-reports --package shared --shards 4 --break 90",
     );
     expect(job("ci").body).toContain("      - mutation-shared-aggregate");
+  });
+
+  // `changes` can fail after setting every output, because its licence and sign-off steps come last.
+  it("runs only lint, root-guards, the watchdog and ci after changes failed with outputs set", () => {
+    const context = routingContext();
+    for (const { body } of jobs)
+      for (const match of body.join("\n").matchAll(/needs\.changes\.outputs\.(\w+)/g))
+        context.needs.changes.outputs[match[1]] = "true";
+    context.needs.changes.outputs.server_route = "server";
+    const downstream = jobs.filter(({ body }) => neededJobs(body).includes("changes"));
+    expect(downstream.map(({ id }) => id)).toEqual(
+      expect.arrayContaining(["lint", "test-server", "mutation-shared-aggregate", "ci", "publish"]),
+    );
+    const run = () =>
+      downstream.filter(({ body }) => runsAtGitHub(body, context)).map(({ id }) => id);
+
+    context.needs["mutation-shared"] = { result: "failure" };
+    expect(run()).toContain("mutation-shared-aggregate");
+
+    context.needs.changes.result = "failure";
+    for (const { id } of downstream) context.needs[id] = { result: "skipped" };
+    context.needs.ci = { result: "failure" };
+    expect(run().sort()).toEqual(["ci", "lint", "root-guards", "server-queue-watchdog"]);
   });
 
   // A case's `pnpm ls` calls run side by side; when the case ends, pass or fail, the ones still
@@ -3574,7 +3653,9 @@ describe("the image smoke's scoping", () => {
 
 describe("main push package gates", () => {
   const changes = job("changes").body;
-  const step = changes.slice(changes.indexOf("      - id: gates"));
+  const fromGates = changes.slice(changes.indexOf("      - id: gates"));
+  const nextStep = fromGates.findIndex((line, index) => index > 0 && line.startsWith("      - "));
+  const step = nextStep === -1 ? fromGates : fromGates.slice(0, nextStep);
   const scriptAt = step.indexOf("        run: |");
   const script = step
     .slice(scriptAt + 1)
@@ -3639,7 +3720,7 @@ describe("main push package gates", () => {
           ).toBe(true);
         const outputs = { ...gates, code, full };
         const context = {
-          needs: { changes: { outputs } },
+          needs: { changes: { result: "success", outputs } },
           always: () => true,
           cancelled: () => false,
         };
@@ -5210,7 +5291,7 @@ function checkoutAttempts(text) {
  */
 describe("the workflows' checkouts", () => {
   it("uses full history, without old file contents, only for change classification and sign-off", () => {
-    const historyReaders = ["ci.yml:changes", "licence.yml:dco"];
+    const historyReaders = ["ci.yml:changes"];
     const checkouts = workflowFiles.flatMap((name) =>
       jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) =>
         workflowSteps(lines.join("\n"))
@@ -5422,6 +5503,39 @@ describe("the workflows' checkouts", () => {
       ),
       'run each checkout as the three steps in docs/developers/ci-and-gates.md, "Every checkout is bounded"',
     ).toEqual([]);
+  });
+});
+
+// Read as TEXT; neither step is run here (check-signoff.test.mjs runs the sign-off step).
+describe("the licence and sign-off checks", () => {
+  const changesSteps = workflowSteps(job("changes").body.join("\n"));
+  const indexOf = (predicate) => changesSteps.findIndex(predicate);
+
+  it("verifies LICENSE byte-for-byte in the changes job", () => {
+    const licence = changesSteps.find(({ step }) => step === "Verify LICENSE byte-for-byte");
+    expect(licence).toBeDefined();
+    expect(
+      licence.command
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
+    ).toEqual([
+      'echo "48255018b41fc0e965b1115af7e6779bc218bb8a6747d561da800d5022622aa2  LICENSE" \\',
+      "| sha256sum -c -",
+    ]);
+  });
+
+  // Jobs that run after a failed `changes` read its outputs, which a step failing before `gates`
+  // would leave unset.
+  it("runs both checks after the gates step", () => {
+    const gates = indexOf(({ id }) => id === "gates");
+    expect(gates).toBeGreaterThan(-1);
+    expect(indexOf(({ step }) => step === "Verify LICENSE byte-for-byte")).toBeGreaterThan(gates);
+    expect(indexOf(({ step }) => step === "Check Signed-off-by trailers")).toBeGreaterThan(gates);
+  });
+
+  it("has no separate licence workflow", () => {
+    expect(existsSync(join(workflowsDir, "licence.yml"))).toBe(false);
   });
 });
 
@@ -6135,7 +6249,7 @@ describe("scoped selection commands", () => {
       const step = workflowSteps(job(id).body.join("\n")).find((entry) =>
         /^Run the light-[ab] shard$/.test(entry.step),
       );
-      const record = 'pnpm() { printf "%s\\n" "$*"; }; node() { :; };\n';
+      const record = 'pnpm() { printf "%s\\n" "$*"; }; node() { cat >/dev/null; };\n';
       const command = step.command.replaceAll("${{ needs.changes.outputs.full }}", "false");
       const result = spawnSync("bash", ["-c", record + command], {
         env: {
