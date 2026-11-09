@@ -6,6 +6,7 @@ export interface BuildWatchOptions {
   /** The page's own origin. Another server's build says nothing about the code this page runs. */
   origin: string;
   onChange: (build: string) => void;
+  onFirstBuild?: (build: string) => void;
 }
 
 /**
@@ -14,18 +15,28 @@ export interface BuildWatchOptions {
  */
 export function watchBuild(
   baseFetch: typeof fetch,
-  { origin, onChange }: BuildWatchOptions,
+  { origin, onChange, onFirstBuild }: BuildWatchOptions,
 ): typeof fetch {
   let own: string | undefined;
   let told = false;
+  let reported = onFirstBuild === undefined;
   return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const response = await baseFetch(input, init);
-    if (told) return response;
+    if (told && reported) return response;
     const build = response.headers.get(BUILD_HEADER);
     if (build === null || build === "") return response;
     if (!fromOrigin(input, origin)) return response;
     // fetch follows redirects, so the answer can come from another origin than the one asked.
     if (response.url !== "" && !fromOrigin(response.url, origin)) return response;
+    if (
+      !reported &&
+      build.length <= 64 &&
+      /^(?:development|[a-f0-9]{7,64}|v?\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?)$/.test(build)
+    ) {
+      reported = true;
+      queueMicrotask(() => onFirstBuild?.(build));
+    }
+    if (told) return response;
     if (own === undefined) own = build;
     else if (build !== own) {
       told = true;
