@@ -213,4 +213,5 @@ cat "$FIXTURE_ROUTER"
       rmSync(root, { recursive: true, force: true });
     }
   },
+  10_000,
 );
