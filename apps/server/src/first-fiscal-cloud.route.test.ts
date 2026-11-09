@@ -1,4 +1,4 @@
-import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -56,8 +56,7 @@ async function historicalCloudFixture(configured = true) {
     stateDir: join(root, "state"),
     venueDir: join(root, "venue"),
   });
-  const nonce = randomBytes(32).toString("base64url");
-  const claimed = await host.owner.claimFirstSetup({ environment: "production", request }, nonce);
+  const claimed = await host.owner.claimFirstSetup({ environment: "production", request });
   let owner = {
     attemptId: claimed.state.attemptId,
     revision: claimed.state.revision,
@@ -137,7 +136,6 @@ async function historicalCloudFixture(configured = true) {
     input,
     receipt,
     owner: () => owner,
-    nonce,
     getRequest: () => app.request("/setup-api/first-setup/request", { headers: headers() }),
     refresh: async () => {
       owner = { ...owner, revision: (await host.store.read())!.revision };
@@ -230,7 +228,7 @@ it.each(["stranger", "foreign-origin"])(
   },
 );
 
-it("retains the original Cloud reserve operation across repeated request exports and owner rebind", async () => {
+it("retains the original Cloud reserve operation across repeated request exports", async () => {
   const f = await historicalCloudFixture();
   const first = await f.getRequest();
   expect(first.status).toBe(200);
@@ -240,10 +238,9 @@ it("retains the original Cloud reserve operation across repeated request exports
       .operationId,
   ).toBe(operationId);
   expect(await (await f.getRequest()).json()).toEqual(exported);
-  await f.host.owner.resumeFirstSetup(f.nonce, { password: PASSWORD });
-  const rebound = await f.host.store.read();
-  expect(rebound!.frozen.modules.find((m) => m.module === "fiscal-verifactu")!.request).toEqual(
+  const stored = await f.host.store.read();
+  expect(stored!.frozen.modules.find((m) => m.module === "fiscal-verifactu")!.request).toEqual(
     exported.modules.find((m: { module: string }) => m.module === "fiscal-verifactu").request,
   );
-  expect(rebound!.status).toBe("consumption-intent");
+  expect(stored!.status).toBe("consumption-intent");
 });

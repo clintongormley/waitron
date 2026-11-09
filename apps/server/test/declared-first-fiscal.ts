@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -69,12 +69,11 @@ export async function declaredFirstFiscalFixture(options?: {
         })),
       }),
     };
-    const owner = createFirstSetupOwner(ownerOptions),
-      nonce = randomBytes(32).toString("base64url");
-    const claim = await owner.claimFirstSetup(
-      { environment: options?.environment ?? "production", request },
-      nonce,
-    );
+    const owner = createFirstSetupOwner(ownerOptions);
+    const claim = await owner.claimFirstSetup({
+      environment: options?.environment ?? "production",
+      request,
+    });
     let state = (await store.read())!;
     let context = firstSetupModuleContext(state, MODULE);
     const selected = FISCAL_INITIAL_SETUP.candidates(context, { serials: options?.serials ?? [1] });
@@ -207,7 +206,6 @@ export async function declaredFirstFiscalFixture(options?: {
       store,
       owner,
       ownerOptions,
-      nonce,
       context,
       input,
       statement,

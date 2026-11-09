@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ALL_MODULES } from "@waitron/composition";
@@ -30,10 +29,7 @@ it.each([
   async ({ kind, intent, code }) => {
     const f = await fixture();
     const host = createFirstSetupModuleHost({ ...f, modules: ALL_MODULES, environment: f.env });
-    const claim = await host.owner.claimFirstSetup(
-      { environment: "preproduction", request },
-      randomBytes(32).toString("base64url"),
-    );
+    const claim = await host.owner.claimFirstSetup({ environment: "preproduction", request });
     if (intent)
       await host.store.update(claim.state.attemptId, claim.state.revision, {
         kind: "consumption-intent",
@@ -136,10 +132,7 @@ it.each([
       await writeFile(join(f.venueDir, "first-setup-claim.json"), "torn-write");
     } else {
       const host = createFirstSetupModuleHost({ ...f, modules: ALL_MODULES, environment: f.env });
-      await host.owner.claimFirstSetup(
-        { environment: "preproduction", request },
-        randomBytes(32).toString("base64url"),
-      );
+      await host.owner.claimFirstSetup({ environment: "preproduction", request });
     }
     if (interrupted === "escalated")
       await writeRecoveryState(f.stateDir, { ...FRESH, failures: 3, level: "recovery" });
@@ -193,16 +186,15 @@ it.each([
         await response.body?.cancel();
       }
       const refused = await globalThis.fetch(
-        `http://127.0.0.1:${child.landingPort}/setup-api/first-setup/resolution/recover`,
+        `http://127.0.0.1:${child.landingPort}/setup-api/first-setup/resolution/start-again`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            password: PASSWORD,
             inspectionId: inspected.inspectionId,
             revision: inspected.revision,
             ownerGeneration: inspected.ownerGeneration,
-            clientClaimNonce: randomBytes(32).toString("base64url"),
+            register: { kind: "no-current-master", confirmed: true },
           }),
         },
       );

@@ -1,11 +1,14 @@
-import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash, generateKeyPairSync } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { TLSSocket } from "node:tls";
 import { afterEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { ALL_MODULES } from "@waitron/composition";
-import { request, PASSWORD } from "../test/first-fiscal.js";
+import { firstFiscalFixture, request, PASSWORD } from "../test/first-fiscal.js";
+import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { mountSetup } from "./setup-api.js";
 
@@ -42,10 +45,7 @@ it.each(["cloud", "serials"] as const)(
       stateDir: join(root, "state"),
       venueDir: join(root, "venue"),
     });
-    const claimed = await host.owner.claimFirstSetup(
-      { environment: "production", request },
-      randomBytes(32).toString("base64url"),
-    );
+    const claimed = await host.owner.claimFirstSetup({ environment: "production", request });
     const owner = {
       attemptId: claimed.state.attemptId,
       revision: claimed.state.revision,
@@ -88,3 +88,83 @@ it.each(["cloud", "serials"] as const)(
     expect(network).not.toHaveBeenCalled();
   },
 );
+
+it("the repair entry no longer serves Finish setup", async () => {
+  const root = await mkdtemp(join(tmpdir(), "retired-finish-routes-"));
+  roots.push(root);
+  const stateDir = join(root, "state");
+  const venueDir = join(root, "venue");
+  await mkdir(stateDir);
+  await mkdir(venueDir);
+  await writeFile(join(venueDir, "first-setup-claim.json"), "retained torn claim");
+  const entry = await resolveFirstSetupEntry({ stateDir, venueDir }, {});
+  if (entry.kind !== "resolution") throw new Error(`expected the repair entry, got ${entry.kind}`);
+  const base = "/setup-api/first-setup/resolution";
+  expect((await entry.app.request("/setup-api/first-setup/status")).status).toBe(200);
+  expect((await entry.app.request(`${base}/publication`)).status).toBe(404);
+  for (const action of ["reconfirm", "document", "document-kept", "finish"]) {
+    const response = await entry.app.request(`${base}/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect([action, response.status]).toEqual([action, 404]);
+  }
+});
+
+it("no route takes the setup password to win the setup back", async () => {
+  const f = await firstFiscalFixture();
+  const socket = new TLSSocket(new Socket());
+  try {
+    const https = { incoming: { socket } };
+    const mounted = new Hono();
+    const host = createFirstSetupModuleHost({
+      stateDir: f.stateDir,
+      venueDir: f.venueDir,
+      environment: {},
+      modules: f.modules,
+    });
+    mountSetup(mounted, { environment: "production", firstFiscal: host }, () => {});
+    const entry = await resolveFirstSetupEntry({ stateDir: f.stateDir, venueDir: f.venueDir }, {});
+    if (entry.kind !== "resolution")
+      throw new Error(`expected the repair entry, got ${entry.kind}`);
+    const inspection = await host.resolution.inspectFirstSetupResolution();
+    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    const claim = {
+      password: PASSWORD,
+    };
+    const routes = [
+      ["/setup-api/first-setup/resume", claim],
+      ["/setup-api/first-setup/recover", claim],
+      [
+        "/setup-api/first-setup/resolution/recover",
+        {
+          ...claim,
+          inspectionId: inspection.inspectionId,
+          revision: inspection.revision,
+          ownerGeneration: inspection.ownerGeneration,
+        },
+      ],
+    ] as const;
+    for (const [name, app] of [
+      ["mountSetup", mounted],
+      ["repair entry", entry.app],
+    ] as const)
+      for (const [path, body] of routes) {
+        const response = await app.request(
+          `https://box.test${path}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          },
+          https,
+        );
+        expect([name, path, response.status]).toEqual([name, path, 404]);
+        expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+      }
+  } finally {
+    socket.destroy();
+    await f.dispose();
+  }
+});

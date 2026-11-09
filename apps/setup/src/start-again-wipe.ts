@@ -30,7 +30,7 @@ const sameSummary = (a: StartAgainSummary, b: StartAgainSummary) =>
   a.recoveryRecordDamaged === b.recoveryRecordDamaged &&
   a.databaseUnreadable === b.databaseUnreadable;
 
-/** What Start again would delete, as the box says it; read with no setup password or owner tab. */
+/** What Start again would delete, as the box says it. */
 export async function readWipeSummary(
   api: SetupApi,
   snapshot: FirstSetupResolutionSnapshot,

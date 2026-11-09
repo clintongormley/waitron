@@ -68,14 +68,8 @@ export type {
 export {
   canonicalFirstSetupDirectory,
   canonicalFirstSetupRoots,
-  createFirstSetupResolutionStore,
-} from "./first-setup-resolution.js";
-export type {
-  RegisterAnswer,
-  ResolutionRecord,
-  ResolutionInput,
-  FirstSetupOriginal,
-} from "./first-setup-resolution.js";
+} from "./first-setup-directories.js";
+export type { RegisterAnswer, FirstSetupOriginal } from "./first-setup-directories.js";
 export { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
 export { createSetupPreparationHost } from "./setup-preparation-host.js";
 export { publicFirstSetupState, createFirstSetupOwner } from "./first-setup-owner.js";
@@ -84,9 +78,7 @@ export type {
   FirstSetupOwnerAttempt,
   ReconfirmationPurpose,
   PublicFirstSetupState,
-  RecoverFirstSetupOwnerRequest,
 } from "./first-setup-owner.js";
-export { createFirstSetupOwnerAudit } from "./first-setup-owner-audit.js";
 export { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 export type {
   FirstSetupRoots,
@@ -94,7 +86,12 @@ export type {
   FirstSetupInspection,
 } from "./first-setup-resolution-inspection.js";
 export { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
-export { executeTarget, openImmutable, openImmutableWhenWalEmpty } from "./read-only-database.js";
+export {
+  executeTarget,
+  openImmutable,
+  openImmutableWhenWalEmpty,
+  openWalInPlace,
+} from "./read-only-database.js";
 export type { ImmutableOpen } from "./read-only-database.js";
 export { createSetupOperationStore } from "./setup-operation.js";
 export type {
@@ -143,7 +140,6 @@ export {
 
 export {
   activateFirstSetup,
-  finishFirstSetup,
   publishCheckedFirstSetup,
   checkedFirstSetupCommit,
   firstSetupProvisionRequest,
@@ -152,11 +148,8 @@ export type {
   CheckedFirstSetupCommit,
   FirstSetupActivationHost,
   FirstSetupActivationDeps,
-  FirstSetupFinishDeps,
   FirstSetupPublicationDeps,
 } from "./first-setup-activation.js";
-
-export { prepareFirstSetupFinishAudit } from "./first-setup-finish-audit.js";
 
 export { recoverProvisionedVenue } from "./recover-provisioned-venue.js";
 

@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { applyTokens, leaveCoordinatorFor } from "@waitron/ui";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
@@ -6,6 +6,7 @@ import { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { wizardApi, venue, initial } from "../test/first-setup-browser.js";
 const hosts: HTMLElement[] = [];
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   hosts.splice(0).forEach((host) => host.remove());
   await new Promise((resolve) => setTimeout(resolve, 0));

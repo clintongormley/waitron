@@ -72,7 +72,6 @@ export function createFirstSetupRuntime(options: {
   >;
   assertClaimAllowed?: (hold: FirstSetupHold) => Promise<void>;
   readPublicEvidence?: ModuleOperationHost["readPublicEvidence"];
-  onOwnershipRecovered?: (attemptId: string) => void;
   testClock?: ModuleOperationHost["testClock"];
   /** Set only by a test: the clock that expires the owner's password grants. */
   grantClock?: () => number;
@@ -126,11 +125,6 @@ export function createFirstSetupRuntime(options: {
     store,
     coordinator,
     bootId,
-    resolution,
-    onOwnershipRecovered: (attemptId) => {
-      recoveryDelivery.invalidate(attemptId);
-      options.onOwnershipRecovered?.(attemptId);
-    },
     freeze: async (request, environment, ids, intent) => {
       const selection = venueFiscalSelection(
         modules,
@@ -263,7 +257,6 @@ export function createFirstSetupRuntime(options: {
     owner,
     store,
     coordinator,
-    resumeBinding: (owner, module, hold) => recoveryDelivery.checkKept(owner, module, hold),
   });
   return {
     ...authorization,

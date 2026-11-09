@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -68,10 +67,7 @@ async function fixture(environment: "production" | "preproduction" = "preproduct
     environment: {},
     database: () => venue.db,
   });
-  const claim = await host.owner.claimFirstSetup(
-    { environment, request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await host.owner.claimFirstSetup({ environment, request });
   let owner = { ...claim.state, capability: claim.capability };
   const app = new Hono();
   mountSetup(app, { environment, firstFiscal: host }, () => {});

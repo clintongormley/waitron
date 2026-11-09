@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, readFile, readdir, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -96,10 +95,7 @@ async function fixture(publicDocumentSeat = true) {
     environment: {},
     database: () => suite.db,
   });
-  const claim = await host.owner.claimFirstSetup(
-    { environment: "preproduction", request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await host.owner.claimFirstSetup({ environment: "preproduction", request });
   let owner = { ...claim.state, capability: claim.capability };
   const selected = await selectPastWaits(time.clock, async () => {
     const compared = (await host.preparation.prepare(
@@ -502,10 +498,7 @@ it("an empty never-activated setup deletes its recovery document when starting a
     modules: f.modules,
     database: () => suite.db,
   });
-  const claim = await next.owner.claimFirstSetup(
-    { environment: "preproduction", request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await next.owner.claimFirstSetup({ environment: "preproduction", request });
   const owner = { ...claim.state, capability: claim.capability };
   await expect(
     next.preparation.prepare(
@@ -530,13 +523,12 @@ it("reissues an unfinished key without another hour selection and requires a new
   expect(await f.host.store.read()).toEqual(state);
   expect(await suite.db.select().from(fiscalAllocations)).toEqual(fiscalBefore);
   expect(f.counts()).toEqual({ activations: 0, publications: 0 });
-  await expect(f.host.recoveryDelivery.checkKept(f.owner, MODULE)).rejects.toMatchObject({
-    code: "setup.not_ready",
-  });
   await expect(f.host.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",
   });
-  expect(await f.host.recoveryDelivery.readRecoveryDocument(f.owner, MODULE)).toBeNull();
+  expect(JSON.parse(await readFile(f.path, "utf8")).stage).not.toEqual(
+    await f.host.keys.readStage(f.owner),
+  );
   const statement = {
     ...f.statement,
     nodeKey: { nodeId: replacement.key.nodeId, name: replacement.key.name },

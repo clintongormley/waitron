@@ -1,12 +1,11 @@
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
-import { randomBytes } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { Agent } from "undici";
 import { afterEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { firstFiscalFixture, PASSWORD } from "../test/first-fiscal.js";
+import { firstFiscalFixture } from "../test/first-fiscal.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { startServerOrFirstSetupResolution } from "./node-entry.js";
@@ -34,7 +33,7 @@ afterEach(() => {
 });
 
 it.each(["Consumed", "Not consumed", "Unknown"])(
-  "trusted HTTPS recovers a missing-database attempt and retires it after %s",
+  "trusted HTTPS retires a missing-database attempt after %s",
   async (status) => {
     vi.useFakeTimers({ toFake: ["Date", "performance"] });
     vi.setSystemTime("2026-10-16T11:40:00Z");
@@ -78,23 +77,6 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
           body: JSON.stringify(body),
         } as RequestInit);
       const before = (await f.store.read())!;
-      const inspected = await get();
-      const recoveredResponse = await post("recover", {
-        inspectionId: inspected.inspectionId,
-        revision: inspected.revision,
-        ownerGeneration: inspected.ownerGeneration,
-        clientClaimNonce: randomBytes(32).toString("base64url"),
-        password: PASSWORD,
-      });
-      expect(recoveredResponse.status).toBe(200);
-      expect(recoveredResponse.headers.get("Cache-Control")).toBe("no-store");
-      const recovered = await recoveredResponse.json();
-      expect(recovered.state).toMatchObject({
-        attemptId: before.frozen.attemptId,
-        status: "consumption-intent",
-        consumptionIntent: true,
-        ownerGeneration: 2,
-      });
       const current = await get();
       const ids = {
         inspectionId: current.inspectionId,
@@ -110,6 +92,7 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
       };
       const summary = await post("start-again/summary", ids);
       expect(summary.status, await summary.clone().text()).toBe(200);
+      expect(summary.headers.get("Cache-Control")).toBe("no-store");
       const shown = await summary.json();
       expect(shown).toEqual({ reached: "named" });
       const attemptFile = await readFile(join(f.stateDir, "first-setup.json"));
@@ -146,7 +129,7 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
         },
         confirmedOn: "repair-page",
         signedIn: false,
-        ownerGeneration: recovered.state.ownerGeneration,
+        ownerGeneration: ids.ownerGeneration,
         shown,
       });
       const selected = await response.json();
@@ -193,42 +176,39 @@ it("HTTPS rejects foreign origins, stale snapshots and malformed resolution requ
         dispatcher: agent,
       } as RequestInit)
     ).json();
+    expect(JSON.stringify(inspection)).not.toContain(f.stateDir);
+    expect(JSON.stringify(inspection)).not.toContain("scrypt$");
     const before = await readFile(join(f.stateDir, "first-setup.json"));
     const base = {
       inspectionId: inspection.inspectionId,
       revision: inspection.revision,
       ownerGeneration: inspection.ownerGeneration,
     };
-    const recover = {
-      ...base,
-      password: PASSWORD,
-      clientClaimNonce: randomBytes(32).toString("base64url"),
-    };
     const start = { ...base, register: { kind: "no-current-master", confirmed: true } };
     const cases = [
       {
-        action: "recover",
-        body: recover,
+        action: "start-again",
+        body: start,
         headers: { Origin: "https://foreign.example" },
         status: 403,
         code: "setup.owner_required",
       },
       {
-        action: "recover",
-        body: recover,
+        action: "start-again",
+        body: start,
         headers: { "Sec-Fetch-Site": "cross-site" },
         status: 403,
         code: "setup.owner_required",
       },
       {
-        action: "recover",
-        body: { ...recover, inspectionId: "c".repeat(64) },
-        status: 403,
-        code: "setup.owner_required",
+        action: "start-again",
+        body: { ...start, inspectionId: "c".repeat(64) },
+        status: 409,
+        code: "setup.attempt_conflict",
       },
       {
-        action: "recover",
-        body: { ...recover, revision: null },
+        action: "start-again",
+        body: { ...start, revision: null },
         status: 400,
         code: "setup.request_invalid",
       },
@@ -423,64 +403,50 @@ it("the loopback resolution listener keeps certificate guidance on the local add
   }
 });
 
-it.each(["recover", "start-again"])(
-  "HTTP refuses %s before reading secrets even with forwarded HTTPS",
-  async (path) => {
-    const f = await firstFiscalFixture();
-    let server: { close(): Promise<void> } | undefined;
-    try {
-      const [port] = await freePorts(1);
-      server = await startServerOrFirstSetupResolution({
-        WAITRON_STATE_DIR: f.stateDir,
-        WAITRON_VENUE_DIR: f.venueDir,
-        WAITRON_HTTP_PORT: String(port),
-      });
-      const before = await readFile(join(f.stateDir, "first-setup.json"));
-      const response = await fetch(
-        `http://127.0.0.1:${port}/setup-api/first-setup/resolution/${path}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Forwarded-Proto": "https" },
-          body: "not even JSON",
-        },
-      );
-      expect(response.status).toBe(404);
-      expect(await response.text()).toBe("404 Not Found");
-      expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
-      if (path === "recover") {
-        expect(
-          (await fetch(`http://127.0.0.1:${port}/setup-api/first-setup/resolution`)).status,
-        ).toBe(404);
-        const admission = await resolveFirstSetupEntry(
-          { stateDir: f.stateDir, venueDir: f.venueDir },
-          {},
-        );
-        expect(admission.kind).toBe("resolution");
-        if (admission.kind !== "resolution") throw new Error("Expected retained setup resolution");
-        const inspection = await (
-          await admission.app.request("https://localhost/setup-api/first-setup/resolution")
-        ).json();
-        const valid = await fetch(
-          `http://127.0.0.1:${port}/setup-api/first-setup/resolution/recover`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Forwarded-Proto": "https" },
-            body: JSON.stringify({
-              inspectionId: inspection.inspectionId,
-              revision: inspection.revision,
-              ownerGeneration: inspection.ownerGeneration,
-              clientClaimNonce: randomBytes(32).toString("base64url"),
-              password: PASSWORD,
-            }),
-          },
-        );
-        expect(valid.status).toBe(404);
-        expect(await valid.text()).toBe("404 Not Found");
-        expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
-      }
-    } finally {
-      await server?.close();
-      await f.dispose();
-    }
-  },
-);
+it("HTTP refuses start-again before reading secrets even with forwarded HTTPS", async () => {
+  const f = await firstFiscalFixture();
+  let server: { close(): Promise<void> } | undefined;
+  try {
+    const [port] = await freePorts(1);
+    server = await startServerOrFirstSetupResolution({
+      WAITRON_STATE_DIR: f.stateDir,
+      WAITRON_VENUE_DIR: f.venueDir,
+      WAITRON_HTTP_PORT: String(port),
+    });
+    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    const route = `http://127.0.0.1:${port}/setup-api/first-setup/resolution/start-again`;
+    const headers = { "Content-Type": "application/json", "X-Forwarded-Proto": "https" };
+    const response = await fetch(route, { method: "POST", headers, body: "not even JSON" });
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("404 Not Found");
+    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+    expect((await fetch(`http://127.0.0.1:${port}/setup-api/first-setup/resolution`)).status).toBe(
+      404,
+    );
+    const admission = await resolveFirstSetupEntry(
+      { stateDir: f.stateDir, venueDir: f.venueDir },
+      {},
+    );
+    expect(admission.kind).toBe("resolution");
+    if (admission.kind !== "resolution") throw new Error("Expected retained setup resolution");
+    const inspection = await (
+      await admission.app.request("https://localhost/setup-api/first-setup/resolution")
+    ).json();
+    const valid = await fetch(route, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        inspectionId: inspection.inspectionId,
+        revision: inspection.revision,
+        ownerGeneration: inspection.ownerGeneration,
+        register: { kind: "no-current-master", confirmed: true },
+      }),
+    });
+    expect(valid.status).toBe(404);
+    expect(await valid.text()).toBe("404 Not Found");
+    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  } finally {
+    await server?.close();
+    await f.dispose();
+  }
+});

@@ -1176,11 +1176,10 @@ declare module "@waitron/shared" {
      */
     "setup.reset_unavailable": Record<string, never>;
     /**
-     * Start again, or its summary, will not go ahead: the setup already finished, the setup
-     * database holds rows Waitron never deletes, or the setup already saved the settings the box
-     * trades with.
+     * Start again, or its summary, will not go ahead: the setup already finished, or the setup
+     * database holds rows Waitron never deletes.
      */
-    "setup.start_again_refused": { cause: "setup-finished" | "kept-records" | "trading-settings" };
+    "setup.start_again_refused": { cause: "setup-finished" | "kept-records" };
     /** Start again was asked for over a connection that is not encrypted. */
     "setup.connection_insecure": Record<string, never>;
     /**

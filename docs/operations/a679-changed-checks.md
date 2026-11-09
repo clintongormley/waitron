@@ -1,5 +1,11 @@
 # A679 changed test checks
 
+_2026-11-09, A1379: setup-password recovery ("Continue"), publication-only Finish, the command's
+resumption and its retained configuration import are removed, with their suites
+(`first-setup-finish.route.test.ts`, `first-fiscal-hour-finish.test.ts`,
+`first-setup-command-import.test.ts`, `first-setup-owner-audit.test.ts` and the resolution record
+store's tests). Sections below that describe them record the earlier tree._
+
 _2026-11-07, A1383: the clock sample, committed preparation action and early recovery-source
 gaps described below are now pinned by the [clock](../../packages/fiscal-verifactu/src/hour-clock.test.ts),
 [action](../../packages/fiscal-verifactu/src/hour-selection.test.ts) and
@@ -3378,6 +3384,9 @@ driver completed it with explicit argument arrays in the independent checkout. R
 `await stampDeployment(db, request.environment)` fails the existing refusal-after-stamping
 case at its exact assertion: expected preproduction, received null. Restoring the bytes passes
 that same selected case, with 66 intentionally unselected cases. No earlier test changed.
+(2026-11-08, A1379 P2-9: the command now stamps only once activation has started, so that case
+became "a refusal before activation starts leaves no environment stamp and no venue" and expects
+`null`; see that branch's PR.)
 
 The release-floor concern was also followed to its consumer. A missing/null embedded timestamp
 sets `releaseBlocked` in `hour-clock.ts:122–126`; it does not permit an earlier clock. The

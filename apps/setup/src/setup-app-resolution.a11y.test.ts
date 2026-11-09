@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtButton } from "@waitron/ui";
 import { SetupApp } from "./setup-app.js";
@@ -7,6 +7,7 @@ import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initial, wizardApi } from "../test/first-setup-browser.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
 
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   cleanupWidgets();
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
@@ -16,12 +17,64 @@ afterEach(async () => {
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280])
+      it(`${locale} ${theme} ${width} after activation: accessible page holding the key`, async () => {
+        const previous = [innerWidth, innerHeight];
+        try {
+          await page.viewport(width, 1200);
+          sessionStorage.setItem(
+            FIRST_SETUP_SESSION_KEY,
+            JSON.stringify({
+              version: 1,
+              tabLockId: "N".repeat(43),
+              claimPending: false,
+              owner: {
+                attemptId: initial.attemptId,
+                revision: 2,
+                ownerGeneration: 2,
+                capability: "A".repeat(43),
+              },
+            }),
+          );
+          const state = {
+            ...initial,
+            status: "committed",
+            consumptionIntent: true,
+            revision: 2,
+            ownerGeneration: 2,
+          };
+          const { api, requests } = wizardApi({
+            claimed: true,
+            intercept(path, _body, headers) {
+              if (path.endsWith("/status") && headers.has("X-Waitron-Setup-Owner"))
+                return Response.json({ claimed: true, state });
+            },
+          });
+          const { el, host } = await mountWidget<SetupApp>(
+            "setup-app",
+            { api, browserLanguages: [locale] },
+            theme,
+          );
+          await expect
+            .poll(() => el.shadowRoot!.querySelector("[data-test=start-again]"))
+            .not.toBeNull();
+          await el.updateComplete;
+          await expectNoA11yViolations(host);
+          expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+          expect(requests.some((r) => /\/(provision|email-test|fiscal-test)$/.test(r.path))).toBe(
+            false,
+          );
+        } finally {
+          await page.viewport(previous[0]!, previous[1]!);
+        }
+      });
+for (const locale of ["en-GB", "es-ES"] as const)
+  for (const theme of ["light", "dark"] as const)
+    for (const width of [390, 1280])
       for (const state of [
         "normal",
         "confirmation",
-        "uncheckable",
+        "unreadable",
         "missing",
-        "refusal",
         "repairable",
       ] as const)
         it(`${locale} ${theme} ${width} ${state}: accessible interrupted setup`, async () => {
@@ -37,13 +90,16 @@ for (const locale of ["en-GB", "es-ES"] as const)
                   return Response.json({
                     version: 2,
                     inspectionId: "a".repeat(64),
-                    pair: state === "repairable" ? "repairable" : "valid",
+                    pair:
+                      state === "repairable"
+                        ? "repairable"
+                        : state === "unreadable"
+                          ? "invalid"
+                          : "valid",
                     database: state === "missing" ? "missing" : "no-venue-rows",
-                    emptyDatabase: !["missing", "uncheckable"].includes(state),
-                    password: state === "uncheckable" ? "uncheckable" : "checkable",
-                    revision: 1,
-                    ownerGeneration: 1,
-                    repairEligible: false,
+                    emptyDatabase: !["missing", "unreadable"].includes(state),
+                    revision: state === "unreadable" ? null : 1,
+                    ownerGeneration: state === "unreadable" ? null : 1,
                     artifacts: [],
                   });
               },
@@ -67,13 +123,6 @@ for (const locale of ["en-GB", "es-ES"] as const)
                 el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=retire-confirmed]")!,
               );
             }
-            if (state === "refusal")
-              Object.assign(el, {
-                firstOwnerError: () =>
-                  locale.startsWith("es")
-                    ? "No se ha podido comprobar la contraseña."
-                    : "The password could not be checked.",
-              });
             await el.updateComplete;
             await expectNoA11yViolations(host);
             expect(innerWidth).toBe(width);
@@ -167,10 +216,8 @@ for (const locale of ["en-GB", "es-ES"] as const)
                   pair: "valid",
                   database: "no-venue-rows",
                   emptyDatabase: true,
-                  password: "checkable",
                   revision: 1,
                   ownerGeneration: 1,
-                  repairEligible: false,
                   artifacts: [],
                 });
             },
@@ -201,3 +248,50 @@ for (const locale of ["en-GB", "es-ES"] as const)
           await page.viewport(previous[0]!, previous[1]!);
         }
       });
+for (const locale of ["en-GB", "es-ES"] as const)
+  for (const theme of ["light", "dark"] as const)
+    for (const width of [375, 1280])
+      for (const step of ["asks", "stopped"] as const)
+        it(`${locale} ${theme} ${width} ${step}: accessible stop confirmation in a new tab on the ordinary server`, async () => {
+          const previous = [innerWidth, innerHeight];
+          try {
+            await page.viewport(width, 1200);
+            const { api, requests } = wizardApi({
+              claimed: true,
+              resolution: false,
+              intercept(path) {
+                if (path.endsWith("/resolution/stop")) return Response.json({ restarting: true });
+              },
+            });
+            const { el, host } = await mountWidget<SetupApp>(
+              "setup-app",
+              { api, browserLanguages: [locale] },
+              theme,
+            );
+            const find = (name: string) =>
+              el.shadowRoot!.querySelector<WtButton>(`[data-test=${name}]`);
+            await expect.poll(() => find("start-again")).not.toBeNull();
+            await userEvent.click(find("start-again")!.shadowRoot!.querySelector("button")!);
+            await expect.poll(() => find("confirm-stop")).not.toBeNull();
+            if (step === "stopped") {
+              await userEvent.click(find("confirm-stop")!.shadowRoot!.querySelector("button")!);
+              await expect.poll(() => find("confirm-stop")).toBeNull();
+              await expect.poll(() => find("reconnect-first")?.disabled).toBe(false);
+              expect(requests.filter((r) => r.path.endsWith("/resolution/stop"))).toHaveLength(1);
+            }
+            await el.updateComplete;
+            await expectNoA11yViolations(host);
+            expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+            expect(
+              el
+                .shadowRoot!.querySelector("[data-test=screen-first-owner]")!
+                .getBoundingClientRect().right,
+            ).toBeLessThanOrEqual(width);
+            if (import.meta.env.VITE_A1379_STOP_LOOK === "1")
+              await page.screenshot({
+                path: `__screenshots__/a1379-stop/${locale}-${theme}-${width}-${step}.png`,
+              });
+          } finally {
+            await page.viewport(previous[0]!, previous[1]!);
+          }
+        });

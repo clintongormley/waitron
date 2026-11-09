@@ -1,12 +1,13 @@
 import { leaveCoordinatorFor } from "@waitron/ui";
+import type { LitElement } from "lit";
 import { page, userEvent } from "vitest/browser";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import indexHtml from "../index.html?raw";
 import type { WtWaitronLockup } from "@waitron/ui/src/components/wt-waitron-lockup.js";
 import { SetupApp, assembleBody } from "./setup-app.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
-import type { ProvisionBody, SetupApi, SetupStatus } from "./api/client.js";
+import { SetupApi, type ProvisionBody, type SetupStatus } from "./api/client.js";
 import type { SetupCloudRestoreScreen } from "./screens/cloud-restore-screen.js";
 import type { SetupRestoreBucketScreen } from "./screens/restore-bucket-screen.js";
 import type { SetupRestoreScreen } from "./screens/restore-screen.js";
@@ -15,11 +16,15 @@ import type { BucketRestoreRequestDetail } from "./events.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { startEn } from "./i18n/strings/start.js";
+import { wizardApi } from "../test/first-setup-browser.js";
+import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 
 const mounted: HTMLElement[] = [];
 
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(() => {
   for (const host of mounted.splice(0)) host.remove();
+  sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
 });
 
 function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): SetupApi {
@@ -214,6 +219,85 @@ function readState(el: SetupApp, keys: string[]): Record<string, unknown> {
 async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<string | null> {
   const host = await screenHost(el, screen);
   return host.shadowRoot!.querySelector<HTMLElement>(sel)?.textContent?.trim() ?? null;
+}
+
+/** The words for a setup request refused while the server holds a first setup this page does not. */
+const FIRST_SETUP_HELD = {
+  provision: [
+    "This server holds an unfinished first setup, so it sets nothing else up while that setup is there. Reload shows that setup and what can be done with it.",
+    "Este servidor tiene una primera configuración sin terminar, así que no configura nada más mientras esa configuración siga ahí. Recargar muestra esa configuración y lo que se puede hacer con ella.",
+  ],
+  restore: [
+    "This server holds an unfinished first setup, so it restores no copy while that setup is there. Reload shows that setup and what can be done with it.",
+    "Este servidor tiene una primera configuración sin terminar, así que no restaura ninguna copia mientras esa configuración siga ahí. Recargar muestra esa configuración y lo que se puede hacer con ella.",
+  ],
+  reset: [
+    "This server holds an unfinished first setup, so it resets nothing while that setup is there. Reload shows that setup and what can be done with it.",
+    "Este servidor tiene una primera configuración sin terminar, así que no restablece nada mientras esa configuración siga ahí. Recargar muestra esa configuración y lo que se puede hacer con ella.",
+  ],
+} as const;
+const SETUP_NOT_ACCEPTED = [
+  "This server did not accept this request from this page, so nothing changed. Reload starts setup again from its first screen; what you typed on this page is not kept.",
+  "Este servidor no ha aceptado esta petición desde esta página, así que no ha cambiado nada. Recargar empieza la configuración de nuevo desde su primera pantalla; lo que has escrito en esta página no se guarda.",
+] as const;
+const SETUP_CONFLICT = [
+  "Another setup on this server is in the way, so the server did not do this. Reload shows where setup on this server stands and what can be done next.",
+  "Otra configuración de este servidor lo impide, así que el servidor no lo ha hecho. Recargar muestra en qué punto está la configuración de este servidor y qué se puede hacer después.",
+] as const;
+type HeldCode = "setup.owner_required" | "setup.attempt_uncertain" | "setup.attempt_conflict";
+const firstSetupHeldWords = (code: HeldCode, kind: keyof typeof FIRST_SETUP_HELD, locale: string) =>
+  (code === "setup.owner_required"
+    ? SETUP_NOT_ACCEPTED
+    : code === "setup.attempt_conflict"
+      ? SETUP_CONFLICT
+      : FIRST_SETUP_HELD[kind])[locale === "es-ES" ? 1 : 0];
+/** What Reload leads to: owner_required comes from a server holding no first setup, the others from one holding one. */
+const reloadAfter = (code: HeldCode) =>
+  code === "setup.owner_required" ? reloadOntoFirstScreen() : reloadOntoHeldFirstSetup();
+/**
+ * The screen ends at the words and one button, Reload, which the words name; pressing it reloads.
+ * Returns nothing: what a reload then shows is {@link reloadAfter}.
+ */
+async function expectEndsAtReload(
+  el: SetupApp,
+  screen: Screen,
+  selector: string,
+  sentence: string,
+  locale: string,
+): Promise<void> {
+  const host = await screenHost(el, screen);
+  const label = locale === "es-ES" ? "Recargar" : "Reload";
+  expect(host.shadowRoot!.querySelector(selector)!.textContent!.replace(/\s+/g, " ").trim()).toBe(
+    sentence,
+  );
+  expect(
+    [...host.shadowRoot!.querySelectorAll("wt-button")].map((b) => b.textContent!.trim()),
+  ).toEqual([label]);
+  expect(sentence).toContain(label);
+  const reload = vi.fn();
+  (host as HTMLElement & { reload: () => void }).reload = reload;
+  host.shadowRoot!.querySelector<HTMLElement>("[data-test=reload]")!.click();
+  expect(reload).toHaveBeenCalledOnce();
+}
+/** A fresh page on a server holding no first setup shows the first screen of setup, with nothing typed. */
+async function reloadOntoFirstScreen(): Promise<void> {
+  const el = await mountSetupApp(wizardApi({ claimed: false }).api);
+  await expect.poll(() => el.shadowRoot!.querySelector("[data-test=screen-mode]")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=screen-first-owner]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("setup-provisioning-screen")).toBeNull();
+}
+/** A fresh page on a server holding an unfinished first setup that the page does not hold: what Reload leads to. */
+async function reloadOntoHeldFirstSetup(): Promise<void> {
+  const el = await mountSetupApp(wizardApi({ claimed: true, resolution: false }).api);
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("[data-test=screen-first-owner]"))
+    .not.toBeNull();
+  const owner = el.shadowRoot!.querySelector<HTMLElement>("[data-test=screen-first-owner]")!;
+  const enabled = (name: string) =>
+    (owner.querySelector(`[data-test=${name}]`) as (HTMLElement & { disabled: boolean }) | null)
+      ?.disabled === false;
+  await expect.poll(() => enabled("start-again")).toBe(true);
+  expect(enabled("recover-backup")).toBe(true);
 }
 
 /** The message under the field `data-test` names: a shared field's own `error`, or else the
@@ -2646,7 +2730,7 @@ describe("resetting a join that stopped partway", () => {
     ["setup.already_provisioning", "Setup is already in progress on this server."],
     [
       "setup.operation_conflict",
-      "This server has saved setup work for a different request. Resume the original setup or contact support.",
+      "This server holds saved setup work that does not match this request, so it did not do this one.",
     ],
   ])("ends at a Reload for %s", async (code, message) => {
     const resetIncompleteAdopt = vi.fn().mockRejectedValue({ code, params: {}, status: 409 });
@@ -2660,6 +2744,32 @@ describe("resetting a join that stopped partway", () => {
     expect(await screenText(el, "reset", "[data-test=reload]")).toBe("Reload");
     expect(screen.shadowRoot!.querySelector("[data-test=personId]")).toBeNull();
   });
+
+  it.each(["setup.owner_required", "setup.attempt_uncertain", "setup.attempt_conflict"] as const)(
+    "a reset refused %s ends at words naming only Reload, and Reload shows what the server then holds, in both languages",
+    async (code) => {
+      for (const locale of ["en-GB", "es-ES"]) {
+        try {
+          const resetIncompleteAdopt = vi.fn().mockRejectedValue({ code, params: {}, status: 409 });
+          const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+          setLocale(locale);
+          await openReset(el);
+          await submitReset(el);
+          expect(resetIncompleteAdopt).toHaveBeenCalledOnce();
+          await expectEndsAtReload(
+            el,
+            "reset",
+            "[data-test=outcome]",
+            firstSetupHeldWords(code, "reset", locale),
+            locale,
+          );
+        } finally {
+          setLocale("en-GB");
+        }
+      }
+      await reloadAfter(code);
+    },
+  );
 
   it("marks no field and names the refused login when the password is refused", async () => {
     const resetIncompleteAdopt = vi
@@ -3801,7 +3911,7 @@ describe("restore from my bucket", () => {
     [
       "setup.operation_conflict",
       undefined,
-      "This server has saved setup work for a different request. Resume the original setup or contact support.",
+      "This server holds saved setup work that does not match this request, so it did not do this one.",
     ],
     ["setup.request_invalid", { field: "kit" }, "Check the recovery pack or kit file."],
     [
@@ -5373,22 +5483,75 @@ describe("Prepare and Live email setup journey", () => {
 });
 
 describe("first setup owner refusals", () => {
+  it.each(
+    (
+      [
+        ["provision", "provision", (el: SetupApp) => provisionRequest(el)],
+        ["adopt", "provision", (el: SetupApp) => adoptRequest(el)],
+        ["restoreFromBucket", "restore", (el: SetupApp) => bucketRequest(el)],
+        [
+          "restore",
+          "restore",
+          (el: SetupApp) =>
+            restoreRequest(el, {
+              artifact: new File([Uint8Array.from([1])], "b.wbk"),
+              recoveryKey: "k",
+              environment: "production",
+            }),
+        ],
+        [
+          "startCloudRecovery",
+          "restore",
+          async (el: SetupApp) => {
+            goto(el, "cloud-restore");
+            await flush(el);
+            cloudRecoveryAction(el, "start");
+          },
+        ],
+      ] as const
+    ).flatMap(([request, kind, send]) =>
+      (
+        [
+          "setup.owner_required",
+          "setup.attempt_uncertain",
+          ...(kind === "restore" ? (["setup.attempt_conflict"] as const) : []),
+        ] as const
+      ).map((code) => [request, code, kind, send] as const),
+    ),
+  )(
+    "%s refused %s ends at words naming only Reload, and Reload shows what the server then holds, in both languages",
+    async (request, code, kind, send) => {
+      for (const locale of ["en-GB", "es-ES"]) {
+        try {
+          const refused = vi.fn().mockRejectedValue({ code, params: {}, status: 409 });
+          const el = await mountSetupApp(stubApi({ [request]: refused }));
+          setLocale(locale);
+          await send(el);
+          await flush(el);
+          await flush(el);
+          expect(refused).toHaveBeenCalledOnce();
+          await expectEndsAtReload(
+            el,
+            "provisioning",
+            "[data-test=error]",
+            firstSetupHeldWords(code, kind, locale),
+            locale,
+          );
+        } finally {
+          setLocale("en-GB");
+        }
+      }
+      await reloadAfter(code);
+    },
+  );
   const cases = [
-    [
-      "setup.owner_required",
-      "Resume setup in its owner tab.",
-      "Reanuda la configuración en la pestaña de su responsable.",
-    ],
+    ["setup.owner_required", ...SETUP_NOT_ACCEPTED],
     [
       "setup.attempt_conflict",
       "Another setup attempt owns this venue.",
       "Otro intento de configuración tiene el control de este local.",
     ],
-    [
-      "setup.attempt_uncertain",
-      "This assignment may have been used. Resume the saved attempt; do not assign it again.",
-      "Esta asignación puede estar usada. Reanuda el intento guardado; no la asignes de nuevo.",
-    ],
+    ["setup.attempt_uncertain", ...FIRST_SETUP_HELD.provision],
     [
       "setup.attempt_invalid",
       "The saved setup cannot be read. Contact support.",
@@ -5417,6 +5580,199 @@ describe("first setup owner refusals", () => {
           setLocale("en-GB");
         }
       }
+    },
+  );
+});
+
+describe("a recovery request refused because another setup holds the server", () => {
+  const fiscalPreview = {
+    sourceId: "selected-copy",
+    activationSourceId: "archive-digest",
+    createdAt: "2026-10-17T12:30:00Z",
+    environment: "production",
+    nodeId: "node-1",
+    nodeRecoveryKeyName: "Caja principal",
+    taxpayer: { legalName: "Olivo SL", taxId: "B12345674" },
+    venueName: "Centro",
+    fiscalSelection: {
+      module: "fiscal-verifactu",
+      country: "ES",
+      fiscalTerritory: "common",
+      timeZone: "Europe/Madrid",
+    },
+  };
+  const refusal = (code: string) => Response.json({ error: { code } }, { status: 409 });
+  type Source = "archive" | "bucket" | "cloud";
+  type Refused = "preview" | "stage" | "preparation";
+  const cloudPoint = {
+    requestId: "b6cbaee9-ee8b-4da5-b023-900547debb94",
+    code: "12345678",
+    openCloudUrl: "https://cloud.example.test/recover",
+    expiresAt: "2026-09-24T12:00:00.000Z",
+    state: "approved" as const,
+    point: {
+      id: "3a1d5560-c5bd-407a-b596-e63fbe2600d5",
+      venueId: "a7f570e8-e510-49eb-b1a7-096ff72171f5",
+      capturedAt: "2026-09-24T10:00:00.000Z",
+      modules: { core: 1 },
+    },
+  };
+
+  /** The setup app on a server whose recovery routes run through the real client and refuse `refused`. */
+  async function recoveryApp(source: Source, refused: Refused, code = "setup.attempt_conflict") {
+    const conflict = () => refusal(code);
+    const calls: string[] = [];
+    const transport = vi.fn<typeof fetch>(async (url) => {
+      const path = new URL(String(url), "http://box.test").pathname;
+      calls.push(path);
+      if (path.endsWith("/preview"))
+        return refused === "preview" ? conflict() : Response.json(fiscalPreview);
+      if (path.endsWith("/recovery/stage"))
+        return refused === "stage"
+          ? conflict()
+          : Response.json({ stagedId: "5c1d6c43-4f61-4c4a-9e0b-0a8f2f8d9a11" });
+      if (path.endsWith("/recovery/stage/discard")) return conflict();
+      if (path.endsWith("/recovery/preparation")) return conflict();
+      throw new Error("unexpected URL " + path);
+    });
+    const recovery = new SetupApi("", transport);
+    const real = (name: keyof SetupApi) =>
+      (recovery[name] as (...args: unknown[]) => unknown).bind(recovery);
+    const el = await mountSetupApp(
+      stubApi({
+        previewRestore: real("previewRestore"),
+        previewBucketRestore: real("previewBucketRestore"),
+        previewCloudRestore: real("previewCloudRestore"),
+        stageRecovery: real("stageRecovery"),
+        prepareRecovery: real("prepareRecovery"),
+        discardStagedRecovery: real("discardStagedRecovery"),
+        cloudRecoveryStatus: vi.fn().mockResolvedValue(cloudPoint),
+      }),
+    );
+    const screen: Screen =
+      source === "archive" ? "restore" : source === "bucket" ? "restore-bucket" : "cloud-restore";
+    goto(el, screen);
+    await flush(el);
+    if (source === "cloud") {
+      cloudRecoveryAction(el, "status");
+      await flush(el);
+    }
+    const host = (await screenHost(el, screen)) as HTMLElement & Record<string, unknown>;
+    if (source === "archive") {
+      host.artifact = new File(["encrypted selected copy"], "backup.waitron");
+      host.recoveryKey = "archive password";
+    } else if (source === "bucket") host.kit = "private selected kit";
+    await (host as unknown as LitElement).updateComplete;
+    const copy = host.shadowRoot!.querySelector<LitElement>("setup-recovery-copy")!;
+    await copy.updateComplete;
+    return { el, host, copy, calls };
+  }
+
+  /** Fills the fiscal module's recovery form and presses Compare clocks, which stages and prepares. */
+  async function compareClocks(copy: LitElement) {
+    await vi.waitFor(() =>
+      expect(copy.shadowRoot!.querySelector("setup-recovery-allocation")).not.toBeNull(),
+    );
+    const allocation = copy.shadowRoot!.querySelector<LitElement>("setup-recovery-allocation")!;
+    await allocation.updateComplete;
+    const entry = allocation.shadowRoot!.querySelector<LitElement>("vf-recovery-hour")!;
+    await entry.updateComplete;
+    const key = entry.shadowRoot!.querySelector<LitElement>("vf-recovery-key")!;
+    await key.updateComplete;
+    const field = key.shadowRoot!.querySelector<LitElement>('[name="printed-recovery-key"]')!;
+    await field.updateComplete;
+    const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    input.value = "06r9 t4fh m4h3 599j eemm 5d5d abtv 2rsx 6qdq we8m c";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    for (const name of ["recovery-old-box-stopped", "recovery-sole-operation"]) {
+      const box = entry.shadowRoot!.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
+      box.checked = true;
+      box.dispatchEvent(new Event("change"));
+    }
+    const compare = () =>
+      entry.shadowRoot!.querySelector("[data-test=compare]") as HTMLElement & {
+        disabled: boolean;
+      };
+    await vi.waitFor(() => expect(compare().disabled).toBe(false));
+    compare().click();
+  }
+
+  it.each([
+    ["archive", "preview"],
+    ["bucket", "preview"],
+    ["cloud", "preview"],
+    ["archive", "stage"],
+    ["archive", "preparation"],
+    ["bucket", "preparation"],
+    ["cloud", "preparation"],
+  ] as const)(
+    "a %s recovery whose %s request is refused ends at words naming only Reload, and Reload shows the setup in the way, in both languages",
+    async (source, refused) => {
+      for (const locale of ["en-GB", "es-ES"]) {
+        try {
+          const { el, copy, calls } = await recoveryApp(source, refused);
+          setLocale(locale);
+          copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+          if (refused !== "preview") await compareClocks(copy);
+          const route =
+            refused === "preview"
+              ? "/preview"
+              : refused === "stage"
+                ? "/recovery/stage"
+                : "/recovery/preparation";
+          await vi.waitFor(() =>
+            expect(calls.filter((path) => path.endsWith(route))).toHaveLength(1),
+          );
+          await vi.waitFor(() =>
+            expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).not.toBeNull(),
+          );
+          await flush(el);
+          await expectEndsAtReload(
+            el,
+            "provisioning",
+            "[data-test=error]",
+            SETUP_CONFLICT[locale === "es-ES" ? 1 : 0],
+            locale,
+          );
+        } finally {
+          setLocale("en-GB");
+        }
+      }
+      await reloadOntoHeldFirstSetup();
+    },
+  );
+  it.each([
+    ["archive", "preview", "Couldn't review this backup."],
+    ["cloud", "preview", "Couldn't review this backup."],
+    ["archive", "stage", "Check the fields and compare clocks again."],
+    ["bucket", "preparation", "Check the fields and compare clocks again."],
+  ] as const)(
+    "a %s recovery whose %s request is refused for another reason keeps the screen and its words",
+    async (source, refused, words) => {
+      const { el, host, copy, calls } = await recoveryApp(source, refused, "server.internal");
+      copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+      if (refused !== "preview") await compareClocks(copy);
+      const errors = (root: ParentNode): string[] =>
+        [...root.querySelectorAll("*")].flatMap((node) => [
+          ...(node.shadowRoot ? errors(node.shadowRoot) : []),
+          ...(node.localName === "wt-form-actions"
+            ? [(node as HTMLElement & { error: string }).error]
+            : []),
+        ]);
+      await vi.waitFor(() => expect(errors(host.shadowRoot!)).toContain(words));
+      expect(
+        calls.some((path) =>
+          path.endsWith(
+            refused === "stage"
+              ? "/recovery/stage"
+              : refused === "preview"
+                ? "/preview"
+                : "/recovery/preparation",
+          ),
+        ),
+      ).toBe(true);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).toBeNull();
     },
   );
 });

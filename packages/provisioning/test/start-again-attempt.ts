@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { hashPassword, hashPin } from "@waitron/identity";
-import { canonicalFirstSetupRoots } from "../src/first-setup-resolution.js";
+import { canonicalFirstSetupRoots } from "../src/first-setup-directories.js";
 import {
   startAgainMarkerFor,
   writeStartAgainMarker,
@@ -88,7 +88,6 @@ export async function startAgainAttempt(
     frozenAttempt(ownerVerifier),
     ownerVerifier,
     digestOf("capability"),
-    digestOf("nonce"),
   );
   const roots = await canonicalFirstSetupRoots({
     venueDir: join(base, "venue"),

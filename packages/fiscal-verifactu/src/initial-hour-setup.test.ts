@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { AppError } from "@waitron/shared";
 import {
   withOperationAuthority,
   type ModuleOperationHost,
@@ -545,8 +546,14 @@ function terminal(f: ReturnType<typeof configured>, answers: string[]) {
     prepare: f.prepare,
     select: async (proposal: unknown) =>
       f.seat.request(context, await f.seat.candidates(context, proposal)),
+    sleep: stopDuringWait,
   };
   return { actions, output, prompts };
+}
+/** Stands in for the operator stopping the command while it waits. */
+const STOPPED = new Error("test: stopped during the wait");
+async function stopDuringWait(): Promise<void> {
+  throw STOPPED;
 }
 
 it("the terminal with only the box's clock explains and cancels without a question", async () => {
@@ -596,10 +603,10 @@ it("the terminal asks nothing, prints why it waits and until when, and keeps the
   const f = configured();
   internetAgrees();
   const t = terminal(f, []);
-  expect(await f.seat.command!(context, t.actions)).toEqual({ status: "waiting" });
+  await expect(f.seat.command!(context, t.actions)).rejects.toBe(STOPPED);
   expect(t.output).toContain("Waiting to confirm the time, so no invoice series is ever repeated.");
   expect(t.output).toContain(
-    "Continues at 2026-10-16T11:42:00.000Z; run the command again within a minute after that time (later, it waits again).",
+    "Waiting until 2026-10-16T11:42:00.000Z; it carries on by itself, so keep the command running.",
   );
   expect(t.prompts).toEqual([]);
   expect(f.history).toHaveLength(1);
@@ -619,9 +626,9 @@ it("the terminal run again after its wait's target selects that minute's name, a
   const f = configured();
   internetAgrees();
   const first = terminal(f, []);
-  expect(await f.seat.command!(context, first.actions)).toEqual({ status: "waiting" });
+  await expect(f.seat.command!(context, first.actions)).rejects.toBe(STOPPED);
   expect(first.output).toContain(
-    "Continues at 2026-10-16T11:40:00.000Z; run the command again within a minute after that time (later, it waits again).",
+    "Waiting until 2026-10-16T11:40:00.000Z; it carries on by itself, so keep the command running.",
   );
   vi.setSystemTime(new Date("2026-10-16T11:40:00Z"));
   monotonicOffset += 120_000;
@@ -637,9 +644,9 @@ it("the terminal near an hour's end waits for its settle point, not for the hour
   vi.setSystemTime(new Date("2026-10-16T11:59:59.900Z"));
   internetAgrees();
   const t = terminal(f, []);
-  expect(await f.seat.command!(context, t.actions)).toEqual({ status: "waiting" });
+  await expect(f.seat.command!(context, t.actions)).rejects.toBe(STOPPED);
   expect(t.output).toContain(
-    "Continues at 2026-10-16T12:02:00.000Z; run the command again within a minute after that time (later, it waits again).",
+    "Waiting until 2026-10-16T12:02:00.000Z; it carries on by itself, so keep the command running.",
   );
   expect(t.output.join("\n")).not.toContain("UTC-hour boundary");
   expect(f.history).toHaveLength(1);
@@ -661,13 +668,13 @@ it.each([null, { status: "invalid" }])(
 it("a terminal run again before the target prints the same wait and records nothing new", async () => {
   const f = configured();
   internetAgrees();
-  expect(await f.seat.command!(context, terminal(f, []).actions)).toEqual({ status: "waiting" });
+  await expect(f.seat.command!(context, terminal(f, []).actions)).rejects.toBe(STOPPED);
   const before = structuredClone(f.history);
   const again = terminal(f, []);
-  expect(await f.seat.command!(context, again.actions)).toEqual({ status: "waiting" });
+  await expect(f.seat.command!(context, again.actions)).rejects.toBe(STOPPED);
   expect(again.prompts).toEqual([]);
   expect(again.output).toContain(
-    "Continues at 2026-10-16T11:42:00.000Z; run the command again within a minute after that time (later, it waits again).",
+    "Waiting until 2026-10-16T11:42:00.000Z; it carries on by itself, so keep the command running.",
   );
   expect(f.history).toEqual(before);
 });
@@ -675,16 +682,202 @@ it("a terminal run again before the target prints the same wait and records noth
 it("a terminal run more than a minute after its wait's target waits again", async () => {
   const f = configured();
   internetAgrees();
-  expect(await f.seat.command!(context, terminal(f, []).actions)).toEqual({ status: "waiting" });
+  await expect(f.seat.command!(context, terminal(f, []).actions)).rejects.toBe(STOPPED);
   vi.setSystemTime(new Date("2026-10-16T11:43:00.001Z"));
   monotonicOffset += 180_001;
   const later = terminal(f, []);
-  expect(await f.seat.command!(context, later.actions)).toEqual({ status: "waiting" });
+  await expect(f.seat.command!(context, later.actions)).rejects.toBe(STOPPED);
   expect(later.output).toContain(
-    "Continues at 2026-10-16T11:45:00.000Z; run the command again within a minute after that time (later, it waits again).",
+    "Waiting until 2026-10-16T11:45:00.000Z; it carries on by itself, so keep the command running.",
   );
   expect(later.prompts).toEqual([]);
   expect(f.history).toHaveLength(2);
+});
+
+it("a terminal that can wait waits until its target and takes that minute's name in the same run", async () => {
+  startEarly();
+  const f = configured();
+  internetAgrees();
+  const t = terminal(f, []);
+  const slept: number[] = [];
+  const sleep = async (ms: number) => {
+    slept.push(ms);
+    vi.setSystemTime(Date.now() + ms);
+    monotonicOffset += ms;
+  };
+  expect(await f.seat.command!(context, { ...t.actions, sleep })).toEqual({
+    status: "ready",
+    input: {
+      allocation: { ...input.allocation, issuedAt: "2026-10-16T11:40:01.000Z" },
+      approval: { ...input.approval, confirmedAt: "2026-10-16T11:40:01.000Z" },
+    },
+  });
+  expect(t.output).toContain("Waiting to confirm the time, so no invoice series is ever repeated.");
+  expect(t.output).toContain(
+    "Waiting until 2026-10-16T11:40:00.000Z; it carries on by itself, so keep the command running.",
+  );
+  expect(t.output.join("\n")).not.toContain("run the command again");
+  expect(slept).toHaveLength(1);
+  expect(Date.now()).toBeGreaterThanOrEqual(Date.parse("2026-10-16T11:40:00Z"));
+  expect(t.prompts).toEqual([]);
+  expect(f.history).toHaveLength(2);
+});
+
+it("a terminal still told to wait after its wait is refused rather than waiting again", async () => {
+  const f = configured();
+  internetAgrees();
+  const t = terminal(f, []);
+  const sleep = vi.fn(async () => {});
+  await expect(f.seat.command!(context, { ...t.actions, sleep })).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "clock_unconfirmed" },
+  });
+  expect(sleep).toHaveBeenCalledTimes(1);
+  expect(t.output).toContain(
+    "The time could not be confirmed after the wait (it ran over, or the clock moved back), so no invoice series was made.",
+  );
+  expect(f.history).toHaveLength(1);
+});
+
+const STALE_WORDS = [
+  "The time reading went out of date before a series could be chosen, even after a fresh one was taken (a reading is used for 30 seconds), so no invoice series was made.",
+  "Choose Start again on the box's setup page, then run the command again.",
+];
+
+it("a terminal whose first selection finds its time reading stale takes one fresh reading and selects with it", async () => {
+  const f = configured();
+  internetAgrees();
+  const t = terminal(f, []);
+  const sleep = async (ms: number) => {
+    vi.setSystemTime(Date.now() + ms);
+    monotonicOffset += ms;
+  };
+  const comparisons: unknown[] = [];
+  const select = async (proposal: unknown) => {
+    comparisons.push((proposal as { comparisonId: unknown }).comparisonId);
+    if (comparisons.length === 1)
+      throw new AppError("sif.allocation_invalid", { reason: "clock_stale" });
+    return t.actions.select(proposal);
+  };
+  expect(await f.seat.command!(context, { ...t.actions, sleep, select })).toMatchObject({
+    status: "ready",
+  });
+  expect(comparisons).toHaveLength(3);
+  expect(new Set(comparisons).size).toBe(3);
+  expect(t.output.join("\n")).not.toContain("out of date");
+  expect(t.prompts).toEqual([]);
+});
+
+it("a terminal whose first selection is still stale after one fresh reading says so and tries no more", async () => {
+  const f = configured();
+  internetAgrees();
+  const t = terminal(f, []);
+  let selections = 0;
+  const select = async () => {
+    if (++selections > 2) throw new Error("test: a third selection");
+    throw new AppError("sif.allocation_invalid", { reason: "clock_stale" });
+  };
+  await expect(f.seat.command!(context, { ...t.actions, select })).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "clock_stale" },
+  });
+  expect(selections).toBe(2);
+  expect(t.output.slice(-2)).toEqual(STALE_WORDS);
+});
+
+it("a terminal whose first selection is stale and whose fresh reading finds no internet explains and cancels", async () => {
+  const f = configured();
+  internetAgrees();
+  const t = terminal(f, []);
+  let selections = 0;
+  const select = async (proposal: unknown) => {
+    if (++selections > 1) return t.actions.select(proposal);
+    source.internet.mockResolvedValue({ source: "internet", result: "unavailable", reason: "tls" });
+    throw new AppError("sif.allocation_invalid", { reason: "clock_stale" });
+  };
+  expect(await f.seat.command!(context, { ...t.actions, select })).toEqual({
+    status: "cancelled",
+  });
+  expect(selections).toBe(1);
+  expect(t.output.slice(-3)).toEqual([
+    "internet: unavailable",
+    "No series is made without a confirmed time, so none is ever repeated.",
+    "Connect the box to the internet, or set up from a phone or laptop on the venue's network.",
+  ]);
+  expect(t.output.join("\n")).not.toContain("out of date");
+  expect(t.prompts).toEqual([]);
+});
+
+it.each([
+  ["another refusal", new AppError("sif.allocation_invalid", { reason: "event_mismatch" })],
+  [
+    "another code",
+    new AppError("setup.certificate_refused", { field: "pfx", reason: "clock_stale" }),
+  ],
+  ["a plain error", Object.assign(new Error("synthetic"), { params: { reason: "clock_stale" } })],
+])("a terminal's first selection refused by %s prints no stale words", async (_, refusal) => {
+  const f = configured();
+  internetAgrees();
+  const t = terminal(f, []);
+  const select = async () => {
+    throw refusal;
+  };
+  await expect(f.seat.command!(context, { ...t.actions, select })).rejects.toBe(refusal);
+  expect(t.output.join("\n")).not.toContain("out of date");
+});
+
+it("a terminal's selection after its wait prints no stale words, since no password was asked", async () => {
+  startEarly();
+  const f = configured();
+  internetAgrees();
+  const t = terminal(f, []);
+  const sleep = async (ms: number) => {
+    vi.setSystemTime(Date.now() + ms);
+    monotonicOffset += ms;
+  };
+  let selections = 0;
+  const select = async (proposal: unknown) => {
+    if (selections++ === 0) return t.actions.select(proposal);
+    throw new AppError("sif.allocation_invalid", { reason: "clock_stale" });
+  };
+  await expect(f.seat.command!(context, { ...t.actions, sleep, select })).rejects.toMatchObject({
+    params: { reason: "clock_stale" },
+  });
+  expect(selections).toBe(2);
+  expect(t.output).toContain("Waiting to confirm the time, so no invoice series is ever repeated.");
+  expect(t.output.join("\n")).not.toContain("out of date");
+});
+
+it("a terminal waits for a target exactly at the module's bound", async () => {
+  const f = configured();
+  internetAgrees();
+  const t = terminal(f, []);
+  const targetMs = Date.now() + 150_000;
+  await expect(
+    f.seat.command!(context, {
+      ...t.actions,
+      select: async () => ({ status: "waiting", targetMs }),
+    }),
+  ).rejects.toBe(STOPPED);
+  expect(t.output).toContain(
+    `Waiting until ${new Date(targetMs).toISOString()}; it carries on by itself, so keep the command running.`,
+  );
+});
+
+it("a terminal refuses a wait further ahead than the module's bound, without waiting", async () => {
+  const f = configured();
+  internetAgrees();
+  const t = terminal(f, []);
+  const sleep = vi.fn(async () => {});
+  await expect(
+    f.seat.command!(context, {
+      ...t.actions,
+      sleep,
+      select: async () => ({ status: "waiting", targetMs: Date.now() + 150_001 }),
+    }),
+  ).rejects.toMatchObject(refusal);
+  expect(sleep).not.toHaveBeenCalled();
+  expect(t.output.join("\n")).not.toContain("Waiting until");
 });
 
 it("refuses a delivered sheet that still carries an installation code", () => {
@@ -762,12 +955,12 @@ it.each(["standard", "rectificative", "unknown"])(
 );
 
 it.each([true, false])(
-  "terminal resume with a second clock %s never selects a replacement hour",
+  "the last check before activation with a second clock %s never selects a replacement hour",
   async (agrees) => {
     const f = configured();
     if (agrees) internetAgrees();
     const t = terminal(f, []);
-    expect(await f.seat.commandResume!(fixture(), t.actions)).toEqual(
+    expect(await f.seat.commandBeforeActivation!(fixture(), t.actions)).toEqual(
       agrees ? { status: "ready", input } : { status: "cancelled" },
     );
     expect(t.prompts).toEqual([]);
@@ -775,12 +968,12 @@ it.each([true, false])(
   },
 );
 
-it("terminal resume refuses an altered retained request before comparing clocks", async () => {
+it("the last check before activation refuses an altered retained request before comparing clocks", async () => {
   const f = configured();
   const t = terminal(f, ["yes"]);
   const saved = fixture();
   saved.request.identity = "0CNPG";
-  await expect(f.seat.commandResume!(saved, t.actions)).rejects.toMatchObject(refusal);
+  await expect(f.seat.commandBeforeActivation!(saved, t.actions)).rejects.toMatchObject(refusal);
   expect(t.output).toEqual([]);
   expect(t.prompts).toEqual([]);
   expect(f.history).toEqual([]);
@@ -850,32 +1043,6 @@ it.each([1.5, 8_640_000_000_060_000, -8_640_000_000_060_000])(
     expect(f.history).toEqual([]);
   },
 );
-
-it("resumes an authenticated retained setup without spending another hour", async () => {
-  startEarly();
-  const f = configured();
-  const read = f.host.readSetupFacts!;
-  let contextKey = "original-owner";
-  f.host.readSetupFacts = async (binding) => ({
-    ...(await read(binding)),
-    contextKey,
-    continuationKey: "retained-attempt",
-  });
-  await f.clock();
-  const saved = await f.select();
-  const before = structuredClone(f.history);
-  contextKey = "reauthenticated-owner";
-  await f.clock();
-  await f.seat.resume!({ ...context, request: saved }, input, "a".repeat(64));
-  expect(f.history).toHaveLength(before.length + 1);
-  expect(f.history[0]).toEqual(before[0]);
-  const operations = FISCAL_OPERATIONS.configure!(f.host);
-  expect(
-    await withOperationAuthority(context.binding, context.administratorId, (authority) =>
-      operations.prepare({ binding: context.binding, authority, input }, async () => "resumed"),
-    ),
-  ).toBe("resumed");
-});
 
 it("binds an exact public recovery statement to its staged node and frozen setup", () => {
   const f = configured();

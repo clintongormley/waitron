@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -58,10 +57,7 @@ it.each([false, true])(
       operationDescription: "Restaurant",
     };
     const claim = owned
-      ? await host.owner.claimFirstSetup(
-          { environment: "production", request: venue },
-          randomBytes(32).toString("base64url"),
-        )
+      ? await host.owner.claimFirstSetup({ environment: "production", request: venue })
       : undefined;
     const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
     const app = new Hono();

@@ -203,7 +203,7 @@ it.each([{ restarting: false }, {}])(
 
 const refused = (params: unknown) =>
   Response.json({ error: { code: "setup.start_again_refused", params } }, { status: 409 });
-it.each(["trading-settings", "setup-finished", "kept-records"] as const)(
+it.each(["setup-finished", "kept-records"] as const)(
   "a Start again refused for %s reaches the page with its cause, from the summary and from the send",
   async (cause) => {
     const fromSummary = await readWipeSummary(

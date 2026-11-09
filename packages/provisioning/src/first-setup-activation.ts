@@ -7,7 +7,6 @@ import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { FirstSetupState, FirstSetupHold } from "./first-setup-state.js";
 import type { VenueResult } from "./venue-apply.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
-import { prepareFirstSetupFinishAudit } from "./first-setup-finish-audit.js";
 import "./errors.js";
 
 export type FirstSetupActivationHost = Pick<
@@ -22,7 +21,8 @@ export interface FirstSetupActivationDeps {
   provision(beforeTransaction: () => Promise<void>): Promise<unknown>;
   check(state: FirstSetupState): Promise<CheckedFirstSetupCommit | null>;
   assertReady(): Promise<void>;
-  confirmCommitted(state: FirstSetupState): Promise<void>;
+  /** Absent, an attempt past `consumption-intent` is refused before it is checked. */
+  confirmCommitted?(state: FirstSetupState): Promise<void>;
   publish(state: FirstSetupState, checked: CheckedFirstSetupCommit): Promise<VenueResult>;
 }
 function conflict(): never {
@@ -144,6 +144,7 @@ export async function activateFirstSetup(
     }
     await advance({ kind: "committed", result: checked });
   } else {
+    if (deps.confirmCommitted === undefined) conflict();
     try {
       checked = await deps.check(state);
     } catch {
@@ -184,7 +185,6 @@ export async function publishCheckedFirstSetup(
   owner: FirstSetupOwnerAttempt,
   digest: string,
   hold: FirstSetupHold,
-  beforeComplete?: () => Promise<unknown>,
 ): Promise<VenueResult> {
   if (
     !["committed", "publication"].includes(state.status) ||
@@ -213,47 +213,6 @@ export async function publishCheckedFirstSetup(
   await deps.persistTrading(result, state);
   await deps.clearConfiguration?.();
   if (state.status === "committed") await advance({ kind: "publication" });
-  // Password recovery remains available until the publication audit is durable.
-  await beforeComplete?.();
   await advance({ kind: "complete" });
   return result;
-}
-
-export interface FirstSetupFinishDeps {
-  check(state: FirstSetupState): Promise<CheckedFirstSetupCommit | null>;
-  publish(
-    state: FirstSetupState,
-    checked: CheckedFirstSetupCommit,
-    beforeComplete: () => Promise<unknown>,
-  ): Promise<VenueResult>;
-}
-export async function finishFirstSetup(
-  host: FirstSetupActivationHost & Pick<ReturnType<typeof createFirstSetupRuntime>, "resolution">,
-  deps: FirstSetupFinishDeps,
-  owner: FirstSetupOwnerAttempt,
-  publicationDigest: string | ((state: FirstSetupState) => string | Promise<string>),
-  hold: FirstSetupHold,
-): Promise<VenueResult> {
-  let state = await host.owner.authorize(owner);
-  const ownership = [...state.history]
-    .reverse()
-    .find((event) => ["claim", "resume", "recover"].includes(event.kind));
-  if (ownership?.kind !== "recover" || ownership.ownerGeneration !== state.ownerGeneration)
-    throw new AppError("setup.owner_required", {});
-  if (!["activation-started", "committed", "publication"].includes(state.status)) conflict();
-  host.assertSelection(state);
-  const digest =
-    typeof publicationDigest === "string" ? publicationDigest : await publicationDigest(state);
-  if (!isDeepStrictEqual(state.inputs.$publication, { digest })) conflict();
-  const checked = await deps.check(state);
-  if (checked === null) conflict();
-  const applyAudit = await prepareFirstSetupFinishAudit(host, state, checked);
-  if (state.status === "activation-started")
-    state = await host.store.update(
-      state.frozen.attemptId,
-      state.revision,
-      { kind: "committed", result: checked },
-      hold,
-    );
-  return deps.publish(state, checked, applyAudit);
 }

@@ -9,6 +9,7 @@ import {
 import { AppError } from "@waitron/shared";
 import { encodeMinuteIdentity, isMinuteIdentity } from "./hour-identity.js";
 import { hostedHourPreparation, hourSetupInput } from "./hour-preparation.js";
+import { WAIT_BOUND_MS } from "./hour-selection.js";
 import "./errors.js";
 import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
 import {
@@ -17,7 +18,7 @@ import {
   type RecoveryDocument,
 } from "./recovery-document.js";
 import { WAITRON_ID_SISTEMA } from "./software.js";
-import { startAgainHoldings } from "./start-again-holdings.js";
+import { startAgainHoldings, startAgainKept } from "./start-again-holdings.js";
 
 function refuse(reason = "event_mismatch"): never {
   throw new AppError("sif.allocation_invalid", { reason });
@@ -81,6 +82,14 @@ export function readHourSetupInput(context: InitialSetupContext, input: unknown)
   return structuredClone(expected);
 }
 
+function clockStale(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.code === "sif.allocation_invalid" &&
+    (error.params as { reason?: unknown }).reason === "clock_stale"
+  );
+}
+
 async function reviewCommandClock(
   actions: InitialSetupCommandActions,
 ): Promise<{ status: "ready"; comparisonId: string } | { status: "cancelled" }> {
@@ -140,43 +149,76 @@ export function createHourInitialSetup(
       );
       return { bytes, statement: recoveryDocumentPublic(recovery) };
     },
-    async commandResume(context, actions) {
+    async commandBeforeActivation(context, actions) {
       readHourSetupInput(context, (context.request as { input: unknown })?.input);
       const reviewed = await reviewCommandClock(actions);
       if (reviewed.status !== "ready") return reviewed;
       return { status: "ready", input: (context.request as { input: unknown }).input };
     },
-    async resume(context, input, documentBinding) {
-      const checked = readHourSetupInput(context, input);
-      await withOperationAuthority(context.binding, context.administratorId, (authority) =>
-        hostedHourPreparation(host).resume(
-          { binding: context.binding, authority, input: checked },
-          documentBinding,
-        ),
-      );
-    },
     async command(context, actions) {
       if (record(context.request) && context.request.status === "selected")
         return { status: "ready", input: readHourSetupInput(context, context.request.input) };
-      const reviewed = await reviewCommandClock(actions);
-      if (reviewed.status !== "ready") return reviewed;
-      const waiting = (targetMs: unknown) => {
-        if (!Number.isSafeInteger(targetMs) || Number.isNaN(new Date(targetMs as number).getTime()))
-          return refuse();
-        actions.output("Waiting to confirm the time, so no invoice series is ever repeated.");
-        actions.output(
-          `Continues at ${new Date(targetMs as number).toISOString()}; run the command again within a minute after that time (later, it waits again).`,
-        );
-        return { status: "waiting" as const };
-      };
-      const preview = await actions.prepare({ action: "selection" });
-      if (!record(preview)) return refuse();
-      if (preview.status === "waiting") return waiting(preview.targetMs);
-      if (!["selected", "preview"].includes(preview.status as string)) return refuse();
-      const selected = await actions.select({ comparisonId: reviewed.comparisonId });
-      if (record(selected) && selected.status === "waiting") return waiting(selected.targetMs);
-      if (!record(selected) || selected.status !== "selected") return refuse();
-      return { status: "ready", input: selected.input };
+      for (let waited = false; ; waited = true) {
+        // After a wait the earlier clock comparison is too old to select with, so take a new one.
+        const reviewed = await reviewCommandClock(actions);
+        if (reviewed.status !== "ready") return reviewed;
+        const target = (targetMs: unknown) => {
+          if (
+            !Number.isSafeInteger(targetMs) ||
+            Number.isNaN(new Date(targetMs as number).getTime()) ||
+            (targetMs as number) - Date.now() > WAIT_BOUND_MS
+          )
+            return refuse();
+          if (waited) {
+            actions.output(
+              "The time could not be confirmed after the wait (it ran over, or the clock moved back), so no invoice series was made.",
+            );
+            return refuse("clock_unconfirmed");
+          }
+          actions.output("Waiting to confirm the time, so no invoice series is ever repeated.");
+          actions.output(
+            `Waiting until ${new Date(targetMs as number).toISOString()}; it carries on by itself, so keep the command running.`,
+          );
+          return targetMs as number;
+        };
+        const preview = await actions.prepare({ action: "selection" });
+        if (!record(preview)) return refuse();
+        let targetMs: number | undefined;
+        if (preview.status === "waiting") targetMs = target(preview.targetMs);
+        else {
+          if (!["selected", "preview"].includes(preview.status as string)) return refuse();
+          let selected: unknown;
+          try {
+            selected = await actions.select({ comparisonId: reviewed.comparisonId });
+          } catch (error) {
+            // Only the first selection asks for the password, so only its reading can go stale
+            // while a person types: take one fresh reading and select once more with it.
+            if (waited || !clockStale(error)) throw error;
+            const fresh = await reviewCommandClock(actions);
+            if (fresh.status !== "ready") return fresh;
+            try {
+              selected = await actions.select({ comparisonId: fresh.comparisonId });
+            } catch (retryError) {
+              if (clockStale(retryError)) {
+                actions.output(
+                  "The time reading went out of date before a series could be chosen, even after a fresh one was taken (a reading is used for 30 seconds), so no invoice series was made.",
+                );
+                actions.output(
+                  "Choose Start again on the box's setup page, then run the command again.",
+                );
+              }
+              throw retryError;
+            }
+          }
+          if (record(selected) && selected.status === "waiting")
+            targetMs = target(selected.targetMs);
+          else if (!record(selected) || selected.status !== "selected") return refuse();
+          else return { status: "ready", input: selected.input };
+        }
+        // The wait stays usable for a minute past its target, so a second's margin absorbs any
+        // difference between the timer and the wall clock.
+        await actions.sleep(Math.max(0, targetMs - Date.now()) + 1000);
+      }
     },
     async preparation(context, proposal, client) {
       contextBinding(context);
@@ -298,5 +340,6 @@ export function createHourInitialSetup(
     },
     assignmentPositions: undefined,
     startAgainHoldings,
+    startAgainKept,
   };
 }

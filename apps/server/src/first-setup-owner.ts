@@ -4,5 +4,4 @@ export type {
   FirstSetupOwnerAttempt,
   ReconfirmationPurpose,
   PublicFirstSetupState,
-  RecoverFirstSetupOwnerRequest,
 } from "@waitron/provisioning";

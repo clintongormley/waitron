@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile, mkdir, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -214,7 +213,6 @@ it.each([
       };
       if (launch === "direct" && !newTaxpayer && change === "none") {
         const absent = await post("/setup-api/first-setup/claim", {
-          clientClaimNonce: randomBytes(32).toString("base64url"),
           venue: request,
           configurationImport: true,
         });
@@ -257,7 +255,6 @@ it.each([
           [{ ...request, taxId: "B12345674" }, false, "configurationImport"],
         ] as const) {
           const refused = await post("/setup-api/first-setup/claim", {
-            clientClaimNonce: randomBytes(32).toString("base64url"),
             venue: candidate,
             configurationImport: true,
             newTaxpayer,
@@ -272,7 +269,6 @@ it.each([
         }
       }
       const claim = await post("/setup-api/first-setup/claim", {
-        clientClaimNonce: randomBytes(32).toString("base64url"),
         venue: { ...venue, ...(staffLanguage === undefined ? {} : { staffLanguage }) },
         configurationImport: true,
         newTaxpayer,
@@ -626,7 +622,6 @@ it("accepts real retained readiness before the wizard collects email settings", 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        clientClaimNonce: randomBytes(32).toString("base64url"),
         venue: request,
       }),
     } as RequestInit);

@@ -15,7 +15,9 @@ import {
 } from "../test/start-again-held-fixture.js";
 import { snapshot, noConfirmations } from "../test/start-again-deleted.js";
 import { heldSetup } from "../test/held-setup-database.js";
+import { DASHBOARD_CERTIFICATE } from "../test/certificate-rows.js";
 import { chmod, readFile, writeFile } from "node:fs/promises";
+import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { manifestSets } from "@waitron/migrations";
@@ -68,14 +70,15 @@ it.each([
   },
 );
 
-it("a damaged held database with no invoice and its own pending -wal: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
+it("a damaged held database with no invoice and its own pending -wal is refused setup.not_ready, and nothing changes", async () => {
   const f = await heldSetup({ pendingWal: true });
   const wal = await readFile(`${venueDb(f)}-wal`);
   damagePages(venueDb(f), "department_days");
   await writeFile(`${venueDb(f)}-wal`, wal);
-  const shown = await unreadableSummary(f);
-  expect(shown).toEqual({ reached: "fiscal-finished", databaseUnreadable: true });
-  await expectUnreadableDeleted(f, shown);
+  await expectHeldRefused(f, {
+    code: "setup.not_ready",
+    reason: "database unreadable: damaged beside a -wal: errcode 11",
+  });
 });
 
 it("an invoice record with the envios table missing refuses kept-records even when every append-only table is listed as deletable, and nothing changes", async () => {
@@ -90,6 +93,22 @@ it("an invoice record with the envios table missing refuses kept-records even wh
     reason: expect.stringMatching(/^rows=\d+ kept=0 records=1 accepted=0$/),
   });
 });
+
+// The invoice count failing must not lose the kept count, or Start again deletes the row.
+it.each(["envios", "registros_facturacion"])(
+  "a dashboard certificate row with the %s table missing refuses kept-records, and deletes nothing",
+  async (table) => {
+    const f = await heldSetup();
+    const db = new DatabaseSync(venueDb(f));
+    try {
+      db.exec(DASHBOARD_CERTIFICATE);
+    } finally {
+      db.close();
+    }
+    dropTables(f, [table]);
+    await expectHeldRefused(f, keptRecords);
+  },
+);
 
 it("with a readable held venue.db, a damaged node.db refuses the summary and Start again setup.not_ready, and nothing changes", async () => {
   const f = await heldSetup();
@@ -109,11 +128,11 @@ it.each([
 ] as const)(
   "a damaged held database whose private copy fails with %s is refused as the failure says, and nothing changes",
   async (code, refusal) => {
-    const f = await heldSetup({ pendingWal: true });
-    const wal = await readFile(`${venueDb(f)}-wal`);
+    const f = await heldSetup();
+    checkpointed(venueDb(f));
     damagePages(venueDb(f), "department_days");
-    // The damage is written with the -wal checkpointed; putting it back keeps the copy path.
-    await writeFile(`${venueDb(f)}-wal`, wal);
+    // Only a -journal beside the database is read through a private copy.
+    foreignHotJournal(`${venueDb(f)}-journal`, "rolls-back");
     copyFails.code = code;
     await expectHeldRefused(f, refusal);
     expect(copyFails.calls).toBeGreaterThan(0);
@@ -163,14 +182,19 @@ it.each([
   },
 );
 
-it.each([
-  ["saved trading settings", { tradingSettings: true }, "trading-settings"],
-  ["a finished setup", { status: "complete" }, "setup-finished"],
-] as const)(
-  "%s beside a damaged database refuse %s, and nothing changes",
-  async (_label, options, cause) => {
-    const f = await heldSetup({ ...options });
-    damagePages(venueDb(f), "department_days");
-    await expectHeldRefused(f, { code: "setup.start_again_refused", params: { cause } });
-  },
-);
+it("saved trading settings beside a damaged database: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
+  const f = await heldSetup({ tradingSettings: true });
+  damagePages(venueDb(f), "department_days");
+  const shown = await unreadableSummary(f);
+  expect(shown).toEqual({ reached: "fiscal-finished", databaseUnreadable: true });
+  await expectUnreadableDeleted(f, shown);
+});
+
+it("a finished setup beside a damaged database refuses setup-finished, and nothing changes", async () => {
+  const f = await heldSetup({ status: "complete" });
+  damagePages(venueDb(f), "department_days");
+  await expectHeldRefused(f, {
+    code: "setup.start_again_refused",
+    params: { cause: "setup-finished" },
+  });
+});

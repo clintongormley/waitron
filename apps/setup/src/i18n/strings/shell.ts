@@ -1,10 +1,20 @@
 // setup-app.ts's own text: the page title and every refusal and outcome the shell hands a screen.
 
 export const shellEn = {
-  "shell.first_setup.owner_required": "Resume setup in its owner tab.",
+  "shell.first_setup.owner_required": "The box no longer lets this page carry this setup on.",
   "shell.first_setup.attempt_conflict": "Another setup attempt owns this venue.",
   "shell.first_setup.attempt_uncertain":
-    "This assignment may have been used. Resume the saved attempt; do not assign it again.",
+    "The setup on this box may already have used its invoice series, so the box does not repeat or replace it.",
+  "shell.setup_not_accepted":
+    "This server did not accept this request from this page, so nothing changed. Reload starts setup again from its first screen; what you typed on this page is not kept.",
+  "shell.setup_conflict":
+    "Another setup on this server is in the way, so the server did not do this. Reload shows where setup on this server stands and what can be done next.",
+  "shell.provisioning.first_setup_held":
+    "This server holds an unfinished first setup, so it sets nothing else up while that setup is there. Reload shows that setup and what can be done with it.",
+  "shell.restore.first_setup_held":
+    "This server holds an unfinished first setup, so it restores no copy while that setup is there. Reload shows that setup and what can be done with it.",
+  "shell.reset.first_setup_held":
+    "This server holds an unfinished first setup, so it resets nothing while that setup is there. Reload shows that setup and what can be done with it.",
   "shell.first_setup.attempt_invalid": "The saved setup cannot be read. Contact support.",
   "shell.first_setup.start_again_incomplete": "Deletion interrupted. Reload the page to continue.",
   "shell.first_setup.workspace_unsupported":
@@ -29,7 +39,7 @@ export const shellEn = {
 
   "shell.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
   "shell.operation_conflict":
-    "This server has saved setup work for a different request. Resume the original setup or contact support.",
+    "This server holds saved setup work that does not match this request, so it did not do this one.",
   "shell.already_stamped":
     "A previous setup attempt left this server partly set up, for a different environment. Contact support to reset this server, then start setup again.",
   "shell.already_provisioning": "Setup is already in progress on this server.",
@@ -167,11 +177,22 @@ export const shellEn = {
 } as const;
 
 export const shellEs: Record<keyof typeof shellEn, string> = {
-  "shell.first_setup.owner_required": "Reanuda la configuración en la pestaña de su responsable.",
+  "shell.first_setup.owner_required":
+    "El equipo ya no deja que esta página continúe esta configuración.",
   "shell.first_setup.attempt_conflict":
     "Otro intento de configuración tiene el control de este local.",
   "shell.first_setup.attempt_uncertain":
-    "Esta asignación puede estar usada. Reanuda el intento guardado; no la asignes de nuevo.",
+    "Puede que la configuración de este equipo ya haya usado su serie de facturas, así que el equipo no la repite ni la sustituye.",
+  "shell.setup_not_accepted":
+    "Este servidor no ha aceptado esta petición desde esta página, así que no ha cambiado nada. Recargar empieza la configuración de nuevo desde su primera pantalla; lo que has escrito en esta página no se guarda.",
+  "shell.setup_conflict":
+    "Otra configuración de este servidor lo impide, así que el servidor no lo ha hecho. Recargar muestra en qué punto está la configuración de este servidor y qué se puede hacer después.",
+  "shell.provisioning.first_setup_held":
+    "Este servidor tiene una primera configuración sin terminar, así que no configura nada más mientras esa configuración siga ahí. Recargar muestra esa configuración y lo que se puede hacer con ella.",
+  "shell.restore.first_setup_held":
+    "Este servidor tiene una primera configuración sin terminar, así que no restaura ninguna copia mientras esa configuración siga ahí. Recargar muestra esa configuración y lo que se puede hacer con ella.",
+  "shell.reset.first_setup_held":
+    "Este servidor tiene una primera configuración sin terminar, así que no restablece nada mientras esa configuración siga ahí. Recargar muestra esa configuración y lo que se puede hacer con ella.",
   "shell.first_setup.attempt_invalid":
     "No se puede leer la configuración guardada. Contacta con soporte.",
   "shell.first_setup.start_again_incomplete":
@@ -199,7 +220,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
 
   "shell.not_ready": "El servidor aún no está listo. Espera un momento e inténtalo de nuevo.",
   "shell.operation_conflict":
-    "Este servidor tiene guardada una configuración de otra solicitud. Continúa la configuración original o contacta con soporte.",
+    "Este servidor tiene guardado un trabajo de configuración que no coincide con esta solicitud, así que no ha hecho esta.",
   "shell.already_stamped":
     "Un intento anterior de configuración dejó este servidor configurado a medias, para otro entorno. Contacta con soporte para restablecer este servidor y vuelve a empezar la configuración.",
   "shell.already_provisioning": "La configuración ya está en curso en este servidor.",

@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -67,10 +66,7 @@ async function fixture(environment: "production" | "preproduction") {
     environment: {},
     modules: ALL_MODULES,
   });
-  const claim = await host.owner.claimFirstSetup(
-    { environment, request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await host.owner.claimFirstSetup({ environment, request });
   const ring = loadKeyRing({
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 17).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",

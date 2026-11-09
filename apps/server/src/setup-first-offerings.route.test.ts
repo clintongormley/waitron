@@ -67,13 +67,9 @@ it.each([{}, { fiscalTerritory: [] }, { fiscalTerritory: "ES-common", modules: [
 );
 
 it("exposes the durable consumption distinction to the owner without publishing it to strangers", async () => {
-  const { randomBytes } = await import("node:crypto");
   const { request } = await import("../test/first-fiscal.js");
   const { host } = await fixture();
-  const claimed = await host.owner.claimFirstSetup(
-    { environment: "production", request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claimed = await host.owner.claimFirstSetup({ environment: "production", request });
   expect(claimed.state.consumptionIntent).toBe(false);
   await host.store.update(claimed.state.attemptId, 1, { kind: "consumption-intent" });
   const status = await host.owner.status({

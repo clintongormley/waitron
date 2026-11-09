@@ -12,6 +12,7 @@ import { FISCAL_INITIAL_SETUP } from "./hour-configuration.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { FISCAL_START_AGAIN_DELETABLE } from "./start-again-holdings.js";
+import { recordInstall } from "./certificate-record.js";
 
 const configured = FISCAL_INITIAL_SETUP.configure!({} as ModuleOperationHost);
 const contributions = [
@@ -70,6 +71,62 @@ describe("startAgainHoldings", () => {
   });
 });
 
+const install = {
+  nodeId: "00000000-0000-4000-8000-0000000000a1",
+  installedAt: new Date("2026-10-18T10:00:00.000Z"),
+  kind: "sello",
+  fingerprint: "AA:BB",
+  validFrom: new Date("2026-01-01T00:00:00Z"),
+  validUntil: new Date("2030-01-01T00:00:00Z"),
+} as const;
+
+describe("startAgainKept", () => {
+  const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
+
+  it.each(contributions)(
+    "counts a certificate row the dashboard installed as kept, and one setup installed as nothing, in %s",
+    async (_, seat) => {
+      expect(await seat.startAgainKept!(suite.db)).toBe(0);
+      await withTransaction(suite.db, (tx) =>
+        recordInstall(tx, { ...install, source: "setup", personId: null }),
+      );
+      expect(await seat.startAgainKept!(suite.db)).toBe(0);
+      expect(await seat.startAgainHoldings!(suite.db)).toEqual({ records: 0, accepted: 0 });
+      await withTransaction(suite.db, (tx) =>
+        recordInstall(tx, {
+          ...install,
+          installedAt: new Date("2026-10-19T10:00:00.000Z"),
+          source: "dashboard",
+          personId: "00000000-0000-4000-8000-0000000000b2",
+          checkedAt: new Date("2026-10-19T10:00:00.000Z"),
+          checkedEndpoint: "https://prewww1.aeat.es",
+        }),
+      );
+      expect(await seat.startAgainKept!(suite.db)).toBe(1);
+      expect(await seat.startAgainHoldings!(suite.db)).toEqual({ records: 0, accepted: 0 });
+    },
+  );
+});
+
+describe("startAgainKept with the certificate table missing", () => {
+  const suite = useVenueDb({
+    migrations: TEST_MIGRATIONS,
+    resetPerTest: false,
+    setup: async (db) => {
+      await db.execute(sql`drop table fiscal_certificate_installs`);
+    },
+  });
+
+  it.each(contributions)(
+    "refuses rather than counting nothing when the certificate table is missing, in %s",
+    async (_, seat) => {
+      await expect(seat.startAgainKept!(suite.db)).rejects.toThrow(
+        /no such table: fiscal_certificate_installs/,
+      );
+    },
+  );
+});
+
 describe("startAgainHoldings on a database missing the fiscal tables", () => {
   const suite = useVenueDb({
     migrations: TEST_MIGRATIONS.filter(
@@ -121,6 +178,9 @@ describe("startAgainHoldings with no invoice record and the envios table missing
   });
 });
 
-it("lists exactly the append-only table the fiscal activation writes as deletable", () => {
-  expect(FISCAL_START_AGAIN_DELETABLE).toEqual(["fiscal_allocations"]);
+it("lists the append-only tables the fiscal activation writes as deletable", () => {
+  expect(FISCAL_START_AGAIN_DELETABLE).toEqual([
+    "fiscal_allocations",
+    "fiscal_certificate_installs",
+  ]);
 });

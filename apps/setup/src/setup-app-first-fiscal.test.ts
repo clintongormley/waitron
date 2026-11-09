@@ -1,10 +1,12 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { applyTokens, leaveCoordinatorFor } from "@waitron/ui";
 import { SetupApp } from "./setup-app.js";
+import { setLocale } from "./i18n/t.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { venue, initial, wizardApi } from "../test/first-setup-browser.js";
 const mounted: HTMLElement[] = [];
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   mounted.splice(0).forEach((el) => el.remove());
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
@@ -119,13 +121,220 @@ it("keeps development Live on the disposable setup path", async () => {
     requests.filter((r) => r.path.endsWith("/claim") || r.path.endsWith("/offerings")),
   ).toEqual([]);
 });
-it("reloads into owner recovery without automatically claiming, activating or reusing the secret draft", async () => {
-  const { app, requests } = await mount({ claimed: true });
+type Intercept = NonNullable<Parameters<typeof wizardApi>[0]>["intercept"];
+/** Claims in one tab, closes it, and opens a second tab holding the first one's saved key. */
+async function reloadHoldingKey(intercept?: Intercept) {
+  const first = await mount();
+  await liveVenue(first.app);
+  await screen(first.app, "cert");
+  first.app.remove();
+  await expect
+    .poll(async () =>
+      (await navigator.locks.query()).held?.some(
+        (lock) => lock.name === `waitron:first-setup:attempt:${initial.attemptId}`,
+      ),
+    )
+    .toBe(false);
+  return mount({ claimed: true, intercept });
+}
+const ownerStatus = (state: Record<string, unknown>): Intercept =>
+  function (path, _body, headers) {
+    if (path.endsWith("/first-setup/status") && headers.has("X-Waitron-Setup-Owner"))
+      return Response.json({ claimed: true, state: { ...initial, ...state } });
+  };
+const firstSetupPaths = (requests: { path: string }[]) =>
+  requests.map((r) => r.path).filter((path) => path.startsWith("/setup-api/first-setup/"));
+const enabled = (owner: HTMLElement, name: string) =>
+  (owner.querySelector(`[data-test=${name}]`) as (HTMLElement & { disabled: boolean }) | null)
+    ?.disabled === false;
+
+it.each(["claimed", "consumption-intent"])(
+  "a reload with a saved key carries on to the next step, sends no password, and claims and activates nothing again (%s)",
+  async (status) => {
+    const { app, requests } = await reloadHoldingKey(ownerStatus({ status }));
+    await screen(app, "cert");
+    expect(firstSetupPaths(requests)).toEqual([
+      "/setup-api/first-setup/status",
+      "/setup-api/first-setup/status",
+      "/setup-api/first-setup/offerings",
+    ]);
+    expect(requests.filter((r) => r.headers.has("X-Waitron-Setup-Owner"))).toHaveLength(1);
+    expect(JSON.stringify(requests.map((r) => r.body))).not.toContain(venue.admin.password);
+    expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain(venue.admin.password);
+    emit(app, "setup-goto", { screen: "review" });
+    const allocation = await screen(app, "first-setup");
+    expect(allocation.shadowRoot!.querySelector("vf-first-fiscal-screen")).not.toBeNull();
+  },
+);
+it.each(["claimed", "consumption-intent"])(
+  "a reloaded tab whose next-step read fails says Reconnect goes on, and Reconnect carries on (%s)",
+  async (status) => {
+    let offeringReads = 0;
+    const { app, requests } = await reloadHoldingKey(function (path, body, headers) {
+      if (path.endsWith("/offerings") && ++offeringReads === 1)
+        return new Response(null, { status: 503 });
+      return ownerStatus({ status })!(path, body, headers);
+    });
+    const owner = await screen(app, "first-owner");
+    await expect.poll(() => enabled(owner, "reconnect-first")).toBe(true);
+    const words = owner.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error;
+    expect(words).toBe(
+      "This page could not read the next step of this setup. Reconnect tries again and goes on with this setup.",
+    );
+    owner.querySelector<HTMLElement>("[data-test=reconnect-first]")!.click();
+    await screen(app, "cert");
+    expect(offeringReads).toBe(2);
+    expect(
+      requests.filter((r) => r.path.endsWith("/claim") || r.path.endsWith("/provision")),
+    ).toEqual([]);
+  },
+);
+it("a reloaded tab sent back from the certificate screen says Reconnect goes on, and Reconnect carries on", async () => {
+  const { app, requests } = await reloadHoldingKey(ownerStatus({ status: "claimed" }));
+  await screen(app, "cert");
+  emit(app, "setup-goto", { screen: "venue" });
   const owner = await screen(app, "first-owner");
-  expect(owner.textContent).toContain("Continue with your setup password");
-  expect(
-    requests.filter((r) => r.path.endsWith("/claim") || r.path.endsWith("/provision")),
-  ).toEqual([]);
+  const words = owner.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error;
+  expect(words).toBe(
+    "Setup details are frozen. Reconnect goes on with them; Abandon this attempt to change them.",
+  );
+  expect(enabled(owner, "abandon-attempt")).toBe(true);
+  owner.querySelector<HTMLElement>("[data-test=reconnect-first]")!.click();
+  await screen(app, "cert");
+  expect(requests.filter((r) => r.path.endsWith("/claim"))).toEqual([]);
+});
+it("the words for a reloaded tab whose next-step read fails, and for frozen details, in Spanish", async () => {
+  try {
+    let offeringReads = 0;
+    const { app } = await reloadHoldingKey(function (path, body, headers) {
+      if (path.endsWith("/offerings") && ++offeringReads === 1)
+        return new Response(null, { status: 503 });
+      return ownerStatus({ status: "claimed" })!(path, body, headers);
+    });
+    setLocale("es-ES");
+    const owner = await screen(app, "first-owner");
+    await expect.poll(() => enabled(owner, "reconnect-first")).toBe(true);
+    await app.updateComplete;
+    expect(owner.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error).toBe(
+      "Esta página no pudo leer el siguiente paso de esta configuración. Reconectar lo vuelve a intentar y sigue con esta configuración.",
+    );
+    owner.querySelector<HTMLElement>("[data-test=reconnect-first]")!.click();
+    await screen(app, "cert");
+    emit(app, "setup-goto", { screen: "venue" });
+    const frozen = await screen(app, "first-owner");
+    expect(frozen.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error).toBe(
+      "Los datos están fijados. Reconectar sigue con ellos; abandona este intento para cambiarlos.",
+    );
+  } finally {
+    setLocale("en-GB");
+  }
+});
+it("a tab holding its key that reaches the box through the connection screen's Continue carries on", async () => {
+  let keylessReads = 0;
+  const { app, requests } = await reloadHoldingKey(function (path, _body, headers) {
+    if (path.endsWith("/discovery")) return Response.json({ caDownloadAvailable: true });
+    if (path.endsWith("/first-setup/status") && !headers.has("X-Waitron-Setup-Owner"))
+      return Response.json({ claimed: ++keylessReads > 1 });
+  });
+  const connection = await screen(app, "connection");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  connection.dispatchEvent(
+    new CustomEvent("connection-continue", { bubbles: true, composed: true }),
+  );
+  await screen(app, "cert");
+  expect(requests.filter((r) => r.path.endsWith("/offerings"))).toHaveLength(1);
+  expect(requests.filter((r) => r.path.endsWith("/claim"))).toEqual([]);
+});
+it.each(["claimed", "consumption-intent"])(
+  "deliberately: a reload with a saved key at %s carries on when the setup database was deleted under the running server; the next server start shows the repair page",
+  async (status) => {
+    const { app, requests } = await reloadHoldingKey(function (path, body, headers) {
+      if (path.endsWith("/first-setup/resolution"))
+        return Response.json({
+          version: 2,
+          inspectionId: "a".repeat(64),
+          pair: "valid",
+          database: "missing",
+          revision: 1,
+          ownerGeneration: 1,
+          emptyDatabase: false,
+          artifacts: [],
+        });
+      return ownerStatus({ status })!(path, body, headers);
+    });
+    await screen(app, "cert");
+    expect(requests.filter((r) => r.path.endsWith("/first-setup/resolution"))).toEqual([]);
+  },
+);
+it("a reload while the box is on its repair page reads the inspection and offers Start again", async () => {
+  const { app, requests } = await reloadHoldingKey(function (path, _body, headers) {
+    if (path.endsWith("/first-setup/status") && headers.has("X-Waitron-Setup-Owner"))
+      return Response.json({ claimed: true, resolution: true });
+  });
+  const owner = await screen(app, "first-owner");
+  await expect.poll(() => enabled(owner, "start-again")).toBe(true);
+  expect(requests.filter((r) => r.path.endsWith("/first-setup/resolution"))).toHaveLength(1);
+  expect(requests.filter((r) => r.path.endsWith("/claim"))).toEqual([]);
+});
+it.each(["activation-started", "committed", "publication"])(
+  "a reload after a failed activation draws Start again and Recover from backup, and no Finish setup (%s)",
+  async (status) => {
+    const { app, requests } = await reloadHoldingKey(ownerStatus({ status }));
+    const owner = await screen(app, "first-owner");
+    await expect.poll(() => enabled(owner, "start-again")).toBe(true);
+    expect(enabled(owner, "recover-backup")).toBe(true);
+    expect(owner.textContent).not.toContain("Finish setup");
+    expect(
+      requests.filter((r) => r.path.endsWith("/claim") || r.path.endsWith("/provision")),
+    ).toEqual([]);
+  },
+);
+it.each([
+  ["abandoned", false],
+  ["abandoned", true],
+  ["uncertain", false],
+  ["uncertain", true],
+] as const)(
+  "a reload of an abandoned or uncertain attempt says the box no longer lets this page carry it on and offers Start again (%s, consumed %s)",
+  async (status, consumptionIntent) => {
+    const { app } = await reloadHoldingKey(ownerStatus({ status, consumptionIntent }));
+    const owner = await screen(app, "first-owner");
+    await expect.poll(() => enabled(owner, "start-again")).toBe(true);
+    expect(owner.textContent).toContain("The box no longer lets this page carry this setup on.");
+    expect(owner.textContent).not.toContain("resolve the incident");
+  },
+);
+it.each(["en-GB", "es-ES"])(
+  "beside Start again, the words that the box no longer lets this page carry the setup on name no button (%s)",
+  async (locale) => {
+    try {
+      const { app } = await reloadHoldingKey(ownerStatus({ status: "abandoned" }));
+      setLocale(locale);
+      const owner = await screen(app, "first-owner");
+      await expect.poll(() => enabled(owner, "start-again")).toBe(true);
+      const words = owner.querySelector("[data-test=owner-required]")!.textContent!;
+      expect(words).toBe(
+        locale === "es-ES"
+          ? "El equipo ya no deja que esta página continúe esta configuración."
+          : "The box no longer lets this page carry this setup on.",
+      );
+    } finally {
+      setLocale("en-GB");
+    }
+  },
+);
+it("a reload whose saved key the box refuses says the box no longer lets this page carry the setup on and offers Start again", async () => {
+  const { app, requests } = await reloadHoldingKey(function (path, _body, headers) {
+    if (path.endsWith("/first-setup/status") && headers.has("X-Waitron-Setup-Owner"))
+      return Response.json(
+        { error: { code: "setup.owner_required", params: {} } },
+        { status: 403 },
+      );
+  });
+  const owner = await screen(app, "first-owner");
+  await expect.poll(() => enabled(owner, "start-again")).toBe(true);
+  expect(owner.textContent).toContain("The box no longer lets this page carry this setup on.");
+  expect(requests.filter((r) => r.path.endsWith("/claim"))).toEqual([]);
 });
 
 it("ignores a late offering answer after navigation, before sending any claim", async () => {
@@ -356,76 +565,9 @@ it("reads back a completed activation after a lost response and offers no second
   owner.querySelector<HTMLElement>("[data-test=reconnect-first]")!.click();
   await expect.poll(() => owner.textContent).toContain("Setup is complete.");
   expect(owner.textContent).not.toContain("resolve the incident");
-  expect(owner.querySelector("[data-test=resume]")).toBeNull();
   expect(requests.filter((r) => r.path.endsWith("/provision"))).toHaveLength(1);
 });
 
-it("resumes the same frozen identity with fresh administrator proof after a reload", async () => {
-  const first = await mount();
-  await liveVenue(first.app);
-  await screen(first.app, "cert");
-  first.app.remove();
-  await expect
-    .poll(async () =>
-      (await navigator.locks.query()).held?.some(
-        (lock) => lock.name === `waitron:first-setup:attempt:${initial.attemptId}`,
-      ),
-    )
-    .toBe(false);
-  const resumed = { ...initial, revision: 2, ownerGeneration: 2 };
-  const second = await mount({
-    claimed: true,
-    intercept(path) {
-      if (path.endsWith("/resume"))
-        return Response.json({ state: resumed, capability: "B".repeat(43), ownerGeneration: 2 });
-    },
-  });
-  const owner = await screen(second.app, "first-owner");
-  owner
-    .querySelector("[data-test=resume-password]")!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: venue.admin.password } }));
-  await second.app.updateComplete;
-  owner.querySelector<HTMLElement>("[data-test=resume]")!.click();
-  await screen(second.app, "cert");
-  expect(second.requests.filter((r) => r.path.endsWith("/claim"))).toEqual([]);
-  expect(JSON.parse(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)!).owner).toMatchObject({
-    attemptId: initial.attemptId,
-    revision: 2,
-    ownerGeneration: 2,
-    capability: "B".repeat(43),
-  });
-  expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain(venue.admin.password);
-});
-it("shows an owner-proof refusal and keeps the resume action usable for a corrected password", async () => {
-  const { app } = await mount({
-    claimed: true,
-    intercept(path) {
-      if (path.endsWith("/resolution/recover"))
-        return Response.json(
-          { error: { code: "setup.owner_required", params: {} } },
-          { status: 403 },
-        );
-    },
-  });
-  const owner = await screen(app, "first-owner");
-  owner
-    .querySelector("[data-test=resume-password]")!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "wrong password" } }));
-  await app.updateComplete;
-  owner.querySelector<HTMLElement>("[data-test=resume]")!.click();
-  await expect
-    .poll(
-      () =>
-        (owner.querySelector("wt-form-actions") as (HTMLElement & { error: string }) | null)?.error,
-    )
-    .toContain("Resume setup in its owner tab.");
-  expect(owner.querySelector("[data-test=resume-password]")!.hasAttribute("invalid")).toBe(false);
-  owner
-    .querySelector("[data-test=resume-password]")!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "corrected password" } }));
-  await app.updateComplete;
-  expect(owner.querySelector("[data-test=resume]")!.hasAttribute("disabled")).toBe(false);
-});
 it("abandons an unconsumed attempt explicitly and collects fresh details before replacing it", async () => {
   let abandoned = false;
   const replacement = {
@@ -488,7 +630,6 @@ it.each(["abandoned", "uncertain"])(
     owner.querySelector<HTMLElement>("[data-test=reconnect-first]")!.click();
     await expect.poll(() => owner.textContent).toContain("Keep it consumed");
     expect(owner.querySelector("[data-test=replace-attempt]")).toBeNull();
-    expect(owner.querySelector("[data-test=resume]")).toBeNull();
     expect(requests.filter((r) => r.path.endsWith("/claim"))).toHaveLength(1);
   },
 );

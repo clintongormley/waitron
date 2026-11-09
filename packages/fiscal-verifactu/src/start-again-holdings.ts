@@ -3,7 +3,10 @@ import type { Database } from "@waitron/db";
 import type { InitialSetupContribution } from "@waitron/module";
 
 /** Must equal the append-only tables a first-setup activation writes. */
-export const FISCAL_START_AGAIN_DELETABLE: readonly string[] = ["fiscal_allocations"];
+export const FISCAL_START_AGAIN_DELETABLE: readonly string[] = [
+  "fiscal_allocations",
+  "fiscal_certificate_installs",
+];
 
 type Target = Pick<Database, "execute">;
 
@@ -29,3 +32,7 @@ export const startAgainHoldings: NonNullable<
     return { records, accepted: 0 };
   }
 };
+
+/** A certificate installed from the dashboard was installed after setup, so it is not the setup's. */
+export const startAgainKept: NonNullable<InitialSetupContribution["startAgainKept"]> = (db) =>
+  count(db, sql`select count(*) as n from fiscal_certificate_installs where source <> 'setup'`);

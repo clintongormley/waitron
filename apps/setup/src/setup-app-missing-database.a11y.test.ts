@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtButton } from "@waitron/ui";
 import { setLocale } from "./i18n/t.js";
@@ -13,6 +13,7 @@ import {
   openMissing,
 } from "../test/missing-database-browser.js";
 
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   cleanupWidgets();
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);

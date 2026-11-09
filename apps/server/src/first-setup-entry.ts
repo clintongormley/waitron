@@ -1,7 +1,6 @@
 import { mountSetupSpa } from "./setup-spa.js";
 import { isUnset } from "./env-value.js";
 import { readModuleConfig } from "./module-config.js";
-import { withFirstSetupPublication } from "./first-setup-publication.js";
 import { Hono } from "hono";
 import { deploymentEnvironmentFor, lockVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
@@ -293,12 +292,6 @@ async function resolutionApp(
     summary: actions.startAgainSummary,
     freeSpace: () => lowestFreeBytes([roots.stateDir, roots.venueDir], spare?.statfs),
     ...(spare === undefined ? {} : { restartDeletesLogs: () => restartDeletesLogs(spare) }),
-    ...(moduleConfig === undefined
-      ? {}
-      : {
-          withPublication: <T>(body: (deps: import("./setup-api.js").SetupDeps) => Promise<T>) =>
-            withFirstSetupPublication(roots, environment, host, body),
-        }),
     ...(requestRestart === undefined ? {} : { requestRestart }),
   });
   if (!isUnset(environment.WAITRON_SETUP_APP_DIR))

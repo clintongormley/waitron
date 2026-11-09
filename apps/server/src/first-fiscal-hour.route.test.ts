@@ -1,7 +1,6 @@
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { randomBytes } from "node:crypto";
 import { afterEach, expect, it } from "vitest";
 import { Hono } from "hono";
 import { ALL_MODULES } from "@waitron/composition";
@@ -112,10 +111,7 @@ async function fixture(withStore = false) {
   const host = createFirstSetupModuleHost(options);
   const app = new Hono();
   mountSetup(app, { environment: "preproduction", firstFiscal: host }, () => {});
-  const claim = await host.owner.claimFirstSetup(
-    { environment: "preproduction", request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await host.owner.claimFirstSetup({ environment: "preproduction", request });
   const owner = { ...claim.state, capability: claim.capability };
   const post = async (reconfirmation?: string) =>
     app.request("/setup-api/first-setup/candidates", {

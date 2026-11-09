@@ -4,11 +4,16 @@ Keep the previous recovery pack when you change the recovery key. Until the new 
 
 ## When first setup was interrupted {#interrupted-setup}
 
-If the repair page cannot continue your setup, it offers **Start again** and **Recover from
-backup**. Both delete the setup that stopped part way in the same way, and **Recover from backup**
+Reloading the tab that was doing the setup carries on with it, until the setup starts activation.
+Otherwise the page offers **Start again** and **Recover from backup**. Both delete the setup that stopped part way in the same way, and **Recover from backup**
 then leads to the restore a new box uses. Neither asks for a password: anyone who can open the
 repair page can use them, and can see what the page shows when one is pressed. When you choose one,
 the box checks what it would delete and the page shows it.
+
+If the box is still showing its setup screens rather than the repair page, either one first asks
+you to stop the setup. **Stop this setup** ends the setup for whoever is doing it, which cannot be
+undone, deletes nothing, and restarts the box; after **Reconnect**, **Start again** and **Recover
+from backup** show what they would delete. **Cancel** keeps everything as it is.
 
 When you choose **Start again**, the page shows "Start again deletes what was entered in the setup
 that stopped part way. No invoice was sent to AEAT.", and deletes it all once you tick "Delete the
@@ -25,12 +30,11 @@ database cannot be read, the page says "The previous setup process was unsuccess
 out "No invoice was sent to AEAT.", because the box may not have been able to check that database
 for invoices. Start again and Recover from backup still delete it.
 
-Neither is offered, and the page says why in the same words for both, if the setup already saved
-the settings the box sells with (continue with your setup password to finish it), if the setup
-already finished, or if the setup database holds an invoice or another record Waitron never
-deletes. If the box cannot confirm that deleting the setup is safe, the page says so and offers
-neither. That includes a setup whose own record cannot be read: then the only way out is to
-reinstall Waitron. Over a plain connection neither works: set up the secure connection first.
+Neither is offered, and the page says why in the same words for both, if the setup already
+finished, or if the setup database holds an invoice or another record Waitron never deletes. If the
+box cannot confirm that deleting the setup is safe, the page says so and offers neither. That
+includes a setup whose own record cannot be read: then the only way out is to reinstall Waitron.
+Over a plain connection neither works: set up the secure connection first.
 
 Once the setup is deleted the box restarts. After **Recover from backup**, **Reconnect** opens "Join
 or recover an existing restaurant", where you choose **Restore a backup** or **Restore from my

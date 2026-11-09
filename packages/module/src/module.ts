@@ -1532,9 +1532,9 @@ export interface WaitronModule {
    * `TableClass`, `@waitron/sync-enrolment`). No foreign key may join a `local` table to a
    * `ledger`/`state` one: `scripts/two-file-foreign-keys.test.ts`. */
   readonly classification?: readonly ClassifiedTable[];
-  /** Whole append-only tables (every row in them may go) that this module's own first-setup
-   * activation writes, which Start again may delete with an unfinished setup. Each must be
-   * declared append-only in this module's own `classification`. */
+  /** Append-only tables that this module's own first-setup activation writes, which Start again
+   * may delete with an unfinished setup: every row may go unless the module's `startAgainKept`
+   * counts it as kept. Each must be declared append-only in this module's own `classification`. */
   readonly startAgainDeletable?: readonly string[];
   readonly changes?: readonly ChangeSource[];
   /** Boot admits settings.<module> for every document listed here. */

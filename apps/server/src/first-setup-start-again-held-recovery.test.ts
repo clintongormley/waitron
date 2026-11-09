@@ -6,6 +6,7 @@ import {
   damageRecoveryRecord,
   handMade,
   notReadyBecause,
+  withoutSignIn,
 } from "../test/start-again-held-fixture.js";
 import {
   snapshot,
@@ -28,7 +29,6 @@ import { applyMigrationSet } from "@waitron/db/testing/venue-db.js";
 import { manifestSets } from "@waitron/migrations";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 
 it("in the held state, a damaged recovery-key record: the summary shows it, and Start again sent as the page sends it, acknowledging it, deletes the setup", async () => {
@@ -78,7 +78,7 @@ it("a setup database that is not empty but holds no rows (a view only) is not th
     emptyDatabase: false,
   });
   await expectRefused(f, notReadyBecause("may-have-filed"));
-  const { ids } = await f.signIn();
+  const { ids } = await withoutSignIn(f);
   await expectStartAgainRefused(
     f,
     () => before.actions.startAgainFirstSetup(ids),
@@ -125,7 +125,7 @@ it("a setup database whose -wal holds no rows stays refused setup.not_ready when
     emptyDatabase: false,
   });
   await expectRefused(f, notReadyBecause("may-have-filed"));
-  const { ids } = await f.signIn();
+  const { ids } = await withoutSignIn(f);
   await expectStartAgainRefused(
     f,
     () => before.actions.startAgainFirstSetup(ids),
@@ -139,7 +139,7 @@ it("in the held state, an invoice record refuses Start again kept-records even w
   expect(every).toContain(getTableName(registrosFacturacion));
   extraDeletable.set("fiscal-verifactu", every);
   const f = await heldSetup({ invoices: 1 });
-  await expectStartAgainRefused(f, await handMade(f, true), {
+  await expectStartAgainRefused(f, await handMade(f), {
     code: "setup.start_again_refused",
     params: { cause: "kept-records" },
     reason: expect.stringMatching(/^rows=\d+ kept=0 records=1 accepted=0$/),
@@ -148,23 +148,22 @@ it("in the held state, an invoice record refuses Start again kept-records even w
 
 it("in the held state, an invoice record refuses Start again kept-records, and nothing changes", async () => {
   const f = await heldSetup({ invoices: 1 });
-  await expectStartAgainRefused(f, await handMade(f, true), {
+  await expectStartAgainRefused(f, await handMade(f), {
     code: "setup.start_again_refused",
     params: { cause: "kept-records" },
   });
 });
 
-it("in the held state, saved trading settings refuse Start again trading-settings, and nothing changes", async () => {
-  const f = await heldSetup({ tradingSettings: true });
-  await expectStartAgainRefused(f, await handMade(f, true), {
-    code: "setup.start_again_refused",
-    params: { cause: "trading-settings" },
-  });
+it("in the held state, saved trading settings and the certificate are deleted by Start again", async () => {
+  const f = await heldSetup({ tradingSettings: true, certificate: true });
+  const { ids, actions } = await withoutSignIn(f);
+  await expect(actions.startAgainFirstSetup(ids)).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f.roots);
 });
 
 it("in the held state, a complete attempt with no saved trading settings refuses Start again setup-finished, and nothing changes", async () => {
   const f = await heldSetup({ status: "complete" });
-  await expectStartAgainRefused(f, await handMade(f, false), {
+  await expectStartAgainRefused(f, await handMade(f), {
     code: "setup.start_again_refused",
     params: { cause: "setup-finished" },
   });
@@ -227,11 +226,7 @@ it("in the held state, the Start again route starts again over HTTPS with only t
 
 it("in the held state, the Start again route answers a refusal HTTP 409 with its cause, and nothing changes", async () => {
   const f = await heldSetup({ invoices: 1 });
-  const { ids } = await f.signIn();
-  const actions = createFirstSetupResolutionActions({
-    ...f.roots,
-    host: f.host,
-  });
+  const { ids, actions } = await withoutSignIn(f);
   const app = new Hono();
   mountFirstSetupResolutionApi(app, f.host, () => {}, {
     startAgain: actions.startAgainFirstSetup,

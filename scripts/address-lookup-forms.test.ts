@@ -18,9 +18,7 @@ const ROOT = join(import.meta.dirname, "..");
 const WAITING: Readonly<Record<string, string>> = {};
 
 /** Files that name an address field and draw some other field, but are not address forms. */
-const NOT_ADDRESS_FORMS: Readonly<Record<string, string>> = {
-  "apps/setup/src/setup-app.ts": "assembles the venue draft; the field it draws is not an address",
-};
+const NOT_ADDRESS_FORMS: Readonly<Record<string, string>> = {};
 
 export function looksLikeAddressForm(source: string): boolean {
   return /"(?:addressLine1|streetAddress)"/.test(source) && /<wt-(?:input|textarea)\b/.test(source);

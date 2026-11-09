@@ -8,6 +8,7 @@ import {
   executeTarget,
   openImmutable,
   openImmutableWhenWalEmpty,
+  openWalInPlace,
   quoteIdent,
   type FirstSetupRoots,
 } from "@waitron/provisioning";
@@ -16,11 +17,13 @@ import { appendOnlyTriggers } from "@waitron/store";
 import "./errors.js";
 import { ALL_MODULES } from "./modules.js";
 import { copyVenueFiles } from "./venue-private-copy.js";
+import { SetupDatabaseReadFailed } from "./setup-database-read-failed.js";
 
 export interface SetupDatabaseHoldings {
   /** Every row outside SQLite's own tables, the migration journals and Litestream's tables. */
   readonly rows: number;
-  /** Rows in append-only tables that no module lists in `startAgainDeletable`. */
+  /** Rows in append-only tables that no module lists in `startAgainDeletable`, plus the rows each
+   * module's `startAgainKept` counts in the tables it does list. */
   readonly kept: number;
   readonly records: number;
   readonly accepted: number;
@@ -39,7 +42,10 @@ const notReady = (reason: string, cause: "unexpected" | "unreadable" = "unreadab
 const copyFailed = (error: unknown): never => {
   if ((error as NodeJS.ErrnoException | undefined)?.code === "ENOSPC")
     throw new AppError("storage.disk_full", {});
-  return notReady(`copy failed: ${codeOf(error)}`);
+  return readFailed(`copy failed: ${codeOf(error)}`, error);
+};
+const readFailed = (reason: string, failure?: unknown): never => {
+  throw new SetupDatabaseReadFailed(reason, failure);
 };
 /**
  * SQLite's primary code 11 (corrupt) or 26 (not a database), or a table a reader expects missing
@@ -62,7 +68,8 @@ const codeOf = (error: unknown) => {
 /**
  * What the setup database holds, read without writing to the venue folder. The caller holds the
  * venue exclusion and the coordinator turn. `modules` are the attempt's modules; which tables are
- * append-only and which may be deleted is taken from every module, enabled or not.
+ * append-only, which may be deleted and which of their rows are still kept is taken from every
+ * module, enabled or not.
  */
 export async function readSetupDatabase(
   roots: Pick<FirstSetupRoots, "venueDir">,
@@ -78,7 +85,7 @@ export async function readSetupDatabase(
       (error: unknown) =>
         (error as NodeJS.ErrnoException).code === "ENOENT"
           ? false
-          : notReady(`journal check failed: ${codeOf(error)}`),
+          : readFailed(`journal check failed: ${codeOf(error)}`, error),
     );
     // Opening the original in place avoids a copy, which a nearly full disk may have no room for.
     const opened = journal ? ({ kind: "wal" } as const) : await openImmutableWhenWalEmpty(database);
@@ -90,28 +97,49 @@ export async function readSetupDatabase(
           code: damage,
           seen: { rows: 0, kept: 0, records: 0, accepted: 0 },
         };
-      notReady(`database unreadable: ${opened.stage} ${codeOf(opened.error)}`);
+      readFailed(`database unreadable: ${opened.stage} ${codeOf(opened.error)}`, opened.error);
     } else if (opened.kind === "open") connection = opened.connection;
     else {
+      // In place: a copy needs disk space that grows with the database, which a full disk lacks.
+      const inPlace = journal
+        ? undefined
+        : await openWalInPlace(database).catch((error: unknown) =>
+            readFailed(`database unreadable: in place ${codeOf(error)}`, error),
+          );
+      if (inPlace?.kind === "not-a-file")
+        return notReady("read refused: not a plain file", "unexpected");
+      if (inPlace?.kind === "missing") return readFailed("database missing");
+      // A copy would read no database and drop the -wal, which may hold an invoice.
+      if (inPlace?.kind === "short")
+        return readFailed("database unreadable: shorter than its header beside a -wal");
+      if (inPlace?.kind === "open") connection = inPlace.connection;
+    }
+    // A -journal needs rolling back, and SQLite cannot read some -wal shapes in place: both copy.
+    if (connection === undefined) {
       scratch = await mkdtemp(join(tmpdir(), "waitron-setup-holdings-")).catch(copyFailed);
       const present = await copyVenueFiles(roots.venueDir, scratch, () =>
         notReady("copy refused: not a plain file", "unexpected"),
       ).catch((error: unknown) =>
         error instanceof AppError ? Promise.reject(error) : copyFailed(error),
       );
-      if (!present) notReady("database missing");
+      if (!present) readFailed("database missing");
       // Read-write so SQLite can roll back a leftover -journal; `query_only` refuses any other write.
       connection = new DatabaseSync(join(scratch, "venue.db"));
       connection.exec("pragma query_only = 1");
     }
-    const { holdings: read, damage } = await readHoldings(connection!, modules);
-    // What the copy shows can come from another database's -wal or journal, so the main file is
-    // read alone too.
+    const { holdings: read, damage } = await readHoldings(connection, modules);
+    // What the -wal or journal adds can come from another database, so the main file is read alone
+    // too.
     const holdings =
       opened.kind === "wal" ? larger(read, await readMainFile(database, modules)) : read;
     if (damage === undefined) return { kind: "read", holdings };
     // Another database's journal rolled into the copy fails an intact database in the same way.
     if (journal) notReady(`journal beside a damaged read: ${damage}`);
+    // An invoice committed only into the -wal may be unreadable through the damaged main file. A
+    // read that saw kept rows or records is left to Start again's kept-records refusal, which names
+    // the cause.
+    if (opened.kind === "wal" && holdings.kept === 0 && holdings.records === 0)
+      readFailed(`database unreadable: damaged beside a -wal: ${damage}`);
     return { kind: "damaged", code: damage, seen: holdings };
   } catch (error) {
     failed = true;
@@ -121,7 +149,10 @@ export async function readSetupDatabase(
     )
       throw error;
     // A module seat's own reason is free text, so only its code is passed on.
-    return notReady(`read failed: ${error instanceof AppError ? error.code : codeOf(error)}`);
+    return readFailed(
+      `read failed: ${error instanceof AppError ? error.code : codeOf(error)}`,
+      error,
+    );
   } finally {
     try {
       connection?.close();
@@ -129,13 +160,13 @@ export async function readSetupDatabase(
       if (scratch !== undefined)
         // After a failed read, that failure stays the reason.
         await rm(scratch, { recursive: true, force: true }).catch((error: unknown) =>
-          failed ? undefined : notReady(`copy not removed: ${codeOf(error)}`),
+          failed ? undefined : readFailed(`copy not removed: ${codeOf(error)}`, error),
         );
     }
   }
 }
 
-// `rows` stays the copy's: a database with no rows is refused, so the main file's could offer it.
+// `rows` stays the first read's: a database with no rows is refused, so the main file's could offer it.
 const larger = (a: SetupDatabaseHoldings, b: SetupDatabaseHoldings): SetupDatabaseHoldings => ({
   rows: a.rows,
   kept: Math.max(a.kept, b.kept),
@@ -153,8 +184,9 @@ async function readMainFile(
     connection = openImmutable(database);
     return (await readHoldings(connection, modules)).holdings;
   } catch (error) {
-    return notReady(
+    return readFailed(
       `main file read failed: ${error instanceof AppError ? error.code : codeOf(error)}`,
+      error,
     );
   } finally {
     connection?.close();
@@ -244,6 +276,21 @@ async function readHoldings(
       records += held.records;
       accepted += held.accepted;
     }
+  }
+  // Every module, as for `deletable`; each its own step, so damage failing the holdings count
+  // cannot lose these kept rows. A module the attempt does not name may never have made its
+  // tables, so for it a missing table holds nothing to keep rather than being damage.
+  const named = new Set(modules.map((module) => module.name));
+  for (const module of ALL_MODULES) {
+    const keeps = module.provisioning?.initialSetup?.startAgainKept;
+    if (keeps === undefined) continue;
+    const count = named.has(module.name)
+      ? () => keeps(target)
+      : () =>
+          keeps(target).catch((error: unknown) =>
+            damageOf(error) === "no such table" ? 0 : Promise.reject(error),
+          );
+    kept += await step(count, 0);
   }
   return { holdings: { rows, kept, records, accepted }, damage };
 }

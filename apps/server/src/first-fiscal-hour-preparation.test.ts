@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,10 +40,7 @@ async function fixture() {
     environment: {},
     modules,
   });
-  await host.owner.claimFirstSetup(
-    { environment: "preproduction", request },
-    randomBytes(32).toString("base64url"),
-  );
+  await host.owner.claimFirstSetup({ environment: "preproduction", request });
   const state = (await host.store.read())!;
   const binding = firstSetupModuleContext(state, MODULE).binding;
   return { host, preparation, binding, stateDir };

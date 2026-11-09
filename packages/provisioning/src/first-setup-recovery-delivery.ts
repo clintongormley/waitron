@@ -209,22 +209,6 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
       for (const [module, grant] of grants)
         if (grant.manifest.attemptId === attemptId) grants.delete(module);
     },
-    readRecoveryDocument(owner: FirstSetupOwnerAttempt, module: string) {
-      return inside(undefined, async (held) => {
-        const state = await options.owner.authorize(owner);
-        const manifest = await read(state, module);
-        if (manifest === null || !equal(manifest.stage, await options.keys.readStage(owner, held)))
-          return null;
-        return structuredClone({
-          module: manifest.module,
-          stageId: manifest.stageId,
-          inputDigest: manifest.inputDigest,
-          bindingDigest: manifest.bindingDigest,
-          documentDigest: manifest.documentDigest,
-          statement: manifest.statement,
-        });
-      });
-    },
     registerRecoveryDocumentDelivery(
       owner: FirstSetupOwnerAttempt,
       supplied: RecoveryDeliveryInput,
@@ -327,30 +311,6 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
           !equal(manifest.stage, await options.keys.readStage(owner, held))
         )
           refuse();
-      });
-    },
-    checkKept(owner: FirstSetupOwnerAttempt, module: string, hold?: FirstSetupHold) {
-      return inside(hold, async (held) => {
-        const state = await options.owner.authorize(owner);
-        const grant = grants.get(module);
-        const manifest = await read(state, module);
-        if (
-          grant === undefined ||
-          performance.now() >= grant.expires ||
-          manifest === null ||
-          !equal(grant.manifest, manifest) ||
-          manifest.revision !== state.revision ||
-          manifest.ownerGeneration !== state.ownerGeneration ||
-          !equal(manifest.stage, await options.keys.readStage(owner, held))
-        )
-          refuse();
-        return firstFiscalPublicDigest({
-          inputDigest: manifest.inputDigest,
-          bindingDigest: manifest.bindingDigest,
-          documentDigest: manifest.documentDigest,
-          frozenDigest: manifest.frozenDigest,
-          stage: manifest.stage,
-        });
       });
     },
     install(

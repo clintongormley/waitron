@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
+import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./review-screen.js";
 import type { SetupReviewScreen } from "./review-screen.js";
@@ -45,6 +47,25 @@ describe.each(["light", "dark"] as const)("setup-review-screen a11y (%s theme)",
     );
     expect(el.shadowRoot!.querySelector("[data-test=summary-cert]")).toBeNull();
     await expectNoA11yViolations(host);
+  });
+
+  it("has no violations and no sideways scroll at phone width in Spanish", async () => {
+    const previous = [innerWidth, innerHeight];
+    setLocale("es-ES");
+    try {
+      await page.viewport(390, 2200);
+      const { el, host } = await mountWidget<SetupReviewScreen>(
+        "setup-review-screen",
+        { draft },
+        theme,
+      );
+      expect(el.shadowRoot!.textContent).toContain(t("review.heading", "es-ES"));
+      await expectNoA11yViolations(host);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+    } finally {
+      setLocale("en-GB");
+      await page.viewport(previous[0]!, previous[1]!);
+    }
   });
 
   it("has no violations on a bare draft summary", async () => {

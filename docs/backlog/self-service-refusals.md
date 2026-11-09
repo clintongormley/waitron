@@ -37,7 +37,7 @@ referrals, not completed recovery experiments.
 | [Public connection](#tls-repair), #2055 | Referral reworked in #2064: read-only Check again and Stop, applicable HTTPS/device choices, pending actions and no-JavaScript guidance are covered in its dated addendum. Authenticated certificate replacement and linked-layout repair remain open. |
 | [Certificate](#certificate), #2056 | Referral reworked: file/type changes, another check with Save and Cancel are explained. Persistent connection/configuration diagnosis and its repair choice remain open below. |
 | [Backup key](#backup-key), #2058 | Referral reworked: retain both key records and stop changing keys; the page states its diagnostic limit. Authenticated inspection and correction of effective configuration remain open below. |
-| [Setup state](#setup-state) | Offer resume/recovery choices and required authentication. A1042's S7l change is in; the `attempt_invalid` words still name no next step. |
+| [Setup state](#setup-state) | Offer a next step and any required authentication. A1042's S7l change is in; the `attempt_invalid` words still name no next step. |
 | [Setup environment](#setup-environment) | Establish a fresh-start/reinstall choice applicable to this state, with a safe Stop before data loss. Do not improvise a reset of trading data. |
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
 | [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
@@ -464,10 +464,10 @@ Screen: Setup wizard. Fix: [setup-state](#setup-state).
 
 | Language | Current words |
 | --- | --- |
-| EN | This server has saved setup work for a different request. Resume the original setup or contact support. |
-| ES | Este servidor tiene guardada una configuración de otra solicitud. Continúa la configuración original o contacta con soporte. |
+| EN | This server holds saved setup work that does not match this request, so it did not do this one. |
+| ES | Este servidor tiene guardado un trabajo de configuración que no coincide con esta solicitud, así que no ha hecho esta. |
 
-Wording: `apps/setup/src/i18n/strings/shell.ts:24` and `apps/setup/src/i18n/strings/shell.ts:165`.
+Wording: `apps/setup/src/i18n/strings/shell.ts:41` and `apps/setup/src/i18n/strings/shell.ts:222`. (2026-11-09, A1379: the words no longer send the person to support or offer to resume; the next step below is still missing.)
 
 State: A saved setup-operation file is malformed, or kind/requestHash differs. Waiting cannot change a retained malformed file or reconcile a different request. Receipt: `packages/provisioning/src/setup-operation.ts:94`; `packages/provisioning/src/setup-operation.ts:171`; `apps/setup/src/setup-app.ts:1513`.
 
@@ -684,7 +684,7 @@ changes take their required review and existing protected-writer approvals.
 
 ### setup-state
 
-**Setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
+**Setup state refusals need a usable next step.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
 
 #### A1158: a damaged setup record or claim marker still dead-ends Start again
 
@@ -695,8 +695,7 @@ PROBE 2/3, re-run on `b8a06f203`). With it missing, since A1131bc slice 2 the bo
 the page offers no Start again and says it cannot confirm that deleting is safe (read, not run:
 `wipeOffered`, `apps/setup/src/setup-app.ts`), and the summary and
 Start again sent with the page's last revision both answer `setup.attempt_conflict` and change
-nothing (a scratch case on the slice's branch, 2026-10-31, not committed). Continue's password step
-is `setup.owner_required` there, as before. Wanted: the same kind of warned way out A1042 gives a
+nothing (a scratch case on the slice's branch, 2026-10-31, not committed). Wanted: the same kind of warned way out A1042 gives a
 damaged recovery-key record.
 
 #### A1159: some setup databases the box cannot read still refuse Start again

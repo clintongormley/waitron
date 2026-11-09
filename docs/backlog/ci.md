@@ -33,7 +33,7 @@ begins with a `<claude-code-hint … />` line, so `apps/server/src/first-fiscal-
 seven `packages/provisioning` CLI cases fail locally under an agent on `main` (A798-B slice 8
 plan, E8 and E13). Found while planning A798-B slice 8. On 2026-10-26, during A980 S1a2,
 `packages/provisioning/src/first-setup-command-import.test.ts`'s case "the actual relocated command
-resumes a retained import and publishes it once" failed this way (its child's stderr held
+resumes a retained import and publishes it once" (a suite removed on 2026-11-08) failed this way (its child's stderr held
 `<claude-code-hint …/>` where the case expects it empty) and passed under
 `env -i HOME PATH TMPDIR`; it fails the same way on `27ae35c09` and `d23e32966`. Next action: find
 which inherited variable lets the hint through and clear it in the cases' child environment.

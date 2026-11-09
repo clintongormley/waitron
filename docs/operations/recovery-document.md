@@ -25,8 +25,8 @@ on Tuesday. Check the key name on the selected copy when you [recover the box](h
 If the pack did not reach this browser, the dialog says so and explains each choice: make it again,
 or stop and change nothing.
 
-During an unfinished first setup, resume the same attempt with its setup password and use that
-flow's recovery-document step. Follow [first Live setup](first-live-fiscal-setup.md); do not start a
+During an unfinished first setup, carry on in the tab that was doing it (reloading that tab
+carries on until activation starts) and use that flow's recovery-pack step. Follow [first Live setup](first-live-fiscal-setup.md); do not start a
 fresh identity just to obtain another pack.
 
 ## Implementation references

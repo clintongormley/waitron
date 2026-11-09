@@ -4,12 +4,19 @@ Conserva el paquete de recuperación anterior cuando cambies la clave de recuper
 
 ## Si se interrumpió la primera configuración {#interrupted-setup}
 
-Si la página de reparación no permite continuar tu configuración, ofrece **Empezar de nuevo** y
-**Recuperar desde una copia**. Las dos borran de la misma manera la configuración que se detuvo a
+Recargar la pestaña que estaba haciendo la configuración sigue con ella, hasta que la configuración
+empieza la activación. Si no, la página ofrece **Empezar de nuevo** y **Recuperar desde una
+copia**. Las dos borran de la misma manera la configuración que se detuvo a
 medias, y **Recuperar desde una copia** lleva después a la restauración que usa un equipo nuevo.
 Ninguna pide contraseña: cualquiera que pueda abrir la página de reparación puede usarlas, y puede
 ver lo que la página muestra al pulsar una. Cuando eliges una, el equipo comprueba lo que borraría
 y la página lo muestra.
+
+Si el equipo sigue mostrando sus pantallas de configuración en lugar de la página de reparación,
+cualquiera de las dos te pide primero detener la configuración. **Detener esta configuración**
+termina la configuración para quien la esté haciendo, algo que no se puede deshacer, no borra nada y
+reinicia el equipo; después de **Reconectar**, **Empezar de nuevo** y **Recuperar desde una copia**
+muestran lo que borrarían. **Cancelar** lo deja todo como está.
 
 Cuando eliges **Empezar de nuevo**, la página muestra «Empezar de nuevo borra lo que se introdujo en
 la configuración que se detuvo a medias. No se envió ninguna factura a la AEAT.», y lo borra todo
@@ -28,13 +35,11 @@ la AEAT.», porque puede que el equipo no haya podido comprobar si esa base de d
 Empezar de nuevo y Recuperar desde una copia la borran igualmente.
 
 No se ofrece ninguna de las dos, y la página dice por qué con las mismas palabras para ambas, si la
-configuración ya guardó los ajustes con los que vende el equipo (continúa con tu contraseña de
-configuración para terminarla), si la configuración ya terminó, o si la base de datos de
-configuración tiene una factura u otro registro que Waitron nunca borra. Si el equipo no puede
-confirmar que borrar la configuración sea seguro, la página lo indica y no ofrece ninguna. Eso
-incluye una configuración cuyo propio registro no se puede leer: entonces la única salida es
-reinstalar Waitron. Con una conexión sin cifrar no funciona ninguna: configura antes la conexión
-segura.
+configuración ya terminó, o si la base de datos de configuración tiene una factura u otro registro
+que Waitron nunca borra. Si el equipo no puede confirmar que borrar la configuración sea seguro, la
+página lo indica y no ofrece ninguna. Eso incluye una configuración cuyo propio registro no se puede
+leer: entonces la única salida es reinstalar Waitron. Con una conexión sin cifrar no funciona
+ninguna: configura antes la conexión segura.
 
 Cuando se ha borrado la configuración, el equipo se reinicia. Después de **Recuperar desde una
 copia**, **Reconectar** abre «Unirse a un restaurante existente o recuperarlo», donde eliges

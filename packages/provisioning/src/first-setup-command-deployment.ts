@@ -1,4 +1,4 @@
-import { createHash, createHmac } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseEnv, isDeepStrictEqual } from "node:util";
@@ -44,14 +44,7 @@ import type { KeyRing } from "@waitron/credentials";
 import type { TrustedClock } from "@waitron/fiscal";
 import type { FirstSetupState } from "./first-setup-state.js";
 import { submitFiscalReadiness } from "./fiscal-readiness-runner.js";
-import {
-  clearStagedConfigurationImport,
-  readStagedConfigurationImport,
-} from "./configuration-import.js";
-import {
-  importConfigurationTables,
-  validateConfigurationBundle,
-} from "./configuration-transfer.js";
+import { clearStagedConfigurationImport } from "./configuration-import.js";
 import "./errors.js";
 
 function conflict(): never {
@@ -73,30 +66,6 @@ export function createFirstSetupCommandDeployment(options: {
         ring: KeyRing;
       }
     | undefined;
-  async function configuration(state: FirstSetupState, ring: KeyRing) {
-    const frozen = state.frozen.configurationImport;
-    if (frozen === undefined) return undefined;
-    const staged = await readStagedConfigurationImport(state.stateDir, ring);
-    if (staged === null) throw new AppError("setup.not_ready", {});
-    if (createHash("sha256").update(staged.artifact).digest("hex") !== frozen.digest)
-      throw new AppError("setup.attempt_conflict", {});
-    if (
-      staged.bundle.venue.country !== state.frozen.request.country ||
-      (!frozen.newTaxpayer && staged.bundle.venue.taxId !== state.frozen.request.taxId)
-    )
-      throw new AppError("setup.request_invalid", { field: "configurationImport" });
-    if (frozen.newTaxpayer && staged.bundle.venue.taxId === state.frozen.request.taxId)
-      throw new AppError("setup.request_invalid", { field: "taxId" });
-    const modules = enabledModules(
-      runtime.modules,
-      venueFiscalSelection(runtime.modules, state.frozen.request.fiscalTerritory).config,
-    );
-    const versions: Record<string, number> = {};
-    for (const module of modulesWithSets(modules))
-      versions[module.name] = await appliedSchemaVersion({ venue: db, node }, module.migrations);
-    validateConfigurationBundle(staged.bundle, modules, versions);
-    return { bundle: staged.bundle, versions };
-  }
   async function readiness(state: FirstSetupState) {
     if (
       publication === undefined ||
@@ -160,8 +129,6 @@ export function createFirstSetupCommandDeployment(options: {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       }
       const ring = loadKeyRing({ ...storedEnvironment, ...environment });
-      if (["claimed", "consumption-intent"].includes(state.status))
-        await configuration(state, ring);
       let contactUrl: string;
       try {
         const parsed = new URL(environment.WAITRON_ADVERTISED_ORIGIN ?? "");
@@ -271,7 +238,6 @@ export function createFirstSetupCommandDeployment(options: {
       if (state === null || !isDeepStrictEqual(request.venue, state.frozen.request)) conflict();
       if ((await readTenantIdentities(db)).length !== 0) conflict();
       if (publication === undefined) throw new AppError("setup.not_ready", {});
-      const imported = await configuration(state, publication.ring);
       const config = venueFiscalSelection(runtime.modules, request.venue.fiscalTerritory).config;
       let remaining = request.initialOperations.inputs.length;
       if (remaining === 0) conflict();
@@ -290,24 +256,21 @@ export function createFirstSetupCommandDeployment(options: {
               run: (prepared: Parameters<typeof operations.prepare>[0]) => Promise<T>,
             ) =>
               operations.prepare(operation, async (prepared) => {
-                if (--remaining === 0) await beforeTransaction();
+                if (--remaining === 0) {
+                  await beforeTransaction();
+                  // Only once activation has started: a refusal before then leaves the venue
+                  // database empty, which Start again can delete.
+                  await stampDeployment(db, request.environment);
+                }
                 return run(prepared);
               }),
           },
         };
       });
-      // A refused venue write retains the environment stamp, so its retry cannot change environments.
-      await stampDeployment(db, request.environment);
       return applyVenue(planVenue(request.venue, modules), {
         db,
         modules,
         ...initialVenueApplyInput(request.initialOperations),
-        ...(imported === undefined
-          ? {}
-          : {
-              beforeCommit: (tx) =>
-                importConfigurationTables(tx, imported.bundle, modules, imported.versions),
-            }),
       });
     },
     recoverProvision: (request) => recoverProvisionedVenue(db, request, runtime.modules),

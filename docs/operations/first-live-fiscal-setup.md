@@ -65,8 +65,7 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
 - **A later minute is already in use** (no time given): the box's clock has gone back behind the
   name this attempt already chose; it can finish once the box's clock reaches the moment this attempt chose
   its name
-  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a resume under a clock behind its own pick
-  refuses before writing anything").
+  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a backward clock refuses existing material and retains its spent hour").
 
 For example, a setup whose clocks are compared at 09:00:00 UTC on 24 October 2026 (11:00 Madrid
 summer time) waits until 09:02:00 (`hour-selection.test.ts`, the setup test above), and that
@@ -94,21 +93,21 @@ You can select the saved pack, or an older sheet, during recovery or type its gr
 typing check catches mistakes; opening the selected backup still authenticates the complete secret.
 See [recovering a box](hour-recovery.md).
 
-## Resume an interruption
+## After an interruption
 
-Reconnect to inspect the attempt before starting another setup. The repair page lets you prove
-ownership with the setup password and recover the same attempt. An eligible interrupted marker
-can be repaired; preserve the state and venue folders when the page reports an uncertain or
-conflicting outcome. Do not delete records to get past a refusal.
+Reconnect to inspect the attempt before starting another setup. A reloaded tab that still holds
+the setup's key carries on with it until activation starts; any other tab, and every attempt past
+that point, is shown **Start again** and **Recover from backup**, which the box refuses in the
+cases below. Preserve the state and
+venue folders when the page reports an uncertain or conflicting outcome. Do not delete records to
+get past a refusal. On the ordinary setup server, either button first asks to stop the setup: the
+stop deletes nothing and restarts the box into the repair page, which alone deletes.
 
-**Finish** publishes an exactly checked committed result. It does not activate another identity,
-reset counters or require a new name because the clock has advanced. **Start again** asks for no
-password: anyone who can open the repair page can use it and see what it shows — what the setup
+**Start again** asks for no password: anyone who can open the repair page can use it and see what it shows — what the setup
 reached and whether the setup database could be read. Pressing it
 makes the box check what it would delete, and the page shows that before anything is deleted. The
-box refuses, in the page's words, when the setup already saved the settings the box sells with
-(Continue with the setup password finishes it), when the setup already finished, or when the setup
-database holds an invoice or another record Waitron never deletes; when it cannot confirm that
+box refuses, in the page's words, when the setup already finished, or when the setup database
+holds an invoice or another record Waitron never deletes; when it cannot confirm that
 deleting is safe, the page says so and does not offer it. If part of the setup database cannot be
 read, the page says "The previous setup process was unsuccessful." without "No invoice was sent to
 AEAT.", because the box may not have been able to check that database for invoices, and Start again
@@ -123,7 +122,7 @@ recovery-key record is damaged and cannot be read." above what Start again delet
 choose **Cancel**.
 
 When the venue database is missing, the box cannot check whether the attempt filed anything to
-AEAT or made a sale, and the repair page does not offer **Continue**. Pressing **Start again**
+AEAT or made a sale. Pressing **Start again**
 says so, lists what the attempt's own record says it reached — whether it did not start, started
 or finished activation — and offers **Recover from backup** there too. Start again then asks you to tick "Nothing was filed to AEAT and nothing was
 sold." If the setup already finished, the box refuses instead, with "This setup already finished,
@@ -169,7 +168,12 @@ replace that key. This documentation change does not authorise a reset or reinst
 
 Build the provisioning bundle with `pnpm --filter @waitron/provisioning build`, then run its
 `venue` command against the intended migrated venue directory with `WAITRON_STATE_DIR` set.
-Choose an absolute `--recovery-pdf` destination outside the host-state and venue folders.
+Choose an absolute `--recovery-pdf` destination outside the host-state and venue folders, naming a
+file that does not exist yet. The command never writes over a file there, since it may be an earlier
+setup's recovery pack; it says so and stops before it records or waits for anything
+(`packages/provisioning/src/cli-first-setup.test.ts`, "a recovery-pack path that already holds a
+file is refused, with what to do, before any wait or setup record"). After Start again, name a new
+file or move the earlier pack to another folder.
 For example, with your real paths:
 
 ```sh
@@ -183,9 +187,24 @@ Follow the venue, password and kept-document prompts; the command asks nothing a
 recent setups. It needs the internet's clock: with only the box's own, it explains why and stops
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal with only the box's
 clock explains and cancels without a question"). When the name must wait, it prints why and the
-time it continues at, and stops; run it again within a minute after that time, or it waits again
-(same file, "the terminal asks nothing, prints why it waits and until when, and keeps the wait"
-and "a terminal run more than a minute after its wait's target waits again"). `--yes` does not
+time it carries on at, and waits in the same run; keep it running
+(`packages/provisioning/src/cli-first-setup.test.ts`, "the venue command claims ownership, waits
+out its settle wait saying why and until when, before any venue write, and carries on in the same
+run"). If the command is stopped, or refused after the setup began, a later run asks nothing,
+changes nothing, says what happened, and is refused with `setup.attempt_conflict`, or
+`setup.attempt_uncertain` when activation stopped and the box could not tell whether it finished
+(same file, "a retained setup (%s) is refused before any question, and nothing on disk changes").
+Choose Start again on the box's setup page, then run the command again. Start again deletes what the
+setup entered (`apps/server/src/first-setup-command-start-again.test.ts`, "a command refused before
+activation leaves a setup Start again deletes, and the next command run completes"). It deletes
+nothing, and the page says why, if the setup already recorded something that must be kept, such as
+an invoice (`apps/server/src/first-setup-start-again-held.test.ts`, "an invoice record refuses the
+summary and Start again setup.start_again_refused kept-records, and nothing changes"), or if the
+box cannot confirm that deleting it is safe. A setup whose activation began but stopped before it
+wrote anything to the venue database is deleted too, when nothing else of it is left beyond what
+Start again deletes for a setup refused before activation (same file as the first, "a command cut
+off at %s before its stamp, with an empty database and nothing outside it: Start again deletes it,
+and the next command run completes"). `--yes` does not
 answer the retention question. Production additionally needs the accepted readiness
 receipt. Supply login secrets through their private prompts or supported environment variables,
 never command arguments. `WAITRON_INITIAL_VENUE_INPUT` cannot supply Live activation authority.

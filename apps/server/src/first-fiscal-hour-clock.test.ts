@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -77,10 +76,7 @@ async function fixture(environment: "production" | "preproduction" = "preproduct
     modules,
     database: () => venue.db,
   });
-  const claim = await host.owner.claimFirstSetup(
-    { environment, request },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await host.owner.claimFirstSetup({ environment, request });
   const state = (await host.store.read())!;
   const context = firstSetupModuleContext(state, MODULE);
   const prepared = createHostedHourPreparation(bound);

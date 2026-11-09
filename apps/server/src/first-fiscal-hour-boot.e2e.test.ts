@@ -1,10 +1,9 @@
-import { randomBytes } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { ALL_MODULES } from "@waitron/composition";
 import { expect, it } from "vitest";
 import { Agent } from "undici";
-import { request, PASSWORD } from "../test/first-fiscal.js";
+import { request } from "../test/first-fiscal.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { childProcess, entryWorkspaces, ready } from "../test/first-fiscal-hour-entry.js";
@@ -14,14 +13,11 @@ const fixture = entryWorkspaces();
 const built = useBuiltServer(["src/bin.ts", "src/node-entry.ts"]);
 
 it.each(["src/bin.ts", "src/node-entry.ts"])(
-  "%s recovers the original password over its retained trusted HTTPS without creating the missing database",
+  "%s serves only the repair page over its retained trusted HTTPS without creating the missing database",
   async (script) => {
     const f = await fixture();
     const host = createFirstSetupModuleHost({ ...f, modules: ALL_MODULES, environment: f.env });
-    const claim = await host.owner.claimFirstSetup(
-      { environment: "preproduction", request },
-      randomBytes(32).toString("base64url"),
-    );
+    await host.owner.claimFirstSetup({ environment: "preproduction", request });
     const frozen = (await host.store.read())!.frozen;
     await ensureBoxSecrets({
       stateDir: f.stateDir,
@@ -43,35 +39,6 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       });
       expect(await (await get("/setup-api/discovery")).json()).toEqual({
         caDownloadAvailable: true,
-      });
-      const snapshot = await (await get("/setup-api/first-setup/resolution")).json();
-      const body = {
-        inspectionId: snapshot.inspectionId,
-        revision: snapshot.revision,
-        ownerGeneration: snapshot.ownerGeneration,
-        clientClaimNonce: randomBytes(32).toString("base64url"),
-        password: PASSWORD,
-      };
-      const post = (password: string, requestOrigin = origin) =>
-        fetch(`${origin}/setup-api/first-setup/resolution/recover`, {
-          dispatcher: agent,
-          method: "POST",
-          headers: { "Content-Type": "application/json", Origin: requestOrigin },
-          body: JSON.stringify({ ...body, password }),
-        } as RequestInit);
-      for (const response of [
-        await post(PASSWORD, "https://another.test"),
-        await post("wrong-password"),
-      ]) {
-        expect(response.status).toBe(403);
-        expect(await response.json()).toMatchObject({ error: { code: "setup.owner_required" } });
-      }
-      const response = await post(PASSWORD);
-      expect(response.status).toBe(200);
-      expect(response.headers.get("Cache-Control")).toBe("no-store");
-      expect(await response.json()).toMatchObject({
-        capability: expect.any(String),
-        state: { attemptId: claim.state.attemptId, ownerGeneration: 2, status: "claimed" },
       });
       expect((await host.store.read())!.frozen).toEqual(frozen);
       await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });

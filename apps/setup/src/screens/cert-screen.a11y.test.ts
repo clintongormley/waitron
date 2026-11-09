@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
+import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./cert-screen.js";
 import type { SetupCertScreen } from "./cert-screen.js";
@@ -26,5 +28,20 @@ describe.each(["light", "dark"] as const)("setup-cert-screen a11y (%s theme)", (
     await el.updateComplete;
     expect(await bottomOf(el)).toBe("Correct the highlighted fields to continue.");
     await expectNoA11yViolations(host);
+  });
+
+  it("has no violations and no sideways scroll at phone width in Spanish", async () => {
+    const previous = [innerWidth, innerHeight];
+    setLocale("es-ES");
+    try {
+      await page.viewport(390, 1200);
+      const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {}, theme);
+      expect(el.shadowRoot!.textContent).toContain(t("cert.next", "es-ES"));
+      await expectNoA11yViolations(host);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+    } finally {
+      setLocale("en-GB");
+      await page.viewport(previous[0]!, previous[1]!);
+    }
   });
 });

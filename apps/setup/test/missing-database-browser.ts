@@ -3,9 +3,8 @@ import { userEvent } from "vitest/browser";
 import type { WtButton } from "@waitron/ui";
 import "../src/setup-app.js";
 import type { SetupApp } from "../src/setup-app.js";
-import { FIRST_SETUP_SESSION_KEY } from "../src/first-setup-session.js";
 import type { FirstSetupInspection, StartAgainSummary } from "../src/api/first-setup-types.js";
-import { initial, wizardApi } from "./first-setup-browser.js";
+import { wizardApi } from "./first-setup-browser.js";
 import { mountWidget } from "../src/widgets/test-helpers.js";
 
 export const q = <T extends Element>(app: SetupApp, name: string) =>
@@ -19,9 +18,6 @@ export async function missingDatabaseFixture(
   options: {
     intercept?: NonNullable<Parameters<typeof wizardApi>[0]>["intercept"];
     summary?: StartAgainSummary;
-    sameTab?: boolean;
-    /** What the mount waits for; by default Start again. */
-    ready?: (app: SetupApp) => boolean;
     theme?: "light" | "dark";
     locale?: "en-GB" | "es-ES";
   } = {},
@@ -38,10 +34,8 @@ export async function missingDatabaseFixture(
           pair: "valid",
           database: "missing",
           emptyDatabase: false,
-          password: "checkable",
           revision: 1,
           ownerGeneration: 1,
-          repairEligible: false,
           artifacts: [],
         } satisfies FirstSetupInspection);
       if (path.endsWith("/start-again/summary"))
@@ -49,21 +43,6 @@ export async function missingDatabaseFixture(
       if (path.endsWith("/start-again")) return Response.json({ restarting: true });
     },
   });
-  if (options.sameTab)
-    sessionStorage.setItem(
-      FIRST_SETUP_SESSION_KEY,
-      JSON.stringify({
-        version: 1,
-        clientClaimNonce: "N".repeat(43),
-        claimPending: false,
-        owner: {
-          attemptId: initial.attemptId,
-          revision: 1,
-          ownerGeneration: 1,
-          capability: "A".repeat(43),
-        },
-      }),
-    );
   const { el: app, host } = await mountWidget<SetupApp>(
     "setup-app",
     {
@@ -72,8 +51,7 @@ export async function missingDatabaseFixture(
     },
     options.theme,
   );
-  if (options.ready) await expect.poll(() => options.ready!(app)).toBe(true);
-  else await expect.poll(() => q(app, "start-again")).not.toBeNull();
+  await expect.poll(() => q(app, "start-again")).not.toBeNull();
   return { app, host, ...fixture };
 }
 /** Presses Start again and waits for the box's answer: the ask, a refusal or an error. */

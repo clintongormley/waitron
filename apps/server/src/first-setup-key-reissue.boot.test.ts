@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -44,8 +43,7 @@ it("reissues on the real setup HTTPS listener after a restart loses the raw key"
       } as RequestInit);
       return { status: response.status, headers: response.headers, body: await response.json() };
     };
-    const nonce = randomBytes(32).toString("base64url");
-    const claim = await post("claim", { clientClaimNonce: nonce, venue: request });
+    const claim = await post("claim", { venue: request });
     expect(claim.status).toBe(200);
     const own = (result: typeof claim.body) => {
       headers = {
@@ -65,9 +63,6 @@ it("reissues on the real setup HTTPS listener after a restart loses the raw key"
     await server.close();
     server = undefined;
     server = await startServer(env);
-    const resumed = await post("resume", { clientClaimNonce: nonce, password: PASSWORD });
-    expect(resumed.status).toBe(200);
-    own(resumed.body);
     const before = await readFile(join(stateDir, "first-setup.json"));
     const refused = await post("node-key-reissue", { password: "wrong password" });
     expect(refused.status).toBe(403);

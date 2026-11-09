@@ -68,8 +68,7 @@ async function fixture() {
     coordinator: createFirstSetupCoordinator(),
   };
   const store = createFirstSetupStore(options);
-  const claim = (input = frozen()) =>
-    store.claim(input, verifier, digest("capability"), digest("client-nonce"));
+  const claim = (input = frozen()) => store.claim(input, verifier, digest("capability"));
   return {
     dir,
     options,
@@ -87,6 +86,30 @@ afterEach(async () => {
   );
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
+
+async function interruptedCompletion(f: Awaited<ReturnType<typeof fixture>>) {
+  let state = await f.claim();
+  for (const change of [
+    { kind: "consumption-intent" },
+    { kind: "activation-started" },
+    { kind: "committed", result: {} },
+    { kind: "publication" },
+  ] as const)
+    state = await f.store.update(state.frozen.attemptId, state.revision, change);
+  const original = (
+    await vi.importActual<typeof import("./durable-host-json.js")>("./durable-host-json.js")
+  ).writeDurableHostJson;
+  let calls = 0;
+  vi.spyOn(durable, "writeDurableHostJson").mockImplementation(async (...args) => {
+    if (++calls === 2) throw new Error("completion-marker-fault");
+    return original(...args);
+  });
+  await expect(
+    f.store.update(state.frozen.attemptId, state.revision, { kind: "complete" }),
+  ).rejects.toThrow("completion-marker-fault");
+  vi.restoreAllMocks();
+  return (await f.store.readResumable())!.state;
+}
 
 it("refuses a frozen request that still nests a location object", async () => {
   const f = await fixture();
@@ -190,28 +213,6 @@ it("does not repair a marker with an unsupported version", async () => {
   expect(await readFile(f.markerPath)).toEqual(before);
 });
 
-it("rechecks the retained setup state after the empty-database proof returns", async () => {
-  const f = await fixture();
-  await f.claim();
-  const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
-  marker.status = "claiming";
-  await writeFile(f.markerPath, JSON.stringify(marker));
-  const expected = (await f.store.readForRepair())!;
-  const before = await readFile(f.markerPath);
-  const changed = structuredClone(expected.state);
-  changed.revision++;
-  changed.ownerGeneration++;
-  changed.capabilityHash = digest("replacement-during-empty-proof");
-  changed.history.push({ kind: "recover", revision: 2, ownerGeneration: 2 });
-  await expect(
-    f.store.repairMarker(expected, async () => {
-      await writeFile(f.statePath, JSON.stringify(changed));
-    }),
-  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-  expect(await readFile(f.markerPath)).toEqual(before);
-  expect((await f.store.readForRepair())!.state).toEqual(changed);
-});
-
 it("lets one simultaneous claim win and retains its exact identities across restart", async () => {
   const f = await fixture();
   const input = frozen();
@@ -226,7 +227,7 @@ it("lets one simultaneous claim win and retains its exact identities across rest
     attemptId: input.attemptId,
   });
   const bytes = await readFile(f.statePath, "utf8");
-  for (const secret of ["owner-password", '"4826"', '"capability"', '"client-nonce"'])
+  for (const secret of ["owner-password", '"4826"', '"capability"'])
     expect(bytes).not.toContain(secret);
 });
 
@@ -498,7 +499,7 @@ it.each([1, 2])(
   },
 );
 
-it("records valid public imports/checks and keeps them through a resume without granting authority", async () => {
+it("records valid public imports and checks", async () => {
   const f = await fixture();
   let state = await f.claim();
   state = await f.store.update(state.frozen.attemptId, 1, {
@@ -507,73 +508,12 @@ it("records valid public imports/checks and keeps them through a resume without 
     input: { signed: "public", list: [true, 2, null] },
   });
   state = await f.store.update(state.frozen.attemptId, 2, { kind: "checked", module: "probe" });
-  state = await f.store.update(state.frozen.attemptId, 3, {
-    kind: "resume",
-    capabilityHash: digest("rotated"),
-  });
-  expect(state.ownerGeneration).toBe(2);
+  expect(state.ownerGeneration).toBe(1);
   expect(state.inputs).toEqual({ probe: { signed: "public", list: [true, 2, null] } });
   expect(state.status).toBe("claimed");
-  expect(state.history.map((event) => event.kind)).toEqual(["claim", "input", "checked", "resume"]);
+  expect(state.history.map((event) => event.kind)).toEqual(["claim", "input", "checked"]);
 });
 
-it("records a recovery as a new owner generation with a replacement browser proof", async () => {
-  const f = await fixture();
-  const before = await f.claim();
-  const recovered = await f.store.update(before.frozen.attemptId, before.revision, {
-    kind: "recover",
-    capabilityHash: digest("recovered-capability"),
-    claimNonceHash: digest("new-browser-proof"),
-  } as never);
-  expect(recovered.frozen).toEqual(before.frozen);
-  expect(recovered.ownerVerifier).toBe(before.ownerVerifier);
-  expect(recovered.claimNonceHash).toBe(digest("new-browser-proof"));
-  expect(recovered.capabilityHash).toBe(digest("recovered-capability"));
-  expect(recovered.ownerGeneration).toBe(2);
-  expect(recovered.revision).toBe(2);
-  expect(recovered.history).toEqual([
-    { kind: "claim", revision: 1, ownerGeneration: 1 },
-    { kind: "recover", revision: 2, ownerGeneration: 2 },
-  ]);
-  expect(await createFirstSetupStore(f.options).read()).toEqual(recovered);
-});
-
-it.each(["capabilityHash", "claimNonceHash"])(
-  "rejects a malformed recovery %s without writing",
-  async (field) => {
-    const f = await fixture();
-    const before = await f.claim();
-    const bytes = await readFile(f.statePath);
-    await expect(
-      f.store.update(before.frozen.attemptId, before.revision, {
-        kind: "recover",
-        capabilityHash: digest("new-capability"),
-        claimNonceHash: digest("new-proof"),
-        [field]: "bad",
-      } as never),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-    expect(await readFile(f.statePath)).toEqual(bytes);
-  },
-);
-
-it("rebinds an abandoned attempt without reviving it or admitting another mutation", async () => {
-  const f = await fixture();
-  const before = await f.claim();
-  await f.store.update(before.frozen.attemptId, 1, { kind: "abandoned" });
-  const bytes = await readFile(f.statePath);
-  const recovered = await f.store.update(before.frozen.attemptId, 2, {
-    kind: "recover",
-    capabilityHash: digest("new-capability"),
-    claimNonceHash: digest("new-proof"),
-  });
-  expect(recovered.status).toBe("abandoned");
-  expect(recovered.ownerGeneration).toBe(2);
-  expect(recovered.history.slice(0, 2)).toEqual(JSON.parse(bytes.toString()).history);
-  await expect(
-    f.store.update(before.frozen.attemptId, 3, { kind: "consumption-intent" }),
-  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-  expect((await f.store.read())?.status).toBe("abandoned");
-});
 it("rejects unknown modules, duplicate consumption, wrong IDs and backward phases", async () => {
   const f = await fixture();
   let state = await f.claim();
@@ -612,6 +552,22 @@ it("rejects unknown modules, duplicate consumption, wrong IDs and backward phase
     expect.objectContaining({ code: "setup.attempt_uncertain" }),
   );
 });
+it("a publication attempt cannot start activation again", async () => {
+  const f = await fixture();
+  let state = await f.claim();
+  for (const change of [
+    { kind: "consumption-intent" },
+    { kind: "activation-started" },
+    { kind: "committed", result: {} },
+    { kind: "publication" },
+  ] as const)
+    state = await f.store.update(state.frozen.attemptId, state.revision, change);
+  const bytes = await readFile(f.statePath);
+  await expect(
+    f.store.update(state.frozen.attemptId, state.revision, { kind: "activation-started" }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await readFile(f.statePath)).toEqual(bytes);
+});
 it("rejects an empty attempt mutation and a new claim after completion", async () => {
   const f = await fixture();
   await expect(f.store.update(randomUUID(), 1, { kind: "abandoned" })).rejects.toMatchObject({
@@ -633,7 +589,6 @@ it.each([
   ["revision", 0],
   ["ownerGeneration", 0],
   ["capabilityHash", "bad"],
-  ["claimNonceHash", "bad"],
   ["ownerVerifier", "scrypt$bad"],
   ["status", "free"],
   ["consumptionIntent", "false"],
@@ -648,6 +603,29 @@ it.each([
   disk[field as string] = value;
   await writeFile(f.statePath, JSON.stringify(disk));
   await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+});
+it("refuses a saved record that still carries the retired claim nonce hash", async () => {
+  const f = await fixture();
+  await f.claim();
+  const disk = JSON.parse(await readFile(f.statePath, "utf8"));
+  disk.claimNonceHash = digest("client-nonce");
+  await writeFile(f.statePath, JSON.stringify(disk));
+  await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+});
+it("refuses a previous attempt that still carries the retired claim nonce hash", async () => {
+  const f = await fixture();
+  const first = await f.claim();
+  await f.store.update(first.frozen.attemptId, first.revision, { kind: "abandoned" });
+  await f.claim();
+  const disk = JSON.parse(await readFile(f.statePath, "utf8"));
+  disk.previous[0].claimNonceHash = digest("x");
+  await writeFile(f.statePath, JSON.stringify(disk));
+  await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+});
+it("writes no claim nonce hash when a setup is claimed", async () => {
+  const f = await fixture();
+  expect(await f.claim()).not.toHaveProperty("claimNonceHash");
+  expect(JSON.parse(await readFile(f.statePath, "utf8"))).not.toHaveProperty("claimNonceHash");
 });
 it.each([
   { attemptId: "not-a-uuid" },
@@ -678,22 +656,19 @@ it("rejects duplicates and raw admin input rather than persisting them", async (
       f.claim({ ...input, request: { ...input.request, admin } } as never),
     ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   for (const bad of ["bad", "a".repeat(63)])
-    await expect(f.store.claim(input, verifier, bad, digest("nonce"))).rejects.toMatchObject({
+    await expect(f.store.claim(input, verifier, bad)).rejects.toMatchObject({
       code: "setup.attempt_invalid",
     });
-  await expect(f.store.claim(input, verifier, digest("cap"), "bad")).rejects.toMatchObject({
+  await expect(f.store.claim(input, hashPassword("other"), digest("cap"))).rejects.toMatchObject({
     code: "setup.attempt_invalid",
   });
-  await expect(
-    f.store.claim(input, hashPassword("other"), digest("cap"), digest("nonce")),
-  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   expect(await f.store.read()).toBeNull();
 });
 
 it("allows internal held mutations, rejecting non-public and unbounded nested inputs", async () => {
   const f = await fixture();
   const state = await f.options.coordinator.run(async (hold) =>
-    f.store.claim(frozen(), verifier, digest("cap"), digest("nonce"), hold),
+    f.store.claim(frozen(), verifier, digest("cap"), hold),
   );
   await f.options.coordinator.run(async (hold) => {
     const updated = await f.store.update(
@@ -769,43 +744,18 @@ it("freezes a validated public request before consumption and admits only its fi
     ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect((await f.store.read())!.inputs.probe).toEqual({ allocationId: "outside-1" });
 });
-it("keeps an interrupted completion out of trading while allowing a credential resume to recheck publication", async () => {
+it("keeps an interrupted completion out of trading", async () => {
   const f = await fixture();
-  let state = await f.claim();
-  for (const change of [
-    { kind: "consumption-intent" },
-    { kind: "activation-started" },
-    { kind: "committed", result: {} },
-    { kind: "publication" },
-  ] as const)
-    state = await f.store.update(state.frozen.attemptId, state.revision, change);
-  const original = (
-    await vi.importActual<typeof import("./durable-host-json.js")>("./durable-host-json.js")
-  ).writeDurableHostJson;
-  let calls = 0;
-  vi.spyOn(durable, "writeDurableHostJson").mockImplementation(async (...args) => {
-    if (++calls === 2) throw new Error("completion-marker-fault");
-    return original(...args);
-  });
-  await expect(
-    f.store.update(state.frozen.attemptId, state.revision, { kind: "complete" }),
-  ).rejects.toThrow("completion-marker-fault");
-  vi.restoreAllMocks();
+  const state = await interruptedCompletion(f);
   await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   const pending = await f.store.readResumable();
   expect(pending?.publicationComplete).toBe(false);
   expect(pending?.state.status).toBe("complete");
-  state = await f.store.update(state.frozen.attemptId, pending!.state.revision, {
-    kind: "resume",
-    capabilityHash: digest("fresh"),
-  });
-  expect(state.status).toBe("publication");
-  expect(state.ownerGeneration).toBe(2);
-  expect((await f.store.read())?.status).toBe("publication");
-  expect(() => assertOtherSetupAllowed(state)).toThrowError(
-    expect.objectContaining({ code: "setup.attempt_uncertain" }),
-  );
+  await expect(
+    f.store.update(state.frozen.attemptId, state.revision, { kind: "publication" }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
 });
+
 it("locks the public publication binding after consumption and never replaces it on retry", async () => {
   const f = await fixture();
   let state = await f.claim();
@@ -886,7 +836,7 @@ it("retains the exact configuration import binding and refuses a changed digest 
 });
 
 it.each(["claim", "abandon"])(
-  "repairs only the %s marker after checking the unused venue",
+  "reports a repairable %s marker without changing either file",
   async (phase) => {
     const f = await fixture();
     const original = (
@@ -913,89 +863,12 @@ it.each(["claim", "abandon"])(
     }
     vi.mocked(durable.writeDurableHostJson).mockImplementation(original);
     const bytes = await readFile(f.statePath);
+    const markerBytes = await readFile(f.markerPath);
     await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
     const inspection = await f.store.readForRepair();
     expect(inspection?.repairMarker).toBe(phase === "claim" ? "active" : "abandoned");
     expect(await readFile(f.statePath)).toEqual(bytes);
-    let checked = 0;
-    await f.store.repairMarker(inspection!, async () => {
-      checked++;
-    });
-    expect(checked).toBe(1);
-    expect(await readFile(f.statePath)).toEqual(bytes);
-    expect((await f.store.read())?.status).toBe(phase === "claim" ? "claimed" : "abandoned");
-    expect(JSON.parse(await readFile(f.markerPath, "utf8")).status).toBe(
-      phase === "claim" ? "active" : "abandoned",
-    );
-  },
-);
-
-it("leaves both files untouched when the unused-venue check refuses marker repair", async () => {
-  const f = await fixture();
-  await f.claim();
-  const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
-  marker.status = "claiming";
-  await writeFile(f.markerPath, JSON.stringify(marker));
-  const stateBytes = await readFile(f.statePath),
-    markerBytes = await readFile(f.markerPath);
-  const observed = await f.store.readForRepair();
-  await expect(
-    f.store.repairMarker(observed!, async () => {
-      throw Object.assign(new Error(), { code: "setup.attempt_conflict" });
-    }),
-  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-  expect(await readFile(f.statePath)).toEqual(stateBytes);
-  expect(await readFile(f.markerPath)).toEqual(markerBytes);
-});
-
-it("rejects a marker repair when the observed ownership changed before exclusion", async () => {
-  const f = await fixture();
-  await f.claim();
-  const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
-  marker.status = "claiming";
-  await writeFile(f.markerPath, JSON.stringify(marker));
-  const observed = (await f.store.readForRepair())!;
-  const changed = JSON.parse(await readFile(f.statePath, "utf8"));
-  changed.revision = 2;
-  changed.ownerGeneration = 2;
-  changed.capabilityHash = digest("replacement-owner");
-  changed.history.push({ kind: "recover", revision: 2, ownerGeneration: 2 });
-  await writeFile(f.statePath, JSON.stringify(changed));
-  const before = await readFile(f.markerPath);
-  await expect(f.store.repairMarker(observed, async () => {})).rejects.toMatchObject({
-    code: "setup.attempt_conflict",
-  });
-  expect(await readFile(f.markerPath)).toEqual(before);
-  expect((await f.store.readForRepair())?.state.ownerGeneration).toBe(2);
-});
-
-it.each(["before-write", "lost-response"])(
-  "preserves state across marker repair failure %s",
-  async (point) => {
-    const f = await fixture();
-    await f.claim();
-    const marker = JSON.parse(await readFile(f.markerPath, "utf8"));
-    marker.status = "claiming";
-    await writeFile(f.markerPath, JSON.stringify(marker));
-    const stateBefore = await readFile(f.statePath);
-    const expected = (await f.store.readForRepair())!;
-    const original = (
-      await vi.importActual<typeof import("./durable-host-json.js")>("./durable-host-json.js")
-    ).writeDurableHostJson;
-    vi.mocked(durable.writeDurableHostJson).mockImplementationOnce(async (...args) => {
-      if (point === "lost-response") await original(...args);
-      throw new Error("marker repair interrupted");
-    });
-    await expect(f.store.repairMarker(expected, async () => {})).rejects.toThrow(
-      "marker repair interrupted",
-    );
-    vi.mocked(durable.writeDurableHostJson).mockImplementation(original);
-    expect(await readFile(f.statePath)).toEqual(stateBefore);
-    const after = (await f.store.readForRepair())!;
-    expect(after.repairMarker).toBe(point === "lost-response" ? null : "active");
-    if (point === "before-write") await f.store.repairMarker(after, async () => {});
-    expect((await f.store.read())?.status).toBe("claimed");
-    expect(await readFile(f.statePath)).toEqual(stateBefore);
+    expect(await readFile(f.markerPath)).toEqual(markerBytes);
   },
 );
 
@@ -1062,9 +935,7 @@ it("a retired root cannot be claimed again or accept a delayed state update", as
   await expect(f.claim()).rejects.toMatchObject({ code: "setup.workspace_unsupported" });
   await expect(
     f.store.update(abandoned.frozen.attemptId, abandoned.revision, {
-      kind: "recover",
-      capabilityHash: digest("different"),
-      claimNonceHash: digest("different-nonce"),
+      kind: "consumption-intent",
     }),
   ).rejects.toMatchObject({ code: "setup.workspace_unsupported" });
   expect(await readFile(f.statePath)).toEqual(before);
@@ -1080,4 +951,53 @@ it("marker inspection and venue-only admission refuse an earlier Waitron's first
   await expect(assertVenueFirstSetupAllowed(f.options.venueDir)).rejects.toMatchObject({
     code: "setup.workspace_unsupported",
   });
+});
+
+it.each(["resume", "recover"])("refuses a record carrying a %s event", async (kind) => {
+  const f = await fixture();
+  await f.claim();
+  const record = JSON.parse(await readFile(f.statePath, "utf8"));
+  record.revision = 2;
+  record.history.push({ kind, revision: 2, ownerGeneration: 1 });
+  await writeFile(f.statePath, JSON.stringify(record));
+  await expect(f.store.read()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+});
+
+const EVERY_CHANGE = [
+  { kind: "input", module: "probe", input: {} },
+  { kind: "import", module: "probe", input: {} },
+  { kind: "candidates", module: "probe", request: {} },
+  { kind: "publication-binding", digest: "a".repeat(64) },
+  { kind: "checked", module: "probe" },
+  { kind: "consumption-intent" },
+  { kind: "activation-started" },
+  { kind: "committed", result: {} },
+  { kind: "publication" },
+  { kind: "complete" },
+  { kind: "abandoned" },
+  { kind: "uncertain" },
+] as const;
+
+it.each(EVERY_CHANGE)("an abandoned attempt refuses a $kind change", async (change) => {
+  const f = await fixture();
+  const claimed = await f.claim();
+  const abandoned = await f.store.update(claimed.frozen.attemptId, claimed.revision, {
+    kind: "abandoned",
+  });
+  const bytes = await readFile(f.statePath);
+  await expect(
+    f.store.update(abandoned.frozen.attemptId, abandoned.revision, change),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await readFile(f.statePath)).toEqual(bytes);
+  expect((await f.store.read())?.status).toBe("abandoned");
+});
+
+it.each(EVERY_CHANGE)("an interrupted completion refuses a $kind change", async (change) => {
+  const f = await fixture();
+  const state = await interruptedCompletion(f);
+  const bytes = await readFile(f.statePath);
+  await expect(
+    f.store.update(state.frozen.attemptId, state.revision, change),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await readFile(f.statePath)).toEqual(bytes);
 });

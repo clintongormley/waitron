@@ -1,9 +1,9 @@
 import { SETUP_MODULES } from "@waitron/dashboard-modules/setup";
-import { draftScopeFor } from "@waitron/ui";
 import { FirstSetupSession } from "./first-setup-session.js";
 import { readWipeSummary, sendWipe, wipeRefusal, type WipeRefusal } from "./start-again-wipe.js";
 import type {
   FirstSetupInspection,
+  FirstSetupState,
   FirstSetupResolutionSnapshot,
   StartAgainSummary,
 } from "./api/first-setup-types.js";
@@ -231,11 +231,52 @@ const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
   "setup.start_again_incomplete": "shell.first_setup.start_again_incomplete",
   "setup.workspace_unsupported": "shell.first_setup.workspace_unsupported",
 };
+/** An attempt in one of these cannot be carried on from the page: only Start again or Recover remain. */
+const pastActivation = (state: FirstSetupState | undefined) =>
+  state !== undefined && ["activation-started", "committed", "publication"].includes(state.status);
+/** The box refuses activation to these, whatever key a page holds: only Start again remains. */
+const notCarriedOn = (state: FirstSetupState | undefined) =>
+  state?.status === "abandoned" || state?.status === "uncertain";
+/** A held attempt the box still lets this page carry on: before activation, with nothing to recover. */
+const carriesOn = (session: FirstSetupSession | undefined) =>
+  session?.state !== undefined &&
+  !session.recoveryRequired &&
+  (session.state.status === "claimed" || session.state.status === "consumption-intent");
+const statusReadUnusable = (error: unknown) => {
+  const code = (error as { code?: string } | null)?.code;
+  return code === "setup.attempt_conflict" || code === "setup.attempt_invalid";
+};
+const inspectsAttempt = (session: FirstSetupSession, statusRefused: boolean) =>
+  ((statusRefused || session.recoveryRequired) && !session.state) ||
+  pastActivation(session.state) ||
+  notCarriedOn(session.state);
 /** Whether the page may ask the box what Start again would delete; the box decides the rest. */
+/** The box refused the stop from this page or over this connection, which deletes nothing. */
+const stopNotAccepted = (code: unknown) =>
+  code === "setup.owner_required" || code === "setup.connection_insecure";
 const wipeOffered = (inspection: FirstSetupInspection) =>
   (inspection.pair === "valid" || inspection.pair === "repairable") &&
   inspection.revision !== null &&
   inspection.ownerGeneration !== null;
+/** Words for a setup request the box refused over a first setup this page does not hold. */
+function firstSetupHeldWords(
+  code: unknown,
+  held:
+    | "shell.provisioning.first_setup_held"
+    | "shell.restore.first_setup_held"
+    | "shell.reset.first_setup_held",
+): Message | undefined {
+  if (code === "setup.owner_required") return say("shell.setup_not_accepted");
+  if (code === "setup.attempt_uncertain") return say(held);
+  return undefined;
+}
+/** The restore and reset screens' words for a refusal their own buttons would only meet again. */
+const restoreOrResetRefusalWords = (
+  code: unknown,
+  held: "shell.restore.first_setup_held" | "shell.reset.first_setup_held",
+): Message | undefined =>
+  firstSetupHeldWords(code, held) ??
+  (code === "setup.attempt_conflict" ? say("shell.setup_conflict") : undefined);
 const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
   "provisioning.territory_country_mismatch": "shell.venue_error.territory_country_mismatch",
   "provisioning.invalid_locales": "shell.venue_error.invalid_locales",
@@ -567,8 +608,9 @@ export class SetupApp extends LitElement {
         margin-block-end: var(--wt-space-2);
       }
 
-      /* The repair page's loose buttons wrap as inline boxes; this keeps a wrapped row off the one above. */
-      section > wt-button {
+      /* Keeps a wrapped row of the repair page's buttons, and a form's button row, off the row above. */
+      section > wt-button,
+      section > wt-form-actions {
         margin-block-end: var(--wt-space-1);
       }
 
@@ -646,17 +688,15 @@ export class SetupApp extends LitElement {
     ++this.#firstGeneration;
     void this.#firstSession?.dispose();
     this.#firstSession = undefined;
-    this.firstOwnerPassword = "";
     this.firstOwnerBusy = false;
     this.firstInspection = undefined;
     this.firstRestartConfirm = false;
     this.firstRetireConfirmed = false;
     this.firstRestarting = false;
+    this.firstStopped = false;
     this.#closeWipe();
     this.#afterWipe = undefined;
     this.firstWipeError = undefined;
-    this.#firstPasswordScope?.dispose();
-    this.#firstPasswordScope = undefined;
     ++this.#cloudRecoveryAttempt;
     this.cloudRecoveryBusy = false;
     this.#rootScope?.dispose();
@@ -781,7 +821,9 @@ export class SetupApp extends LitElement {
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
       if (first.claimed || first.conflict) {
         try {
-          await this.#openFirstSession();
+          await this.#resumeFirstSession(
+            () => this.isConnected && generation === this.#connectionGeneration,
+          );
         } catch (error) {
           if (this.isConnected && generation === this.#connectionGeneration) {
             this.screen = "first-owner";
@@ -789,8 +831,6 @@ export class SetupApp extends LitElement {
           }
           throw error;
         }
-        if (!this.isConnected || generation !== this.#connectionGeneration) return;
-        this.screen = "first-owner";
       } else if (this.screen === "connection" && !discovery.caDownloadAvailable)
         this.screen = "mode";
     } catch (error) {
@@ -822,7 +862,9 @@ export class SetupApp extends LitElement {
       this.connectionAnswered = true;
       if (first.claimed || first.conflict) {
         try {
-          await this.#openFirstSession();
+          await this.#resumeFirstSession(
+            () => this.isConnected && generation === this.#connectionGeneration,
+          );
         } catch (error) {
           if (this.isConnected && generation === this.#connectionGeneration) {
             this.screen = "first-owner";
@@ -830,8 +872,6 @@ export class SetupApp extends LitElement {
           }
           throw error;
         }
-        if (!this.isConnected || generation !== this.#connectionGeneration) return;
-        this.screen = "first-owner";
       } else this.screen = "mode";
     } catch (error) {
       this.#recordConnectionFailure(error, generation);
@@ -848,7 +888,7 @@ export class SetupApp extends LitElement {
       !this.#firstReplacing &&
       (event.detail.patch.venue !== undefined || event.detail.patch.mode !== undefined)
     ) {
-      this.firstOwnerError = () => initialOwnerStrings[setupLocale()].scope;
+      this.firstOwnerError = this.#frozenDetailsWords();
       this.screen = "first-owner";
       return;
     }
@@ -1000,13 +1040,10 @@ export class SetupApp extends LitElement {
         "cloud-restore",
       ].includes(destination)
     ) {
-      this.firstOwnerError = () => initialOwnerStrings[setupLocale()].scope;
+      this.firstOwnerError = this.#frozenDetailsWords();
       destination = "first-owner";
     }
-    if (this.firstFinishing && destination === "fiscal-test")
-      destination = this.#firstSession?.recoveryRequired ? "first-owner" : "email";
-    if (destination === "first-owner") this.firstFinishing = false;
-    if (this.#firstSession && destination === "review" && !this.firstReady && !this.firstFinishing)
+    if (this.#firstSession && destination === "review" && !this.firstReady)
       destination = "first-setup";
     ++this.#cloudRecoveryAttempt;
     this.cloudRecoveryBusy = false;
@@ -1056,6 +1093,11 @@ export class SetupApp extends LitElement {
     else this.#afterFirstOwner();
   }
 
+  #frozenDetailsWords(): Message {
+    const words = carriesOn(this.#firstSession) ? "scopeCarryOn" : "scope";
+    return () => initialOwnerStrings[setupLocale()][words];
+  }
+
   #afterFirstOwner(): void {
     this.screen =
       this.draft.mode === "live" && !this.developmentMode
@@ -1069,15 +1111,15 @@ export class SetupApp extends LitElement {
 
   @state() private firstOwnerBusy = false;
   @state() private firstOwnerError?: Message;
-  @state() private firstOwnerPassword = "";
-  @state() private firstPasswordAttempted = false;
   @state() private firstReady = false;
-  @state() private firstFinishing = false;
   @state() private firstOfferings: { module: string; version: string }[] = [];
   @state() private firstInspection?: FirstSetupInspection;
   @state() private firstRestartConfirm = false;
   @state() private firstRetireConfirmed = false;
   @state() private firstRestarting = false;
+  /** Start again or Recover pressed on the ordinary server: the setup must be stopped first (D2). */
+  @state() private firstStopConfirm = false;
+  @state() private firstStopped = false;
   /** What Start again's confirmation shows; the send stops if the box's summary differs from it. */
   @state() private firstWipeSummary?: StartAgainSummary;
   /** Which button the person last pressed: it picks the words drawn; both send the same request. */
@@ -1090,8 +1132,6 @@ export class SetupApp extends LitElement {
   #firstSession?: FirstSetupSession;
   #firstGeneration = 0;
   #firstReplacing = false;
-  #firstPasswordOwner = {};
-  #firstPasswordScope?: DraftScope<string>;
 
   async #openFirstSession(): Promise<FirstSetupSession> {
     if (this.#firstSession) return this.#firstSession;
@@ -1108,16 +1148,42 @@ export class SetupApp extends LitElement {
     try {
       await session.refresh();
     } catch (error) {
-      if (session.state || (error as { code?: string })?.code !== "setup.attempt_conflict")
-        throw error;
+      if (session.state || !statusReadUnusable(error)) throw error;
       inspect = true;
     }
     if (inspect || session.recoveryRequired || session.state) this.#afterWipe = undefined;
-    if ((inspect || session.recoveryRequired) && !session.state) {
+    if (inspectsAttempt(session, inspect)) {
       const inspection = await this.api.inspectFirstSetupResolution();
       if (this.isConnected && this.#firstSession === session) this.firstInspection = inspection;
     }
     return session;
+  }
+  /** A tab whose saved key the box still accepts before activation carries on where it was (D3). */
+  async #resumeFirstSession(current: () => boolean): Promise<void> {
+    const session = await this.#openFirstSession();
+    if (!current()) return;
+    if (carriesOn(session)) await this.#carryOnFirstSession(current);
+    else this.screen = "first-owner";
+  }
+  /** What a reload does for a held attempt the box still lets this page carry on, Reconnect included. */
+  async #carryOnFirstSession(current: () => boolean): Promise<void> {
+    const state = this.#firstSession!.state!;
+    this.#acceptFirstIdentity();
+    let offerings: { modules: { module: string; version: string }[] };
+    try {
+      offerings = await this.api.firstSetupOfferings(state.venue.fiscalTerritory);
+    } catch (error) {
+      if (!current()) return;
+      const key = repairErrorKey(error);
+      this.screen = "first-owner";
+      this.firstOwnerError = key
+        ? say(key)
+        : () => initialOwnerStrings[setupLocale()].carryOnFailed;
+      return;
+    }
+    if (!current()) return;
+    this.firstOfferings = offerings.modules;
+    this.#afterFirstOwner();
   }
   #acceptFirstIdentity(): void {
     const state = this.#firstSession!.state!;
@@ -1136,7 +1202,6 @@ export class SetupApp extends LitElement {
     this.#rootBaseline = structuredClone(this.draft);
     this.#rootScope?.commit(this.#rootBaseline);
     this.firstReady = false;
-    this.firstFinishing = false;
     this.#firstReplacing = false;
   }
   async #claimFirstSetup(): Promise<void> {
@@ -1197,63 +1262,9 @@ export class SetupApp extends LitElement {
     const key = repairErrorKey(error);
     return key ? say(key) : () => initialOwnerStrings[setupLocale()].error;
   }
-  async #resumeFirstSetup(): Promise<void> {
-    this.firstPasswordAttempted = true;
-    if (!this.firstOwnerPassword || this.firstOwnerBusy) return;
-    const password = this.firstOwnerPassword;
-    this.firstPasswordAttempted = false;
-    this.firstOwnerPassword = "";
-    this.#firstPasswordScope?.commit("");
-    this.firstOwnerBusy = true;
-    this.firstOwnerError = undefined;
-    this.#closeWipe();
-    this.firstWipeError = undefined;
-    const generation = ++this.#firstGeneration;
-    const current = () => this.isConnected && generation === this.#firstGeneration;
-    try {
-      const session = await this.#openFirstSession();
-      if (!current()) return;
-      if (session.state) {
-        const inspection = await this.api.inspectFirstSetupResolution();
-        if (!current()) return;
-        this.firstInspection = inspection;
-        // A tab that signed in before draws Continue without knowing the database is missing.
-        if (inspection.database === "missing") {
-          this.screen = "first-owner";
-          return;
-        }
-      }
-      if (
-        !session.state ||
-        ["activation-started", "committed", "publication"].includes(session.state.status)
-      ) {
-        await session.recover(this.#firstResolutionSnapshot(), password);
-      } else await session.resume(password);
-      if (!current()) return;
-      this.#acceptFirstIdentity();
-      if (!["claimed", "consumption-intent"].includes(session.state!.status)) {
-        this.screen = "first-owner";
-        return;
-      }
-      this.firstOfferings = (
-        await this.api.firstSetupOfferings(session.state!.venue.fiscalTerritory)
-      ).modules;
-      if (!current()) return;
-      this.#afterFirstOwner();
-    } catch (error) {
-      if (current()) this.firstOwnerError = this.#describeRepairError(error);
-    } finally {
-      if (current()) this.firstOwnerBusy = false;
-    }
-  }
   #firstResolutionSnapshot(): FirstSetupResolutionSnapshot {
     const inspection = this.firstInspection;
-    if (
-      !inspection ||
-      inspection.password !== "checkable" ||
-      inspection.revision === null ||
-      inspection.ownerGeneration === null
-    )
+    if (!inspection || inspection.revision === null || inspection.ownerGeneration === null)
       throw { code: "setup.not_ready" };
     return {
       inspectionId: inspection.inspectionId,
@@ -1262,17 +1273,19 @@ export class SetupApp extends LitElement {
     };
   }
   #closeWipe(): void {
+    this.firstStopConfirm = false;
     this.firstWipeSummary = undefined;
     this.firstRestartConfirm = false;
     this.firstRetireConfirmed = false;
   }
   /**
-   * Start again or Recover from backup: the confirmation is drawn from what the box says now, read
-   * with no password, never from what the page read before.
+   * Start again or Recover from backup: the confirmation is drawn from what the box says now, never
+   * from what the page read before.
    */
   async #openWipeConfirmation(kind: "start-again" | "recover"): Promise<void> {
     if (this.firstOwnerBusy) return;
     this.firstWipeKind = kind;
+    const stop = this.#firstSession?.repairPage !== true;
     const generation = ++this.#firstGeneration;
     const current = () => this.isConnected && generation === this.#firstGeneration;
     this.firstOwnerBusy = true;
@@ -1283,6 +1296,11 @@ export class SetupApp extends LitElement {
       if (!current()) return;
       this.firstInspection = inspection;
       if (!wipeOffered(inspection)) return;
+      if (stop) {
+        this.firstStopConfirm = true;
+        void this.#focusAfterUpdate("cancel-stop");
+        return;
+      }
       const summary = await readWipeSummary(this.api, this.#firstResolutionSnapshot());
       if (!current()) return;
       this.firstWipeSummary = summary;
@@ -1296,7 +1314,9 @@ export class SetupApp extends LitElement {
         this.firstStartAgainRefused = refusal;
         void this.#focusAfterUpdate("start-again-refused");
       } else {
-        this.firstWipeError = this.#describeRepairError(error);
+        this.firstWipeError = stop
+          ? this.#describeStopReadError(error)
+          : this.#describeRepairError(error);
       }
     } finally {
       if (current()) this.firstOwnerBusy = false;
@@ -1330,8 +1350,6 @@ export class SetupApp extends LitElement {
       if (!current()) return;
       this.#closeWipe();
       this.firstRestarting = true;
-      this.firstOwnerPassword = "";
-      this.#firstPasswordScope?.commit("");
       await this.#firstSession?.dispose();
       this.#firstSession = undefined;
     } catch (error) {
@@ -1356,6 +1374,51 @@ export class SetupApp extends LitElement {
       if (current()) this.firstOwnerBusy = false;
     }
   }
+  async #stopFirstSetup(): Promise<void> {
+    if (this.firstOwnerBusy || !this.firstStopConfirm) return;
+    const generation = ++this.#firstGeneration;
+    const current = () => this.isConnected && generation === this.#firstGeneration;
+    this.firstOwnerBusy = true;
+    this.firstWipeError = undefined;
+    try {
+      await this.api.stopFirstSetup(this.#firstResolutionSnapshot());
+      if (!current()) return;
+      this.#closeWipe();
+      this.firstStopped = true;
+      await this.#firstSession?.dispose();
+      this.#firstSession = undefined;
+    } catch (error) {
+      if (!current()) return;
+      this.#closeWipe();
+      const code = (error as { code?: unknown })?.code;
+      // The stop runs the checks the summary runs, so its refusals read as the summary's do, except
+      // the refusal of this page or its connection, which says nothing about deleting.
+      const refusal = stopNotAccepted(code) ? undefined : wipeRefusal(error);
+      if (code === "setup.attempt_conflict") {
+        this.firstWipeError = () => initialOwnerStrings[setupLocale()].heldChanged;
+        void this.#focusAfterUpdate(
+          this.firstWipeKind === "recover" ? "recover-backup" : "start-again",
+        );
+      } else if (refusal !== undefined) {
+        this.firstStartAgainRefused = refusal;
+        void this.#focusAfterUpdate("start-again-refused");
+      } else this.firstWipeError = this.#describeStopError(error);
+    } finally {
+      if (current()) this.firstOwnerBusy = false;
+    }
+  }
+  #describeStopError(error: unknown): Message {
+    const strings = () => initialOwnerStrings[setupLocale()];
+    if (stopNotAccepted((error as { code?: unknown } | null)?.code))
+      return () => strings().stopNotAccepted;
+    const key = repairErrorKey(error);
+    return key ? say(key) : () => strings().stopUnanswered;
+  }
+  /** On the stop path the only request before the confirmation is the read, so no stop was sent. */
+  #describeStopReadError(error: unknown): Message {
+    const key = repairErrorKey(error);
+    return key ? say(key) : () => initialOwnerStrings[setupLocale()].stopReadUnanswered;
+  }
   #cancelWipe(): void {
     if (this.firstOwnerBusy) return;
     this.#closeWipe();
@@ -1371,6 +1434,7 @@ export class SetupApp extends LitElement {
     try {
       this.firstInspection = undefined;
       this.firstRestarting = false;
+      this.firstStopped = false;
       this.#closeWipe();
       this.firstWipeError = undefined;
       this.firstStartAgainRefused = undefined;
@@ -1380,19 +1444,22 @@ export class SetupApp extends LitElement {
       try {
         await session.refresh();
       } catch (error) {
-        if (session.state || (error as { code?: string })?.code !== "setup.attempt_conflict")
-          throw error;
+        if (session.state || !statusReadUnusable(error)) throw error;
         inspect = true;
       }
       const unclaimed = !inspect && !session.state && !session.recoveryRequired;
       if (!unclaimed) this.#afterWipe = undefined;
-      if ((inspect || session.recoveryRequired) && !session.state) {
+      if (inspectsAttempt(session, inspect)) {
         const inspection = await this.api.inspectFirstSetupResolution();
         if (!this.isConnected || generation !== this.#firstGeneration) return;
         this.firstInspection = inspection;
       }
       if (!this.isConnected || generation !== this.#firstGeneration) return;
-      if (unclaimed) {
+      if (carriesOn(session))
+        await this.#carryOnFirstSession(
+          () => this.isConnected && generation === this.#firstGeneration,
+        );
+      else if (unclaimed) {
         await session.dispose();
         if (!this.isConnected || generation !== this.#firstGeneration) return;
         this.#firstSession = undefined;
@@ -1446,27 +1513,9 @@ export class SetupApp extends LitElement {
     this.screen = "admin";
   }
 
-  #startFinishFirstSetup(): void {
-    const session = this.#firstSession;
-    if (
-      !session ||
-      session.recoveryRequired ||
-      this.firstOwnerBusy ||
-      !["activation-started", "committed", "publication"].includes(session.state?.status ?? "")
-    )
-      return;
-    this.firstFinishing = true;
-    this.firstOwnerError = undefined;
-    this.#afterFirstOwner();
-  }
-
   async #onProvisionRequested(event: CustomEvent): Promise<void> {
     event.stopPropagation();
-    if (this.firstFinishing && this.screen !== "review") return;
-    if (
-      this.#firstSession &&
-      ((!this.firstReady && !this.firstFinishing) || this.#firstSession.recoveryRequired)
-    ) {
+    if (this.#firstSession && (!this.firstReady || this.#firstSession.recoveryRequired)) {
       this.firstReady = false;
       this.screen = "first-owner";
       return;
@@ -1478,48 +1527,29 @@ export class SetupApp extends LitElement {
     this.#registerRoot();
     const submitted = structuredClone(this.draft);
     const generation = this.#rootGeneration;
-    const firstGeneration = this.#firstGeneration;
-    const finishing = this.firstFinishing;
     this.screen = "provisioning";
     try {
       const result = await (this.#firstSession
-        ? this.firstFinishing
-          ? this.#firstSession.finish({
+        ? this.#firstSession.provision(
+            {
               mode: "live",
               aeatCert: assembleBody(submitted).aeatCert,
               email: submitted.email as ProvisionBody["email"],
-            })
-          : this.#firstSession.provision(
-              {
-                mode: "live",
-                aeatCert: assembleBody(submitted).aeatCert,
-                email: submitted.email as ProvisionBody["email"],
-              },
-              currentLocale(),
-            )
+            },
+            currentLocale(),
+          )
         : this.#localeChosen
           ? this.api.provision(assembleBody(submitted), currentLocale())
           : this.api.provision(assembleBody(submitted)));
-      if (
-        !this.isConnected ||
-        generation !== this.#rootGeneration ||
-        (finishing && firstGeneration !== this.#firstGeneration)
-      )
-        return;
+      if (!this.isConnected || generation !== this.#rootGeneration) return;
       this.#rootBaseline = submitted;
       this.#rootScope?.commit(submitted);
       this.openingHours = result.openingHours;
       this.screen = "done";
     } catch (error) {
-      if (
-        !this.isConnected ||
-        generation !== this.#rootGeneration ||
-        (finishing && firstGeneration !== this.#firstGeneration)
-      )
-        return;
+      if (!this.isConnected || generation !== this.#rootGeneration) return;
       if (this.#mapCertificateError(error)) return;
       if (this.#firstSession) {
-        this.firstFinishing = false;
         this.firstReady = false;
         this.firstOwnerError = this.#describeFirstError(error);
         this.screen = "first-owner";
@@ -1528,12 +1558,18 @@ export class SetupApp extends LitElement {
   }
 
   #mapFirstSetupError(code: string): boolean {
+    const held = firstSetupHeldWords(code, "shell.provisioning.first_setup_held");
     const key = FIRST_SETUP_ERROR_MESSAGES[code];
-    if (key === undefined) return false;
-    this.provisionMessage = say(key);
-    this.provisionCanRetry = false;
-    this.provisionReloadLabel = say("shell.reload");
+    if (held === undefined && key === undefined) return false;
+    this.#endAtReload(held ?? say(key!));
     return true;
+  }
+
+  #endAtReload(message: Message): void {
+    this.#clearProvisionOutcome();
+    this.provisionMessage = message;
+    this.provisionReloadLabel = say("shell.reload");
+    this.screen = "provisioning";
   }
 
   /**
@@ -1691,6 +1727,11 @@ export class SetupApp extends LitElement {
         code?: unknown;
         params?: { lastChangeAt?: unknown };
       };
+      const held = restoreOrResetRefusalWords(code, "shell.restore.first_setup_held");
+      if (held !== undefined) {
+        this.#endAtReload(held);
+        return;
+      }
       this.restoreRequest = withoutRecoveryCredentials(request);
       if (code === "restore.stream_source_live" && typeof params?.lastChangeAt === "string") {
         this.restoreLiveSince = params.lastChangeAt;
@@ -1757,6 +1798,11 @@ export class SetupApp extends LitElement {
         code?: unknown;
         params?: Record<string, unknown>;
       };
+      const held = restoreOrResetRefusalWords(code, "shell.restore.first_setup_held");
+      if (held !== undefined) {
+        this.#endAtReload(held);
+        return;
+      }
       this.bucketRequest = withoutRecoveryCredentials(request);
       const venue = venueToConfirm(params);
       if (code === "restore.stream_source_live" && typeof params?.lastChangeAt === "string") {
@@ -1860,11 +1906,16 @@ export class SetupApp extends LitElement {
       }
     } catch (error) {
       if (current()) {
-        if (phase === "provisioning") this.cloudRetryConfirmation = confirmation;
         const { code, params } = (error ?? {}) as {
           code?: unknown;
           params?: { lastChangeAt?: unknown };
         };
+        const held = restoreOrResetRefusalWords(code, "shell.restore.first_setup_held");
+        if (held !== undefined) {
+          this.#endAtReload(held);
+          return;
+        }
+        if (phase === "provisioning") this.cloudRetryConfirmation = confirmation;
         if (code === "restore.stream_source_live" && typeof params?.lastChangeAt === "string") {
           this.cloudLiveSince = params.lastChangeAt;
           this.cloudLiveUnknown = false;
@@ -2106,6 +2157,11 @@ export class SetupApp extends LitElement {
     } catch (error) {
       if (!current()) return;
       const { code, params } = (error ?? {}) as ApiError;
+      const held = restoreOrResetRefusalWords(code, "shell.reset.first_setup_held");
+      if (held !== undefined) {
+        this.resetOutcome = { kind: "refused", message: held };
+        return;
+      }
       switch (code) {
         case "password.invalid":
           this.resetCredentialsRejected = true;
@@ -2172,6 +2228,7 @@ export class SetupApp extends LitElement {
           void this.#onRestoreRequested(e)}
         @bucket-restore-requested=${(e: CustomEvent<{ request: BucketRestoreRequestDetail }>) =>
           void this.#onBucketRestoreRequested(e)}
+        @setup-conflict=${() => this.#endAtReload(say("shell.setup_conflict"))}
         @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string; oldBoxGone?: boolean }>) => void this.#onCloudRestoreAction(e)}
         @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
           void this.#onConfigurationRequested(e)}
@@ -2200,9 +2257,17 @@ export class SetupApp extends LitElement {
 
   #renderFirstOwner(): TemplateResult {
     const t = initialOwnerStrings[setupLocale()];
+    const restarting = this.firstRestarting || this.firstStopped;
     const state = this.#firstSession?.state;
     const missing = this.firstInspection?.database === "missing";
-    const inspection = !state || missing ? this.firstInspection : undefined;
+    const inspection =
+      !state || missing || pastActivation(state) || notCarriedOn(state)
+        ? this.firstInspection
+        : undefined;
+    const noLongerHeld =
+      inspection !== undefined &&
+      !restarting &&
+      (this.#firstSession?.keyRefused === true || notCarriedOn(state));
     const summary = this.firstWipeSummary;
     const ask = missing ? summary : undefined;
     const confirmOpen = this.firstRestartConfirm && summary !== undefined;
@@ -2210,7 +2275,6 @@ export class SetupApp extends LitElement {
     const offered = inspection !== undefined && wipeOffered(inspection);
     const refusalWords = {
       "setup-finished": t.setupFinished,
-      "trading-settings": `${t.tradingSaved} ${t.tradingSavedPassword}`,
       "kept-records": t.keptFault,
       "may-have-filed": t.wipeMayHaveFiled,
       unexpected: t.wipeUnexpected,
@@ -2220,25 +2284,15 @@ export class SetupApp extends LitElement {
       insecure: t.wipeInsecure,
       unavailable: t.wipeUnavailable,
     }[refused ?? "unavailable"];
-    if (!this.#firstPasswordScope && this.isConnected) {
-      this.#firstPasswordScope = draftScopeFor(this, {
-        id: this.#firstPasswordOwner,
-        current: () => this.firstOwnerPassword,
-        snapshot: (value) => value,
-        equal: (a, b) => a === b,
-        restore: (value) => {
-          this.firstOwnerPassword = value;
-        },
-      }).scope;
-      this.#firstPasswordScope.commit("");
-    }
-    const terminal =
-      state?.status === "complete" ||
-      state?.status === "abandoned" ||
-      state?.status === "uncertain" ||
-      state?.status === "activation-started" ||
-      state?.status === "committed" ||
-      state?.status === "publication";
+    const terminal = pastActivation(state) || notCarriedOn(state) || state?.status === "complete";
+    const heldError =
+      (!terminal || this.#firstSession?.recoveryRequired) &&
+      !missing &&
+      !this.firstOwnerBusy &&
+      !restarting &&
+      state !== undefined
+        ? this.firstOwnerError
+        : undefined;
     const startAgain = html`<wt-button
       data-test="start-again"
       variant="secondary"
@@ -2247,22 +2301,6 @@ export class SetupApp extends LitElement {
       >${t.startAgain}</wt-button
     >`;
     const noInvoiceFound = !missing && summary?.databaseUnreadable !== true;
-    const passwordField = html`<wt-input
-      data-test="resume-password"
-      name="setup-resume-password"
-      type="password"
-      autocomplete="current-password"
-      label=${t.password}
-      required
-      .value=${this.firstOwnerPassword}
-      ?invalid=${this.firstPasswordAttempted && !this.firstOwnerPassword}
-      error=${this.firstPasswordAttempted && !this.firstOwnerPassword ? t.required : ""}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        this.firstOwnerPassword = event.detail.value;
-        this.#firstPasswordScope?.changed();
-      }}
-    ></wt-input>`;
     const recoverBackup = html`<wt-button
       data-test="recover-backup"
       variant="secondary"
@@ -2321,6 +2359,24 @@ export class SetupApp extends LitElement {
               >${recovering ? t.recoverBackup : t.startAgain}</wt-button
             >
           </wt-form-actions>`;
+    const stopConfirm = html`<p data-test="stop-asks">${t.stopAsk}</p>
+      <wt-form-actions .error=${this.firstWipeError?.() ?? ""}>
+        <wt-button
+          slot="cancel"
+          data-test="cancel-stop"
+          variant="secondary"
+          ?disabled=${this.firstOwnerBusy}
+          @click=${() => this.#cancelWipe()}
+          >${t.cancel}</wt-button
+        >
+        <wt-button
+          data-test="confirm-stop"
+          variant="danger"
+          ?disabled=${this.firstOwnerBusy}
+          @click=${() => void this.#stopFirstSetup()}
+          >${t.stopConfirm}</wt-button
+        >
+      </wt-form-actions>`;
     const wipeError =
       !confirmOpen && !this.firstOwnerBusy && this.firstWipeError
         ? html`<wt-form-actions .error=${this.firstWipeError()}></wt-form-actions>`
@@ -2330,76 +2386,44 @@ export class SetupApp extends LitElement {
         ? html`<p data-test="start-again-refused" tabindex="-1">${refusalWords}</p>`
         : nothing;
     return html`<section data-test="screen-first-owner">
-      <h1>${inspection && !this.firstRestarting ? t.interrupted : t.heading}</h1>
-      ${this.firstRestarting ? html`<p role="status">${t.restarting}</p>` : nothing}
-      ${inspection?.password === "uncheckable" ? html`<p>${t.uncheckable}</p>` : nothing}
+      <h1>${inspection && !restarting ? t.interrupted : t.heading}</h1>
+      ${restarting ? html`<p role="status">${this.firstStopped ? t.stopped : t.restarting}</p>` : nothing}
       ${missing ? html`<p data-test="missing-database">${t.missingDatabase}</p>` : nothing}
+      ${noLongerHeld ? html`<p data-test="owner-required">${say("shell.first_setup.owner_required")()}</p>` : nothing}
       ${this.firstOwnerBusy ? html`<p role="status">${t.waiting}</p>` : nothing}
+      ${heldError ? html`<wt-form-actions .error=${heldError()}></wt-form-actions>` : nothing}
       ${
-        (!terminal || this.#firstSession?.recoveryRequired) &&
-        !missing &&
-        !this.firstOwnerBusy &&
-        !this.firstRestarting &&
-        (state !== undefined || inspection?.password === "checkable")
-          ? html`<p>${t.resumeHelp}</p>
-              ${passwordField}
-              <wt-form-actions
-                .error=${this.firstPasswordAttempted && !this.firstOwnerPassword ? t.fix : (this.firstOwnerError?.() ?? "")}
-              >
-                <wt-button
-                  data-test="resume"
-                  ?disabled=${this.firstOwnerBusy || (this.firstPasswordAttempted && !this.firstOwnerPassword)}
-                  @click=${() => void this.#resumeFirstSetup()}
-                  >${t.resume}</wt-button
-                >
-              </wt-form-actions>`
-          : nothing
-      }
-      ${
-        inspection && !this.firstRestarting
-          ? ask
-            ? html`<p>${t.missingAsk}</p>
-                <ul data-test="missing-reached">
-                  <li>
-                    ${
-                      ask.reached === "fiscal-started"
-                        ? t.reachedFiscalStarted
-                        : ask.reached === "fiscal-finished"
-                          ? t.reachedFiscalFinished
-                          : t.reachedNotStarted
-                    }
-                  </li>
-                </ul>
-                ${recovering ? nothing : html`<p>${t.missingBackup}</p>`}
-                <div class="missing-actions" data-test="missing-actions">
-                  ${recovering ? nothing : recoverBackup}${confirmOpen ? nothing : startAgain}
-                </div>
-                ${startAgainConfirm} ${wipeError}`
-            : html`${refused === undefined && !confirmOpen ? startAgain : nothing} ${refusal}
-              ${startAgainConfirm} ${refused === undefined && !recovering ? recoverBackup : nothing}
-              ${wipeError}`
+        inspection && !restarting
+          ? this.firstStopConfirm
+            ? stopConfirm
+            : ask
+              ? html`<p>${t.missingAsk}</p>
+                  <ul data-test="missing-reached">
+                    <li>
+                      ${
+                        ask.reached === "fiscal-started"
+                          ? t.reachedFiscalStarted
+                          : ask.reached === "fiscal-finished"
+                            ? t.reachedFiscalFinished
+                            : t.reachedNotStarted
+                      }
+                    </li>
+                  </ul>
+                  ${recovering ? nothing : html`<p>${t.missingBackup}</p>`}
+                  <div class="missing-actions" data-test="missing-actions">
+                    ${recovering ? nothing : recoverBackup}${confirmOpen ? nothing : startAgain}
+                  </div>
+                  ${startAgainConfirm} ${wipeError}`
+              : html`${refused === undefined && !confirmOpen ? startAgain : nothing} ${refusal}
+                ${startAgainConfirm}
+                ${refused === undefined && !recovering ? recoverBackup : nothing} ${wipeError}`
           : nothing
       }
       ${state?.status === "abandoned" ? html`<p>${t.retired}</p>` : nothing}
-      ${!missing && state?.consumptionIntent && terminal && state.status !== "complete" ? html`<p>${t.consumed}</p>` : nothing}
+      ${!missing && state?.consumptionIntent && terminal && state.status !== "complete" && !pastActivation(state) ? html`<p>${t.consumed}</p>` : nothing}
       ${!missing && state?.status === "complete" ? html`<p>${t.complete}</p>` : nothing}
       ${
-        state &&
-        !missing &&
-        ["activation-started", "committed", "publication"].includes(state.status) &&
-        !this.#firstSession?.recoveryRequired
-          ? html`<p>${t.finishHelp}</p>
-              <wt-button
-                data-test="finish-setup"
-                variant="primary"
-                ?disabled=${this.firstOwnerBusy}
-                @click=${() => this.#startFinishFirstSetup()}
-                >${t.finish}</wt-button
-              >`
-          : nothing
-      }
-      ${
-        !terminal && !inspection && !state && !this.firstOwnerBusy
+        !heldError && !inspection && (!state || pastActivation(state)) && !this.firstOwnerBusy
           ? html`<wt-form-actions .error=${this.firstOwnerError?.() ?? t.error}></wt-form-actions>`
           : nothing
       }
@@ -2510,11 +2534,10 @@ export class SetupApp extends LitElement {
           data-test="screen-email"
           .email=${this.draft.email}
           .mode=${this.draft.mode === "prepare" ? "prepare" : "live"}
-          .publicationOnly=${this.firstFinishing}
           .adminEmail=${this.draft.venue?.admin?.email ?? ""}
           .api=${firstSession === undefined ? this.api : { runEmailTest: (email: EmailSettingsDraft) => firstSession.runEmailTest(email) }}
           .errorMessage=${this.emailError?.()}
-          .backScreen=${this.firstFinishing ? (this.draft.venue?.fiscalTerritory === "ES-common" ? "cert" : "first-owner") : this.draft.mode === "live" && this.draft.venue?.fiscalTerritory === "ES-common" && !this.developmentMode ? "fiscal-test" : "venue"}
+          .backScreen=${this.draft.mode === "live" && this.draft.venue?.fiscalTerritory === "ES-common" && !this.developmentMode ? "fiscal-test" : "venue"}
         ></setup-email-screen>`;
       case "mode":
         return html`<setup-mode-screen
@@ -2558,7 +2581,6 @@ export class SetupApp extends LitElement {
         return html`<setup-review-screen
           data-test="screen-review"
           .usesAllocation=${this.#firstSession !== undefined}
-          .finishing=${this.firstFinishing}
           .backScreen=${(this.draft.mode === "live" || this.draft.mode === "prepare") && !this.developmentMode ? "email" : "venue"}
           .draft=${this.draft}
           .errorMessage=${this.reviewError?.()}

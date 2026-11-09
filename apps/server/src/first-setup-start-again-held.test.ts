@@ -8,9 +8,16 @@ import {
   withoutSignIn,
   type Held,
 } from "../test/start-again-held-fixture.js";
-import { expectStartAgainDeleted, expectStartAgainRefused } from "../test/start-again-deleted.js";
+import {
+  expectStartAgainDeleted,
+  expectStartAgainRefused,
+  noConfirmations,
+} from "../test/start-again-deleted.js";
 import { heldSetup } from "../test/held-setup-database.js";
+import { readSetupDatabase } from "./first-setup-database-holdings.js";
 import { expectedSchemaVersion, manifestSets } from "@waitron/migrations";
+import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
@@ -21,6 +28,53 @@ it("a held setup database with an invoice record refuses the summary kept-record
     code: "setup.start_again_refused",
     params: { cause: "kept-records" },
   });
+});
+
+it("a held setup with its certificate row: nothing is kept, and Start again deletes everything", async () => {
+  const f = await heldSetup({ certificate: true });
+  expect(await readSetupDatabase(f.roots, f.host.modules!)).toMatchObject({
+    kind: "read",
+    holdings: { kept: 0, records: 0 },
+  });
+  const { ids, actions } = await withoutSignIn(f);
+  await expect(actions.startAgainSummary(ids)).resolves.toEqual({ reached: "fiscal-finished" });
+  await expect(actions.startAgainFirstSetup(ids)).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f.roots);
+  await noConfirmations(f);
+});
+
+/** What the setup database would keep with its certificate rows gone, read from a copy. */
+async function keptWithoutCertificates(f: Held) {
+  const aside = await mkdtemp(join(tmpdir(), "held-without-certificates-"));
+  try {
+    await copyFile(venueDb(f), join(aside, "venue.db"));
+    const copy = new DatabaseSync(join(aside, "venue.db"));
+    try {
+      const triggers = copy
+        .prepare(
+          "select name from sqlite_schema where type = 'trigger' and tbl_name = 'fiscal_certificate_installs'",
+        )
+        .all() as { name: string }[];
+      for (const { name } of triggers) copy.exec(`drop trigger "${name}"`);
+      copy.exec("delete from fiscal_certificate_installs");
+    } finally {
+      copy.close();
+    }
+    const read = await readSetupDatabase({ venueDir: aside }, f.host.modules!);
+    return read.kind === "read" ? read.holdings.kept : undefined;
+  } finally {
+    await rm(aside, { recursive: true, force: true });
+  }
+}
+
+it("a held setup with its certificate row and an invoice refuses kept-records, keeping only what the invoice keeps, and nothing changes", async () => {
+  const f = await heldSetup({ certificate: true, invoices: 1 });
+  await expectRefused(f, {
+    code: "setup.start_again_refused",
+    params: { cause: "kept-records" },
+  });
+  const kept = /kept=(\d+)/.exec(String(await keptRecordsLogReason(f)))?.[1];
+  expect(Number(kept)).toBe(await keptWithoutCertificates(f));
 });
 
 it("the summary's kept-records refusal logs the counts, not the answer", async () => {
@@ -37,26 +91,30 @@ it("a kept-records refusal after a damaged read logs the damage's code after the
   );
 });
 
-it.each([
-  ["committed", { tradingSettings: true }, true],
-  ["complete", { status: "complete", tradingSettings: true }, false],
-] as const)(
-  "saved trading settings beside a held database (attempt %s) refuse setup.start_again_refused trading-settings, and nothing changes",
-  async (_label, options, signIn) => {
-    await expectRefused(
-      await heldSetup(options),
-      { code: "setup.start_again_refused", params: { cause: "trading-settings" } },
-      { signIn },
-    );
-  },
-);
+it("saved trading settings and the certificate beside a held database: the summary says fiscal-finished and Start again deletes everything", async () => {
+  const f = await heldSetup({ tradingSettings: true, certificate: true });
+  expect(await readSetupDatabase(f.roots, f.host.modules!)).toMatchObject({
+    kind: "read",
+    holdings: { records: 0 },
+  });
+  const { ids, actions } = await withoutSignIn(f);
+  await expect(actions.startAgainSummary(ids)).resolves.toEqual({ reached: "fiscal-finished" });
+  await expect(actions.startAgainFirstSetup(ids)).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f.roots);
+});
+
+it("a complete attempt with saved trading settings refuses setup.start_again_refused setup-finished, and nothing changes", async () => {
+  await expectRefused(await heldSetup({ status: "complete", tradingSettings: true }), {
+    code: "setup.start_again_refused",
+    params: { cause: "setup-finished" },
+  });
+});
 
 it("a complete attempt with no saved trading settings refuses setup.start_again_refused setup-finished, and nothing changes", async () => {
-  await expectRefused(
-    await heldSetup({ status: "complete" }),
-    { code: "setup.start_again_refused", params: { cause: "setup-finished" } },
-    { signIn: false },
-  );
+  await expectRefused(await heldSetup({ status: "complete" }), {
+    code: "setup.start_again_refused",
+    params: { cause: "setup-finished" },
+  });
 });
 
 it("a held summary the disk check refuses is refused before what the setup database holds is read, and nothing changes", async () => {
@@ -141,32 +199,28 @@ it("in the held state, a node.db holding a mirror link refuses Start again setup
 });
 
 it.each([
-  ["saved trading settings", "trading-settings", { tradingSettings: true }, true],
-  ["a complete attempt", "setup-finished", { status: "complete" }, false],
-  ["an invoice record", "kept-records", { invoices: 1 }, true],
+  [
+    "saved trading settings, the certificate and an invoice",
+    "kept-records",
+    { tradingSettings: true, certificate: true, invoices: 1 },
+  ],
+  ["a complete attempt", "setup-finished", { status: "complete" }],
+  ["an invoice record", "kept-records", { invoices: 1 }],
 ] as const)(
   "%s refuses the summary and Start again setup.start_again_refused %s, and nothing changes",
-  async (_label, cause, options, signIn) => {
+  async (_label, cause, options) => {
     const f = await heldSetup(options);
     const refusal = { code: "setup.start_again_refused", params: { cause } };
-    await expectRefused(f, refusal, { signIn });
-    await expectStartAgainRefused(f, await handMade(f, signIn), refusal);
+    await expectRefused(f, refusal);
+    await expectStartAgainRefused(f, await handMade(f), refusal);
   },
 );
 
 it.each([
   ["unknown", {}, notReadyBecause("unreadable")],
   ["partial", {}, notReadyBecause("unreadable")],
-  [
-    "unknown",
-    { tradingSettings: true },
-    { code: "setup.start_again_refused", params: { cause: "trading-settings" } },
-  ],
-  [
-    "partial",
-    { tradingSettings: true },
-    { code: "setup.start_again_refused", params: { cause: "trading-settings" } },
-  ],
+  ["unknown", { tradingSettings: true }, notReadyBecause("unreadable")],
+  ["partial", { tradingSettings: true }, notReadyBecause("unreadable")],
 ] as const)(
   "a database read as %s (%o) is refused as %o, and nothing changes",
   async (database, options, refusal) => {

@@ -175,8 +175,7 @@ ahead, and what it asks for:
 - **A later minute is already in use** (no time given): the box's clock has gone back behind the
   name this attempt already chose; it can finish once the box's clock reaches the moment this attempt chose
   its name
-  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a resume under a clock behind its own pick
-  refuses before writing anything").
+  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a backward clock refuses existing material and retains its spent hour").
 
 For example, a restore whose clocks are compared at 09:00:04 UTC on 24 October 2026 waits until
 09:02:00 and takes `0D0RY` (`hour-selection.test.ts`, the same restore test). With prefixes `A`,

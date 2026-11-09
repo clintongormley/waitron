@@ -10,7 +10,7 @@ import { migrationSetsHolding, type WaitronModule } from "@waitron/module";
 import { executeTarget } from "./read-only-database.js";
 import { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
 import { assertNoLegacyFirstSetupWorkspace } from "./first-setup-workspace.js";
-import { canonicalFirstSetupDirectory } from "./first-setup-resolution.js";
+import { canonicalFirstSetupDirectory } from "./first-setup-directories.js";
 import { readOperationalVenueIds, readTenantIdentities } from "./tenant-guard.js";
 import { type FirstSetupStore } from "./first-setup-state.js";
 export interface FirstSetupRoots {
@@ -29,10 +29,8 @@ export interface FirstSetupInspection {
   pair: "missing" | "partial" | "invalid" | "valid" | "repairable";
   database:
     "missing" | "unreadable" | "corrupt" | "partial" | "unknown" | "no-venue-rows" | "occupied";
-  password: "checkable" | "uncheckable";
   revision: number | null;
   ownerGeneration: number | null;
-  repairEligible: boolean;
   emptyDatabase: boolean;
   artifacts: FirstSetupArtifact[];
 }
@@ -358,26 +356,13 @@ export function createFirstSetupResolutionInspection(
             : repair.repairMarker === null
               ? "valid"
               : "repairable";
-      const noOtherEvidence = artifacts.every(
-        (a) =>
-          ["first-setup.json", "first-setup-claim.json", "venue.db", "venue.db-wal"].includes(
-            a.name,
-          ) ||
-          (!a.name.startsWith("outside-") && a.status === "missing"),
-      );
       const result = {
         version: 2 as const,
         pair,
         database,
         emptyDatabase,
-        password: repair == null ? ("uncheckable" as const) : ("checkable" as const),
         revision: repair?.state.revision ?? null,
         ownerGeneration: repair?.state.ownerGeneration ?? null,
-        repairEligible:
-          pair === "repairable" &&
-          emptyDatabase &&
-          noOtherEvidence &&
-          artifacts.some((entry) => entry.name === "venue.db" && entry.status === "present"),
         artifacts,
       };
       return {

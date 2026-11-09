@@ -81,10 +81,21 @@ function fixture() {
       monotonic += waiting.remainingMs;
       return run();
     },
-    resume: (input: unknown, digest = "a".repeat(64)) =>
-      withOperationAuthority(binding, "admin", (authority) =>
-        preparation.resume({ binding, authority, input }, digest),
-      ),
+    /** Appends a resumption entry as stored data, the shape an earlier setup left behind. */
+    storeResumption(contextKey: string, documentBinding = "a".repeat(64)) {
+      const entries = structuredClone((value as { entries: Record<string, unknown>[] }).entries);
+      const intent = entries.find((entry) => entry.kind === "intent")!;
+      const from = entries.filter((entry) => entry.kind === "resume").at(-1) ?? intent;
+      entries.push({
+        ...intent,
+        kind: "resume",
+        fromContextKey: from.contextKey,
+        contextKey,
+        documentBinding,
+      });
+      value = { version: 1, entries };
+      history.push(value);
+    },
     prepare: (input: unknown) =>
       withOperationAuthority(binding, "admin", (authority) =>
         preparation.prepare({ binding, authority, input }, async () => "admitted"),
@@ -93,149 +104,36 @@ function fixture() {
 }
 const refused = (reason: string) => ({ code: "sif.allocation_invalid", params: { reason } });
 
-it("explicit resumption keeps the hour and input while ordinary changed-context admission still refuses", async () => {
+it("a stored resumption keeps the hour and input while changed-context admission without one still refuses", async () => {
   const f = fixture();
   const selected = await f.select();
   if (selected.status !== "selected") throw new Error("expected selection");
   f.facts = { ...f.facts, contextKey: "owner-2", clock: clock(at + 3_600_000) };
   await expect(f.prepare(selected.input)).rejects.toMatchObject(refused("event_mismatch"));
-  await f.resume(selected.input);
+  f.storeResumption("owner-2");
   await expect(f.prepare(selected.input)).resolves.toBe("admitted");
-  expect(f.history).toHaveLength(3);
-  expect(f.history[2]).toMatchObject({
-    entries: [
-      { kind: "wait" },
-      { kind: "intent", identity: "0CNNW", contextKey: "owner-1" },
-      {
-        kind: "resume",
-        identity: "0CNNW",
-        fromContextKey: "owner-1",
-        contextKey: "owner-2",
-        documentBinding: "a".repeat(64),
-      },
-    ],
-  });
   f.facts = { ...f.facts, contextKey: "owner-1" };
   await expect(f.prepare(selected.input)).rejects.toMatchObject(refused("event_mismatch"));
 });
 
-it("a later authenticated resumption appends a continuous owner trail", async () => {
+it("a stored continuous owner trail admits its latest owner", async () => {
   const f = fixture();
   const selected = await f.select();
   if (selected.status !== "selected") throw new Error("expected selection");
-  for (const contextKey of ["owner-2", "owner-3"]) {
-    f.facts = { ...f.facts, contextKey };
-    await f.resume(selected.input);
-  }
-  await expect(f.prepare(selected.input)).resolves.toBe("admitted");
-  expect(f.history).toHaveLength(4);
-});
-
-it.each([
-  "input",
-  "taxpayer",
-  "environment",
-  "bases",
-  "administrator",
-  "frozen-context",
-  "document",
-])("resumption refuses changed %s before recording a new owner", async (change) => {
-  const f = fixture();
-  const selected = await f.select();
-  if (selected.status !== "selected") throw new Error("expected selection");
-  const input = structuredClone(selected.input);
-  f.facts = { ...f.facts, contextKey: "owner-2" };
-  if (change === "input") input.allocation.installationIdentity = "0CNPG";
-  if (change === "administrator") input.approval.operatorId = "other";
-  if (change === "taxpayer")
-    f.facts = { ...f.facts, scope: { ...f.facts.scope, taxpayerNif: "89890002E" } };
-  if (change === "environment")
-    f.facts = { ...f.facts, scope: { ...f.facts.scope, environment: "production" } };
-  if (change === "bases")
-    f.facts = { ...f.facts, bases: [...f.facts.bases, { code: "B", purpose: "standard" }] };
-  if (change === "frozen-context") f.facts = { ...f.facts, waitKey: "changed-location" };
-  await expect(f.resume(input, change === "document" ? "" : "a".repeat(64))).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-  });
-  expect(f.history).toHaveLength(2);
-});
-
-it("a second clock is still required for resumption", async () => {
-  const f = fixture();
-  const selected = await f.select();
-  if (selected.status !== "selected") throw new Error("expected selection");
-  f.facts = {
-    ...f.facts,
-    contextKey: "owner-2",
-    clock: compareHourClocks(
-      [
-        {
-          source: "box",
-          result: "usable",
-          instantMs: at,
-          uncertaintyMs: 0,
-          wallStartedMs: at,
-          wallFinishedMs: at,
-          monotonicStartedMs: 0,
-          monotonicFinishedMs: 0,
-        },
-      ],
-      Date.parse("2026-10-15T00:00:00Z"),
-    ),
-  };
-  await expect(f.resume(selected.input)).rejects.toMatchObject(refused("second_clock_missing"));
-  expect(f.history).toHaveLength(2);
-});
-
-it("a further owner cannot resume with a different document binding", async () => {
-  const f = fixture();
-  const selected = await f.select();
-  if (selected.status !== "selected") throw new Error("expected selection");
-  f.facts = { ...f.facts, contextKey: "owner-2" };
-  await f.resume(selected.input);
+  for (const contextKey of ["owner-2", "owner-3"]) f.storeResumption(contextKey);
   f.facts = { ...f.facts, contextKey: "owner-3" };
-  await expect(f.resume(selected.input, "b".repeat(64))).rejects.toMatchObject(
-    refused("event_mismatch"),
-  );
-  expect(f.history).toHaveLength(3);
+  await expect(f.prepare(selected.input)).resolves.toBe("admitted");
 });
 
-it.each(["known-own-hour", "clock-rollback"])(
-  "resumption still refuses after a %s",
-  async (change) => {
-    const f = fixture();
-    const selected = await f.select();
-    if (selected.status !== "selected") throw new Error("expected selection");
-    f.facts = { ...f.facts, contextKey: "owner-2" };
-    if (change === "clock-rollback") f.facts = { ...f.facts, clock: clock(at - 1000) };
-    else
-      f.facts = {
-        ...f.facts,
-        history: [
-          {
-            reference: "venue",
-            complete: true,
-            records: [
-              {
-                taxpayerNif: "89890001K",
-                environment: "preproduction",
-                reference: "other-node",
-                kind: "intent",
-                softwareId: "OTHER",
-                nodeId: "other",
-                identity: "0CNNW",
-                recordedAtMs: null,
-              },
-            ],
-          },
-        ],
-      };
-    await expect(f.resume(selected.input)).rejects.toMatchObject(
-      refused(change === "clock-rollback" ? "minute_not_later" : "minute_in_use"),
-    );
-    expect(f.history).toHaveLength(2);
-  },
-);
+it("stored resumptions under different document bindings refuse admission", async () => {
+  const f = fixture();
+  const selected = await f.select();
+  if (selected.status !== "selected") throw new Error("expected selection");
+  f.storeResumption("owner-2");
+  f.storeResumption("owner-3", "b".repeat(64));
+  f.facts = { ...f.facts, contextKey: "owner-3" };
+  await expect(f.prepare(selected.input)).rejects.toMatchObject(refused("history_invalid"));
+});
 
 it.each(["broken-chain", "wrong-document", "changed-hour"])(
   "a %s in the retained resumption journal refuses admission",
@@ -244,7 +142,7 @@ it.each(["broken-chain", "wrong-document", "changed-hour"])(
     const selected = await f.select();
     if (selected.status !== "selected") throw new Error("expected selection");
     f.facts = { ...f.facts, contextKey: "owner-2" };
-    await f.resume(selected.input);
+    f.storeResumption("owner-2");
     const latest = f.history.at(-1) as { entries: Record<string, unknown>[] };
     const resumed = latest.entries.at(-1)!;
     if (change === "broken-chain") resumed.fromContextKey = "unrelated-owner";
@@ -254,18 +152,12 @@ it.each(["broken-chain", "wrong-document", "changed-hour"])(
   },
 );
 
-it("resumption cannot select an hour for an event without an intent", async () => {
-  const f = fixture();
-  await expect(f.resume({})).rejects.toMatchObject(refused("reservation_missing"));
-  expect(f.history).toEqual([]);
-});
-
 it("an orphan resumption for another event cannot disappear from known-history checks", async () => {
   const f = fixture();
   const selected = await f.select();
   if (selected.status !== "selected") throw new Error("expected selection");
   f.facts = { ...f.facts, contextKey: "owner-2" };
-  await f.resume(selected.input);
+  f.storeResumption("owner-2");
   const latest = f.history.at(-1) as {
     entries: { binding: OperationBinding; [key: string]: unknown }[];
   };
@@ -273,4 +165,18 @@ it("an orphan resumption for another event cannot disappear from known-history c
   orphan.binding = { ...orphan.binding, eventId: "other-event" };
   latest.entries.push(orphan);
   await expect(f.prepare(selected.input)).rejects.toMatchObject(refused("history_invalid"));
+});
+
+it("a stored resume entry carries its minute to the new owner, so no other minute is taken", async () => {
+  const f = fixture();
+  const selected = await f.select();
+  if (selected.status !== "selected") throw new Error("expected selection");
+  f.facts = { ...f.facts, contextKey: "owner-2", clock: clock(at + 3_600_000) };
+  f.storeResumption("owner-2");
+  const stored = f.history.length;
+  const again = await withOperationAuthority(binding, "admin", (authority) =>
+    f.preparation.select({ binding, authority, comparisonId: "comparison" }),
+  );
+  expect(again).toMatchObject({ status: "selected", identity: "0CNNW" });
+  expect(f.history).toHaveLength(stored);
 });

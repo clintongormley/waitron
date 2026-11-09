@@ -57,12 +57,8 @@ interface Resumption extends Omit<Intent, "kind"> {
   documentBinding: string;
 }
 type Entry = Intent | Wait | Resumption;
-type ResumeRequest = BareRequest & {
-  documentBinding: string;
-  validate(selected: ReturnType<typeof material>): void;
-};
 const MINUTE_MS = 60_000;
-const WAIT_BOUND_MS = 150_000;
+export const WAIT_BOUND_MS = 150_000;
 const SETTLE_MS = 90_000;
 const WAIT_REUSE_MS = 60_000;
 const EPOCH_MS = Date.parse("2026-01-01T00:00:00Z");
@@ -269,8 +265,8 @@ export function createHourSelection(options: {
   // Monotonic readings are process-local; persisted waits carry only their original UTC target.
   const timers = new Map<string, { start: number; duration: number }>();
   const perform = async (
-    supplied: BareRequest & { comparisonId?: string } & Partial<ResumeRequest>,
-    mode: "select" | "preview" | "selected" | "resume" | "committed",
+    supplied: BareRequest & { comparisonId?: string },
+    mode: "select" | "preview" | "selected" | "committed",
   ) => {
     const persist = mode === "select";
     const request = {
@@ -344,19 +340,9 @@ export function createHourSelection(options: {
           entry.binding.eventId === request.binding.eventId,
       );
       const original = sameEvent.find((entry): entry is Intent => entry.kind === "intent");
-      const resumptions = sameEvent.filter((entry): entry is Resumption => entry.kind === "resume");
       const intent = resumedIntent(sameEvent);
-      if (["selected", "resume", "committed"].includes(mode) && intent === undefined)
+      if (["selected", "committed"].includes(mode) && intent === undefined)
         return refuse("reservation_missing");
-      if (
-        mode === "resume" &&
-        (request.binding.action !== "setup" ||
-          intent!.continuationKey === undefined ||
-          typeof request.documentBinding !== "string" ||
-          resumptions.some((entry) => entry.documentBinding !== request.documentBinding) ||
-          !/^[a-f0-9]{64}$/.test(request.documentBinding))
-      )
-        return refuse("event_mismatch");
       const base: EntryBase = {
         softwareId: WAITRON_ID_SISTEMA,
         operatorId,
@@ -372,12 +358,7 @@ export function createHourSelection(options: {
           .some(
             (entry) =>
               fingerprint(
-                entry.kind === "intent"
-                  ? {
-                      ...entry,
-                      contextKey: mode === "resume" ? facts.contextKey : intent!.contextKey,
-                    }
-                  : entry,
+                entry.kind === "intent" ? { ...entry, contextKey: intent!.contextKey } : entry,
               ) !==
               fingerprint({
                 ...base,
@@ -439,20 +420,7 @@ export function createHourSelection(options: {
         authorize();
         entries.push(entry);
       };
-      if (intent !== undefined) {
-        if (mode === "resume") {
-          request.validate!(material(intent));
-          if (intent.contextKey !== facts.contextKey)
-            await write({
-              ...intent,
-              kind: "resume",
-              fromContextKey: intent.contextKey,
-              contextKey: facts.contextKey,
-              documentBinding: request.documentBinding!,
-            });
-        }
-        return material(intent);
-      }
+      if (intent !== undefined) return material(intent);
       // A recorded wait stays current for a minute past its target; a later select gets its own.
       const currentWait =
         latestWait !== undefined && now <= latestWait.targetMs + WAIT_REUSE_MS
@@ -531,11 +499,6 @@ export function createHourSelection(options: {
     async committed(request: BareRequest) {
       const result = await perform(request, "committed");
       if (result.status !== "selected") return refuse("event_mismatch");
-      return result;
-    },
-    async resume(request: ResumeRequest) {
-      const result = await perform(request, "resume");
-      if (result.status !== "selected") return refuse("clock_unconfirmed");
       return result;
     },
     select: (request: SelectionRequest) => perform(request, "select"),

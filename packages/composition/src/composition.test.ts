@@ -545,6 +545,6 @@ it("only the fiscal module lets Start again delete an append-only table, and onl
       m.name,
       m.startAgainDeletable,
     ]),
-  ).toEqual([["fiscal-verifactu", ["fiscal_allocations"]]]);
+  ).toEqual([["fiscal-verifactu", ["fiscal_allocations", "fiscal_certificate_installs"]]]);
   expect(() => orderedMigrationSets(ALL_MODULES)).not.toThrow();
 });

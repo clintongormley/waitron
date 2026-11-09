@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { html, LitElement } from "lit";
 import { userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
@@ -33,6 +33,7 @@ const state = {
 };
 const hosts: HTMLElement[] = [];
 const sessions: FirstSetupSession[] = [];
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   hosts.splice(0).forEach((host) => host.remove());
   for (const session of sessions.splice(0)) await session.dispose();

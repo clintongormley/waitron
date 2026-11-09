@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import type { WtButton } from "@waitron/ui";
@@ -11,6 +11,7 @@ import { refusedCause, settled } from "../test/held-database-browser.js";
 import { text, wipeFixture } from "../test/wipe-browser.js";
 import { cleanupWidgets, expectNoA11yViolations } from "./widgets/test-helpers.js";
 
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   cleanupWidgets();
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);

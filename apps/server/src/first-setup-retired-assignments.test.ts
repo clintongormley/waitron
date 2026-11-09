@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { lstat, mkdtemp, readFile, writeFile, unlink, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -151,14 +151,6 @@ async function startAgainMissingDatabase(
   folders: { stateDir: string; venueDir: string },
   resolution: Host["resolution"] = host.resolution,
 ) {
-  const inspected = await host.resolution.inspectFirstSetupResolution();
-  await host.owner.recoverFirstSetupOwner({
-    inspectionId: inspected.inspectionId,
-    revision: inspected.revision!,
-    ownerGeneration: inspected.ownerGeneration!,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    password: PASSWORD,
-  });
   const current = await resolution.inspectFirstSetupResolution();
   const ids = {
     inspectionId: current.inspectionId,
@@ -198,10 +190,7 @@ async function fixture(
     environment: {},
     database: () => suite.db,
   });
-  let oldClaim = await oldHost.owner.claimFirstSetup(
-    { environment: "production", request },
-    randomBytes(32).toString("base64url"),
-  );
+  let oldClaim = await oldHost.owner.claimFirstSetup({ environment: "production", request });
   let old = (await oldHost.store.read())!;
   for (const hour of retained?.previousIndex === undefined
     ? [retiredIndex]
@@ -229,10 +218,7 @@ async function fixture(
         request: seat.request(context, candidates),
       });
       await oldHost.store.update(old.frozen.attemptId, old.revision, { kind: "abandoned" });
-      oldClaim = await oldHost.owner.claimFirstSetup(
-        { environment: "production", request },
-        randomBytes(32).toString("base64url"),
-      );
+      oldClaim = await oldHost.owner.claimFirstSetup({ environment: "production", request });
       old = (await oldHost.store.read())!;
     } else old = (await choose(oldHost, old, oldClaim.capability)).state;
   }
@@ -301,10 +287,7 @@ async function fixture(
     environment: {},
     database: () => suite.db,
   });
-  const claim = await host.owner.claimFirstSetup(
-    { environment, request: { ...request, taxId } },
-    randomBytes(32).toString("base64url"),
-  );
+  const claim = await host.owner.claimFirstSetup({ environment, request: { ...request, taxId } });
   let state = (await host.store.read())!;
   if (freezeCandidates)
     state = await host.store.update(state.frozen.attemptId, state.revision, {
@@ -334,20 +317,16 @@ async function expectStartAgainRefused(made: Promise<unknown>, code: string) {
   expect(await readStartAgainMarker(anchor.venueDir)).toBeNull();
 }
 
-it("password recovery starts an unused named replacement again in the same folders", async () => {
+it("Start again starts an unused named replacement again in the same folders", async () => {
   const f = await fixture(2, request.taxId, "production", false);
   const named = (await choose(f.host, f.state, f.claim.capability)).state;
   await suite.db.archiveTo(join(f.state.venueDir, "venue.db"));
-  const initial = await f.host.resolution.inspectFirstSetupResolution();
-  expect(initial.emptyDatabase).toBe(true);
-  const recovered = await f.host.owner.recoverFirstSetupOwner({
-    inspectionId: initial.inspectionId,
+  const inspection = await f.host.resolution.inspectFirstSetupResolution();
+  expect(inspection.emptyDatabase).toBe(true);
+  expect(inspection).toMatchObject({
     revision: named.revision,
     ownerGeneration: named.ownerGeneration,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    password: PASSWORD,
   });
-  const inspection = await f.host.resolution.inspectFirstSetupResolution();
   const actions = createFirstSetupResolutionActions({
     stateDir: f.state.stateDir,
     venueDir: f.state.venueDir,
@@ -356,8 +335,8 @@ it("password recovery starts an unused named replacement again in the same folde
   await expect(
     actions.startAgainFirstSetup({
       inspectionId: inspection.inspectionId,
-      revision: recovered.state.revision,
-      ownerGeneration: recovered.state.ownerGeneration,
+      revision: inspection.revision!,
+      ownerGeneration: inspection.ownerGeneration!,
     }),
   ).resolves.toBeUndefined();
   expect({ stateDir: f.state.stateDir, venueDir: f.state.venueDir }).toEqual({

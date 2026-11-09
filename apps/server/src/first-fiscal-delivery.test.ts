@@ -122,7 +122,7 @@ it("a download or print event alone supplies no kept-document grant", async () =
   await expect(f.kept({ kept: false })).rejects.toMatchObject(missing);
   await expect(f.delivery.read(f.context.binding)).rejects.toMatchObject(missing);
 });
-it.each(["expiry", "restart", "revision", "owner generation", "invalidate"])(
+it.each(["expiry", "restart", "revision", "invalidate"])(
   "refuses a previously valid document after %s",
   async (why) => {
     const f = await fixture();
@@ -137,8 +137,6 @@ it.each(["expiry", "restart", "revision", "owner generation", "invalidate"])(
       await f.store.update(f.ownerAttempt.attemptId, f.ownerAttempt.revision, {
         kind: "activation-started",
       });
-    if (why === "owner generation")
-      await f.owner.resumeFirstSetup(f.nonce, { password: f.password });
     if (why === "invalidate") f.delivery.invalidate(f.ownerAttempt.attemptId);
     await expect(delivery.read(f.context.binding)).rejects.toMatchObject(missing);
   },
@@ -202,7 +200,7 @@ it("rereads finalized public chunks and refuses tampering", async () => {
   });
   await expect(f.delivery.read(f.context.binding)).rejects.toMatchObject(missing);
 });
-it("a committed retry reuses the retained document and key with fresh owner authority", async () => {
+it("a committed retry reuses the retained document and key with the owner's own authority", async () => {
   const f = await fixture();
   await f.register();
   await f.kept();
@@ -211,17 +209,11 @@ it("a committed retry reuses the retained document and key with fresh owner auth
   state = await f.store.update(state.frozen.attemptId, state.revision, {
     kind: "activation-started",
   });
-  await f.store.update(state.frozen.attemptId, state.revision, {
+  state = await f.store.update(state.frozen.attemptId, state.revision, {
     kind: "committed",
     result: { venue: { nodeId: state.frozen.nodeId }, modules: {} },
   });
-  const resumed = await f.owner.resumeFirstSetup(f.nonce, { password: f.password });
-  const owner = {
-    ...f.ownerAttempt,
-    revision: resumed.state.revision,
-    ownerGeneration: resumed.ownerGeneration,
-    capability: resumed.capability,
-  };
+  const owner = { ...f.ownerAttempt, revision: state.revision };
   const statement = { ...f.statement, priorActivation: "committed" as const };
   await f.delivery.registerFirstFiscalDelivery(owner, { ...f.input, statement });
   const { statement: _, ...reference } = f.input;

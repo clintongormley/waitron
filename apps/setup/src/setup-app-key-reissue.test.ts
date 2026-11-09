@@ -1,5 +1,5 @@
 import axe from "axe-core";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement } from "lit";
 import { applyTokens, leaveCoordinatorFor } from "@waitron/ui";
@@ -10,6 +10,7 @@ import { setLocale } from "./i18n/t.js";
 import { wizardApi, venue, initial } from "../test/first-setup-browser.js";
 
 const hosts: HTMLElement[] = [];
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   hosts.splice(0).forEach((host) => host.remove());
   await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});

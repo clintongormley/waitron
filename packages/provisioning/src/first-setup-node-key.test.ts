@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -65,8 +65,7 @@ async function fixture(stage = true) {
     }),
   };
   const owner = createFirstSetupOwner(options);
-  const nonce = randomBytes(32).toString("base64url");
-  const claim = await owner.claimFirstSetup({ environment: "preproduction", request }, nonce);
+  const claim = await owner.claimFirstSetup({ environment: "preproduction", request });
   const access = { ...claim.state, capability: claim.capability };
   const keys = createFirstSetupNodeKeys({ ...options, owner });
   const grant = () => owner.reconfirm(access, PASSWORD, "block-use");
@@ -79,7 +78,6 @@ async function fixture(stage = true) {
     store,
     coordinator,
     grant,
-    nonce,
     staged,
     path: join(stateDir, "first-setup-node-key.json"),
     async committed(result: unknown = { venue: { nodeId: access.nodeId } }) {
@@ -180,17 +178,6 @@ it("refuses a replaced but well-formed stage instead of returning the old transi
     code: "setup.attempt_conflict",
   });
   expect(await f.keys.readStage(f.access)).toEqual(changed);
-});
-
-it("a resumed owner cannot retrieve the preceding owner's transient secret", async () => {
-  const f = await fixture();
-  const resumed = await f.owner.resumeFirstSetup(f.nonce, { password: PASSWORD });
-  const access = { ...resumed.state, capability: resumed.capability };
-  const before = await readFile(f.path);
-  await expect(
-    f.keys.stageInitialNodeKey(access, await f.owner.reconfirm(access, PASSWORD, "block-use")),
-  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-  expect(await readFile(f.path)).toEqual(before);
 });
 
 it("a completed activation cannot stage another key", async () => {
@@ -498,26 +485,6 @@ it("refuses expired reissue authority without replacing the stage", async () => 
   } finally {
     vi.useRealTimers();
   }
-});
-
-it("a password-resumed owner can replace the lost key without retrieving the preceding raw key", async () => {
-  const f = await fixture();
-  const resumed = await f.owner.resumeFirstSetup(f.nonce, { password: PASSWORD });
-  const access = { ...resumed.state, capability: resumed.capability };
-  const before = await f.store.read();
-  const replacement = await f.keys.reissueInitialNodeKey(
-    access,
-    await f.owner.reconfirm(access, PASSWORD, "node-key-reissue"),
-  );
-  expect(replacement.stage.stageId).not.toBe(f.staged!.stage.stageId);
-  expect(await f.store.read()).toEqual(before);
-  expect(
-    await f.keys.stageInitialNodeKey(
-      access,
-      await f.owner.reconfirm(access, PASSWORD, "block-use"),
-    ),
-  ).toEqual(replacement);
-  await expect(f.keys.readStage(f.access)).rejects.toMatchObject({ code: "setup.owner_required" });
 });
 
 it.each(["committed", "publication"] as const)(

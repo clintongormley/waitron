@@ -37,7 +37,7 @@ const events = (...kinds: string[]): Attempt => ({
 });
 
 it.each([
-  ["no events past claiming", state(events("claim", "input", "checked", "recover")), "claimed"],
+  ["no events past claiming", state(events("claim", "input", "checked")), "claimed"],
   ["candidates", state(events("claim", "candidates")), "named"],
   ["import", state(events("claim", "import")), "named"],
   ["consumption-intent", state(events("claim", "consumption-intent")), "named"],

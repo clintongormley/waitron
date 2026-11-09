@@ -11,37 +11,29 @@ type Runtime = Pick<
   "modules" | "owner" | "preparation" | "assertSelection"
 >;
 
-export async function resumeFirstSetupCommand(
+/** Runs each module's `commandBeforeActivation`, its last check before activation. */
+export async function recheckFirstSetupCommand(
   runtime: Runtime,
   owner: FirstSetupOwnerAttempt,
   io: ProvisioningIo,
 ) {
   const state = await runtime.owner.authorize(owner);
-  const ownership = [...state.history]
-    .reverse()
-    .find((event) => ["claim", "resume", "recover"].includes(event.kind));
-  if (ownership?.kind !== "recover" || ownership.ownerGeneration !== state.ownerGeneration)
-    throw new AppError("setup.owner_required", {});
   runtime.assertSelection(state);
   for (const { module } of state.frozen.modules) {
     const seat = initialSetupFor(runtime.modules, module);
-    if (seat?.resume === undefined) continue;
-    if (seat.commandResume === undefined) throw new AppError("setup.not_ready", {});
-    const reviewed = await seat.commandResume(firstSetupModuleContext(state, module), {
+    if (seat?.commandBeforeActivation === undefined) continue;
+    const reviewed = await seat.commandBeforeActivation(firstSetupModuleContext(state, module), {
       output: (line) => io.stdout(line),
       prompt: (question) => io.prompt(question),
       prepare: (proposal) => runtime.preparation.prepare(owner, module, proposal, { onBox: true }),
       select: async () => {
         throw new AppError("setup.attempt_conflict", {});
       },
+      sleep: async () => {
+        throw new AppError("setup.attempt_conflict", {});
+      },
     });
     if (reviewed.status !== "ready") return { status: reviewed.status };
-    const proof = await runtime.owner.reconfirm(
-      owner,
-      await io.promptSecret("Confirm setup password: "),
-      "block-use",
-    );
-    await runtime.preparation.resume(owner, module, proof);
   }
   return { status: "ready" as const };
 }
@@ -50,6 +42,7 @@ export async function prepareFirstSetupCommand(
   runtime: Runtime,
   suppliedOwner: FirstSetupOwnerAttempt,
   io: ProvisioningIo,
+  sleep: (ms: number) => Promise<void>,
 ) {
   let owner = { ...suppliedOwner };
   let state = await runtime.owner.authorize(owner);
@@ -60,30 +53,47 @@ export async function prepareFirstSetupCommand(
     const seat = initialSetupFor(runtime.modules, module);
     if (seat === undefined) return [];
     if (seat.command === undefined) throw new AppError("setup.not_ready", {});
-    return [{ module, command: seat.command }];
+    return [{ module, seat, command: seat.command }];
   });
   const inputs: { module: string; input: unknown }[] = [];
-  for (const { module, command } of offerings) {
-    if (Object.hasOwn(state.inputs, module)) {
-      inputs.push({ module, input: state.inputs[module] });
-      continue;
-    }
+  for (const { module, seat, command } of offerings) {
+    // One confirmation lasts through the module's waits, so nothing is asked once a wait has begun.
+    let proof: string | undefined;
+    const confirm = async () =>
+      (proof ??= await runtime.owner.reconfirm(
+        owner,
+        await io.promptSecret("Confirm setup password: "),
+        "block-use",
+      ));
     const result = await command(firstSetupModuleContext(state, module), {
       output: (line) => io.stdout(line),
       prompt: (question) => io.prompt(question),
       prepare: (proposal) => runtime.preparation.prepare(owner, module, proposal, { onBox: true }),
+      sleep,
       select: async (proposal) => {
-        const proof = await runtime.owner.reconfirm(
-          owner,
-          await io.promptSecret("Confirm setup password: "),
-          "block-use",
-        );
-        const selected = await runtime.preparation.select(owner, module, proposal, proof);
+        const kept = proof !== undefined;
+        let selected: Awaited<ReturnType<Runtime["preparation"]["select"]>>;
+        try {
+          selected = await runtime.preparation.select(owner, module, proposal, await confirm());
+        } catch (error) {
+          // Here a kept confirmation fails only by expiring during the wait; a lost claim fails
+          // `authorize` and keeps its own refusal.
+          if (!kept || !(error instanceof AppError) || error.code !== "setup.owner_required")
+            throw error;
+          await runtime.owner.authorize(owner);
+          io.stdout(
+            "The command waited so long that the password confirmation expired, so the setup stopped before anything was chosen.",
+          );
+          throw error;
+        }
         state = selected.state;
         owner = { ...owner, revision: state.revision };
-        return "preparation" in selected
-          ? selected.preparation
-          : firstSetupModuleContext(state, module).request;
+        const answer =
+          "preparation" in selected
+            ? selected.preparation
+            : firstSetupModuleContext(state, module).request;
+        if (seat.pending?.(answer) !== true) proof = undefined;
+        return answer;
       },
     });
     if (result.status !== "ready") {

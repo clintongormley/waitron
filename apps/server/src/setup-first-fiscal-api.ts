@@ -1,7 +1,6 @@
 import { validateSmtpTestFrom } from "./email-sender-name.js";
 import {
   activateFirstFiscal,
-  finishFirstFiscalSetup,
   checkedFirstFiscalCommit,
   firstFiscalPayload,
   firstFiscalProvisionRequest,
@@ -19,10 +18,13 @@ import type { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { requestFromBox } from "./request-from-box.js";
 import { FULL_DISK_BYTES, fullDiskFailure } from "./boot-failure.js";
+import { lowestFreeBytes } from "./start-space.js";
 import { errnoOf } from "./errno.js";
+import { SetupDatabaseReadFailed } from "./setup-database-read-failed.js";
 import { publicFirstSetupState, type FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { Logger } from "./logger.js";
 import { sentFromThisOrigin } from "./own-page.js";
+import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import "./errors.js";
 
 export type FirstFiscalHost = ReturnType<typeof createFirstSetupModuleHost>;
@@ -139,6 +141,24 @@ export function firstFiscalOwner(c: Context): FirstSetupOwnerAttempt {
     attemptId: c.req.header("X-Waitron-Setup-Attempt") ?? "",
     revision: integer("X-Waitron-Setup-Revision"),
     ownerGeneration: integer("X-Waitron-Setup-Generation"),
+  };
+}
+function assertAttemptCounts(body: Record<string, unknown>) {
+  if (
+    ![body.revision, body.ownerGeneration].every(
+      (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
+    )
+  )
+    invalid();
+}
+/** The body of a request naming only the attempt it acts on. */
+async function attemptReference(c: Context) {
+  const body = exact(await readFirstFiscalBody(c), ["inspectionId", "revision", "ownerGeneration"]);
+  assertAttemptCounts(body);
+  return {
+    inspectionId: text(body.inspectionId),
+    revision: body.revision as number,
+    ownerGeneration: body.ownerGeneration as number,
   };
 }
 export async function readFirstFiscalBody(c: Context, limit = 131072): Promise<unknown> {
@@ -361,7 +381,7 @@ export function mountSetupFirstFiscalApi(
     boundary(c, log, async () => {
       const body = exact(
         await readFirstFiscalBody(c),
-        ["clientClaimNonce", "venue"],
+        ["venue"],
         ["configurationImport", "newTaxpayer"],
       );
       if (
@@ -407,42 +427,20 @@ export function mountSetupFirstFiscalApi(
       void _;
       void __;
       return c.json(
-        await host.owner.claimFirstSetup(
-          {
-            environment,
-            request: { ...venue, admin: { ...normalized, password, pin } },
-            configurationImport: body.configurationImport === true,
-            newTaxpayer: body.newTaxpayer === true,
-          },
-          text(body.clientClaimNonce),
-        ),
-      );
-    }),
-  );
-  app.post(`${root}/resume`, (c) =>
-    boundary(c, log, async () => {
-      const body = exact(await readFirstFiscalBody(c), ["clientClaimNonce", "password"]);
-      return c.json(
-        await host.owner.resumeFirstSetup(text(body.clientClaimNonce), {
-          password: text(body.password),
+        await host.owner.claimFirstSetup({
+          environment,
+          request: { ...venue, admin: { ...normalized, password, pin } },
+          configurationImport: body.configurationImport === true,
+          newTaxpayer: body.newTaxpayer === true,
         }),
       );
     }),
   );
-  mountFirstSetupResolutionApi(app, host, log);
-  app.post(`${root}/recover`, (c) =>
-    boundary(c, log, async () => {
-      const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-      if (!(socket instanceof TLSSocket) || !socket.encrypted)
-        throw new AppError("setup.owner_required", {});
-      const body = exact(await readFirstFiscalBody(c), ["clientClaimNonce", "password"]);
-      const recovered = await host.owner.recoverFirstSetup(text(body.clientClaimNonce), {
-        password: text(body.password),
-      });
-      host.evidence.invalidate(recovered.state.attemptId);
-      return c.json(recovered);
-    }),
-  );
+  mountFirstSetupResolutionApi(app, host, log, {
+    stop: createFirstSetupResolutionActions({ ...host.roots, host, log }).stopForStartAgain,
+    freeSpace: () => lowestFreeBytes([host.roots.stateDir, host.roots.venueDir]),
+    ...(deps.requestRestart === undefined ? {} : { requestRestart: deps.requestRestart }),
+  });
   app.get(`${root}/status`, (c) =>
     boundary(c, log, async () => {
       if (c.req.header("X-Waitron-Setup-Owner") === undefined) {
@@ -603,12 +601,12 @@ export function mountSetupFirstFiscalApi(
 }
 
 const RESOLUTION = "/setup-api/first-setup/resolution";
-/** The repair page's routes: inspection, Continue's password step, and Start again's summary and request. */
+/** The repair page's routes: inspection, the stop, and Start again's summary and request. */
 export const START_AGAIN_ROUTES = {
   inspect: { method: "GET", path: RESOLUTION },
-  recover: { method: "POST", path: `${RESOLUTION}/recover` },
   summary: { method: "POST", path: `${RESOLUTION}/start-again/summary` },
   startAgain: { method: "POST", path: `${RESOLUTION}/start-again` },
+  stop: { method: "POST", path: `${RESOLUTION}/stop` },
 } as const;
 
 export function mountFirstSetupResolutionApi(
@@ -622,8 +620,10 @@ export function mountFirstSetupResolutionApi(
     summary?: ReturnType<
       typeof import("./first-setup-resolution.js").createFirstSetupResolutionActions
     >["startAgainSummary"];
+    stop?: ReturnType<
+      typeof import("./first-setup-resolution.js").createFirstSetupResolutionActions
+    >["stopForStartAgain"];
     requestRestart?: () => void;
-    withPublication?: <T>(body: (deps: SetupDeps) => Promise<T>) => Promise<T>;
     /** The lower free space of the setup's folders; given, the Start-again flow can say the disk is full. */
     freeSpace?: () => Promise<number | null>;
     /** True where the box's next start deletes old logs; undefined otherwise. */
@@ -643,20 +643,23 @@ export function mountFirstSetupResolutionApi(
       return await body();
     } catch (error) {
       if (isAppError(error) && error.code === "storage.disk_full") throw await diskFull();
-      const candidate = isAppError(error)
-        ? error.code === "setup.attempt_invalid"
-        : fullDiskFailure(error, 0);
+      // A setup database that could not be copied or read is judged by what failed.
+      const failure = error instanceof SetupDatabaseReadFailed ? error.failure : error;
+      const refusedWrite = isAppError(error) && error.code === "setup.attempt_invalid";
+      const candidate =
+        refusedWrite ||
+        (failure !== undefined && !isAppError(failure) && fullDiskFailure(failure, 0));
       if (options.freeSpace !== undefined && candidate) {
         const free = await freeSpace();
-        const full = isAppError(error)
+        const full = refusedWrite
           ? free !== null && free < FULL_DISK_BYTES
-          : fullDiskFailure(error, free);
+          : fullDiskFailure(failure, free);
         if (full) {
           // The boundary logs only the code it answers; this keeps what the refusal really was.
           log("warn", "storage.disk_full_reported", {
             errorCode: isAppError(error) ? error.code : null,
-            errno: errnoOf(error) ?? null,
-            errcode: sqliteFailureOf(error)?.errcode ?? null,
+            errno: errnoOf(failure) ?? null,
+            errcode: sqliteFailureOf(failure)?.errcode ?? null,
           });
           throw await diskFull();
         }
@@ -692,149 +695,6 @@ export function mountFirstSetupResolutionApi(
       return c.json(inspection);
     }),
   );
-  app.post(START_AGAIN_ROUTES.recover.path, (c) =>
-    boundary(c, log, async () => {
-      assertFirstFiscalRequest(c);
-      const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-      if (!(socket instanceof TLSSocket) || !socket.encrypted)
-        throw new AppError("setup.owner_required", {});
-      const body = exact(await readFirstFiscalBody(c), [
-        "inspectionId",
-        "revision",
-        "ownerGeneration",
-        "clientClaimNonce",
-        "password",
-      ]);
-      if (
-        ![body.revision, body.ownerGeneration].every(
-          (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
-        )
-      )
-        invalid();
-      return c.json(
-        await diskFullOr(() =>
-          host.owner.recoverFirstSetupOwner({
-            inspectionId: text(body.inspectionId),
-            revision: body.revision as number,
-            ownerGeneration: body.ownerGeneration as number,
-            clientClaimNonce: text(body.clientClaimNonce),
-            password: text(body.password),
-          }),
-        ),
-      );
-    }),
-  );
-
-  if (options.withPublication !== undefined) {
-    app.get(`${root}/resolution/publication`, (c) =>
-      boundary(c, log, async () => {
-        assertFirstFiscalRequest(c);
-        const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
-        if (!(socket instanceof TLSSocket) || !socket.encrypted)
-          throw new AppError("setup.owner_required", {});
-        const owner = firstFiscalOwner(c);
-        return host.resolution.withVenueExclusion(() =>
-          host.coordinator.run(async (hold) => {
-            const state = await host.owner.authorize(owner);
-            host.assertSelection(state);
-            if (!["activation-started", "committed", "publication"].includes(state.status))
-              throw new AppError("setup.attempt_uncertain", {});
-            const stage = await host.keys.readStage(owner, hold);
-            return c.json({
-              state: publicFirstSetupState(state),
-              stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.name },
-              modules: state.frozen.modules
-                .filter((m) => initialSetupFor(host.modules, m.module) !== undefined)
-                .map((m) => ({
-                  module: m.module,
-                  request: m.request,
-                  input: state.inputs[m.module],
-                })),
-            });
-          }),
-        );
-      }),
-    );
-    for (const action of ["reconfirm", "document", "document-kept", "finish"] as const)
-      app.post(`${root}/resolution/${action}`, (c) =>
-        boundary(c, log, async () => {
-          assertFirstFiscalRequest(c);
-          const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming
-            ?.socket;
-          if (!(socket instanceof TLSSocket) || !socket.encrypted)
-            throw new AppError("setup.owner_required", {});
-          const owner = firstFiscalOwner(c);
-          const body = object(
-            await readFirstFiscalBody(c, action === "document" ? 8 * 1024 * 1024 : 131072),
-          );
-          // Password derivation must finish before taking either the venue or coordinator lock.
-          if (action === "reconfirm") {
-            exact(body, ["password", "purpose"]);
-            if (body.purpose !== "activation") invalid();
-            const state = await host.owner.authorize(owner);
-            if (!["activation-started", "committed", "publication"].includes(state.status))
-              throw new AppError("setup.attempt_uncertain", {});
-            return c.json({
-              reconfirmation: await host.owner.reconfirm(owner, text(body.password), "activation"),
-            });
-          }
-          return host.resolution.withVenueExclusion(() =>
-            host.coordinator.run(async (hold) => {
-              const state = await host.owner.authorize(owner);
-              host.assertSelection(state);
-              if (!["activation-started", "committed", "publication"].includes(state.status))
-                throw new AppError("setup.attempt_uncertain", {});
-              if (action !== "finish") {
-                const fields = [
-                  "module",
-                  "stageId",
-                  "inputDigest",
-                  "historyDigest",
-                  "documentDigest",
-                ];
-                if (action === "document") {
-                  exact(body, [...fields, "statement"]);
-                  if (object(body.statement).priorActivation !== "committed")
-                    throw new AppError("sif.allocation_invalid", {
-                      reason: "outside_confirmation_missing",
-                    });
-                  await host.delivery.registerFirstFiscalDelivery(
-                    owner,
-                    body as unknown as import("./first-fiscal-delivery.js").FirstFiscalDeliveryInput,
-                    hold,
-                  );
-                } else {
-                  exact(body, [...fields, "kept", "reconfirmation"]);
-                  const { reconfirmation, ...input } = body;
-                  await host.delivery.confirmFirstFiscalDocumentKept(
-                    owner,
-                    input as unknown as import("./first-fiscal-delivery.js").FirstFiscalKeptInput,
-                    text(reconfirmation),
-                    hold,
-                  );
-                }
-                return c.json({ accepted: true });
-              }
-              exact(body, ["inspectionId", "revision", "ownerGeneration", "publication"]);
-              const inspected = await host.resolution.inspectFirstSetupResolution();
-              if (
-                body.inspectionId !== inspected.inspectionId ||
-                body.revision !== state.revision ||
-                body.ownerGeneration !== state.ownerGeneration
-              )
-                throw new AppError("setup.attempt_conflict", {});
-              const publication = object(body.publication);
-              await options.withPublication!((deps) =>
-                finishFirstFiscalSetup(host, deps, owner, publication, hold),
-              );
-              setTimeout(() => options.requestRestart?.(), 0);
-              return c.json({ provisioned: true, restarting: true });
-            }),
-          );
-        }),
-      );
-  }
-
   const assertHttps = (c: Context) => {
     const socket = (c.env as { incoming?: { socket?: unknown } } | undefined)?.incoming?.socket;
     if (!(socket instanceof TLSSocket) || !socket.encrypted)
@@ -845,27 +705,9 @@ export function mountFirstSetupResolutionApi(
       boundary(c, log, async () => {
         assertFirstFiscalRequest(c);
         assertHttps(c);
-        const body = exact(await readFirstFiscalBody(c), [
-          "inspectionId",
-          "revision",
-          "ownerGeneration",
-        ]);
-        if (
-          ![body.revision, body.ownerGeneration].every(
-            (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
-          )
-        )
-          invalid();
+        const reference = await attemptReference(c);
         try {
-          return c.json(
-            await diskFullOr(() =>
-              options.summary!({
-                inspectionId: text(body.inspectionId),
-                revision: body.revision as number,
-                ownerGeneration: body.ownerGeneration as number,
-              }),
-            ),
-          );
+          return c.json(await diskFullOr(() => options.summary!(reference)));
         } catch (error) {
           // The next start tries to finish what an earlier Start again left.
           if (error instanceof AppError && error.code === "setup.start_again_incomplete")
@@ -874,6 +716,20 @@ export function mountFirstSetupResolutionApi(
         }
       }),
     );
+  // A stop that restarted nothing would leave the setup stopped on the running server.
+  if (options.stop !== undefined && options.requestRestart !== undefined) {
+    const { stop, requestRestart } = options;
+    app.post(START_AGAIN_ROUTES.stop.path, (c) =>
+      boundary(c, log, async () => {
+        assertFirstFiscalRequest(c);
+        assertHttps(c);
+        const reference = await attemptReference(c);
+        await diskFullOr(() => stop(reference));
+        setTimeout(() => requestRestart(), 0);
+        return c.json({ restarting: true });
+      }),
+    );
+  }
   if (options.startAgain !== undefined)
     app.post(START_AGAIN_ROUTES.startAgain.path, (c) =>
       boundary(c, log, async () => {
@@ -898,12 +754,7 @@ export function mountFirstSetupResolutionApi(
           body.recoveryRecordDamagedShown !== true
         )
           invalid();
-        if (
-          ![body.revision, body.ownerGeneration].every(
-            (value) => typeof value === "number" && Number.isSafeInteger(value) && value > 0,
-          )
-        )
-          invalid();
+        assertAttemptCounts(body);
         const register = Object.hasOwn(body, "register")
           ? registerAnswer(body.register)
           : undefined;

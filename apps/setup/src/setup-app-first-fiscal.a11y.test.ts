@@ -1,10 +1,11 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initial, wizardApi } from "../test/first-setup-browser.js";
 import { setLocale } from "./i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
 
+beforeEach(() => sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY));
 afterEach(async () => {
   cleanupWidgets();
   await navigator.locks.request(`waitron:first-setup:attempt:${initial.attemptId}`, () => {});
@@ -13,20 +14,13 @@ afterEach(async () => {
 });
 for (const theme of ["light", "dark"] as const)
   for (const locale of ["en-GB", "es-ES"] as const)
-    for (const stage of [
-      "resume",
-      "missing-password",
-      "refusal",
-      "abandoned",
-      "uncertain",
-      "complete",
-    ] as const) {
+    for (const stage of ["claimed", "refusal", "abandoned", "uncertain", "complete"] as const) {
       it(`${locale} ${theme} owner ${stage} is accessible`, async () => {
         sessionStorage.setItem(
           FIRST_SETUP_SESSION_KEY,
           JSON.stringify({
             version: 1,
-            clientClaimNonce: "C".repeat(43),
+            tabLockId: "C".repeat(43),
             claimPending: false,
             owner: {
               attemptId: initial.attemptId,
@@ -56,10 +50,22 @@ for (const theme of ["light", "dark"] as const)
           { api, browserLanguages: [locale] },
           theme,
         );
+        if (!terminal) {
+          // A tab holding a claimed setup carries on where it was; changing its frozen details brings it here.
+          await expect
+            .poll(() => el.shadowRoot!.querySelector("[data-test=screen-cert]"))
+            .not.toBeNull();
+          el.shadowRoot!.querySelector("main")!.dispatchEvent(
+            new CustomEvent("setup-goto", {
+              detail: { screen: "venue" },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+        }
         await expect
           .poll(() => el.shadowRoot!.querySelector("[data-test=screen-first-owner]"))
           .not.toBeNull();
-        if (stage === "missing-password") Object.assign(el, { firstPasswordAttempted: true });
         if (stage === "refusal")
           Object.assign(el, {
             firstOwnerError: () =>

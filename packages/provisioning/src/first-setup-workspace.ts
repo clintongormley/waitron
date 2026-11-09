@@ -1,7 +1,7 @@
 import { AppError } from "@waitron/shared";
 import { lstat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { canonicalFirstSetupDirectory } from "./first-setup-resolution.js";
+import { canonicalFirstSetupDirectory } from "./first-setup-directories.js";
 import "./errors.js";
 
 // What an earlier Waitron's Start again, or its repair-page recovery from backup, left behind;

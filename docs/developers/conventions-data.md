@@ -1807,10 +1807,11 @@ without changing the province. The same suite checks that a module's hook sees t
 
 Implementation pointer, 2026-10-17: the configuration staging and transfer services now live in
 `packages/provisioning/src/configuration-import.ts` and `configuration-transfer.ts`. Their server
-entry points forward to those implementations. The owned setup command uses the same allowlisted
-transfer inside its venue transaction; a retained artifact must match the frozen digest and target
-module versions before activation. Its command checks are in
-`packages/provisioning/src/first-setup-command-import.test.ts`.
+entry points forward to those implementations. The setup command imports no configuration: its
+claim never asks for one (`packages/provisioning/src/cli.ts` passes no import to
+`claimFirstSetup`). The setup page stages a configuration with `POST /setup-api/configuration` in
+`apps/server/src/setup-api.ts`; it is imported when the setup runs with `configurationImport`
+(`apps/server/src/boot.ts`).
 
 A182 part 2 removes `canvases` from the transfer declarations. Every earlier format-2 export
 includes that table key, even when it has no rows. With the format left unchanged, the real setup
@@ -3465,19 +3466,10 @@ only the refusal of an earlier layout). Replays now
 sync the existing record or witness directory before returning. The resolution suite also injects
 write, file-sync, rename and directory-sync failures into original chunks, manifests and both
 action phases, then resumes through a new store and compares retained bytes. These are filesystem
-fault injections, not physical power-loss measurements.
+fault injections, not physical power-loss measurements. (Dated pointer, 2026-11-08: that store and
+its durability suite were removed by A1379.)
 
-**First-setup password recovery audit, 2026-10-16:** the module host’s password recovery takes
-anchor/target exclusion on the older route as well as the inspection-bound route. On Node
-v26.11.1, `first-setup-owner-audit.test.ts` first recovered ownership while a child process held
-`venue.lock`; after the exclusion change it refuses with `provisioning.database_in_use`, leaves
-the state bytes unchanged and writes no audit. Eligible marker repair and ownership recovery
-record prepared/applied actions with retained source bytes and predecessor digests. Their
-owner-approved `register: null` means no consultation and grants no reset or fiscal authority.
-The suite injects failure before/after each action-record rename and the marker/state rename,
-then retries with a new owner service. Changed non-target evidence or a state change beyond the
-recorded recovery refuses reconciliation. These are filesystem fault injections, not physical
-power-loss measurements.
+**First-setup password recovery audit:** removed on 2026-11-08 by A1379, with the resolution record store it described.
 
 `deploy/waitron.sh` reads the stamp from `venue.db` with its own read-only `node:sqlite` connection,
 not through the store, so it takes no lock and is never refused.
@@ -5720,8 +5712,7 @@ later minute, except the one named below (owner, 2026-10-29 ~10:52, A1207: "If l
 should flag them up to be dealt with (how?) but it doesn't stop us from issuing the correct series
 based on the current minute, just as long as that minute series doesn't exist in the database
 already."). The one later name that still refuses is the attempt's own pick when the box's clock
-has gone back behind it (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a resume under a clock behind its own pick
-refuses before writing anything"). Receipts in `packages/fiscal-verifactu/src/hour-selection.test.ts`: "$action selects as
+has gone back behind it (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a backward clock refuses existing material and retains its spent hour"). Receipts in `packages/fiscal-verifactu/src/hour-selection.test.ts`: "$action selects as
 with an empty history beside $later", "waits for the next minute when the current one is known" and
 "a restore's recorded wait meeting %s, in use, at %s waits for the next free minute"; in
 `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "selected although a later

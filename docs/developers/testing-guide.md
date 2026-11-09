@@ -1538,9 +1538,8 @@ Desktop during the slice's review (2026-10-21), where the 32 MiB tmpfs mounted a
 `Tests  36 passed (36)`.
 
 **A second real-disk file has its own small filesystem.** `apps/server/src/start-again-full-disk.e2e.test.ts`
-(A1127) runs the repair page's flows on a full disk beside a held setup database: Continue's
-password step (`/recover`) answers `507 storage.disk_full`, and the summary and Start again answer
-`507 storage.disk_full` and delete nothing on the repair page as first served. After a restart
+(A1127) runs the repair page's flows on a full disk beside a held setup database: the summary and
+Start again answer `507 storage.disk_full` and delete nothing on the repair page as first served. After a restart
 through `runEntry`, the start releases the box's spare file and the summary and Start again finish;
 with no spare file, that restart serves the full-disk page instead. It builds its
 held setup from the held-database fixture (`apps/server/test/held-setup-database.ts`), whose
@@ -3058,12 +3057,9 @@ WAL-mode database before inspecting its rows, your own read can invalidate the f
 read-only inspection created an empty `venue.db-wal`. The next inspection found that file where the
 first had recorded it missing, and password recovery refused with `setup.owner_required`.
 
-The interrupted case in `packages/provisioning/src/cli-owned-entry.test.ts` closes the command after
-its commit, compares two inspections, then starts another command to finish publication. Run it with
-`pnpm --filter @waitron/provisioning exec vitest run src/cli-owned-entry.test.ts -t 'interrupted=true'`.
-Without the ordering change, the comparison reports `venue.db-wal` changing from missing to the hash
-of an empty file. Sample the files after the inspection connection closes; keep the snapshot,
-password and exact-commit checks.
+_2026-11-09, A1379: password recovery and the command that finished publication are removed, and
+with them the interrupted case in `packages/provisioning/src/cli-owned-entry.test.ts` this section
+described. The lesson stands: sample the files after the inspection connection closes._
 
 ## Match file-read probes against physical paths
 

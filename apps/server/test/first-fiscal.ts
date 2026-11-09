@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -99,8 +99,7 @@ export async function firstFiscalFixture(parent: string = tmpdir()) {
       },
     };
     const owner = createFirstSetupOwner(ownerOptions);
-    const nonce = randomBytes(32).toString("base64url");
-    const claim = await owner.claimFirstSetup({ environment: "production", request }, nonce);
+    const claim = await owner.claimFirstSetup({ environment: "production", request });
     const pair = generateKeyPairSync("ed25519");
     const privateKey = pair.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
     const publicKey = pair.publicKey.export({ type: "spki", format: "pem" }).toString();
@@ -177,7 +176,6 @@ export async function firstFiscalFixture(parent: string = tmpdir()) {
       coordinator,
       owner,
       ownerOptions,
-      nonce,
       context,
       input,
       current,

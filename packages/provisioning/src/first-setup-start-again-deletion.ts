@@ -19,7 +19,7 @@ import {
 import { AppError, isUuid } from "@waitron/shared";
 import { deleteBackupRoomNote } from "./backup-room-note-file.js";
 import { readDurableHostJsonWithBytes, writeDurableHostJson } from "./durable-host-json.js";
-import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
+import { canonicalFirstSetupRoots } from "./first-setup-directories.js";
 import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { removeAndSync } from "./folder-sync.js";
 import { openImmutableWhenWalEmpty } from "./read-only-database.js";
@@ -76,15 +76,17 @@ const REFUSED = {
 type Root = "venue" | "state";
 type Roots = { stateDir: string; venueDir: string };
 /**
- * `held`: the setup database holds what activation wrote, so the `modules.json` activation writes
- * after its commit is deleted with it rather than refused. `nodeId`: the attempt's node; without
- * it, no node.db row counts as the attempt's.
+ * `held`: the setup database holds what activation wrote, so the `HELD_ONLY` files activation
+ * writes after its commit are deleted with it rather than refused. `nodeId`: the attempt's node;
+ * without it, no node.db row counts as the attempt's.
  */
 type Options = { held?: true; nodeId?: string };
-const MODULES = "modules.json";
-/** A marker that names `modules.json` was taken with `held`. */
+const HELD_ONLY = ["modules.json", "trading.env"] as const;
+const isHeldOnly = (name: string): name is (typeof HELD_ONLY)[number] =>
+  (HELD_ONLY as readonly string[]).includes(name);
+/** A marker that names a `HELD_ONLY` file was taken with `held`. */
 const heldBy = (marker: StartAgainMarker): Options =>
-  marker.files.some((entry) => entry.root === "state" && entry.name === MODULES)
+  marker.files.some((entry) => entry.root === "state" && isHeldOnly(entry.name))
     ? { held: true }
     : {};
 export interface StartAgainFingerprint {
@@ -134,7 +136,7 @@ function listed(root: Root, name: string): boolean {
       "module-preparation-state.json",
       "first-setup-node-key.json",
       "module-operation-public.json",
-      MODULES,
+      ...HELD_ONLY,
       "first-setup.json",
     ].includes(name);
   if (parts[0] === DOCUMENTS) return parts.length === 2;
@@ -274,7 +276,7 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
     items.push({ kind: "folder", path: join(roots.stateDir, DOCUMENTS) });
   await file("state", "first-setup-node-key.json");
   await file("state", "module-operation-public.json");
-  if (options.held === true) await file("state", MODULES);
+  if (options.held === true) for (const name of HELD_ONLY) await file("state", name);
   const records = await entries(join(roots.stateDir, RECORDS));
   if (records !== null) {
     for (const record of records) {
@@ -494,7 +496,7 @@ export async function assertStartAgainAllowedOnDisk(
     for (const name of REFUSED[root])
       if (
         (await exists(join(rootOf(root), name))) &&
-        !(root === "state" && name === MODULES && options.held === true)
+        !(root === "state" && isHeldOnly(name) && options.held === true)
       )
         throw notReady(`refused artifact: ${root}/${name}`, "unexpected");
   await assertNoStartAgainDeletion(canonical.venueDir);
@@ -600,7 +602,7 @@ export async function collectStartAgainFindings(roots: Roots): Promise<{
     for (const root of ["state", "venue"] as const)
       for (const name of REFUSED[root])
         if (
-          !(root === "state" && name === MODULES && held.held === true) &&
+          !(root === "state" && isHeldOnly(name) && held.held === true) &&
           (await present(join(root === "venue" ? canonical.venueDir : canonical.stateDir, name)))
         )
           findings.push({ kind: "refused-artifact", root, name });

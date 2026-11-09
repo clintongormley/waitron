@@ -1,4 +1,5 @@
 import { chmod, mkdir, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
@@ -180,6 +181,55 @@ it("a modules.json changed after the marker named it is a changed finding, and t
   expect(await exists(join(roots.stateDir, "modules.json"))).toBe(true);
   expect(await exists(join(roots.stateDir, "first-setup.json"))).toBe(true);
 });
+
+const TRADING = "state/trading.env";
+async function tradingBox(names: readonly string[]) {
+  const roots = await box();
+  if (names.includes("modules.json"))
+    await writeFile(join(roots.stateDir, "modules.json"), '{"modules":{}}\n');
+  if (names.includes("trading.env")) await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
+  return roots;
+}
+
+it("with held, the disk check accepts the setup's trading.env; without it, refuses", async () => {
+  const roots = await tradingBox(["trading.env"]);
+  await assertStartAgainAllowedOnDisk(roots, { held: true });
+  expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
+    code: "setup.not_ready",
+    params: { cause: "unexpected" },
+    reason: "refused artifact: state/trading.env",
+  });
+});
+
+it("the marker names and fingerprints trading.env only with held", async () => {
+  const roots = await tradingBox(["modules.json", "trading.env"]);
+  const marker = await startAgainMarkerFor(roots, attempt, { held: true });
+  expect(marked(marker)).toEqual([
+    "state/first-setup.json",
+    MODULES,
+    TRADING,
+    "venue/first-setup-claim.json",
+    "venue/venue.db",
+  ]);
+  expect(marker.files.find((file) => file.name === "trading.env")).toMatchObject({
+    size: 4,
+    sha256: createHash("sha256").update("X=1\n").digest("hex"),
+  });
+  expect(marked(await startAgainMarkerFor(roots, attempt))).not.toContain(TRADING);
+});
+
+it.each([[["trading.env"]], [["modules.json"]], [["modules.json", "trading.env"]]] as const)(
+  "a marker naming %o is read as held, finished, and deletes them",
+  async (names) => {
+    const roots = await tradingBox(names);
+    await writeStartAgainMarker(roots, await startAgainMarkerFor(roots, attempt, { held: true }));
+    expect(await collectStartAgainFindings(roots)).toMatchObject({ findings: [], blocker: null });
+    await finishStartAgainDeletion(roots);
+    for (const name of [...names, "first-setup.json"])
+      expect(await exists(join(roots.stateDir, name))).toBe(false);
+    expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(false);
+  },
+);
 
 it("deleting the marked attempt deletes the backup room note first", async () => {
   const roots = await box();

@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { Hono } from "hono";
 import { vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -104,10 +106,14 @@ describe("hour recovery document route", () => {
       statement: f.staged.statement,
     });
     expect(registered.status).toBe(200);
-    expect(await f.host.recoveryDelivery.readRecoveryDocument(f.ownerAttempt, f.module)).toEqual({
-      ...reference,
-      statement: f.staged.statement,
-    });
+    expect(
+      JSON.parse(
+        await readFile(
+          join(f.stateDir, "first-fiscal-documents", `${f.module}.recovery.json`),
+          "utf8",
+        ),
+      ),
+    ).toMatchObject({ ...reference, statement: f.staged.statement });
     await expect(f.host.recoveryDelivery.consume(f.ownerAttempt, f.module)).rejects.toMatchObject({
       code: "setup.not_ready",
       params: {},

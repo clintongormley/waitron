@@ -147,7 +147,6 @@ it("a strictly paired attempt with a missing database reaches resolution without
     expect(await (await app!.request("/setup-api/first-setup/resolution")).json()).toMatchObject({
       pair: "valid",
       database: "missing",
-      password: "checkable",
     });
     await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
   } finally {
