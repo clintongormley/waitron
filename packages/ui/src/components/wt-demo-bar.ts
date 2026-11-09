@@ -29,10 +29,6 @@ export class WtDemoBar extends LitElement {
         padding: var(--wt-space-2) var(--wt-space-3);
       }
 
-      nav > * {
-        flex: 0 0 auto;
-      }
-
       strong {
         font-weight: var(--wt-font-weight-bold);
       }

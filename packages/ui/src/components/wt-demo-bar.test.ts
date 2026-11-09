@@ -32,7 +32,7 @@ test("paints the raised surface, border and text from tokens", async () => {
   expect(getComputedStyle(el).color).toBe("rgb(7, 8, 9)");
 });
 
-test("scrolls the last destination into view when reached by keyboard", async () => {
+test("scrolls a fully hidden last destination into view when reached by keyboard", async () => {
   const el = (await mount("<wt-demo-bar></wt-demo-bar>")) as WtDemoBar;
   host.style.width = "240px";
   el.modeLabel = "Preparation";

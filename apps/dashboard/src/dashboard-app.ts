@@ -761,8 +761,8 @@ export class DashboardApp extends LitElement {
       /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER inside the
          content row, below the banner. It leaves the flow and slides in when the layout gains
          the drawer-open class. A CSS media query cannot read a
-         --custom-property, so the breakpoint is a literal here (and mirrored in the JS DRAWER_BREAKPOINT
-         constant that drives the narrow state). */
+         --custom-property, so the breakpoint is a literal here, in index.html's page-frame query and
+         in the JS DRAWER_BREAKPOINT constant that drives the narrow state. */
       @media (max-width: 48rem) {
         /* A phone cannot fit the lockup, the legal name, the mode pill and the trailing controls on
            one line, so the name, the pill and, signed in with a venue logo, Powered by take a second
