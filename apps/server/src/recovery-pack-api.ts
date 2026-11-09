@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { authorizeManager } from "@waitron/identity";
+import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { createRecoveryPack } from "./recovery-pack.js";
@@ -34,6 +34,7 @@ export function mountRecoveryPackApi(
           permission: "system.manage",
           touch: false,
         });
+        await requireFreshManagementSignIn(deps.db, token);
         const request = await readJsonBody<unknown>(c);
         let personId: string | undefined;
         const pack = await createRecoveryPack(
@@ -47,6 +48,7 @@ export function mountRecoveryPackApi(
                   permission: "system.manage",
                 })
               ).authorizedBy;
+              await requireFreshManagementSignIn(tx, token);
             },
           },
           request,

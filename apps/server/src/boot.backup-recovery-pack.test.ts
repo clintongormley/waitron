@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -119,6 +120,7 @@ async function seedVenueWithBackupSettings(): Promise<void> {
 it("makes a pack over the real TLS listener, drawn with the production font, that the readers accept, and the status follows a key rotation", async () => {
   await seedVenueWithBackupSettings();
   const { token } = await openManagementSession(suite.db, "admin");
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
   const cookie = `waitron_management_session=${token}`;
 
   const scratch = await mkdtemp(join(tmpdir(), "a1187-boot-pack-"));
@@ -160,7 +162,6 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
         body: JSON.stringify({
           locale: "es",
           newServerKey: false,
-          signIn: { method: "password", password: "correct horse" },
         }),
       });
       expect(made.status).toBe(200);
@@ -236,6 +237,7 @@ it("with the box ticked, the real fiscal module draws a new server key that the 
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
   const oldKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
   const { token } = await openManagementSession(suite.db, "admin");
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
   const cookie = `waitron_management_session=${token}`;
 
   const scratch = await mkdtemp(join(tmpdir(), "a1187-boot-pack-key-"));
@@ -297,7 +299,6 @@ it("with the box ticked, the real fiscal module draws a new server key that the 
         body: JSON.stringify({
           locale: "es",
           newServerKey: true,
-          signIn: { method: "password", password: "correct horse" },
         }),
       });
       expect(made.status).toBe(200);

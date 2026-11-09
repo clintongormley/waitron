@@ -2,10 +2,9 @@ import { LitElement, html } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LeaveController, type WtDialog } from "@waitron/ui";
-import type { DashboardApi, OwnProfile, RecoveryPackStatus } from "../api/client.js";
+import type { DashboardApi, RecoveryPackStatus } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, dialogClosed, mountWidget } from "./test-helpers.js";
-import type { FreshSignIn } from "./fresh-sign-in.js";
 import type { RecoveryPackDialog } from "./recovery-pack-dialog.js";
 import "./recovery-pack-dialog.js";
 
@@ -24,20 +23,6 @@ afterEach(() => {
   setLocale("en-GB");
 });
 
-const PROFILE: OwnProfile = {
-  displayName: "Marta",
-  firstNames: "Marta",
-  lastNames: "López",
-  telephone: null,
-  email: "marta@example.test",
-  pendingEmail: null,
-  locale: null,
-  hasPassword: true,
-  hasTotp: false,
-  hasGoogle: false,
-  passkeys: [],
-};
-
 const STATUS: RecoveryPackStatus = {
   latest: null,
   upToDate: false,
@@ -53,8 +38,6 @@ async function fixture() {
   setLocale("en-GB");
   const makeRecoveryPack = vi.fn();
   const api = {
-    getProfile: vi.fn().mockResolvedValue(PROFILE),
-    recoveryPackPasskeyOptions: vi.fn(),
     makeRecoveryPack,
     markRecoveryPackReceived: vi.fn(),
     getRecoveryPackStatus: vi.fn(),
@@ -67,16 +50,8 @@ async function fixture() {
   await host.updateComplete;
   const dialog = host.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
   await expect.poll(() => dialog.open).toBe(true);
-  await expect
-    .poll(() => host.shadowRoot!.querySelector<FreshSignIn>("dashboard-fresh-sign-in")?.ways)
-    .not.toBeNull();
-  const signIn = host.shadowRoot!.querySelector<FreshSignIn>("dashboard-fresh-sign-in")!;
-  await signIn.updateComplete;
-  const password = signIn.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-    "wt-input[name=current-password]",
-  )!;
-  await password.updateComplete;
-  return { app, host, dialog, signIn, password, makeRecoveryPack };
+  const choice = host.shadowRoot!.querySelector<HTMLInputElement>("input[name=new-server-key]")!;
+  return { app, host, dialog, choice, makeRecoveryPack };
 }
 
 async function question(app: RecoveryPackLeaveApp) {
@@ -93,46 +68,14 @@ async function choose(app: RecoveryPackLeaveApp, choice: "keep" | "discard") {
 }
 
 it("an untouched dialog closes on Escape without asking", async () => {
-  const { app, dialog, password } = await fixture();
-  password.shadowRoot!.querySelector("input")!.focus();
+  const { app, dialog, choice } = await fixture();
+  choice.focus();
   const closed = dialogClosed(dialog);
   await userEvent.keyboard("{Escape}");
   await closed;
   expect(dialog.open).toBe(false);
   expect((await question(app)).open).toBe(false);
   expect(app.leave.coordinator.isDirty()).toBe(false);
-});
-
-it("a typed password asks before Escape, and Keep keeps it", async () => {
-  const { app, dialog, signIn, password, makeRecoveryPack } = await fixture();
-  password.shadowRoot!.querySelector("input")!.focus();
-  await userEvent.keyboard("hunter2");
-  await expect.poll(() => app.leave.coordinator.isDirty()).toBe(true);
-  await userEvent.keyboard("{Escape}");
-  await expect.poll(async () => (await question(app)).open).toBe(true);
-  expect(dialog.open).toBe(true);
-  await choose(app, "keep");
-  await expect.poll(async () => (await question(app)).open).toBe(false);
-  expect(dialog.open).toBe(true);
-  expect(password.value).toBe("hunter2");
-  expect(signIn.typed).toBe(true);
-  expect(makeRecoveryPack).not.toHaveBeenCalled();
-});
-
-it("a typed password asks before Escape, and Discard closes and forgets it", async () => {
-  const { app, dialog, signIn, password, makeRecoveryPack } = await fixture();
-  password.shadowRoot!.querySelector("input")!.focus();
-  await userEvent.keyboard("hunter2");
-  await expect.poll(() => app.leave.coordinator.isDirty()).toBe(true);
-  await userEvent.keyboard("{Escape}");
-  await expect.poll(async () => (await question(app)).open).toBe(true);
-  const closed = dialogClosed(dialog);
-  await choose(app, "discard");
-  await closed;
-  expect(dialog.open).toBe(false);
-  expect(signIn.typed).toBe(false);
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-  expect(makeRecoveryPack).not.toHaveBeenCalled();
 });
 
 it("a ticked box alone asks before Cancel", async () => {
@@ -149,9 +92,9 @@ it("a ticked box alone asks before Cancel", async () => {
 });
 
 it("the dialog being dismissed releases its draft", async () => {
-  const { app, host, dialog, password } = await fixture();
-  password.shadowRoot!.querySelector("input")!.focus();
-  await userEvent.keyboard("hunter2");
+  const { app, host, dialog, choice } = await fixture();
+  choice.focus();
+  choice.click();
   await expect.poll(() => app.leave.coordinator.isDirty()).toBe(true);
   host.dismiss();
   await host.updateComplete;
@@ -160,16 +103,16 @@ it("the dialog being dismissed releases its draft", async () => {
   expect((await question(app)).open).toBe(false);
 });
 
-it("a typed password makes the browser ask before the page is left, and closing stops it", async () => {
-  const { dialog, password } = await fixture();
+it("a new-key choice makes the browser ask before the page is left, and closing stops it", async () => {
+  const { dialog, choice } = await fixture();
   const leaving = () => {
     const event = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(event);
     return event.defaultPrevented;
   };
   expect(leaving()).toBe(false);
-  password.shadowRoot!.querySelector("input")!.focus();
-  await userEvent.keyboard("hunter2");
+  choice.focus();
+  choice.click();
   await expect.poll(leaving).toBe(true);
   dialog.closeAfter("security");
   await expect.poll(leaving).toBe(false);

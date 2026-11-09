@@ -88,6 +88,7 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
         openedAt: managementSessions.createdAt,
         lastSeenAt: managementSessions.lastSeenAt,
         endedAt: managementSessions.endedAt,
+        provedAt: managementSessions.provedAt,
       })
       .from(managementSessions)
       .where(eq(managementSessions.personId, personId))

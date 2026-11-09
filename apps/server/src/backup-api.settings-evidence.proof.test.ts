@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 // What `GET /api/backup/settings-evidence` must never do: change anything, wait for a Save, turn
 // backups on, carry a secret, or answer without `system.manage`. Real venue database, real key rings,
 // a real supervisor loading the record as boot does.
@@ -292,6 +293,7 @@ async function setupTenant(): Promise<void> {
         .values({ displayName: role, pinHash: hashPin("1234"), role, email: `${role}@x.com` })
         .returning({ id: persons.id });
       const session = await startManagementSession(tx, { personId: inserted!.id });
+      await setFreshManagementSignIn(tx, session.token);
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     };
     return { manager: await start("manager"), staff: await start("staff") };

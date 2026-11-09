@@ -4,7 +4,6 @@ import { DashboardApi } from "../api/client.js";
 import type { MadeRecoveryPack, OwnProfile, RecoveryPackStatus } from "../api/client.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
-import type { FreshSignIn } from "../widgets/fresh-sign-in.js";
 import type { RecoveryPackDialog } from "../widgets/recovery-pack-dialog.js";
 import type { RecoveryPackCard } from "./recovery-pack-card.js";
 import "./recovery-pack-card.js";
@@ -484,13 +483,6 @@ describe("making a pack", () => {
     const dialog = dialogOf(el);
     const wt = dialog.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
     await expect.poll(() => wt.open).toBe(true);
-    await expect
-      .poll(() => dialog.shadowRoot!.querySelector<FreshSignIn>("dashboard-fresh-sign-in")?.ways)
-      .not.toBeNull();
-    const signIn = dialog.shadowRoot!.querySelector<FreshSignIn>("dashboard-fresh-sign-in")!;
-    signIn
-      .shadowRoot!.querySelector("wt-input[name=current-password]")!
-      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "hunter2-hunter2" } }));
     await dialog.updateComplete;
     const make = () =>
       dialog.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=make-pack]")!.click();

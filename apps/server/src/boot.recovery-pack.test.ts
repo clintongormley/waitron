@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -55,7 +56,9 @@ it("the actual trading listener downloads the named node key and signed register
       .insert(persons)
       .values({ displayName: "Owner", role: "admin", pinHash: "unused", passwordHash: "unused" })
       .returning();
-    return (await startManagementSession(tx, { personId: admin!.id })).token;
+    const session = await startManagementSession(tx, { personId: admin!.id });
+    await setFreshManagementSignIn(tx, session.token);
+    return session.token;
   });
   const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
   const fixture = allocationFixture({ node, bases, identity: "P000042" });

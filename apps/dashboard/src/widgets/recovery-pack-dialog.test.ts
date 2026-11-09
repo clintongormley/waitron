@@ -1,34 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtDialog } from "@waitron/ui";
 import { DashboardApi } from "../api/client.js";
-import type { MadeRecoveryPack, OwnProfile, RecoveryPackStatus } from "../api/client.js";
+import type { MadeRecoveryPack, RecoveryPackStatus } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import { cleanupWidgets, dialogClosed, mountWidget } from "./test-helpers.js";
-import type { FreshSignIn } from "./fresh-sign-in.js";
 import type { RecoveryPackDialog, RecoveryPackMade } from "./recovery-pack-dialog.js";
 import "./recovery-pack-dialog.js";
 
-const PASSKEY = { id: "pk1", name: null, createdAt: "", lastUsedAt: null, provider: null };
 const MADE_AT = "2026-10-12T12:00:00.000Z";
-
-function profile(overrides: Partial<OwnProfile> = {}): OwnProfile {
-  return {
-    displayName: "Marta",
-    firstNames: "Marta",
-    lastNames: "López",
-    telephone: null,
-    email: "marta@example.test",
-    pendingEmail: null,
-    locale: null,
-    hasPassword: true,
-    hasTotp: false,
-    hasGoogle: false,
-    passkeys: [],
-    ...overrides,
-  };
-}
 
 function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus {
   return {
@@ -55,12 +36,8 @@ function pdf(): Blob {
   return new Blob(["%PDF-1.7 pack"], { type: "application/pdf" });
 }
 
-function stubApi(own = profile()) {
+function stubApi() {
   return {
-    getProfile: vi.fn().mockResolvedValue(own),
-    recoveryPackPasskeyOptions: vi
-      .fn()
-      .mockResolvedValue({ challengeHandle: "h1", options: { challenge: "AQID" } }),
     makeRecoveryPack: vi
       .fn<(body: unknown) => Promise<MadeRecoveryPack>>()
       .mockResolvedValue({ pdf: pdf(), number: 4, key: "unchanged" }),
@@ -80,27 +57,7 @@ async function open(options: { api?: Api; at?: RecoveryPackStatus | null } = {})
   await el.updateComplete;
   const dialog = el.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
   await expect.poll(() => dialog.open).toBe(true);
-  const signIn = await signInOf(el);
-  return { el, api, dialog, signIn };
-}
-
-async function signInOf(el: RecoveryPackDialog): Promise<FreshSignIn> {
-  await expect
-    .poll(() => el.shadowRoot!.querySelector<FreshSignIn>("dashboard-fresh-sign-in")?.ways)
-    .not.toBeNull();
-  const signIn = el.shadowRoot!.querySelector<FreshSignIn>("dashboard-fresh-sign-in")!;
-  await signIn.updateComplete;
-  return signIn;
-}
-
-function field(signIn: FreshSignIn, name: string) {
-  return signIn.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-    `wt-input[name=${name}]`,
-  );
-}
-
-function type(signIn: FreshSignIn, name: string, value: string): void {
-  field(signIn, name)!.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+  return { el, api, dialog };
 }
 
 function button(el: RecoveryPackDialog, test: string) {
@@ -153,13 +110,13 @@ afterEach(() => vi.restoreAllMocks());
 afterEach(() => setLocale("en-GB"));
 
 describe("the form", () => {
-  it("draws the heading, the intro, the sign-in fields, the box and both actions", async () => {
-    const { el, dialog, signIn } = await open();
+  it("draws recovery choices and both actions without a duplicate sign-in form", async () => {
+    const { el, dialog } = await open();
     expect(dialog.heading).toBe(t("recovery_pack_dialog.heading"));
     expect(words(el.shadowRoot!.querySelector("[data-test=intro]"))).toBe(
       t("recovery_pack_dialog.intro"),
     );
-    expect(field(signIn, "current-password")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-fresh-sign-in")).toBeNull();
     expect(box(el).checked).toBe(false);
     expect(words(el.shadowRoot!.querySelector("label[for=new-server-key]"))).toBe(option());
     expect(button(el, "cancel-pack")!.slot).toBe("cancel");
@@ -229,11 +186,10 @@ describe("the form", () => {
         ],
       },
     });
-    const { el, api, signIn } = await open({ at });
+    const { el, api } = await open({ at });
     expect(el.shadowRoot!.querySelector("input[name=new-server-key]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=new-key-why]")).toBeNull();
     expect(button(el, "make-pack")!.variant).toBe("primary");
-    type(signIn, "current-password", "hunter2-hunter2");
     button(el, "make-pack")!.click();
     await expect.poll(() => api.makeRecoveryPack.mock.calls.length).toBe(1);
     expect(api.makeRecoveryPack.mock.calls[0]![0]).toMatchObject({ newServerKey: false });
@@ -257,38 +213,11 @@ describe("the form", () => {
     const { el } = await open({ at });
     expect(el.shadowRoot!.querySelector("input[name=new-server-key]")).not.toBeNull();
   });
-
-  it("offers no Make action to a person with no way to sign in again", async () => {
-    const { el } = await open({ api: stubApi(profile({ hasPassword: false, passkeys: [] })) });
-    expect(button(el, "make-pack")).toBeNull();
-    expect(button(el, "cancel-pack")).not.toBeNull();
-  });
-
-  it("marks an empty password on the first press, and holds Make pack until it is filled", async () => {
-    const { el, api, signIn } = await open();
-    button(el, "make-pack")!.click();
-    await expect
-      .poll(() => field(signIn, "current-password")!.error)
-      .toBe(t("form.password_required"));
-    await el.updateComplete;
-    expect(button(el, "make-pack")!.disabled).toBe(true);
-    expect(bottom(el)).toBe(t("form.fix_fields"));
-    expect(api.makeRecoveryPack).not.toHaveBeenCalled();
-    type(signIn, "current-password", "hunter2-hunter2");
-    await el.updateComplete;
-    expect(button(el, "make-pack")!.disabled).toBe(false);
-    expect(bottom(el)).toBe("");
-    type(signIn, "current-password", "");
-    await signIn.updateComplete;
-    await el.updateComplete;
-    expect(field(signIn, "current-password")!.error).toBe(t("form.password_required"));
-    expect(button(el, "make-pack")!.disabled).toBe(true);
-  });
 });
 
 describe("a made pack", () => {
   it("marks the pack received, then hands the PDF over and closes", async () => {
-    const { el, api, dialog, signIn } = await open();
+    const { el, api, dialog } = await open();
     const order: string[] = [];
     api.markRecoveryPackReceived.mockImplementation(async () => {
       order.push("marked");
@@ -296,7 +225,6 @@ describe("a made pack", () => {
     el.addEventListener("recovery-pack-made", () => order.push("handed"));
     const seen = made(el);
     const closeAfter = vi.spyOn(dialog, "closeAfter");
-    type(signIn, "current-password", "hunter2-hunter2");
     tick(el);
     await el.updateComplete;
     button(el, "make-pack")!.click();
@@ -304,7 +232,6 @@ describe("a made pack", () => {
     expect(api.makeRecoveryPack).toHaveBeenCalledWith({
       locale: "en",
       newServerKey: true,
-      signIn: { method: "password", password: "hunter2-hunter2" },
     });
     expect(api.markRecoveryPackReceived).toHaveBeenCalledWith(4);
     expect(order).toEqual(["marked", "handed"]);
@@ -323,9 +250,8 @@ describe("a made pack", () => {
     const api = stubApi();
     const answer = deferred<MadeRecoveryPack>();
     api.makeRecoveryPack.mockReturnValue(answer.promise);
-    const { el, signIn } = await open({ api });
+    const { el } = await open({ api });
     const seen = made(el);
-    type(signIn, "current-password", "hunter2-hunter2");
     button(el, "make-pack")!.click();
     await expect.poll(() => api.makeRecoveryPack.mock.calls.length).toBe(1);
     button(el, "make-pack")!.click();
@@ -338,8 +264,7 @@ describe("a made pack", () => {
 
   it("asks for the pack in Spanish when the screen is in Spanish", async () => {
     setLocale("es-ES");
-    const { el, api, signIn } = await open();
-    type(signIn, "current-password", "hunter2-hunter2");
+    const { el, api } = await open();
     button(el, "make-pack")!.click();
     await expect.poll(() => api.makeRecoveryPack.mock.calls.length).toBe(1);
     expect(api.makeRecoveryPack.mock.calls[0]![0]).toMatchObject({
@@ -353,9 +278,8 @@ describe("a made pack", () => {
     api.markRecoveryPackReceived
       .mockRejectedValueOnce({ code: "connection.failed" })
       .mockRejectedValueOnce({ code: "connection.failed" });
-    const { el, signIn } = await open({ api });
+    const { el } = await open({ api });
     const seen = made(el);
-    type(signIn, "current-password", "hunter2-hunter2");
     button(el, "make-pack")!.click();
     await expect.poll(() => seen.length).toBe(1);
     expect(api.markRecoveryPackReceived).toHaveBeenCalledTimes(2);
@@ -365,37 +289,12 @@ describe("a made pack", () => {
   it("is marked received when the second try succeeds", async () => {
     const api = stubApi();
     api.markRecoveryPackReceived.mockRejectedValueOnce({ code: "connection.failed" });
-    const { el, signIn } = await open({ api });
+    const { el } = await open({ api });
     const seen = made(el);
-    type(signIn, "current-password", "hunter2-hunter2");
     button(el, "make-pack")!.click();
     await expect.poll(() => seen.length).toBe(1);
     expect(api.markRecoveryPackReceived).toHaveBeenCalledTimes(2);
     expect(seen[0]!.received).toBe(true);
-  });
-
-  it("signs in with the passkey when its button is pressed", async () => {
-    vi.spyOn(navigator.credentials, "get").mockResolvedValue({
-      id: "cred-abc",
-      rawId: new Uint8Array([1]).buffer,
-      type: "public-key",
-      authenticatorAttachment: "platform",
-      response: {
-        clientDataJSON: new Uint8Array([2]).buffer,
-        authenticatorData: new Uint8Array([3]).buffer,
-        signature: new Uint8Array([4]).buffer,
-        userHandle: new Uint8Array([5]).buffer,
-      },
-      getClientExtensionResults: () => ({}),
-      toJSON: vi.fn(),
-    } as unknown as PublicKeyCredential);
-    const { el, api, signIn } = await open({ api: stubApi(profile({ passkeys: [PASSKEY] })) });
-    const seen = made(el);
-    signIn.shadowRoot!.querySelector<HTMLElement>("[data-test=use-passkey]")!.click();
-    await expect.poll(() => seen.length).toBe(1);
-    expect(api.makeRecoveryPack.mock.calls[0]![0]).toMatchObject({
-      signIn: { method: "passkey", challengeHandle: "h1" },
-    });
   });
 });
 
@@ -404,9 +303,8 @@ describe("closing", () => {
     const api = stubApi();
     const answer = deferred<MadeRecoveryPack>();
     api.makeRecoveryPack.mockReturnValue(answer.promise);
-    const { el, dialog, signIn } = await open({ api });
+    const { el, dialog } = await open({ api });
     const seen = made(el);
-    type(signIn, "current-password", "hunter2-hunter2");
     button(el, "make-pack")!.click();
     await expect.poll(() => api.makeRecoveryPack.mock.calls.length).toBe(1);
     const closed = dialogClosed(dialog);
@@ -423,8 +321,7 @@ describe("closing", () => {
     const api = stubApi();
     const answer = deferred<MadeRecoveryPack>();
     api.makeRecoveryPack.mockReturnValue(answer.promise);
-    const { el, dialog, signIn } = await open({ api });
-    type(signIn, "current-password", "hunter2-hunter2");
+    const { el, dialog } = await open({ api });
     button(el, "make-pack")!.click();
     await expect.poll(() => api.makeRecoveryPack.mock.calls.length).toBe(1);
     const closed = dialogClosed(dialog);
@@ -436,20 +333,14 @@ describe("closing", () => {
     expect(dialog.open).toBe(false);
   });
 
-  it("forgets the password on close, and a reopened dialog starts empty", async () => {
-    const { el, dialog, signIn } = await open();
-    type(signIn, "current-password", "hunter2-hunter2");
+  it("forgets its new-key choice on close, and a reopened dialog starts unticked", async () => {
+    const { el, dialog } = await open();
     tick(el);
-    await signIn.updateComplete;
-    expect(signIn.typed).toBe(true);
     const closed = dialogClosed(dialog);
     button(el, "cancel-pack")!.click();
     await closed;
-    expect(signIn.typed).toBe(false);
     el.show(status());
     await expect.poll(() => dialog.open).toBe(true);
-    const again = await signInOf(el);
-    expect(field(again, "current-password")!.value).toBe("");
     expect(box(el).checked).toBe(false);
   });
 });
@@ -459,9 +350,8 @@ describe("the server key was not replaced", () => {
     const api = stubApi();
     api.makeRecoveryPack.mockResolvedValue({ pdf: pdf(), number: 4, key: "failed" });
     api.getRecoveryPackStatus.mockResolvedValue(at);
-    const { el, dialog, signIn } = await open({ api, at: HELD });
+    const { el, dialog } = await open({ api, at: HELD });
     const seen = made(el);
-    type(signIn, "current-password", "hunter2-hunter2");
     tick(el);
     await el.updateComplete;
     button(el, "make-pack")!.click();
@@ -510,9 +400,8 @@ describe("the server key was not replaced", () => {
   it("closes as a made pack when the box was not ticked", async () => {
     const api = stubApi();
     api.makeRecoveryPack.mockResolvedValue({ pdf: pdf(), number: 4, key: "failed" });
-    const { el, dialog, signIn } = await open({ api });
+    const { el, dialog } = await open({ api });
     const seen = made(el);
-    type(signIn, "current-password", "hunter2-hunter2");
     button(el, "make-pack")!.click();
     await expect.poll(() => seen.length).toBe(1);
     await expect.poll(() => dialog.open).toBe(false);
@@ -524,17 +413,16 @@ describe("a lost answer", () => {
     const api = stubApi();
     api.makeRecoveryPack.mockRejectedValue(options.error ?? { code: "connection.failed" });
     api.getRecoveryPackStatus.mockResolvedValue(options.after ?? status());
-    const { el, dialog, signIn } = await open({ api, at: HELD });
-    type(signIn, "current-password", "hunter2-hunter2");
+    const { el, dialog } = await open({ api, at: HELD });
     if (options.ticked) tick(el);
     await el.updateComplete;
     button(el, "make-pack")!.click();
     await expect.poll(() => el.shadowRoot!.querySelector("[data-test=lost]")).not.toBeNull();
-    return { el, api, dialog, signIn };
+    return { el, api, dialog };
   }
 
   it("with the box ticked, reads the status again and warns that the only copy of the key may be on a pack the person does not have", async () => {
-    const { el, api, signIn } = await lose({ ticked: true });
+    const { el, api } = await lose({ ticked: true });
     expect(api.getRecoveryPackStatus).toHaveBeenCalledOnce();
     const lost = words(el.shadowRoot!.querySelector("[data-test=lost]"));
     expect(lost).toContain(t("recovery_pack_dialog.lost_new_key"));
@@ -544,7 +432,7 @@ describe("a lost answer", () => {
     expect(words(button(el, "stop-pack"))).toBe(t("recovery_pack_dialog.stop"));
     expect(button(el, "make-pack")).toBeNull();
     expect(button(el, "retry-pack")).toBeNull();
-    expect(signIn.typed).toBe(false);
+    expect(el.shadowRoot!.querySelector("dashboard-fresh-sign-in")).toBeNull();
   });
 
   it("names the pack and its date when the status names it unreceived, and hands the status on", async () => {
@@ -574,14 +462,13 @@ describe("a lost answer", () => {
     expect(lost).not.toContain("recovery pack 4");
   });
 
-  it("offers a new pack with a new key, ticked, which needs the sign-in again", async () => {
+  it("offers a new pack with a new key, ticked, through the shared sign-in gate", async () => {
     const { el, api } = await lose({ ticked: true });
     button(el, "remake-pack")!.click();
     await el.updateComplete;
-    const signIn = await signInOf(el);
     expect(el.shadowRoot!.querySelector("[data-test=lost]")).toBeNull();
     expect(box(el).checked).toBe(true);
-    expect(field(signIn, "current-password")!.value).toBe("");
+    expect(el.shadowRoot!.querySelector("dashboard-fresh-sign-in")).toBeNull();
     expect(api.makeRecoveryPack).toHaveBeenCalledOnce();
     expect(button(el, "make-pack")!.variant).toBe("danger");
   });
@@ -642,7 +529,7 @@ describe("a lost answer", () => {
         calls.push(call);
         if (call === "POST /api/backup/recovery-pack") return makeAnswer();
         if (call === "GET /api/backup/recovery-pack") return json(status());
-        return json(profile());
+        throw new Error(`Unexpected request: ${call}`);
       });
       return { api: new DashboardApi("", fetchImpl as typeof fetch), calls };
     }
@@ -653,8 +540,6 @@ describe("a lost answer", () => {
       });
       el.show(HELD);
       await el.updateComplete;
-      const signIn = await signInOf(el);
-      type(signIn, "current-password", "hunter2-hunter2");
       tick(el);
       await el.updateComplete;
       button(el, "make-pack")!.click();
@@ -694,8 +579,7 @@ describe("a lost answer", () => {
     const api = stubApi();
     api.makeRecoveryPack.mockRejectedValue({ code: "connection.timed_out" });
     api.getRecoveryPackStatus.mockRejectedValue({ code: "connection.failed" });
-    const { el, signIn } = await open({ api });
-    type(signIn, "current-password", "hunter2-hunter2");
+    const { el } = await open({ api });
     tick(el);
     await el.updateComplete;
     button(el, "make-pack")!.click();
@@ -710,8 +594,7 @@ describe("a refusal", () => {
   it("shows a server refusal and keeps Make pack working", async () => {
     const api = stubApi();
     api.makeRecoveryPack.mockRejectedValue({ code: "password.throttled", status: 429 });
-    const { el, signIn } = await open({ api });
-    type(signIn, "current-password", "hunter2-hunter2");
+    const { el } = await open({ api });
     tick(el);
     await el.updateComplete;
     button(el, "make-pack")!.click();
@@ -724,8 +607,7 @@ describe("a refusal", () => {
   it("forgets a refusal on Cancel, so a reopened dialog shows none and sends nothing", async () => {
     const api = stubApi();
     api.makeRecoveryPack.mockRejectedValue({ code: "password.throttled", status: 429 });
-    const { el, dialog, signIn } = await open({ api });
-    type(signIn, "current-password", "hunter2-hunter2");
+    const { el, dialog } = await open({ api });
     button(el, "make-pack")!.click();
     await expect.poll(() => bottom(el)).toBe(codeMessage("password.throttled"));
     const closed = dialogClosed(dialog);
@@ -733,39 +615,9 @@ describe("a refusal", () => {
     await closed;
     el.show(status());
     await expect.poll(() => dialog.open).toBe(true);
-    await signInOf(el);
     await el.updateComplete;
     expect(bottom(el)).toBe("");
     expect(api.makeRecoveryPack).toHaveBeenCalledOnce();
-  });
-
-  it("puts a wrong password under its field, and keeps Make pack working", async () => {
-    const api = stubApi();
-    api.makeRecoveryPack.mockRejectedValue({ code: "password.invalid", status: 401 });
-    const { el, signIn } = await open({ api });
-    type(signIn, "current-password", "wrong-password");
-    button(el, "make-pack")!.click();
-    await expect
-      .poll(() => field(signIn, "current-password")!.error)
-      .toBe(codeMessage("password.invalid"));
-    await el.updateComplete;
-    expect(bottom(el)).toBe(t("form.fix_fields"));
-    expect(button(el, "make-pack")!.disabled).toBe(false);
-  });
-
-  it("says in the bottom message, and nowhere else, that a code asked for is no longer needed", async () => {
-    const api = stubApi(profile({ hasTotp: false }));
-    api.makeRecoveryPack.mockRejectedValue({ code: "totp.invalid", status: 401 });
-    const { el, signIn } = await open({ api });
-    type(signIn, "current-password", "hunter2-hunter2");
-    button(el, "make-pack")!.click();
-    await expect.poll(() => api.getProfile.mock.calls.length).toBe(2);
-    await expect.poll(() => bottom(el)).toBe(t("fresh_sign_in.code_no_longer_needed"));
-    expect(signIn.shadowRoot!.querySelector("[data-error]")).toBeNull();
-    type(signIn, "current-password", "hunter2-hunter3");
-    await signIn.updateComplete;
-    await el.updateComplete;
-    expect(bottom(el)).toBe("");
   });
 
   it("shows the box's own recovery.pack_invalid as a refusal in words, not as a lost answer", async () => {
@@ -775,8 +627,7 @@ describe("a refusal", () => {
       params: { reason: "shape" },
       status: 400,
     });
-    const { el, signIn } = await open({ api });
-    type(signIn, "current-password", "hunter2-hunter2");
+    const { el } = await open({ api });
     tick(el);
     await el.updateComplete;
     button(el, "make-pack")!.click();

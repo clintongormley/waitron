@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { generateSync } from "otplib";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   beginOwnPasskeyCheck,
+  startManagementSession,
   encryptTotpSecret,
   hashSessionToken,
   managementSessions,
@@ -96,6 +97,22 @@ const beginCheck = (token: string) =>
   );
 
 describe("confirmFreshSignIn with a password", () => {
+  it("records proof for only the session that just proved its password", async () => {
+    const { token, personId } = await openManagementSession(suite.db, "admin");
+    const other = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
+    const before = Date.now();
+    await confirm(token, { method: "password", password: "correct horse" });
+    const rows = (
+      await suite.db.execute<{ token_hash: string; proved_at: string | null }>(
+        sql`select token_hash, proved_at from management_sessions where person_id = ${personId}`,
+      )
+    ).rows;
+    expect(
+      Date.parse(rows.find((r) => r.token_hash === hashSessionToken(token))!.proved_at!),
+    ).toBeGreaterThanOrEqual(before);
+    expect(rows.find((r) => r.token_hash === hashSessionToken(other.token))!.proved_at).toBeNull();
+  });
+
   it("answers the person's id for the right password when no authenticator is set up", async () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
     expect(await confirm(token, { method: "password", password: "correct horse" })).toBe(personId);
@@ -114,6 +131,11 @@ describe("confirmFreshSignIn with a password", () => {
       "password.invalid",
     );
     expect(await codeOf(() => confirm(token, { method: "password" }))).toBe("password.invalid");
+    const [row] = await suite.db
+      .select({ provedAt: managementSessions.provedAt })
+      .from(managementSessions)
+      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    expect(row).toEqual({ provedAt: null });
   });
 
   it("needs the authenticator code, or an unused recovery code that it spends, once one is set up", async () => {
@@ -243,6 +265,11 @@ describe("confirmFreshSignIn with a passkey", () => {
     expect(
       await confirm(token, { method: "passkey", challengeHandle, response: { id: "cred-mine" } }),
     ).toBe(personId);
+    const [row] = await suite.db
+      .select({ provedAt: managementSessions.provedAt })
+      .from(managementSessions)
+      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    expect(row!.provedAt).toEqual(expect.any(String));
   });
 
   it("accepts the passkey with the authenticator code once one is set up", async () => {

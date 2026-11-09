@@ -3,7 +3,6 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
   type DraftScope,
   type LeaveCoordinator,
   type LeaveReason,
@@ -12,16 +11,10 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type {
-  DashboardApi,
-  FreshSignInBody,
-  RecoveryPackKeyState,
-  RecoveryPackStatus,
-} from "../api/client.js";
+import type { DashboardApi, RecoveryPackKeyState, RecoveryPackStatus } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import type { FreshSignIn, SignInWays } from "./fresh-sign-in.js";
-import "./fresh-sign-in.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import { keyHolder, packDate, unreceivedWords, withStrong } from "./recovery-pack-words.js";
 
 /** The detail of `recovery-pack-made`: the pack's PDF, and whether the box has it marked received. */
@@ -50,7 +43,7 @@ function answeredByBox(error: unknown): boolean {
 }
 
 type Step = "form" | "lost" | "key-failed";
-type Draft = { typed: boolean; ticked: boolean };
+type Draft = { ticked: boolean };
 
 /**
  * Makes a recovery pack after a fresh sign-in. Fires `recovery-pack-closed` on closing only when it
@@ -66,9 +59,6 @@ export class RecoveryPackDialog extends LitElement {
       }
       p {
         margin: 0 0 var(--wt-space-3);
-      }
-      .sign-in {
-        margin-block-end: var(--wt-space-4);
       }
       .option {
         display: grid;
@@ -95,11 +85,7 @@ export class RecoveryPackDialog extends LitElement {
 
   @property({ attribute: false }) api!: Pick<
     DashboardApi,
-    | "getProfile"
-    | "recoveryPackPasskeyOptions"
-    | "makeRecoveryPack"
-    | "markRecoveryPackReceived"
-    | "getRecoveryPackStatus"
+    "makeRecoveryPack" | "markRecoveryPackReceived" | "getRecoveryPackStatus"
   >;
 
   @state() private opened = false;
@@ -107,7 +93,6 @@ export class RecoveryPackDialog extends LitElement {
   @state() private ticked = false;
   @state() private busy = false;
   @state() private step: Step = "form";
-  @state() private ways: SignInWays | null = null;
   /** A refusal's sentence that names no field, kept until the next press. */
   @state() private refusal = "";
   /** The status read again after a lost answer or an unreplaced key; null when unreadable. */
@@ -116,7 +101,6 @@ export class RecoveryPackDialog extends LitElement {
 
   #generation = 0;
   #sent = false;
-  #method: "password" | "passkey" | undefined;
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
 
@@ -135,23 +119,21 @@ export class RecoveryPackDialog extends LitElement {
     this.ticked = false;
     this.busy = false;
     this.step = "form";
-    this.ways = null;
     this.refusal = "";
     this.reread = null;
     const { coordinator, scope } = draftScopeFor<Draft>(this, {
       id: {},
       current: () => this.#draft(),
       snapshot: (value) => ({ ...value }),
-      equal: (a, b) => a.typed === b.typed && a.ticked === b.ticked,
+      equal: (a, b) => a.ticked === b.ticked,
       restore: () => {
-        this.#signIn()?.clear();
         this.ticked = false;
         this.refusal = "";
       },
     });
     this.#leave = coordinator;
     this.#scope = scope;
-    scope.commit({ typed: false, ticked: false });
+    scope.commit({ ticked: false });
   }
 
   /** Closes without asking, forgetting everything typed. */
@@ -179,14 +161,13 @@ export class RecoveryPackDialog extends LitElement {
   }
 
   #draft(): Draft {
-    if (this.step !== "form") return { typed: false, ticked: false };
-    return { typed: this.#signIn()?.typed ?? false, ticked: this.ticked };
+    if (this.step !== "form") return { ticked: false };
+    return { ticked: this.ticked };
   }
 
   #close(announce = true): void {
     const wasOpen = this.opened;
     this.#generation++;
-    this.#signIn()?.clear();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -196,7 +177,6 @@ export class RecoveryPackDialog extends LitElement {
     this.ticked = false;
     this.refusal = "";
     this.reread = null;
-    this.ways = null;
     if (announce && wasOpen && this.#sent && this.isConnected)
       this.dispatchEvent(
         new CustomEvent("recovery-pack-closed", { bubbles: true, composed: true }),
@@ -205,10 +185,6 @@ export class RecoveryPackDialog extends LitElement {
 
   #dialog(): WtDialog | null {
     return this.renderRoot.querySelector<WtDialog>("wt-dialog");
-  }
-
-  #signIn(): FreshSignIn | null {
-    return this.renderRoot.querySelector<FreshSignIn>("dashboard-fresh-sign-in");
   }
 
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
@@ -221,49 +197,27 @@ export class RecoveryPackDialog extends LitElement {
     this.requestUpdate();
   }
 
-  async #make(method?: "password" | "passkey"): Promise<void> {
-    const signIn = this.#signIn();
-    if (!this.opened || this.busy || signIn === null) return;
+  async #make(): Promise<void> {
+    if (!this.opened || this.busy) return;
     const generation = this.#generation;
     const newServerKey = this.ticked;
     const api = this.api;
-    this.#method = method;
     this.refusal = "";
     this.busy = true;
-    let body: FreshSignInBody | null;
-    try {
-      body = await signIn.signIn(method);
-    } catch (error) {
-      if (generation !== this.#generation) return;
-      this.busy = false;
-      this.refusal = signIn.refuse(error);
-      return;
-    }
-    if (generation !== this.#generation) return;
-    if (body === null) {
-      this.busy = false;
-      if (signIn.invalid) {
-        await this.updateComplete;
-        await focusFirstInvalid(signIn.shadowRoot!);
-      }
-      return;
-    }
     let made;
     this.#sent = true;
     try {
       made = await api.makeRecoveryPack({
         locale: currentLocale().startsWith("es") ? "es" : "en",
         newServerKey,
-        signIn: body,
       });
     } catch (error) {
       if (generation !== this.#generation) return;
       if (answeredByBox(error)) {
         this.busy = false;
-        this.refusal = signIn.refuse(error);
+        this.refusal = codeMessage(codeOf(error, "server.internal"));
         return;
       }
-      if (newServerKey) signIn.clear();
       this.reread = await this.#readStatus(api, generation);
       if (generation !== this.#generation) return;
       this.lostTicked = newServerKey;
@@ -286,7 +240,6 @@ export class RecoveryPackDialog extends LitElement {
     );
     if (generation !== this.#generation) return;
     if (made.key === "failed" && newServerKey) {
-      signIn.clear();
       this.reread = await this.#readStatus(api, generation);
       if (generation !== this.#generation) return;
       this.step = "key-failed";
@@ -332,13 +285,12 @@ export class RecoveryPackDialog extends LitElement {
     this.step = "form";
     this.ticked = true;
     this.refusal = "";
-    this.#signIn()?.clear();
     this.#scope?.changed();
   }
 
   #retry(): void {
     this.step = "form";
-    void this.#make(this.#method);
+    void this.#make();
   }
 
   override render(): TemplateResult {
@@ -360,16 +312,6 @@ export class RecoveryPackDialog extends LitElement {
   #body(): TemplateResult {
     return html`<div ?hidden=${this.step !== "form"}>
         <p data-test="intro">${t("recovery_pack_dialog.intro")}</p>
-        <dashboard-fresh-sign-in
-          class="sign-in"
-          .api=${this.api}
-          ?disabled=${this.busy}
-          @sign-in-ways=${(event: CustomEvent<SignInWays>) => {
-            this.ways = event.detail;
-          }}
-          @sign-in-change=${() => this.#edited()}
-          @sign-in-passkey=${() => void this.#make("passkey")}
-        ></dashboard-fresh-sign-in>
         ${this.#option()}
       </div>
       ${this.step === "lost" ? this.#lost() : nothing}
@@ -474,26 +416,17 @@ export class RecoveryPackDialog extends LitElement {
               >`
         }
       </wt-form-actions>`;
-    const signIn = this.#signIn();
-    const noWayIn = this.ways !== null && !this.ways.password && !this.ways.passkey;
-    const bottom = [this.refusal, signIn?.notice, signIn?.marked ? t("form.fix_fields") : ""]
-      .filter(Boolean)
-      .join(" ");
-    return html`<wt-form-actions slot="footer" .error=${bottom}>
+    return html`<wt-form-actions slot="footer" .error=${this.refusal}>
       <wt-button slot="cancel" data-test="cancel-pack" variant="secondary" @click=${leave}
         >${t("action.cancel")}</wt-button
       >
-      ${
-        noWayIn
-          ? nothing
-          : html`<wt-button
-              data-test="make-pack"
-              variant=${this.ticked ? "danger" : "primary"}
-              ?disabled=${this.busy || this.ways === null || (signIn?.invalid ?? false)}
-              @click=${() => void this.#make()}
-              >${t("recovery_pack_dialog.make")}</wt-button
-            >`
-      }
+      <wt-button
+        data-test="make-pack"
+        variant=${this.ticked ? "danger" : "primary"}
+        ?disabled=${this.busy}
+        @click=${() => void this.#make()}
+        >${t("recovery_pack_dialog.make")}</wt-button
+      >
     </wt-form-actions>`;
   }
 }

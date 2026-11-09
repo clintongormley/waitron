@@ -28,6 +28,13 @@ correo con un enlace para elegir una nueva. La confirmación es la misma para to
 no confirma que exista una cuenta ni que pueda acceder. Restablecer la contraseña no habilita una
 cuenta deshabilitada.
 
+Waitron te pide que vuelvas a identificarte antes de cambiar las copias de seguridad, descargar
+archivos de recuperación, mostrar la clave de recuperación de las copias, retirar un equipo o
+exportar la configuración o los datos de otra persona. Usa tu contraseña o passkey y, si tienes
+verificación en dos pasos, un código del autenticador o de recuperación. La confirmación cubre
+estas acciones en este navegador durante 15 minutos o hasta que termine tu sesión.
+Elige **Cancelar** para dejar la acción sin realizar.
+
 ## Tu propia cuenta {#own-account}
 
 Abre **Configuración de la cuenta** desde el menú de cuenta para cambiar tus propios datos de

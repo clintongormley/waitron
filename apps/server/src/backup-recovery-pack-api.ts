@@ -1,5 +1,5 @@
 import { TLSSocket } from "node:tls";
-import { isRemoteStaffRequest, managementSite } from "./request-from-box.js";
+import { isRemoteStaffRequest } from "./request-from-box.js";
 import { eq, inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import { credentialRevision, type KeyRing } from "@waitron/credentials";
@@ -21,9 +21,9 @@ import {
 } from "@waitron/db";
 import {
   authorizeManager,
+  requireFreshManagementSignIn,
   beginOwnPasskeyCheck,
   persons,
-  type TotpKeyRing,
 } from "@waitron/identity";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { readRecoveryKeyName, setRecoveryKeyTx } from "@waitron/node-db";
@@ -60,9 +60,7 @@ import {
 import { carriesServerKey, packStatus, type CurrentChecks } from "./backup-recovery-pack-status.js";
 import type { BackupRuntimeStatus } from "./backup-supervisor.js";
 import type { Turns } from "./backup-turns.js";
-import { confirmFreshSignIn } from "./fresh-sign-in.js";
 import type { Logger } from "./logger.js";
-import { createPasswordThrottle } from "./password-throttle.js";
 import type { RecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
 import { knownZone } from "./venue-time-zone.js";
@@ -107,10 +105,8 @@ export function mountBackupRecoveryPackApi(
   });
 }
 
-export interface BackupRecoveryPackMakeDeps extends BackupRecoveryPackApiDeps {
-  /** The management origin a passkey response must name. */
-  origin: string;
-  keyRing: TotpKeyRing;
+export interface BackupRecoveryPackMakeDeps {
+  db: Database;
   ring: KeyRing;
   /** This box's node.db, which holds the recovery-key check. */
   nodeDb: NodeDatabase;
@@ -169,14 +165,14 @@ function requireSecurePackRequest(c: Context): void {
   }
 }
 
-type MakeRequest = { locale: PackLocale; newServerKey: boolean; signIn: unknown };
+type MakeRequest = { locale: PackLocale; newServerKey: boolean };
 
 function makeRequest(body: unknown): MakeRequest {
   if (body === null || typeof body !== "object" || Array.isArray(body)) invalid("shape");
   const fields = body as Record<string, unknown>;
   const keys = Object.keys(fields).sort();
   if (
-    keys.join(",") !== "locale,newServerKey,signIn" ||
+    keys.join(",") !== "locale,newServerKey" ||
     (fields.locale !== "en" && fields.locale !== "es") ||
     typeof fields.newServerKey !== "boolean"
   ) {
@@ -279,6 +275,7 @@ async function makePack(
   const { request, madeAt, newSecret } = input;
   const nodeId = deps.node.nodeId;
   await authorizeManager(tx, { managementSessionId: input.token, permission: "system.manage" });
+  await requireFreshManagementSignIn(tx, input.token);
   const tenant = await readTenant(tx);
   const venue = await readVenue(tx);
   if (tenant === null) {
@@ -368,7 +365,6 @@ export function mountBackupRecoveryPackMakeApi(
   deps: BackupRecoveryPackMakeDeps,
   log: Logger,
 ): void {
-  const throttle = createPasswordThrottle();
   const nodeId = deps.node.nodeId;
   const filesInvoices = deps.modules.some((m) => m.backup?.recoveryPackPage !== undefined);
 
@@ -382,12 +378,8 @@ export function mountBackupRecoveryPackMakeApi(
         permission: "system.manage",
         touch: false,
       });
+      const { personId } = await requireFreshManagementSignIn(deps.db, token);
       const request = makeRequest(await readRawJsonBody<unknown>(c));
-      const personId = await confirmFreshSignIn(
-        { db: deps.db, throttle, keyRing: deps.keyRing, ...managementSite(c, deps) },
-        token,
-        request.signIn,
-      );
       const made = await deps.turns(() =>
         inTurn(deps.db, `recovery-document:${nodeId}`, async () => {
           const env = await deps.readBoxEnv();

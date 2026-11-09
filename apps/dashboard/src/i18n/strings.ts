@@ -1215,8 +1215,11 @@ export const en = {
     "Your account no longer uses an authenticator app, so no code is needed. Make the pack again.",
   "fresh_sign_in.use_passkey": "Use your passkey",
   "fresh_sign_in.use_passkey_instead": "Use a passkey instead of the password",
-  "fresh_sign_in.no_way_in":
-    "To make a recovery pack you need to sign in again with a password or a passkey.",
+  "fresh_sign_in.heading": "Confirm it is you",
+  "fresh_sign_in.explanation":
+    "Sign in again to continue. This confirmation covers protected actions in this browser for 15 minutes, or until you sign out.",
+  "fresh_sign_in.confirm": "Continue",
+  "fresh_sign_in.no_way_in": "To continue, sign in again with a password or a passkey.",
   "fresh_sign_in.passkey_not_registered":
     "You have no passkey on your account yet. To add one, open Account settings from the person icon at the top of the page and choose Add passkey; or sign in with your password here.",
   "fresh_sign_in.profile_failed":
@@ -1224,7 +1227,7 @@ export const en = {
   "fresh_sign_in.retry": "Try again",
   "recovery_pack_dialog.heading": "Make recovery pack",
   "recovery_pack_dialog.intro":
-    "The pack holds every key this venue has. Sign in again to make it. It is made once, for this download; the box keeps no copy.",
+    "The pack holds every key this venue has. It is made once, for this download; the box keeps no copy.",
   "recovery_pack_dialog.new_key": "Also make a new server key",
   "recovery_pack_dialog.new_key_held":
     "Only if the pack or sheet holding the current key (recovery pack {number}, made on {date}) is lost.",
@@ -5068,8 +5071,12 @@ export const es: Record<StringKey, string> = {
     "Tu cuenta ya no usa una app de autenticación, así que no hace falta ningún código. Vuelve a hacer el paquete.",
   "fresh_sign_in.use_passkey": "Usar tu passkey",
   "fresh_sign_in.use_passkey_instead": "Usar una passkey en lugar de la contraseña",
+  "fresh_sign_in.heading": "Confirma que eres tú",
+  "fresh_sign_in.explanation":
+    "Vuelve a identificarte para continuar. Esta confirmación cubre las acciones protegidas en este navegador durante 15 minutos o hasta que cierres la sesión.",
+  "fresh_sign_in.confirm": "Continuar",
   "fresh_sign_in.no_way_in":
-    "Para hacer un paquete de recuperación tienes que volver a identificarte con una contraseña o una passkey.",
+    "Para continuar, vuelve a identificarte con una contraseña o una passkey.",
   "fresh_sign_in.passkey_not_registered":
     "Todavía no tienes ninguna passkey en tu cuenta. Para añadir una, abre Configuración de la cuenta desde el icono de persona en la parte superior de la página y elige Añadir passkey; o identifícate aquí con tu contraseña.",
   "fresh_sign_in.profile_failed":
@@ -5077,7 +5084,7 @@ export const es: Record<StringKey, string> = {
   "fresh_sign_in.retry": "Volver a intentarlo",
   "recovery_pack_dialog.heading": "Hacer paquete de recuperación",
   "recovery_pack_dialog.intro":
-    "El paquete contiene todas las claves de este local. Vuelve a iniciar sesión para hacerlo. Se hace una sola vez, para esta descarga; la caja no guarda ninguna copia.",
+    "El paquete contiene todas las claves de este local. Se hace una sola vez, para esta descarga; la caja no guarda ninguna copia.",
   "recovery_pack_dialog.new_key": "También crear una clave del servidor nueva",
   "recovery_pack_dialog.new_key_held":
     "Solo si se ha perdido el paquete o la hoja con la clave actual (paquete de recuperación {number}, hecho el {date}).",

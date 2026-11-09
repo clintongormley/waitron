@@ -1901,8 +1901,6 @@ describe("DashboardApi.getDiskStop", () => {
 });
 
 describe("the recovery pack calls", () => {
-  const SIGN_IN = { method: "password", password: "hunter2-hunter2" } as const;
-
   function packResponse(body: BodyInit, headers: Record<string, string>): Response {
     return new Response(body, { status: 200, headers });
   }
@@ -1921,13 +1919,13 @@ describe("the recovery pack calls", () => {
     );
     const api = new DashboardApi("", fetchImpl);
 
-    const made = await api.makeRecoveryPack({ locale: "es", newServerKey: true, signIn: SIGN_IN });
+    const made = await api.makeRecoveryPack({ locale: "es", newServerKey: true });
 
     expect(made.number).toBe(4);
     expect(made.key).toBe("replaced");
     expect(await made.pdf.text()).toBe(MINIMAL_PDF);
     expect(callsOf(fetchImpl)).toEqual([
-      ["/api/backup/recovery-pack", "POST", { locale: "es", newServerKey: true, signIn: SIGN_IN }],
+      ["/api/backup/recovery-pack", "POST", { locale: "es", newServerKey: true }],
     ]);
   });
 
@@ -1964,9 +1962,9 @@ describe("the recovery pack calls", () => {
     headers["X-Waitron-Recovery-Pack-Key"] = key;
     const api = new DashboardApi("", vi.fn().mockResolvedValue(packResponse(body, headers)));
 
-    await expect(
-      api.makeRecoveryPack({ locale: "en", newServerKey: false, signIn: SIGN_IN }),
-    ).rejects.toEqual({ code: "recovery.pack_invalid" });
+    await expect(api.makeRecoveryPack({ locale: "en", newServerKey: false })).rejects.toEqual({
+      code: "recovery.pack_invalid",
+    });
   });
 
   it("refuses a pack over 8 MiB as recovery.pack_invalid", async () => {
@@ -1981,9 +1979,9 @@ describe("the recovery pack calls", () => {
       ),
     );
 
-    await expect(
-      api.makeRecoveryPack({ locale: "en", newServerKey: false, signIn: SIGN_IN }),
-    ).rejects.toEqual({ code: "recovery.pack_invalid" });
+    await expect(api.makeRecoveryPack({ locale: "en", newServerKey: false })).rejects.toEqual({
+      code: "recovery.pack_invalid",
+    });
   });
 
   it.each([
@@ -2006,7 +2004,6 @@ describe("the recovery pack calls", () => {
       const made = await api.makeRecoveryPack({
         locale: "en",
         newServerKey: false,
-        signIn: SIGN_IN,
       });
 
       expect(made.number).toBe(4);
@@ -2023,17 +2020,18 @@ describe("the recovery pack calls", () => {
         ),
     );
 
-    await expect(
-      api.makeRecoveryPack({ locale: "en", newServerKey: true, signIn: SIGN_IN }),
-    ).rejects.toEqual({ code: "connection.failed" });
+    await expect(api.makeRecoveryPack({ locale: "en", newServerKey: true })).rejects.toEqual({
+      code: "connection.failed",
+    });
   });
 
   it("passes a refusal through with its code", async () => {
     const api = new DashboardApi("", vi.fn().mockResolvedValue(refusal("password.invalid", 401)));
 
-    await expect(
-      api.makeRecoveryPack({ locale: "en", newServerKey: false, signIn: SIGN_IN }),
-    ).rejects.toEqual({ code: "password.invalid", status: 401 });
+    await expect(api.makeRecoveryPack({ locale: "en", newServerKey: false })).rejects.toEqual({
+      code: "password.invalid",
+      status: 401,
+    });
   });
 
   it("reads the status passively, asks for passkey options and marks a pack received with an empty JSON body", async () => {
@@ -2056,7 +2054,7 @@ describe("the recovery pack calls", () => {
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/api/backup/recovery-pack", "GET", undefined],
-      ["/api/backup/recovery-pack/passkey-options", "POST", undefined],
+      ["/management-api/session/me/fresh-sign-in/passkey-options", "POST", undefined],
       ["/api/backup/recovery-pack/7/received", "POST", {}],
     ]);
     expect(
@@ -2066,4 +2064,17 @@ describe("the recovery pack calls", () => {
       "application/json",
     );
   });
+});
+
+it("confirms fresh sign-in through the shared session endpoint", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+  const api = new DashboardApi("", fetchImpl);
+  await api.confirmFreshSignIn({ method: "password", password: "correct password" });
+  expect(callsOf(fetchImpl)).toEqual([
+    [
+      "/management-api/session/me/fresh-sign-in",
+      "POST",
+      { method: "password", password: "correct password" },
+    ],
+  ]);
 });

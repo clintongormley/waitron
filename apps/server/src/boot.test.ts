@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { locations } from "@waitron/db";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
@@ -3360,9 +3361,11 @@ describe("startServer — what a trading boot wires behind its management routes
         role: "admin",
       })
       .returning({ id: persons.id });
-    const session = await withTransaction(db, (tx) =>
-      startManagementSession(tx, { personId: admin!.id }),
-    );
+    const session = await withTransaction(db, async (tx) => {
+      const session = await startManagementSession(tx, { personId: admin!.id });
+      await setFreshManagementSignIn(tx, session.token);
+      return session;
+    });
     cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
     port = await freePort();
     server = await startServer({

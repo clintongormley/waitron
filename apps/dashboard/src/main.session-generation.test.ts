@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import type { FreshSignInDialog } from "./widgets/fresh-sign-in-dialog.js";
 import type { DashboardApp } from "./dashboard-app.js";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -97,6 +98,41 @@ it("the actual entry shares one epoch with shell, API, module requests and backg
       );
       await rejection;
       expect(captured).toEqual([]);
+      const proofRefusal = { code: "management_session.proof_required" };
+      fetchImpl.mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: proofRefusal }), { status: 400 }),
+      );
+      fetchImpl.mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: proofRefusal }), { status: 400 }),
+      );
+      const profileRead = vi.spyOn(app.api, "getProfile").mockResolvedValue({
+        displayName: "Marta",
+        firstNames: "Marta",
+        lastNames: "",
+        telephone: null,
+        email: "marta@example.test",
+        pendingEmail: null,
+        locale: null,
+        hasPassword: true,
+        hasTotp: false,
+        hasGoogle: false,
+        passkeys: [],
+      });
+      const moduleAction = app
+        .request("/protected-module", "POST", { original: true })
+        .catch((error: unknown) => error);
+      const apiAction = app.api.getBackupRecoveryKey().catch((error: unknown) => error);
+      await vi.waitFor(() => expect(profileRead).toHaveBeenCalledTimes(1));
+      const proofDialog = app.shadowRoot!.querySelector<FreshSignInDialog>(
+        "dashboard-fresh-sign-in-dialog",
+      )!;
+      expect(proofDialog.shadowRoot!.querySelector("dashboard-fresh-sign-in")).not.toBeNull();
+      app.sessionEpoch.advance();
+      expect(await moduleAction).toMatchObject(proofRefusal);
+      expect(await apiAction).toMatchObject(proofRefusal);
+      await proofDialog.updateComplete;
+      expect(proofDialog.shadowRoot!.querySelector("dashboard-fresh-sign-in")).toBeNull();
+      profileRead.mockRestore();
       const observed = app.api.liveData.observe(
         { key: "wiring", dependencies: [{ type: "printers" }], read: async () => [] },
         () => {},

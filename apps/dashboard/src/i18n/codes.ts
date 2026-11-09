@@ -8,6 +8,10 @@ import { en, es } from "./strings.js";
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "management_session.proof_required": {
+    en: "Confirm it is you to continue. The action has not been carried out.",
+    es: "Confirma que eres tú para continuar. La acción no se ha realizado.",
+  },
   "node.spare": {
     en: "This box is the spare. Open the main box's address for restaurant screens and data.",
     es: "Este es el equipo de reserva. Abre la dirección del equipo principal para acceder a las pantallas y los datos del local.",

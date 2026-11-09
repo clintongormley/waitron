@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -60,6 +61,7 @@ const suite = useVenueDb({
       const session = await startManagementSession(tx, {
         personId: admin.rows[0]!.id,
       });
+      await setFreshManagementSignIn(tx, session.token);
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     });
   },
@@ -82,6 +84,24 @@ function app(options: { clock?: boolean } = {}): Hono {
 }
 
 describe("configuration export API", () => {
+  it("requires proof before preparing an export", async () => {
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie, false));
+    try {
+      const response = await app().request("/management-api/configuration-export", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ passphrase: "a strong passphrase" }),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management_session.proof_required" },
+      });
+      expect(response.headers.get("content-disposition")).toBeNull();
+    } finally {
+      await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie));
+    }
+  });
+
   it("requires an authenticated manager", async () => {
     const response = await app().request("/management-api/configuration-export", {
       method: "POST",

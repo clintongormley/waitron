@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { createCipheriv, randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it, vi, type Mock } from "vitest";
@@ -145,7 +146,9 @@ async function login(app: Hono): Promise<string> {
     body: JSON.stringify({ email: MANAGER_EMAIL, password: PASSWORD }),
   });
   expect(res.status).toBe(200);
-  return res.headers.get("set-cookie")!.split(";")[0];
+  const cookie = res.headers.get("set-cookie")!.split(";")[0];
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie));
+  return cookie;
 }
 
 let nodeId: string;
@@ -1079,3 +1082,23 @@ describe("stream settings routes", () => {
     });
   });
 });
+
+it.each(["PUT", "DELETE"])(
+  "%s stream requires proof before contacting the bucket or changing settings",
+  async (method) => {
+    const { app, deps, order } = harness();
+    const cookie = await login(app);
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie, false));
+    const response = await app.request("/api/backup/stream", {
+      method,
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(BODY),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management_session.proof_required" },
+    });
+    expect(deps.probe).not.toHaveBeenCalled();
+    expect(order).toEqual([]);
+  },
+);

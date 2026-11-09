@@ -14,6 +14,7 @@ import {
 } from "@waitron/workforce";
 import {
   permissionsForRole,
+  beginOwnPasskeyCheck,
   IDLE_TIMEOUT_MS,
   markPasskeyOffered,
   resolveManagementSession,
@@ -35,6 +36,8 @@ import {
 import { SUPPORTED_LOCALES, AppError } from "@waitron/shared";
 import { resolveLoginLocale } from "./login-locale.js";
 import { createPasswordThrottle } from "./password-throttle.js";
+import { confirmFreshSignIn } from "./fresh-sign-in.js";
+import { managementSite } from "./request-from-box.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
 import "./errors.js";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -68,6 +71,8 @@ export interface MeApiDeps {
   /** The enabled module names, `core` included. */
   modules: string[];
   credentialKeyRing: TotpKeyRing;
+  rpId?: string;
+  origin?: string;
   accountActionCodeKey?: Buffer;
   accountMailMode?: (tx: Transaction) => Promise<EmailDelivery["mode"]>;
   assertAccountMailPrimary?: () => Promise<void>;
@@ -130,6 +135,37 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       now: deps.now,
     },
     log,
+  );
+
+  const proofThrottle = createPasswordThrottle();
+  const proofSite = { rpId: deps.rpId ?? "localhost", origin: deps.origin ?? "http://localhost" };
+  app.post("/management-api/session/me/fresh-sign-in", (c) =>
+    run(c, log, async () => {
+      const token = requireManagementSession(c);
+      await confirmFreshSignIn(
+        {
+          db: deps.db,
+          throttle: proofThrottle,
+          keyRing: credentialKeyRing,
+          ...managementSite(c, proofSite),
+        },
+        token,
+        await readJsonBody<unknown>(c),
+      );
+      return c.body(null, 204);
+    }),
+  );
+  app.post("/management-api/session/me/fresh-sign-in/passkey-options", (c) =>
+    run(c, log, async () => {
+      const token = requireManagementSession(c);
+      const result = await asStaff((tx) =>
+        beginOwnPasskeyCheck(tx, {
+          managementSessionId: token,
+          rpId: managementSite(c, proofSite).rpId,
+        }),
+      );
+      return c.json(result);
+    }),
   );
 
   const updateProfile = ownPasswordChanges(deps.db, profileThrottle);

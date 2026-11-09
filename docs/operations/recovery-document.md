@@ -8,8 +8,9 @@ and a secure (HTTPS) connection to that server.
 
 1. Open **Backups**. The **Recovery pack** card at the top says which pack is the latest and
    whether it is up to date. Choose **Make recovery pack**.
-2. Sign in again in the dialog: your password, or **Use your passkey**. If your account uses an
-   authenticator app, also enter a code from it or one of your recovery codes.
+2. When Waitron asks you to confirm it is you, use your password or **Use your passkey**. If your
+   account uses an authenticator app, also enter a code from it or one of your recovery codes. This
+   confirmation covers protected actions in this browser for 15 minutes or until your session ends.
 3. Tick **Also make a new server key** only if the pack or sheet holding the current server key is
    lost. Without the tick the pack does not change the key: its server key page names the pack or
    sheet that holds it.

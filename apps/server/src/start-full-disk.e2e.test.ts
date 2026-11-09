@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 // Needs a filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_DIR names, or on macOS a disk
 // image the harness makes with hdiutil (`./testing/full-disk.ts`). Without one each case is reported
 // SKIPPED; with CI=true or WAITRON_REQUIRE_FULL_DISK=1 it FAILS instead (testing-guide.md, "The
@@ -262,6 +263,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         .values({ displayName: name, pinHash: hashPin("1234"), role })
         .returning({ id: persons.id });
       const session = await startManagementSession(tx, { personId: p!.id });
+      await setFreshManagementSignIn(tx, session.token);
       return {
         personId: p!.id,
         token: session.token,

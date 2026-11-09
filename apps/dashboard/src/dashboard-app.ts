@@ -1,3 +1,4 @@
+import "./widgets/fresh-sign-in-dialog.js";
 import { LeaveController, navigationGuardFor, type LeaveReason } from "@waitron/ui";
 import { dashboardPath, leftToBrowser } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
@@ -1821,7 +1822,9 @@ export class DashboardApp extends LitElement {
   }
 
   override render(): TemplateResult {
-    return html`${this.leaveConfirmation()} ${this.#permissionDialog()} ${this.#renderPage()}`;
+    return html`${this.leaveConfirmation()} ${this.#permissionDialog()}
+      <dashboard-fresh-sign-in-dialog .api=${this.api}></dashboard-fresh-sign-in-dialog>
+      ${this.#renderPage()}`;
   }
 
   #renderPage(): TemplateResult {
