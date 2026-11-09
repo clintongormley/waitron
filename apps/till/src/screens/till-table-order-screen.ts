@@ -3471,10 +3471,12 @@ export class TillTableOrderScreen extends LitElement {
       });
   }
 
-  /** `refused`: the footer already offers Void… and Comp… beside the refusal. */
+  /** `comp` and `canVoid`: whether the menu offers Comp… and Void…, which the footer offers
+   * instead beside a refusal. */
   #sentLineMore(
     members: readonly SentSlice[] | undefined,
-    refused = false,
+    comp: boolean,
+    canVoid: boolean,
   ): TemplateResult | typeof nothing {
     const slice = members?.[0];
     if (members === undefined || slice === undefined) return nothing;
@@ -3483,8 +3485,6 @@ export class TillTableOrderScreen extends LitElement {
     const station = members.every((member) => this.#canMoveSent(member));
     const unserve =
       slice.kind === "served" && members.every((member) => this.#sentBillOpen(member.row));
-    const comp = !refused && this.#sentOrderLine(slice) !== undefined;
-    const canVoid = !refused && this.#canVoidSent(slice);
     if (!fire && !recall && !station && !unserve && !canVoid && !comp) return nothing;
     const pending = this.sentLinePending;
     const disabled = this.busy || this.groupCommandBusy;
@@ -3596,9 +3596,10 @@ export class TillTableOrderScreen extends LitElement {
       this.#sentChangeMovesPrice(change, decimal(shownQuantity), seed!.selection);
     const refused =
       this.sentChangeRefused?.pending === pending ? this.sentChangeRefused : undefined;
-    const refusedVoid = refused !== undefined && slice !== undefined && this.#canVoidSent(slice);
-    const refusedComp =
-      refused !== undefined && slice !== undefined && this.#sentOrderLine(slice) !== undefined;
+    const voidable = slice !== undefined && this.#canVoidSent(slice);
+    const compable = slice !== undefined && this.#sentOrderLine(slice) !== undefined;
+    const refusedVoid = refused !== undefined && voidable;
+    const refusedComp = refused !== undefined && compable;
     // More of a weighed dish is weighed on its own, so it goes in the New order.
     const weighed = changeLines !== undefined && (changeLines[0]!.unitPrecision ?? 0) > 0;
     const status =
@@ -3724,7 +3725,7 @@ export class TillTableOrderScreen extends LitElement {
         ${slice?.kind === "fired" && slice.row.released ? html`<wt-button data-sent-line-serve aria-label=${`${t("table.serve")} · ${slice.row.name}`} variant=${disabled ? "secondary" : "primary"} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, false)}>${t("table.serve")}</wt-button>` : nothing}
         ${refusedVoid ? html`<wt-button variant="secondary" data-sent-change-refused-void ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "void")}>${t("table.void_line")}</wt-button>` : nothing}
         ${refusedComp ? html`<wt-button variant="secondary" data-sent-change-refused-comp ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp")}>${t("comp.title")}</wt-button>` : nothing}
-        ${this.#sentLineMore(members, refused !== undefined)}
+        ${this.#sentLineMore(members, compable && !refusedComp, voidable && !refusedVoid)}
       </wt-form-actions>
     </wt-dialog>`;
   }
