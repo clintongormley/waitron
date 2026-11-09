@@ -98,7 +98,6 @@ export function allocateCorrectionAmounts(
     const priorGross = sumDecimals(prior.map((allocation) => allocation.gross));
     const priorBase = sumDecimals(prior.map((allocation) => allocation.base));
     const cumulativeGross = addDecimal(priorGross, gross);
-    // The last allocation takes the stored remainder; rounding a fresh percentage can lose it.
     let cumulativeBase =
       compareDecimal(cumulativeGross, addDecimal(original.base, original.tax)) === 0
         ? original.base
@@ -131,7 +130,7 @@ export function allocateCorrectionAmounts(
       allocation.base = bases[index]!;
       allocation.tax = subtractDecimal(allocation.gross, allocation.base);
     }
-    vatBreakdown.push({ rate, base, tax });
+    vatBreakdown.push({ rate, base: toScale(base, 2), tax: toScale(tax, 2) });
   }
   return { gross: toScale(amount, 2), allocations, vatBreakdown };
 }

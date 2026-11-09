@@ -334,53 +334,34 @@ describe("correction amount allocation", () => {
     );
   });
 
-  it.each<[string, (h: CorrectionAmountHistory) => void]>([
-    [
-      "duplicate original id",
-      (h) => {
-        h.lines.push({ ...h.lines[0]! });
-      },
-    ],
-    [
-      "missing original rate",
-      (h) => {
-        h.vatBreakdown = [];
-      },
-    ],
-    [
-      "duplicate rate spelling",
-      (h) => {
-        h.vatBreakdown.push({ rate: d("10.00"), base: d("0"), tax: d("0") });
-      },
-    ],
-    [
-      "unexplained rate",
-      (h) => {
-        h.vatBreakdown.push({ rate: d("21"), base: d("0"), tax: d("0") });
-      },
-    ],
-    [
-      "invalid line number",
-      (h) => {
-        h.lines[0]!.lineNo = 0;
-      },
-    ],
-    [
-      "overspent prior base",
-      (h) => {
-        h.consumed.push(part("dish", "10", "10.01", "10.01", "0"));
-      },
-    ],
-    [
-      "overspent prior VAT",
-      (h) => {
-        h.consumed.push(part("dish", "10", "1.01", "0", "1.01"));
-      },
-    ],
-  ])("refuses an unreconciled history: %s", (_label, change) => {
+  it.each([
+    "duplicate id",
+    "missing rate",
+    "duplicate rate",
+    "unexplained rate",
+    "line number",
+    "prior base",
+    "prior VAT",
+    "prior line gross",
+  ])("refuses unreconciled history: %s", (cause) => {
     const history = oneRate();
     expect(allocateCorrectionAmounts(history, { gross: d("0.01") }).gross).toBe("0.01");
-    change(history);
+    if (cause === "duplicate id" || cause === "prior line gross") {
+      history.lines.push({
+        ...history.lines[0]!,
+        id: cause === "duplicate id" ? "dish" : "second",
+      });
+      history.vatBreakdown = [{ rate: d("10"), base: d("20"), tax: d("2") }];
+    }
+    if (cause === "missing rate") history.vatBreakdown = [];
+    if (cause === "duplicate rate") history.vatBreakdown.push({ ...history.vatBreakdown[0]! });
+    if (cause === "unexplained rate")
+      history.vatBreakdown.push({ rate: d("21"), base: d("0"), tax: d("0") });
+    if (cause === "line number") history.lines[0]!.lineNo = 0;
+    if (cause === "prior base") history.consumed.push(part("dish", "10", "10.01", "10.01", "0"));
+    if (cause === "prior VAT") history.consumed.push(part("dish", "10", "1.01", "0", "1.01"));
+    if (cause === "prior line gross")
+      history.consumed.push(part("dish", "10", "12.10", "11", "1.10"));
     expect(() => allocateCorrectionAmounts(history, { gross: d("0.01") })).toThrowError(
       expect.objectContaining({ code: "sale.correction_history_unusable" }),
     );
@@ -407,6 +388,7 @@ describe("correction amount allocation", () => {
     for (const [rate, gross, base, count, cents, totalBase, totalTax] of [
       ["21", "1.00", "0.83", 10, 1000, "8.30", "1.70"],
       ["10", "1.80", "1.64", 8, 1440, "13.12", "1.28"],
+      ["21", "1.20", "0.99", 10, 1200, "9.90", "2.10"],
     ] as const) {
       for (let cent = 1; cent <= cents; cent++) {
         const history = smallBill(rate, gross, base, count);
@@ -466,6 +448,15 @@ describe("correction amount allocation", () => {
     expect(allocateCorrectionAmounts(history, { gross: d("0.03") }).allocations).toEqual([
       { saleLineId: "a", rate: "21.00", gross: "0.02", base: "0.01", tax: "0.01" },
       { saleLineId: "b", rate: "21.00", gross: "0.01", base: "0.01", tax: "0.00" },
+    ]);
+  });
+
+  it("normalises exhausted stored totals with extra zero places", () => {
+    const history = oneRate();
+    history.vatBreakdown[0]!.base = d("10.0000");
+    history.vatBreakdown[0]!.tax = d("1.0000");
+    expect(allocateCorrectionAmounts(history, { gross: d("11") }).vatBreakdown).toEqual([
+      { rate: "10.00", base: "10.00", tax: "1.00" },
     ]);
   });
 
