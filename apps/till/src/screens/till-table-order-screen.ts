@@ -556,6 +556,33 @@ type ActionStep = "closed" | "pick" | "move-dishes" | "split-table" | "split-tab
  * were not. */
 const splitRowsUnreadSentence = (): string => t("table.split_updated_elsewhere");
 
+/** What a Sent window's fields start from: the product and selection, and its dishes' counts. */
+type SentChangeSeed<Pending> = {
+  pending: Pending;
+  counts: string[];
+  product: TillProduct;
+  selection: LineSelection;
+};
+
+/** Extras by what is picked, in any order. */
+function extraPicks(extras: LineSelection["extras"]): string {
+  return JSON.stringify(
+    (extras ?? [])
+      .map(({ listId, productId, quantity }) => JSON.stringify([listId, productId, quantity]))
+      .sort(),
+  );
+}
+
+/** Whether two seeds of one Sent window describe the same stored dish. */
+function sameSentFacts<P>(a: SentChangeSeed<P>, b: SentChangeSeed<P>): boolean {
+  return (
+    a.selection.note === b.selection.note &&
+    sameOptionSelections(a.selection.options ?? [], b.selection.options ?? []) &&
+    extraPicks(a.selection.extras) === extraPicks(b.selection.extras) &&
+    a.counts.join() === b.counts.join()
+  );
+}
+
 const isAnswer = (read: SplitSources | "failed" | null): read is SplitSources =>
   read !== null && read !== "failed";
 
@@ -1364,12 +1391,13 @@ export class TillTableOrderScreen extends LitElement {
     message: string;
     selection: ModifierConfirmDetail;
   } | null = null;
-  /** The product and selection the open Sent window's fields started from. */
-  #sentChangeSeed?: {
-    pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
-    product: TillProduct;
-    selection: LineSelection;
-  };
+  /** The open Sent window whose staged change was thrown away because another device changed its
+   * dish, which its footer says until the fields change again. */
+  @state() private sentChangeOvertaken: NonNullable<
+    TillTableOrderScreen["sentLinePending"]
+  > | null = null;
+  /** The product and selection the open Sent window's fields started from, and its dishes' counts. */
+  #sentChangeSeed?: SentChangeSeed<NonNullable<TillTableOrderScreen["sentLinePending"]>>;
   readonly #beforeSentLineClose = (reason: LeaveReason): Promise<boolean> =>
     this.renderRoot
       .querySelector<TillModifierPicker>("[data-sent-change-fields]")
@@ -2176,6 +2204,7 @@ export class TillTableOrderScreen extends LitElement {
       this.sentLinePending = null;
     if (this.sentChangeRefused !== null && this.sentChangeRefused.pending !== this.sentLinePending)
       this.sentChangeRefused = null;
+    if (this.sentChangeOvertaken !== this.sentLinePending) this.sentChangeOvertaken = null;
     this.#watchDraft();
     this.#refreshKept();
     if (this.#draftPress !== undefined && !this.#draftPressCurrent()) this.#endDraftDrag();
@@ -2272,16 +2301,24 @@ export class TillTableOrderScreen extends LitElement {
       this.billNaming = null;
       this.counting = null;
     }
-    this.#dropUnchangeableSentChange();
+    this.#followSentChange();
   }
 
-  /** Once the open Sent window's dish can no longer be changed, forgets what its fields staged, so
-   * that if it becomes changeable again its fields start from the dish as it is then. Runs last in
-   * `willUpdate`, after everything the check reads is current. */
-  #dropUnchangeableSentChange(): void {
-    if (this.sentChange === null && this.#sentChangeSeed === undefined) return;
-    const members = this.sentLinePending === null ? undefined : this.#sentLineMembers();
-    if (members !== undefined && this.#sentChangeLines(members) !== undefined) return;
+  /** Keeps the open Sent window's fields on the dish as it is stored. Once the dish can no longer be
+   * changed, or another device changes it, what the fields staged is thrown away and they start
+   * again from the dish as it is then, so Change dish never sends older facts over newer ones. Runs
+   * last in `willUpdate`, after everything the check reads is current. */
+  #followSentChange(): void {
+    const seed = this.#sentChangeSeed;
+    if (this.sentChange === null && seed === undefined) return;
+    const pending = this.sentLinePending;
+    const members = pending === null ? undefined : this.#sentLineMembers();
+    const lines = members === undefined ? undefined : this.#sentChangeLines(members);
+    if (lines !== undefined && seed?.pending === pending) {
+      if (sameSentFacts(seed, this.#sentChangeSeedOf(pending!, lines))) return;
+      if (this.#sentChangeHeld(pending!)) this.sentChangeOvertaken = pending;
+      this.sentChangeRefused = null;
+    }
     this.sentChange = null;
     this.#sentChangeSeed = undefined;
   }
@@ -2595,9 +2632,18 @@ export class TillTableOrderScreen extends LitElement {
    * offers extras, so the fields name it rather than drop it. */
   #sentChangeSeedFor(
     pending: NonNullable<typeof this.sentLinePending>,
-    line: TabLine,
-  ): { product: TillProduct; selection: LineSelection } {
-    if (this.#sentChangeSeed?.pending === pending) return this.#sentChangeSeed;
+    lines: readonly TabLine[],
+  ): SentChangeSeed<NonNullable<typeof this.sentLinePending>> {
+    if (this.#sentChangeSeed?.pending !== pending)
+      this.#sentChangeSeed = this.#sentChangeSeedOf(pending, lines);
+    return this.#sentChangeSeed;
+  }
+
+  #sentChangeSeedOf(
+    pending: NonNullable<typeof this.sentLinePending>,
+    lines: readonly TabLine[],
+  ): SentChangeSeed<NonNullable<typeof this.sentLinePending>> {
+    const line = lines[0]!;
     const live = this.#liveProduct(line)!;
     const offered = offeredListsOf(live);
     const sendsExtras = offered.some((entry) => entry.kind === "extras");
@@ -2618,8 +2664,9 @@ export class TillTableOrderScreen extends LitElement {
       else if (sendsExtras)
         extras.push({ ...held, listId: held.listId ?? "", productId: held.productId ?? "" });
     }
-    this.#sentChangeSeed = {
+    return {
       pending,
+      counts: lines.map((each) => each.quantity),
       product: {
         ...live,
         name: this.#nameForLine(line),
@@ -2632,7 +2679,6 @@ export class TillTableOrderScreen extends LitElement {
         note: line.note ?? "",
       },
     };
-    return this.#sentChangeSeed;
   }
 
   /** A bill with no party is adjusted from the counter's basket, not from this screen. */
@@ -3470,13 +3516,7 @@ export class TillTableOrderScreen extends LitElement {
         return true;
       }
     }
-    const picks = (extras: LineSelection["extras"]) =>
-      JSON.stringify(
-        (extras ?? [])
-          .map(({ listId, productId, quantity }) => JSON.stringify([listId, productId, quantity]))
-          .sort(),
-      );
-    return picks(selection.extras) !== picks(before.extras);
+    return extraPicks(selection.extras) !== extraPicks(before.extras);
   }
 
   #sentLineDialog(): TemplateResult {
@@ -3509,7 +3549,7 @@ export class TillTableOrderScreen extends LitElement {
     const changeLines =
       pending === null || members === undefined ? undefined : this.#sentChangeLines(members);
     const seed =
-      changeLines === undefined ? undefined : this.#sentChangeSeedFor(pending!, changeLines[0]!);
+      changeLines === undefined ? undefined : this.#sentChangeSeedFor(pending!, changeLines);
     const change = this.sentChange?.pending === pending ? this.sentChange.detail : undefined;
     const changeReady = change?.changed === true && change.savable && !disabled;
     const priceMoves =
@@ -3557,7 +3597,7 @@ export class TillTableOrderScreen extends LitElement {
                 seed === undefined
                   ? nothing
                   : keyed(
-                      pending,
+                      seed,
                       html`<till-modifier-picker
                         data-sent-change-fields
                         inline
@@ -3574,8 +3614,9 @@ export class TillTableOrderScreen extends LitElement {
                         .disabled=${disabled}
                         @wt-modifier-change=${(event: CustomEvent<ModifierChangeDetail>) => {
                           event.stopPropagation();
-                          if (pending === this.sentLinePending)
-                            this.sentChange = { pending: pending!, detail: event.detail };
+                          if (pending !== this.sentLinePending) return;
+                          this.sentChange = { pending: pending!, detail: event.detail };
+                          if (event.detail.changed) this.sentChangeOvertaken = null;
                         }}
                         @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
                           event.stopPropagation();
@@ -3618,7 +3659,14 @@ export class TillTableOrderScreen extends LitElement {
       }
       <wt-form-actions
         slot="footer"
-        .error=${change?.fixFields ? t("form.fix_fields") : (refused?.message ?? "")}
+        .error=${
+          change?.fixFields
+            ? t("form.fix_fields")
+            : (refused?.message ??
+              (pending !== null && this.sentChangeOvertaken === pending
+                ? t("held.changed_elsewhere")
+                : ""))
+        }
       >
         <wt-button
           slot="cancel"

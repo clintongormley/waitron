@@ -1024,3 +1024,83 @@ it.each([
     expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(true);
   },
 );
+
+/** A live update in which another device changed the Flan: its bill line as `over` says, at revision 10. */
+async function changedElsewhere(el: TillTableOrderScreen, lines: TabLine[]) {
+  el.lines = lines;
+  el.revision = 10;
+  await el.updateComplete;
+  await q<TillModifierPicker>(el, "till-modifier-picker")!.updateComplete;
+  await el.updateComplete;
+}
+
+const bacon = line({
+  id: "l-bacon",
+  name: "Bacon",
+  lineNo: 2,
+  parentLineNo: 1,
+  productId: "p-bacon",
+  listId: "list-extras",
+  menuItemId: null,
+  note: null,
+});
+
+it.each<[string, TabLine[], Partial<TillTableOrderScreen>]>([
+  ["its note", [line({ note: "Peanut allergy" })], {}],
+  ["its count", [line({ quantity: "3.000" })], {}],
+  [
+    "its extras",
+    [line({ productId: "burger", menuItemId: "offer-burger" }), bacon],
+    { products: [flan, { ...burger, offeredModifiers: [extrasList] }] },
+  ],
+])(
+  "throws a staged change away and says so when another device changes %s, so the newer one is never overwritten",
+  async (_, newer, over) => {
+    const lines =
+      newer[0]!.productId === "burger"
+        ? [line({ productId: "burger", menuItemId: "offer-burger" })]
+        : [line()];
+    const el = await openRow({ lines, revision: 9, billEdit, ...over });
+    const seen = changes(el);
+    await editNote(el, "warm, no cream");
+    await changedElsewhere(el, newer);
+    expect(seen).toEqual([]);
+    await expect
+      .poll(() => footerSentence(el)?.textContent?.trim())
+      .toBe(t("held.changed_elsewhere"));
+    expect(await noteShown(el)).toBe(newer[0]!.note);
+    expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(true);
+    await editNote(el, `${newer[0]!.note}, no cream`);
+    expect(footerSentence(el)?.textContent?.trim() ?? "").toBe("");
+    await pressChange(el);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ revision: 10, patch: { note: `${newer[0]!.note}, no cream` } });
+    if (newer.length > 1)
+      expect(seen[0]!.patch.extras).toEqual([
+        { listId: "list-extras", picks: [{ productId: "p-bacon", quantity: 1 }] },
+      ]);
+  },
+);
+
+it("brings another device's change into a window with nothing staged, saying nothing", async () => {
+  const el = await openRow({ lines: [line()], revision: 9, billEdit });
+  const seen = changes(el);
+  await changedElsewhere(el, [line({ note: "Peanut allergy" })]);
+  expect(footerSentence(el)?.textContent?.trim() ?? "").toBe("");
+  expect(await noteShown(el)).toBe("Peanut allergy");
+  await setQuantity(el, "3");
+  await pressChange(el);
+  expect(seen).toMatchObject([
+    { revision: 10, patch: { note: "Peanut allergy", quantity: "3", portionLineNos: [] } },
+  ]);
+});
+
+it("keeps a staged change through an update that leaves its dish as it was", async () => {
+  const el = await openRow({ lines: [line()], revision: 9, billEdit });
+  const seen = changes(el);
+  await setQuantity(el, "3");
+  await changedElsewhere(el, [line(), coffee({ lineNo: 5 })]);
+  expect(footerSentence(el)?.textContent?.trim() ?? "").toBe("");
+  await pressChange(el);
+  expect(seen).toMatchObject([{ revision: 10, patch: { note: "warm", quantity: "3" } }]);
+});
