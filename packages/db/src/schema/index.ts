@@ -81,3 +81,5 @@ export * from "./device-invoice-save-operations.js";
 export * from "./device-invoice-revisions.js";
 
 export * from "./document-page-jobs.js";
+
+export { settings } from "./settings.js";

@@ -1,9 +1,92 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c75bf7ff-91d7-4e91-8124-4260e61a852d",
+  "id": "917c73d7-bb5b-427f-8238-0f778b0a27b9",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
+    "settings": {
+      "name": "settings",
+      "columns": {
+        "module": {
+          "name": "module",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revision": {
+          "name": "revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "doc": {
+          "name": "doc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_by": {
+          "name": "updated_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "settings_updated_by_fk": {
+          "name": "settings_updated_by_fk",
+          "tableFrom": "settings",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "updated_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "settings_module_ck": {
+          "name": "settings_module_ck",
+          "value": "\"settings\".\"module\" glob '[a-z]*' and \"settings\".\"module\" not glob '*[^a-z0-9_]*'"
+        },
+        "settings_version_ck": {
+          "name": "settings_version_ck",
+          "value": "\"settings\".\"version\" >= 1"
+        },
+        "settings_revision_ck": {
+          "name": "settings_revision_ck",
+          "value": "\"settings\".\"revision\" >= 1"
+        },
+        "settings_doc_ck": {
+          "name": "settings_doc_ck",
+          "value": "case when json_valid(\"settings\".\"doc\") then json_type(\"settings\".\"doc\") = 'object' else 0 end"
+        }
+      }
+    },
     "locations": {
       "name": "locations",
       "columns": {

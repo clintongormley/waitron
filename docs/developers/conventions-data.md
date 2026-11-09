@@ -914,11 +914,11 @@ calendar.
   in `packages/venue-service/src/menu-timetable.test.ts` pins what `listZoneOffers` reads with that
   option, by statement text; nothing checks that the pricing callers pass it.
 
-**Tables the application code may read and never write**
+**Tables whose writes live only in named files**
 
-## The tables `scripts/write-path-tables.json` lists are read-only to the application, and one guard is the whole of the enforcement
+## A write of a table `scripts/write-path-tables.json` lists lives only in the files it names
 
-`venue.db`'s `tenants`, `nodes` and `deployment`, and `node.db`'s `node_mode`, `node_mirror_link`,
+`venue.db`'s `tenants`, `nodes`, `deployment` and `settings`, and `node.db`'s `node_mode`, `node_mirror_link`,
 `node_primary_key`, `node_recovery_key`, `node_signing_key`, `node_handover_operations`,
 `node_handover_events` and `node_handover_restriction`. NOTHING BUT
 `scripts/write-path-tables.test.ts` REFUSES THEM.
@@ -926,6 +926,9 @@ SQLite has no roles and no grants, and every path, request and provisioning alik
 venue handle and the one node handle a process opens (`ownerDb` is a name, not a separate handle).
 So the rule is a convention over source text, and that guard is not a second opinion on an engine
 that would refuse the write anyway.
+
+`settings` is written on request paths through its one writer,
+`packages/db/src/settings.ts` (`saveSettings`).
 
 The guard reads `scripts/write-path-tables.json` and pins its table set independently. It reads
 TEXT, judges a FILE rather than a call chain, and walks `<member>/src` under `apps` and `packages`
@@ -6137,3 +6140,34 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   working-time chain continues from its head. Guards: hour-selection/hour-clock/minute-selection-
   unknown-name suites (the last weaker than its name) and
   `packages/workforce/src/restore-continuation.test.ts`.
+
+
+## A module's settings are one document in the shared settings table
+
+Declare a document with `defineSettingsDocument`, read it with `readSettings`, and save it through
+`saveSettings`, the only writer (`packages/db/src/settings.ts`). The checker returns the normalised
+value that is stored. A save names the revision you read; map `settings.out_of_date` to HTTP 409.
+Map `settings.invalid` to HTTP 500 when reading a stored document: the box holds data its code
+refuses. See the fixed interfaces in
+[the settings plan](../superpowers/plans/2026-11-08-a1308-1b-settings-table.md#interfaces-fixed-by-this-slice).
+
+Before go-live, a read refuses a stored version other than the definition's. The first shape change
+after go-live adds one tested upgrade per version, applied on read and saved on the next save,
+never in a migration, plus the backup measurement in tables-venuebox §8.3
+([design U2](../superpowers/specs/2026-11-02-rationalisation/README.md)).
+The live type is `settings.<module>`: declare the document in the module's `settings` seat and make
+the dashboard query depend on that string. Saves currently keep only the latest saver and time;
+[activity-log slice 2](../superpowers/plans/2026-11-08-a1308-2-activity-log.md) adds the save history.
+
+Keep row ids out of documents, except the short lists owned by one row allowed by design R4.
+A per-module database rule is a pair of triggers in `packages/db/triggers/core.sql`, named
+`settings_<module>_<rule>_insert` and `_update`: `before insert` and `before update of doc on settings`,
+with `when new.module = '<module>'`, raising the domain code through `raise(abort, '<code>')`.
+Match that refusal with `triggerRaised`. A rule is never a CHECK, which would require rebuilding
+the shared table. The per-module cases in `packages/db/src/settings.test.ts` exercise both writes
+and a different module's accepting control.
+
+`scripts/settings-not-migrated.test.ts` scans migration and trigger SQL for writes; it does not see
+TypeScript run during migration or start. The pinned-CHECK case in `packages/db/src/settings.test.ts`
+reads the built table's text and checks the four shared constraints, not what each enforces.
+Nothing checks that documents hold no row ids or that a module declares its document in its seat.

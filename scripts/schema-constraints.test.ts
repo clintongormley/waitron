@@ -31,6 +31,7 @@ const PACKAGES_DIR = join(REPO_ROOT, "packages");
 
 /** `[child table, child columns, parent table]`, one row per foreign key. */
 const EXPECTED_FOREIGN_KEYS = [
+  ["settings", ["updated_by"], "persons"],
   ["device_zone_selections", ["device_id"], "devices"],
   ["device_zone_selections", ["device_profile_id"], "device_profiles"],
   ["device_zone_selections", ["starting_zone_id"], "floor_zones"],
@@ -525,6 +526,10 @@ const EXPECTED_UNIQUE_INDEXES = [
  * check.
  */
 const EXPECTED_CHECK_CONSTRAINTS = [
+  "settings_doc_ck",
+  "settings_module_ck",
+  "settings_revision_ck",
+  "settings_version_ck",
   "absences_range_ck",
   "acks_state_ck",
   "adjustment_reasons_actions_ck",

@@ -1,5 +1,5 @@
 import { appendOnly, classify, type ClassifiedTable } from "@waitron/sync-enrolment";
-import type { ChangeSource } from "@waitron/shared";
+import { SETTINGS_CHANGE_TYPE, type ChangeSource } from "@waitron/shared";
 
 // Shared reason strings for the common case; a table with a more specific "why" states it inline.
 const LEDGER = "what happened, keyed by the writing node; drained back from a returned box";
@@ -10,6 +10,11 @@ const STATE = "manager configuration / live service; copied to a standby, never 
  * list; the modules hosted in core's set name theirs in their own packages.
  */
 export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
+  classify(
+    "settings",
+    "state",
+    "each module’s configuration document; copied to a standby, never drained back",
+  ),
   classify(
     "document_delivery_requests",
     "local",
@@ -516,6 +521,7 @@ export const CORE_CHANGE_SOURCES: readonly ChangeSource[] = CORE_OWN_CLASSIFICAT
   ({ table }) => !NOT_CHANGE_SOURCES.has(table),
 ).map(({ table }) => ({
   table,
-  type: table,
+  type: table === "settings" ? SETTINGS_CHANGE_TYPE : table,
+  ...(table === "settings" ? { typeSuffixColumn: "module" } : {}),
   related: table === "print_jobs" ? [{ type: "printers", column: "printer_id" }] : [],
 }));

@@ -5,11 +5,11 @@ import { pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { QUERY_DEPENDENCIES } from "../apps/dashboard/src/api/live-queries.js";
-import { liveResourceTypes } from "../apps/server/src/live-resources.js";
+import { liveResourceTypesForModules } from "../apps/server/src/live-resources.js";
 
 it("every shipped dashboard query subscribes only to a declared server resource", async () => {
   const root = join(import.meta.dirname, "..");
-  const allowed = new Set(liveResourceTypes(ALL_MODULES.flatMap((module) => module.changes ?? [])));
+  const allowed = new Set(liveResourceTypesForModules(ALL_MODULES));
   const groups: { source: string; queries: Record<string, readonly string[]> }[] = [
     { source: "apps/dashboard", queries: QUERY_DEPENDENCIES },
   ];

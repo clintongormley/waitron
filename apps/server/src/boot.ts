@@ -45,7 +45,7 @@ import { createCloudReplacement } from "./cloud-replacement.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { mountCloudApi } from "./cloud-api.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
-import { liveResourceTypes } from "./live-resources.js";
+import { liveResourceTypesForModules } from "./live-resources.js";
 import { fileURLToPath } from "node:url";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -2204,7 +2204,7 @@ async function bootServer(
     {
       db,
       bus: liveEvents,
-      resourceTypes: liveResourceTypes(changeSources),
+      resourceTypes: liveResourceTypesForModules(setsToMigrate),
     },
     log,
   );

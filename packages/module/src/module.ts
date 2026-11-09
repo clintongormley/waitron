@@ -22,7 +22,7 @@ import type { ModulePersonalData } from "./personal-data.js";
 import semver from "semver";
 import type { Hono } from "hono";
 import { AppError, type ErrorParams } from "@waitron/shared";
-import type { AllergenMap, Database, SQL, Transaction } from "@waitron/db";
+import type { AllergenMap, Database, SQL, Transaction, SettingsDocument } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
 import type { RecoveryPackPage } from "@waitron/recovery-pack";
 import type { MigrationSet, MigrationSetSource } from "@waitron/migrations";
@@ -1537,6 +1537,8 @@ export interface WaitronModule {
    * declared append-only in this module's own `classification`. */
   readonly startAgainDeletable?: readonly string[];
   readonly changes?: readonly ChangeSource[];
+  /** Boot admits settings.<module> for every document listed here. */
+  readonly settings?: readonly SettingsDocument<object>[];
   readonly cards?: unknown;
   /** The domain terms this module OWNS — allowed in its own package (`packageDirOf`), forbidden in
    * every generic package. Tokens, not words: lowercase ASCII, unaccented, singular and plural

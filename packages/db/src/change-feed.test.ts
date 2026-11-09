@@ -31,7 +31,12 @@ describe("database change feed", () => {
             ` primary key (left_id, right_id))`,
         ),
       );
+      db.run(
+        sql.raw(`create table live_probe_suffixed (module text primary key not null, doc text)`),
+      );
+      db.run(sql.raw(`create table live_probe_nullable (id text primary key, module text)`));
       await installChangeFeed(db, [
+        { table: "live_probe_suffixed", type: "suffixed", typeSuffixColumn: "module" },
         {
           table: "live_probe",
           type: "print-job",
@@ -61,6 +66,34 @@ describe("database change feed", () => {
       .rows.map((row) => JSON.parse(row.payload) as ResourceChange)
       .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   }
+
+  it("types a suffixed source by its column value, without an id", () => {
+    suite.db.run(sql.raw(`insert into live_probe_suffixed values ('menu', '{}')`));
+    expect(changes()).toEqual([{ resources: [{ type: "suffixed.menu" }] }]);
+    suite.db.run(sql.raw(`delete from change_log`));
+    suite.db.run(sql.raw(`update live_probe_suffixed set doc = '{"note":"changed"}'`));
+    expect(changes()).toEqual([
+      { resources: [{ type: "suffixed.menu" }] },
+      { resources: [{ type: "suffixed.menu" }] },
+    ]);
+    suite.db.run(sql.raw(`delete from change_log`));
+    suite.db.run(sql.raw(`delete from live_probe_suffixed`));
+    expect(changes()).toEqual([{ resources: [{ type: "suffixed.menu" }] }]);
+  });
+  it("refuses missing, unsafe and nullable suffix columns without breaking the installed feed", async () => {
+    for (const [table, column, message] of [
+      ["live_probe_suffixed", "nope", "no column named nope"],
+      ["live_probe_suffixed", 'a"b', "not a plain column name"],
+      ["live_probe_nullable", "module", "module may be null"],
+    ])
+      await expect(
+        installChangeFeed(suite.db, [
+          { table: table!, type: "suffixed", typeSuffixColumn: column! },
+        ]),
+      ).rejects.toThrow(message);
+    suite.db.run(sql.raw(`insert into live_probe_suffixed values ('menu', '{}')`));
+    expect(changes()).toEqual([{ resources: [{ type: "suffixed.menu" }] }]);
+  });
 
   it("writes the changed row's own identity and its related object's, and nothing else", () => {
     suite.db.run(

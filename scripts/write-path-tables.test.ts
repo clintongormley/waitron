@@ -4,10 +4,13 @@ import { describe, expect, it } from "vitest";
 import { blankComments } from "../packages/shared/src/source-comments.js";
 
 /**
- * The tables the application code may read and never write: venue.db's `tenants`, `nodes` and
- * `deployment`, and node.db's `node_mode`, `node_mirror_link`, `node_primary_key`,
+ * The tables whose writes live only in the files `write-path-tables.json` names: venue.db's `tenants`, `nodes` and
+ * `deployment` and `settings`, and node.db's `node_mode`, `node_mirror_link`, `node_primary_key`,
  * `node_recovery_key`, `node_signing_key`, `node_handover_operations`, `node_handover_events` and
  * `node_handover_restriction`.
+ *
+ * `packages/db/src/settings.ts` saveSettings is the one settings writer: every document passes
+ * its module’s checker and revision check.
  *
  * NOTHING BUT THIS FILE REFUSES THEM. SQLite has no roles and no grants, so the rule survives only
  * as a convention over source text, and this guard is the whole of its enforcement.
@@ -167,7 +170,7 @@ function productionSources(): string[] {
 const SOURCES = productionSources();
 const ALLOWANCES = new Map(TABLES.map((table) => [table, new Set(ALLOWED[table])]));
 
-describe("no source writes a table the application role may only read", () => {
+describe("no source writes a listed table outside the files the JSON names", () => {
   it("finds no forbidden write", () => {
     const offenders: string[] = [];
     for (const file of SOURCES) {
@@ -180,16 +183,15 @@ describe("no source writes a table the application role may only read", () => {
     }
     expect(
       offenders,
-      "This guard is the ONLY thing refusing this write. A role used to hold SELECT and no write " +
-        "on these tables, so the database refused it; SQLite has no roles, so nothing at runtime " +
-        "will stop you. Either the write belongs on a provisioning or boot " +
-        "path, or it should not exist. Adding the file to " +
-        "scripts/write-path-tables.json is the wrong answer unless it is such a path:\n  " +
+      "This guard is the ONLY thing refusing this write: SQLite has no roles, so nothing at runtime will stop it. " +
+        "A write of these tables lives only in the files scripts/write-path-tables.json names. " +
+        "Move the write into one of them, or add the file to the JSON only if it is where such a write belongs, " +
+        "and say why in this file's header:\n  " +
         offenders.join("\n  "),
     ).toEqual([]);
   });
 
-  it("keeps every table whose writes belong in the named provisioning or identity files", () => {
+  it("keeps every table whose writes live only in named files", () => {
     expect(TABLES.slice().sort()).toEqual([
       "deployment",
       "node_handover_events",
@@ -201,6 +203,7 @@ describe("no source writes a table the application role may only read", () => {
       "node_recovery_key",
       "node_signing_key",
       "nodes",
+      "settings",
       "tenants",
     ]);
   });

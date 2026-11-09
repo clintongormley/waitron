@@ -1,3 +1,17 @@
+CREATE TABLE `settings` (
+	`module` text PRIMARY KEY NOT NULL,
+	`version` integer NOT NULL,
+	`revision` integer NOT NULL,
+	`doc` text NOT NULL,
+	`updated_at` text NOT NULL,
+	`updated_by` text,
+	FOREIGN KEY (`updated_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "settings_module_ck" CHECK("settings"."module" glob '[a-z]*' and "settings"."module" not glob '*[^a-z0-9_]*'),
+	CONSTRAINT "settings_version_ck" CHECK("settings"."version" >= 1),
+	CONSTRAINT "settings_revision_ck" CHECK("settings"."revision" >= 1),
+	CONSTRAINT "settings_doc_ck" CHECK(case when json_valid("settings"."doc") then json_type("settings"."doc") = 'object' else 0 end)
+);
+--> statement-breakpoint
 CREATE TABLE `locations` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,

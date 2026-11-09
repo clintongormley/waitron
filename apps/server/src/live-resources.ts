@@ -1,19 +1,18 @@
-import type { ChangeSource } from "@waitron/shared";
+import type { WaitronModule } from "@waitron/module";
+import { settingsChangeType, type ChangeSource } from "@waitron/shared";
 
-/**
- * The resource names the events endpoint accepts as subscription interests: every type a module's
- * `ChangeSource` declares, plus the extras added below. None of those extras is a table, so no row
- * change can ever produce one and the screens naming them refresh on their query's own timer
- * instead (`refreshMs` in `apps/dashboard/src/api/live-queries.ts`). They are listed here anyway
- * because one unrecognised name makes `parseInterests` (`live-api.ts`) refuse the WHOLE stream.
- */
-export function liveResourceTypes(sources: readonly ChangeSource[]): string[] {
+/** Suffixed sources admit only declared document keys; the bare type would watch every module. */
+export function liveResourceTypes(
+  sources: readonly ChangeSource[],
+  settingsModules: readonly string[] = [],
+): string[] {
   return [
     ...new Set([
       ...sources.flatMap((source) => [
-        source.type,
+        ...(source.typeSuffixColumn === undefined ? [source.type] : []),
         ...(source.related ?? []).map((related) => related.type),
       ]),
+      ...settingsModules.map(settingsChangeType),
       "pairing",
       "printer_discovery",
       "email_inbox",
@@ -21,4 +20,13 @@ export function liveResourceTypes(sources: readonly ChangeSource[]): string[] {
       "google_config",
     ]),
   ];
+}
+
+export function liveResourceTypesForModules(
+  modules: readonly Pick<WaitronModule, "changes" | "settings">[],
+): string[] {
+  return liveResourceTypes(
+    modules.flatMap((module) => module.changes ?? []),
+    modules.flatMap((module) => (module.settings ?? []).map((document) => document.module)),
+  );
 }
