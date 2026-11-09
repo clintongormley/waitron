@@ -20,7 +20,13 @@ export function spareReadGate(): MiddlewareHandler {
   return async (c, next) => {
     if (!SAFE_METHODS.has(c.req.method)) return next();
     const path = c.req.path;
-    if (path === "/api/node" || /^\/api\/node\/handover\/[^/]+$/.test(path)) return next();
+    if (
+      path === "/api/node" ||
+      /^\/api\/node\/handover\/[^/]+$/.test(path) ||
+      /^\/handover\/[^/]+\/?$/.test(path) ||
+      path.startsWith("/handover/assets/")
+    )
+      return next();
     const locale = resolveLoginLocale(c.req.header("accept-language"), "en-GB");
     c.header("Cache-Control", "no-store");
     if (path === "/" || path === "/manage" || path.startsWith("/manage/"))

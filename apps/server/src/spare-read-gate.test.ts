@@ -119,3 +119,20 @@ it.each(["en-GB", "es-ES"] as const)(
     expect((await response.json()).error.message).toContain(SPARE_WORDS[locale].body);
   },
 );
+
+it("serves the handover page and its built assets while private reads remain closed", async () => {
+  const app = fixture();
+  for (const path of [
+    "/handover/operation-one",
+    "/handover/assets/app-123.js",
+    "/handover/favicon.svg",
+    "/handover/favicon.ico",
+    "/handover/apple-touch-icon.png",
+  ]) {
+    const response = await app.request(path);
+    expect([response.status, await response.json()]).toEqual([200, { reached: path }]);
+  }
+  for (const path of ["/handover-other/operation-one", "/handover/operation-one/private"]) {
+    expect((await app.request(path)).status).toBe(403);
+  }
+});
