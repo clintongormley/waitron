@@ -1526,7 +1526,8 @@ move cases use "Mesa 9" and "Mesa 7", and many other till test files use "Mesa โ
 (`git grep -l '"Mesa ' -- 'apps/till/src/*.test.ts'`), against the English-only rule (CLAUDE.md
 ยง3). This is the till's share of the Spanish test data the
 [English-only audit](english-only-audit.md) counts in its `apps/till` row; A976 covers
-the server's test venues, and A977's list of test folders still to clean is where this joins. A797
+the server's test venues, and `scripts/english-only-still-to-clean.ts`, the list of files still to
+clean, is where this joins. A797
 slice 1's till test fixtures copy labels into `shortName` (`apps/till/src/api/client.test.ts`'s
 "Mesa 1" and "Mesa 2" among them), so renaming a label means renaming its short name too. Low
 priority.

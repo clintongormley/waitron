@@ -182,8 +182,7 @@ def main():
     w("// offset as posición − 1. Every field's { pos, len, type } is transcribed from the .xlsx and")
     w("// self-validated by dr303-layout.test.ts (per-segment contiguity + declared length). The AEAT")
     w("// Descripción of each field (which carries the casilla-27/45 summation formulas verbatim) is the")
-    w("// // comment ABOVE each field — a comment, not a string literal, because the english-only guard")
-    w("// scans string literals in packages/reporting but excludes comments (the descriptions are Spanish).")
+    w("// // comment ABOVE each field.")
     w("")
     w('/** A single fixed-layout field, transcribed from the DR303e26 record design. */')
     w("export interface Dr303Field {")
@@ -271,8 +270,7 @@ def main():
         w(f"  length: {declared},")
         w("  fields: [")
         for (n, pos, length, typ, casilla, decimals, role, value, desc) in fields:
-            # AEAT Descripción as a // comment (Spanish — kept out of string literals so the
-            # english-only guard, which scans literals but not comments, stays green). A `//` or
+            # AEAT Descripción as a // comment. A `//` or
             # newline in the source text would corrupt the comment; neither occurs in these fields,
             # but guard anyway.
             desc1 = " ".join(desc.split()).replace("//", "/ /")

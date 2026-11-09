@@ -2354,10 +2354,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Correct every sentence known to be false, then finish comment pruning** (bundle of 27, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning)
 
-- **A977. Widen the English-only guard to every text file, after the remaining English cleanup.** Accented
-  letters too; a shrinking-only list of test folders still to clean. Exempt homes include a
-  package's `src/starter-content.ts` (A918). [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
-
 - **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; design approved).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md); [plan](superpowers/plans/2026-11-07-a646-modules-page.md).
   Build waits for A739; retained protection comes first. Google disable protects every active administrator.
