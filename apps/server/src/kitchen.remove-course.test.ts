@@ -239,13 +239,21 @@ describe("removing a course", () => {
 
   it("reads which of many courses are in use in one call, and never lists deleted ones", async () => {
     const v = await setupPartyVenue(suite.db);
+    const initialCourses = await inTx(v, (tx) => listCourses(tx));
     const used = await course(v, "Used");
     const free = await course(v, "Free");
     await inTx(v, (tx) => setProductCourse(tx, v.productId("Flan"), used));
     expect(await inTx(v, (tx) => coursesInUse(tx, [used, free]))).toEqual(new Set([used]));
     expect(await inTx(v, (tx) => coursesInUse(tx, []))).toEqual(new Set());
     await inTx(v, (tx) => deleteCourse(tx, used));
-    expect((await inTx(v, (tx) => listCourses(tx))).map((c) => c.id)).toEqual([free]);
+    const expectedCourseIds = [
+      initialCourses[0]!.id,
+      initialCourses[1]!.id,
+      initialCourses[2]!.id,
+      free,
+      initialCourses[3]!.id,
+    ];
+    expect((await inTx(v, (tx) => listCourses(tx))).map((c) => c.id)).toEqual(expectedCourseIds);
     expect(
       (
         await inTx(v, (tx) =>
@@ -257,11 +265,11 @@ describe("removing a course", () => {
           )(tx, true),
         )
       ).map((c) => [c.id, c.active]),
-    ).toEqual([[free, true]]);
+    ).toEqual(expectedCourseIds.map((id) => [id, true]));
     await expect(inTx(v, (tx) => updateCourse(tx, used, {}))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: used },
     });
-    expect((await inTx(v, (tx) => listCourses(tx))).map((c) => c.id)).toEqual([free]);
+    expect((await inTx(v, (tx) => listCourses(tx))).map((c) => c.id)).toEqual(expectedCourseIds);
   });
 });

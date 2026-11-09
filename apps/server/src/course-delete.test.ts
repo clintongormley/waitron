@@ -26,6 +26,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 describe("permanent course deletion", () => {
   it("deleting a product-default course clears all defaults and retains its row", async () => {
     const v = await setupPartyVenue(suite.db);
+    const initialCourses = await inTx(v, (tx) => listCourses(tx));
     const { id } = await inTx(v, (tx) => createCourse(tx, { name: "Desserts" }));
     const parentId = v.productId("Flan");
     const [parent] = await inTx(v, (tx) =>
@@ -78,7 +79,7 @@ describe("permanent course deletion", () => {
         params: { courseId: id },
       });
     }
-    expect(await inTx(v, (tx) => listCourses(tx))).toEqual([]);
+    expect(await inTx(v, (tx) => listCourses(tx))).toEqual(initialCourses);
   });
 
   it.each(["product", "draft", "order", "ticket"] as const)(
@@ -222,12 +223,14 @@ describe("permanent course deletion", () => {
     "rejects an own active patch key with value %s",
     async (active) => {
       const v = await setupPartyVenue(suite.db);
+      const initialCourses = await inTx(v, (tx) => listCourses(tx));
       const { id } = await inTx(v, (tx) => createCourse(tx, { name: "Live" }));
       await expect(
         inTx(v, (tx) => updateCourse(tx, id, { active, name: "Changed" } as never)),
       ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "active" } });
       expect(await inTx(v, (tx) => listCourses(tx))).toEqual([
         { id, name: "Live", displayOrder: 0, active: true, heldUntilFired: true },
+        ...initialCourses,
       ]);
     },
   );
