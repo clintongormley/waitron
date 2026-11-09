@@ -21079,6 +21079,12 @@ export class TillApp extends LitElement {
         @adjust=${(event: Event) => void this.#onAdjust(event)}
         @cancel-item=${(event: CustomEvent<{ lineId: string; lineIds?: string[] }>) => void this.#onCancelItem(event)}
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
+        @change-refusal-unshown=${(event: CustomEvent<unknown>) => {
+          event.stopPropagation();
+          if (event.detail !== this.changeRefusal) return;
+          this.changeRefusal = null;
+          this.errorKey = { code: "ticket.already_started" };
+        }}
         @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}
         @move-guests=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveGuests(event))}
         @move-bill=${(event: Event) =>

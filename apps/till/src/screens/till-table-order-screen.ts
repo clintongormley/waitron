@@ -1349,12 +1349,15 @@ export class TillTableOrderScreen extends LitElement {
   } | null = null;
   /** The app's answer to a Change dish the kitchen refused as started: the dish's line, and why. */
   @property({ attribute: false }) changeRefusal: { lineNo: number; message: string } | null = null;
-  /** The last Change dish sent, kept so a refusal of it can reopen its window as it was left. */
-  #sentChangeAttempt?: {
-    pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
-    lineNo: number;
-    selection: ModifierConfirmDetail;
-  };
+  /** Each line's last Change dish sent, kept so a refusal of it can reopen its window as it was
+   * left. By line, as changes to two dishes can be out at once and either may be refused. */
+  readonly #sentChangeAttempts = new Map<
+    number,
+    {
+      pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
+      selection: ModifierConfirmDetail;
+    }
+  >();
   /** The refusal the reopened Sent window shows, and the change it puts back in the fields. */
   @state() private sentChangeRefused: {
     pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
@@ -3168,20 +3171,24 @@ export class TillTableOrderScreen extends LitElement {
         ...(detail.note ? { note: detail.note } : {}),
       },
     };
-    this.#sentChangeAttempt = { pending, lineNo: line.lineNo, selection: detail };
+    this.#sentChangeAttempts.set(line.lineNo, { pending, selection: detail });
     this.sentLinePending = null;
     this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
     this.#dispatch("change-line", change);
     return true;
   }
 
-  /** Reopens the window of the Change dish the app says was refused, while no other is open. */
+  /** Reopens the window of the Change dish the app says was refused. While another window is
+   * open, or the change was not sent from here, it hands the refusal back for the app's banner. */
   #reopenRefusedChange(): void {
     const refusal = this.changeRefusal;
-    const attempt = this.#sentChangeAttempt;
-    if (refusal === null || attempt === undefined || attempt.lineNo !== refusal.lineNo) return;
-    this.#sentChangeAttempt = undefined;
-    if (this.sentLinePending !== null) return;
+    if (refusal === null) return;
+    const attempt = this.#sentChangeAttempts.get(refusal.lineNo);
+    this.#sentChangeAttempts.delete(refusal.lineNo);
+    if (attempt === undefined || this.sentLinePending !== null) {
+      this.#dispatch("change-refusal-unshown", refusal);
+      return;
+    }
     const pending = { ...attempt.pending };
     this.sentLinePending = pending;
     this.sentChangeRefused = { pending, message: refusal.message, selection: attempt.selection };
