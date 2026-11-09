@@ -3,7 +3,7 @@ import type { Transaction } from "@waitron/db";
 import { eq, inArray } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { devices } from "@waitron/db";
-import { hashSecret } from "@waitron/identity";
+import { hashDeviceToken } from "@waitron/identity";
 import { DEVICE_COOKIE } from "../device-session.js";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { createJoinRequest, acceptDeviceJoinRequest } from "../join-requests.js";
@@ -15,7 +15,7 @@ export async function deviceCookieForTest(db: Database, deviceId: string): Promi
   const token = randomUUID();
   await db
     .update(devices)
-    .set({ tokenHash: hashSecret(token) })
+    .set({ tokenHash: hashDeviceToken(token) })
     .where(eq(devices.id, deviceId));
   return `${DEVICE_COOKIE}=${deviceId}.${token}`;
 }

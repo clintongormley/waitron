@@ -124,8 +124,6 @@ export type {
   IssuedAccountAction,
 } from "./account-action.js";
 export { hashSecret, verifySecretAsync } from "./secret-hash.js";
-export { createVerifiedTokenMemory } from "./verified-tokens.js";
-export type { VerifiedTokenMemory } from "./verified-tokens.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
 export {
   PIN_THROTTLE_FREE_ATTEMPTS,

@@ -37,7 +37,7 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { hashSecret, verifySecretAsync } from "@waitron/identity";
+import { deviceTokenMatches, hashDeviceToken } from "@waitron/identity";
 import {
   deleteDeviceProfile,
   emptyPrinterLists,
@@ -85,20 +85,6 @@ async function seedProfile(
 function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, async (tx) => {
     return fn(tx);
-  });
-}
-
-/** On the next turn of the event loop, commit a write transaction and record "writer" once it has. */
-function writeOnNextTurn(order: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    setImmediate(() => {
-      withTransaction(suite.db, (tx) => tx.execute(sql`select 1`))
-        .then(() => {
-          order.push("writer");
-          resolve();
-        })
-        .catch(reject);
-    });
   });
 }
 
@@ -529,20 +515,6 @@ describe("readJoinStatus", () => {
     const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token, window);
     expect(status).toBe("not_approved");
   });
-  it("lets another writer commit while it derives the key", async () => {
-    const venue = await setupVenue(suite.db);
-    const window = openWindow();
-    const made = await asApp((tx) =>
-      createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
-    );
-    const order: string[] = [];
-    const read = readJoinStatus(suite.db, venue.cfg, made.joinId, made.token, window).then(
-      (status) => order.push(status),
-    );
-    await Promise.all([read, writeOnNextTurn(order)]);
-    expect(order).toEqual(["writer", "pending"]);
-  });
-
   // The `approved` case needs an accepted device — see acceptDeviceJoinRequest's own first test below,
   // which asserts it via this same function.
 });
@@ -1236,7 +1208,7 @@ describe("a returning disabled device", () => {
       await denyJoinRequest(tx, venue.cfg, made.joinId);
       return made;
     });
-    expect(await verifySecretAsync(made.token, await storedHash(deviceId))).toBe(true);
+    expect(deviceTokenMatches(made.token, await storedHash(deviceId))).toBe(true);
     expect(await proven(`${deviceId}.${made.token}`)).toEqual({
       deviceId,
       tokenHash: await storedHash(deviceId),
@@ -1420,7 +1392,7 @@ describe("a returning disabled device", () => {
       return made;
     });
     await withTransaction(suite.db, (tx) => deleteDevice(tx, venue.cfg, made.joinId));
-    const tokenHash = hashSecret(made.token);
+    const tokenHash = hashDeviceToken(made.token);
     await suite.db.update(devices).set({ tokenHash }).where(eq(devices.id, made.joinId));
     return { deviceId: made.joinId, tokenHash };
   }
@@ -1599,7 +1571,7 @@ describe("acceptPrintAgentJoinRequest", () => {
     );
     expect(agent).toMatchObject({ id: made.joinId, name: "kitchen-pi", active: true });
     // At the VERB layer `token` IS the bare secret; the route composes `${joinId}.${secret}`.
-    expect(await verifySecretAsync(made.token, agent!.tokenHash)).toBe(true);
+    expect(deviceTokenMatches(made.token, agent!.tokenHash)).toBe(true);
 
     const gone = await asApp((tx) =>
       tx.select().from(joinRequests).where(eq(joinRequests.id, made.joinId)),
@@ -1659,21 +1631,6 @@ describe("readAgentJoinStatus", () => {
     );
     expect(await readAgentJoinStatus(suite.db, cfg, made.joinId, made.token)).toBe("approved");
     expect(await readAgentJoinStatus(suite.db, cfg, randomUUID(), made.token)).toBe("not_approved");
-  });
-  it("lets another writer commit while it derives the key", async () => {
-    const cfg = (await setupVenue(suite.db)).cfg;
-    const made = await asApp((tx) =>
-      createJoinRequest(tx, cfg, { kind: "print_agent", label: "a" }),
-    );
-    await asApp((tx) =>
-      acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: made.verificationNumber }),
-    );
-    const order: string[] = [];
-    const read = readAgentJoinStatus(suite.db, cfg, made.joinId, made.token).then((status) =>
-      order.push(status),
-    );
-    await Promise.all([read, writeOnNextTurn(order)]);
-    expect(order).toEqual(["writer", "approved"]);
   });
 });
 

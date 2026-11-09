@@ -16,7 +16,7 @@ import {
   type VenueDatabase,
 } from "@waitron/db";
 import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
-import { hashPin, hashSecret, persons } from "@waitron/identity";
+import { hashPin, hashDeviceToken, persons } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -149,7 +149,7 @@ let migrationsRoot: string;
 
 /** Seed the venue's identity (tenant, location, both nodes, till, both series) plus a staff person on
  * PIN 5555 and the till device, on one venue directory. The device's `token_hash` is
- * `hashSecret(DEVICE_TOKEN)`, so the `waitron_device=<id>.<token>` cookie built above authenticates
+ * `hashDeviceToken(DEVICE_TOKEN)`, so the `waitron_device=<id>.<token>` cookie built above authenticates
  * against this row on whichever node holds it. */
 async function seedVenueWithNodesAndTill(db: Database): Promise<void> {
   beforeServerStarts();
@@ -197,7 +197,7 @@ async function seedVenueWithNodesAndTill(db: Database): Promise<void> {
       locationId: LOCATION,
       deviceProfileId: DEVICE_PROFILE,
       label: "Counter till",
-      tokenHash: hashSecret(DEVICE_TOKEN),
+      tokenHash: hashDeviceToken(DEVICE_TOKEN),
     })
     .onConflictDoNothing({ target: devices.id });
 }

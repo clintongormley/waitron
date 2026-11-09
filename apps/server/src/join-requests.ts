@@ -12,7 +12,7 @@ import {
   venueLocationId,
   withTransaction,
 } from "@waitron/db";
-import { endDeviceSessions, hashSecret, verifySecretAsync } from "@waitron/identity";
+import { deviceTokenMatches, endDeviceSessions, hashDeviceToken } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { FormFactor } from "@waitron/layouts";
 import type { DeviceKitchenScreen, ResolvedKitchenScreen } from "@waitron/module";
@@ -199,7 +199,7 @@ export async function createJoinRequest(
   }
 
   const token = randomBytes(32).toString("base64url");
-  const tokenHash = hashSecret(token);
+  const tokenHash = hashDeviceToken(token);
   const [row] = await tx
     .insert(joinRequests)
     .values({
@@ -236,10 +236,8 @@ export interface ReturningDevice {
  * The disabled device a knock's parsed device cookie proves, or `null` — for no cookie (or a
  * malformed one, which parses to `null`), an id that names no device, an active one or a deleted
  * one, or a token that does not verify. Every `null` makes the knock an ordinary new request,
- * answered as one from a browser with no cookie.
- *
- * Called with no transaction open, so scrypt never holds the write lock; {@link createJoinRequest}
- * re-reads the row before relying on the result.
+ * answered as one from a browser with no cookie. {@link createJoinRequest} re-reads the row before
+ * relying on the result.
  */
 export async function provenDisabledDevice(
   db: Database,
@@ -251,7 +249,7 @@ export async function provenDisabledDevice(
     .from(devices)
     .where(and(eq(devices.id, parsed.id), eq(devices.active, false), isNull(devices.deletedAt)));
   if (row === undefined) return null;
-  if (!(await verifySecretAsync(parsed.token, row.tokenHash))) return null;
+  if (!deviceTokenMatches(parsed.token, row.tokenHash)) return null;
   return { deviceId: parsed.id, tokenHash: row.tokenHash };
 }
 
@@ -407,15 +405,14 @@ type JoinStatus = "pending" | "approved" | "not_approved";
  * accepted row's. */
 type StoredJoinHash = { pending: string } | { accepted: string } | null;
 
-/** Called once the transaction that read `stored` has closed, so the write lock is not held while
- * scrypt runs. A pending request whose token does not verify is `not_approved`; it never falls
- * through to an accepted row. */
-async function statusFor(token: string, stored: StoredJoinHash): Promise<JoinStatus> {
+/** A pending request whose token does not verify is `not_approved`; it never falls through to an
+ * accepted row. */
+function statusFor(token: string, stored: StoredJoinHash): JoinStatus {
   if (stored === null) return "not_approved";
   if ("pending" in stored) {
-    return (await verifySecretAsync(token, stored.pending)) ? "pending" : "not_approved";
+    return deviceTokenMatches(token, stored.pending) ? "pending" : "not_approved";
   }
-  return (await verifySecretAsync(token, stored.accepted)) ? "approved" : "not_approved";
+  return deviceTokenMatches(token, stored.accepted) ? "approved" : "not_approved";
 }
 
 /**
@@ -710,7 +707,7 @@ export async function selfEnrolNodeAgent(
   if (existing !== undefined && !existing.active) throw new AppError("device.join_revoked", {});
 
   const secret = randomBytes(32).toString("base64url");
-  const tokenHash = hashSecret(secret);
+  const tokenHash = hashDeviceToken(secret);
 
   if (existing !== undefined) {
     await tx.update(printAgents).set({ tokenHash }).where(eq(printAgents.id, existing.id));

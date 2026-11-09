@@ -1,17 +1,12 @@
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { AppError, diskFullIn, isUuid } from "@waitron/shared";
-import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
+import { AppError, isUuid } from "@waitron/shared";
+import { deviceProfiles, devices } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { profileAllows } from "@waitron/layouts";
 import type { CapabilityFlag, FormFactor, ProfileAction } from "@waitron/layouts";
-import {
-  SIGHTING_INTERVAL_MS,
-  createVerifiedTokenMemory,
-  sightingDue,
-  verifySecretAsync,
-} from "@waitron/identity";
+import { SIGHTING_INTERVAL_MS, signInWithToken, sightingDue } from "@waitron/identity";
 // Side-effect only: keeps `device.unauthorized` (errors.ts) reachable from the file that throws it.
 import "./errors.js";
 
@@ -109,9 +104,6 @@ export const deviceBindingColumns = {
   capabilities: deviceProfiles.capabilities,
 };
 
-export const VERIFIED_TOKENS_LIMIT = 256;
-const verifiedTokens = createVerifiedTokenMemory(VERIFIED_TOKENS_LIMIT);
-
 /**
  * Carries NO authentication: the caller has already fetched an `active` row and, on the cookie
  * path, verified the token. A `tokenHash` on the passed row is never copied through.
@@ -185,7 +177,7 @@ async function readDeviceProof(
   if (parsed === null) return null;
   const { id: deviceId, token } = parsed;
 
-  const readRow = async (on: Database | Transaction = deps.db) => {
+  const readRow = async (on: Database | Transaction) => {
     const [found] = await on
       .select({
         tokenHash: devices.tokenHash,
@@ -198,48 +190,13 @@ async function readDeviceProof(
       .where(and(eq(devices.id, deviceId), eq(devices.active, true)));
     return found;
   };
-  let row = await readRow();
-  if (row === undefined) {
-    verifiedTokens.forget(deviceId);
-    return null;
-  }
-  if (!verifiedTokens.alreadyVerified(deviceId, token, row.tokenHash)) {
-    const checkedHash = row.tokenHash;
-    // Constant-time: the token is never compared with `===`.
-    if (!(await verifySecretAsync(token, checkedHash))) return null;
-    // A revocation, a new token or a new binding committed while scrypt ran wins over the row it
-    // checked.
-    row = await readRow();
-    if (row === undefined || row.tokenHash !== checkedHash) return null;
-    verifiedTokens.remember(deviceId, token, checkedHash);
-  }
-
-  // The check on the row read spares a request the write lock.
-  const seenAt = nowIso();
-  if (options.passive !== true && sightingDue(row.lastSeenAt, seenAt)) {
-    const checkedHash = row.tokenHash;
-    // A revocation, a new token or a new binding committed while this request waited for the
-    // lock wins.
-    const stillCurrent = (current: typeof row | undefined) =>
-      current === undefined || current.tokenHash !== checkedHash ? undefined : current;
-    let locked: typeof row | undefined;
-    try {
-      locked = await withTransaction(deps.db, async (tx) => {
-        const current = stillCurrent(await readRow(tx));
-        if (current !== undefined) await recordSighting(tx, deviceId, seenAt);
-        return current;
-      });
-    } catch (error) {
-      // A full disk refuses the stamp, not the device: the same checks run again, unstamped.
-      if (!diskFullIn(error)) throw error;
-      locked = stillCurrent(await readRow());
-    }
-    if (locked === undefined) {
-      verifiedTokens.forget(deviceId);
-      return null;
-    }
-    row = locked;
-  }
+  const row = await signInWithToken(deps.db, {
+    token,
+    readRow,
+    recordSighting: (tx, seenAt) => recordSighting(tx, deviceId, seenAt),
+    passive: options.passive,
+  });
+  if (row === null) return null;
   return { device: toDeviceBinding(deviceId, row), tokenHash: row.tokenHash };
 }
 

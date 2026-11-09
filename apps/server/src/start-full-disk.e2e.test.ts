@@ -36,7 +36,7 @@ import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import {
   hashPin,
-  hashSecret,
+  hashDeviceToken,
   hashSessionToken,
   persons,
   startManagementSession,
@@ -1027,7 +1027,7 @@ describe("a start on a real full disk", () => {
       const token = "equipment-token";
       await db
         .update(devices)
-        .set({ tokenHash: hashSecret(token) })
+        .set({ tokenHash: hashDeviceToken(token) })
         .where(eq(devices.id, deviceId));
       const app = new Hono();
       mountDeviceApi(
@@ -1096,7 +1096,7 @@ describe("a start on a real full disk", () => {
           .values({
             locationId: await venueLocationId(db),
             name: "Agent",
-            tokenHash: hashSecret(secret),
+            tokenHash: hashDeviceToken(secret),
             active: true,
           })
           .returning({ id: printAgents.id });
@@ -1143,7 +1143,7 @@ describe("a start on a real full disk", () => {
         expect(await codeOf(authenticateAgent(db, token))).toBe("agent.unauthorized");
 
         const newSecret = randomBytes(32).toString("base64url");
-        await changedWhileFull({ active: true, tokenHash: hashSecret(newSecret) });
+        await changedWhileFull({ active: true, tokenHash: hashDeviceToken(newSecret) });
         expect(await codeOf(authenticateAgent(db, token))).toBe("agent.unauthorized");
         const newToken = `${agentId}.${newSecret}`;
         expect(await authenticateAgent(db, newToken)).toEqual({ agentId });
@@ -1408,7 +1408,7 @@ describe("a start on a real full disk", () => {
       const token = "equipment-notices-token";
       await db
         .update(devices)
-        .set({ tokenHash: hashSecret(token), lastSeenAt: "2020-01-01T00:00:00.000Z" })
+        .set({ tokenHash: hashDeviceToken(token), lastSeenAt: "2020-01-01T00:00:00.000Z" })
         .where(eq(devices.id, deviceId));
       db.run(sql`create table zz (id integer primary key, pad blob)`);
       // The full disk refuses this insert too, so this case shows the writer failing alone, not
