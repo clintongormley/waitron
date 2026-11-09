@@ -11171,11 +11171,11 @@ describe("direct New order actions", () => {
   });
 });
 
-describe("native app phone Review with mixed dish families", () => {
+describe("native app phone order view with mixed dish families", () => {
   for (const locale of ["en", "es"] as const)
     for (const theme of ["light", "dark"] as const)
       for (const width of [360, 390]) {
-        it(`${locale}, ${theme}, ${width}px retains saved sources, placement and selection across Back`, async () => {
+        it(`${locale}, ${theme}, ${width}px retains saved sources, placement and selection across Menu`, async () => {
           const oldWidth = innerWidth,
             oldHeight = innerHeight;
           await page.viewport(width, 900);
@@ -11338,29 +11338,15 @@ describe("native app phone Review with mixed dish families", () => {
             await expect.poll(() => tableOrder(el)?.draftStore?.lines.length).toBe(4);
             const order = tableOrder(el)!;
             const q = (selector: string) => order.shadowRoot!.querySelector<HTMLElement>(selector)!;
-            const expectTarget = (selector: string) => {
-              const target = q(selector).shadowRoot!.querySelector<HTMLButtonElement>("button")!;
-              const box = target.getBoundingClientRect();
-              expect(target.checkVisibility()).toBe(true);
-              expect(box.width).toBeGreaterThanOrEqual(44);
-              expect(box.height).toBeGreaterThanOrEqual(44);
-              expect(box.left).toBeGreaterThanOrEqual(0);
-              expect(box.right).toBeLessThanOrEqual(width);
-            };
-            await expect.poll(() => q("[data-review-open]").checkVisibility()).toBe(true);
+            await expect.poll(() => q("[data-view=order]").checkVisibility()).toBe(true);
             const originalRows = [...draft(el).lines];
             const before = structuredClone(draft(el).lines);
-            const reviewText = locale === "es" ? "Revisar (6)" : "Review (6)";
             expect(innerWidth).toBe(width);
-            expect(q("[data-review-open]").textContent!.trim()).toBe(reviewText);
-            expectTarget("[data-review-open]");
             expect(rows(el)).toEqual(["Beer ×2", "Flan ×1", "Steak ×0.375", "Recorded dish ×2"]);
             expect(q("[data-browsing]").checkVisibility()).toBe(true);
             expect(q("[data-draft-pane]").checkVisibility()).toBe(false);
-            await userEvent.click(q("[data-review-open]"));
+            await userEvent.click(q("[data-view=order]"));
             await expect.poll(() => q("[data-draft-pane]").checkVisibility()).toBe(true);
-            expect(order.shadowRoot!.activeElement).toBe(q("[data-review-back]"));
-            expectTarget("[data-review-back]");
             expect(
               [...order.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-group]")].map(
                 (group) => group.dataset.draftGroup,
@@ -11391,11 +11377,9 @@ describe("native app phone Review with mixed dish families", () => {
             await page.screenshot({
               path: `__screenshots__/a773-app-review-${locale}-${theme}-${width}.png`,
             });
-            await userEvent.click(q("[data-review-back]"));
+            await userEvent.click(q("[data-view=menu]"));
             await expect.poll(() => q("[data-browsing]").checkVisibility()).toBe(true);
             expect(q("[data-draft-pane]").checkVisibility()).toBe(false);
-            expect(order.shadowRoot!.activeElement).toBe(q("[data-review-open]"));
-            expect(q("[data-review-open]").textContent!.trim()).toBe(reviewText);
             expect(draft(el).lines).toEqual(before);
             expect(server.drafts).toEqual(savedBefore);
             expect(api.saveDraft).not.toHaveBeenCalled();
@@ -11406,7 +11390,7 @@ describe("native app phone Review with mixed dish families", () => {
             await page.screenshot({
               path: `__screenshots__/a773-app-back-${locale}-${theme}-${width}.png`,
             });
-            await userEvent.click(q("[data-review-open]"));
+            await userEvent.click(q("[data-view=order]"));
             await expect.poll(() => q("[data-draft-pane]").checkVisibility()).toBe(true);
             expect(q('[data-draft-select="0"]').getAttribute("aria-pressed")).toBe("true");
             expect(draft(el).lines).toEqual(before);

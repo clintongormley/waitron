@@ -2890,7 +2890,7 @@ describe("A803 name bill", () => {
     },
   );
 
-  it("does not open Review when the screen is first drawn after such a refusal", async () => {
+  it("does not open Order when the screen is first drawn after such a refusal", async () => {
     const oldWidth = innerWidth;
     const oldHeight = innerHeight;
     await page.viewport(400, 800);
@@ -2907,8 +2907,10 @@ describe("A803 name bill", () => {
       await flush(el, 6);
 
       expect(
-        tableOrder(el)!.shadowRoot!.querySelector("[data-review-back]")?.checkVisibility() ?? false,
-      ).toBe(false);
+        tableOrder(el)!
+          .shadowRoot!.querySelector("[data-view=order]")!
+          .getAttribute("aria-pressed"),
+      ).toBe("false");
     } finally {
       await page.viewport(oldWidth, oldHeight);
     }

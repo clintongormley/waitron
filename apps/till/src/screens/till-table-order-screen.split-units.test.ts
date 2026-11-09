@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { beer, flan, ham, mount, store } from "./till-table-order-screen.test-helpers.js";
@@ -169,8 +169,8 @@ it("A803: offers no split for a 200 ml line in a measure unit with no decimals",
       (control) => control.dataset.splitDraftLine,
     ),
   ).toEqual(["1"]);
-  expect(el.shadowRoot!.querySelector("[data-review-open]")!.textContent!.trim()).toBe(
-    "Review (3)",
+  expect(el.shadowRoot!.querySelector("[data-view=order]")!.textContent!.trim()).toBe(
+    `${t("table.view_order")} · 3`,
   );
 });
 

@@ -1,4 +1,4 @@
-/** Fixtures and steps shared by the table screen's drafting and Review suites. */
+/** Fixtures and steps shared by the table screen's drafting and order-view suites. */
 import { userEvent } from "vitest/browser";
 import type { TillBasket } from "../widgets/basket.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
@@ -189,4 +189,18 @@ export async function openDraftLine(
   if (picker === null) throw new Error(`No line window for ${index}`);
   await picker.updateComplete;
   return picker;
+}
+
+/** Taps the narrow screen's Menu or Order switch button and waits for the screen to draw it. */
+export async function showView(el: TillTableOrderScreen, view: "menu" | "order"): Promise<void> {
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>(`[data-view="${view}"]`)!);
+  await el.updateComplete;
+}
+
+/** Which of the switch's buttons is pressed, or undefined where no switch is drawn. */
+export function shownView(el: TillTableOrderScreen): "menu" | "order" | undefined {
+  const pressed = el.shadowRoot!.querySelector<HTMLElement>(
+    '[data-view-switch] [data-view][aria-pressed="true"]',
+  );
+  return (pressed?.dataset.view as "menu" | "order" | undefined) ?? undefined;
 }

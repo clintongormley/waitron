@@ -5,7 +5,12 @@ import {
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { grossOf } from "@waitron/shared";
 import { DraftStore } from "../state/draft-sync.js";
-import { openDraftLine, resized } from "./till-table-order-screen.test-helpers.js";
+import {
+  openDraftLine,
+  resized,
+  showView,
+  shownView,
+} from "./till-table-order-screen.test-helpers.js";
 import { sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -1086,6 +1091,18 @@ describe.each(["light", "dark"] as const)(
           ?.checkVisibility()
       )
         throw new Error("the scan must include the last-added bar");
+      await expectNoA11yViolations(host);
+    });
+
+    it("the switch has no violations, Menu and Order each pressed", async () => {
+      const { el, host } = await phoneDraft();
+      await settled(el);
+      if (shownView(el) !== "menu") throw new Error("the scan must see Menu pressed");
+      await expectNoA11yViolations(host);
+
+      await showView(el, "order");
+      await settled(el);
+      if (shownView(el) !== "order") throw new Error("the scan must see Order pressed");
       await expectNoA11yViolations(host);
     });
 

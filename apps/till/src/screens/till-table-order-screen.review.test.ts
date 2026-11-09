@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
+import { DraftStore } from "../state/draft-sync.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import {
   DRAFT_SIDE_BY_SIDE_MIN_WIDTH,
   type TillTableOrderScreen,
@@ -8,24 +10,133 @@ import {
 import {
   beer,
   browser,
+  flan,
+  ham,
   menuOf,
   mount,
   resized,
   rows,
   shown,
+  showView,
+  shownView,
   tap,
 } from "./till-table-order-screen.test-helpers.js";
+import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
-describe("till-table-order-screen: browsing and the draft by the screen's width", () => {
+describe("till-table-order-screen: browsing and the order by the screen's width", () => {
   const review = (el: TillTableOrderScreen) =>
     el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
   const draftPane = (el: TillTableOrderScreen) =>
     el.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]");
   const browsing = (el: TillTableOrderScreen) =>
     el.shadowRoot!.querySelector<HTMLElement>("[data-browsing]");
+
+  const orderButton = (el: TillTableOrderScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
+  const viewSwitch = (el: TillTableOrderScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-switch]");
+
+  it("below the width, Menu and Order switch the views, Order counting the New order, the focus staying on the button tapped", async () => {
+    const { el, host } = await mount();
+    host.style.width = "390px";
+    await resized(el);
+    await tap(el, "Beer");
+    await tap(el, "Beer");
+    await tap(el, "Flan");
+
+    expect(shownView(el)).toBe("menu");
+    expect(orderButton(el)!.textContent!.trim()).toBe(`${t("table.view_order")} · 3`);
+    expect(orderButton(el)!.querySelector('[aria-hidden="true"]')!.textContent!.trim()).toBe("·");
+    await expect
+      .element(page.getByRole("button", { name: "Order 3", exact: true }))
+      .toBeInTheDocument();
+
+    await showView(el, "order");
+    expect(shownView(el)).toBe("order");
+    expect(shown(draftPane(el))).toBe(true);
+    expect(shown(browsing(el))).toBe(false);
+    expect(el.shadowRoot!.activeElement).toBe(orderButton(el));
+
+    await showView(el, "menu");
+    expect(shownView(el)).toBe("menu");
+    expect(shown(browsing(el))).toBe(true);
+    expect(shown(draftPane(el))).toBe(false);
+    expect(el.shadowRoot!.activeElement).toBe(
+      el.shadowRoot!.querySelector<HTMLElement>("[data-view=menu]"),
+    );
+  });
+
+  it("the Order count takes whole, weighed and recalled lines as items", async () => {
+    const draft = new DraftStore();
+    draft.appendLines([
+      { product: beer, quantity: "2" },
+      {
+        product: flan,
+        quantity: "1",
+        extras: [
+          { listId: "extras", productId: "sauce", name: "Sauce", quantity: 3, price: "0.25" },
+        ],
+      },
+      { product: ham, quantity: "0.375" },
+      {
+        product: { ...beer, id: "retired", name: "Recorded dish" },
+        quantity: "2.000",
+        noMerge: true,
+        source: { line: storedDish, extras: [storedExtra], netAmount: "8.00" },
+      },
+    ]);
+    const { el, host } = await mount({ draftStore: draft, lines: [storedDish, storedExtra] });
+    host.style.width = "390px";
+    await resized(el);
+
+    expect(orderButton(el)!.textContent!.trim()).toBe(`${t("table.view_order")} · 6`);
+  });
+
+  it("an empty New order reads Order with no number", async () => {
+    const { el, host } = await mount();
+    host.style.width = "390px";
+    await resized(el);
+
+    expect(orderButton(el)!.textContent!.trim()).toBe(t("table.view_order"));
+    await expect
+      .element(page.getByRole("button", { name: t("table.view_order"), exact: true }))
+      .toBeInTheDocument();
+  });
+
+  it("the switch only below the width", async () => {
+    const { el, host } = await mount();
+    host.style.width = `${DRAFT_SIDE_BY_SIDE_MIN_WIDTH - 1}px`;
+    await resized(el);
+    expect(shown(viewSwitch(el))).toBe(true);
+
+    host.style.width = `${DRAFT_SIDE_BY_SIDE_MIN_WIDTH}px`;
+    await resized(el);
+    expect(viewSwitch(el)).toBeNull();
+  });
+
+  it("Spanish: Carta and Pedido · 3", async () => {
+    setLocale("es");
+    try {
+      expect(t("table.view_menu")).not.toBe("Menu");
+      expect(t("table.view_order")).not.toBe("Order");
+      const { el, host } = await mount();
+      host.style.width = "390px";
+      await resized(el);
+      await tap(el, "Beer");
+      await tap(el, "Beer");
+      await tap(el, "Flan");
+
+      expect(el.shadowRoot!.querySelector("[data-view=menu]")!.textContent!.trim()).toBe(
+        t("table.view_menu"),
+      );
+      expect(orderButton(el)!.textContent!.trim()).toBe(`${t("table.view_order")} · 3`);
+    } finally {
+      setLocale("en");
+    }
+  });
 
   it("gives each line's name the Review view's width at 390 px, so it is not broken letter by letter", async () => {
     const { el, host } = await mount();

@@ -303,15 +303,15 @@ describe("till-table-order-screen: sending a draft with a flagged line", () => {
 });
 
 describe("till-table-order-screen: a dish no longer offered at all", () => {
-  it("shows its quantity as the server holds it, and counts a whole quantity on Review by its count", async () => {
+  it("shows its quantity as the server holds it, and counts a whole quantity on the Order switch by its count", async () => {
     const { el, host } = await mount();
     host.style.width = "390px";
     await resized(el);
     store(el).loadFrom(store(el).id, [{ product: beer, quantity: "1" }, standIn("2")]);
     await settled(el);
 
-    expect(el.shadowRoot!.querySelector("[data-review-open]")!.textContent!.trim()).toBe(
-      t("table.review").replace("{n}", "3"),
+    expect(el.shadowRoot!.querySelector("[data-view=order]")!.textContent!.trim()).toBe(
+      `${t("table.view_order")} · 3`,
     );
     const quantities = [...el.shadowRoot!.querySelectorAll("till-basket")].flatMap((basket) =>
       [...basket.shadowRoot!.querySelectorAll(".qty:not(.stepper)")].map((qty) => qty.textContent),
