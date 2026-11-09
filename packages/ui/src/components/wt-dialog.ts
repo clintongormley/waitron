@@ -58,6 +58,8 @@ export class WtDialog extends LitElement {
     formMessageStyles,
     css`
       dialog {
+        position: fixed;
+        inset: 0;
         padding: 0;
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-lg);
@@ -65,6 +67,7 @@ export class WtDialog extends LitElement {
         color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
         max-width: var(--wt-dialog-max-width);
+        max-height: calc(100% - 2 * var(--wt-space-5));
       }
 
       /* The native modal dialog's own height limit bounds this column, so a long body scrolls
@@ -85,7 +88,7 @@ export class WtDialog extends LitElement {
         padding: var(--wt-space-5);
         min-height: 0;
         overflow: auto;
-        overscroll-behavior: contain;
+        overscroll-behavior-x: contain;
         flex-shrink: 1000000;
       }
 
@@ -166,6 +169,8 @@ export class WtDialog extends LitElement {
   private static untrack(dialog: WtDialog): void {
     if (WtDialog.openDialogs.delete(dialog) && WtDialog.openDialogs.size === 0)
       document.removeEventListener("keydown", WtDialog.onDocumentKeydown);
+    for (const each of [...WtDialog.openDialogs].sort((a, b) => b.openedAt - a.openedAt))
+      if (each.isConnected && each.open) each.returnToOpeningOrder();
   }
 
   /** A focused control that is disabled drops focus to the page body, outside every dialog.
@@ -267,13 +272,16 @@ export class WtDialog extends LitElement {
     if (this.hasUpdated) this.observeBody();
     if (this.hasUpdated) this.syncMessageTabStop();
     if (this.hasUpdated && this.open) {
-      this.returnToOpeningOrder();
+      if (this.dialog.open) this.returnToOpeningOrder();
+      else if (this.openedAt === 0) this.requestUpdate("open", false);
       this.watchContent();
     }
   }
 
   override disconnectedCallback(): void {
+    this.dialog?.setAttribute("closedby", "none");
     WtDialog.untrack(this);
+    if (this.open) this.refocus();
     this.bodyResize.disconnect();
     this.messageResize.disconnect();
     this.observedMessage = null;
@@ -353,7 +361,7 @@ export class WtDialog extends LitElement {
 
   override updated(changed: Map<string, unknown>): void {
     if (changed.has("open")) {
-      if (this.open && !this.dialog.open) {
+      if (this.open && this.isConnected && !this.dialog.open) {
         const focused = deepActiveElement();
         this.returnTarget = focused === document.body ? null : focused;
         this.openedAt = ++WtDialog.openings;
@@ -364,8 +372,8 @@ export class WtDialog extends LitElement {
       // Also when the browser has already closed the dialog itself, as on Escape.
       if (!this.open) {
         this.unwatchContent();
-        WtDialog.untrack(this);
         this.lastFocused = null;
+        this.openedAt = 0;
       }
       if (!this.open && this.dialog.open) {
         this.dialog.close();
@@ -373,9 +381,11 @@ export class WtDialog extends LitElement {
         // this update completes must already see where focus will stay.
         this.refocus();
       }
+      if (!this.open) WtDialog.untrack(this);
     }
     this.syncBodyTabStop();
     this.syncMessageTabStop();
+    this.syncCloseRequest();
   }
 
   private showModalWithOpeningFocus(): void {
@@ -395,21 +405,23 @@ export class WtDialog extends LitElement {
       this.focusFirstContent();
   }
 
-  /** Leaving the page takes a native dialog out of the top layer but leaves its `open` attribute,
-   * and put back like that it is not modal: everything in it is inert under any modal it is not
-   * inside. A native dialog goes back only on top, so every dialog opened after it goes back again
-   * over it, in order. */
+  /** A native dialog can return only on top. Keep a covered one inert until restoring it no
+   * longer blurs the upper field or dismisses its popovers. */
   private returnToOpeningOrder(): void {
     if (!this.dialog.open) return;
     WtDialog.track(this);
     if (this.dialog.matches(":modal")) return;
-    const above = [...WtDialog.openDialogs]
-      .filter((other) => other.openedAt > this.openedAt)
-      .sort((a, b) => a.openedAt - b.openedAt);
+    if (this.hasModalAbove()) {
+      this.syncCloseRequest();
+      return;
+    }
     this.showAgain();
-    // Asked here, not above: moving focus can run a page's handlers, and one may remove or close
-    // any of these. A dialog off the page is not modal either.
-    for (const each of above) if (each.dialog.matches(":modal")) each.showAgain();
+  }
+
+  private hasModalAbove(): boolean {
+    return [...WtDialog.openDialogs].some(
+      (other) => other.openedAt > this.openedAt && other.dialog.matches(":modal"),
+    );
   }
 
   /** `close()`, because a modal whose `open` attribute is removed keeps its place in the top layer.
@@ -418,9 +430,21 @@ export class WtDialog extends LitElement {
     const focused = this.lastFocused;
     const scrolled = this.bodyEl.scrollTop;
     this.dialog.close();
+    if (!this.isConnected || !this.open || this.hasModalAbove()) return;
     this.showModalWithOpeningFocus();
+    this.syncCloseRequest();
     focused?.focus();
     this.bodyEl.scrollTop = scrolled;
+  }
+
+  private syncCloseRequest(): void {
+    // A covered nonmodal dialog must not register a newer native close request above the upper one.
+    this.dialog.setAttribute(
+      "closedby",
+      this.dismissible && !this.beforeClose && this.dialog.matches(":modal")
+        ? "closerequest"
+        : "none",
+    );
   }
 
   private onClose(): void {
@@ -605,7 +629,6 @@ export class WtDialog extends LitElement {
         @close=${this.onClose}
         @cancel=${this.onCancel}
         @keydown=${this.onKeydown}
-        closedby=${this.dismissible && !this.beforeClose ? "closerequest" : "none"}
         role="dialog"
         aria-labelledby=${this.heading ? this.headingId : nothing}
         aria-describedby=${this.description ? this.descriptionId : nothing}

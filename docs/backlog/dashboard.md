@@ -17,17 +17,6 @@ their full text.
 **Dashboard leftovers from the coverage branch — OPEN (found 2026-09-23, PR #538).** Each from
 reading unless marked run:
 
-- `wt-dialog` re-sends the native dialog's `close` event as `wt-close`
-  (`packages/ui/src/components/wt-dialog.ts`), and the native event arrives a task after the dialog
-  closes — the same mechanism the catalogue screen's nested forms guard against (#741). So a dialog
-  reopened within that task is shut again: `wt-dialog`'s own close handler (`onClose`) sets its
-  `open` to false, which closes the native dialog, and then the screen's handler clears its state.
-  `staff-screen.ts` and `purchases-screen.ts` have no guard; their tests wait out the late close
-  rather than guard it (`staff-screen.test.ts`, `purchases-screen.test.ts`). `profile-screen.ts`'s
-  flag (`#closingModal`) protects the screen's mode but, we believe (by reading, not tested), not
-  the dialog itself. `apps/dashboard/src/widgets/allergen-picker.ts` avoids the problem by mounting
-  a fresh dialog for each open (`keyed`). Seen once under coverage load in a test (run); we believe
-  a person cannot reopen it that fast; not tested.
 - `login-screen.ts` checks an account link's purpose with `=== null`, so a reply with no purpose at
   all would pass; the server always sends one.
 - Guards no test can reach, left uncovered rather than deleted: several `?? []` and `?? null` fallbacks in the printers, payments,
@@ -71,25 +60,6 @@ needs A1308's shared activity writer and functional outgoing-mail sender.
 The general history screen is a follow-up. Before cut 2 builds, the owner must decide whether the
 existing Admin-default `fiscal.remedy` may be assigned to another role; its behavior stays unchanged.
 Implementation remains open.
-
-## A keydown guard that cancels Escape while a save runs did not keep one dialog open
-
-On
-  Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`) a real Escape
-  during a save closed the editor although its keydown handler called `preventDefault()` and
-  `stopPropagation()`; the screen now sets `wt-modal`'s `dismissible` to false while busy, and
-  `wt-dialog` sets `closedby="none"` while `dismissible` is off. Why that screen behaved
-  differently has not been established. The same keydown guard is on other dashboard forms:
-  those whose tests press a real Escape during a save also ignore a close while busy in their
-  `wt-close` handler. Slice 6's department and zone dialogs now set `dismissible` to false
-  while busy and refuse a close through their guard; their real-Escape cases are in
-  `packages/venue-service/src/dashboard/department-dialogs.test.ts`. The rest were tried only with a hand-built
-  `KeyboardEvent` (`sections-screen`, `modifiers-screen`, `add-to-menus`, `extra-list-form`,
-  `option-list-form`, `option-label-form` and `variant-form`, under `apps/dashboard/src`) or not at all
-  (`#guardEscape` in `apps/dashboard/src/screens/menus-screen.ts`). **Next action:** repeat the reasons-screen case
-  recording which element has focus just before the Escape; then press a real Escape during a
-  save on each form tried only with a hand-built event or not at all, and move the ones that close
-  to `dismissible`.
 
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 
@@ -571,37 +541,13 @@ plans to retire the editor.
 
 ## Bundle: Wt dialog lifecycle
 
-8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Dashboard leftovers from the coverage branch**
+- **Dashboard leftovers from the coverage branch**: the login-purpose check and unreachable
+  fallbacks remain outside the dialog work.
   [Detail](dashboard.md#dashboard-leftovers-from-the-coverage-branch)
-- **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Why that
-  screen behaved differently has not been established. Left open by the service, ordering and
-  billing plan (Task 1's reasons screen).
-  [Detail](dashboard.md#a-keydown-guard-that-cancels-escape-while-a-save-runs-did-not-keep-one-dialog-open)
 - **The till's modifier picker still recreates its modal when put back.** A738 added that because
-  `wt-dialog` lost modality there; `wt-dialog` now restores it. With the recreation disabled, the
-  `combined line edits` cases of `apps/till/src/widgets/modifier-picker.unsaved.test.ts` still passed
-  (3 passed). Left open by A397.
-- **The department and zone edit dialogs still close on removal and reopen on return**, so they come
-  back on top with focus as at opening, not in their place in opening order. Whether they still need
-  to was not tried. (`packages/venue-service/src/dashboard/department-edit-dialog.ts`,
-  `zone-edit-dialog.ts`.) Left open by A397.
-- **An open choice list or native popover inside a dialog closes when a dialog under it is put
-  back**; the person opens it again. Measured once on Chromium, with no case kept: in that dialog a
-  field's value, selection and focus, an open `details` and the scroll of an inner box and a textarea
-  are kept. At e3ec7efd36 the list and popover stayed open. Left open by A397.
-- **Setting `open` on a `wt-dialog` while it is off the page makes `showModal` throw**, and the
-  dialog stays closed with `open` true after being put back. Ran at e3ec7efd36 on #2444's branch;
-  whether it predates that branch was not run. Left open by A397.
-- **When a dialog under another is put back, the dialog above loses focus for a moment, and a form
-  that reacts to losing focus can misbehave.** Tried on two fields at e3ec7efd36 on #2444's branch:
-  allergen editing disappeared and a course name saved. Other forms were not tried, and whether it
-  predates that branch was not run. Left open by A397.
-- **In a text field inside a dialog, with the field's text selected, End and Home do not move the
-  caret**, so typing replaces the whole text. Seen on the A721 branch in the Seasons window and the
-  period dialog; a bare input and a bare dialog in the same Chromium behave normally. Cause not
-  found; not tested on main.
+  `wt-dialog` lost modality there. The shared primitive now restores its opening order without
+  blurring an upper field. Check whether the picker still needs recreation once lane C's #2642
+  has landed; leave its existing draft and dismissal protections intact.
 
 ## Bundle: Wt popups
 

@@ -427,3 +427,40 @@ describe("adding Valencian alongside Catalan", () => {
     );
   });
 });
+
+it("keeps the native language dialog open through repeated Escape after its focused field is disabled by saving", async () => {
+  let refuse!: (error: unknown) => void;
+  const { el, host } = await mount(
+    () =>
+      new Promise<void>((_resolve, reject) => {
+        refuse = reject;
+      }),
+  );
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  await modal.updateComplete;
+  const language = box(el);
+  await language.updateComplete;
+  const trigger = language.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
+  trigger.focus();
+  expect(language.shadowRoot!.activeElement).toBe(trigger);
+  const closed = vi.fn();
+  host.addEventListener("languages-closed", closed);
+  await choose(el, "fr");
+  await modal.updateComplete;
+  for (let press = 0; press < 2; press++) {
+    await userEvent.keyboard("{Escape}");
+    await closeReportsDelivered();
+    expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  }
+  expect(closed).not.toHaveBeenCalled();
+  refuse({ code: "content.language_invalid" });
+  await vi.waitFor(() => expect(box(el).disabled).toBe(false));
+  await modal.updateComplete;
+  trigger.focus();
+  const reported = new Promise((resolve) =>
+    modal.addEventListener("wt-close", resolve, { once: true }),
+  );
+  await userEvent.keyboard("{Escape}");
+  await reported;
+  expect(closed).toHaveBeenCalledOnce();
+});

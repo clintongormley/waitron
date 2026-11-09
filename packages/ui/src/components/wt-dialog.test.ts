@@ -1917,6 +1917,104 @@ test.each([
 
 const nativeOf = (el: HTMLElement) => el.shadowRoot!.querySelector("dialog") as HTMLDialogElement;
 
+test.each(["wt-dialog", "wt-modal"] as const)(
+  "%s opens on attachment after open was set during a detached update",
+  async (tag) => {
+    const el = (await mount(`<${tag} heading="Edit"><input name="note" /></${tag}>`)) as WtDialog;
+    const putBack = takeOut(el);
+    el.open = true;
+    await expect(el.updateComplete).resolves.toBeDefined();
+    expect(nativeOf(el).open).toBe(false);
+    const target = document.createElement("button");
+    host.append(target);
+    target.focus();
+    putBack();
+    await el.updateComplete;
+    expect(nativeOf(el).matches(":modal")).toBe(true);
+    expect(takesFocus(el.querySelector("input")!)).toBe(true);
+    el.open = false;
+    await el.updateComplete;
+    await closeReportsDelivered();
+    expect(deepActiveElement()).toBe(target);
+  },
+);
+
+test("an opening cancelled off-page stays closed on attachment", async () => {
+  const el = (await mount('<wt-dialog heading="Edit">Draft</wt-dialog>')) as WtDialog;
+  const putBack = takeOut(el);
+  el.open = true;
+  await expect(el.updateComplete).resolves.toBeDefined();
+  el.open = false;
+  await el.updateComplete;
+  putBack();
+  await el.updateComplete;
+  expect(nativeOf(el).open).toBe(false);
+});
+
+for (const tag of ["wt-dialog", "wt-modal"] as const)
+  for (const field of [
+    '<input value="abcdef" />',
+    '<wt-input label="Note" value="abcdef"></wt-input>',
+  ])
+    test.each(["Home", "End"] as const)(
+      `${tag}: %s moves a selected field's caret (${field})`,
+      async (key) => {
+        const el = (await mount(`<${tag} heading="Edit">${field}</${tag}>`)) as WtDialog;
+        el.open = true;
+        await el.updateComplete;
+        const wrapped = el.querySelector("wt-input");
+        if (wrapped) await wrapped.updateComplete;
+        const input = wrapped
+          ? wrapped.shadowRoot!.querySelector("input")!
+          : el.querySelector("input")!;
+        input.focus();
+        input.select();
+        expect(deepActiveElement()).toBe(input);
+        await userEvent.keyboard(`{${key}}`);
+        expect([input.selectionStart, input.selectionEnd]).toEqual(
+          key === "Home" ? [0, 0] : [6, 6],
+        );
+        await userEvent.keyboard("Z");
+        expect(input.value).toBe(key === "Home" ? "Zabcdef" : "abcdefZ");
+      },
+    );
+
+test.each([
+  ["wt-dialog", 390],
+  ["wt-modal", 390],
+  ["wt-modal", 1280],
+] as const)(
+  "returning the covered %s preserves upper focus, choices and both panel rectangles at %ipx",
+  async (tag, width) => {
+    await page.viewport(width, 844);
+    onTestFinished(() => page.viewport(1280, 900));
+    const { parent, child, inChild } = await stacked("beside", tag);
+    const popup = document.createElement("div");
+    popup.popover = "auto";
+    popup.textContent = "Choice";
+    child.append(popup);
+    inChild.focus();
+    popup.showPopover();
+    const blurred = vi.fn();
+    inChild.addEventListener("focusout", blurred);
+    const parentBox = nativeOf(parent).getBoundingClientRect().toJSON();
+    const childBox = nativeOf(child).getBoundingClientRect().toJSON();
+    takeOut(parent)();
+    await settledBoth(parent, child);
+    expect(blurred).not.toHaveBeenCalled();
+    expect(deepActiveElement()).toBe(inChild);
+    expect(popup.matches(":popover-open")).toBe(true);
+    expect(nativeOf(parent).getBoundingClientRect().toJSON()).toEqual(parentBox);
+    expect(nativeOf(child).getBoundingClientRect().toJSON()).toEqual(childBox);
+    expect(takesFocus(parent.querySelector("input")!)).toBe(false);
+    expect(deepActiveElement()).toBe(inChild);
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
+    expect(child.open).toBe(true);
+    expect(parent.open).toBe(true);
+  },
+);
+
 function takeOut(el: HTMLElement): () => void {
   const parent = el.parentNode!;
   const next = el.nextSibling;
@@ -2148,10 +2246,10 @@ test("an open dialog put back with the page body focused leaves its opener as wh
 });
 
 /** Two dialogs, the second opened over the first: inside it, after it in the page, or before it. */
-async function stacked(arrangement: "inside" | "beside" | "before") {
+async function stacked(arrangement: "inside" | "beside" | "before", tag = "wt-modal") {
   const inner = `<wt-modal class="child" heading="Child"><input class="in-child" aria-label="Child" /></wt-modal>`;
   const outer = (content: string) =>
-    `<wt-modal class="parent" heading="Parent"><input class="first-in-parent" aria-label="First" /><input class="in-parent" aria-label="Parent" />${content}</wt-modal>`;
+    `<${tag} class="parent" heading="Parent"><input class="first-in-parent" aria-label="First" /><input class="in-parent" aria-label="Parent" />${content}</${tag}>`;
   await mount("<div></div>");
   host.innerHTML = `<div class="around">${
     arrangement === "inside"
@@ -2185,7 +2283,7 @@ async function settledBoth(parent: WtDialog, child: WtDialog) {
 }
 
 function expectChildOnTop(parent: WtDialog, child: WtDialog, inChild: HTMLInputElement) {
-  expect(nativeOf(parent).matches(":modal")).toBe(true);
+  expect(nativeOf(parent).open).toBe(true);
   expect(nativeOf(child).matches(":modal")).toBe(true);
   expect(takesFocus(inChild)).toBe(true);
   const inParent = parent.querySelector("input")!;
@@ -2252,21 +2350,29 @@ test("the dialog above one put back keeps where its long body was scrolled to", 
   expect(body.scrollTop).toBe(200);
 });
 
-test("Escape goes to the dialog above one put back, and focus then lands in the one underneath", async () => {
-  const { parent, child, inParent } = await stacked("beside");
-  const parentCloses = vi.fn();
-  parent.addEventListener("wt-close", parentCloses);
-  takeOut(parent)();
-  await settledBoth(parent, child);
-  const closed = new Promise((resolve) => child.addEventListener("wt-close", resolve));
-  await userEvent.keyboard("{Escape}");
-  await closed;
-  expect(child.open).toBe(false);
-  expect(parent.open).toBe(true);
-  expect(nativeOf(parent).matches(":modal")).toBe(true);
-  expect(parentCloses).not.toHaveBeenCalled();
-  expect(deepActiveElement()).toBe(inParent);
-});
+test.each(["field", "disabled field"] as const)(
+  "Escape from %s goes to the dialog above one put back, and focus then lands underneath",
+  async (focus) => {
+    const { parent, child, inParent, inChild } = await stacked("beside");
+    const parentCloses = vi.fn();
+    parent.addEventListener("wt-close", parentCloses);
+    takeOut(parent)();
+    await settledBoth(parent, child);
+    inChild.focus();
+    if (focus === "disabled field") {
+      inChild.disabled = true;
+      await vi.waitFor(() => expect(deepActiveElement()).toBe(document.body));
+    }
+    const closed = new Promise((resolve) => child.addEventListener("wt-close", resolve));
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    expect(child.open).toBe(false);
+    expect(parent.open).toBe(true);
+    expect(nativeOf(parent).matches(":modal")).toBe(true);
+    expect(parentCloses).not.toHaveBeenCalled();
+    expect(deepActiveElement()).toBe(inParent);
+  },
+);
 
 test("a dialog above one put back, closed by the browser but not yet reported, is not shown again", async () => {
   const { parent, child } = await stacked("beside");
@@ -2281,20 +2387,16 @@ test("a dialog above one put back, closed by the browser but not yet reported, i
   expect(closes).toHaveBeenCalledTimes(1);
 });
 
-test("a dialog above one put back, removed by its own focusout handler meanwhile, is left off the page", async () => {
+test("removing the upper dialog restores the covered dialog without first blurring the upper field", async () => {
   const { parent, child, inParent, inChild } = await stacked("beside");
-  const errors: unknown[] = [];
-  const onError = (event: ErrorEvent) => {
-    errors.push(event.error);
-    event.preventDefault();
-  };
-  window.addEventListener("error", onError);
-  onTestFinished(() => window.removeEventListener("error", onError));
   inChild.focus();
-  inChild.addEventListener("focusout", () => child.remove(), { once: true });
+  const blurred = vi.fn();
+  inChild.addEventListener("focusout", blurred);
   takeOut(parent)();
   await parent.updateComplete;
-  expect(errors).toEqual([]);
+  expect(blurred).not.toHaveBeenCalled();
+  expect(child.isConnected).toBe(true);
+  child.remove();
   expect(child.isConnected).toBe(false);
   expect(nativeOf(parent).matches(":modal")).toBe(true);
   expect(takesFocus(inParent)).toBe(true);

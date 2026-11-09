@@ -62,19 +62,8 @@ export class ZoneEditDialog extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.requestUpdate();
-    const modal = this.shadowRoot?.querySelector("wt-modal");
-    if (modal)
-      void modal.updateComplete.then(() => {
-        if (
-          this.isConnected &&
-          !this.dismissed &&
-          this.shadowRoot?.querySelector("wt-modal") === modal
-        )
-          modal.open = true;
-      });
   }
   override disconnectedCallback() {
-    this.shadowRoot?.querySelector("wt-modal")?.closeAfter("security");
     this.scope?.dispose();
     this.scope = undefined;
     this.leave = undefined;
@@ -262,7 +251,7 @@ export class ZoneEditDialog extends LitElement {
     return keyed(
       zone.id,
       html`<wt-modal
-        .open=${this.isConnected && !this.dismissed}
+        .open=${!this.dismissed}
         size="standard"
         heading=${`${t("venue.edit_zone")}: ${zone.name}`}
         .beforeClose=${this.beforeClose}
