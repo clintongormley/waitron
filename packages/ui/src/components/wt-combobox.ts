@@ -766,6 +766,7 @@ export class WtCombobox extends LitElement {
     const anchor = this.trigger.getBoundingClientRect();
     const scrollTop = this.listbox.scrollTop;
     const previousTop = this.popup.getBoundingClientRect().top;
+    // Measure at the final width so wrapped rows contribute their drawn height.
     this.popup.style.width = "max-content";
     this.popup.style.minWidth = `${anchor.width}px`;
     this.popup.style.maxWidth = `${innerWidth - 16}px`;

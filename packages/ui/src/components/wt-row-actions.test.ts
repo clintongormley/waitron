@@ -566,7 +566,7 @@ describe("opens-below", () => {
       window.addEventListener("error", onError);
       await page.viewport(900, 800);
       try {
-        const { el, trigger, popup, actions } = await longMenu(opensBelow ? 15 : 5);
+        const { el, trigger, popup, actions } = await longMenu(15);
         el.opensBelow = opensBelow;
         el.style.insetInlineStart = "auto";
         el.style.right = "8px";
@@ -607,6 +607,26 @@ describe("opens-below", () => {
       expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
     } finally {
       await page.viewport(1280, 900);
+    }
+  });
+
+  it("removes its window resize listener on close and removal, and installs a fresh one on reopen", async () => {
+    const add = vi.spyOn(window, "addEventListener");
+    const remove = vi.spyOn(window, "removeEventListener");
+    try {
+      const { el, popup } = await longMenu(3);
+      el.show();
+      const listener = add.mock.calls.find(([type]) => type === "resize")![1];
+      el.hide();
+      await vi.waitFor(() => expect(remove).toHaveBeenCalledWith("resize", listener));
+      el.show();
+      expect(popup.matches(":popover-open")).toBe(true);
+      remove.mockClear();
+      el.remove();
+      expect(remove).toHaveBeenCalledWith("resize", listener);
+    } finally {
+      add.mockRestore();
+      remove.mockRestore();
     }
   });
 

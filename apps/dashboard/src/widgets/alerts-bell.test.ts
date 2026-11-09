@@ -241,6 +241,18 @@ describe("dashboard-alerts-bell", () => {
     expect(popup(el).matches(":popover-open")).toBe(true);
   });
 
+  it("keeps keyboard focus on Mark handled while its panel stays open", async () => {
+    const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", { alerts: [event("9")] });
+    const handled: unknown[] = [];
+    el.addEventListener("wt-alert-handle", (event) => handled.push((event as CustomEvent).detail));
+    el.open();
+    el.focusPanel();
+    await userEvent.keyboard("{Enter}");
+    expect(handled).toEqual([{ incidentId: "9", key: "incident:9" }]);
+    expect(popup(el).matches(":popover-open")).toBe(true);
+    expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=alert-handle]"));
+  });
+
   it("shows loading only on the Mark handled button of the alert being handled", async () => {
     const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
       alerts: [event("1"), event("2"), event("3")],

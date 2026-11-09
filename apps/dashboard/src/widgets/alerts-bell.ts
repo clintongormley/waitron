@@ -153,6 +153,7 @@ export class AlertsBell extends LitElement {
               size="sm"
               variant="secondary"
               data-test="alert-handle"
+              data-keep-open
               ?loading=${this.busyKey === alert.key}
               @click=${(e: MouseEvent) => this.#onHandle(e, alert, incidentId)}
               >${t("alerts.mark_handled")}</wt-button

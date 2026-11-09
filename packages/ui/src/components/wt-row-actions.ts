@@ -46,6 +46,8 @@ export class WtRowActions extends LitElement {
            resize it and the size observer would never settle. */
         width: max-content;
         max-width: calc(100vw - 2 * var(--wt-space-2));
+        max-height: calc(100vh - 2 * var(--wt-space-2));
+        overflow-y: auto;
       }
       .actions {
         display: flex;
@@ -172,6 +174,7 @@ export class WtRowActions extends LitElement {
           })
           .filter((middle) => middle <= room - border);
         below = middles.length >= 2;
+        // A half-visible next row signals that more actions can be scrolled into view.
         if (below) cap = Math.max(...middles) + border;
       }
     }

@@ -3894,6 +3894,8 @@ describe("field stays clear of its open list", () => {
   });
 
   test("resize keeps the active last row visible and stops placing a removed field", async () => {
+    const add = vi.spyOn(window, "addEventListener");
+    const remove = vi.spyOn(window, "removeEventListener");
     await page.viewport(900, 800);
     try {
       const { el, trigger, popup } = await mountWithManyOptions();
@@ -3909,10 +3911,35 @@ describe("field stays clear of its open list", () => {
         const last = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".option")].at(-1)!;
         expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(box.bottom);
       });
+      const listener = add.mock.calls.find(([type]) => type === "resize")![1];
+      remove.mockClear();
       el.remove();
-      const placed = popup.style.cssText;
-      window.dispatchEvent(new Event("resize"));
-      expect(popup.style.cssText).toBe(placed);
+      expect(remove).toHaveBeenCalledWith("resize", listener);
+    } finally {
+      add.mockRestore();
+      remove.mockRestore();
+      await page.viewport(1280, 900);
+    }
+  });
+
+  test("growing options in an open panel above the field keeps its bottom above the field", async () => {
+    await page.viewport(390, 500);
+    try {
+      const { el, trigger, popup } = await mountCombobox();
+      el.search = "never";
+      el.options = [{ value: "one", label: "One" }];
+      el.style.cssText = "position: fixed; left: 20px; bottom: 12px; width: 250px";
+      await el.updateComplete;
+      await userEvent.click(trigger);
+      el.options = Array.from({ length: 20 }, (_, index) => ({
+        value: String(index),
+        label: `Option ${index}`,
+      }));
+      await el.updateComplete;
+      expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        trigger.getBoundingClientRect().top,
+      );
+      expect(popup.getBoundingClientRect().top).toBeGreaterThanOrEqual(8);
     } finally {
       await page.viewport(1280, 900);
     }
