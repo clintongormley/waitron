@@ -3534,8 +3534,13 @@ describe("the scope gates", () => {
   });
 
   // A gate that gates nothing means a shard was planned and not wired.
-  it("are each read by some job's `if:`", () => {
+  it("are each read by a job or the contract package-check step", () => {
     const read = new Set(jobs.flatMap((entry) => gatesRead(entry.body)));
+    const contractStep = job("test-light-a").body.match(
+      / {6}- name: Check the contract package\n {8}run: pnpm --filter @waitron\/contract test:package\n {8}if: needs\.changes\.outputs\.contract == 'true'/,
+    );
+    expect(contractStep).not.toBeNull();
+    read.add("contract");
     for (const gate of SCOPE_GATES) expect([...read]).toContain(gate.output);
   });
 

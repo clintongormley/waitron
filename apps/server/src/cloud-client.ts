@@ -1,3 +1,4 @@
+import { pairingPayload } from "@waitron/contract";
 import {
   reserveCloudCapture,
   publishCloudCapture,
@@ -274,21 +275,18 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     action: "start" | "status" | "complete",
     choice?: CloudChoice,
   ): Promise<CloudPairingView> {
-    const bytes = Buffer.from(
-      JSON.stringify([
-        "waitron-cloud-pair-v1",
-        state.origin,
-        action,
-        state.requestId,
-        state.publicKey,
-        state.localVenueId,
-        state.environment,
-        action === "start" ? state.code : "",
-        choice?.organisationId ?? "",
-        choice?.legalBusinessId ?? "",
-        Date.now(),
-      ]),
-    );
+    const bytes = pairingPayload({
+      origin: state.origin,
+      action,
+      requestId: state.requestId,
+      publicKey: state.publicKey,
+      localVenueId: state.localVenueId,
+      environment: state.environment,
+      code: action === "start" ? state.code : "",
+      organisationId: choice?.organisationId ?? "",
+      legalBusinessId: choice?.legalBusinessId ?? "",
+      issuedAt: Date.now(),
+    });
     const signature = sign(
       null,
       bytes,

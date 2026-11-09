@@ -701,3 +701,33 @@ it("refuses an export that resolves to a directory", async () => {
     expect(await readdir(context.output)).toEqual([]);
   });
 });
+
+it("prepares contract metadata with no peers and preserves the UI policy", () => {
+  const contract = {
+    ...packed,
+    name: "@waitron/contract",
+    sideEffects: false,
+    peerDependencies: {},
+    exports: { ".": packed.exports["."] },
+  };
+  const result = releaseManifest(contract, source, "0.2.7", "contract");
+  expect(result.name).toBe("@waitron-io/contract");
+  expect(result.homepage).toBe(
+    `https://github.com/clintongormley/waitron/tree/${source.commit}/packages/contract`,
+  );
+  expect(result.peerDependencies).toEqual({});
+  expect(result.sideEffects).toBe(false);
+  expect(() =>
+    releaseManifest(
+      { ...contract, peerDependencies: { lit: "^3.2.0" } },
+      source,
+      "0.2.7",
+      "contract",
+    ),
+  ).toThrow(/peer/);
+  expect(() =>
+    releaseManifest({ ...contract, sideEffects: true }, source, "0.2.7", "contract"),
+  ).toThrow(/side effects/);
+  expect(() => releaseManifest(contract, source, "0.2.7", "../other")).toThrow(/package/);
+  expect(releaseManifest(packed, source, "0.2.7").peerDependencies).toEqual({ lit: "^3.2.0" });
+});
