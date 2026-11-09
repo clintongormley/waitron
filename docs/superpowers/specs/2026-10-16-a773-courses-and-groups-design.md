@@ -295,7 +295,7 @@ A tap on a Fired row marks it served (3.3); a tap on a New order row does what A
 - **If A738 has not landed** when this is built, A773 builds what it needs (the sent view, ⋯ More,
   Mark served, the Course field) on today's modifiers window, and A738 adds its own sections later
   (builder's call).
-- **Sent:** nothing is editable. (2026-11-07: replaced by the owner's decision A1426: a sent dish's
+- **Sent:** nothing is editable. (2026-11-07: replaced by the owner's decision A1426, #2642: a sent dish's
   window shows its fields and **Change dish**, which saves that dish alone.) The window shows the
   dish, its extras and note with their prices, and a pill saying where it is ("Bar · waiting · fired 2 min ago"). Its **⋯ More** lists only what
   applies right now:
