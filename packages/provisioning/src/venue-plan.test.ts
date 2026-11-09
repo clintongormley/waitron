@@ -180,6 +180,34 @@ describe("planVenue", () => {
     ]);
   });
 
+  it.each([
+    ["es-ES", "en", "Kitchen", ["Counter", "Kitchen", "Handheld"]],
+    [
+      "en-GB",
+      "es",
+      STARTER_STATION_NAMES.Kitchen.es,
+      [
+        STARTER_PROFILE_NAMES.Counter.es,
+        STARTER_PROFILE_NAMES.Kitchen.es,
+        STARTER_PROFILE_NAMES.Handheld.es,
+      ],
+    ],
+  ] as const)(
+    "names the station and profiles in explicit %s / %s staff language",
+    (receiptLocale, staffLanguage, stationName, profileNames) => {
+      const actions = planVenue(
+        request({ invoiceLocales: [receiptLocale], staffLanguage }),
+        MODULES,
+      );
+      const location = actions.find((a) => a.kind === "create-venue");
+      const profiles = actions.find((a) => a.kind === "seed-device-profiles");
+      expect(location?.kind === "create-venue" && location.stationName).toBe(stationName);
+      expect(
+        profiles?.kind === "seed-device-profiles" && profiles.profiles.map((p) => p.name),
+      ).toEqual(profileNames);
+    },
+  );
+
   it("seeds the admin immediately after ensure-tenant, carrying the display name and pin hash", () => {
     const actions = planVenue(request(), MODULES);
     expect(actions[0]?.kind).toBe("ensure-tenant");

@@ -21,6 +21,7 @@ export interface VenueRequest {
   name: string;
   fiscalTerritory: string;
   invoiceLocales: string[];
+  staffLanguage?: "en" | "es";
   operationDescription: string;
   addressLine1: string;
   addressLine2: string | null;
@@ -170,6 +171,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
     country,
     area: request.province,
     receiptLocale: locales[0],
+    staffLanguage: request.staffLanguage,
   });
 
   return [
