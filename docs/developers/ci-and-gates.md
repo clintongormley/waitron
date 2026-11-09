@@ -2416,10 +2416,21 @@ pnpm exec prettier --check apps/server/test-durations.json
 
 `scripts/test-durations.mjs` takes each file's median over the logs (the mean of the middle two for
 an even count), rounded to 0.1 s, at least 0.1 s. If no log holds a `[file-progress] end` line with a time, it writes nothing, prints `no file measurements found in the logs; <out> left unchanged` and exits 1. The models above used the six runs named at the top
-of this section (872 paths). The committed table was rebuilt after #1929 landed, from the
+of this section (872 paths). The table was previously rebuilt after #1929 landed, from the
 six newest `main` runs that ran the server shards (39449527877, 39500330558, 39503634628,
 39507125783, 39518421998, 39530877061): 66 logs, 877 paths, the five more being #1929's new test
 files.
+
+**9 November 2026, A1398:** the table was refreshed from the 24 ordinary server-shard logs of
+[nightly 42550200310, attempt 1](https://github.com/clintongormley/waitron/actions/runs/42550200310/attempts/1),
+head `b267e7eb4e83367943326c8bfb97fb1c72a4f73f`: 1,282 timed paths, coverage on, one sample per file.
+The table keeps 1,281 rows after omitting `src/tunnel-http.test.ts`, retired by PR #2543.
+All 24 shards passed; image smoke failed separately. The watcher approved this single-run
+exception on 9 November at 09:37, including its slowest checkout of 16 seconds rather than
+[the roughly ten-second criterion](#inspect-duration-warnings-before-refreshing-the-table).
+The checked GitHub incident history showed no relevant incident overlapping the run; no download
+HTTP 5xx appeared in the 24 server logs. This refresh supplies measured file weights; it establishes
+neither a speed comparison nor whole-run qualification.
 
 **Guards, each weaker than its name.** The "apps/server's config packs every server test file into
 exactly one shard" case in `scripts/vitest-duration-sequencer.test.mjs` checks that the config's table
