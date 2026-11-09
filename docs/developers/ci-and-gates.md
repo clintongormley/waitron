@@ -4999,43 +4999,19 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ## Root receipts moved on 2026-11-09
 
-These excerpts retain supporting detail from `CLAUDE.md` at
-`c7ca274eeb1426f64a825164ee3411630545efcd`. They are not new measurements or changes to the rules.
+These supporting fragments are from `CLAUDE.md` at
+`c7ca274eeb1426f64a825164ee3411630545efcd`. The headings identify their unchanged root entries.
 
-### `prettier --check` on an IGNORED path
+### Shell command exit status
 
-`docs/` is ignored
-whole, so `pnpm exec prettier --file-info <file>` is the one that discriminates — it prints
-`"ignored": true`.
+> A shell sequence separated by newlines reports only its
+> LAST command's status.
 
-### Check every command's exit status.
+### Bundle smoke coverage
 
-A shell sequence separated by newlines reports only its
-LAST command's status.
+> A blank dashboard or till still passes, and setup's server routes are not tested.
 
-### `apps/server`'s shards
+### Workflow job time limits
 
-Guard:
-`scripts/vitest-duration-sequencer.test.mjs`, weaker than its name: checks packing, not a Vitest run or freshness.
-
-### `mutation-db`'s whole files
-
-Guard: the cost-table cases in `scripts/mutation-shard.test.mjs`, weaker
-than their name: existence, shape and that every file named is still mutated, not freshness. [Receipt](ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).
-
-### `bundle-smoke` builds dashboard
-
-A blank dashboard or till still passes, and setup's server routes are not tested.
-
-### Every workflow job carries
-
-Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads text, does not judge the limit
-or read an external called workflow.
-
-### On GitHub's ubuntu-26.04
-
-Cost: root-guards failed on 26.04 runners.
-
-### The upgrade test uses
-
-It prefers `/dev/shm` when present.
+> , does not judge the limit
+> or read an external called workflow.

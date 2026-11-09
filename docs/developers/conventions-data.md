@@ -6185,39 +6185,18 @@ Nothing checks that documents hold no row ids or that a module declares its docu
 
 ## Root receipts moved on 2026-11-09
 
-These excerpts retain supporting detail from `CLAUDE.md` at
-`c7ca274eeb1426f64a825164ee3411630545efcd`. They are not new measurements or changes to the rules.
+These supporting fragments are from `CLAUDE.md` at
+`c7ca274eeb1426f64a825164ee3411630545efcd`. The headings identify their unchanged root entries.
 
-### A detail or log field
+### Till person-header guard
 
-Cost: staff names and
-emails reached the sign-in-free recovery page.
+> , statuses rather than bodies, and a text check for the
+> cookie.
 
-### A configuration bundle value
+### Module migration-set guard
 
-Cost: from #1752 to A980 S1a2
-no production box could be set up from an export.
+> , never whether a module can be switched off.
 
-### A change adding third-party code
+### Schema constraint guard
 
-Guard: the third-party blocks in
-`scripts/deploy-image-env.test.ts`, weaker than their name — they read text, and a new binary or
-system package is seen by none of them.
-
-### A till request that needs
-
-Guard: `apps/server/src/till-api.session-person.test.ts`, weaker than its name: only the
-till, device and schedule mounts' routes, statuses rather than bodies, and a text check for the
-cookie. A new route the walk sees answered as with nobody signed in goes in its `BLIND` list, and
-one that needs a body in `BODIES`. [Receipt](conventions-data.md#a-till-requests-person-is-checked-where-the-sign-in-is-read).
-
-### A module that can be switched off
-
-Guard: the eight-sets cases in
-`packages/composition/src/composition.test.ts`, weaker than the rule: they pin today's sets and
-hosted modules, never whether a module can be switched off.
-
-### Declare every foreign key and unique index
-
-Guard: `scripts/schema-constraints.test.ts`,
-weaker than its name: reads built schema, never offending writes; matches unique indexes by name.
+> , never offending writes; matches unique indexes by name.

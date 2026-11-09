@@ -2365,26 +2365,15 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ## Root receipts moved on 2026-11-09
 
-These excerpts retain supporting detail from `CLAUDE.md` at
-`c7ca274eeb1426f64a825164ee3411630545efcd`. They are not new measurements or changes to the rules.
+These supporting fragments are from `CLAUDE.md` at
+`c7ca274eeb1426f64a825164ee3411630545efcd`. The headings identify their unchanged root entries.
 
-### A screen does not draw its own form field
+### Native form field guard
 
-Guard:
-`scripts/native-form-fields.test.ts`, weaker than its name — it reads string literals, and holds
-the files it allows by name only to a line count.
+> , and holds
+> the files it allows by name only to a line count.
 
-### A device's profile and
+### Device profile guard
 
-Preserve the stated action exceptions. New routes
-add refusing cases and inventory rows to `apps/server/src/till-api.profile-actions.test.ts` and
-zone rows to `apps/server/src/till-api.profile-zones.test.ts`. The inventory guard is weaker than
-its name: only its till/device/schedule mounts, and device-proof refusals, not every action
-label or zone check. The zone map remains a comment.
-[Limits](conventions-ui.md#a-devices-profile-and-the-signed-in-person-must-both-allow-what-the-device-does).
-
-### Every staff-notice code
-
-Guard:
-`scripts/staff-notice-codes.test.ts`, weaker than its name — it reads `code: "…"` literals as
-text, in source files it lists by hand. See [conventions-ui.md](conventions-ui.md).
+> , not every action
+> label or zone check. The zone map remains a comment.

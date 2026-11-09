@@ -644,13 +644,3 @@ rule of that date, not text from `1d03a7c`.
   `docs/handoffs/` are gitignored — never open a PR for one. Historical docs record what was true when
   written: add a dated pointer rather than rewriting them. The legal track is separate, in
   `docs/compliance/action-plan.md`.
-
-## Root receipts moved on 2026-11-09
-
-These excerpts retain supporting detail from `CLAUDE.md` at
-`c7ca274eeb1426f64a825164ee3411630545efcd`. They are not new measurements or changes to the rules.
-
-### Mock-ups and screenshots
-
-Cost:
-184 MiB of them in the tree when removed.
