@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   cpSync,
   mkdirSync,
   mkdtempSync,
@@ -207,6 +208,20 @@ describe("rebuilding starting migrations", () => {
       expect(bytes(f)).toEqual(mode === "check" ? corrupt : before);
     },
   );
+  it("detects and repairs an epoch date that differs from the unchanged journal", async () => {
+    const f = fixture();
+    await rebuildBaseline(f);
+    put(f.epochFile, readFileSync(f.epochFile, "utf8").replace('"when": 1500', '"when": 9999'));
+    const before = bytes(f);
+    expect(await rebuildBaseline({ ...f, mode: "check" })).toMatchObject({
+      outcome: "epoch-only",
+      differences: ["epoch when differs"],
+      when: 1500,
+    });
+    expect(bytes(f)).toEqual(before);
+    await rebuildBaseline(f);
+    expect(JSON.parse(readFileSync(f.epochFile, "utf8")).entries[0].when).toBe(1500);
+  });
   it("checks the whole snapshot while ignoring only its random id", async () => {
     const f = fixture();
     await rebuildBaseline(f);
@@ -224,8 +239,17 @@ describe("rebuilding starting migrations", () => {
     "refuses %s before generating",
     async (extra) => {
       const f = fixture();
-      if (extra === "journal") fold(f);
-      else put(join(f.set.folder, extra), "stray");
+      if (extra === "journal") {
+        const j = journal();
+        j.entries.push({
+          idx: 1,
+          version: "6",
+          tag: "0001_missing",
+          when: 2000,
+          breakpoints: true,
+        });
+        json(join(f.set.folder, "meta/_journal.json"), j);
+      } else put(join(f.set.folder, extra), "stray");
       const before = bytes(f);
       await expect(rebuildBaseline(f)).rejects.toThrow(/not the starting migration|journal/);
       expect(f.generate).not.toHaveBeenCalled();
@@ -243,7 +267,14 @@ describe("rebuilding starting migrations", () => {
         return run;
       };
       const result = await rebuildBaseline({ ...f, generate, foldGenerated: "0001_more" });
-      expect(result.when).toBe(generatedWhen === 1500 ? 2001 : 5000);
+      const expectedWhen = generatedWhen === 1500 ? 2001 : 5000;
+      expect(result.when).toBe(expectedWhen);
+      expect(
+        JSON.parse(readFileSync(join(f.set.folder, "meta/_journal.json"), "utf8")).entries,
+      ).toEqual([
+        { idx: 0, version: "6", tag: "0000_baseline", when: expectedWhen, breakpoints: true },
+      ]);
+      expect(JSON.parse(readFileSync(f.epochFile, "utf8")).entries[0].when).toBe(expectedWhen);
       expect(readdirSync(f.set.folder).sort()).toEqual(["0000_baseline.sql", "meta"]);
       expect(readdirSync(join(f.set.folder, "meta")).sort()).toEqual([
         "0000_snapshot.json",
@@ -283,6 +314,17 @@ describe("rebuilding starting migrations", () => {
     const before = bytes(f);
     await expect(rebuildBaseline({ ...f, foldGenerated: tag })).rejects.toThrow(message);
     expect(bytes(f)).toEqual(before);
+  });
+  it("restores the migration files when writing the epoch is refused", async () => {
+    const f = fixture();
+    const before = bytes(f);
+    chmodSync(f.epochFile, 0o444);
+    try {
+      await expect(rebuildBaseline(f)).rejects.toMatchObject({ code: "EACCES" });
+      expect(bytes(f)).toEqual(before);
+    } finally {
+      chmodSync(f.epochFile, 0o644);
+    }
   });
   it.each(["import", "prompt", "exit", "no SQL", "extra"])(
     "leaves everything unchanged when generation fails: %s",
@@ -324,6 +366,32 @@ describe("rebuilding starting migrations", () => {
     const file = join(f.set.packageDir, "triggers/core.sql");
     put(file, sql);
     expect(() => readTriggers(file)).toThrow(message);
+  });
+  it.each([
+    TRIGGER + "\nCREATE TRIGGER second_guard BEFORE INSERT ON x BEGIN SELECT 2; END;",
+    TRIGGER + "\nCREATE TABLE child(id integer REFERENCES x(id));",
+  ])("refuses SQL after the first complete trigger without a breakpoint", (sql) => {
+    const f = fixture();
+    const file = join(f.set.packageDir, "triggers/core.sql");
+    put(file, sql);
+    expect(() => readTriggers(file)).toThrow("after its complete CREATE TRIGGER");
+  });
+  it("accepts separated triggers with CASE expressions, quoted END and comments", () => {
+    const f = fixture();
+    const file = join(f.set.packageDir, "triggers/core.sql");
+    const first =
+      "CREATE TRIGGER case_guard BEFORE INSERT ON x BEGIN SELECT CASE WHEN new.id = 1 THEN 'END; CREATE TABLE hidden(id);' ELSE 'end' END; END; -- END;";
+    const sql = first + "\n--> statement-breakpoint\n" + TRIGGER;
+    put(file, sql);
+    expect(readTriggers(file)).toBe(sql);
+  });
+  it("refuses trigger SQL on an empty set before generation", async () => {
+    const f = fixture("fiscal-none", true);
+    put(join(f.set.packageDir, "triggers/fiscal-none.sql"), TRIGGER);
+    const before = bytes(f);
+    await expect(rebuildBaseline(f)).rejects.toThrow("empty set cannot hold trigger SQL");
+    expect(f.generate).not.toHaveBeenCalled();
+    expect(bytes(f)).toEqual(before);
   });
   it("accepts lower-case triggers and refuses an unexpected trigger file", async () => {
     const f = fixture();

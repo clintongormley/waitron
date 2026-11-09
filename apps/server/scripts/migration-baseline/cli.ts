@@ -19,7 +19,8 @@ const USAGE =
   "       controls --reference <absolute dir> --out <absolute dir>\n" +
   "       copies --dist <absolute dir> --image-root <absolute dir> --report <absolute file>\n" +
   "       rebuild --set <name> [--fold-generated <tag,...>]\n" +
-  "       rebuild-check --set <name>";
+  "       rebuild-check --set <name>\n" +
+  "--fold-generated is temporary for #2594, #2536 and #2455 only. Retire it after those in-flight migrations are folded; all later schema changes rebuild the starting migration.";
 
 function flags(
   args: readonly string[],

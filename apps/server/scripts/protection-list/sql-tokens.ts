@@ -63,7 +63,7 @@ function tokenise(sql: string): Token[] {
   return tokens;
 }
 
-function significantTokens(sql: string): Token[] {
+export function significantTokens(sql: string): Token[] {
   return tokenise(sql).filter((token) => token.kind !== "comment" && token.kind !== "lineComment");
 }
 

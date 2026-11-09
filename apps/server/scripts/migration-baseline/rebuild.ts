@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { isDeepStrictEqual, promisify } from "node:util";
 import { manifestCopySets } from "./copies.js";
-import { createdObject } from "../protection-list/sql-tokens.js";
+import { createdObject, significantTokens } from "../protection-list/sql-tokens.js";
 
 export interface RebuildSet {
   readonly name: string;
@@ -92,6 +92,18 @@ export function readTriggers(file: string): string | null {
     const object = createdObject(statement);
     if (object?.kind !== "trigger")
       throw new Error(`${file}: statement ${i + 1} is not a CREATE TRIGGER`);
+    const tokens = significantTokens(statement);
+    const end = tokens.findIndex(
+      (token, index) =>
+        token.kind === "word" &&
+        token.text.toUpperCase() === "END" &&
+        tokens[index - 1]?.text === ";",
+    );
+    const afterEnd = end + (tokens[end + 1]?.text === ";" ? 2 : 1);
+    if (end < 0 || afterEnd !== tokens.length)
+      throw new Error(
+        `${file}: statement ${i + 1} holds SQL after its complete CREATE TRIGGER; add a statement-breakpoint`,
+      );
     if (names.has(object.name)) throw new Error(`${file}: ${object.name} defined twice`);
     names.add(object.name);
   }
@@ -245,6 +257,8 @@ export async function rebuildBaseline({
   if (unexpected.length)
     throw new Error(`${set.name}: unexpected file in triggers/: ${unexpected.join(", ")}`);
   const triggers = readTriggers(triggerFile);
+  if (!populated && triggers !== null)
+    throw new Error(`${set.name}: empty set cannot hold trigger SQL`);
   const scratch = mkdtempSync(join(tmpdir(), "wt-rebuild-")),
     outDir = join(scratch, "drizzle"),
     configPath = join(scratch, "drizzle.config.ts");

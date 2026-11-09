@@ -3384,7 +3384,7 @@ determinism case.
   **`rebuild-check --set <name>`** compares without writing the set or epoch. `rebuild` exits 0
   on success and 2 on refusal; `rebuild-check` exits 0 unchanged, 1 if it would change anything,
   and 2 on refusal. `scripts/starting-migrations.test.ts` checks every set and refuses a second
-  migration. Until go-live, rebuild instead of adding migrations.
+  migration. Until go-live, rebuild instead of adding migrations. Run set rebuilds one at a time: they share the epoch file.
 - **`preserve --reference <list dir> --set <name> --from <old set,old set,...>`** rewrites the one
   generated SQL file of the manifest set `<name>`. The reference is a `protection-list list` folder
   built from the old history, and only its `sql-only` phase is read, so triggers the installers add

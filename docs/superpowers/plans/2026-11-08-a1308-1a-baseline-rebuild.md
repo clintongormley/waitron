@@ -57,6 +57,14 @@ set's committed SQL differs from what `drizzle-kit generate` writes into an empt
 fiscal-verifactu 94, core 870 before its triggers), because A760's `preserve` kept the old history's
 text and column order.
 
+**Watcher decision, 2026-11-09 11:30 (Lane H questions.md):** `--fold-generated` is temporary for
+#2594, #2536 and #2455's `0003` if it lands first. Retire it after those in-flight migrations are
+folded: in 1a if #2455 has landed, otherwise in the first A1308 slice touching rebuild after that
+fold. Every later schema change rebuilds the starting migration. The approved fix round rejects
+extra SQL after one complete trigger per breakpoint, refuses trigger SQL for empty sets, strengthens
+the journal/date/rollback checks, and documents that rebuilds run serially. No SQL-origin verifier
+or concurrency controller is added.
+
 ## Words used here
 
 - **Migration set:** one folder of drizzle migration files with its own journal table; the eight
