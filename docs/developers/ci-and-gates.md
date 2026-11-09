@@ -142,7 +142,7 @@ External provenance, read 2026-11-06:
 Set `DISPOSABLE_TESTS_MODE=server` to route CI jobs to Lane I's disposable Linux
 runners. Same-repository pull requests, main pushes, tags, schedules, manual runs and
 ordinary reruns are eligible for the server route when the queue-pressure comparison below selects it. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
-GitHub so routing, recovery and the required result can still run when server assignment
+GitHub so routing, health checks and the required result can still run when server assignment
 stops (watcher, 2026-11-08 16:00). Image smoke always uses `ubuntu-latest` until a
 disposable guest is qualified (watcher, 2026-11-09 08:20). CI still passes
 `server_route` into the reusable image workflow, but that input does not choose its runner.
@@ -210,7 +210,7 @@ retry record or previous attempt is uncertainty: routing still checks other read
 
 The hosted queue watchdog reads its configured families in pages of 30, allowing ten
 seconds for each complete read. It waits up to five minutes, with at most ten polls and
-200 API calls including the recovery dispatch. Reads require complete family membership,
+200 API calls including dispatch of the health check. Reads require complete family membership,
 unique job IDs and matching run, attempt, head and labels. After the wait it dispatches
 `server-health.yml` on `main`. A valid waiting inventory and accepted dispatch pass this
 watchdog; incomplete inventories and refused dispatches fail it. The shell retains its
@@ -228,14 +228,18 @@ old shows positive slots all occupied, or recent completed server traffic explai
 Missing, invalid, stale or zero capacity cannot suppress that alarm. The existing
 machine-local stall watcher reports failed health workflows for intervention.
 Incomplete inventories are reported without changing work; API failures remain visible.
-The explicit `recover` helper is retained for manual tools and is not scheduled.
+The explicit `recover` helper is retained for manual tools and is not scheduled. A stuck
+job can keep new runs on hosted until someone resolves it; the check only reports the stop.
 
 The health reader requests job inventories in pages of 30 and run inventories in pages of 100.
 GET failures reporting HTTP 5xx get two 15-second attempts, one second apart. Writes and
 JSON parse errors are not retried; the final request error remains visible.
 A server route chosen without readable inputs logs `CI_ROUTE_BLIND run=ID attempt=N`
 once, including a failed routing-module fetch. Use those lines to count daily blind
-routes after deployment; this change does not reconsider or move them.
+routes after deployment; this change does not reconsider or move them. The workflow-module
+fetch also retries once after one second. A routing step killed at its existing two-minute
+limit leaves an empty route and uses hosted runners; it does not emit a BLIND line, so
+the daily count excludes those killed-step choices. Read failed routing-step logs separately.
 On 9 November, the attempt-job endpoints for runs `42580703144` (84 jobs) and `42584158356`
 (87 jobs) returned HTTP 502 with 100-record pages and returned 30 records with 30-record pages.
 The reader keeps its complete-count, unique-ID and run/attempt/head checks across those pages.

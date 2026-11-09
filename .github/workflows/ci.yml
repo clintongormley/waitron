@@ -305,7 +305,9 @@ jobs:
           LABEL_PREFIX: ${{ vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt' }}
         run: |
           if gh api "repos/$GITHUB_REPOSITORY/contents/scripts/ci-server-health.mjs?ref=$GITHUB_WORKFLOW_SHA" \
-            -H "Accept: application/vnd.github.raw+json" > "$RUNNER_TEMP/ci-server-health.mjs"; then
+            -H "Accept: application/vnd.github.raw+json" > "$RUNNER_TEMP/ci-server-health.mjs" ||
+             { sleep 1; gh api "repos/$GITHUB_REPOSITORY/contents/scripts/ci-server-health.mjs?ref=$GITHUB_WORKFLOW_SHA" \
+               -H "Accept: application/vnd.github.raw+json" > "$RUNNER_TEMP/ci-server-health.mjs"; }; then
             node "$RUNNER_TEMP/ci-server-health.mjs" route
           else
             echo "server_route=server" >> "$GITHUB_OUTPUT"
@@ -3968,19 +3970,19 @@ jobs:
           done
           if ! request "$end" "repos/$REPO/actions/runs/$RUN_ID" ||
              ! jq -e '.id == ($ENV.RUN_ID | tonumber) and .run_attempt == ($ENV.RUN_ATTEMPT | tonumber) and .head_sha == $ENV.HEAD_SHA' "$scratch/response"; then
-            echo 'Cannot confirm this run attempt before requesting recovery' >&2; exit 1
+            echo 'Cannot confirm this run attempt before requesting a health check' >&2; exit 1
           fi
           if jq -e '.status == "completed"' "$scratch/response" > /dev/null; then exit 0; fi
           for attempt in 1 2; do
             if request "$end" --method POST "repos/$REPO/actions/workflows/server-health.yml/dispatches" -f ref=main; then
-              echo "Independent recovery requested because $waiting jobs are still queued; it checks server activity before acting" >&2
+              echo "Read-only health check requested because $waiting jobs are still queued; it reports stopped server activity" >&2
               [ "$valid_inventory" = true ]
               exit $?
             fi
             if grep -q 'HTTP 409' "$scratch/error" && request "$end" "repos/$REPO/actions/runs/$RUN_ID" &&
                jq -e '.id == ($ENV.RUN_ID | tonumber) and .run_attempt == ($ENV.RUN_ATTEMPT | tonumber) and .head_sha == $ENV.HEAD_SHA and .status == "completed"' "$scratch/response"; then exit 0; fi
           done
-          echo "Could not request independent recovery of the queued $waiting jobs" >&2
+          echo "Could not request a read-only health check for the queued $waiting jobs" >&2
           exit 1
           WATCHDOG
 

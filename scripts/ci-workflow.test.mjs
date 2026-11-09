@@ -667,7 +667,7 @@ exit "$status"
     expect(result.status, result.output).not.toBe(0);
     expect(recoveryDispatches(result)).toHaveLength(2);
     expect(result.output).toContain(
-      "Could not request independent recovery of the queued test-ui jobs",
+      "Could not request a read-only health check for the queued test-ui jobs",
     );
   });
   it.each(["name", "head", "attempt", "label", "missing"])(

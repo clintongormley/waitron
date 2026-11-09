@@ -101,7 +101,7 @@ function sibling(f, fields, after = 0) {
 }
 
 describe("server health recovery", () => {
-  it.each(["free", "zero", "stale", "missing", "invalid", "full"])(
+  it.each(["free", "zero", "stale", "future", "text-running", "missing", "invalid", "full"])(
     "checks a stalled queue without writes when capacity is %s",
     async (state) => {
       const f = fixture(),
@@ -114,9 +114,10 @@ describe("server health recovery", () => {
                 throw new SyntaxError("bad capacity");
               }
             : {
-                observedAt: state === "stale" ? now - 300_000 : now,
+                observedAt:
+                  state === "stale" ? now - 300_000 : state === "future" ? now + 2000 : now,
                 slots: state === "zero" ? 0 : 6,
-                serverRunning: state === "free" ? 5 : 6,
+                serverRunning: state === "free" ? 5 : state === "text-running" ? "6" : 6,
               };
       const check = health.healthCommand("check", f.options, {
         report: (line) => reports.push(line),
@@ -441,11 +442,13 @@ describe("server health recovery", () => {
 
   it("retries one transient GitHub read with the same bounded request", () => {
     const calls = [],
+      times = [],
       failure = Object.assign(new Error("gh: Bad Gateway (HTTP 502)"), {
         stderr: "gh: Bad Gateway (HTTP 502)",
       });
     const answer = health.githubRequest("/repos/o/r", undefined, (...args) => {
       calls.push(args);
+      times.push(performance.now());
       if (calls.length === 1) throw failure;
       return '{"id":42}';
     });
@@ -453,6 +456,7 @@ describe("server health recovery", () => {
     expect(calls).toHaveLength(2);
     expect(calls[1]).toEqual(calls[0]);
     expect(calls[1][2].timeout).toBe(15000);
+    expect(times[1] - times[0]).toBeGreaterThanOrEqual(1000);
   });
 
   it.each([
