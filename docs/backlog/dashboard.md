@@ -1014,12 +1014,10 @@ minimised, especially for use on mobiles".
 - **Phone side margins and the demo link strip** (owner, 2026-10-14, from a phone screenshot of the
   Routes tab):
   "the mobile view still has a lot of margin on the sides which narrows the page width
-  considerably". The page body keeps `padding: var(--wt-space-5)` at every width
-  (`apps/dashboard/index.html`), drawing a frame round the whole shell, and each screen pads its
-  content again inside. On a phone both shrink to a narrow gutter or none. The Demo and Preparation
-  link strip (`wt-demo-bar`, `packages/ui/src/components/wt-demo-bar.ts`) wraps to two rows there;
-  keep it to one, for example a row that scrolls sideways. Live mode draws no strip, but a venue
-  uses Preparation while being set up.
+  considerably". The phone-space slice removes the outer frame at the drawer breakpoint and uses
+  `--wt-space-2` inline content gutters. Demo and Preparation links stay on one horizontally
+  scrolling row; Live draws no strip. The shared scrolling work and the row-space target above
+  remain open, including Structure’s short-phone selection view.
 
 ## A657 — Cancel leaves without asking
 

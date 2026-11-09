@@ -5722,16 +5722,16 @@ describe("the floor plan editor inside the real page", () => {
     });
   });
 
-  it("keeps another screen's padding at 390 px", async () => {
+  it("keeps another screen's narrow gutters at 390 px", async () => {
     history.replaceState(null, "", "/manage/overview");
     const { el, unmount } = await mountInRealPage(floorPlanApi("en-GB"), 390, 844);
     try {
       expect(el.shadowRoot!.querySelector("dashboard-overview-screen")).not.toBeNull();
       const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
       const style = getComputedStyle(body);
-      expect(body.getBoundingClientRect().left + Number.parseFloat(style.paddingLeft)).toBe(40);
+      expect(body.getBoundingClientRect().left + Number.parseFloat(style.paddingLeft)).toBe(8);
       expect(body.getBoundingClientRect().right - Number.parseFloat(style.paddingRight)).toBe(
-        window.innerWidth - 40,
+        window.innerWidth - 8,
       );
     } finally {
       await unmount();

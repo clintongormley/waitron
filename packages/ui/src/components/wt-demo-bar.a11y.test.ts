@@ -9,6 +9,7 @@ afterEach(cleanup);
 describe.each(["light", "dark"] as const)("wt-demo-bar a11y (%s theme)", (theme) => {
   test.each(["Demo", "Preparation"])("%s navigation", async (modeLabel) => {
     const el = (await mountThemed("<wt-demo-bar></wt-demo-bar>", theme)) as WtDemoBar;
+    host.style.width = "240px";
     el.modeLabel = modeLabel;
     el.navigationLabel = `${modeLabel} navigation`;
     el.links = [

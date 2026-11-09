@@ -3887,8 +3887,9 @@ venue and 102 px for a Live one, and CI's Chromium drew this branch's banner 1 p
 the current dashboard page, a link to the device page, and an "Email inbox" link to `/manage/email`
 (the inbox screen, also linked from setup's done page). Signed out, the inbox link always shows;
 signed in, it shows only to a session that may open the inbox screen (a manager or an admin). The
-sidebar has no entry for that screen. The bar wraps its links at phone width while each link keeps
-the minimum tap height.
+sidebar has no entry for that screen. Keep the bar on one line so it leaves room for the page
+below. Its links scroll horizontally when they do not fit, keep their minimum tap height and
+remain reachable by Tab.
 
 When the session may see alerts, the alerts bell (`dashboard-alerts-bell`, a `wt-row-actions` with
 the `bell` icon and a `wt-count-badge` in its `badge` slot) sits immediately before the help switch.
@@ -4369,6 +4370,11 @@ Use image fills the tile's width and uses the secondary style; the full-size pho
 the primary style (owner, 2026-10-14, A651).
 
 ### Spacing rhythm
+
+At the dashboard’s drawer breakpoint (`48rem` and below), remove the outer page frame and use
+`--wt-space-2` for the content column’s inline gutters, so tables have more room on a phone. Keep
+its block padding at `--wt-space-4`. Above that breakpoint, keep the page frame at `--wt-space-5`
+and content padding at `--wt-space-4`.
 
 Using the existing `--wt-space-*` scale:
 
