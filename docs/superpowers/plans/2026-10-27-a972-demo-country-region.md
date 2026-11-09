@@ -1,5 +1,9 @@
 # A972 Demo Data per Country and Region Implementation Plan
 
+> **2026-11-09 (A1458 slice 1b):** Regional demo single names now follow the English/Spanish seed
+> language; regional translations and customer maps remain. The regional-name overrides below
+> describe the earlier behavior. See [A1458's approved plan](../plans/2026-11-09-a1458-venue-language.md).
+
 > **For agentic workers:** Execute inline with `superpowers:executing-plans`. Read `superpowers:test-driven-development` before writing code. The parent driver owns workflow; do not automatically
 delegate tasks to implementers or reviewers. Steps use checkboxes for tracking.
 

@@ -239,6 +239,15 @@ for (const locale of ["en", "es"] as const) {
       await readFile(new URL(`plain-name-changes.${locale}.json`, root), "utf8"),
     ) as MadridNameChange[];
     expected.seeded = madridWithNameChanges(expected.seeded, nameChanges);
+    if (locale === "en") {
+      const department = '@departments:["Deli"]';
+      for (const [position, name] of ["Set up", "Take order", "Anything else?"].entries()) {
+        const key = `@service_steps:${JSON.stringify([department, position])}`;
+        const row = expected.seeded.tables.service_steps!.rows[key]!;
+        expect(row.name).toBe(["Montar mesa", "Tomar nota", "¿Algo más?"][position]);
+        row.name = name;
+      }
+    }
     expected.before = madridWithRenamedColumns(expected.before, RENAMED_COLUMNS);
     expected.provisioned = madridWithRenamedColumns(expected.provisioned, RENAMED_COLUMNS);
     expected.seeded = madridWithRenamedColumns(expected.seeded, RENAMED_COLUMNS);

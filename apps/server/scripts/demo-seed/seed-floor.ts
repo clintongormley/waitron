@@ -70,7 +70,7 @@ export async function seedFloor(
   await tx
     .insert(departmentSalePolicies)
     .values({ departmentId: deliDepartmentId, orderStart: "counter" });
-  await addStarterServiceSteps(tx, deliDepartmentId);
+  await addStarterServiceSteps(tx, deliDepartmentId, locale);
 
   const zoneIds = new Map<string, string>();
   for (const zone of floor.zones) {

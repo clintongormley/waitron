@@ -153,7 +153,6 @@ export const CASA_DELGADO_GL = {
   ...CASA_DELGADO_ES,
   id: "casa-delgado-gl",
   mediaDataSet: "casa-delgado-gl",
-  plainNameLanguage: "gl",
   contentLanguages: ["gl", "es", "en"],
   menus: {
     ...CASA_DELGADO_ES.menus,

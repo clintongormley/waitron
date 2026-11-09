@@ -948,16 +948,16 @@ Each extra stays separate. The retired Allergens screen has no destination or pr
 
 A demo set up in Catalonia or the Balearic Islands uses the pack's
 `casa-delgado-ca` data and Can Delgado as the default venue name. The tenant's stored country
-and the venue's province select the data. Catalan staff and kitchen names are a
-demo-only override; customer content remains Catalan, Spanish and English.
-The Valencian Community selects `casa-delgado-valencia`, with Casa Delgado de l'Horta
-as its default venue name. Its plain names use `ca-ES-valencia`; content starts in
-Valencian, Spanish and English, while its default receipt language stays `es-ES`.
-Galicia selects `casa-delgado-gl`, with A Casa Delgado as its default venue name.
-Its plain names use `gl`, content starts in Galician, Spanish and English, and
-receipts default to `es-ES`.
-The staff screens remain English or Spanish. Madrid retains English/Spanish
-staff-name selection and its frozen database comparison.
+and the venue's province select the data. The Valencian Community selects
+`casa-delgado-valencia` and Casa Delgado de l'Horta; Galicia selects `casa-delgado-gl` and
+A Casa Delgado.
+
+The seed's English/Spanish language writes the single names you see for staff and kitchen
+products, menus, departments, stations and service steps. Regional wording remains in the data;
+customer content keeps Catalan/Valencian/Galician, Spanish and English. Receipt language keeps
+its separate choice. A1458's later setup slices add an explicit working-language choice; until
+then the seed uses its existing language resolver. A country without its own demo keeps the
+English fallback. Madrid retains its frozen database comparison.
 
 Setup tracks whether the suggested name is automatic or has been edited.
 An edit keeps the name through later region changes and Review/Back, including

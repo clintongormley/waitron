@@ -38,6 +38,14 @@ const expected = JSON.parse(
   menus: { restaurant: string; lunch: string };
   products: { staff: string; price: string; vatClass: string }[];
 };
+function regionalProduct(set: selections.DemoDataSet, language: string, name: string) {
+  const product = [set.menus.restaurant, set.menus.deli, set.menus.lunch]
+    .flatMap((menu) => menu.categories.flatMap((category) => category.products))
+    .find((product) => product.staffName?.[language] === name);
+  expect(product, `${set.id}/${language}/${name}`).toBeDefined();
+  return product!;
+}
+
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60000,
@@ -81,37 +89,46 @@ for (const [province, postalCode, invoiceLocale] of [
         listTranslationGapReport(tx, languageConfig),
       );
       expect(gaps.flatMap((language) => language.gaps)).toEqual([]);
+      const sausageNames = regionalProduct(selection.dataSet, "ca", expected.sausage.staff);
+      const wineName = regionalProduct(selection.dataSet, "ca", expected.wine).staffName![locale];
       const rows = suite.db.all<{
         name: string;
         kitchen_name: string;
         customer_name: string;
         image: string;
       }>(sql`select name,kitchen_name,customer_name,image from products where parent_id is null`);
-      expect(rows.some((p) => p.name === expected.sausage.staff)).toBe(true);
-      const sausage = rows.find((p) => p.name === expected.sausage.staff)!;
-      expect(sausage.kitchen_name).toBe(expected.sausage.kitchen);
+      expect(rows.some((p) => p.name === sausageNames.staffName![locale])).toBe(true);
+      const sausage = rows.find((p) => p.name === sausageNames.staffName![locale])!;
+      expect(sausage.kitchen_name).toBe(sausageNames.kitchenName![locale]);
       expect(JSON.parse(sausage.customer_name)).toMatchObject({
         ca: expected.sausage.customer.ca,
         en: "House Catalan sausage with white beans",
       });
       const menus = suite.db.all<{ id: string; name: string }>(sql`select id,name from catalogues`);
-      const drinks = menus.find((m) => m.name === expected.drinks)!;
+      const drinks = menus.find((m) => m.name === selection.dataSet.menus.drinksName[locale])!;
       expect(drinks).toBeDefined();
       const doc = await withTransaction(suite.db, (tx) => buildMenuDocument(tx, drinks.id));
-      expect(JSON.stringify(doc)).toContain(expected.wine);
-      expect(JSON.stringify(doc)).not.toContain(expected.sausage.staff);
-      for (const name of [expected.menus.restaurant, expected.menus.lunch]) {
+      expect(JSON.stringify(doc)).toContain(wineName);
+      expect(JSON.stringify(doc)).not.toContain(sausageNames.staffName![locale]);
+      for (const name of [
+        selection.dataSet.menus.restaurant.name[locale],
+        selection.dataSet.menus.lunch.name[locale],
+      ]) {
         const menu = menus.find((row) => row.name === name)!;
         expect(menu, name).toBeDefined();
         const offers = await withTransaction(suite.db, (tx) => listMenuOffers(tx, [menu.id]));
-        expect(offers.find((offer) => offer.name === expected.wine)).toMatchObject({
+        expect(offers.find((offer) => offer.name === wineName)).toMatchObject({
           unitPrice: "4.50",
           vatClass: "general",
         });
-        if (name === expected.menus.restaurant)
+        if (name === selection.dataSet.menus.restaurant.name[locale])
           for (const product of expected.products)
             expect(
-              offers.find((offer) => offer.name === product.staff),
+              offers.find(
+                (offer) =>
+                  offer.name ===
+                  regionalProduct(selection.dataSet, "ca", product.staff).staffName![locale],
+              ),
               product.staff,
             ).toMatchObject({ unitPrice: product.price, vatClass: product.vatClass });
       }
@@ -153,8 +170,8 @@ for (const [province, postalCode, invoiceLocale] of [
         await rm(root, { recursive: true });
       }
       const available = (await listAvailableProducts(suite.db)).products;
-      expect(available.some((p) => p.name === expected.sausage.staff)).toBe(true);
-      expect(available.some((p) => p.name === expected.wine)).toBe(true);
+      expect(available.some((p) => p.name === sausageNames.staffName![locale])).toBe(true);
+      expect(available.some((p) => p.name === wineName)).toBe(true);
       const input = vi.mocked(seedSales).mock.calls.at(-1)![1];
       expect(input.products.map((p) => p.id).sort()).toEqual(available.map((p) => p.id).sort());
       const sales = suite.db.all<{ invoice_locales: string; descriptions: string }>(
@@ -185,7 +202,7 @@ it("records a forced regional-only pool through the unchanged fiscal seat", asyn
     dataSet: selection.dataSet,
   });
   const product = (await listAvailableProducts(suite.db)).products.find(
-    (p) => p.name === expected.sausage.staff,
+    (p) => p.name === "Butifarra con judías",
   )!;
   const { count } = await seedSales(suite.db, {
     venue: { nodeId: venue.nodeId, seriesId: venue.seriesId },
@@ -207,7 +224,7 @@ it("records a forced regional-only pool through the unchanged fiscal seat", asyn
   );
   expect(rows.length).toBeGreaterThan(0);
   for (const row of rows) {
-    expect(row.name).toBe(expected.sausage.staff);
+    expect(row.name).toBe("Butifarra con judías");
     expect(JSON.parse(row.descriptions)).toEqual({ "ca-ES": expected.sausage.customer.ca });
   }
   expect(suite.db.all<{ n: number }>(sql`select count(*) as n from registros_facturacion`)).toEqual(
@@ -245,36 +262,39 @@ for (const locale of ["en", "es"] as const)
     });
     const gaps = await withTransaction(suite.db, (tx) => listTranslationGapReport(tx, languages));
     expect(gaps.flatMap((language) => language.gaps)).toEqual([]);
+    const dishNames = regionalProduct(selection.dataSet, "ca-ES-valencia", VALENCIA_DEMO_TEXT.dish);
+    const staffName = (name: string) =>
+      regionalProduct(selection.dataSet, "ca-ES-valencia", name).staffName![locale];
     const rows = suite.db.all<{
       name: string;
       kitchen_name: string;
       customer_name: string;
       image: string;
     }>(sql`select name,kitchen_name,customer_name,image from products where parent_id is null`);
-    expect(rows.find((p) => p.name === VALENCIA_DEMO_TEXT.dish)).toMatchObject({
-      kitchen_name: VALENCIA_DEMO_TEXT.dishKitchen,
+    expect(rows.find((p) => p.name === dishNames.staffName![locale])).toMatchObject({
+      kitchen_name: dishNames.kitchenName![locale],
     });
-    expect(JSON.parse(rows.find((p) => p.name === VALENCIA_DEMO_TEXT.dish)!.customer_name)).toEqual(
-      {
-        "ca-ES-valencia": VALENCIA_DEMO_TEXT.dishCustomer,
-        es: VALENCIA_DEMO_TEXT.dishCustomer,
-        en: "House eel and potato stew",
-      },
-    );
+    expect(
+      JSON.parse(rows.find((p) => p.name === dishNames.staffName![locale])!.customer_name),
+    ).toEqual({
+      "ca-ES-valencia": VALENCIA_DEMO_TEXT.dishCustomer,
+      es: VALENCIA_DEMO_TEXT.dishCustomer,
+      en: "House eel and potato stew",
+    });
     const menus = suite.db.all<{ id: string; name: string }>(sql`select id,name from catalogues`);
     for (const name of [
-      VALENCIA_DEMO_TEXT.drinksMenu,
-      VALENCIA_DEMO_TEXT.restaurantMenu,
-      VALENCIA_DEMO_TEXT.lunchMenu,
+      selection.dataSet.menus.drinksName[locale],
+      selection.dataSet.menus.restaurant.name[locale],
+      selection.dataSet.menus.lunch.name[locale],
     ]) {
       const menu = menus.find((m) => m.name === name)!;
       expect(menu, name).toBeDefined();
       const offers = await withTransaction(suite.db, (tx) => listMenuOffers(tx, [menu.id]));
-      expect(offers.find((p) => p.name === VALENCIA_DEMO_TEXT.wine)).toMatchObject({
+      expect(offers.find((p) => p.name === staffName(VALENCIA_DEMO_TEXT.wine))).toMatchObject({
         unitPrice: "4.00",
         vatClass: "general",
       });
-      if (name === VALENCIA_DEMO_TEXT.restaurantMenu)
+      if (name === selection.dataSet.menus.restaurant.name[locale])
         for (const [dish, price] of [
           [VALENCIA_DEMO_TEXT.dish, "14.50"],
           [VALENCIA_DEMO_TEXT.salad, "8.50"],
@@ -285,11 +305,11 @@ for (const locale of ["en", "es"] as const)
           [VALENCIA_DEMO_TEXT.dessert, "5.50"],
         ])
           expect(
-            offers.find((p) => p.name === dish),
+            offers.find((p) => p.name === staffName(dish)),
             dish,
           ).toMatchObject({ unitPrice: price, vatClass: "reduced" });
-      if (name === VALENCIA_DEMO_TEXT.drinksMenu)
-        expect(offers.some((p) => p.name === VALENCIA_DEMO_TEXT.dish)).toBe(false);
+      if (name === selection.dataSet.menus.drinksName[locale])
+        expect(offers.some((p) => p.name === dishNames.staffName![locale])).toBe(false);
     }
     const people = suite.db.all<{
       display_name: string;
@@ -346,7 +366,7 @@ for (const locale of ["en", "es"] as const)
       VALENCIA_DEMO_TEXT.wine,
     ])
       expect(
-        pool.some((p) => p.name === name),
+        pool.some((p) => p.name === staffName(name)),
         name,
       ).toBe(true);
     const sales = suite.db.all<{ invoice_locales: string; descriptions: string }>(
@@ -359,7 +379,7 @@ for (const locale of ["en", "es"] as const)
     }
   });
 
-it("stores the Valencian plain-name entry when Catalan and Valencian differ", async () => {
+it("uses the Spanish seed language when the data also has Catalan and Valencian entries", async () => {
   const venue = await createDemoVenueProvisioner(() => suite.db, {
     nifBase: 98000000,
     nifFormat: "calculated",
@@ -368,7 +388,6 @@ it("stores the Valencian plain-name entry when Catalan and Valencian differ", as
     postalCode: "46001",
   })();
   const { dataSet, identity } = await selections.readDemoSeedSelection(suite.db);
-  expect(dataSet.plainNameLanguage).toBe("ca-ES-valencia");
   const synthetic = {
     ...dataSet,
     printerName: {
@@ -385,7 +404,7 @@ it("stores the Valencian plain-name entry when Catalan and Valencian differ", as
     dataSet: synthetic,
     departmentTradingNames: identity.departmentTradingNames,
   });
-  expect(suite.db.all(sql`select name from printers`)).toEqual([{ name: "Valencian printer" }]);
+  expect(suite.db.all(sql`select name from printers`)).toEqual([{ name: "Spanish printer" }]);
 });
 
 it.each([
@@ -416,7 +435,8 @@ it.each([
     departmentTradingNames: identity.departmentTradingNames,
   });
   const available = (await listAvailableProducts(suite.db)).products;
-  const product = available.find((p) => p.name === name)!;
+  const staffName = regionalProduct(dataSet, "ca-ES-valencia", name!).staffName!.es;
+  const product = available.find((p) => p.name === staffName)!;
   expect(product, name).toBeDefined();
   const { count } = await seedSales(suite.db, {
     venue: { nodeId: venue.nodeId, seriesId: venue.seriesId },
@@ -434,11 +454,11 @@ it.each([
   });
 
   const rows = suite.db.all<{ name: string; descriptions: string }>(
-    sql`select name,descriptions from sale_lines where name=${name!}`,
+    sql`select name,descriptions from sale_lines where name=${staffName}`,
   );
   expect(rows.length).toBeGreaterThan(0);
   for (const row of rows) {
-    expect(row.name).toBe(name);
+    expect(row.name).toBe(staffName);
     expect(JSON.parse(row.descriptions)).toEqual({ "es-ES": customer });
   }
   expect(count).toBeGreaterThan(0);
@@ -477,34 +497,39 @@ for (const locale of ["en", "es"] as const)
     });
     const gaps = await withTransaction(suite.db, (tx) => listTranslationGapReport(tx, languages));
     expect(gaps.flatMap((language) => language.gaps)).toEqual([]);
+    const dishNames = regionalProduct(selection.dataSet, "gl", GALICIA_DEMO_TEXT.dish);
+    const staffName = (name: string) =>
+      regionalProduct(selection.dataSet, "gl", name).staffName![locale];
     const rows = suite.db.all<{
       name: string;
       kitchen_name: string;
       customer_name: string;
       image: string;
     }>(sql`select name,kitchen_name,customer_name,image from products where parent_id is null`);
-    expect(rows.find((p) => p.name === GALICIA_DEMO_TEXT.dish)).toMatchObject({
-      kitchen_name: GALICIA_DEMO_TEXT.dishKitchen,
+    expect(rows.find((p) => p.name === dishNames.staffName![locale])).toMatchObject({
+      kitchen_name: dishNames.kitchenName![locale],
     });
-    expect(JSON.parse(rows.find((p) => p.name === GALICIA_DEMO_TEXT.dish)!.customer_name)).toEqual({
+    expect(
+      JSON.parse(rows.find((p) => p.name === dishNames.staffName![locale])!.customer_name),
+    ).toEqual({
       gl: GALICIA_DEMO_TEXT.dishCustomer,
       es: GALICIA_DEMO_TEXT.dishCustomerEs,
       en: "House Galician savoury pie",
     });
     const menus = suite.db.all<{ id: string; name: string }>(sql`select id,name from catalogues`);
     for (const name of [
-      GALICIA_DEMO_TEXT.drinksMenu,
-      GALICIA_DEMO_TEXT.restaurantMenu,
-      GALICIA_DEMO_TEXT.lunchMenu,
+      selection.dataSet.menus.drinksName[locale],
+      selection.dataSet.menus.restaurant.name[locale],
+      selection.dataSet.menus.lunch.name[locale],
     ]) {
       const menu = menus.find((m) => m.name === name)!;
       expect(menu, name).toBeDefined();
       const offers = await withTransaction(suite.db, (tx) => listMenuOffers(tx, [menu.id]));
-      expect(offers.find((p) => p.name === GALICIA_DEMO_TEXT.wine)).toMatchObject({
+      expect(offers.find((p) => p.name === staffName(GALICIA_DEMO_TEXT.wine))).toMatchObject({
         unitPrice: "4.50",
         vatClass: "general",
       });
-      if (name === GALICIA_DEMO_TEXT.restaurantMenu)
+      if (name === selection.dataSet.menus.restaurant.name[locale])
         for (const [dish, price] of [
           [GALICIA_DEMO_TEXT.dish, "8.50"],
           [GALICIA_DEMO_TEXT.soup, "6.50"],
@@ -515,11 +540,11 @@ for (const locale of ["en", "es"] as const)
           [GALICIA_DEMO_TEXT.cake, "5.50"],
         ])
           expect(
-            offers.find((p) => p.name === dish),
+            offers.find((p) => p.name === staffName(dish)),
             dish,
           ).toMatchObject({ unitPrice: price, vatClass: "reduced" });
-      if (name === GALICIA_DEMO_TEXT.drinksMenu)
-        expect(offers.some((p) => p.name === GALICIA_DEMO_TEXT.dish)).toBe(false);
+      if (name === selection.dataSet.menus.drinksName[locale])
+        expect(offers.some((p) => p.name === dishNames.staffName![locale])).toBe(false);
     }
     const people = suite.db.all<{
       display_name: string;
@@ -576,7 +601,7 @@ for (const locale of ["en", "es"] as const)
       GALICIA_DEMO_TEXT.wine,
     ])
       expect(
-        pool.some((p) => p.name === name),
+        pool.some((p) => p.name === staffName(name)),
         name,
       ).toBe(true);
     const sales = suite.db.all<{ invoice_locales: string; descriptions: string }>(
@@ -617,7 +642,8 @@ it.each([
     departmentTradingNames: identity.departmentTradingNames,
   });
   const available = (await listAvailableProducts(suite.db)).products;
-  const product = available.find((p) => p.name === name)!;
+  const staffName = regionalProduct(dataSet, "gl", name!).staffName!.es;
+  const product = available.find((p) => p.name === staffName)!;
   expect(product, name).toBeDefined();
   const { count } = await seedSales(suite.db, {
     venue: { nodeId: venue.nodeId, seriesId: venue.seriesId },
@@ -635,11 +661,11 @@ it.each([
   });
 
   const rows = suite.db.all<{ name: string; descriptions: string }>(
-    sql`select name,descriptions from sale_lines where name=${name!}`,
+    sql`select name,descriptions from sale_lines where name=${staffName}`,
   );
   expect(rows.length).toBeGreaterThan(0);
   for (const row of rows) {
-    expect(row.name).toBe(name);
+    expect(row.name).toBe(staffName);
     expect(JSON.parse(row.descriptions)).toEqual({ "es-ES": customer });
   }
   expect(count).toBeGreaterThan(0);
