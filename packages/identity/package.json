@@ -20,7 +20,7 @@
     "@waitron/store": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
     "drizzle-orm": "^0.45.4",
-    "otplib": "^13.5.0"
+    "otplib": "^13.6.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

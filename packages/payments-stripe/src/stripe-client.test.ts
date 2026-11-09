@@ -112,7 +112,7 @@ describe("stripeClient's Terminal creation through the real SDK", () => {
         {
           method: "POST",
           path: "/v1/payment_intents",
-          version: "2026-09-30.endive",
+          version: "2026-10-28.endive",
           key: "wo_terminal",
           body: {
             amount: "1210",
