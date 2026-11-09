@@ -64,6 +64,23 @@ export async function cancelMail(
     .returning({ id: outgoingMail.id });
   return rows.length !== 0;
 }
+export async function reopenMail(
+  tx: Transaction,
+  dedupeKey: string,
+  times: { notAfter: Date; nextAttemptAt: Date },
+): Promise<boolean> {
+  const rows = await tx
+    .update(outgoingMail)
+    .set({
+      status: sql`case when ${outgoingMail.attempts} = 0 then 'pending' else 'rejected' end`,
+      finishedAt: null,
+      nextAttemptAt: sql`case when ${outgoingMail.attempts} = 0 then ${times.nextAttemptAt.toISOString()} else ${outgoingMail.nextAttemptAt} end`,
+      notAfter: times.notAfter.toISOString(),
+    })
+    .where(and(eq(outgoingMail.dedupeKey, dedupeKey), eq(outgoingMail.status, "cancelled")))
+    .returning({ id: outgoingMail.id });
+  return rows.length !== 0;
+}
 export async function readMail(
   tx: Transaction,
   dedupeKey: string,

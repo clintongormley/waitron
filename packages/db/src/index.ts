@@ -508,7 +508,13 @@ export {
 export type { SettingsParse, SettingsDocument, SettingsRead, SettingsChange } from "./settings.js";
 
 export * from "./schema/outgoing-mail.js";
-export { enqueueMail, cancelMail, readMail, MAIL_LIFETIME_MS } from "./outgoing-mail.js";
+export {
+  enqueueMail,
+  cancelMail,
+  reopenMail,
+  readMail,
+  MAIL_LIFETIME_MS,
+} from "./outgoing-mail.js";
 export type { MailRequest } from "./outgoing-mail.js";
 
 export { activityLog } from "./schema/activity-log.js";

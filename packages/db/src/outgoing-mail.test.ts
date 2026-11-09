@@ -4,7 +4,13 @@ import { CORE_MIGRATIONS } from "./migrations.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 import { outgoingMail } from "./schema/outgoing-mail.js";
-import { enqueueMail, cancelMail, readMail, MAIL_LIFETIME_MS } from "./outgoing-mail.js";
+import {
+  enqueueMail,
+  cancelMail,
+  reopenMail,
+  readMail,
+  MAIL_LIFETIME_MS,
+} from "./outgoing-mail.js";
 
 const now = new Date("2026-11-09T12:00:00.000Z");
 const request = (dedupeKey = "invoice:one") => ({
@@ -98,6 +104,60 @@ describe("mail queue API", () => {
       const pending = await enqueueMail(tx, request("invoice:pending"));
       expect(await cancelMail(tx, "invoice:pending", now)).toBe(true);
       expect((await readMail(tx, "invoice:pending"))?.id).toBe(pending.id);
+    });
+  });
+  it.each([0, 1])(
+    "reopens a cancelled reminder with %s prior attempts without shortening a retry",
+    async (attempts) => {
+      await withTransaction(suite.db, async (tx) => {
+        const { id } = await enqueueMail(tx, request());
+        const retry = "2026-11-09T12:15:00.000Z";
+        await tx
+          .update(outgoingMail)
+          .set({ status: attempts ? "rejected" : "pending", attempts, nextAttemptAt: retry })
+          .where(eq(outgoingMail.id, id));
+        await cancelMail(tx, "invoice:one", now);
+        const notAfter = new Date("2026-11-17T12:00:00.000Z");
+        expect(await reopenMail(tx, "invoice:one", { notAfter, nextAttemptAt: now })).toBe(true);
+        expect(await readMail(tx, "invoice:one")).toMatchObject({
+          status: attempts ? "rejected" : "pending",
+          attempts,
+          finishedAt: null,
+          nextAttemptAt: attempts ? retry : now.toISOString(),
+          notAfter: notAfter.toISOString(),
+          claimToken: null,
+        });
+      });
+    },
+  );
+  it.each(["pending", "sending", "sent", "unknown", "expired"] as const)(
+    "leaves a %s row alone when reopening",
+    async (status) => {
+      await withTransaction(suite.db, async (tx) => {
+        const { id } = await enqueueMail(tx, request());
+        await tx
+          .update(outgoingMail)
+          .set({
+            status,
+            ...(status === "sending"
+              ? { claimToken: "claim", claimedAt: now.toISOString(), recipient: "a@example.test" }
+              : {}),
+            ...(["sent", "unknown", "expired"].includes(status)
+              ? { finishedAt: now.toISOString() }
+              : {}),
+          })
+          .where(eq(outgoingMail.id, id));
+        const before = await readMail(tx, "invoice:one");
+        expect(await reopenMail(tx, "invoice:one", { notAfter: now, nextAttemptAt: now })).toBe(
+          false,
+        );
+        expect(await readMail(tx, "invoice:one")).toEqual(before);
+      });
+    },
+  );
+  it("answers false when reopening a key nobody queued", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      expect(await reopenMail(tx, "missing", { notAfter: now, nextAttemptAt: now })).toBe(false);
     });
   });
 });
