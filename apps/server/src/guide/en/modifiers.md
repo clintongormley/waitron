@@ -107,7 +107,8 @@ list, and its charge with it, and drops any answer to a deleted options list.
 To change a dish already sent at a table, open its details in **Sent**, change it and press
 **Change dish**. Only that dish is saved, and the kitchen gets the change. You can do this until
 the bill is presented or the dish paid, while the stations of the dish and its extras allow changes
-after sending. A row of identical dishes changes together. Once the kitchen has started a dish you
+after sending. A row of identical dishes changes together; to change only one of them, recall it
+(**Recall** asks how many) and change it in **New order**. Once the kitchen has started a dish you
 cannot change it, but you can add more of it. You cannot lower the count here: to take one off, use
 **Void…**.
 **Recall**, under the window's **More**, takes the dish back to **New order**, to send again with

@@ -214,6 +214,16 @@ it("Recall from More names the original line and closes information before conti
   expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(false);
 });
 
+it("A1426: Recall on a row of one recalls at once, asking no count", async () => {
+  const el = await openLine("held", { lines: [heldLine()], bills: [bill("open")] });
+  const events = capture(el, "recall-lines");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-recall]"));
+  await el.updateComplete;
+  expect(events.map((event) => event.detail)).toEqual([{ lineNos: [1] }]);
+  expect(q(el, "[data-serve-dialog]").hasAttribute("open")).toBe(false);
+});
+
 it.each([
   "station",
   "parent-started",

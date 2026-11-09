@@ -1188,6 +1188,7 @@ export const en = {
   "table.change_dish_lower": "To take one off, use Void…",
   "table.change_dish_started": "The kitchen has already started {dish}, so it can't be changed.",
   "table.recall_line": "Recall",
+  "table.recall_n": "Recall {n}",
   "table.void_line": "Void…",
   "table.cancel_line": "Cancel",
   "table.cancel_started": "The kitchen has started this — cancel and bin it?",
@@ -3119,6 +3120,7 @@ export const es: Record<StringKey, string> = {
   "table.change_dish_started":
     "La cocina ya ha empezado a preparar {dish}, así que no se puede cambiar.",
   "table.recall_line": "Retirar",
+  "table.recall_n": "Retirar {n}",
   "table.void_line": "Cancelar…",
   "table.cancel_line": "Cancelar",
   "table.cancel_started": "La cocina ya lo ha empezado — ¿cancelar y tirarlo?",

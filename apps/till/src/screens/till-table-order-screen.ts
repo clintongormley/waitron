@@ -1401,13 +1401,15 @@ export class TillTableOrderScreen extends LitElement {
     billId: string | undefined;
     visit: number;
   };
-  /** A row whose Mark served, or its undo, asks how many; `count` is what is chosen so far. A
-   * grouped row's `members` are its portions by line number, and `count` counts portions. */
+  /** A row whose Mark served, its undo, or a grouped row's Recall asks how many; `count` is what
+   * is chosen so far. A grouped row's `members` are its portions by line number, and `count`
+   * counts portions; `recall` holds the same portions as Sent slices. */
   @state() private servePending: {
     row: CurrentOrderRow;
     undo: boolean;
     count: Decimal;
     members?: readonly CurrentOrderRow[];
+    recall?: readonly SentSlice[];
   } | null = null;
 
   #serveAuthority?: {
@@ -3336,8 +3338,10 @@ export class TillTableOrderScreen extends LitElement {
     const lineIds =
       members.length > 1 ? { lineIds: members.map((member) => member.row.lineId) } : {};
     if (action === "fire") this.#dispatch("fire-held-line", { lineId: slice.row.lineId });
-    else if (action === "recall") this.#recallLines(members.map((member) => member.row.lineNo));
-    else if (action === "comp") {
+    else if (action === "recall") {
+      if (members.length > 1) this.#requestRecall(members);
+      else this.#recallLines([slice.row.lineNo]);
+    } else if (action === "comp") {
       const line = this.#sentOrderLine(slice)!;
       const priced = (target: AdjustTarget) =>
         compareDecimal(decimal(target.total), decimal("0")) > 0;
@@ -5062,6 +5066,68 @@ export class TillTableOrderScreen extends LitElement {
     this.#sendServe(row, undo, most);
   }
 
+  #requestRecall(members: readonly SentSlice[]): void {
+    if (!this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread) return;
+    this.#serveAuthority = {
+      api: this.api,
+      partyId: this.party?.id ?? null,
+      billId: this.orderId,
+      visit: this.serviceVisit,
+    };
+    const most = decimal(String(members.length));
+    this.#serveOpening++;
+    this.#serveScope?.dispose();
+    this.#serveScope = undefined;
+    this.#serveBaseline = most;
+    this.servePending = {
+      row: members[0]!.row,
+      undo: false,
+      count: most,
+      members: members.map((member) => member.row),
+      recall: members,
+    };
+    this.#watchServe();
+    const dialog = this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]");
+    if (dialog) dialog.open = true;
+  }
+
+  /** Recalls the first `count` portions, only while every portion can still be recalled. */
+  #sendRecall(members: readonly SentSlice[], count: Decimal): void {
+    const authority = this.#serveAuthority;
+    this.#serveAuthority = undefined;
+    if (
+      authority === undefined ||
+      !this.isConnected ||
+      this.busy ||
+      this.groupCommandBusy ||
+      this.currentOrdersUnread ||
+      this.currentOrders === null ||
+      authority.api !== this.api ||
+      authority.partyId !== (this.party?.id ?? null) ||
+      authority.billId !== this.orderId ||
+      authority.visit !== this.serviceVisit
+    )
+      return;
+    const model = sentPanel(this.currentOrders, this.orderId ?? "", this.now ?? Date.now());
+    const slices = [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)];
+    const found = members.map((member) =>
+      slices.find(
+        (slice) =>
+          slice.kind === member.kind &&
+          slice.row.lineId === member.row.lineId &&
+          slice.row.workingOrderId === member.row.workingOrderId,
+      ),
+    );
+    const n = Number.parseInt(trimQuantity(count), 10);
+    if (
+      found.some((slice) => slice === undefined || !this.#canRecallSent(slice)) ||
+      n < 1 ||
+      n > members.length
+    )
+      return;
+    this.#recallLines(found.slice(0, n).map((slice) => slice!.row.lineNo));
+  }
+
   #sendServe(
     row: CurrentOrderRow,
     undo: boolean,
@@ -5153,7 +5219,8 @@ export class TillTableOrderScreen extends LitElement {
     this.servePending = null;
     this.#watchServe();
     this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]")!.closeAfter("saved");
-    this.#sendServe(pending.row, pending.undo, pending.count, pending.members);
+    if (pending.recall !== undefined) this.#sendRecall(pending.recall, pending.count);
+    else this.#sendServe(pending.row, pending.undo, pending.count, pending.members);
   }
 
   /** Always present, driven by {@link servePending}, so an Escape close flows back through
@@ -5166,7 +5233,13 @@ export class TillTableOrderScreen extends LitElement {
       class="serve-dialog"
       data-serve-dialog
       .open=${pending !== null}
-      .heading=${t(pending?.undo === true ? "table.unserve" : "table.serve")}
+      .heading=${t(
+        pending?.recall !== undefined
+          ? "table.recall_line"
+          : pending?.undo === true
+            ? "table.unserve"
+            : "table.serve",
+      )}
       .beforeClose=${this.#serveScope ? this.#beforeServeClose : undefined}
       @wt-close=${(event: Event) => this.#closeServe(event)}
     >
@@ -5212,9 +5285,11 @@ export class TillTableOrderScreen extends LitElement {
         </wt-button>
         <wt-button variant="primary" data-serve-confirm @click=${() => this.#confirmServe()}>
           ${
-            pending?.undo === true
-              ? t("table.unserve_n").replace("{n}", String(count))
-              : countText(count, "table.serve_n", "table.serve_n_one")
+            pending?.recall !== undefined
+              ? t("table.recall_n").replace("{n}", String(count))
+              : pending?.undo === true
+                ? t("table.unserve_n").replace("{n}", String(count))
+                : countText(count, "table.serve_n", "table.serve_n_one")
           }
         </wt-button>
       </div>

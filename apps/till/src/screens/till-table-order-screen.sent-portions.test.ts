@@ -173,7 +173,70 @@ it("A803 portion grouping: Recall on a grouped row recalls every member, by line
   const events = capture(el, "recall-lines");
   await openMore(el);
   await userEvent.click(q(el, "[data-sent-line-recall]"));
+  await el.updateComplete;
+  await userEvent.click(q(el, "[data-serve-confirm]"));
   expect(events).toEqual([{ lineNos: [1, 2] }]);
+});
+
+async function recallFromGrouped(el: TillTableOrderScreen) {
+  const events = capture(el, "recall-lines");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-recall]"));
+  await el.updateComplete;
+  return events;
+}
+
+it("A1426: Recall on a grouped 3 asks how many and recalls only the first, by line number", async () => {
+  const el = await openGrouped("held", {}, 3);
+  const events = await recallFromGrouped(el);
+  expect(events).toEqual([]);
+  const dialog = q(el, "[data-serve-dialog]");
+  expect(dialog.hasAttribute("open")).toBe(true);
+  expect((dialog as unknown as { heading: string }).heading).toBe("Recall");
+  expect(text(dialog.querySelector(".move-dish")!)).toBe("Steak ×3");
+  expect(text(q(el, "[data-serve-count]"))).toBe("3");
+  await userEvent.click(q(el, "[data-serve-dec]"));
+  await el.updateComplete;
+  await userEvent.click(q(el, "[data-serve-dec]"));
+  await el.updateComplete;
+  expect(q(el, "[data-serve-dec]").hasAttribute("disabled")).toBe(true);
+  expect(text(q(el, "[data-serve-confirm]"))).toBe("Recall 1");
+  await userEvent.click(q(el, "[data-serve-confirm]"));
+  expect(events).toEqual([{ lineNos: [1] }]);
+});
+
+it("A1426: Recall on a grouped 3 recalls all three when the count is left at 3", async () => {
+  const el = await openGrouped("held", {}, 3);
+  const serves = capture(el, "serve-lines");
+  const events = await recallFromGrouped(el);
+  expect(text(q(el, "[data-serve-confirm]"))).toBe("Recall 3");
+  await userEvent.click(q(el, "[data-serve-confirm]"));
+  expect(events).toEqual([{ lineNos: [1, 2, 3] }]);
+  expect(serves).toEqual([]);
+});
+
+it("A1426: Recall's how-many choice reads in Spanish", async () => {
+  setLocale("es");
+  const el = await openGrouped("held", {}, 3);
+  await recallFromGrouped(el);
+  const dialog = q(el, "[data-serve-dialog]");
+  expect((dialog as unknown as { heading: string }).heading).toBe("Retirar");
+  await userEvent.click(q(el, "[data-serve-dec]"));
+  await el.updateComplete;
+  expect(text(q(el, "[data-serve-confirm]"))).toBe("Retirar 2");
+});
+
+it("A1426: a grouped Recall sends nothing once a member can no longer be recalled", async () => {
+  const el = await openGrouped("held", {}, 3);
+  const events = await recallFromGrouped(el);
+  await userEvent.click(q(el, "[data-serve-dec]"));
+  await el.updateComplete;
+  const orders = structuredClone(el.currentOrders!);
+  orders.groups[0]!.rows.find((each) => each.lineId === "s-3")!.kitchen!.state = "preparing";
+  el.currentOrders = orders;
+  await el.updateComplete;
+  await userEvent.click(q(el, "[data-serve-confirm]"));
+  expect(events).toEqual([]);
 });
 
 it("A803 portion grouping: Move station on a grouped row moves every member", async () => {
