@@ -199,7 +199,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "google.second_factor_required": 401,
   "account_action.invalid": 400,
   "account_action.rate_limited": 429,
-  "account_mail.primary_required": 403,
+  "node.read_only": 403,
   // The passkey login is a credential check, so its failures are 401 like `password.invalid`; an
   // expired challenge is a retryable timing fault, not a rejected credential.
   "passkey.not_registered": 401,

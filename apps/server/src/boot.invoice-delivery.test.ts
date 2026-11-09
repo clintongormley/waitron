@@ -844,8 +844,8 @@ describe("queued account mail primary admission at real boot", () => {
           if (role === "secondary")
             expect(await reset.json()).toEqual({
               error: {
-                code: "account_mail.primary_required",
-                params: { primaryDashboardUrl: null },
+                code: "node.read_only",
+                params: {},
               },
             });
           else await reset.body?.cancel();

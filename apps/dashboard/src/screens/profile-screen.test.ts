@@ -2039,20 +2039,3 @@ describe("profile confirmation delivery messages", () => {
     expect(el.shadowRoot!.querySelector("[data-test=email-status-text]")).toBeNull();
   });
 });
-
-it("offers the primary dashboard beside a refused spare email change", async () => {
-  const { el } = await mount({
-    saveProfile: vi.fn().mockRejectedValue({
-      code: "account_mail.primary_required",
-      params: { primaryDashboardUrl: "https://primary.test/manage/" },
-    }),
-  });
-  await editDetails(el);
-  input(el, "email", "new@example.com");
-  await flush(el);
-  input(el, "currentPassword", "current");
-  await click(el, "save");
-  expect(
-    el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=primary-dashboard-link]")?.href,
-  ).toBe("https://primary.test/manage/");
-});

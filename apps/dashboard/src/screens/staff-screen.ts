@@ -95,7 +95,6 @@ export class StaffScreen extends LitElement {
   @state() private editingPerson: PersonSummary | null = null;
   @state() private editOpen = false;
   @state() private errorKey: string | null = null;
-  @state() private primaryDashboardUrl: string | null = null;
   /** The refusal's `params.field`, read by the add and edit forms beside `errorKey`. */
   @state() private errorField: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
@@ -191,18 +190,6 @@ export class StaffScreen extends LitElement {
           : result.invitationSent
             ? "sent"
             : "throttled";
-  }
-
-  #primaryLink(slot?: string) {
-    return this.primaryDashboardUrl
-      ? html`<a
-          slot=${slot ?? nothing}
-          data-test="primary-dashboard-link"
-          href=${this.primaryDashboardUrl}
-          style="color: var(--wt-color-primary-text)"
-          >${t("account.primary_dashboard")}</a
-        >`
-      : nothing;
   }
 
   #onRowAction(event: CustomEvent<{ personId: string; action: string }>): void {
@@ -314,7 +301,6 @@ export class StaffScreen extends LitElement {
 
   #showError(code: string | null, field: string | null = null, fromRead = false): void {
     this.errorKey = code;
-    this.primaryDashboardUrl = null;
     this.errorField = field;
     this.#readErrorShown = fromRead;
   }
@@ -322,10 +308,6 @@ export class StaffScreen extends LitElement {
   #fail(error: unknown, fromRead = false): void {
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
     this.#showError(codeOf(error), typeof field === "string" ? field : null, fromRead);
-    if (this.errorKey === "account_mail.primary_required")
-      this.primaryDashboardUrl =
-        (error as { params?: { primaryDashboardUrl?: string } }).params?.primaryDashboardUrl ??
-        null;
   }
 
   /** A read's failure never replaces an action's message. */
@@ -558,7 +540,6 @@ export class StaffScreen extends LitElement {
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
           : nothing
       }
-      ${!this.formOpen && !this.editOpen && this.rowAction === null ? this.#primaryLink() : nothing}
       ${this.#renderDownloadLines()}
       ${
         this.invitationStatus
@@ -591,7 +572,6 @@ export class StaffScreen extends LitElement {
               </p>`
             : nothing
         }
-        ${this.rowAction ? this.#primaryLink() : nothing}
         <wt-form-actions
           slot="footer"
           .error=${this.rowAction && this.errorKey ? codeMessage(this.errorKey) : ""}
@@ -629,8 +609,7 @@ export class StaffScreen extends LitElement {
           }>,
         ) => void this.#onCreatePerson(e)}
         @wt-close=${() => (this.formOpen = false)}
-        >${this.formOpen ? this.#primaryLink("refusal-action") : nothing}</dashboard-person-form
-      >
+      ></dashboard-person-form>
       <dashboard-person-edit
         .busy=${this.#editing}
         .person=${this.editingPerson}
@@ -642,8 +621,7 @@ export class StaffScreen extends LitElement {
         @save-person=${(e: CustomEvent<PersonEditDetails>) => this.#onSavePerson(e)}
         @resend-invitation=${(e: Event) => void this.#onResendInvitation(e)}
         @wt-close=${() => this.#closeEdit()}
-        >${this.editOpen ? this.#primaryLink("refusal-action") : nothing}</dashboard-person-edit
-      >
+      ></dashboard-person-edit>
     `;
   }
 }

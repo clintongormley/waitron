@@ -8,10 +8,6 @@ import { en, es } from "./strings.js";
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
-  "account_mail.primary_required": {
-    en: "This box is a spare and does not send email. Make this request on the main box's dashboard.",
-    es: "Este es un equipo de reserva y no envía correo. Haz esta solicitud en el panel del equipo principal.",
-  },
   "node.spare": {
     en: "This box is the spare. Open the main box's address for restaurant screens and data.",
     es: "Este es el equipo de reserva. Abre la dirección del equipo principal para acceder a las pantallas y los datos del local.",

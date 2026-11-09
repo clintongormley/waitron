@@ -385,7 +385,6 @@ export class PersonEdit extends LitElement {
               `
             : nothing
         }
-        <slot name="refusal-action"></slot>
         <wt-form-actions slot="footer" .error=${person ? bottom : ""}>
           <wt-button
             slot="cancel"

@@ -274,6 +274,7 @@ describe("startup zone admission", () => {
       expect(await (await request("/api/node")).json()).toEqual({ acceptingSales: false });
       noDuties();
       await server!.close();
+      expect(vi.mocked(startMailSender).mock.calls[0]![0].signal.aborted).toBe(true);
       server = undefined;
     });
     const repaired = await suite.db
@@ -572,7 +573,7 @@ describe("startup zone admission", () => {
         "",
       ),
       403,
-      "account_mail.primary_required",
+      "node.read_only",
     );
     expect(suite.db.all(sql`select id from outgoing_mail`)).toEqual([]);
     noDuties(0);

@@ -4251,19 +4251,3 @@ it("A403 offers passkey enrollment without asking for a name", async () => {
       .disabled,
   ).toBe(false);
 });
-
-it("offers the primary dashboard beside a refused spare password reset", async () => {
-  const api = stubApi({
-    requestPasswordReset: vi.fn().mockRejectedValue({
-      code: "account_mail.primary_required",
-      params: { primaryDashboardUrl: "https://primary.test/manage/" },
-    }),
-  });
-  const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
-  await openPassword(el, "owner@example.test");
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=reset-by-email]")!.click();
-  await flush(el);
-  expect(
-    el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=primary-dashboard-link]")?.href,
-  ).toBe("https://primary.test/manage/");
-});

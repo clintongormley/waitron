@@ -2096,19 +2096,7 @@ async function bootServer(
   const accountMailMode = (tx: Transaction) =>
     resolveMailDeliveryIn(tx, ring, config, "notice").then((delivery) => delivery.mode);
   const assertAccountMailPrimary = async () => {
-    if (holders.singletonRole.current === "primary") return;
-    const primary = (await readNodeMembership(db))?.body.nodes.find(
-      (node) => node.standing === "serving-primary" && node.nodeId !== tradingContext.nodeId,
-    );
-    let primaryDashboardUrl: string | null = null;
-    try {
-      if (primary?.contactUrl) {
-        const url = new URL(primary.contactUrl);
-        if (url.protocol === "https:" || url.protocol === "http:")
-          primaryDashboardUrl = new URL("/manage/", url.origin).toString();
-      }
-    } catch {}
-    throw new AppError("account_mail.primary_required", { primaryDashboardUrl });
+    if (holders.singletonRole.current !== "primary") throw new AppError("node.read_only", {});
   };
   // Interim: the venue row's id; removed by S18e or S28.
   const venueId = await venueLocationId(db);

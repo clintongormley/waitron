@@ -1718,27 +1718,3 @@ describe("account email outcome messages", () => {
     }
   });
 });
-
-it("offers the primary dashboard beside a refused spare invitation", async () => {
-  const api = stubApi({
-    createPerson: vi.fn().mockRejectedValue({
-      code: "account_mail.primary_required",
-      params: { primaryDashboardUrl: "https://primary.test/manage/" },
-    }),
-  });
-  const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
-    api,
-    canAdminister: true,
-  });
-  await flush(el);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
-  await flush(el);
-  await createThroughForm(el);
-  await flush(el);
-  const link = el.shadowRoot!.querySelector<HTMLAnchorElement>(
-    "[data-test=primary-dashboard-link]",
-  );
-  expect(link?.href).toBe("https://primary.test/manage/");
-  expect(link?.getBoundingClientRect().width).toBeGreaterThan(0);
-  expect(await formErrorText(el)).toContain(codeMessage("account_mail.primary_required"));
-});

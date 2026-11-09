@@ -242,7 +242,6 @@ export class ProfileScreen extends LitElement {
   #readErrorShown = false;
   #fieldErrors: Partial<Record<Field, string>> = {};
   @property({ type: Boolean }) canAdminister = false;
-  @state() private primaryDashboardUrl: string | null = null;
   @state() private emailStatus: "sent" | "captured" | "unconfigured" | null = null;
   @state() private saved = false;
   @state() private busy = false;
@@ -377,7 +376,6 @@ export class ProfileScreen extends LitElement {
   }
   #showError(message: string, fromRead = false): void {
     this.error = message;
-    this.primaryDashboardUrl = null;
     this.#readErrorShown = fromRead;
   }
   /** A read's failure never replaces an action's message. */
@@ -758,13 +756,7 @@ export class ProfileScreen extends LitElement {
       if (field !== undefined && this.#shownFields().has(field)) {
         this.requestRefused = { [field]: message };
         this.#focusFirstInvalid();
-      } else {
-        this.#showError(message);
-        if (code === "account_mail.primary_required")
-          this.primaryDashboardUrl =
-            (error as { params?: { primaryDashboardUrl?: string } }).params?.primaryDashboardUrl ??
-            null;
-      }
+      } else this.#showError(message);
     } finally {
       if (this.#operation === operation) this.busy = false;
     }
@@ -1180,7 +1172,6 @@ export class ProfileScreen extends LitElement {
       >
         <div class="fields">
           ${this.mode === "codes" ? this.#renderCodesBody() : this.mode === "view" ? nothing : this.#renderEditBody(p)}
-          ${this.primaryDashboardUrl ? html`<a data-test="primary-dashboard-link" href=${this.primaryDashboardUrl}>${t("account.primary_dashboard")}</a>` : nothing}
         </div>
         <wt-form-actions slot="footer" .error=${form.bottom}>
           <wt-button

@@ -86,7 +86,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.telephone_invalid": 400,
   "person.display_name_taken": 409,
   "profile.invalid": 400,
-  "account_mail.primary_required": 403,
+  "node.read_only": 403,
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,

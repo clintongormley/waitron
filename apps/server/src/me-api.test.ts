@@ -1076,7 +1076,7 @@ describe("mountMeApi — own credentials and second factor", () => {
     const app = mountApp({
       accountMailMode: async () => "smtp",
       assertAccountMailPrimary: async () => {
-        throw new AppError("account_mail.primary_required", { primaryDashboardUrl: null });
+        throw new AppError("node.read_only", {});
       },
     });
     const cookie = await cookieFor(personId);
@@ -1092,7 +1092,7 @@ describe("mountMeApi — own credentials and second factor", () => {
     const refused = await send(app, "PUT", "/management-api/session/me/profile", { cookie, body });
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual({
-      error: { code: "account_mail.primary_required", params: { primaryDashboardUrl: null } },
+      error: { code: "node.read_only", params: {} },
     });
     expect((await personRow(personId)).pendingEmail).toBeNull();
     expect(suite.db.all(sql`select id from outgoing_mail where person_id=${personId}`)).toEqual([]);
