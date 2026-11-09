@@ -338,10 +338,7 @@ describe("venue detail edits", () => {
       sql`update locations set name = '  Main room  ', province = 'Madrid', time_zone = 'Europe/Madrid', day_cutover = '05:00:00' where id = ${venue.cfg.locationId}`,
     );
     const initial = await read();
-    for (const changes of [
-      {},
-      { name: "Main room", province: "28", dayCutover: "05:00:00" },
-    ]) {
+    for (const changes of [{}, { name: "Main room", province: "28", dayCutover: "05:00:00" }]) {
       expect(
         (
           await withTransaction(suite.db, (tx) =>
@@ -672,10 +669,7 @@ describe("crafted detail bodies and legacy values", () => {
       sql`create trigger detail_probe_no_update before update on locations begin select raise(abort, 'detail probe update'); end`,
     );
     try {
-      for (const changes of [
-        {},
-        { name: " Main room ", province: "28", dayCutover: "05:00:00" },
-      ]) {
+      for (const changes of [{}, { name: " Main room ", province: "28", dayCutover: "05:00:00" }]) {
         expect(
           (
             await withTransaction(suite.db, (tx) =>
