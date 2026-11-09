@@ -242,6 +242,11 @@ const EARLIER = {
     file({ total: "-10.45", lines: [line(1, undefined, "10.00", "-9.50")], split: [] }),
   // €1.10 off line 1 through the derived path, with no gross stored.
   line1NoGross: () => file({ total: "-1.10", lines: [line(1, 0, "10.00", "-1.00")], split: [] }),
+  // The same, then another €1.10 off line 1 with its gross stored.
+  line1NoGrossThenGross: async () => {
+    await file({ total: "-1.10", lines: [line(1, 0, "10.00", "-1.00")], split: [] });
+    await file({ total: "-1.10", lines: [line(1, 0, "10.00", "-1.00", "-1.10")], split: [] });
+  },
 };
 
 const UNUSABLE = "sale.correction_history_unusable";
@@ -256,13 +261,15 @@ type Case = [
 const at = (draft: Draft, index: number) => draft.lines[index]!;
 
 /** Both 21% lines of `passing` taken from invoice line `second` at one rate. */
-const twoAt21 = (second: number) => (d: Draft) =>
-  void d.lines.splice(
-    1,
-    1,
-    line(2, 1, "21.00", "-0.41", "-0.50"),
-    line(3, second, "21.00", "-0.46", "-0.55"),
-  );
+const twoAt21 =
+  (second: number) =>
+  (d: Draft): void =>
+    void d.lines.splice(
+      1,
+      1,
+      line(2, 1, "21.00", "-0.41", "-0.50"),
+      line(3, second, "21.00", "-0.46", "-0.55"),
+    );
 
 const REFUSED: Case[] = [
   ["a total past the cent", (d) => void (d.total = "-2.001")],
@@ -335,6 +342,12 @@ const REFUSED: Case[] = [
     "line1NoGross",
     UNUSABLE,
   ],
+  [
+    "an earlier correction of the line with no stored gross, filed before one with it",
+    () => undefined,
+    "line1NoGrossThenGross",
+    UNUSABLE,
+  ],
 ];
 
 it.each([
@@ -345,6 +358,14 @@ it.each([
     "line3Whole",
   ],
   ["two lines at one rate, each naming its own invoice line", twoAt21(2), undefined],
+  [
+    "a 21% split after an earlier correction named no line at 10% only",
+    (d: Draft): void =>
+      void ((d.total = "-1.05"),
+      (d.lines = [line(1, 1, "21.00", "-0.87", "-1.05")]),
+      (d.split = [["21.00", "-0.87", "-0.18"]])),
+    "unnamedAt10",
+  ],
 ] as const)("files %s as given", async (_name, change, earlier) => {
   if (earlier) await EARLIER[earlier]();
   const spy = vi.spyOn(backend, "recordCorrection");
@@ -353,7 +374,7 @@ it.each([
   await file(draft);
   expect(spy).toHaveBeenCalledOnce();
   expect(spy.mock.calls[0]![1].vatBreakdown).toEqual(
-    passing().split.map(([rate, base, tax]) => ({ rate, base, tax })),
+    draft.split.map(([rate, base, tax]) => ({ rate, base, tax })),
   );
 });
 
@@ -447,6 +468,31 @@ it("refuses a rate's gross past the invoice's when each line is within its own",
       total: "-0.08",
       lines: [line(1, 0, "21.00", "-0.03", "-0.04"), line(2, 1, "21.00", "-0.04", "-0.04")],
       split: [["21.00", "-0.07", "-0.01"]],
+    },
+    { to: rounded },
+  );
+});
+
+it("refuses a rate's running gross past the invoice's after an earlier exact correction", async () => {
+  const rounded = await sell("11.07", [
+    ["21.00", "1", "0.03", "0.04"],
+    ["21.00", "1", "0.03", "0.04"],
+    ["10.00", "1", "10.00", "11.00"],
+  ]);
+  await file(
+    {
+      total: "-0.04",
+      lines: [line(1, 0, "21.00", "-0.03", "-0.04")],
+      split: [["21.00", "-0.03", "-0.01"]],
+    },
+    { to: rounded },
+  );
+  await expectRefused(
+    "sale.correction_breakdown_invalid",
+    {
+      total: "-0.04",
+      lines: [line(1, 1, "21.00", "-0.04", "-0.04")],
+      split: [["21.00", "-0.04", "0.00"]],
     },
     { to: rounded },
   );
