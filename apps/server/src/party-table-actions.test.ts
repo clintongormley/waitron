@@ -1334,7 +1334,7 @@ describe("split a table", () => {
   }
 
   it("starts a new unnamed party on the table with the chosen bill as its Bill 1", async () => {
-    const { ana, m4, m5, b2 } = await anaAtTwo("Separa");
+    const { ana, m4, m5, b2 } = await anaAtTwo("Split");
 
     const splitting = await cmd(ana.partyId);
     const result = await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
@@ -1451,7 +1451,7 @@ describe("split a table", () => {
     });
 
     it("refuses a table not in the party", async () => {
-      const { ana, m4, m5, b2 } = await anaAtTwo("Fuera");
+      const { ana, m4, m5, b2 } = await anaAtTwo("Elsewhere");
       const [elsewhere] = await tables("Elsewhere other", 9);
       const splitting = await cmd(ana.partyId);
 
@@ -1478,7 +1478,7 @@ describe("split a table", () => {
     });
 
     it("refuses another party's bill", async () => {
-      const { ana, m4, m5, b2 } = await anaAtTwo("Ajena");
+      const { ana, m4, m5, b2 } = await anaAtTwo("Foreign");
       const [m7] = await tables("Foreign other", 7);
       const luis = await seat(v, m7);
       const splitting = await cmd(ana.partyId);
@@ -1497,7 +1497,7 @@ describe("split a table", () => {
     });
 
     it("refuses an abandoned bill, and one that does not exist, as not open", async () => {
-      const { ana, m4, m5, b2 } = await anaAtTwo("Abandonada");
+      const { ana, m4, m5, b2 } = await anaAtTwo("Abandoned");
       const b3 = await splitOff(ana.partyId, ana.tabId, [1]);
       v.db.run(sql`update working_orders set status = 'abandoned' where id = ${b3}`);
       const missing = randomUUID();
@@ -1516,7 +1516,7 @@ describe("split a table", () => {
   });
 
   it("A803 waiting copy: Split a table takes a bill holding a dish held for the kitchen, and the new party holds its own copy of the group", async () => {
-    const { ana, m5, b2 } = await anaAtTwo("Retenida");
+    const { ana, m5, b2 } = await anaAtTwo("Held");
     await sendGroups(ana.partyId, [{ names: ["Flan"], release: "hold" }], b2);
     const flanBefore = (await lineRows(b2)).find((line) => line.lineNo === 2)!;
     const source = flanBefore.groupId!;
