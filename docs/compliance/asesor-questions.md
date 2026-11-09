@@ -3959,6 +3959,8 @@ This records a question; no enquiry has been sent.
 
 ### Q62. The box's continuous copy of the database is not encrypted before it leaves (added 2026-11-06)
 
+**2026-11-09, A1404 encryption slice:** the implementation now sends Litestream a customer encryption key derived from the backup key. The storage provider still receives the database and that key; this is encryption at the provider, not encryption before upload. The original question below records the earlier design. The final Amazon recovery-pack qualification remains open under [A1404](../superpowers/plans/2026-11-08-a1404-bucket-encryption.md).
+
 For the privacy specialist. The box copies its whole database, with customer and staff data, to storage
 the restaurant chooses, and does not encrypt it first: it relies on the provider's encryption, which
 does not protect against someone holding valid credentials. The owner kept this on 2026-11-06 (A1324),

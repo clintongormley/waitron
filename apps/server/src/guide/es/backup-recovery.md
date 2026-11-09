@@ -1,5 +1,7 @@
 # Recuperar desde una copia
 
+Conserva el paquete de recuperación anterior cuando cambies la clave de recuperación. Hasta que la nueva copia del bucket esté lista, el paquete anterior sigue correspondiendo a la copia ofrecida para recuperar. Si la página dice que el paquete no corresponde a la copia o que el acceso al bucket no permite leerla, usa el paquete correspondiente, o corrige el acceso al bucket y vuelve a intentarlo.
+
 ## Si se interrumpió la primera configuración {#interrupted-setup}
 
 Si la página de reparación no permite continuar tu configuración, ofrece **Empezar de nuevo** y

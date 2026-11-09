@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { litestreamConfig, litestreamEnv, replicaUrl } from "./litestream.js";
 import { spawnLitestream } from "./litestream-process.js";
+import { verifyStreamKey } from "./sse-c.js";
 import type { BucketConfig } from "./s3-store.js";
 import { exitCategory } from "./supervisor.js";
 import "./errors.js";
@@ -21,6 +22,7 @@ const RESTORE_POLL_MS = 5_000;
 export interface RestoreGenerationArgs {
   litestreamBin: string;
   bucket: BucketConfig;
+  streamKey: string;
   venueId: string;
   generation: string;
   /** Must not exist, or exist empty, with no `-wal`, `-shm` or `-journal` beside it. Litestream
@@ -61,7 +63,8 @@ export async function restoreGeneration(args: RestoreGenerationArgs): Promise<vo
     dbPath: namedPath,
     replicaUrl: replicaUrl(args.bucket, args.venueId, args.generation),
   });
-  const env = litestreamEnv(args.bucket);
+  const env = litestreamEnv(args.bucket, args.streamKey);
+  await verifyStreamKey(args.bucket, args.venueId, args.generation, args.streamKey);
   const configPath = join(configDir, "restore.yml");
   try {
     await mkdir(configDir, { recursive: true, mode: 0o700 });

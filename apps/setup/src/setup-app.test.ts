@@ -3728,6 +3728,11 @@ describe("restore from my bucket", () => {
       "The bucket's record of its newest copy names a different restaurant from this kit. Nothing was changed.",
     ],
     [
+      "restore.stream_pointer_unverified",
+      { reason: "key_or_access" },
+      "The recovery pack does not match this copy, or the bucket login cannot read it. Use the pack matching this copy, or correct the bucket access and try again.",
+    ],
+    [
       "backup.stream_pointer_invalid",
       { reason: "shape" },
       "The bucket's record of its newest copy is damaged, so it cannot be rebuilt from. Nothing was changed.",

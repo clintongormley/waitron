@@ -449,6 +449,8 @@ function bucketRefusal(err: AppError): string | null {
       : `${failed}if ${err.params.legalName} (tax id ${err.params.taxId}) is your business, re-run with --confirm-venue ${err.params.taxId}`;
   }
   if (hasCode(err, "restore.stream_pointer_unverified")) {
+    if (err.params.reason === "key_or_access")
+      return `${failed}the recovery pack does not match this copy, or the bucket login cannot read it; use the pack matching this copy, or correct the bucket access and try again`;
     return err.params.reason === "signature"
       ? `${failed}the copy in the bucket was not signed by the key in this kit, so it is not trusted; check that the kit is this venue's newest`
       : `${failed}the bucket's record of its newest copy names a different venue from this kit`;

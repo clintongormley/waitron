@@ -108,6 +108,8 @@ export const shellEn = {
   "shell.bucket.pointer_missing": "The bucket in this kit holds no copy of this restaurant.",
   "shell.bucket.pointer_unverified":
     "The copy in the bucket was not written by the server this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
+  "shell.bucket.key_or_access":
+    "The recovery pack does not match this copy, or the bucket login cannot read it. Use the pack matching this copy, or correct the bucket access and try again.",
   "shell.bucket.venue_mismatch":
     "The bucket's record of its newest copy names a different restaurant from this kit. Nothing was changed.",
   "shell.bucket.venue_unconfirmed":
@@ -280,6 +282,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "El bucket de este kit no guarda ninguna copia de este restaurante.",
   "shell.bucket.pointer_unverified":
     "La copia del bucket no la escribió el servidor al que pertenece este kit. Comprueba que el kit es el más reciente de este restaurante. No se ha cambiado nada.",
+  "shell.bucket.key_or_access":
+    "El paquete de recuperación no corresponde a esta copia, o el acceso al bucket no permite leerla. Usa el paquete que corresponda a esta copia, o corrige el acceso al bucket y vuelve a intentarlo.",
   "shell.bucket.venue_mismatch":
     "El registro del bucket de su copia más reciente nombra un restaurante distinto al de este kit. No se ha cambiado nada.",
   "shell.bucket.venue_unconfirmed":

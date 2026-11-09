@@ -78,6 +78,7 @@ async function harness() {
       accessKeyId: "AKIAEXAMPLE",
       secretAccessKey: "secret-example",
     },
+    streamKey: Buffer.alloc(32, 7).toString("base64"),
     venueId: VENUE,
     nodeId: NODE,
     term: 2,

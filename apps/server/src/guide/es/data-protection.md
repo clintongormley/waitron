@@ -243,10 +243,10 @@ entrada por cada uso. Cópialas en tu propio registro, sustituye cada parte en c
 haces fuera de Waitron, como las nóminas que lleva tu gestor. Dos hechos se aplican a todas las
 entradas, así que no se repiten en cada una:
 
-- Waitron no cifra la base de datos en sí, ni en el disco del equipo ni en la copia continua de tu
-  bucket de copias de seguridad, así que quien consiga cualquiera de las dos puede leer todas las
-  entradas siguientes. Las copias programadas van cifradas con la clave de recuperación, que guarda
-  el equipo.
+- Waitron no cifra la base de datos en el disco del equipo. Para la copia continua del bucket,
+  envía al proveedor de almacenamiento una clave de cifrado independiente derivada de tu clave de
+  recuperación. Las copias programadas van cifradas con la clave de recuperación. El equipo guarda
+  estas claves, así que el acceso al equipo también puede exponer las copias.
 - La copia de tu bucket contiene toda la base de datos, así que tu proveedor de almacenamiento de
   copias de seguridad recibe todo lo siguiente. Que algún dato vaya a un tercer país depende de los
   proveedores que elegiste, y Waitron no comprueba dónde guardan los datos, así que consúltalo con
@@ -435,9 +435,10 @@ configuración para poner en marcha otro local.
   equipo](box-status.md#free-space)). Desactivar la copia del bucket o las copias
   programadas deja lo que ya está guardado, así que bórralo en tu proveedor, o de la carpeta, cuando
   ya no lo necesites. Todo lo demás: _fijar con tu asesor_.
-- Seguridad: Waitron no cifra la copia del bucket, pero las contraseñas y claves que guarda para tus
-  proveedores van cifradas dentro de ella. Cada copia programada va cifrada con la clave de
-  recuperación, que guarda el equipo. Mientras la hace, el equipo escribe una copia sin cifrar de la
+- Seguridad: Waitron pide al proveedor de almacenamiento que cifre la copia del bucket con una
+  clave derivada de tu clave de recuperación. El proveedor recibe la base de datos y la clave de
+  cifrado. Las contraseñas y claves que Waitron guarda para tus proveedores también van cifradas
+  dentro de la base de datos. Cada copia programada va cifrada con la clave de recuperación, que guarda el equipo. Mientras la hace, el equipo escribe una copia sin cifrar de la
   base de datos en su propio disco y la borra al terminar la copia, o en el siguiente arranque si se
   detuvo durante la copia. La exportación de la configuración va cifrada con una frase de paso de al
   menos 12 caracteres, así que es tan segura como esa frase. Un paquete de recuperación hecho en
@@ -479,8 +480,9 @@ Uno de los casos en que no hace falta es cuando los datos afectados estaban prot
 que los hace ininteligibles para cualquier persona que no esté autorizada a acceder a ellos, como el
 cifrado. Si eso se mantiene cuando la clave también puede haber quedado expuesta, como con una copia
 programada cuando también se perdió la clave de recuperación, o una exportación de la configuración
-cuya frase de paso puede haberse filtrado, es una pregunta para tu asesor. Waitron no cifra la copia
-de la base de datos de tu bucket, así que esa copia no recibe de Waitron esa protección. La
+cuya frase de paso puede haberse filtrado, es una pregunta para tu asesor. Incluye la copia del
+bucket en esa evaluación: su clave de cifrado se deriva de la clave de recuperación, y el proveedor
+de almacenamiento recibe la base de datos y esa clave. La
 herramienta Comunica-Brecha RGPD de la AEPD te ayuda a decidir si debes comunicarlo a las personas
 afectadas.
 
@@ -587,9 +589,9 @@ continua** y guarda, porque conservan las claves con las que se guardaron. Una c
 nueva no cambia las contraseñas y claves de tus otros proveedores, así que cámbialas también en cada
 proveedor. Mientras las copias programadas están activadas, **Copias de seguridad** también ofrece
 **Cambiar la clave de recuperación**; después elige **Hacer paquete de recuperación** en **Copias de
-seguridad** y guarda el paquete nuevo. Las copias programadas hechas antes del cambio se siguen
-abriendo con la clave antigua, igual que la parte sellada con las contraseñas y claves en el
-historial de la copia del bucket anterior al cambio, que se guarda una semana. Un paquete también
+seguridad** y guarda el paquete nuevo. Las copias programadas hechas antes del cambio y toda la
+copia anterior del bucket siguen necesitando la clave antigua. Conserva el paquete de recuperación
+correspondiente a cualquier copia anterior que puedas necesitar restaurar. Un paquete también
 puede contener la clave del servidor. Para sustituirla, haz un paquete nuevo con **También crear una
 clave del servidor nueva** marcado: las copias nuevas usan la clave nueva, y las anteriores siguen
 necesitando la antigua.

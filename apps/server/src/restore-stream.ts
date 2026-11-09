@@ -36,6 +36,7 @@ import {
 import { readSealedStateRow, unsealNodeState } from "./sealed-state.js";
 import { STREAM_RESTORE_PREFIX } from "./restore-staging-dirs.js";
 import { readStreamSettings } from "./stream-host.js";
+import { deriveStreamKey } from "./stream-key.js";
 import "./errors.js";
 
 /** A change newer than this, on the bucket's clock, means the old box may still be selling. */
@@ -305,12 +306,21 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
       await (deps.restoreGeneration ?? restoreGeneration)({
         litestreamBin: deps.litestreamBin,
         bucket: kit.bucket,
+        streamKey: deriveStreamKey(kit.recoveryKey, kit.venueId),
         venueId: kit.venueId,
         generation,
         outPath: databasePath,
         configDir: join(scratch, "litestream"),
       });
     } catch (error) {
+      if (isAppError(error) && hasCode(error, "backup.stream_request_failed")) {
+        deps.log("warn", "restore.stream_key_check_failed", {
+          errorCode: error.code,
+          status: error.params.status,
+          failureKind: error.params.name,
+        });
+        throw new AppError("restore.stream_pointer_unverified", { reason: "key_or_access" });
+      }
       if (
         isAppError(error) &&
         hasCode(error, "backup.stream_restore_failed") &&

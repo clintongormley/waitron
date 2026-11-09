@@ -23,9 +23,10 @@ export function resolveLitestreamBin(env: Readonly<Record<string, string | undef
   return value === undefined || value === "" ? DEFAULT_LITESTREAM_BIN : value;
 }
 
-/** The bucket key reaches Litestream only through these variables, never through the file. */
+/** Secrets reach Litestream through its environment, never through the file. */
 export const ENV_ACCESS_KEY_ID = "WAITRON_STREAM_ACCESS_KEY_ID";
 export const ENV_SECRET_ACCESS_KEY = "WAITRON_STREAM_SECRET_ACCESS_KEY";
+export const ENV_ENCRYPTION_KEY = "WAITRON_STREAM_ENCRYPTION_KEY";
 
 const BUCKET_NAME = /^[a-z0-9.-]+$/;
 const LONE_SURROGATE = /\p{Cs}/u;
@@ -40,15 +41,20 @@ const SINGLE_QUOTABLE = /^[\x20-\x26\x28-\x7e]*$/;
  */
 export function litestreamEnv(
   keys: Pick<BucketConfig, "accessKeyId" | "secretAccessKey">,
+  streamKey: string,
 ): Record<string, string> {
   for (const field of ["accessKeyId", "secretAccessKey"] as const) {
     if (!SINGLE_QUOTABLE.test(keys[field])) {
       throw new AppError("backup.stream_config_unsafe", { field });
     }
   }
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(streamKey) || Buffer.from(streamKey, "base64").length !== 32) {
+    throw new AppError("backup.stream_config_unsafe", { field: "streamKey" });
+  }
   return {
     [ENV_ACCESS_KEY_ID]: keys.accessKeyId,
     [ENV_SECRET_ACCESS_KEY]: keys.secretAccessKey,
+    [ENV_ENCRYPTION_KEY]: streamKey,
   };
 }
 
@@ -89,6 +95,7 @@ export function litestreamConfig(input: { dbPath: string; replicaUrl: string }):
     `  - path: ${JSON.stringify(input.dbPath)}`,
     "    replica:",
     `      url: ${JSON.stringify(input.replicaUrl)}`,
+    `      sse-customer-key: '\${${ENV_ENCRYPTION_KEY}}'`,
     "",
   ].join("\n");
 }
@@ -134,7 +141,7 @@ export function checkLitestreamSettings(bucket: BucketConfig): void {
     dbPath: "venue.db",
     replicaUrl: replicaUrl(bucket, "venue", "gen-0-node-20260101T000000Z"),
   });
-  litestreamEnv(bucket);
+  litestreamEnv(bucket, Buffer.alloc(32).toString("base64"));
 }
 
 /** Litestream's own state for `dbPath`: `.<file>-litestream` beside it (`db.go:342` at the pinned tag). */

@@ -52,6 +52,7 @@ import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
 import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import { readStreamSettings, type StreamSettings } from "./stream-host.js";
+import type { StreamHost } from "./stream-host.js";
 import type { Turns } from "./backup-turns.js";
 import "./errors.js";
 
@@ -73,6 +74,7 @@ export interface BackupApiDeps {
    * key. */
   sealedState: Pick<SealedStateRefresher, "refresh">;
   readStream: () => StreamView;
+  stream: Pick<StreamHost, "reload">;
   /** Shared with the stream settings routes, which also read and then write the key in
    * `backup.env`. */
   turns: Turns;
@@ -305,6 +307,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     await deps.sealedState.refresh();
   };
 
+  const persistKey = async (key: Parameters<typeof writeRecoveryKey>[1]): Promise<void> => {
+    await deps.stream.reload(() => persist(() => writeRecoveryKey(deps.stateDir, key)));
+  };
+
   const storeSettings = (settings: Omit<ArchiveSettings, "revision">): Promise<void> =>
     persist(async () => {
       await withTransaction(deps.db, (tx) => writeArchiveSettings(tx, deps.ring, settings));
@@ -464,9 +470,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
 
         // Deliberate split: the key file cannot join the transaction; refused settings leave a key.
         if (held.key === undefined) {
-          await persist(() =>
-            writeRecoveryKey(deps.stateDir, { recoveryKey, keyRotatedAt: undefined }),
-          );
+          await persistKey({ recoveryKey, keyRotatedAt: undefined });
         }
         await storeSettings(settings);
         const reloadErrorCode =
@@ -531,7 +535,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         // An unreadable record is never rewritten, so its key changes the key-only way.
         if (held === null && deps.supervisor.current().destinations.length === 0) {
           if (!(await keyPresent())) throw requestInvalid("config");
-          await persist(() => writeRecoveryKey(deps.stateDir, { recoveryKey, keyRotatedAt }));
+          await persistKey({ recoveryKey, keyRotatedAt });
           if ((await deps.readRecoveryKey()) !== recoveryKey) {
             throw new AppError("backup.effective_mismatch", {});
           }
@@ -540,7 +544,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
             ...(unreadableCode === undefined ? {} : { loadErrorCode: unreadableCode }),
           });
         }
-        await persist(() => writeRecoveryKey(deps.stateDir, { recoveryKey, keyRotatedAt }));
+        await persistKey({ recoveryKey, keyRotatedAt });
         // The key file is authoritative from here: a failure below never puts the old key back.
         if (held !== null) {
           try {

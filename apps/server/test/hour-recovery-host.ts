@@ -7,6 +7,9 @@ import "../src/boot.js";
 import "../src/testing/free-ports.js";
 import "node:net";
 import "node:tls";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { once } from "node:events";
 import { copyFile, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,6 +64,7 @@ import { generateNodeKeyPair } from "@waitron/membership";
 import { encodeRecoveryKit, signPointer, writePointer } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { sealNodeState, writeSealedStateRow } from "../src/sealed-state.js";
+import { deriveStreamKey } from "../src/stream-key.js";
 import { nodeDumpEntry } from "../src/testing/node-copy.js";
 import {
   createFakeTimersHourClock,
@@ -129,6 +133,7 @@ export let clock: HourTestClock;
 export const seams: { requestFromBox: () => boolean } = { requestFromBox: () => false };
 const client = () => ({ onBox: seams.requestFromBox() });
 let value: unknown;
+const bucketServers = new Set<Server>();
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "hour-recovery-host-"));
   await mkdir(join(root, "state"));
@@ -210,6 +215,13 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.useRealTimers();
   external.internet.mockReset();
+  for (const server of bucketServers) {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+  bucketServers.clear();
   if (root) await rm(root, { recursive: true, force: true });
 });
 export async function host() {
@@ -420,6 +432,7 @@ export async function bucketCommand() {
     version: 1 as const,
     venueId: node.locationId,
     bucket: {
+      endpoint: "",
       region: "eu-west-1",
       bucket: "synthetic-hour-recovery",
       prefix: "",
@@ -429,6 +442,31 @@ export async function bucketCommand() {
     recoveryKey: "separate bucket password",
     pointerSignerPublicKey: signer.publicKey,
   };
+  const server = createServer((req, res) => {
+    const url = new URL(req.url!, "http://local");
+    if (url.searchParams.has("list-type")) {
+      const objectKey = `${url.searchParams.get("prefix")}0000/0000000000000001-0000000000000001.ltx`;
+      res.setHeader("content-type", "application/xml");
+      res.end(
+        `<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>${objectKey}</Key></Contents></ListBucketResult>`,
+      );
+    } else if (
+      req.headers.range === "bytes=0-0" &&
+      req.headers["x-amz-server-side-encryption-customer-key"] ===
+        deriveStreamKey(kit.recoveryKey, kit.venueId)
+    ) {
+      res.writeHead(206);
+      res.end(Buffer.from([0]));
+    } else {
+      res.writeHead(403);
+      res.end();
+    }
+  });
+  bucketServers.add(server);
+  const listening = once(server, "listening");
+  server.listen(0, "127.0.0.1");
+  await listening;
+  kit.bucket.endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   await writeSealedStateRow(
     suite.db,
     node.nodeId,

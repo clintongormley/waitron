@@ -250,6 +250,8 @@ by the answers):
 
 ## Decisions and deliberate limits
 
+- **2026-11-09, A1404 encryption slice:** Litestream and recovery now receive a separate key derived from the backup key. Rotation reloads the stream after resealing. The provider still receives the database and customer key; the box’s local database is unencrypted. Real Amazon recovery-pack qualification after rotation remains in A1404; the A1324 paragraph below records the earlier decision.
+
 - **A1324. The box does not encrypt the bucket copy, until A1404 lands.** The owner accepted this on
   2026-11-06 on advice that Litestream 0.5.17 had no encryption. That was wrong: it accepts a
   customer-supplied key, though nobody has run this. A key would sit on the box beside the bucket

@@ -2893,12 +2893,6 @@ async function bootServer(
   // Reached by every boot past setup and adoption, standby and mirror included: each node writes its
   // own row by design (one row per node; owner, 2026-09-24).
   await sealedState.refresh();
-  // The refresher writes only venue.db, so its own commit cannot call it again.
-  const stopSealingNodeCommits = store.node.onCommit(() => void sealedState.refresh());
-  // Undone newest first: the unsubscribe runs, then a refresh already started finishes before the
-  // store closes.
-  undoOnFailure.push(() => sealedState.settled());
-  undoOnFailure.push(async () => stopSealingNodeCommits());
   // The live copy of venue.db to the owner's bucket, primary only. `start()` returns without
   // waiting for the bucket, so a bucket that never answers cannot hold boot or a sale.
   const streamHost = new StreamHost({
@@ -2913,9 +2907,26 @@ async function bootServer(
     now,
     isPrimary: () => holders.singletonRole.current === "primary",
     mayStream: () => firstStart.mayStream,
+    readRecoveryKey,
+    refreshSealedState: () => sealedState.refresh(),
     ...seams.stream,
   });
   undoOnFailure.push(() => streamHost.stop());
+  // The refresher writes only venue.db, so its own commit cannot call it again.
+  const stopSealingNodeCommits = store.node.onCommit(() => {
+    void sealedState.refresh().then(async (outcome) => {
+      const status = streamHost.status();
+      if (
+        outcome === "sealed" &&
+        status.state === "off" &&
+        "reason" in status &&
+        status.reason === "reseal_required"
+      )
+        await streamHost.start();
+    });
+  });
+  undoOnFailure.push(() => sealedState.settled());
+  undoOnFailure.push(async () => stopSealingNodeCommits());
   await streamHost.start();
   health.readStream = () => streamHost.status();
 
@@ -3301,6 +3312,7 @@ async function bootServer(
       readBoxEnv: () => loadBoxEnv(base, config.stateDir),
       sealedState,
       readStream: () => streamHost.status(),
+      stream: streamHost,
       turns: backupTurns,
     },
     log,

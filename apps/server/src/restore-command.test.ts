@@ -629,6 +629,10 @@ describe("waitron-restore restore --from-bucket", () => {
       "restore failed: restore.stream_pointer_unverified — the bucket's record of its newest copy names a different venue from this kit",
     ],
     [
+      new AppError("restore.stream_pointer_unverified", { reason: "key_or_access" }),
+      "restore failed: restore.stream_pointer_unverified — the recovery pack does not match this copy, or the bucket login cannot read it; use the pack matching this copy, or correct the bucket access and try again",
+    ],
+    [
       new AppError("restore.stream_integrity_failed", {}),
       "restore failed: restore.stream_integrity_failed — the copy downloaded from the bucket is damaged",
     ],

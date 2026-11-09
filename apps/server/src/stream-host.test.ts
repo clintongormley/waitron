@@ -80,6 +80,8 @@ describe("the live copy's wiring", () => {
       log: (_level, event) => logs.push(event),
       now: () => new Date(),
       isPrimary: () => true,
+      readRecoveryKey: async () => "backup-key-for-test-0123456789",
+      refreshSealedState: async () => "sealed",
       ...overrides,
     });
 
@@ -232,10 +234,15 @@ describe("the live copy's wiring", () => {
     it("starts nothing, and says so, before this node holds a membership document", async () => {
       logs = [];
       const litestream = new FakeLitestream();
+      let resealed = false;
       const rt = runtime({
         spawn: litestream.spawn,
         store: new SwitchableStore(() => new Date()),
         now: () => AT,
+        refreshSealedState: async () => {
+          resealed = true;
+          return "sealed";
+        },
       });
       await rt.start();
       expect(rt.status()).toEqual({
@@ -245,6 +252,7 @@ describe("the live copy's wiring", () => {
       });
       expect(litestream.children).toHaveLength(0);
       expect(logs).toContain("stream.no_membership");
+      expect(resealed).toBe(false);
     });
 
     // Nothing external may block the box: a vault this box cannot open is logged and reads off.
@@ -293,6 +301,144 @@ describe("the live copy's wiring", () => {
             signerPrivateKey: keys.privateKey,
           }),
         );
+      });
+
+      it.each(["failed", "no_key"] as const)(
+        "starts no child until resealing succeeds: %s",
+        async (outcome) => {
+          let sealed: "sealed" | "failed" | "no_key" = outcome;
+          const litestream = new FakeLitestream();
+          const rt = runtime({
+            spawn: litestream.spawn,
+            store: new SwitchableStore(() => new Date()),
+            refreshSealedState: async () => sealed,
+          });
+          try {
+            await rt.start();
+            expect(rt.status()).toMatchObject({ state: "off", reason: "reseal_required" });
+            expect(litestream.children).toHaveLength(0);
+            sealed = "sealed";
+            await rt.start();
+            await vi.waitFor(() => expect(litestream.running()).toBeDefined());
+            expect(litestream.running()!.env.WAITRON_STREAM_ENCRYPTION_KEY).toBe(
+              "eZOKn+2qHfg5lh9N8KukguwiEexVtiKGzbtZJFj3c8s=",
+            );
+            expect(Object.values(litestream.running()!.env)).not.toContain(
+              "backup-key-for-test-0123456789",
+            );
+          } finally {
+            await rt.stop();
+          }
+        },
+      );
+
+      it.each([false, true])(
+        "discards a pending start crossing a key change, including a failed reseal: %s",
+        async (fails) => {
+          const litestream = new FakeLitestream();
+          let rawKey = "backup-key-for-test-0123456789";
+          let failReseal = false;
+          let readCount = 0;
+          let keyRead!: () => void;
+          const reading = new Promise<void>((resolve) => {
+            keyRead = resolve;
+          });
+          let releaseKey!: (key: string) => void;
+          const oldKey = new Promise<string>((resolve) => {
+            releaseKey = resolve;
+          });
+          let writing!: () => void;
+          const writeStarted = new Promise<void>((resolve) => {
+            writing = resolve;
+          });
+          let releaseWrite!: () => void;
+          const writeHeld = new Promise<void>((resolve) => {
+            releaseWrite = resolve;
+          });
+          const rt = runtime({
+            spawn: litestream.spawn,
+            store: new SwitchableStore(() => new Date()),
+            refreshSealedState: async () => (failReseal ? "failed" : "sealed"),
+            readRecoveryKey: async () => {
+              if (++readCount === 1) {
+                keyRead();
+                return oldKey;
+              }
+              return rawKey;
+            },
+          });
+          const started = rt.start();
+          let reloading: Promise<void> | undefined;
+          try {
+            await reading;
+            reloading = rt.reload(async () => {
+              rawKey = "replacement-backup-key-0123456789";
+              failReseal = fails;
+              writing();
+              await writeHeld;
+            });
+            await writeStarted;
+            if (!fails) {
+              releaseKey("backup-key-for-test-0123456789");
+              await started;
+              expect(litestream.children).toHaveLength(0);
+            }
+            releaseWrite();
+            await reloading;
+            if (fails) {
+              releaseKey("backup-key-for-test-0123456789");
+              await started;
+              expect(rt.status()).toMatchObject({ state: "off", reason: "reseal_required" });
+              expect(litestream.children).toHaveLength(0);
+              failReseal = false;
+              await rt.start();
+            }
+            await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
+            expect(litestream.running()!.env.WAITRON_STREAM_ENCRYPTION_KEY).not.toBe(
+              "eZOKn+2qHfg5lh9N8KukguwiEexVtiKGzbtZJFj3c8s=",
+            );
+          } finally {
+            releaseKey("backup-key-for-test-0123456789");
+            releaseWrite();
+            await started;
+            await reloading;
+            await rt.stop();
+          }
+        },
+      );
+
+      it("stops the old child before the key write and restarts on the old key when that write fails", async () => {
+        const litestream = new FakeLitestream();
+        const rt = runtime({
+          spawn: litestream.spawn,
+          store: new SwitchableStore(() => new Date()),
+        });
+        try {
+          await rt.start();
+          await vi.waitFor(() => expect(litestream.running()).toBeDefined());
+          const old = litestream.running()!;
+          let stoppedAtWrite = false;
+          let childrenAtWrite = 0;
+          const failure = new Error("key file refused");
+          await expect(
+            rt.reload(async () => {
+              stoppedAtWrite = old.done;
+              await rt.start();
+              childrenAtWrite = litestream.children.length;
+              throw failure;
+            }),
+          ).rejects.toBe(failure);
+          expect(stoppedAtWrite).toBe(true);
+          expect(childrenAtWrite).toBe(2);
+          await vi.waitFor(() => expect(litestream.replicas()).toHaveLength(2), {
+            timeout: 10_000,
+          });
+          expect(litestream.running()!.env.WAITRON_STREAM_ENCRYPTION_KEY).toBe(
+            old.env.WAITRON_STREAM_ENCRYPTION_KEY,
+          );
+        } finally {
+          await rt.stop();
+        }
       });
 
       it("reloads by stopping the running Litestream before starting the next, so two never stream at once", async () => {
@@ -511,7 +657,12 @@ describe("the live copy's wiring", () => {
           return answer;
         };
         const litestream = new FakeLitestream();
-        const rt = runtime({ spawn: litestream.spawn, store });
+        let recoveryKey = "backup-key-for-test-0123456789";
+        const rt = runtime({
+          spawn: litestream.spawn,
+          store,
+          readRecoveryKey: async () => recoveryKey,
+        });
         try {
           await rt.start();
           await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
@@ -520,7 +671,9 @@ describe("the live copy's wiring", () => {
             `${venuePrefix("venue-1")}${first}/0000/0000000000000001-0000000000000001.ltx`,
           );
           await vi.waitFor(() => expect(release).toBeDefined(), { timeout: 10_000 });
+          const oldKey = litestream.running()!.env.WAITRON_STREAM_ENCRYPTION_KEY;
           reloaded = true;
+          recoveryKey = "replacement-backup-key-0123456789";
           await rt.reload();
           // The status names the next generation only once it is claimed and Litestream started,
           // which can trail the old write landing.
@@ -531,6 +684,10 @@ describe("the live copy's wiring", () => {
             },
             { timeout: 10_000 },
           );
+          await vi.waitFor(() => expect(litestream.replicas()).toHaveLength(2), {
+            timeout: 10_000,
+          });
+          expect(litestream.running()!.env.WAITRON_STREAM_ENCRYPTION_KEY).not.toBe(oldKey);
           const second = generationOf(rt.status());
           expect(second).not.toBe(first);
           expect((await readPointer(store, "venue-1"))!.pointer.body.generation).toBe(first);
