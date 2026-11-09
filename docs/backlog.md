@@ -1429,11 +1429,10 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   explains its effect before changing access.
   [Correction](backlog/self-service-refusals.md#sign-in).
 
-- **A1437. The dashboard's sign-in follows Cloud's rules, with SMS codes through Cloud (owner,
-  2026-11-08) — designed, waiting for the owner's five choices.** A new browser on a password-only
-  account gets an email code; about 25 risky actions ask for your proof again (today two do); text
-  messages only through a Cloud-connected venue. Five pull requests, the "ask again" list first.
-  [Design](superpowers/specs/2026-11-09-a1437-dashboard-sign-in-rules-design.md).
+- **A1437. Dashboard sign-in and SMS through Cloud — designed; no build yet.**
+  The [ask-again plan](superpowers/plans/2026-11-09-a1437-1-dashboard-reproof.md) awaits the owner's
+  slice-size and authentication exceptions; its shared window is fifteen minutes. Remaining sign-in
+  choices, email/browser checks, enrolment and SMS stay in the [design](superpowers/specs/2026-11-09-a1437-dashboard-sign-in-rules-design.md).
 
 - **A1227. The Catalogue screen replaces its live stream once per load when catalogues exist (left
   open by A1222).** It watches `ingredients` and `recipe_lines` only after awaited reads, so its
