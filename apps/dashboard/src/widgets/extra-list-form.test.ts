@@ -1348,7 +1348,11 @@ it.each([
         const needed = probe.getBoundingClientRect().width;
         probe.remove();
         const room =
-          input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+          input.getBoundingClientRect().width -
+          parseFloat(style.borderLeftWidth) -
+          parseFloat(style.borderRightWidth) -
+          parseFloat(style.paddingLeft) -
+          parseFloat(style.paddingRight);
         expect(needed, `${name} at ${frame}px in ${locale}`).toBeLessThanOrEqual(room);
       }
     } finally {

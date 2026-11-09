@@ -2444,7 +2444,11 @@ describe("variants", () => {
         // The placeholder's own font, which is italic and wider than the amount's.
         context.font = getComputedStyle(input, "::placeholder").font;
         const room =
-          input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+          input.getBoundingClientRect().width -
+          parseFloat(style.borderLeftWidth) -
+          parseFloat(style.borderRightWidth) -
+          parseFloat(style.paddingLeft) -
+          parseFloat(style.paddingRight);
         expect(context.measureText(input.placeholder).width).toBeLessThanOrEqual(room);
       } finally {
         setLocale("es-ES");
@@ -2790,7 +2794,12 @@ it.each(["en-GB", "es-ES"])(
     const style = getComputedStyle(input);
     const context = document.createElement("canvas").getContext("2d")!;
     context.font = getComputedStyle(input, "::placeholder").font;
-    const room = input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const room =
+      input.getBoundingClientRect().width -
+      parseFloat(style.borderLeftWidth) -
+      parseFloat(style.borderRightWidth) -
+      parseFloat(style.paddingLeft) -
+      parseFloat(style.paddingRight);
     expect(context.measureText(input.placeholder).width).toBeLessThanOrEqual(room);
     expect(override(el, "mi-ranged").getBoundingClientRect().right).toBeLessThanOrEqual(
       pinnedCell(el, "mi-ranged").getBoundingClientRect().left + 0.5,
@@ -2833,7 +2842,12 @@ function textFit(field: HTMLElementTagNameMap["wt-price-input"]) {
   return {
     shown,
     needed: context.measureText(shown).width,
-    room: input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+    room:
+      input.getBoundingClientRect().width -
+      parseFloat(style.borderLeftWidth) -
+      parseFloat(style.borderRightWidth) -
+      parseFloat(style.paddingLeft) -
+      parseFloat(style.paddingRight),
   };
 }
 

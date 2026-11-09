@@ -973,7 +973,12 @@ describe("a link entry", () => {
     expect([style.paddingTop, style.paddingLeft]).toEqual(["9px", "13px"]);
     expect(style.fontWeight).toBe("800");
     expect(style.textDecorationLine).toBe("none");
-    expect(style.justifyContent).toBe("flex-start");
+    const label = document.createRange();
+    label.selectNodeContents(link);
+    expect(label.getBoundingClientRect().left - link.getBoundingClientRect().left).toBeCloseTo(
+      parseFloat(style.paddingLeft) + parseFloat(style.borderLeftWidth),
+      0,
+    );
   });
 
   it("shows the token focus ring when reached by keyboard, as the button does", async () => {

@@ -87,7 +87,12 @@ export class PlaceholderFit implements ReactiveController {
     this.#measure.font = placeholder.font;
     this.#measure.letterSpacing = placeholder.letterSpacing;
     this.#textBox =
-      input.clientWidth - parseFloat(control.paddingLeft) - parseFloat(control.paddingRight) - 1;
+      input.getBoundingClientRect().width -
+      parseFloat(control.borderLeftWidth) -
+      parseFloat(control.borderRightWidth) -
+      parseFloat(control.paddingLeft) -
+      parseFloat(control.paddingRight) -
+      1;
     const shown = this.placeholder;
     this.#fit();
     if (this.placeholder !== shown) this.host.requestUpdate();

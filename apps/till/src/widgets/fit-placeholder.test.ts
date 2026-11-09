@@ -102,6 +102,22 @@ describe("fitPlaceholder, measuring one unit per character", () => {
 });
 
 describe("PlaceholderFit", () => {
+  it("fills the padded text box without clipping or dropping a character that fits", async () => {
+    const { el } = await mountWidget<PlaceholderFitProbe>("placeholder-fit-probe", {
+      text: "W".repeat(40),
+    });
+    const input = el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+    for (const padding of ["8px", "20px"]) {
+      input.style.paddingInline = padding;
+      document.fonts.dispatchEvent(new Event("loadingdone"));
+      await measured();
+      const { placeholder, width, textBox } = drawn(el);
+      expect(placeholder).toMatch(/^W+…$/);
+      expect(width(placeholder)).toBeLessThanOrEqual(textBox);
+      expect(width(`W${placeholder}`)).toBeGreaterThan(textBox - 1);
+    }
+  });
+
   it("leaves no font listener or resize observer behind when removed with an update queued", async () => {
     const attached = watchAttachments();
     const { el, host } = await mountWidget<PlaceholderFitProbe>("placeholder-fit-probe", {

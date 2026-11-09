@@ -518,7 +518,10 @@ describe("content languages screen", () => {
     expect(card.contains(list)).toBe(true);
     expect(footer.parentElement).toBe(card);
     expect(list.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(getComputedStyle(footer).justifyContent).toBe("flex-end");
+    expect(footer.getBoundingClientRect().right - add.getBoundingClientRect().right).toBeCloseTo(
+      parseFloat(getComputedStyle(footer).paddingRight),
+      0,
+    );
     expect(getComputedStyle(footer).borderTopStyle).toBe("solid");
     expect(add.textContent!.trim()).toBe(t("content_languages.add"));
     expect(add.getAttribute("variant")).toBe("secondary");
