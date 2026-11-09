@@ -5,11 +5,6 @@ import "./errors.js";
 
 export const NODE_KEY_PURPOSE = "membership.node_key";
 
-/**
- * The handle is named `ownerDb` because `nodes` is one of the tables
- * `scripts/write-path-tables.json` lists, which request code may read and never write; nothing in
- * the engine enforces that.
- */
 export interface EstablishIdentityDeps {
   ownerDb: Database;
   node: NodeDatabase;

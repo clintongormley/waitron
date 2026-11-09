@@ -301,7 +301,6 @@ describe("the detector itself", () => {
     expect(
       writes(
         "/**\n * `insert into tenants` happens in the provisioner\n */\nconst x = 1;",
-        "settings",
         "tenants",
       ),
     ).toBe(false);

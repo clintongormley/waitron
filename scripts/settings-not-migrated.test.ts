@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 
 const writes = (text: string) =>
-  /\b(?:insert(?:\s+or\s+\w+)?\s+into|replace\s+into|delete\s+from)\s+[`"]?settings[`"]?(?![\w])|\bupdate(?:\s+or\s+\w+)?\s+[`"]?settings[`"]?\s+set\b/i.test(
+  /\b(?:insert(?:\s+or\s+\w+)?\s+into|replace\s+into|delete\s+from)\s+(?:[`"]?\w+[`"]?\s*\.\s*)?[`"]?settings[`"]?(?![\w])|\bupdate(?:\s+or\s+\w+)?\s+(?:[`"]?\w+[`"]?\s*\.\s*)?[`"]?settings[`"]?(?:\s+(?:as\s+)?[`"]?\w+[`"]?)?\s+set\b/i.test(
     text.replace(/--[^\n]*/g, ""),
   );
 const root = join(import.meta.dirname, "..");
@@ -35,6 +35,13 @@ it("sees writes it must refuse and passes a rule on settings", () => {
     "replace into settings values (1)",
     "delete from settings",
     "insert or replace into settings values (1)",
+    "update settings as s set doc = '{}'",
+    "update main.settings set doc = '{}'",
+    "update main.settings s set doc = '{}'",
+    'update "main"."settings" as "s" set doc = \'{}\'',
+    "insert into main.settings values (1)",
+    "delete from main.settings",
+    "replace into main.settings values (1)",
   ])
     expect(writes(text)).toBe(true);
   for (const text of [
@@ -42,6 +49,7 @@ it("sees writes it must refuse and passes a rule on settings", () => {
     "CREATE TABLE `settings` (",
     "-- update settings set doc = '{}'\nselect 1",
     "update settings_other set doc = '{}' ",
+    "update main.settings_other s set doc = '{}'",
   ])
     expect(writes(text)).toBe(false);
 });

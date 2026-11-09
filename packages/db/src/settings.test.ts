@@ -282,5 +282,6 @@ describe("a per-module rule on settings", () => {
   it("leaves the module's good document and another module's alone", async () => {
     expect(await save(3)).toEqual({ doc: { size: 3 }, revision: 1 });
     expect(await save(4, 0, "other")).toEqual({ doc: { size: 4 }, revision: 1 });
+    expect(await save(5, 1, "other")).toEqual({ doc: { size: 5 }, revision: 2 });
   });
 });

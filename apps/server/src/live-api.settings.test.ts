@@ -14,7 +14,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
-import { liveResourceTypes } from "./live-resources.js";
+import { liveResourceTypesForModules } from "./live-resources.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -44,7 +44,13 @@ async function fixture() {
   const app = new Hono();
   mountLiveApi(
     app,
-    { db: suite.db, bus, resourceTypes: liveResourceTypes(CORE_CHANGE_SOURCES, ["venue", "menu"]) },
+    {
+      db: suite.db,
+      bus,
+      resourceTypes: liveResourceTypesForModules([
+        { changes: CORE_CHANGE_SOURCES, settings: [document("venue"), document("menu")] },
+      ]),
+    },
     () => {},
   );
   return { app, bus, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
