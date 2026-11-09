@@ -143,13 +143,14 @@ Set `DISPOSABLE_TESTS_MODE=server` to route CI jobs to Lane I's disposable Linux
 runners. Same-repository pull requests, main pushes, tags, schedules, manual runs and
 ordinary reruns use the server route. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
 GitHub so routing, recovery and the required result can still run when server assignment
-stops (watcher, 2026-11-08 16:00). CI passes its routing result explicitly into the reusable image smoke workflow;
-its other callers retain their existing hosted routing.
+stops (watcher, 2026-11-08 16:00). Image smoke always uses `ubuntu-latest` until a
+disposable guest is qualified (watcher, 2026-11-09 08:20). CI still passes
+`server_route` into the reusable image workflow, but that input does not choose its runner.
 
 The workflow no longer uses `DISPOSABLE_TESTS_*_JOBS` family caps. The controller's
 measured global pool limits simultaneous guests. Removing a workflow cap does not add
 memory or runner slots. Publish matching controller and host job-key support before
-activating this workflow; the controller must recognise stream, merge and image
+activating this workflow; the controller must recognise stream and merge
 jobs as well as package shards.
 
 Set `DISPOSABLE_TESTS_HEAD` to one full source SHA to select that commit, or unset it
@@ -164,8 +165,9 @@ local expression checks do not establish when GitHub reads a changed repository 
 
 `DISPOSABLE_TESTS_LABEL_PREFIX` defaults to `dt`. A server job requests `self-hosted`
 and `dt-REPOSITORY_ID-RUN_ID-ATTEMPT-JOB-N`, with its existing shard number or 1 for a
-single job. The reusable image job uses logical key `image-smoke-1`; GitHub reports its
-job name as `image / smoke`. Existing check names, test commands, coverage merges,
+single job. GitHub reports the hosted image job as `image / smoke`.
+`scripts/ci-server-first.test.mjs` checks its literal hosted route and the other routing
+expressions locally; these checks do not run a hosted image build. Existing check names, test commands, coverage merges,
 setup retries and execution limits remain unchanged.
 
 The routing job checks CI's queued and running workflows with its own
