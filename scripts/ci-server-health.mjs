@@ -133,19 +133,23 @@ export async function serverHealth(options, unavailable) {
   return { stuck: running || progressing ? [] : stuck, running, recent };
 }
 
-function initialJobs(outputs) {
-  const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+export function initialJobs(
+  outputs,
+  workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
+) {
+  assert.ok(outputs?.code === "true" || outputs?.code === "false", "Unknown CI selection");
   let count = 0;
   for (const [, id, body] of workflow.matchAll(
     /^ {2}([\w-]+):\n([\s\S]*?)(?=^ {2}[\w-]+:|$(?![\s\S]))/gm,
   )) {
-    if (!/^ {4}needs: changes$/m.test(body) || id === "server-queue-watchdog") continue;
+    if (!/^ {4}needs: (changes|\[changes\])$/m.test(body) || id === "server-queue-watchdog")
+      continue;
     const condition = body.match(/^ {4}if: (.+)$/m)?.[1];
     assert.ok(condition, `Missing initial job condition: ${id}`);
     const enabled = runInNewContext(
       condition.replace(/^\$\{\{ | \}\}$/g, ""),
       {
-        needs: { changes: { outputs } },
+        needs: { changes: { outputs, result: "success" } },
         inputs: { server_probe: false },
         always: () => true,
       },
@@ -154,7 +158,10 @@ function initialJobs(outputs) {
     assert.equal(typeof enabled, "boolean", `Unknown initial job condition: ${id}`);
     if (!enabled) continue;
     if (/^ {6}matrix:/m.test(body)) {
-      const shards = JSON.parse(body.match(/^ {8}shard: (\[[^\n]+\])$/m)?.[1] ?? "null");
+      const matrix = body.match(/^ {6}matrix:\n((?: {8}[^\n]*\n)+)/m)?.[1] ?? "";
+      const dimensions = [...matrix.matchAll(/^ {8}([\w-]+):/gm)].map(([, name]) => name);
+      assert.deepEqual(dimensions, ["shard"], `Unsupported initial job matrix: ${id}`);
+      const shards = JSON.parse(matrix.match(/^ {8}shard: (\[[^\n]+\])$/m)?.[1] ?? "null");
       assert.ok(Array.isArray(shards) && shards.length > 0, `Unknown initial job matrix: ${id}`);
       count += shards.length;
     } else count++;
@@ -314,7 +321,7 @@ export async function healthCommand(command, options, { report, output }) {
       } catch (error) {
         answer = {
           route: "server",
-          reason: `CI inventory could not be verified; using the server: ${error.message}`,
+          reason: `CI routing inputs could not be verified; using the server: ${error.message}`,
         };
       }
       output(`server_route=${answer.route}`);

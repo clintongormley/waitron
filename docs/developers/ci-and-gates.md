@@ -180,8 +180,9 @@ Routing runs after classification and scope gates. It reads the workflow's jobs 
 need only `changes`, evaluates their existing conditions against those outputs, and
 counts every selected matrix shard. This includes the hosted image job when selected;
 it excludes the server watchdog and later merge, summary and publication jobs.
-The summary records the running, queued and selected counts. An unreadable selection
-uses the server. This repository-only snapshot neither measures account-wide capacity
+The summary records the running, queued and selected counts. A selection the routing script cannot read
+uses the server. If an earlier classification or gate step fails, routing is skipped and the
+two always-running lint/root jobs retain the empty-route hosted fallback. This repository-only snapshot neither measures account-wide capacity
 nor reserves slots; simultaneous routing decisions can observe the same room. The routing
 run's own hosted `changes` job counts while running. The cutoff of 20 remains the owner's
 approximation (watcher, 2026-11-09 10:01; initial-wave fit correction 12:05), not a measured

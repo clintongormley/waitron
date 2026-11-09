@@ -582,9 +582,9 @@ A1424's live qualification was added on 7 November 2026.
   The successful stream job in main run 42506794616 applied loopback MTU 1500 and
   `TMPDIR=/dev/shm`; this is that job’s receipt, not a full guest qualification.
   Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
-  drills. Keep the corrected v40 controller; the existing routing job uses the hosted
-  approximation above (watcher, 2026-11-09 10:01). A1454 is parked with six slots retained (watcher,
-  2026-11-09 08:20); A1461 reduces run sizes. Per-job
+  drills. Keep the corrected v41 controller; the existing routing job uses the hosted
+  approximation above (watcher, 2026-11-09 10:01). A1454 is dropped with six slots retained (watcher,
+  2026-11-09 10:24); A1461 reduces run sizes. Per-job
   overflow, the remaining workflows, second-host registration and queue measurements remain open. Lane I reports
   existing-record observations on 15 November; episodic status reads cannot prove the full-day
   no-avoidable-wait target. Never drain other lanes' work for a drill.
@@ -740,7 +740,7 @@ A1424's live qualification was added on 7 November 2026.
   illustrative replay, not measured alternate outcomes. Its fit-only rules leave more modeled
   capacity idle; no snapshot-freshness limit was validated. Keep the deployed controller,
   advance A1454 and A1461, and report existing-record observations on 15 November. **2026-11-09:** the watcher
-  parked A1454 and retained six slots after its measurement-only cut; A1461 reduces run sizes. No new
+  dropped A1454 and retained six slots after its measurement-only cut; A1461 reduces run sizes. No new
   collector, workflow, reservation service or credential carrier is approved. **2026-11-09 10:01:**
   the owner approved the repository-only GitHub-first approximation in the existing router: no
   hosted queue and fewer than 20 running hosted jobs chooses GitHub; otherwise the server-health
