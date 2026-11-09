@@ -37,7 +37,7 @@ referrals, not completed recovery experiments.
 | [Public connection](#tls-repair), #2055 | Referral reworked in #2064: read-only Check again and Stop, applicable HTTPS/device choices, pending actions and no-JavaScript guidance are covered in its dated addendum. Authenticated certificate replacement and linked-layout repair remain open. |
 | [Certificate](#certificate), #2056 | Referral reworked: file/type changes, another check with Save and Cancel are explained. Persistent connection/configuration diagnosis and its repair choice remain open below. |
 | [Backup key](#backup-key), #2058 | Referral reworked: retain both key records and stop changing keys; the page states its diagnostic limit. Authenticated inspection and correction of effective configuration remain open below. |
-| [Setup state](#setup-state) | Offer resume/recovery choices and required authentication. A1042's S7l change is in; the `attempt_invalid` words still name no next step. |
+| [Setup state](#setup-state) | Offer a next step and any required authentication. A1042's S7l change is in; the `attempt_invalid` words still name no next step. |
 | [Setup environment](#setup-environment) | Establish a fresh-start/reinstall choice applicable to this state, with a safe Stop before data loss. Do not improvise a reset of trading data. |
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
 | [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
@@ -458,21 +458,6 @@ State: Saved setup/owner data cannot be parsed or checked, or a protected read f
 
 Route: Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words. Since A1206 (2026-10-29) Start again no longer reads the attempt's series names, so a damaged record of them neither refuses nor warns; a damaged setup record or claim marker (A1158), the setup databases A1159 lists and the database-present case in A1161 still refuse.
 
-### `shell.operation_conflict`
-
-Screen: Setup wizard. Fix: [setup-state](#setup-state).
-
-| Language | Current words |
-| --- | --- |
-| EN | This server has saved setup work for a different request. Resume the original setup or contact support. |
-| ES | Este servidor tiene guardada una configuración de otra solicitud. Continúa la configuración original o contacta con soporte. |
-
-Wording: `apps/setup/src/i18n/strings/shell.ts:24` and `apps/setup/src/i18n/strings/shell.ts:165`.
-
-State: A saved setup-operation file is malformed, or kind/requestHash differs. Waiting cannot change a retained malformed file or reconcile a different request. Receipt: `packages/provisioning/src/setup-operation.ts:94`; `packages/provisioning/src/setup-operation.ts:171`; `apps/setup/src/setup-app.ts:1513`.
-
-Route: Existing for a resumable request: resume the original. Missing for an unrecoverable mismatch: a verified discard/recovery choice. Coordinate with A1042; do not delete retained setup data as an improvised remedy.
-
 ### `shell.already_stamped`
 
 Screen: Setup wizard. Fix: [setup-environment](#setup-environment).
@@ -684,7 +669,7 @@ changes take their required review and existing protected-writer approvals.
 
 ### setup-state
 
-**Setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
+**Setup state refusals need a usable next step.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence.
 
 #### A1158: a damaged setup record or claim marker still dead-ends Start again
 
