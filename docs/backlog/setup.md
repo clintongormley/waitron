@@ -417,8 +417,8 @@ once-only restart, with a test that closes the connection before the answer is w
 ## A1223. A stored series pick that turns out taken
 
 From A1207. An attempt whose chosen name is found taken before it finishes is refused
-(`minute_in_use`). Left: start a new attempt by itself (Q1 in the A1385 PR; the default there is not
-to). The refusal is already worded where it shows (A1385): both hour pages and the setup app at
+(`minute_in_use`). Left: start a new attempt by itself (Q1 in the A1385 PR, answered by the owner on
+2026-11-07: series are cheap and a retry may take a second series name). The refusal is already worded where it shows (A1385): both hour pages and the setup app at
 first setup's activation call it a fault in Waitron, and the restore page adds that reloading the
 page and starting the restore again makes a new restore with a new name
 (`packages/fiscal-verifactu/src/setup/clock-wait.ts`, `clockWaitStrings` `inUse`;
@@ -521,7 +521,8 @@ that operation's reader. Do not remove exact-content checks to make a large file
 1 entry, size S. The other three were built by the A1385 PR.
 
 - **A1223. A stored series pick that turns out taken** (from A1207): start a new attempt by itself
-  (Q1 in the A1385 PR); the refusal is already worded where it shows (A1385).
+  (owner, 2026-11-07: series are cheap and a retry may take a second series name); the refusal is
+  already worded where it shows (A1385).
   [Detail](setup.md#a1223-a-stored-series-pick-that-turns-out-taken)
 
 ## Bundle: The key ring after a join
