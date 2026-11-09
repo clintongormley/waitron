@@ -584,8 +584,8 @@ A1424's live qualification was added on 7 November 2026.
   The successful stream job in main run 42506794616 applied loopback MTU 1500 and
   `TMPDIR=/dev/shm`; this is that job’s receipt, not a full guest qualification.
   Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
-  drills. Keep the corrected v40 controller without a new whole-run capacity gate, as the
-  watcher approved on 8 November. A1454 is parked with six slots retained (watcher,
+  drills. Keep the corrected v40 controller; the existing routing job uses the hosted
+  approximation above (watcher, 2026-11-09 10:01). A1454 is parked with six slots retained (watcher,
   2026-11-09 08:20); A1461 reduces run sizes. Per-job
   overflow, the remaining workflows, second-host registration and queue measurements remain open. Lane I reports
   existing-record observations on 15 November; episodic status reads cannot prove the full-day

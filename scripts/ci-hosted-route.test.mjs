@@ -60,6 +60,44 @@ describe("GitHub-first routing", () => {
     expect(f.calls.every(([, options]) => !options?.method)).toBe(true);
   });
 
+  it("counts hosted work in a run visible only in the queued run list", async () => {
+    const f = fixture(0, 1),
+      request = f.options.request;
+    f.options.request = async (path, options) =>
+      path.includes("/actions/runs?")
+        ? {
+            total_count: path.includes("status=queued") ? 1 : 0,
+            workflow_runs: path.includes("status=queued") ? [f.run] : [],
+          }
+        : request(path, options);
+    expect((await serverRoute(f.options)).route).toBe("server");
+  });
+
+  it("counts a run only once when it moves between active run lists", async () => {
+    const f = fixture(19),
+      request = f.options.request;
+    f.options.request = async (path, options) =>
+      path.includes("/actions/runs?")
+        ? { total_count: 1, workflow_runs: [f.run] }
+        : request(path, options);
+    const answer = await serverRoute(f.options);
+    expect(answer.route).toBe("hosted");
+    expect(answer.reason).toContain("19 running, 0 queued");
+  });
+
+  it("defaults to hosted when the run inventory names a different repository", async () => {
+    const f = fixture(20),
+      outputs = [],
+      reports = [];
+    f.run.repository.id = 99;
+    await healthCommand("route", f.options, {
+      output: (line) => outputs.push(line),
+      report: (line) => reports.push(line),
+    });
+    expect(outputs).toEqual(["server_route=hosted"]);
+    expect(reports[0]).toContain("Foreign hosted run inventory");
+  });
+
   it("ignores self-hosted, completed and jobs without assigned runner labels", async () => {
     const f = fixture(19);
     for (const job of [
