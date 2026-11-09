@@ -154,6 +154,7 @@ class ModifierLeaveApp extends LitElement {
   initialSelections?: LineSelection;
   withNote = false;
   lineDetails = false;
+  inline = false;
   quantity = "1";
   initialCourse?: string;
   courseChoices: readonly ComboboxOption[] = [];
@@ -165,6 +166,7 @@ class ModifierLeaveApp extends LitElement {
         .initialSelections=${this.initialSelections}
         .withNote=${this.withNote}
         .lineDetails=${this.lineDetails}
+        .inline=${this.inline}
         .quantity=${this.quantity}
         .initialCourse=${this.initialCourse}
         .courseChoices=${this.courseChoices}
@@ -813,4 +815,63 @@ it("saving Course commits its own baseline and a stale discard cannot undo it", 
   await form.updateComplete;
   expect(course.value).toBe("dessert");
   expect(unload()).toBe(false);
+});
+
+it("inline, a changed draft asks before leaving, keeps it on Keep and restores it on Discard", async () => {
+  const { el: app } = await mountWidget<ModifierLeaveApp>("modifier-leave-test-app", {
+    product: { ...product, variants: undefined },
+    inline: true,
+    lineDetails: true,
+    withNote: true,
+    quantity: "2",
+    initialSelections: { options: [{ listId: "cooked", labelId: "medium" }], note: "No salt" },
+  });
+  const form = app.shadowRoot!.querySelector("till-modifier-picker")!;
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect(await form.requestLeave("cancel"), "nothing changed, so nothing to ask").toBe(true);
+  await note(form, "No onion");
+  await input(form, "#label-cooked-rare");
+  expect(unload()).toBe(true);
+  const kept = form.requestLeave("cancel");
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  expect(await kept).toBe(false);
+  expect(form.shadowRoot!.querySelector("wt-textarea")!.value).toBe("No onion");
+  const navigated = app.leave.coordinator.request({
+    scopes: "all",
+    reason: "navigation",
+    proceed: () => {
+      app.closes++;
+    },
+  });
+  await expect.poll(() => q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  expect(await navigated).toBe("proceeded");
+  await form.updateComplete;
+  expect(form.shadowRoot!.querySelector("wt-textarea")!.value).toBe("No salt");
+  expect(form.shadowRoot!.querySelector<HTMLInputElement>("#label-cooked-medium")!.checked).toBe(
+    true,
+  );
+  expect(unload()).toBe(false);
+  expect(app.submitted).toEqual([]);
+});
+
+it("inline, a confirmed draft leaves without asking", async () => {
+  const { el: app } = await mountWidget<ModifierLeaveApp>("modifier-leave-test-app", {
+    product: { ...product, variants: undefined },
+    inline: true,
+    withNote: true,
+    initialSelections: { options: [{ listId: "cooked", labelId: "medium" }] },
+  });
+  const form = app.shadowRoot!.querySelector("till-modifier-picker")!;
+  await form.updateComplete;
+  await note(form, "No onion");
+  form.confirm();
+  expect(app.submitted).toHaveLength(1);
+  expect(app.submitted[0]!.note).toBe("No onion");
+  expect(unload()).toBe(false);
+  expect(await form.requestLeave("cancel")).toBe(true);
+  expect((await question(app)).open).toBe(false);
 });

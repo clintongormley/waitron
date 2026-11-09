@@ -136,8 +136,8 @@ changed, under **Identical dishes on a kitchen ticket**, **Print held groups in 
 **Changes after sending**: **Not allowed**, **While held**, or
 **While held or waiting**. It also sets whether its dishes wait for the pass to fire them, under
 **Waits for the pass**: see [Make a station wait for the pass](kitchen-service.md#station-waits).
-A dish the kitchen has started is never recalled. A dish that went to no
-station, with no extra that went to a station of its own, can be recalled whatever the stations
+A dish the kitchen has started is never recalled or changed. A dish that went to no
+station, with no extra that went to a station of its own, can be recalled or changed whatever the stations
 allow.
 
 ## Work the kitchen screen {#kitchen-screen}

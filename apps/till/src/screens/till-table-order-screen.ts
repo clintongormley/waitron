@@ -54,6 +54,7 @@ import {
   decimal,
   formatMoney,
   multiplyDecimal,
+  perDishOptionQuantity,
   subtractDecimal,
   sumDecimals,
   type Decimal,
@@ -87,6 +88,15 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
 import "../widgets/modifier-picker.js";
+import type {
+  ModifierChangeDetail,
+  ModifierConfirmDetail,
+  TillModifierPicker,
+} from "../widgets/modifier-picker.js";
+import { deriveExtraSelections, sameExtraSelections } from "../state/held-extras.js";
+import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
+import { offeredListsOf } from "../state/order-line.js";
+import type { LineSelection, SelectedExtra } from "../state/working-order.js";
 import {
   partyScope,
   partyTablesLabel,
@@ -494,8 +504,6 @@ export interface AdjustDetail {
   combined?: true;
   kind: AdjustKind;
   target: AdjustTarget;
-  /** Opened by the app's Cancel offer, so the message saying why stays on screen. */
-  offered?: true;
   /** Pressed in the counter's basket, on the stored order it holds, rather than on the table's
    * open bill. */
   counter?: true;
@@ -513,7 +521,7 @@ export interface BillPayDetail {
 export interface ChangeLineDetail {
   expectedEdit: BillEditExpected | null;
   lineNo: number;
-  /** The line's staff name, for a message about the change shown once another order is open. */
+  /** The line's staff name, for a message about the change. */
   lineName: string;
   patch: OrderLinePatch;
   revision: number;
@@ -547,6 +555,44 @@ type ActionStep = "closed" | "pick" | "move-dishes" | "split-table" | "split-tab
 /** What the foot says when a refusal's own sentence would claim the rows were read again and they
  * were not. */
 const splitRowsUnreadSentence = (): string => t("table.split_updated_elsewhere");
+
+/** What a Sent window's fields start from: the product and selection, and its dishes' stored facts. */
+type SentChangeSeed<Pending> = {
+  pending: Pending;
+  /** Each member's count, note, answers and extras rows as stored, never through the live menu. */
+  stored: string;
+  product: TillProduct;
+  selection: LineSelection;
+};
+
+interface LinesIndex {
+  lines: readonly TabLine[];
+  byNo: Map<number, TabLine>;
+  children: Map<number, TabLine[]>;
+  /** The dishes an extra's station keeps from changing. */
+  extraForbidsChange: Set<number>;
+}
+
+function findSlice(
+  slices: readonly SentSlice[],
+  kind: SentSlice["kind"],
+  workingOrderId: string,
+  lineId: string,
+): SentSlice | undefined {
+  return slices.find(
+    (slice) =>
+      slice.kind === kind &&
+      slice.row.lineId === lineId &&
+      slice.row.workingOrderId === workingOrderId,
+  );
+}
+
+function stationAllowsChange(row: TabLine): boolean {
+  return (
+    row.changesAfterSending === null ||
+    allowsChangeAfterSending(row.changesAfterSending, row.firedAt !== null)
+  );
+}
 
 const isAnswer = (read: SplitSources | "failed" | null): read is SplitSources =>
   read !== null && read !== "failed";
@@ -1334,6 +1380,39 @@ export class TillTableOrderScreen extends LitElement {
     billId: string | undefined;
     visit: number;
   } | null = null;
+  /** What the open Sent window's fields last reported, for the row it was opened on. */
+  @state() private sentChange: {
+    pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
+    detail: ModifierChangeDetail;
+  } | null = null;
+  /** The app's answer to a Change dish the kitchen refused as started: the dish's line, and why. */
+  @property({ attribute: false }) changeRefusal: { lineNo: number; message: string } | null = null;
+  /** Each line's last Change dish sent, kept so a refusal of it can reopen its window as it was
+   * left. By line, as changes to two dishes can be out at once and either may be refused. */
+  readonly #sentChangeAttempts = new Map<
+    number,
+    {
+      pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
+      selection: ModifierConfirmDetail;
+    }
+  >();
+  /** The refusal the reopened Sent window shows, and the change it puts back in the fields. */
+  @state() private sentChangeRefused: {
+    pending: NonNullable<TillTableOrderScreen["sentLinePending"]>;
+    message: string;
+    selection: ModifierConfirmDetail;
+  } | null = null;
+  /** The open Sent window whose staged change was thrown away because its dish's stored facts
+   * changed, which its footer says until the fields change again. */
+  @state() private sentChangeOvertaken: NonNullable<
+    TillTableOrderScreen["sentLinePending"]
+  > | null = null;
+  /** The product and selection the open Sent window's fields started from, and its dishes' counts. */
+  #sentChangeSeed?: SentChangeSeed<NonNullable<TillTableOrderScreen["sentLinePending"]>>;
+  readonly #beforeSentLineClose = (reason: LeaveReason): Promise<boolean> =>
+    this.renderRoot
+      .querySelector<TillModifierPicker>("[data-sent-change-fields]")
+      ?.requestLeave(reason) ?? Promise.resolve(true);
   /** The screen is at least {@link DRAFT_SIDE_BY_SIDE_MIN_WIDTH} wide. */
   @state() private wide = false;
   /** Below that width, the draft is open on its Review view in place of browsing. */
@@ -1352,9 +1431,6 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) billEdit: BillEditExpected | null = null;
   @property({ attribute: false }) routingRevision: number | null = null;
   @property({ attribute: false }) billEdits: readonly BillEditExpected[] = [];
-  /** Set by the app when a change was refused because the kitchen had started the line: that line's
-   * Cancel opens. */
-  @property({ attribute: false }) cancelOffer: number | null = null;
 
   /** The held group whose Fire waits for confirmation. */
   @state() private fireGroupPending: OrderGroup | null = null;
@@ -1364,13 +1440,15 @@ export class TillTableOrderScreen extends LitElement {
     billId: string | undefined;
     visit: number;
   };
-  /** A row whose Mark served, or its undo, asks how many; `count` is what is chosen so far. A
-   * grouped row's `members` are its portions by line number, and `count` counts portions. */
+  /** A row whose Mark served, its undo, or a grouped row's Recall asks how many; `count` is what
+   * is chosen so far. A grouped row's `members` are its portions by line number, and `count`
+   * counts portions; `recall` holds the same portions as Sent slices. */
   @state() private servePending: {
     row: CurrentOrderRow;
     undo: boolean;
     count: Decimal;
     members?: readonly CurrentOrderRow[];
+    recall?: readonly SentSlice[];
   } | null = null;
 
   #serveAuthority?: {
@@ -2115,7 +2193,6 @@ export class TillTableOrderScreen extends LitElement {
   /** Built with {@link groups}: every group, and the held ones, in position order. */
   #groupsInOrder: OrderGroup[] = [];
   #heldInOrder: OrderGroup[] = [];
-  #lineByNo = new Map<number, TabLine>();
 
   constructor() {
     super();
@@ -2132,8 +2209,12 @@ export class TillTableOrderScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("draftStore")) this.#kitchenNoteVisit++;
+    if (changed.has("changeRefusal")) this.#reopenRefusedChange();
     if (this.sentLinePending !== null && this.#sentLine() === undefined)
       this.sentLinePending = null;
+    if (this.sentChangeRefused !== null && this.sentChangeRefused.pending !== this.sentLinePending)
+      this.sentChangeRefused = null;
+    if (this.sentChangeOvertaken !== this.sentLinePending) this.sentChangeOvertaken = null;
     this.#watchDraft();
     this.#refreshKept();
     if (this.#draftPress !== undefined && !this.#draftPressCurrent()) this.#endDraftDrag();
@@ -2164,7 +2245,6 @@ export class TillTableOrderScreen extends LitElement {
         billGross(this.lines, (line) => this.#lineGross(line)),
         this.lines.length,
       );
-      this.#lineByNo = new Map(this.lines.map((line) => [line.lineNo, line]));
     }
     this.#tidyMovePicks();
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
@@ -2230,17 +2310,28 @@ export class TillTableOrderScreen extends LitElement {
       this.billNaming = null;
       this.counting = null;
     }
-    if (changed.has("cancelOffer") && this.cancelOffer !== null) {
-      const offered = this.lines.find(
-        (line) => line.lineNo === this.cancelOffer && !this.#isChild(line),
-      );
-      this.#offeredCancel = offered;
-      this.#offerTaken = true;
-    }
+    this.#followSentChange();
   }
 
-  /** The app clears its offer on this event, so a screen mounted later does not open it again. Taken
-   * even when the line is gone, for the same reason. */
+  /** Keeps the open Sent window's fields on the dish as it is stored. Once the dish can no longer be
+   * changed, or its stored facts change, what the fields staged is thrown away and they start again
+   * from the dish as it is then. Runs last in `willUpdate`, after everything the check reads is
+   * current. */
+  #followSentChange(): void {
+    const seed = this.#sentChangeSeed;
+    if (this.sentChange === null && seed === undefined) return;
+    const pending = this.sentLinePending;
+    const members = pending === null ? undefined : this.#sentLineMembers();
+    const lines = members === undefined ? undefined : this.#sentChangeLines(members);
+    if (lines !== undefined && seed?.pending === pending) {
+      if (seed.stored === this.#storedSentFacts(lines)) return;
+      if (this.#sentChangeHeld(pending!)) this.sentChangeOvertaken = pending;
+      this.sentChangeRefused = null;
+    }
+    this.sentChange = null;
+    this.#sentChangeSeed = undefined;
+  }
+
   override updated(changed: PropertyValues<this>): void {
     this.#refocusMenu();
     this.#placeStepFocus();
@@ -2249,14 +2340,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#sizeDraftBar();
     this.#observeSplit();
     this.#tellSplitDeclined();
-    if (!this.#offerTaken) return;
-    this.#offerTaken = false;
-    const offered = this.#offeredCancel;
-    this.#offeredCancel = undefined;
-    if (offered !== undefined) this.#adjust("cancel", this.#lineTarget(offered), { offered: true });
-    this.dispatchEvent(
-      new CustomEvent("cancel-offer-taken", { detail: {}, bubbles: true, composed: true }),
-    );
   }
 
   /** The naming and guests windows open from the ⋮, so focus goes back to it when the last of them
@@ -2382,9 +2465,6 @@ export class TillTableOrderScreen extends LitElement {
     if (bar !== undefined) barSize(bar, bar.getBoundingClientRect().height);
   }
 
-  #offerTaken = false;
-  #offeredCancel: TabLine | undefined;
-
   #lineGross(line: TabLine): Decimal {
     return this.#lineGrossByLineNo.get(line.lineNo)!;
   }
@@ -2476,18 +2556,177 @@ export class TillTableOrderScreen extends LitElement {
       this.currentOrders?.groups.some((group) => group.rows.some(served))
     )
       return false;
-    const stationAllows = (row: TabLine) =>
-      row.changesAfterSending === null ||
-      allowsChangeAfterSending(row.changesAfterSending, row.firedAt !== null);
     return (
-      stationAllows(line) &&
-      this.lines.every((extra) => extra.parentLineNo !== line.lineNo || stationAllows(extra)) &&
+      this.#stationsAllowChange(line) &&
       !this.#isChild(line) &&
       line.servedAt === null &&
       !isStarted(line) &&
       (this.#shownBill === undefined || this.#shownBill.status === "open") &&
       !this.lines.some((extra) => extra.parentLineNo === line.lineNo && isStarted(extra)) &&
       (line.sentAt !== null || inHeldGroup(line, this.#heldGroupIds!))
+    );
+  }
+
+  /** Built from {@link lines} as they are when read, not at the last redraw: a press can land
+   * between a new `lines` and the redraw that shows it. */
+  #linesIndexed?: LinesIndex;
+
+  #linesIndex(): LinesIndex {
+    if (this.#linesIndexed?.lines !== this.lines) {
+      const extraForbidsChange = new Set<number>();
+      const children = new Map<number, TabLine[]>();
+      for (const row of this.lines) {
+        if (row.parentLineNo == null) continue;
+        if (!stationAllowsChange(row)) extraForbidsChange.add(row.parentLineNo);
+        const kept = children.get(row.parentLineNo);
+        if (kept === undefined) children.set(row.parentLineNo, [row]);
+        else kept.push(row);
+      }
+      this.#linesIndexed = {
+        lines: this.lines,
+        byNo: new Map(this.lines.map((line) => [line.lineNo, line])),
+        children,
+        extraForbidsChange,
+      };
+    }
+    return this.#linesIndexed;
+  }
+
+  #stationsAllowChange(line: TabLine): boolean {
+    return stationAllowsChange(line) && !this.#linesIndex().extraForbidsChange.has(line.lineNo);
+  }
+
+  #productIndex?: {
+    products: readonly TillProduct[];
+    byOffer: Map<string, TillProduct>;
+    byId: Map<string, TillProduct>;
+  };
+
+  #liveProduct(line: TabLine): TillProduct | undefined {
+    if (this.#productIndex?.products !== this.products) {
+      const byOffer = new Map<string, TillProduct>();
+      const byId = new Map<string, TillProduct>();
+      for (const product of this.products) {
+        if (product.menuItemId !== undefined && !byOffer.has(product.menuItemId))
+          byOffer.set(product.menuItemId, product);
+        if (!byId.has(product.id)) byId.set(product.id, product);
+      }
+      this.#productIndex = { products: this.products, byOffer, byId };
+    }
+    const { byOffer, byId } = this.#productIndex;
+    const productId = line.parentProductId ?? line.productId;
+    return (
+      (line.menuItemId === null ? undefined : byOffer.get(line.menuItemId)) ??
+      (productId === null ? undefined : byId.get(productId))
+    );
+  }
+
+  #paidIndexed?: { lines: readonly TabLine[]; balance: BillBalance | null; dishes: Set<number> };
+
+  /** Each dish the shown bill's balance has paid any of, by line number: a dish counts as paid
+   * when it or any of its extras is. */
+  #paidDishes(): Set<number> {
+    const balance = this.#balanceShown();
+    const indexed = this.#paidIndexed;
+    if (indexed?.lines === this.lines && indexed.balance === balance) return indexed.dishes;
+    const paid = balance === null ? undefined : paidQuantities(balance);
+    const zero = decimal("0");
+    const dishes = new Set<number>();
+    for (const row of this.lines)
+      if (compareDecimal(decimal(paid?.get(row.lineNo) ?? "0"), zero) > 0)
+        dishes.add(row.parentLineNo ?? row.lineNo);
+    this.#paidIndexed = { lines: this.lines, balance, dishes };
+    return dishes;
+  }
+
+  /** The dish line of each member a Sent window can change, or undefined when it is read-only. */
+  #sentChangeLines(members: readonly SentSlice[]): TabLine[] | undefined {
+    const zero = decimal("0");
+    if (
+      members.some(
+        (member) =>
+          (member.kind !== "held" && member.kind !== "fired") ||
+          compareDecimal(decimal(member.row.servedQuantity), zero) > 0,
+      )
+    )
+      return;
+    const lines = members.map((member) => this.#sentOrderLine(member));
+    if (lines.some((line) => line === undefined)) return;
+    const paidDishes = this.#paidDishes();
+    const recalled = this.#recalledLineIds();
+    const editable = (line: TabLine) =>
+      !paidDishes.has(line.lineNo) &&
+      !recalled.has(line.id) &&
+      this.#liveProduct(line) !== undefined &&
+      this.#stationsAllowChange(line);
+    return (lines as TabLine[]).every(editable) ? (lines as TabLine[]) : undefined;
+  }
+
+  /** The dish as its fields open on it: the live product's lists at the line's own name and price,
+   * with the line's picks. A pick no list offers any more stays, as a stale pick, when the dish
+   * offers extras, so the fields name it rather than drop it. */
+  #sentChangeSeedFor(
+    pending: NonNullable<typeof this.sentLinePending>,
+    lines: readonly TabLine[],
+  ): SentChangeSeed<NonNullable<typeof this.sentLinePending>> {
+    if (this.#sentChangeSeed?.pending !== pending)
+      this.#sentChangeSeed = this.#sentChangeSeedOf(pending, lines);
+    return this.#sentChangeSeed;
+  }
+
+  #sentChangeSeedOf(
+    pending: NonNullable<typeof this.sentLinePending>,
+    lines: readonly TabLine[],
+  ): SentChangeSeed<NonNullable<typeof this.sentLinePending>> {
+    const line = lines[0]!;
+    const live = this.#liveProduct(line)!;
+    const offered = offeredListsOf(live);
+    const sendsExtras = offered.some((entry) => entry.kind === "extras");
+    const extras: SelectedExtra[] = [];
+    for (const child of this.#linesIndex().children.get(line.lineNo) ?? []) {
+      const held = {
+        productId: child.productId,
+        listId: child.listId,
+        name: this.#nameForLine(child),
+        price: child.unitPriceGross,
+        quantity: perDishOptionQuantity(
+          child.quantity,
+          multiplyDecimal(decimal(line.quantity), decimal(child.priceQuantity ?? "1")),
+        ),
+      };
+      const [kept] = deriveExtraSelections(offered, [held]).extras;
+      if (kept !== undefined) extras.push(kept);
+      else if (sendsExtras)
+        extras.push({ ...held, listId: held.listId ?? "", productId: held.productId ?? "" });
+    }
+    return {
+      pending,
+      stored: this.#storedSentFacts(lines),
+      product: {
+        ...live,
+        name: this.#nameForLine(line),
+        unitPrice: line.unitPriceGross,
+        variants: [],
+      },
+      selection: {
+        extras,
+        options: deriveOptionSelections(offered, line.optionSnapshots).options,
+        note: line.note ?? "",
+      },
+    };
+  }
+
+  #storedSentFacts(lines: readonly TabLine[]): string {
+    const children = this.#linesIndex().children;
+    return JSON.stringify(
+      lines.map((each) => [
+        each.quantity,
+        each.note ?? "",
+        (each.optionSnapshots ?? []).map((answer) => JSON.stringify(answer)).sort(),
+        (children.get(each.lineNo) ?? [])
+          .map((row) => JSON.stringify([row.listId, row.productId, row.quantity]))
+          .sort(),
+      ]),
     );
   }
 
@@ -2498,15 +2737,9 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #lineTarget(line: TabLine): AdjustTarget {
-    return lineAdjustTarget(line, this.lines, this.#adjustName(line), (row) =>
-      this.#lineGross(row),
-    );
-  }
-
   /** A dish's name, and an extra's with its dish's, so two extras of one name can be told apart. */
   #adjustName(line: TabLine): string {
-    const dish = this.#isChild(line) ? this.#lineByNo.get(line.parentLineNo!) : undefined;
+    const dish = this.#isChild(line) ? this.#linesIndex().byNo.get(line.parentLineNo!) : undefined;
     return dish === undefined
       ? this.#nameForLine(line)
       : t("table.extra_of")
@@ -2514,8 +2747,8 @@ export class TillTableOrderScreen extends LitElement {
           .replace("{dish}", () => this.#nameForLine(dish));
   }
 
-  #adjust(kind: AdjustKind, target: AdjustTarget, also: { offered?: true } = {}): void {
-    const detail: AdjustDetail = { kind, target, ...also };
+  #adjust(kind: AdjustKind, target: AdjustTarget): void {
+    const detail: AdjustDetail = { kind, target };
     this.dispatchEvent(new CustomEvent("adjust", { detail, bubbles: true, composed: true }));
   }
 
@@ -2860,14 +3093,34 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  /** The bill lines recalled into this person's draft or another person's. */
+  #recalledIndexed?: {
+    store: WorkingOrderStore | null;
+    epoch: number;
+    others: readonly OtherDraft[];
+    ids: Set<string>;
+  };
+
+  /** The bill lines recalled into this person's draft or another person's. Kept only while the
+   * draft is the watched one, whose every change moves {@link #draftEpoch} as it happens. */
   #recalledLineIds(): Set<string> {
-    return new Set(
-      [
-        ...(this.#draftStore?.lines ?? []),
-        ...this.otherDrafts.flatMap((draft) => draft.lines),
-      ].flatMap((line) => (line.source === undefined ? [] : [line.source.line.id])),
+    const store = this.#draftStore;
+    const indexed = this.#recalledIndexed;
+    if (
+      indexed?.store === store &&
+      indexed.epoch === this.#draftEpoch &&
+      indexed.others === this.otherDrafts
+    )
+      return indexed.ids;
+    const ids = new Set(
+      [...(store?.lines ?? []), ...this.otherDrafts.flatMap((draft) => draft.lines)].flatMap(
+        (line) => (line.source === undefined ? [] : [line.source.line.id]),
+      ),
     );
+    this.#recalledIndexed =
+      this.#watchedDraft?.store === store
+        ? { store, epoch: this.#draftEpoch, others: this.otherDrafts, ids }
+        : undefined;
+    return ids;
   }
 
   #sentFallback(): TemplateResult | typeof nothing {
@@ -2924,6 +3177,12 @@ export class TillTableOrderScreen extends LitElement {
     return this.#sentLineMembers()?.[0];
   }
 
+  /** Every row Sent lists now, as its own slice. */
+  #sentSlices(orders: CurrentOrders): SentSlice[] {
+    const model = sentPanel(orders, this.orderId ?? "", this.now ?? Date.now());
+    return [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)];
+  }
+
   /** The portions the open sheet speaks for, by line number: the row's one slice, or every member
    * of a grouped row while they all still show as that one row. */
   #sentLineMembers(): SentSlice[] | undefined {
@@ -2938,16 +3197,10 @@ export class TillTableOrderScreen extends LitElement {
       pending.visit !== this.serviceVisit
     )
       return;
-    const model = sentPanel(this.currentOrders, this.orderId ?? "", this.now ?? Date.now());
-    const slices = [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)];
+    const slices = this.#sentSlices(this.currentOrders);
     const members: SentSlice[] = [];
     for (const lineId of pending.info.lineIds ?? [pending.info.lineId]) {
-      const member = slices.find(
-        (slice) =>
-          slice.row.lineId === lineId &&
-          slice.kind === pending.info.kind &&
-          slice.row.workingOrderId === pending.info.workingOrderId,
-      );
+      const member = findSlice(slices, pending.info.kind, pending.info.workingOrderId, lineId);
       if (member === undefined) return;
       members.push(member);
     }
@@ -2966,7 +3219,7 @@ export class TillTableOrderScreen extends LitElement {
     return members;
   }
 
-  #serveFromSentLine(pending: typeof this.sentLinePending, undo: boolean): void {
+  #serveFromSentLine(pending: typeof this.sentLinePending, undo: boolean, asked = false): void {
     if (
       pending === null ||
       pending !== this.sentLinePending ||
@@ -2975,6 +3228,10 @@ export class TillTableOrderScreen extends LitElement {
       this.groupCommandBusy
     )
       return;
+    if (!asked && this.#sentChangeHeld(pending)) {
+      this.#askSentChangeLeave(() => this.#serveFromSentLine(pending, undo, true));
+      return;
+    }
     const members = this.#sentLineMembers();
     if (
       members === undefined ||
@@ -2995,6 +3252,105 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
+  /** Sends Change dish for the open row; false when nothing was sent. */
+  #changeSentLine(
+    pending: NonNullable<typeof this.sentLinePending>,
+    detail: ModifierConfirmDetail,
+  ): boolean {
+    if (pending !== this.sentLinePending || !this.isConnected || this.busy || this.groupCommandBusy)
+      return false;
+    const members = this.#sentLineMembers();
+    const lines = members === undefined ? undefined : this.#sentChangeLines(members);
+    const seed = this.#sentChangeSeed;
+    if (lines === undefined || seed?.pending !== pending) return false;
+    const total = multiplyDecimal(
+      decimal(members![0]!.row.quantity),
+      decimal(String(members!.length)),
+    );
+    const [line, ...others] = [...lines].sort((a, b) => a.lineNo - b.lineNo) as [
+      TabLine,
+      ...TabLine[],
+    ];
+    const offered = offeredListsOf(seed.product);
+    const patch: OrderLinePatch = {
+      note: detail.note ?? null,
+      portionLineNos: others.map((other) => other.lineNo),
+    };
+    // The server takes a row's total only as digits, so "3.0" goes as "3".
+    const quantity = detail.quantity === undefined ? undefined : trimQuantity(detail.quantity);
+    if (quantity !== undefined && compareDecimal(decimal(quantity), total) !== 0)
+      patch.quantity = quantity;
+    const options = detail.options ?? [];
+    if (
+      offered.some((entry) => entry.kind === "options") &&
+      !sameOptionSelections(options, seed.selection.options ?? [])
+    )
+      patch.options = options;
+    const extras = toWireModifiers({ extras: detail.extras }).extras ?? [];
+    if (offered.some((entry) => entry.kind === "extras")) patch.extras = extras;
+    const change: ChangeLineDetail = {
+      lineNo: line.lineNo,
+      lineName: this.#nameForLine(line),
+      patch,
+      revision: this.revision,
+      expectedEdit: this.billEdit,
+      saleLine: {
+        menuItemId: line.menuItemId ?? undefined,
+        ...(line.parentProductId === null || line.productId === null
+          ? {}
+          : { variantId: line.productId }),
+        quantity: quantity ?? line.quantity,
+        options,
+        extras,
+        ...(detail.note ? { note: detail.note } : {}),
+      },
+    };
+    this.#sentChangeAttempts.set(line.lineNo, { pending, selection: detail });
+    this.sentLinePending = null;
+    this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
+    this.#dispatch("change-line", change);
+    return true;
+  }
+
+  /** Reopens the window of the Change dish the app says was refused, and tells the app whether it
+   * did: while another window is open, the change was not sent from here, or Sent does not show the
+   * dish, the app's banner says it instead. Either way the app then drops it, so a screen drawn
+   * afresh never says it again. */
+  #reopenRefusedChange(): void {
+    const refusal = this.changeRefusal;
+    if (refusal === null) return;
+    const attempt = this.#sentChangeAttempts.get(refusal.lineNo);
+    this.#sentChangeAttempts.delete(refusal.lineNo);
+    let shown = false;
+    if (attempt !== undefined && this.sentLinePending === null) {
+      const pending = { ...attempt.pending };
+      this.sentLinePending = pending;
+      shown = this.#sentLine() !== undefined;
+      if (shown)
+        this.sentChangeRefused = {
+          pending,
+          message: refusal.message,
+          selection: attempt.selection,
+        };
+      else this.sentLinePending = null;
+    }
+    this.#dispatch("change-refusal-taken", { refusal, shown });
+  }
+
+  /** The open window's fields hold a change that another of its actions would throw away. */
+  #sentChangeHeld(pending: NonNullable<typeof this.sentLinePending>): boolean {
+    return this.sentChange?.pending === pending && this.sentChange.detail.changed;
+  }
+
+  /** Asks the window's leave question, as Close does, and runs `act` only on Discard. */
+  #askSentChangeLeave(act: () => void): void {
+    const picker = this.renderRoot.querySelector<TillModifierPicker>("[data-sent-change-fields]");
+    if (picker === null) return;
+    void picker.requestLeave("cancel").then((leave) => {
+      if (leave) act();
+    });
+  }
+
   #sentBillOpen(row: CurrentOrderRow): boolean {
     const bill = this.bills.find((bill) => bill.workingOrderId === row.workingOrderId);
     return row.billStatus === "open" && (bill === undefined || bill.status === "open");
@@ -3008,12 +3364,8 @@ export class TillTableOrderScreen extends LitElement {
       this.#draftStore?.sending
     )
       return;
-    return this.lines.find(
-      (line) =>
-        line.id === slice.row.lineId &&
-        line.lineNo === slice.row.lineNo &&
-        line.parentLineNo == null,
-    );
+    const line = this.#linesIndex().byNo.get(slice.row.lineNo);
+    return line?.id === slice.row.lineId && line.parentLineNo == null ? line : undefined;
   }
 
   #canRecallSent(slice: SentSlice): boolean {
@@ -3076,6 +3428,7 @@ export class TillTableOrderScreen extends LitElement {
   #actOnSentLine(
     pending: typeof this.sentLinePending,
     action: "fire" | "recall" | "station" | "void" | "comp",
+    asked = false,
   ): void {
     if (
       pending === null ||
@@ -3085,6 +3438,10 @@ export class TillTableOrderScreen extends LitElement {
       this.groupCommandBusy
     )
       return;
+    if (!asked && this.#sentChangeHeld(pending)) {
+      this.#askSentChangeLeave(() => this.#actOnSentLine(pending, action, true));
+      return;
+    }
     const members = this.#sentLineMembers();
     const slice = members?.[0];
     if (
@@ -3104,8 +3461,10 @@ export class TillTableOrderScreen extends LitElement {
     const lineIds =
       members.length > 1 ? { lineIds: members.map((member) => member.row.lineId) } : {};
     if (action === "fire") this.#dispatch("fire-held-line", { lineId: slice.row.lineId });
-    else if (action === "recall") this.#recallLines(members.map((member) => member.row.lineNo));
-    else if (action === "comp") {
+    else if (action === "recall") {
+      if (members.length > 1) this.#requestRecall(members);
+      else this.#recallLines([slice.row.lineNo]);
+    } else if (action === "comp") {
       const line = this.#sentOrderLine(slice)!;
       const priced = (target: AdjustTarget) =>
         compareDecimal(decimal(target.total), decimal("0")) > 0;
@@ -3138,7 +3497,13 @@ export class TillTableOrderScreen extends LitElement {
       });
   }
 
-  #sentLineMore(members: readonly SentSlice[] | undefined): TemplateResult | typeof nothing {
+  /** `comp` and `canVoid`: whether the menu offers Comp… and Void…, which the footer offers
+   * instead beside a refusal. */
+  #sentLineMore(
+    members: readonly SentSlice[] | undefined,
+    comp: boolean,
+    canVoid: boolean,
+  ): TemplateResult | typeof nothing {
     const slice = members?.[0];
     if (members === undefined || slice === undefined) return nothing;
     const fire = this.#canFireSent(slice);
@@ -3146,8 +3511,6 @@ export class TillTableOrderScreen extends LitElement {
     const station = members.every((member) => this.#canMoveSent(member));
     const unserve =
       slice.kind === "served" && members.every((member) => this.#sentBillOpen(member.row));
-    const comp = this.#sentOrderLine(slice) !== undefined;
-    const canVoid = this.#canVoidSent(slice);
     if (!fire && !recall && !station && !unserve && !canVoid && !comp) return nothing;
     const pending = this.sentLinePending;
     const disabled = this.busy || this.groupCommandBusy;
@@ -3203,6 +3566,24 @@ export class TillTableOrderScreen extends LitElement {
     return lineTotal(before, amount);
   }
 
+  /** Whether Change dish would move the bill: another count, or other extras. What the server
+   * charges for what a change adds depends on the dish's kitchen state and adjustments
+   * (`applyLineEdits`), which the window does not know, so it shows no count or Total then. */
+  #sentChangeMovesPrice(
+    selection: Pick<ModifierChangeDetail, "quantity" | "extras">,
+    shown: Decimal,
+    before: LineSelection,
+  ): boolean {
+    if (selection.quantity !== undefined) {
+      try {
+        if (compareDecimal(decimal(selection.quantity), shown) !== 0) return true;
+      } catch {
+        return true;
+      }
+    }
+    return !sameExtraSelections(selection.extras ?? [], before.extras ?? []);
+  }
+
   #sentLineDialog(): TemplateResult {
     const pending = this.sentLinePending;
     const members = this.#sentLineMembers();
@@ -3230,6 +3611,23 @@ export class TillTableOrderScreen extends LitElement {
       row?.extras.reduce((sum, extra) => addDecimal(sum, decimal(extra.netAmount)), decimal("0")) ??
       decimal("0");
     const station = this.stations.find((station) => station.id === row?.kitchen?.stationId);
+    const changeLines =
+      pending === null || members === undefined ? undefined : this.#sentChangeLines(members);
+    const seed =
+      changeLines === undefined ? undefined : this.#sentChangeSeedFor(pending!, changeLines);
+    const change = this.sentChange?.pending === pending ? this.sentChange.detail : undefined;
+    const changeReady = change?.savable === true && !disabled;
+    const priceMoves =
+      change?.changed === true &&
+      this.#sentChangeMovesPrice(change, decimal(shownQuantity), seed!.selection);
+    const refused =
+      this.sentChangeRefused?.pending === pending ? this.sentChangeRefused : undefined;
+    const voidable = slice !== undefined && this.#canVoidSent(slice);
+    const compable = slice !== undefined && this.#sentOrderLine(slice) !== undefined;
+    const refusedVoid = refused !== undefined && voidable;
+    const refusedComp = refused !== undefined && compable;
+    // More of a weighed dish is weighed on its own, so it goes in the New order.
+    const weighed = changeLines !== undefined && (changeLines[0]!.unitPrecision ?? 0) > 0;
     const status =
       slice?.kind === "cancelled_charged"
         ? t("table.cancelled_charged")
@@ -3243,6 +3641,7 @@ export class TillTableOrderScreen extends LitElement {
       data-sent-line-dialog
       .open=${row !== undefined}
       .heading=${t("table.sent_info")}
+      .beforeClose=${seed === undefined ? undefined : this.#beforeSentLineClose}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         if (event.target === event.currentTarget && !(event.currentTarget as WtDialog).open)
@@ -3254,12 +3653,52 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`
               <p class="move-dish">
-                ${row.name}${this.#nutrition(row)} ×${this.#displayQty(shownQuantity)}
-                ${this.#sentDetails(row)}
+                ${row.name}${this.#nutrition(row)}${priceMoves ? nothing : ` ×${this.#displayQty(shownQuantity)}`}
+                ${seed === undefined ? this.#sentDetails(row) : nothing}
                 ${allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: row.lineId })}
               </p>
               ${lineNutrition(row.nutrition)}
               ${row.workingOrderId === this.orderId ? this.#paidMarkOf(members!.map((member) => member.row)) : nothing}
+              ${
+                seed === undefined
+                  ? nothing
+                  : keyed(
+                      seed,
+                      html`<till-modifier-picker
+                        data-sent-change-fields
+                        inline
+                        withNote
+                        lineDetails
+                        ?quantityReadOnly=${weighed}
+                        .minQuantity=${weighed ? undefined : this.#displayQty(shownQuantity)}
+                        .minQuantityMessage=${t("table.change_dish_lower")}
+                        .draftParent=${this}
+                        .product=${seed.product}
+                        .quantity=${this.#displayQty(shownQuantity)}
+                        .initialSelections=${seed.selection}
+                        .restoredSelection=${refused?.selection}
+                        .disabled=${disabled}
+                        @wt-modifier-change=${(event: CustomEvent<ModifierChangeDetail>) => {
+                          event.stopPropagation();
+                          if (pending !== this.sentLinePending) return;
+                          this.sentChange = { pending: pending!, detail: event.detail };
+                          if (event.detail.changed) this.sentChangeOvertaken = null;
+                        }}
+                        @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {
+                          event.stopPropagation();
+                          if (!this.#changeSentLine(pending!, event.detail)) event.preventDefault();
+                        }}
+                        ><wt-button
+                          slot="min-quantity-action"
+                          variant="secondary"
+                          data-sent-change-void
+                          ?disabled=${disabled}
+                          @click=${() => this.#actOnSentLine(pending, "void")}
+                          >${t("table.void_line")}</wt-button
+                        ></till-modifier-picker
+                      >`,
+                    )
+              }
               <div class="total-row">
                 <span>${row.name}</span
                 ><span class="amount" data-sent-line-amount
@@ -3267,31 +3706,53 @@ export class TillTableOrderScreen extends LitElement {
                 >
               </div>
               ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${this.#displayQty(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, times(decimal(extra.netAmount)), extra, count)}</span></div>`)}
-              ${row.note === null ? nothing : html`<p>${t("line.note.label")}: ${row.note}</p>`}
+              ${row.note === null || seed !== undefined ? nothing : html`<p>${t("line.note.label")}: ${row.note}</p>`}
               ${this.#sentCourse(row.courseId, this.currentOrders?.retainedCourses.find((course) => course.id === row.courseId) ?? this.lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo)?.course)}
               <p data-sent-line-status>
                 ${station === undefined ? nothing : html`${station.name} · `}${status}
               </p>
               ${group === undefined ? nothing : html`<p data-sent-line-origin>${this.#sentOf(group)}</p>`}
               ${partlyServed ? html`<p data-sent-line-served>${this.#servedOf(row)}</p>` : nothing}
-              <div class="total-row">
-                <span>${t("label.total")}</span
-                ><span class="amount">${this.#money(times(decimal(row.netAmount)))}</span>
-              </div>
+              ${
+                priceMoves
+                  ? nothing
+                  : html`<div class="total-row">
+                      <span>${t("label.total")}</span
+                      ><span class="amount">${this.#money(times(decimal(row.netAmount)))}</span>
+                    </div>`
+              }
             `
       }
-      <div slot="footer" class="cancel-actions">
+      <wt-form-actions
+        slot="footer"
+        .error=${
+          change?.fixFields
+            ? t("form.fix_fields")
+            : (refused?.message ??
+              (pending !== null && this.sentChangeOvertaken === pending
+                ? t("held.changed_elsewhere")
+                : ""))
+        }
+      >
         <wt-button
+          slot="cancel"
           variant="secondary"
           data-sent-line-close
-          @click=${() => {
-            this.sentLinePending = null;
+          @click=${(event: Event) => {
+            if (seed === undefined) this.sentLinePending = null;
+            else
+              void (event.currentTarget as HTMLElement)
+                .closest<WtDialog>("wt-dialog")!
+                .requestClose("cancel");
           }}
           >${t("table.submitted_close")}</wt-button
         >
+        ${seed === undefined ? nothing : html`<wt-button data-sent-change variant=${changeReady ? "primary" : "secondary"} ?disabled=${!changeReady} @click=${() => this.renderRoot.querySelector<TillModifierPicker>("[data-sent-change-fields]")?.confirm()}>${t("table.change_dish")}</wt-button>`}
         ${slice?.kind === "fired" && slice.row.released ? html`<wt-button data-sent-line-serve aria-label=${`${t("table.serve")} · ${slice.row.name}`} variant=${disabled ? "secondary" : "primary"} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, false)}>${t("table.serve")}</wt-button>` : nothing}
-        ${this.#sentLineMore(members)}
-      </div>
+        ${refusedVoid ? html`<wt-button variant="secondary" data-sent-change-refused-void ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "void")}>${t("table.void_line")}</wt-button>` : nothing}
+        ${refusedComp ? html`<wt-button variant="secondary" data-sent-change-refused-comp ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp")}>${t("comp.title")}</wt-button>` : nothing}
+        ${this.#sentLineMore(members, compable && !refusedComp, voidable && !refusedVoid)}
+      </wt-form-actions>
     </wt-dialog>`;
   }
 
@@ -4709,26 +5170,88 @@ export class TillTableOrderScreen extends LitElement {
   #requestServe(row: CurrentOrderRow, undo: boolean, members?: readonly CurrentOrderRow[]): void {
     if (!this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread) return;
     if (undo && !this.#sentBillOpen(row)) return;
+    this.#takeServeAuthority();
+    const most =
+      members === undefined ? this.#mostToServe(row, undo) : decimal(String(members.length));
+    if (row.unitPrecision === 0 && compareDecimal(most, decimal("1")) > 0) {
+      this.#openServeDialog({
+        row,
+        undo,
+        count: most,
+        ...(members === undefined ? {} : { members }),
+      });
+      return;
+    }
+    this.#sendServe(row, undo, most);
+  }
+
+  #requestRecall(members: readonly SentSlice[]): void {
+    if (!this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread) return;
+    this.#takeServeAuthority();
+    this.#openServeDialog({
+      row: members[0]!.row,
+      undo: false,
+      count: decimal(String(members.length)),
+      members: members.map((member) => member.row),
+      recall: members,
+    });
+  }
+
+  /** Remembers what the count dialog's answer may act on: this api, party, bill and visit. */
+  #takeServeAuthority(): void {
     this.#serveAuthority = {
       api: this.api,
       partyId: this.party?.id ?? null,
       billId: this.orderId,
       visit: this.serviceVisit,
     };
-    const most =
-      members === undefined ? this.#mostToServe(row, undo) : decimal(String(members.length));
-    if (row.unitPrecision === 0 && compareDecimal(most, decimal("1")) > 0) {
-      this.#serveOpening++;
-      this.#serveScope?.dispose();
-      this.#serveScope = undefined;
-      this.#serveBaseline = most;
-      this.servePending = { row, undo, count: most, ...(members === undefined ? {} : { members }) };
-      this.#watchServe();
-      const dialog = this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]");
-      if (dialog) dialog.open = true;
+  }
+
+  /** Spends what {@link #takeServeAuthority} remembered: true when the screen may still act on it
+   * now. */
+  #spendServeAuthority(): boolean {
+    const authority = this.#serveAuthority;
+    this.#serveAuthority = undefined;
+    return (
+      authority !== undefined &&
+      this.isConnected &&
+      !this.busy &&
+      !this.groupCommandBusy &&
+      !this.currentOrdersUnread &&
+      authority.api === this.api &&
+      authority.partyId === (this.party?.id ?? null) &&
+      authority.billId === this.orderId &&
+      authority.visit === this.serviceVisit
+    );
+  }
+
+  /** Opens the count dialog on `pending`, whose count is also what the dialog counts as unchanged. */
+  #openServeDialog(pending: NonNullable<typeof this.servePending>): void {
+    this.#serveOpening++;
+    this.#serveScope?.dispose();
+    this.#serveScope = undefined;
+    this.#serveBaseline = pending.count;
+    this.servePending = pending;
+    this.#watchServe();
+    const dialog = this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]");
+    if (dialog) dialog.open = true;
+  }
+
+  /** Recalls the first `count` portions, only while every portion can still be recalled. */
+  #sendRecall(members: readonly SentSlice[], count: Decimal): void {
+    if (!this.#spendServeAuthority() || this.currentOrders === null) return;
+    const slices = this.#sentSlices(this.currentOrders);
+    const found = members.map((member) =>
+      findSlice(slices, member.kind, member.row.workingOrderId, member.row.lineId),
+    );
+    const n = Number.parseInt(trimQuantity(count), 10);
+    if (
+      found.some((slice) => slice === undefined || !this.#canRecallSent(slice)) ||
+      n < 1 ||
+      n > members.length
+    )
       return;
-    }
-    this.#sendServe(row, undo, most);
+    this.#recallLines(found.slice(0, n).map((slice) => slice!.row.lineNo));
   }
 
   #sendServe(
@@ -4737,23 +5260,7 @@ export class TillTableOrderScreen extends LitElement {
     quantity: Decimal,
     members?: readonly CurrentOrderRow[],
   ): void {
-    const authority = this.#serveAuthority;
-    this.#serveAuthority = undefined;
-    if (
-      authority === undefined ||
-      !this.isConnected ||
-      this.busy ||
-      this.groupCommandBusy ||
-      this.currentOrdersUnread
-    )
-      return;
-    if (
-      authority.api !== this.api ||
-      authority.partyId !== (this.party?.id ?? null) ||
-      authority.billId !== this.orderId ||
-      authority.visit !== this.serviceVisit
-    )
-      return;
+    if (!this.#spendServeAuthority()) return;
     const rows =
       this.currentOrders === null
         ? []
@@ -4822,7 +5329,8 @@ export class TillTableOrderScreen extends LitElement {
     this.servePending = null;
     this.#watchServe();
     this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]")!.closeAfter("saved");
-    this.#sendServe(pending.row, pending.undo, pending.count, pending.members);
+    if (pending.recall !== undefined) this.#sendRecall(pending.recall, pending.count);
+    else this.#sendServe(pending.row, pending.undo, pending.count, pending.members);
   }
 
   /** Always present, driven by {@link servePending}, so an Escape close flows back through
@@ -4835,7 +5343,13 @@ export class TillTableOrderScreen extends LitElement {
       class="serve-dialog"
       data-serve-dialog
       .open=${pending !== null}
-      .heading=${t(pending?.undo === true ? "table.unserve" : "table.serve")}
+      .heading=${t(
+        pending?.recall !== undefined
+          ? "table.recall_line"
+          : pending?.undo === true
+            ? "table.unserve"
+            : "table.serve",
+      )}
       .beforeClose=${this.#serveScope ? this.#beforeServeClose : undefined}
       @wt-close=${(event: Event) => this.#closeServe(event)}
     >
@@ -4881,9 +5395,11 @@ export class TillTableOrderScreen extends LitElement {
         </wt-button>
         <wt-button variant="primary" data-serve-confirm @click=${() => this.#confirmServe()}>
           ${
-            pending?.undo === true
-              ? t("table.unserve_n").replace("{n}", String(count))
-              : countText(count, "table.serve_n", "table.serve_n_one")
+            pending?.recall !== undefined
+              ? t("table.recall_n").replace("{n}", String(count))
+              : pending?.undo === true
+                ? t("table.unserve_n").replace("{n}", String(count))
+                : countText(count, "table.serve_n", "table.serve_n_one")
           }
         </wt-button>
       </div>

@@ -2022,11 +2022,12 @@ both saved. A counter order sent with Send did not reach it: once placed, a save
   the order, try again" or "Could not complete the sale, try again" from Send or Pay. The basket
   keeps its unsaved changes, the added dish among them, and hides Cancel. Each later save gets the
   same answer. The owner chose (2026-11-07) to replace this path with a separate action for changing
-  a sent dish (A1426); it is not built.
-- A staff name changed: "An item's choices have changed — open the line and choose again". The line's
-  window is read-only on a dish already sent (run on a started dish; the check reads only whether it
-  was sent), so nobody can. The box refuses each save `options.label_required`, started or not, and
-  the till says "Could not park the order, try again".
+  a sent dish (A1426); A1426 built it, but the whole-order save is unchanged, so this stays open.
+- A staff name changed: "An item's choices have changed — open the line and choose again". The
+  basket's line window is read-only on a dish already sent (run on a started dish), and Change dish
+  refuses a started dish, so nobody can; whether Change dish clears a dish not yet started was not
+  run. The box refuses each save `options.label_required`, started or not, and the till says "Could
+  not park the order, try again".
 
 **The ways out that ran:** cancel the started dish, then save; or rename it back and publish. Sending
 the order unchanged still works, so a dish added meanwhile has to go on another order (not run).
@@ -4195,9 +4196,7 @@ drives the table's comps through that separate mode (`requestAdjustment` emits n
 modes, make `kind: "comp"` mean the Comp window, and move those app tests onto it. The
 one-or-all choice (`#quantityChoice`, `apps/till/src/widgets/adjustment-dialog.ts:894`) and
 `adjust.quantity_one`, `adjust.quantity_all` and `adjust.quantity_shown` are not theirs alone:
-the cancel mode, which stays, uses them (a cancel offer of several whole units draws the choice,
-`apps/till/src/screens/till-table-order-screen.a11y.test.ts:375-389`), so they stay unless the
-cancel moves too.
+the cancel mode, which stays, uses them, so they stay unless the cancel moves too.
 
 ## A1020. The owner looks at A758-6's words and choices
 

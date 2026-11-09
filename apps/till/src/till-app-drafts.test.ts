@@ -10587,7 +10587,7 @@ describe("direct line editing authority", () => {
       expect(api.getTabLines).toHaveBeenCalledTimes(reads);
       expect(tableOrder(el)!.revision).not.toBe(23);
       expect(tableOrder(el)!.billEdit?.editorVersion).toBe(2);
-      expect(tableOrder(el)!.cancelOffer).toBeNull();
+      expect(tableOrder(el)!.changeRefusal).toBeNull();
       expect(banner(el)?.textContent ?? "").not.toContain(codeMessage("ticket.already_started"));
     },
   );
@@ -10615,7 +10615,7 @@ describe("direct line editing authority", () => {
     await flush(el, 6);
     expect(api.getTabLines).toHaveBeenCalledTimes(calls);
     expect(tableOrder(el)!.revision).not.toBe(23);
-    expect(tableOrder(el)!.cancelOffer).toBeNull();
+    expect(tableOrder(el)!.changeRefusal).toBeNull();
     expect(banner(el)?.textContent ?? "").not.toContain(codeMessage("ticket.already_started"));
   });
 });

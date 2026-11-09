@@ -24,7 +24,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { nutritionIcons, nutritionIconStyles, nutritionDietLabels } from "./nutrition-icons.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
-import { deriveExtraSelections } from "../state/held-extras.js";
+import { deriveExtraSelections, sameExtraSelections } from "../state/held-extras.js";
 import { dishGross, extraGross, offeredListsOf, quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, extraNutrition } from "./diet-badges.js";
@@ -706,15 +706,9 @@ export class TillBasket extends LitElement {
       selection.options = detail.options ?? [];
       selection.optionSnapshots = detail.optionSnapshots ?? [];
     }
-    const extrasKey = (picks: SelectedExtra[]) =>
-      JSON.stringify(
-        picks
-          .map(({ listId, productId, quantity }) => JSON.stringify([listId, productId, quantity]))
-          .sort(),
-      );
     if (
       offered.some((list) => list.kind === "extras") &&
-      extrasKey(detail.extras ?? []) !== extrasKey(this.#modifierSelection!.extras ?? [])
+      !sameExtraSelections(detail.extras ?? [], this.#modifierSelection!.extras ?? [])
     )
       selection.extras = (detail.extras ?? []).map((pick) => {
         const stored = this.#recordedExtra(line, pick.listId, pick.productId);

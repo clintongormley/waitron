@@ -125,6 +125,36 @@ describe.each(["light", "dark"] as const)("till-modifier-picker a11y (%s theme)"
     }
   });
 
+  it("has no violations inline, before and after a refused quantity", async () => {
+    setLocale("es-ES");
+    const { el, host } = await mountWidget<TillModifierPicker>(
+      "till-modifier-picker",
+      {
+        product: burger,
+        inline: true,
+        lineDetails: true,
+        withNote: true,
+        quantity: "2",
+        initialSelections: {
+          note: "Sin sal",
+          options: [{ listId: "list-cooked", labelId: "label-medium" }],
+        },
+      },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector('[name="quantity"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "0" } }),
+    );
+    el.confirm();
+    await el.updateComplete;
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { error: string }>('[name="quantity"]')!.error,
+    ).not.toBe("");
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with an extras list and an options list on screen", async () => {
     setLocale("es-ES");
     const { host } = await mountWidget<TillModifierPicker>(

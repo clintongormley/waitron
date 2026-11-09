@@ -209,6 +209,7 @@ row parts as soon as one dish differs, for example once one burger is served or 
 row in **Sent** marks all of it served; **Mark served** in the row's details asks how many.
 [**Move dishes…**](table-service.md#move-dishes) lets you choose how many of a row go to another bill, each with
 its own extras. **Comp** and **Void** work on the row and let you choose how many of its dishes.
+**Change dish**, in the row's details, changes every dish of the row.
 
 A weighed dish is different, because each one is weighed on its own: adding the same weighed dish
 twice gives two lines rather than one of double the weight, and a weighed dish moves to another bill

@@ -287,7 +287,7 @@ describe("till-table-order-screen: comping a dish", () => {
 });
 
 describe("till-table-order-screen: cancelling a dish", () => {
-  it("keeps the app cancellation offer target and native Sent Void on the whole dish with its extras", async () => {
+  it("sends native Sent Void on the whole dish, and Comp's target at one unit's price", async () => {
     const el = await mountScreen({ lines: [{ ...pizza, quantity: "2.000" }, olives] });
     const asked = capture(el);
     await openSentDish(el, "line-2");
@@ -298,22 +298,8 @@ describe("till-table-order-screen: cancelling a dish", () => {
     expect(cancelled.map((event) => [event.detail, event.bubbles, event.composed])).toEqual([
       [{ lineId: "line-2" }, true, true],
     ]);
-    el.cancelOffer = 2;
-    await el.updateComplete;
     await comp(el, 2);
     expect(asked).toEqual([
-      {
-        kind: "cancel",
-        offered: true,
-        target: {
-          lineId: "line-2",
-          name: "Pizza",
-          quantity: "2",
-          total: "19.50",
-          unitTotal: "9.75",
-          started: false,
-        },
-      },
       { kind: "comp", combined: true, target: expect.objectContaining({ unitTotal: "9.75" }) },
     ]);
   });

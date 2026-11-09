@@ -1244,8 +1244,6 @@ interface Adjusting {
   preview: AdjustmentPreview | null;
   refusal: string | null;
   busy: boolean;
-  /** The banner that offered this cancel, which goes once the cancel is made. */
-  offer: CounterError | undefined;
   source?: {
     sync: DraftSync;
     lineId: string;
@@ -1440,7 +1438,12 @@ function lateChangeMessage(late: LateChange): string {
   const text = t(key)
     .replace("{line}", () => late.lineName)
     .replace("{table}", () => tableLabel ?? "");
-  return text.replace("{reason}", () => codeMessage(late.code ?? "server.internal"));
+  const sentDish = sentDishRefusal(late.code, late.lineName);
+  return text.replace("{reason}", () =>
+    sentDish === undefined
+      ? codeMessage(late.code ?? "server.internal")
+      : sentDishRefusalText(sentDish),
+  );
 }
 
 /** A drawer refusal the operator can act on keeps its own sentence; anything else is a retry. */
@@ -1524,7 +1527,25 @@ type CounterError =
   | { billNameTakenOver: string }
   | { partyChanged: PartyChange }
   | { billChanged: BillChange }
-  | { lateChange: LateChange; also?: StringKey };
+  | { lateChange: LateChange; also?: StringKey }
+  | { sentDishRefused: SentDishRefusal };
+
+/** A dish's change refused because the kitchen has it, said where its Sent window cannot. */
+interface SentDishRefusal {
+  key: "table.change_dish_started_void" | "table.change_dish_fired_void";
+  dish: string;
+}
+
+/** The banner's words for a refused change of a sent dish, or undefined for another refusal. */
+function sentDishRefusal(code: string | undefined, dish: string): SentDishRefusal | undefined {
+  if (code === "ticket.already_started") return { key: "table.change_dish_started_void", dish };
+  if (code === "ticket.already_fired") return { key: "table.change_dish_fired_void", dish };
+  return undefined;
+}
+
+function sentDishRefusalText({ key, dish }: SentDishRefusal): string {
+  return fill(t(key), { dish });
+}
 
 /** What a refusal as out of date found changed when the bill was read again: the dish the
  * adjustment named, gone or changed, or something else on the bill. */
@@ -1670,6 +1691,7 @@ function errorText(
       >`;
   }
   if ("overLimit" in error) return overLimitText(error.overLimit);
+  if ("sentDishRefused" in error) return sentDishRefusalText(error.sentDishRefused);
   if ("clockUnusable" in error)
     return clockUnusableText(
       error.clockUnusable.clockAt,
@@ -3367,14 +3389,15 @@ export class TillApp extends LitElement {
   @state() private billNameRefusal: { billId: string; name: string; message: string } | null = null;
   @state() private revealOtherDrafts = 0;
   @state() private guestsRefusal: { value: string; message: string } | null = null;
+  /** A Change dish the kitchen refused as started, which the table screen shows in its window. */
+  @state() private changeRefusal: { lineNo: number; lineName: string; message: string } | null =
+    null;
   @state() private splitRefusal: SplitRefusal | null = null;
   @state() private splitRowsUnread: SplitRefusal | null = null;
   /** The panel's rows and the revision a press sends with them: one answer, written in one place,
    * {@link #readSplitSources}. Null until a panel's first read answers; "failed" only while no read
    * has answered. */
   @state() private splitRead: SplitSources | "failed" | null = null;
-  /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
-  @state() private cancelOffer: number | null = null;
   @state() private editDeadEnds: {
     answer: DeadEndAnswer;
     change: ChangeLineDetail;
@@ -11380,7 +11403,6 @@ export class TillApp extends LitElement {
     this.movingStation = null;
     this.makingAt = null;
     this.#clearErrorKeepingLateChange();
-    this.cancelOffer = null;
     this.#tableOpensPending++;
     const session = this.#operatorSession;
     if (showAtOnce) this.#showOrderScreen(tableId);
@@ -11519,6 +11541,7 @@ export class TillApp extends LitElement {
       this.nameRefusal = null;
       this.billNameRefusal = null;
       this.guestsRefusal = null;
+      this.changeRefusal = null;
       this.splitRefusal = null;
       this.billGone = null;
       this.reprintSent = [];
@@ -14684,8 +14707,7 @@ export class TillApp extends LitElement {
   }
 
   async #onAdjust(event: Event): Promise<void> {
-    const { kind, target, offered, counter, combined } = (event as CustomEvent<AdjustDetail>)
-      .detail;
+    const { kind, target, counter, combined } = (event as CustomEvent<AdjustDetail>).detail;
     const surface = counter === true ? "counter" : "table";
     const orderId = surface === "counter" ? this.#store.id : this.activeTabId;
     if (
@@ -14708,8 +14730,7 @@ export class TillApp extends LitElement {
       visit: surface === "counter" ? session : this.#orderVisit,
     } as const;
     if (surface === "counter" && !this.#counterStillAdjustable(opened)) return;
-    if (offered !== true) this.errorKey = undefined;
-    const offer = offered === true ? this.errorKey : undefined;
+    this.errorKey = undefined;
     this.#adjustOpening = true;
     let reasons: AdjustmentReason[];
     try {
@@ -14742,7 +14763,6 @@ export class TillApp extends LitElement {
       preview: null,
       refusal: null,
       busy: false,
-      offer,
     };
   }
 
@@ -14817,7 +14837,6 @@ export class TillApp extends LitElement {
         preview: null,
         refusal: null,
         busy: false,
-        offer: undefined,
         source: {
           sync,
           lineId: sourceId,
@@ -15038,7 +15057,6 @@ export class TillApp extends LitElement {
         )?.closeSaved();
         this.#closeAdjust();
       }
-      if (this.errorKey === open.offer) this.errorKey = undefined;
       if (this.#hasLeftAdjusted(open)) return;
       await this.#rereadAdjusted(open);
     } catch (error) {
@@ -15285,8 +15303,10 @@ export class TillApp extends LitElement {
     const visit = this.#orderVisit;
     const left = () => this.#hasLeftOrder(orderId, visit);
     const tableId = this.activeTableId;
+    // The screen that sent the change, which alone can reopen its window.
+    const sender = event.target as Element | null;
     this.errorKey = undefined;
-    this.cancelOffer = null;
+    this.changeRefusal = null;
     let outcome: { saved: { revision: number; party: BillParty } } | { error: unknown };
     try {
       outcome = {
@@ -15356,23 +15376,33 @@ export class TillApp extends LitElement {
       }
     }
     if (!identity()) return;
-    this.errorKey =
-      code !== undefined && DRAFT_REFUSALS.has(code)
-        ? draftRefusalError({
-            refused: code,
-            ownerName: (outcome.error as { ownerName?: string }).ownerName,
-          })
-        : code === "working_order.out_of_date"
-          ? "held.changed_elsewhere"
-          : code === "bill.received_exceeds_total"
-            ? billWriteError(outcome.error, true)
-            : lineWriteError(outcome.error);
+    if (code === "ticket.already_started" && sender?.isConnected === true)
+      this.changeRefusal = {
+        lineNo,
+        lineName,
+        message: fill(t("table.change_dish_started"), { dish: lineName }),
+      };
+    else {
+      const sentDish = sentDishRefusal(code, lineName);
+      this.errorKey =
+        sentDish !== undefined
+          ? { sentDishRefused: sentDish }
+          : code !== undefined && DRAFT_REFUSALS.has(code)
+            ? draftRefusalError({
+                refused: code,
+                ownerName: (outcome.error as { ownerName?: string }).ownerName,
+              })
+            : code === "working_order.out_of_date"
+              ? "held.changed_elsewhere"
+              : code === "bill.received_exceeds_total"
+                ? billWriteError(outcome.error, true)
+                : lineWriteError(outcome.error);
+    }
     if (isNetworkFailure(outcome.error)) await this.#rereadAmounts(orderId, visit);
     else if (isBillMoneyRefusal(outcome.error)) await this.#loadLinesAndBills();
     else await this.#loadTabLines();
     if (!identity()) return;
     if (code !== undefined && DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
-    if (code === "ticket.already_started" && !left()) this.cancelOffer = lineNo;
   }
 
   #releaseEditDeadEnds(): void {
@@ -20234,7 +20264,7 @@ export class TillApp extends LitElement {
   #onBackToFloor(): void {
     if (!this.#inShell()) return;
     this.#orderVisit++;
-    this.cancelOffer = null;
+    this.changeRefusal = null;
     const session = this.#operatorSession;
     const flushed = this.#flushDraft(true);
     this.#clearErrorKeepingLateChange();
@@ -20514,7 +20544,6 @@ export class TillApp extends LitElement {
       .printProblems=${this.printProblems}
       .reprintSent=${this.reprintSent}
       .revision=${this.tabRevision}
-      .cancelOffer=${this.cancelOffer}
       .products=${this.tableProducts}
       .menus=${this.tableMenus}
       .service=${this.tableService}
@@ -20556,6 +20585,7 @@ export class TillApp extends LitElement {
       .billNameRefusal=${this.billNameRefusal}
       .revealOtherDrafts=${this.revealOtherDrafts}
       .guestsRefusal=${this.guestsRefusal}
+      .changeRefusal=${this.changeRefusal}
       .splitRefusal=${this.splitRefusal}
       .splitRowsUnread=${this.splitRowsUnread}
       .splitRead=${this.splitRead}
@@ -20691,7 +20721,6 @@ export class TillApp extends LitElement {
           .printProblems=${this.printProblems}
           .reprintSent=${this.reprintSent}
           .revision=${this.tabRevision}
-          .cancelOffer=${this.cancelOffer}
           .products=${this.tableProducts}
           .menus=${this.tableMenus}
           .service=${this.tableService}
@@ -20733,6 +20762,7 @@ export class TillApp extends LitElement {
           .billNameRefusal=${this.billNameRefusal}
           .revealOtherDrafts=${this.revealOtherDrafts}
           .guestsRefusal=${this.guestsRefusal}
+          .changeRefusal=${this.changeRefusal}
           .splitRefusal=${this.splitRefusal}
           .splitRowsUnread=${this.splitRowsUnread}
           .splitRead=${this.splitRead}
@@ -21079,7 +21109,16 @@ export class TillApp extends LitElement {
         @adjust=${(event: Event) => void this.#onAdjust(event)}
         @cancel-item=${(event: CustomEvent<{ lineId: string; lineIds?: string[] }>) => void this.#onCancelItem(event)}
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
-        @cancel-offer-taken=${() => (this.cancelOffer = null)}
+        @change-refusal-taken=${(event: CustomEvent<{ refusal: unknown; shown: boolean }>) => {
+          event.stopPropagation();
+          const refusal = this.changeRefusal;
+          if (refusal === null || event.detail.refusal !== refusal) return;
+          this.changeRefusal = null;
+          if (!event.detail.shown)
+            this.errorKey = {
+              sentDishRefused: sentDishRefusal("ticket.already_started", refusal.lineName)!,
+            };
+        }}
         @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}
         @move-guests=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveGuests(event))}
         @move-bill=${(event: Event) =>

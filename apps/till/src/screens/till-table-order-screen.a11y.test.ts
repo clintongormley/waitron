@@ -16,13 +16,7 @@ import {
   servedMenus,
 } from "../widgets/test-helpers.js";
 import "./till-table-order-screen.js";
-import "../widgets/adjustment-dialog.js";
-import type {
-  AdjustDetail,
-  SubmitDraftDetail,
-  TillTableOrderScreen,
-} from "./till-table-order-screen.js";
-import type { TillAdjustmentDialog } from "../widgets/adjustment-dialog.js";
+import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
 import type {
   OfferedModifier,
   OrderGroup,
@@ -32,7 +26,6 @@ import type {
   TillProduct,
   TillZoneMenu,
   PartyBill,
-  AdjustmentReason,
 } from "../api/client.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 import {
@@ -62,18 +55,6 @@ const menus: TillZoneMenu[] = servedMenus(
   [{ id: "menu-carta", name: "Carta", isDefault: true, versionId: "v1" }],
   [{ id: "offer-cafe", menuId: "menu-carta", productId: "cafe" }],
 );
-
-const mistake: AdjustmentReason = {
-  id: "error",
-  name: "Error",
-  kind: "void",
-  actions: ["cancel"],
-  noteRequired: false,
-  maxPercentBp: null,
-  maxAmount: null,
-  applyRoles: [],
-  approverRoles: [],
-};
 
 const lines: TabLine[] = [
   {
@@ -331,10 +312,9 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await el.updateComplete;
     }
 
-    it("has no violations on a sent line with its note shown and no direct Change", async () => {
+    it("has no violations on a sent line with its note shown", async () => {
       const { el, host } = await mountDrawer([sentLine]);
       await settle(el);
-      expect(el.shadowRoot!.querySelector("[data-change-line]")).toBeNull();
       await expectNoA11yViolations(host);
     });
 
@@ -370,25 +350,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         picker.shadowRoot!.querySelector('[data-test="pick-list-extras-p-cheese-count"]'),
       ).not.toBeNull();
       await settle(el);
-      await expectNoA11yViolations(host);
-    });
-
-    it("has no violations in the dialog asking how many to cancel after the app offers it", async () => {
-      const { el } = await mountDrawer([sentLine]);
-      let asked: AdjustDetail | undefined;
-      el.addEventListener("adjust", (e) => (asked = (e as CustomEvent<AdjustDetail>).detail));
-      el.cancelOffer = 5;
-      await el.updateComplete;
-      expect(asked!.offered).toBe(true);
-      // The app opens the dialog on what the screen asked for.
-      const { el: dialog, host } = await mountWidget<TillAdjustmentDialog>(
-        "till-adjustment-dialog",
-        { kind: asked!.kind, target: asked!.target, reasons: [mistake] },
-        theme,
-      );
-      expect(dialog.shadowRoot!.querySelector("[data-quantity]")).not.toBeNull();
-      dialog.shadowRoot!.querySelector<HTMLElement>('input[name="quantity"][value="1"]')!.click();
-      await dialog.updateComplete;
       await expectNoA11yViolations(host);
     });
   });

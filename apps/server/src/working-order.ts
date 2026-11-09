@@ -5,6 +5,7 @@ import { requireEconomicWrite, type TradingAdmission } from "./trading-admission
 import {
   newCustomerPresentation,
   newCustomerText,
+  addDecimal,
   AppError,
   type BumpMode,
   centsToDecimal,
@@ -146,6 +147,7 @@ import {
   tableHeld,
   partyFamily,
   partyOfOrder,
+  canonicalJson,
 } from "./parties.js";
 import { randomUUID } from "node:crypto";
 import { setImmediate as nextTurn } from "node:timers/promises";
@@ -5592,6 +5594,11 @@ export interface OrderLinePatch {
   note?: string | null;
   options?: OptionSelection[];
   extras?: ExtraSelection[];
+  /**
+   * The other dishes of the URL line's Sent row, changed with it in one save. With it, `quantity`
+   * is the row's total and may only rise; nothing is removed this way.
+   */
+  portionLineNos?: number[];
 }
 
 /** A stored line as the edit path reads it, with its ticket item's kitchen state. */
@@ -7087,9 +7094,11 @@ export async function updateHeldOrder(
 
 /**
  * Edit ONE dish line of an OPEN order made from the copy at `revision`, by the rules
- * {@link applyLineEdits} states; an absent field of `patch` keeps the line's own. A line number the
- * order does not hold is `tab.line_not_found`, and an extras line, which follows its dish,
- * `management.request_invalid`. Answers the order's revision after the edit.
+ * {@link applyLineEdits} states; an absent field of `patch` keeps the line's own. With
+ * `portionLineNos`, the same change goes to every dish of the line's Sent row, and a raised total
+ * is added to the line itself. A line number the order does not hold is `tab.line_not_found`, and
+ * an extras line, which follows its dish, `management.request_invalid`. Answers the order's
+ * revision after the edit.
  */
 export async function updateOrderLine(
   tx: Transaction,
@@ -7115,25 +7124,35 @@ export async function updateOrderLine(
   if (parent === undefined) {
     throw new AppError("management.request_invalid", { field: "lineNo" });
   }
-  await refuseRecalledWrite(tx, eq(workingOrderLines.id, parent.id));
+  const wholeRow = Object.hasOwn(patch, "portionLineNos");
+  const portions = wholeRow ? rowPortions(order, parent, patch.portionLineNos) : [];
+  await refuseRecalledWrite(
+    tx,
+    inArray(workingOrderLines.id, [parent.id, ...portions.map((portion) => portion.id)]),
+  );
+  const row = [parent, ...portions];
+  const rise = !wholeRow || patch.quantity === undefined ? null : rowRise(patch.quantity, row);
   const { changed, at } = await applyLineEdits(
     tx,
     cfg,
     orderId,
     order,
     {
-      edits: [
-        {
-          parent,
-          intent: {
-            quantity: patch.quantity ?? parent.quantity,
-            note: Object.hasOwn(patch, "note") ? screenNote(patch.note) : parent.note,
-            options: patch.options === undefined ? null : { set: patch.options },
-            extras: patch.extras === undefined ? null : { set: patch.extras },
-            makeAt: patch.makeAt,
-          },
+      edits: row.map((dish, index) => ({
+        parent: dish,
+        intent: {
+          quantity:
+            index > 0
+              ? dish.quantity
+              : rise === null
+                ? (patch.quantity ?? dish.quantity)
+                : addDecimal(dish.quantity, rise),
+          note: Object.hasOwn(patch, "note") ? screenNote(patch.note) : dish.note,
+          options: patch.options === undefined ? null : { set: patch.options },
+          extras: patch.extras === undefined ? null : { set: patch.extras },
+          makeAt: patch.makeAt,
         },
-      ],
+      })),
       removed: [],
       fresh: [],
     },
@@ -7143,6 +7162,71 @@ export async function updateOrderLine(
   const saved = await countEdit(tx, orderId, revision, changed);
   if (changed) await captureOrderEdit(tx, attendance, orderId, operatorId, saved, "line", at);
   return saved;
+}
+
+/**
+ * The dishes `lineNos` names as the rest of `first`'s Sent row: each named once, not `first`, a
+ * dish line of the order and the same dish as `first`, else `management.request_invalid`.
+ */
+function rowPortions(
+  order: EditableOrder,
+  first: EditableParent,
+  lineNos: unknown,
+): EditableParent[] {
+  const refused = () => new AppError("management.request_invalid", { field: "portionLineNos" });
+  if (!Array.isArray(lineNos)) throw refused();
+  if (lineNos.length === 0) return [];
+  const byLineNo = new Map<number, EditableParent>();
+  for (const candidate of order.parents)
+    if (!byLineNo.has(candidate.lineNo)) byLineNo.set(candidate.lineNo, candidate);
+  let firstKey: string | undefined;
+  const seen = new Set<number>([first.lineNo]);
+  return lineNos.map((lineNo: unknown) => {
+    if (typeof lineNo !== "number" || !Number.isInteger(lineNo) || seen.has(lineNo)) {
+      throw refused();
+    }
+    seen.add(lineNo);
+    const dish = byLineNo.get(lineNo);
+    if (dish === undefined || sameDishKey(dish) !== (firstKey ??= sameDishKey(first))) {
+      throw refused();
+    }
+    return dish;
+  });
+}
+
+/**
+ * What every dish of one Sent row must share, as the server checks it: product, offer, note,
+ * options answer and extras, by value, so neither key order nor list order tells them apart.
+ */
+function sameDishKey(dish: EditableParent): string {
+  return canonicalJson({
+    productId: dish.productId ?? null,
+    menuItemId: dish.menuItemId ?? null,
+    note: dish.note,
+    options: dish.optionSnapshots.map(canonicalJson).sort(),
+    extras: dish.children
+      .map((child) =>
+        canonicalJson({
+          listId: child.extraListId ?? null,
+          productId: child.productId ?? null,
+          perDish: perDishExtraPicks(child.quantity, dish.quantity, child.priceQuantity),
+        }),
+      )
+      .sort(),
+  });
+}
+
+/**
+ * How much a row's requested `total` raises it: a whole number not below the dishes' total now,
+ * else `management.request_invalid` (`quantity`).
+ */
+function rowRise(total: unknown, row: EditableParent[]): Decimal {
+  const refused = () => new AppError("management.request_invalid", { field: "quantity" });
+  if (typeof total !== "string" || !/^\d+$/.test(total)) throw refused();
+  const now = row.reduce((sum, dish) => addDecimal(sum, dish.quantity), decimal("0"));
+  const rise = subtractDecimal(decimal(total), now);
+  if (compareDecimal(rise, decimal("0")) < 0) throw refused();
+  return rise;
 }
 
 /** Abandon an open held order anywhere in the venue. An unknown id reads as `working_order.not_open`. */

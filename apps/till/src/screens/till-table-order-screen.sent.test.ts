@@ -3,7 +3,8 @@ import { userEvent } from "vitest/browser";
 import { setLocale } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import { beer, mount, resized } from "./till-table-order-screen.test-helpers.js";
+import type { TabLine } from "../api/client.js";
+import { beer, flan, mount, resized } from "./till-table-order-screen.test-helpers.js";
 import {
   current,
   currentGroup,
@@ -12,7 +13,7 @@ import {
   row,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import { switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -348,8 +349,30 @@ it("starts the same bill's new visit from its attention state, not its last manu
   expect(inside(el, "[data-sent-toggle]").getAttribute("aria-expanded")).toBe("true");
 });
 
-it("opens sent information as read-only recorded dish, extra and note prices", async () => {
-  const { el } = await sent();
+it("opens sent information as read-only recorded dish, extra and note prices at a Not allowed station", async () => {
+  const flanLine: TabLine = {
+    changesAfterSending: "never",
+    id: "l-flan",
+    name: "Flan",
+    lineNo: 1,
+    groupId: "g3",
+    productId: flan.id,
+    quantity: "2.000",
+    unitPrecision: 0,
+    unitPriceGross: "2.00",
+    servedAt: null,
+    courseId: null,
+    sentAt: null,
+    firedAt: null,
+    state: "queued",
+    note: "warm",
+    listId: null,
+    menuItemId: flan.menuItemId!,
+    parentProductId: null,
+    stationId: null,
+    movable: false,
+  };
+  const { el } = await sent({ lines: [flanLine], bills: [partyBill("wo-4", 1, "10.00")] });
   const events = collect(el, "serve-lines");
   await click(el, "[data-held-toggle]");
   await click(el, '[data-sent-info="l-flan"]');
@@ -359,7 +382,9 @@ it("opens sent information as read-only recorded dish, extra and note prices", a
   expect(dialog.querySelector("[data-sent-line-amount]")!.textContent).toContain("4.00");
   expect(dialog.querySelector('[data-sent-extra="l-cream"]')!.textContent).toContain("2.00");
   expect(
-    dialog.querySelector("input,textarea,wt-input,wt-combobox,[data-sent-line-serve]"),
+    dialog.querySelector(
+      "input,textarea,wt-input,wt-combobox,till-modifier-picker,[data-sent-change],[data-sent-line-serve]",
+    ),
   ).toBeNull();
   expect(find(el, "[data-sent-line-close]").textContent!.trim()).toBe("Close");
   await userEvent.click(find(el, "[data-sent-line-close]"));

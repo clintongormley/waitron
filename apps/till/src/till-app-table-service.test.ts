@@ -5,7 +5,6 @@ import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import {
   floorPartyBills,
   adjustmentStubs,
-  cancelReason,
   cancelThroughDialog,
   cleanupWidgets,
   draftServer,
@@ -24,6 +23,10 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillAdjustmentDialog } from "./widgets/adjustment-dialog.js";
+import type { TillModifierPicker } from "./widgets/modifier-picker.js";
+import type { TillSentOrders } from "./widgets/sent-orders.js";
+import { row } from "./screens/till-table-order-screen.current-orders.test-helpers.js";
+import type { WtDialog, WtTextarea } from "@waitron/ui";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   FloorZone,
@@ -1609,10 +1612,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   /** The app's cancel dialog, or null when none is open. */
   const cancelDialog = (el: TillApp) =>
     el.shadowRoot!.querySelector<TillAdjustmentDialog>("till-adjustment-dialog");
-  async function closeCancel(el: TillApp): Promise<void> {
-    cancelDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-adjust-close]")!.click();
-    await flush(el);
-  }
 
   it("applies the retained line-edit command with its opening revision and shows the note at the same price", async () => {
     const getTabLines = vi
@@ -1739,135 +1738,305 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(banner(el)!.textContent).toContain(t("held.changed_elsewhere"));
   });
 
-  it("says the kitchen has started the line, and offers to cancel it", async () => {
-    const getTabLines = vi
-      .fn()
-      .mockResolvedValueOnce({ lines: [burgerLine], revision: 7 })
-      .mockResolvedValueOnce({
-        lines: [{ ...burgerLine, state: "preparing" }],
-        revision: 7,
-      });
-    const { el, screen } = await openBurgerTab({
-      getTabLines,
-      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
-    });
+  /** The burger as Sent shows it: fired, and the kitchen has started it. */
+  const startedBurger = row("line-5", "Burger", "1.000", {
+    workingOrderId: "wo-7",
+    lineNo: 5,
+    netAmount: "9.50",
+    note: "no salt",
+    kitchen: { stationId: null, movable: false, state: "preparing", firedAt: sent },
+  });
+  const sentBurger = {
+    hasGroups: false,
+    nextDisplayNumber: 1,
+    retainedCourses: [],
+    revision: 7,
+    reminder: null,
+    groups: [],
+    ungrouped: [startedBurger],
+  };
+  const started = {
+    es: "La cocina ya ha empezado a preparar Burger, así que no se puede cambiar.",
+    en: "The kitchen has already started Burger, so it can't be changed.",
+  } as const;
 
-    emit(screen, "change-line", change);
+  /** The table with the started burger in Sent, its window open. */
+  async function openBurgerWindow(overrides: Record<string, unknown> = {}, locale = "es-ES") {
+    const { el } = await openBurgerTab({
+      readCurrentOrders: vi.fn().mockResolvedValue(sentBurger),
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [{ ...burgerLine, state: "preparing", note: "no salt" }],
+        revision: 7,
+      }),
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+      ...overrides,
+    });
+    setLocale(locale);
+    await flush(el);
+    // A language change draws the screen afresh.
+    const screen = tableOrder(el)!;
+    const dialog = await openSentWindow(el, screen, "line-5");
+    return { el, screen, dialog };
+  }
+
+  /** Opens a dish's window from Sent, showing Sent's dishes first when they are folded away. */
+  async function openSentWindow(el: TillApp, screen: TillTableOrderScreen, lineId: string) {
+    const panel = screen.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+    await panel.updateComplete;
+    const info = () => panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${lineId}"]`);
+    if (info() === null) {
+      panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!.click();
+      await panel.updateComplete;
+    }
+    info()!.click();
+    await flush(el);
+    const dialog = screen.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
+    await expect.poll(() => dialog.open).toBe(true);
+    return dialog;
+  }
+
+  /** The note box inside the burger's window. */
+  async function noteBox(screen: TillTableOrderScreen): Promise<HTMLTextAreaElement> {
+    const picker = screen.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+    await picker.updateComplete;
+    const field = picker.shadowRoot!.querySelector<WtTextarea>('[data-test="line-note"]')!;
+    await field.updateComplete;
+    return field.shadowRoot!.querySelector("textarea")!;
+  }
+
+  /** Types `note` into the window's fields and presses Change dish. */
+  async function changeNote(el: TillApp, screen: TillTableOrderScreen, note: string) {
+    const box = await noteBox(screen);
+    box.value = note;
+    box.dispatchEvent(new Event("input"));
+    await screen.updateComplete;
+    const button = screen.shadowRoot!.querySelector<HTMLElement>("[data-sent-change]")!;
+    await expect.poll(() => button.hasAttribute("disabled")).toBe(false);
+    button.click();
+    await flush(el);
+    await flush(el);
+  }
+
+  /** Closes the window, throwing away the change its fields hold. */
+  async function closeDiscarding(el: TillApp, screen: TillTableOrderScreen, dialog: WtDialog) {
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-close]")!.click();
+    const question = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "wt-unsaved-changes",
+    )!;
+    await expect.poll(() => question.open).toBe(true);
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => dialog.open).toBe(false);
+  }
+
+  /** The window's sentence above its buttons. */
+  const windowSentence = (dialog: WtDialog) =>
+    dialog.shadowRoot!.querySelector<HTMLElement>(".footer > .form-message")?.textContent?.trim();
+
+  it.each(["es", "en"] as const)(
+    "shows a started dish's refusal inside its window, as it was left, with Void… and Comp… (%s)",
+    async (language) => {
+      const { el, screen, dialog } = await openBurgerWindow(
+        {},
+        language === "es" ? "es-ES" : "en-GB",
+      );
+
+      await changeNote(el, screen, "no onions");
+
+      expect(api.updateOrderLine).toHaveBeenCalledWith(
+        "wo-7",
+        5,
+        { note: "no onions", portionLineNos: [] },
+        7,
+        { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      );
+      await expect.poll(() => dialog.open).toBe(true);
+      await expect.poll(() => windowSentence(dialog)).toBe(started[language]);
+      expect((await noteBox(screen)).value).toBe("no onions");
+      const button = (selector: string) =>
+        screen.shadowRoot!.querySelector<HTMLElement>(`[data-sent-line-dialog] ${selector}`);
+      expect(button("[data-sent-change]")!.hasAttribute("disabled")).toBe(false);
+      expect(button("[data-sent-change-refused-void]")!.textContent!.trim()).toBe(
+        t("table.void_line"),
+      );
+      expect(button("[data-sent-change-refused-comp]")!.textContent!.trim()).toBe(t("comp.title"));
+      expect(banner(el)).toBeNull();
+      expect(cancelDialog(el)).toBeNull();
+    },
+  );
+
+  it("changes only the sent dish, leaving the New order's water unsaved and unsent, when the kitchen had started the dish", async () => {
+    const { el, screen, dialog } = await openBurgerWindow();
+    screen.draftStore!.addProduct(
+      {
+        id: "water",
+        catalogueId: "menu-dinner",
+        menuItemId: "menu-item-water",
+        name: "Water",
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+        category: null,
+        allergens: null,
+      },
+      "1",
+    );
+    await flush(el);
+    expect(screen.draftStore!.lines.map((line) => line.product.name)).toEqual(["Water"]);
+    const saves = vi.mocked(api.saveDraft).mock.calls.length;
+
+    await changeNote(el, screen, "no onions");
+    await expect.poll(() => windowSentence(dialog)).toBe(started.es);
+
+    expect(api.updateOrderLine).toHaveBeenCalledOnce();
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    expect(api.sendLines).not.toHaveBeenCalled();
+    expect(vi.mocked(api.saveDraft).mock.calls.length).toBe(saves);
+    expect(tableOrder(el)!.draftStore!.lines.map((line) => line.product.name)).toEqual(["Water"]);
+  });
+
+  it("says a started dish's refusal on the banner when the screen that sent it was drawn afresh before the answer", async () => {
+    let refuse!: (error: unknown) => void;
+    const { el, screen } = await openBurgerWindow({
+      updateOrderLine: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    });
+    await changeNote(el, screen, "no onions");
+    setLocale("en-GB");
+    await flush(el);
+    expect(tableOrder(el)).not.toBe(screen);
+
+    refuse({ code: "ticket.already_started" });
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(
-      "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
+      "Burger is already being made and can no longer be changed. Use Void… to take it off the bill.",
     );
-    await flush(el);
-    const dialog = cancelDialog(el)!;
-    expect(dialog.kind).toBe("cancel");
-    expect(dialog.target!.lineId).toBe("line-5");
-    expect(dialog.shadowRoot!.textContent).toContain(t("table.cancel_started"));
+    expect(tableOrder(el)!.changeRefusal).toBeNull();
   });
 
-  it("clears the offer to cancel once the offered cancel is made", async () => {
-    const { el, screen } = await openBurgerTab({
-      getTabLines: vi.fn().mockResolvedValue({
-        lines: [{ ...burgerLine, state: "preparing" }],
-        revision: 7,
-      }),
-      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
-    });
-    emit(screen, "change-line", change);
-    await flush(el);
-    await flush(el);
-    expect(banner(el)).not.toBeNull();
+  it("shows the refusal again when the reopened window's change is refused a second time", async () => {
+    const { el, screen, dialog } = await openBurgerWindow();
+    await changeNote(el, screen, "no onions");
+    await expect.poll(() => windowSentence(dialog)).toBe(started.es);
 
-    emit(cancelDialog(el)!, "adjust-preview", {
-      action: "cancel",
-      reasonId: cancelReason.id,
-      note: null,
-    });
-    await flush(el);
-    emit(cancelDialog(el)!, "adjust-confirm");
-    await flush(el);
-    await flush(el);
+    await changeNote(el, screen, "no onions, no salt");
 
-    expect(api.applyAdjustment).toHaveBeenCalledWith(
-      "wo-7",
-      expect.objectContaining({ lineId: "line-5", action: "cancel" }),
-      expect.anything(),
-    );
-    expect(cancelDialog(el)).toBeNull();
+    expect(api.updateOrderLine).toHaveBeenCalledTimes(2);
+    await expect.poll(() => dialog.open).toBe(true);
+    await expect.poll(() => windowSentence(dialog)).toBe(started.es);
+    expect((await noteBox(screen)).value).toBe("no onions, no salt");
     expect(banner(el)).toBeNull();
   });
 
-  it("keeps the offer to cancel on screen when the offered dialog is closed without cancelling", async () => {
-    const { el, screen } = await openBurgerTab({
-      getTabLines: vi.fn().mockResolvedValue({
-        lines: [{ ...burgerLine, state: "preparing" }],
-        revision: 7,
-      }),
-      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
-    });
-    emit(screen, "change-line", change);
+  it("does not say a refusal the window already showed again when a language change draws the screen afresh", async () => {
+    const { el, screen, dialog } = await openBurgerWindow();
+    await changeNote(el, screen, "no onions");
+    await expect.poll(() => windowSentence(dialog)).toBe(started.es);
+    await closeDiscarding(el, screen, dialog);
+
+    setLocale("en-GB");
     await flush(el);
     await flush(el);
 
-    await closeCancel(el);
-
-    expect(banner(el)!.textContent).toContain(codeMessage("ticket.already_started"));
+    expect(tableOrder(el)).not.toBe(screen);
+    expect(banner(el)).toBeNull();
   });
 
-  it("offers Cancel again when a second change of the same line is refused the same way", async () => {
-    const { el, screen } = await openBurgerTab({
-      getTabLines: vi.fn().mockResolvedValue({
-        lines: [{ ...burgerLine, state: "preparing" }],
-        revision: 7,
-      }),
-      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+  describe("a started dish's refusal while the waiter is busy with another sent dish", () => {
+    const flanLine: TabLine = {
+      ...burgerLine,
+      id: "line-6",
+      lineNo: 6,
+      name: "Flan",
+      productId: "flan",
+      menuItemId: "menu-item-flan",
+      unitPriceGross: "4.00",
+      state: "preparing",
+      note: "cold",
+    };
+    const startedFlan = row("line-6", "Flan", "1.000", {
+      workingOrderId: "wo-7",
+      lineNo: 6,
+      netAmount: "4.00",
+      note: "cold",
+      kitchen: { stationId: null, movable: false, state: "preparing", firedAt: sent },
     });
-    emit(screen, "change-line", change);
-    await flush(el);
-    await flush(el);
-    await closeCancel(el);
-    await expect.poll(() => cancelDialog(el)).toBeNull();
+    const burgerAndFlanOffers = zoneOffers(
+      {
+        menus: diningMenus,
+        products: [
+          { ...coffee, id: "burger", menuItemId: "menu-item-burger", name: "Burger" },
+          { ...coffee, id: "flan", menuItemId: "menu-item-flan", name: "Flan" },
+        ].map((product) => ({ ...product, catalogueId: "menu-dinner" })),
+      },
+      null,
+    );
 
-    emit(tableOrder(el)!, "change-line", change);
-    await flush(el);
-    await flush(el);
+    /** The burger's window open beside a started flan; each Change dish waits for the test's answer. */
+    async function openBurgerBesideFlan() {
+      const answers: Array<(reason: unknown) => void> = [];
+      const opened = await openBurgerWindow({
+        listZoneOffers: vi.fn().mockResolvedValue(burgerAndFlanOffers),
+        readCurrentOrders: vi
+          .fn()
+          .mockResolvedValue({ ...sentBurger, ungrouped: [startedBurger, startedFlan] }),
+        getTabLines: vi.fn().mockResolvedValue({
+          lines: [{ ...burgerLine, state: "preparing", note: "no salt" }, flanLine],
+          revision: 7,
+        }),
+        updateOrderLine: vi.fn(() => new Promise((_resolve, reject) => answers.push(reject))),
+      });
+      return { ...opened, answers };
+    }
 
-    expect(cancelDialog(el)).not.toBeNull();
-  });
+    async function openFlan(el: TillApp, screen: TillTableOrderScreen) {
+      const dialog = await openSentWindow(el, screen, "line-6");
+      expect(dialog.textContent).toContain("Flan");
+      return dialog;
+    }
 
-  it("shows a dismissed Cancel offer only once, even when a handheld's order screen mounts again", async () => {
-    const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait" }),
-      listZoneOffers: vi.fn().mockResolvedValue(burgerOffers),
-      getTabLines: vi.fn().mockResolvedValue({
-        lines: [{ ...burgerLine, state: "preparing" }],
-        revision: 7,
-      }),
-      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+    it("says the burger's refusal on the banner when it lands while the flan's window is open", async () => {
+      const { el, screen, answers } = await openBurgerBesideFlan();
+      await changeNote(el, screen, "no onions");
+      const flan = await openFlan(el, screen);
+
+      answers[0]!({ code: "ticket.already_started" });
+      await flush(el);
+
+      await expect
+        .poll(() => banner(el)?.textContent ?? "")
+        .toContain(
+          "Burger ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
+        );
+      expect(flan.open).toBe(true);
+      expect(flan.textContent).toContain("Flan");
+      expect(windowSentence(flan) ?? "").toBe("");
     });
-    await logIn(el);
-    emit(shell(el), "screen-select", { screen: "floor" });
-    await flush(el);
-    await openFromFloor(el, openTable);
-    await flush(el);
-    emit(tableOrder(el)!, "change-line", change);
-    await flush(el);
-    await flush(el);
-    expect(cancelDialog(el)).not.toBeNull();
-    await closeCancel(el);
 
-    emit(shell(el), "screen-select", { screen: "floor" });
-    await flush(el);
-    history.pushState(null, "", "/tabs/order");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    await flush(el);
-    await flush(el);
+    it("matches each refusal to its own change: the burger's in its window, then the flan's on the banner", async () => {
+      const { el, screen, dialog, answers } = await openBurgerBesideFlan();
+      await changeNote(el, screen, "no onions");
+      await openFlan(el, screen);
+      await changeNote(el, screen, "warm");
+      expect(api.updateOrderLine).toHaveBeenCalledTimes(2);
 
-    expect(tableOrder(el)!.orderId).toBe(openTable.party!.openingBillId);
-    expect(cancelDialog(el)).toBeNull();
+      answers[0]!({ code: "ticket.already_started" });
+      await flush(el);
+
+      await expect.poll(() => windowSentence(dialog)).toBe(started.es);
+      expect((await noteBox(screen)).value).toBe("no onions");
+      expect(banner(el)).toBeNull();
+
+      answers[1]!({ code: "ticket.already_started" });
+      await flush(el);
+
+      await expect
+        .poll(() => banner(el)?.textContent ?? "")
+        .toContain(
+          "Flan ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
+        );
+      expect(windowSentence(dialog)).toBe(started.es);
+      expect((await noteBox(screen)).value).toBe("no onions");
+    });
   });
 
   describe("an answer that arrives after the waiter has moved to another table", () => {
@@ -1925,7 +2094,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await flush(el);
 
       expect(banner(el)!.textContent).toContain(
-        "Tu cambio en Burger de la mesa 2 no se ha guardado. La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
+        "Tu cambio en Burger de la mesa 2 no se ha guardado. Burger ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
       );
       expect(banner(el)!.textContent).not.toContain("Tarta");
       await flush(el);
@@ -2043,7 +2212,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     }
 
     const startedRefusal =
-      "Tu cambio en Burger de la mesa 2 no se ha guardado. La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo";
+      "Tu cambio en Burger de la mesa 2 no se ha guardado. Burger ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.";
 
     it("names the refused change, and offers nothing on the next table, when the refusal lands while that table is still opening", async () => {
       const { el, settle, release, reads } = await changeThenLeave();
@@ -2139,9 +2308,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       expect(banner(el)!.textContent).toContain(startedRefusal);
     });
 
+    /** `fromWindow`: the change is pressed in the started burger's Sent window, not handed to the
+     * app as an event. */
     async function changeOnFormFactor(
       formFactor: FormFactor,
       overrides: Record<string, unknown> = {},
+      fromWindow = false,
     ) {
       let settle!: { resolve: (value: unknown) => void; reject: (reason: unknown) => void };
       let releaseOffers: () => void = () => undefined;
@@ -2171,10 +2343,15 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await flush(el);
       await openFromFloor(el, openTable);
       await flush(el);
-      emit(tableOrder(el)!, "change-line", change);
+      const screen = tableOrder(el)!;
+      if (fromWindow) {
+        await openSentWindow(el, screen, "line-5");
+        await changeNote(el, screen, "no onions");
+      } else emit(screen, "change-line", change);
       await flush(el);
       return {
         el,
+        screen,
         settle: () => settle,
         release: () => releaseOffers(),
         reads: () => vi.mocked(api.getTabLines).mock.calls.length,
@@ -2216,19 +2393,60 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       expect(reads()).toBe(readsOnLeaving);
     });
 
-    it("treats a handheld's tap on the button of the table it is on as staying on the order", async () => {
-      const { el, settle } = await changeOnFormFactor(phoneFormFactor);
+    it("treats a handheld's tap on the button of the table it is on as staying on the order, showing the refusal in the dish's window", async () => {
+      const { el, screen, settle } = await changeOnFormFactor(
+        phoneFormFactor,
+        {
+          readCurrentOrders: vi.fn().mockResolvedValue(sentBurger),
+          getTabLines: vi.fn().mockResolvedValue({
+            lines: [{ ...burgerLine, state: "preparing", note: "no salt" }],
+            revision: 7,
+          }),
+        },
+        true,
+      );
       shell(el)
         .shadowRoot!.querySelector<HTMLElement>(`[data-bar-table="${openTable.id}"]`)!
         .click();
       await flush(el);
+      expect(tableOrder(el)).toBe(screen);
 
       settle().reject({ code: "ticket.already_started" });
       await flush(el);
 
-      expect(banner(el)!.textContent).not.toContain("Tu cambio");
+      const dialog = screen.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
+      await expect.poll(() => windowSentence(dialog)).toBe(started.es);
+      expect(dialog.open).toBe(true);
+      expect((await noteBox(screen)).value).toBe("no onions");
+      expect(banner(el)).toBeNull();
+    });
+
+    it("does not say a refusal the window already showed again once a handheld goes to its Floor tab and back", async () => {
+      const { el, screen, settle } = await changeOnFormFactor(
+        phoneFormFactor,
+        {
+          readCurrentOrders: vi.fn().mockResolvedValue(sentBurger),
+          getTabLines: vi.fn().mockResolvedValue({
+            lines: [{ ...burgerLine, state: "preparing", note: "no salt" }],
+            revision: 7,
+          }),
+        },
+        true,
+      );
+      settle().reject({ code: "ticket.already_started" });
       await flush(el);
-      expect(cancelDialog(el)).not.toBeNull();
+      const dialog = screen.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
+      await expect.poll(() => windowSentence(dialog)).toBe(started.es);
+      await closeDiscarding(el, screen, dialog);
+
+      emit(shell(el), "screen-select", { screen: "floor" });
+      await flush(el);
+      emit(shell(el), "screen-select", { screen: "order" });
+      await flush(el);
+      await flush(el);
+
+      expect(tableOrder(el)).not.toBe(screen);
+      expect(banner(el)).toBeNull();
     });
 
     it("names the refusal that lands while a tablet opens another table from the same tab", async () => {
@@ -2281,7 +2499,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await flush(el);
 
       expect(banner(el)!.textContent!.trim()).toBe(
-        "Tu cambio en Burger no se ha guardado. La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
+        "Tu cambio en Burger no se ha guardado. Burger ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
       );
     });
 
@@ -2468,7 +2686,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       expect(banner(el)).toBeNull();
     });
 
-    it("says the kitchen has started the line, and offers to cancel it, after a handheld goes to its Floor tab and back", async () => {
+    it("says the kitchen has started the line on the banner after a handheld goes to its Floor tab and back, which draws its screen afresh", async () => {
       const { el, settle, reads } = await changeHeld(phoneFormFactor);
       emit(shell(el), "screen-select", { screen: "floor" });
       await flush(el);
@@ -2482,14 +2700,13 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       const text = banner(el)!.textContent!;
       expect(text).not.toContain("Tu cambio");
       expect(text).toContain(
-        "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
+        "Burger ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
       );
       expect(reads()).toBe(readsBack + 1);
       expect(tableOrder(el)!.orderId).toBe("wo-7");
+      expect(tableOrder(el)!.changeRefusal).toBeNull();
       await flush(el);
-      const dialog = cancelDialog(el)!;
-      expect(dialog.kind).toBe("cancel");
-      expect(dialog.target!.name).toBe("Burger");
+      expect(cancelDialog(el)).toBeNull();
     });
 
     it("takes the saved revision after a till goes back to the floor and opens the same table again", async () => {
@@ -2692,7 +2909,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(tableOrder(el)!.lines.map((line) => line.name)).toEqual(["Tarta"]);
   });
 
-  it("offers no Cancel when the waiter moves to another table while the refused line reloads", async () => {
+  it("hands the next table's screen no refusal when the waiter moves to another table while the refused line reloads", async () => {
     const otherTable: TableState = {
       ...openTable,
       id: "t3",
@@ -2740,6 +2957,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
 
     expect(tableOrder(el)!.orderId).toBe("wo-8");
     await flush(el);
+    expect(tableOrder(el)!.changeRefusal).toBeNull();
     expect(cancelDialog(el)).toBeNull();
   });
 
@@ -2788,7 +3006,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(
-      "Este plato ya ha ido a cocina y no se puede cambiar. Puedes cancelarlo",
+      "Burger ya ha ido a cocina y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
     );
     expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
   });

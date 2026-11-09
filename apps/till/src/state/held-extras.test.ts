@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveExtraSelections } from "./held-extras.js";
+import { deriveExtraSelections, sameExtraSelections } from "./held-extras.js";
 import type { OfferedModifier } from "../api/client.js";
 
 /** One offered product, with its three names DIFFERENT so a reader of the wrong one fails. */
@@ -178,5 +178,52 @@ describe("deriveExtraSelections", () => {
       deriveExtraSelections([], [held("list-toppings", "p-bacon", "Bacon", "1.50", 1)]).notOffered,
     ).toHaveLength(1);
     expect(deriveExtraSelections([toppings], undefined)).toEqual({ extras: [], notOffered: [] });
+  });
+});
+
+describe("sameExtraSelections", () => {
+  const bacon = {
+    listId: "list-toppings",
+    productId: "p-bacon",
+    name: "Bacon",
+    price: "1.50",
+    quantity: 1,
+  };
+  const cheese = {
+    listId: "list-toppings",
+    productId: "p-cheese",
+    name: "Cheese",
+    price: "1.00",
+    quantity: 2,
+  };
+
+  it("compares the picks as a set, whatever order they come in", () => {
+    expect(sameExtraSelections([bacon, cheese], [cheese, bacon])).toBe(true);
+  });
+
+  it("reads only the list, the product and the count, not the frozen name or price", () => {
+    expect(sameExtraSelections([bacon], [{ ...bacon, name: "Bacon rashers", price: "2.00" }])).toBe(
+      true,
+    );
+  });
+
+  it("tells a different count, list or product, a missing pick and an extra pick apart", () => {
+    expect(sameExtraSelections([bacon], [{ ...bacon, quantity: 2 }])).toBe(false);
+    expect(sameExtraSelections([bacon], [{ ...bacon, listId: "list-sides" }])).toBe(false);
+    expect(sameExtraSelections([bacon], [{ ...bacon, productId: "p-egg" }])).toBe(false);
+    expect(sameExtraSelections([bacon, cheese], [bacon])).toBe(false);
+    expect(sameExtraSelections([], [cheese])).toBe(false);
+  });
+
+  it("does not take one list's product for another list's", () => {
+    expect(
+      sameExtraSelections(
+        [bacon, { ...cheese, listId: "list-sides" }],
+        [
+          { ...bacon, listId: "list-sides" },
+          { ...cheese, listId: "list-toppings" },
+        ],
+      ),
+    ).toBe(false);
   });
 });
