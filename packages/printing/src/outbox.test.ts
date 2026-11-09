@@ -344,6 +344,98 @@ describe("resendPrintJob", () => {
     });
   });
 
+  it("resends to another printer with the bytes it is given, in the same chain, sale and marking", async () => {
+    await setup();
+    const nodeId = await seedNode(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const [series] = await tx.insert(invoiceSeries).values({ nodeId, code: "A" }).returning();
+      const [sale] = await tx
+        .insert(sales)
+        .values({
+          source: "operator_script",
+          nodeId,
+          seriesId: series!.id,
+          invoiceNumber: 1,
+          issuedAt: "2026-10-22T12:00:00.000Z",
+          issuedOffsetMinutes: 0,
+          total: 100,
+          vatBreakdown: [],
+          locale: "en-GB",
+          invoiceLocales: ["en-GB"],
+          fiscalBackend: "fake",
+          fiscalState: "not_applicable",
+        })
+        .returning();
+      const narrow = await createPrinter(tx, {
+        name: "Narrow",
+        transport: "network_tcp",
+        host: "narrow.local",
+      });
+      const wide = await createPrinter(tx, {
+        name: "Wide",
+        transport: "network_tcp",
+        host: "wide.local",
+      });
+      const original = await enqueuePrintJob(tx, narrow.id, new Uint8Array([1]), "document", {
+        saleId: sale!.id,
+        receiptCopy: true,
+      });
+      const exhausted = { status: "failed", attempts: 5 } as const;
+      await tx.update(printJobs).set(exhausted).where(eq(printJobs.id, original.jobId));
+      const first = await resendPrintJob(tx, original.jobId);
+      await tx.update(printJobs).set(exhausted).where(eq(printJobs.id, first.jobId));
+
+      const moved = await resendPrintJob(tx, first.jobId, {
+        printerId: wide.id,
+        payload: new Uint8Array([2, 3]),
+      });
+
+      const [row] = await tx.select().from(printJobs).where(eq(printJobs.id, moved.jobId));
+      expect(row).toMatchObject({
+        printerId: wide.id,
+        payload: new Uint8Array([2, 3]),
+        kind: "document",
+        status: "queued",
+        resendOf: original.jobId,
+        saleId: sale!.id,
+        receiptCopy: true,
+      });
+    });
+  });
+
+  it("refuses a drawer command sent to another printer, as it does on its own", async () => {
+    await setup();
+    await withTransaction(suite.db, async (tx) => {
+      const drawer = await createPrinter(tx, {
+        name: "Drawer",
+        transport: "network_tcp",
+        host: "printer.local",
+      });
+      const other = await createPrinter(tx, {
+        name: "Other",
+        transport: "network_tcp",
+        host: "other.local",
+      });
+      const original = await enqueuePrintJob(
+        tx,
+        drawer.id,
+        new Uint8Array([27, 112, 0, 25, 250]),
+        "drawer",
+      );
+      await tx
+        .update(printJobs)
+        .set({ status: "failed", attempts: 5 })
+        .where(eq(printJobs.id, original.jobId));
+      await expect(
+        resendPrintJob(tx, original.jobId, {
+          printerId: other.id,
+          payload: new Uint8Array([27, 112, 0, 25, 250]),
+        }),
+      ).rejects.toMatchObject({ code: "print_job.not_resendable" });
+      expect(await tx.select().from(printJobs)).toHaveLength(1);
+    });
+  });
+
   it("refuses unknown jobs and disabled printers", async () => {
     await setup();
     await withTransaction(suite.db, async (tx) => {

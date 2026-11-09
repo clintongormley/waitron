@@ -88,11 +88,16 @@ export function canResendPrintJob(job: {
 }
 
 /**
- * Resend the opaque document to its original printer, preserving delivery history. The
+ * Resend the opaque document to its original printer, or `to` another with the bytes given,
+ * preserving delivery history. The
  * copy names the first job of its chain, which `printJobInTrouble` (apps/server/src/print-job-trouble.ts)
  * reads to clear a failed job once a later copy has printed, and carries the receipt's sale.
  */
-export async function resendPrintJob(tx: Transaction, jobId: string): Promise<{ jobId: string }> {
+export async function resendPrintJob(
+  tx: Transaction,
+  jobId: string,
+  to?: { printerId: string; payload: Uint8Array },
+): Promise<{ jobId: string }> {
   const [job] = await tx.select().from(printJobs).where(eq(printJobs.id, jobId));
   if (job === undefined) throw new AppError("print_job.not_found", { id: jobId });
   const [target] = await tx
@@ -120,9 +125,15 @@ export async function resendPrintJob(tx: Transaction, jobId: string): Promise<{ 
       .limit(1);
     if (reserved !== undefined) throw new AppError("print_job.not_resendable", { id: jobId });
   }
-  return insertPrintJob(tx, job.printerId, job.payload, "document", {
-    resendOf: job.resendOf ?? job.id,
-    saleId: job.saleId,
-    receiptCopy: job.receiptCopy,
-  });
+  return insertPrintJob(
+    tx,
+    to?.printerId ?? job.printerId,
+    to?.payload ?? job.payload,
+    "document",
+    {
+      resendOf: job.resendOf ?? job.id,
+      saleId: job.saleId,
+      receiptCopy: job.receiptCopy,
+    },
+  );
 }
