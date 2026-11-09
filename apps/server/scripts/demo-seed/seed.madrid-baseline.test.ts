@@ -349,6 +349,11 @@ for (const locale of ["en", "es"] as const) {
       });
       for (const [name, column, value] of [
         [
+          "management_sessions",
+          { name: "proved_at", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+          null,
+        ],
+        [
           "kitchen_stations",
           { name: "waits_for_pass", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
           0,
