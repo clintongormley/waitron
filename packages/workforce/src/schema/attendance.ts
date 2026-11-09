@@ -9,7 +9,6 @@ import {
   id,
   json,
   label,
-  locations,
   newId,
   table,
   tsString,
@@ -22,9 +21,6 @@ export const attendanceDayWork = table(
   "attendance_day_work",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id")
-      .notNull()
-      .references(() => locations.id, { onDelete: "restrict" }),
     businessDay: day("business_day").notNull(),
     startAt: tsString("start_at").notNull(),
     endAt: tsString("end_at").notNull(),
@@ -34,8 +30,8 @@ export const attendanceDayWork = table(
     deferredShiftIds: json<string[]>("deferred_shift_ids").notNull().default([]),
   },
   (t) => [
-    uniqueIndex("attendance_day_work_scope_uq").on(t.locationId, t.businessDay),
-    index("attendance_day_work_due_idx").on(t.locationId, t.nextDueAt),
+    uniqueIndex("attendance_day_work_scope_uq").on(t.businessDay),
+    index("attendance_day_work_due_idx").on(t.nextDueAt),
     check("attendance_day_work_bounds_ck", sql`${t.endAt} > ${t.startAt}`),
     check(
       "attendance_day_work_revision_ck",
@@ -61,9 +57,6 @@ export const attendanceSourceState = table(
   "attendance_source_state",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id")
-      .notNull()
-      .references(() => locations.id, { onDelete: "restrict" }),
     source: discoverySource("source").notNull(),
     key: label("key").notNull(),
     recordKind: sourceKind("record_kind").notNull(),
@@ -76,8 +69,8 @@ export const attendanceSourceState = table(
     nextDueAt: tsString("next_due_at"),
   },
   (t) => [
-    uniqueIndex("attendance_source_state_scope_uq").on(t.locationId, t.source, t.recordKind, t.key),
-    index("attendance_source_state_watch_idx").on(t.locationId, t.recordKind, t.nextDueAt, t.id),
+    uniqueIndex("attendance_source_state_scope_uq").on(t.source, t.recordKind, t.key),
+    index("attendance_source_state_watch_idx").on(t.recordKind, t.nextDueAt, t.id),
     check("attendance_source_state_source_ck", enumCheck(t.source)),
     check("attendance_source_state_kind_ck", enumCheck(t.recordKind)),
     check(
@@ -107,9 +100,6 @@ export const attendanceOperationFacts = table(
     personId: id("person_id")
       .notNull()
       .references(() => persons.id, { onDelete: "restrict" }),
-    locationId: id("location_id")
-      .notNull()
-      .references(() => locations.id, { onDelete: "restrict" }),
     kind: activityKind("kind").$type<ActivityKind>().notNull(),
     at: tsString("at").notNull(),
     offsetMinutes: count("offset_minutes").notNull(),
@@ -118,7 +108,7 @@ export const attendanceOperationFacts = table(
   },
   (t) => [
     uniqueIndex("attendance_operation_facts_source_uq").on(t.source, t.key),
-    index("attendance_operation_facts_day_idx").on(t.locationId, t.businessDay, t.personId, t.at),
+    index("attendance_operation_facts_day_idx").on(t.businessDay, t.personId, t.at),
     index("attendance_operation_facts_pending_idx").on(t.outcome, t.sequence),
     index("attendance_operation_facts_person_idx").on(t.personId, t.at, t.sequence),
     check("attendance_operation_facts_source_ck", enumCheck(t.source)),
@@ -136,9 +126,6 @@ export const attendanceQuestions = table(
     personId: id("person_id")
       .notNull()
       .references(() => persons.id, { onDelete: "restrict" }),
-    locationId: id("location_id")
-      .notNull()
-      .references(() => locations.id, { onDelete: "restrict" }),
     businessDay: day("business_day").notNull(),
     startAt: tsString("start_at").notNull(),
     endAt: tsString("end_at").notNull(),
@@ -155,8 +142,8 @@ export const attendanceQuestions = table(
     inactiveReason: label("inactive_reason"),
   },
   (t) => [
-    uniqueIndex("attendance_questions_shift_uq").on(t.personId, t.locationId, t.shiftKey),
-    uniqueIndex("attendance_questions_subject_uq").on(t.id, t.personId, t.locationId),
+    uniqueIndex("attendance_questions_shift_uq").on(t.personId, t.shiftKey),
+    uniqueIndex("attendance_questions_subject_uq").on(t.id, t.personId),
     index("attendance_questions_own_idx").on(
       t.personId,
       t.active,
@@ -181,8 +168,8 @@ export const attendanceQuestions = table(
       name: "attendance_questions_resolution_fk",
     }).onDelete("restrict"),
     foreignKey({
-      columns: [t.canonicalQuestionId, t.personId, t.locationId],
-      foreignColumns: [t.id, t.personId, t.locationId],
+      columns: [t.canonicalQuestionId, t.personId],
+      foreignColumns: [t.id, t.personId],
       name: "attendance_questions_canonical_fk",
     }).onDelete("restrict"),
     check("attendance_questions_kind_ck", enumCheck(t.kind)),

@@ -4,7 +4,6 @@ import { categories, products } from "../catalogue.js";
 import { flag, id, newId, table } from "../columns.js";
 import { floorZones } from "../floor-zones.js";
 import { kitchenStations } from "../kitchen-stations.js";
-import { locations } from "../tenants.js";
 import { menuPeriods } from "./menus.js";
 
 /** A missing row is an unset cell; All categories × Every zone is the default station, never a row. */
@@ -12,7 +11,6 @@ export const routingCells = table(
   "routing_cells",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id").notNull(),
     categoryId: id("category_id"),
     productId: id("product_id"),
     zoneId: id("zone_id"),
@@ -21,11 +19,6 @@ export const routingCells = table(
     noCategory: flag("no_category").notNull().default(false),
   },
   (t) => [
-    foreignKey({
-      columns: [t.locationId],
-      foreignColumns: [locations.id],
-      name: "routing_cells_location_fk",
-    }),
     foreignKey({
       columns: [t.categoryId],
       foreignColumns: [categories.id],
@@ -63,27 +56,27 @@ export const routingCells = table(
       sql`${t.noCategory} = 0 or (${t.noCategory} = 1 and ${t.categoryId} is null and ${t.productId} is null)`,
     ),
     uniqueIndex("routing_cells_category_every_zone_key")
-      .on(t.locationId, t.categoryId)
+      .on(t.categoryId)
       .where(sql`${t.categoryId} is not null and ${t.zoneId} is null`),
     uniqueIndex("routing_cells_category_zone_key")
-      .on(t.locationId, t.categoryId, t.zoneId)
+      .on(t.categoryId, t.zoneId)
       .where(sql`${t.categoryId} is not null and ${t.zoneId} is not null`),
     uniqueIndex("routing_cells_product_every_zone_key")
-      .on(t.locationId, t.productId)
+      .on(t.productId)
       .where(sql`${t.productId} is not null and ${t.zoneId} is null`),
     uniqueIndex("routing_cells_product_zone_key")
-      .on(t.locationId, t.productId, t.zoneId)
+      .on(t.productId, t.zoneId)
       .where(sql`${t.productId} is not null and ${t.zoneId} is not null`),
     uniqueIndex("routing_cells_all_zone_key")
-      .on(t.locationId, t.zoneId)
+      .on(t.zoneId)
       .where(
         sql`${t.categoryId} is null and ${t.productId} is null and ${t.noCategory} = 0 and ${t.zoneId} is not null`,
       ),
     uniqueIndex("routing_cells_no_category_every_zone_key")
-      .on(t.locationId, t.noCategory)
+      .on(t.noCategory)
       .where(sql`${t.noCategory} = 1 and ${t.zoneId} is null`),
     uniqueIndex("routing_cells_no_category_zone_key")
-      .on(t.locationId, t.noCategory, t.zoneId)
+      .on(t.noCategory, t.zoneId)
       .where(sql`${t.noCategory} = 1 and ${t.zoneId} is not null`),
   ],
 );

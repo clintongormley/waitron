@@ -16,6 +16,7 @@ import {
   withTransaction,
   locations,
   venueLocationId,
+  zoneServicePolicies,
 } from "../../index.js";
 import { randomUUID } from "node:crypto";
 import type { Database } from "../../index.js";
@@ -1415,5 +1416,54 @@ describe("the kitchen screen tables refuse what their rules forbid", () => {
       db.transaction((tx) => tx.execute(sql`delete from devices where id = ${deviceId}`)),
     );
     expect(isRefusal(removed, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+});
+
+describe("single-venue defaults", () => {
+  const single = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  it("allows one default department and multiple ordinary departments", async () => {
+    await seedVenue(single.db, {
+      name: "Venue",
+      invoiceLocales: ["en"],
+      operationDescription: "Sale on premises",
+    });
+    const locationId = await venueLocationId(single.db);
+    async function add(name: string, isDefault: boolean) {
+      return single.db
+        .insert(departments)
+        .values({ locationId, name, tradingName: name, isDefault });
+    }
+    await add("Main", true);
+    const error = await captureError(() => add("Other default", true));
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("departments.is_default");
+    await add("Ordinary one", false);
+    await add("Ordinary two", false);
+    expect(await single.db.select().from(departments)).toHaveLength(3);
+  });
+  it("allows one counter-default zone and multiple ordinary zones", async () => {
+    await seedVenue(single.db, {
+      name: "Venue",
+      invoiceLocales: ["en"],
+      operationDescription: "Sale on premises",
+    });
+    const locationId = await venueLocationId(single.db);
+    const [department] = await single.db
+      .insert(departments)
+      .values({ locationId, name: "Main", tradingName: "Main" })
+      .returning();
+    async function add(name: string, isCounterDefault: boolean) {
+      const [zone] = await single.db.insert(floorZones).values({ locationId, name }).returning();
+      return single.db
+        .insert(zoneServicePolicies)
+        .values({ locationId, zoneId: zone!.id, departmentId: department!.id, isCounterDefault });
+    }
+    await add("Counter", true);
+    const error = await captureError(() => add("Other counter", true));
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toContain("zone_service_policies.is_counter_default");
+    await add("Ordinary one", false);
+    await add("Ordinary two", false);
+    expect(await single.db.select().from(zoneServicePolicies)).toHaveLength(3);
   });
 });

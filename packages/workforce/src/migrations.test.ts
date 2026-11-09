@@ -11,6 +11,8 @@ import {
   newId,
   nowIso,
 } from "@waitron/db";
+import { attendanceQuestions } from "./schema/attendance.js";
+import { attendanceResponseCommands } from "./schema/attendance-responses.js";
 import { hashPin } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -594,5 +596,51 @@ describe("the workforce set carries no tenant column", () => {
     expect(indexes["shift_swaps_from_shift_idx"]!.columns).toBe("from_shift_id");
     expect(indexes["time_entries_person_event_idx"]!.columns).toBe("person_id, event_at");
     expect(Object.keys(indexes).filter((name) => name.includes("tenant"))).toEqual([]);
+  });
+});
+
+describe("question ownership", () => {
+  const single = useVenueDb({ migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS] });
+  it("a command's question belongs to its person", async () => {
+    await seedTenant(single.db);
+    const locationId = await seedLocation(single.db);
+    const personId = await seedPerson(single.db, "Worker");
+    const other = await seedPerson(single.db, "Other");
+    const [question] = await single.db
+      .insert(attendanceQuestions)
+      .values({
+        locationId,
+        personId,
+        businessDay: "2026-11-01",
+        startAt: "2026-11-01T09:00:00.000Z",
+        endAt: "2026-11-01T10:00:00.000Z",
+        shiftKey: "probe",
+        kind: "missing-times",
+        missingKinds: ["in"],
+        evidenceKeys: [],
+        createdAt: nowIso(),
+      })
+      .returning();
+    const command = (subject: string) =>
+      single.db.insert(attendanceResponseCommands).values({
+        id: newId(),
+        requestedByPersonId: personId,
+        authorizedByPersonId: personId,
+        personId: subject,
+        locationId: null,
+        questionId: question!.id,
+        action: "confirm",
+        input: { action: "confirm", questionId: question!.id },
+        entryIds: ["recorded-entry"],
+        createdAt: nowIso(),
+      });
+    const refused = await captureError(() => command(other));
+    expect(isRefusal(refused, FOREIGN_KEY_VIOLATION)).toBe(true);
+    await command(personId);
+    expect(
+      await single.db
+        .select({ personId: attendanceResponseCommands.personId })
+        .from(attendanceResponseCommands),
+    ).toEqual([{ personId }]);
   });
 });

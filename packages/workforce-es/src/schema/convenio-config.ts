@@ -1,48 +1,23 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, unique } from "drizzle-orm/sqlite-core";
+import { check } from "drizzle-orm/sqlite-core";
 import {
   count,
   enumCheck,
   enumType,
   flag,
-  id,
-  locations,
   money,
-  newId,
   nowIso,
   rate,
   table,
   tsString,
 } from "@waitron/db";
 
-/**
- * The overtime-model reading a convenio selects (art. 35 daily-accrual vs art. 34.2 distribución
- * irregular / period-net). Underscored to match SQL convention; the generic `OvertimeModel`
- * (`daily-accrual` / `period-net`) is hyphenated and the workforce-es resolver bridges the two.
- */
 export const overtimeModel = enumType(["daily_accrual", "period_net"]);
 
-/**
- * `convenio_config` — the Spain-specific configuration surface that supplies the overtime rule and
- * the ET/convenio guardrails as data, one row per location. It lives in
- * `packages/workforce-es` (exempt from the english-only guard) because `convenio` is a Spanish
- * labour token; the generic engine never imports it, and the workforce-es resolver maps a row into
- * the neutral `WorkTimeRuleset` (`packages/workforce`).
- *
- * DESIGN PRINCIPLE: the overtime *rule* is an asesor-laboral decision, not code. So every rule is a
- * COLUMN with a documented default equal to the ET statutory floor or to today's default, and the
- * asesor edits the ROW, not this schema. Nothing here hard-codes a convenio's figure: the two
- * provincial premiums default null ("not computed yet", never an invented number), and the guardrail
- * limits default to the ET statute, which a convenio may only tighten.
- *
- * MUTABLE: this is configuration an admin edits, not the immutable registro — it carries no
- * append-only trigger and no chain.
- */
 export const convenioConfig = table(
   "convenio_config",
   {
-    id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id").notNull(),
+    id: count("id").primaryKey(),
 
     /** Ordinary working days per week — the daily-target denominator. */
     workingDaysPerWeek: count("working_days_per_week").notNull().default(5),
@@ -93,16 +68,7 @@ export const convenioConfig = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    // The array `foreignKey({...})` form, not `.references(() => …)`: the thunk makes v8 count a
-    // never-invoked arrow as an uncovered function (drizzle-kit resolves it in a separate CLI
-    // process). restrict, so a config row is never silently orphaned by a location delete.
-    foreignKey({
-      columns: [t.locationId],
-      foreignColumns: [locations.id],
-      name: "convenio_config_location_fk",
-    }).onDelete("restrict"),
-    // One convenio_config per location: the resolver looks a row up by this key.
-    unique("convenio_config_location_uq").on(t.locationId),
+    check("convenio_config_singleton_ck", sql`${t.id} = 1`),
     // The projection divides the contracted week by working_days_per_week, so it must be 1..7
     // (never zero) or a resolved ruleset would produce a NaN daily target.
     check("convenio_config_working_days_ck", sql`${t.workingDaysPerWeek} between 1 and 7`),

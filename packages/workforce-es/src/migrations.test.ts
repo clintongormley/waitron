@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CHECK_VIOLATION,
+  checkFailed,
   CORE_MIGRATIONS,
   FOREIGN_KEY_VIOLATION,
   UNIQUE_VIOLATION,
@@ -151,5 +152,25 @@ describe("convenio_config carries no tenant column", () => {
     );
     expect(keyed.rows.map((r) => r.name)).toEqual(["location_id"]);
     expect(Object.keys(byName).filter((name) => name.includes("tenant"))).toEqual([]);
+  });
+});
+
+describe("one venue's agreement", () => {
+  const single = useVenueDb({ migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS] });
+  it("keeps one convenio row", async () => {
+    await seedTenant(single.db);
+    const locationId = await seedLocation(single.db);
+    const refused = await captureError(() =>
+      single.db.insert(convenioConfig).values({ id: 2, locationId }),
+    );
+    expect(checkFailed(refused, "convenio_config_singleton_ck")).toBe(true);
+    await single.db.insert(convenioConfig).values({ id: 1, locationId });
+    const duplicate = await captureError(() =>
+      single.db.insert(convenioConfig).values({ id: 1, locationId }),
+    );
+    expect(isRefusal(duplicate, UNIQUE_VIOLATION)).toBe(true);
+    expect(await single.db.select({ id: convenioConfig.id }).from(convenioConfig)).toEqual([
+      { id: 1 },
+    ]);
   });
 });
