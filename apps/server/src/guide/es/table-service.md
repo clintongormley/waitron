@@ -271,6 +271,7 @@ nombres personalizados; **Añadir mesa unida** pide uno.
 Si se devolvió parte de un pago antes de registrar su factura, no vuelvas a cobrar.
 El pedido sigue bloqueado. Comprueba el pago y sus devoluciones en el panel de SumUp antes
 de decidir cuánto queda por cobrar al cliente.
+Comprobarlo en SumUp no desbloquea el pedido. Waitron aún no permite liberar este bloqueo.
 
 Es habitual que los clientes paguen por separado: dos parejas en una misma mesa, o alguien que paga
 sus propias bebidas. Cada uno tiene entonces su propia cuenta en la mesa. El selector de cuentas,

@@ -1,3 +1,5 @@
+import { takeReaderBillPayment } from "./bill-payments.js";
+import { readBillEditState } from "./bill-editing.js";
 import { settleFromProviderRow } from "./bill-payments-loop.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -102,6 +104,7 @@ import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed
 import { seedNode } from "@waitron/db/testing/seed.js";
 import {
   seedSessionDevice,
+  openTillSession,
   deviceRequestCfg,
   orderDeviceOrigin,
 } from "./testing/session-device.js";
@@ -3170,60 +3173,156 @@ describe("an order being paid by card cannot be changed from another device (pla
     },
   );
 
-  it("keeps a partially refunded pending bill payment held without allocating or issuing", async () => {
-    const t = await twoTabs();
-    const ref = randomUUID();
-    const billId = await withTransaction(suite.db, async (tx) => {
-      const [bill] = await tx
-        .insert(billPayments)
-        .values({
+  it.each(["0.40", "1.50"])(
+    "handles a pending bill payment refund of %s without allocating or issuing",
+    async (refund) => {
+      const t = await twoTabs();
+      const ref = randomUUID();
+      const billId = await withTransaction(suite.db, async (tx) => {
+        const [bill] = await tx
+          .insert(billPayments)
+          .values({
+            workingOrderId: t.tabId,
+            submissionId: randomUUID(),
+            fingerprint: "pending",
+            kind: "contribution",
+            method: "card",
+            applied: 150,
+            state: "pending",
+            requestedBy: OPERATOR,
+            source: "device",
+            deviceId: t.cfg.origin.deviceId,
+          })
+          .returning({ id: billPayments.id });
+        await insertCapturedPayment(tx, {
+          origin: t.cfg.origin,
           workingOrderId: t.tabId,
+          nodeId: t.cfg.nodeId,
+          provider: "sumup",
+          paymentRef: ref,
+          amount: decimal("1.50"),
+          settledAt: clock.now().instant,
+          billPaymentId: bill!.id,
+        });
+        await recordRefund(tx, {
+          provider: "sumup",
+          paymentRef: ref,
+          amount: decimal(refund),
+          providerRefundRef: "partial",
+        });
+        return bill!.id;
+      });
+      const result = await withTransaction(suite.db, (tx) =>
+        settleFromProviderRow(
+          tx,
+          { admission: testTradingAdmission(), db: suite.db, backend, clock, cfg: t.cfg },
+          billId,
+          clock.now().instant,
+        ),
+      );
+      expect(result).toEqual(
+        refund === "1.50"
+          ? { settled: "failed" }
+          : { settled: "left", providerState: "partially_refunded" },
+      );
+      const [bill] = await suite.db
+        .select({ state: billPayments.state })
+        .from(billPayments)
+        .where(eq(billPayments.id, billId));
+      expect(bill?.state).toBe(refund === "1.50" ? "failed" : "pending");
+      expect(suite.db.all(sql`select id from sales where working_order_id = ${t.tabId}`)).toEqual(
+        [],
+      );
+      expect(await tendersFor(t.tabId)).toEqual([]);
+    },
+  );
+
+  it.each(["0.40", "1.50"])(
+    "answers a live bill reader refund of %s without timeout or issuance",
+    async (refund) => {
+      const t = await twoTabs();
+      const personId = suite.db.all<{ id: string }>(
+        sql`select id from persons where role = 'admin'`,
+      )[0]!.id;
+      const sessionId = await openTillSession(suite.db, {
+        personId,
+        deviceId: t.cfg.origin.deviceId,
+      });
+      class RefundedReader extends SimulatorPaymentProvider {
+        override async collect(
+          params: Parameters<PaymentProvider["collect"]>[0],
+        ): Promise<PaymentResult> {
+          const result = await super.collect(params);
+          return this.partialRefund(result.paymentRef, decimal(refund));
+        }
+      }
+      const expectedEdit = await withTransaction(suite.db, (tx) => readBillEditState(tx, t.tabId));
+      const taking = takeReaderBillPayment(
+        {
+          admission: testTradingAdmission(),
+          db: suite.db,
+          backend,
+          clock,
+          provider: new RefundedReader(suite.db),
+        },
+        t.cfg,
+        t.tabId,
+        {
+          expectedEdit,
           submissionId: randomUUID(),
-          fingerprint: "pending",
           kind: "contribution",
+          amount: "1.50",
+          applied: "1.50",
+          tip: "0.00",
           method: "card",
-          applied: 150,
-          state: "pending",
-          requestedBy: OPERATOR,
-          source: "device",
-          deviceId: t.cfg.origin.deviceId,
-        })
-        .returning({ id: billPayments.id });
-      await insertCapturedPayment(tx, {
-        origin: t.cfg.origin,
-        workingOrderId: t.tabId,
-        nodeId: t.cfg.nodeId,
-        provider: "sumup",
-        paymentRef: ref,
-        amount: decimal("1.50"),
-        settledAt: clock.now().instant,
-        billPaymentId: bill!.id,
-      });
-      await recordRefund(tx, {
-        provider: "sumup",
-        paymentRef: ref,
-        amount: decimal("0.40"),
-        providerRefundRef: "partial",
-      });
-      return bill!.id;
-    });
-    const result = await withTransaction(suite.db, (tx) =>
-      settleFromProviderRow(
-        tx,
-        { admission: testTradingAdmission(), db: suite.db, backend, clock, cfg: t.cfg },
-        billId,
-        clock.now().instant,
-      ),
-    );
-    expect(result).toEqual({ settled: "left", providerState: "partially_refunded" });
-    const [bill] = await suite.db
-      .select({ state: billPayments.state })
-      .from(billPayments)
-      .where(eq(billPayments.id, billId));
-    expect(bill?.state).toBe("pending");
-    expect(suite.db.all(sql`select id from sales where working_order_id = ${t.tabId}`)).toEqual([]);
-    expect(await tendersFor(t.tabId)).toEqual([]);
-  });
+          entry: "reader",
+          simulationOutcome: "captured",
+        },
+        { personId, sessionId },
+      );
+      if (refund === "0.40")
+        await expect(taking).rejects.toMatchObject({
+          code: "sale.charged_not_recorded",
+          params: { reason: "partial_refund" },
+        });
+      else expect((await taking).outcome).toBe("declined");
+      const [bill] = await suite.db
+        .select({ state: billPayments.state })
+        .from(billPayments)
+        .where(eq(billPayments.workingOrderId, t.tabId));
+      expect(bill?.state).toBe(refund === "1.50" ? "failed" : "pending");
+      expect(suite.db.all(sql`select id from sales where working_order_id = ${t.tabId}`)).toEqual(
+        [],
+      );
+      expect(await tendersFor(t.tabId)).toEqual([]);
+      if (refund === "1.50") {
+        const retry = await takeReaderBillPayment(
+          {
+            admission: testTradingAdmission(),
+            db: suite.db,
+            backend,
+            clock,
+            provider: new SimulatorPaymentProvider(suite.db),
+          },
+          t.cfg,
+          t.tabId,
+          {
+            expectedEdit: await withTransaction(suite.db, (tx) => readBillEditState(tx, t.tabId)),
+            submissionId: randomUUID(),
+            kind: "contribution",
+            amount: "1.50",
+            applied: "1.50",
+            tip: "0.00",
+            method: "card",
+            entry: "reader",
+            simulationOutcome: "captured",
+          },
+          { personId, sessionId },
+        );
+        expect(retry.payment.state).toBe("received");
+      }
+    },
+  );
 
   it("the loop releases a mark no attempt in this process and no unfiled payment stands behind, on open orders only", async () => {
     const t = await twoTabs();

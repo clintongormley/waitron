@@ -800,7 +800,8 @@ it.each(["en", "es"])("explains affiliate rejection and refund uncertainty in %s
     { paymentRef: "ref-refund", status: "refund_pending" },
     locale,
   );
-  expect(refund).toContain("refund_pending");
+  expect(refund).not.toContain("refund_pending");
+  expect(refund).toContain(locale === "en" ? "there may be more" : "puede haber más");
   expect(refund).toContain("ref-refund");
   expect(refund).not.toMatch(/marked the payment as failed|marcado el pago como fallido/);
 });

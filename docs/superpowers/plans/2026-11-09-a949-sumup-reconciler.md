@@ -37,3 +37,9 @@ Backlog names the constant; runbook gets a dated pointer and provenance. Report 
 **Implementation authority, 9 November 19:04:** the watcher approved plan `6c496e3f77`,
 including the evidence-limited fallback and partial-charge hold, with one whole-branch
 Claude run-it review and one push. This resolves the question above; no third plan read.
+
+**Review disposition, 9 November 20:08:** the watcher approved the shared incident slot with
+candid MORE wording, the explicitly unreleased partial-refund hold as a first-slice limit,
+and the same partial/full refund correction in `bill-payments.ts` and `bill-payments-loop.ts`
+with focused cases. The manager release stays within remaining A949 work. Remove the stale
+fake comment. Stop for another scope opinion past about 1,500 changed lines.
