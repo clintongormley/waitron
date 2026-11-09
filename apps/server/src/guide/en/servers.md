@@ -40,6 +40,9 @@ If the backup confirms that another box has taken over, this box refuses to carr
 other box using the link. If that evidence appears after you carry on, this box stops taking sales.
 Use the new main box. Older boxes may share an address: check which box you opened.
 
+Keep this box’s data until the new main confirms it holds every invoice record. Sending those
+records to the new main is not available yet. Do not reset this box now.
+
 ## Turn remote staff access on or off {#remote-access}
 
 To stop staff reaching your dashboard from outside the venue, open **Cloud services** in **Settings**

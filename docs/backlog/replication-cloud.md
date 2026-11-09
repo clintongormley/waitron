@@ -505,11 +505,21 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 - `scripts/handover-manifest-complete.test.ts` has no reverse check: a manifest row naming a table
   or file that no longer exists still passes.
 
+## A1342: return a stopped box's records before reset
+
+Owner 2026-11-09 18:59 replaces the withdrawn restricted-filing proposal: transfer only fiscal
+records absent from the bucket copy to the new main over the existing signed connection. The new
+main preserves original chain/node identity, skips records already held, and files/corrects through
+its normal outbox/remedy path. Do not sync other domain tables. The old page says safe to reset only
+after the new main confirms it holds every record. One-page plan and approval are pending; the
+bucket stop does not provide this transfer. Reset-to-clean-setup is qualified; completed current
+contract rejoin remains with A9473b6, as watcher18:51accepted.
+
 ## A box the chart no longer names main keeps filing its earlier records
 
 Enrollment prerequisite (2026-11-09): new enrollment retains this box’s signed spare endorsement in
 its held chart, and later charts retain its own verified endorsements of listed, non-evicted nodes.
-Earlier enrollments are not backfilled. Bucket checks and the stop remain in A1342’s next part.
+Earlier enrollments are not backfilled. Records-return recovery remains separate from the bucket stop.
 
 The third-box admission cases below remain separate work.
 

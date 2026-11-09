@@ -44,6 +44,9 @@ niega a seguir como principal. Abre el otro equipo con el enlace. Si esa informa
 de continuar, este equipo deja de aceptar ventas. Usa el nuevo equipo principal. Los equipos antiguos
 pueden compartir dirección: comprueba qué equipo has abierto.
 
+Conserva los datos de este equipo hasta que el nuevo principal confirme que tiene todos los registros
+de facturación. El envío de esos registros aún no está disponible: no restablezcas este equipo todavía.
+
 ## Activar o desactivar el acceso remoto del personal {#remote-access}
 
 Para impedir que el personal abra el panel desde fuera del local, abre **Servicios Cloud** en **Ajustes**
