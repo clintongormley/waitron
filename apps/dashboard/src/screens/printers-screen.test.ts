@@ -12369,6 +12369,85 @@ describe("one table for every printer", () => {
     );
     expect(rowOf(el, "pp2").contains(q(el, "[data-test=page-printer-test-page-pp2]"))).toBe(true);
   });
+
+  const refreshError = (el: PrintersScreen) =>
+    textOf(el, "[data-test=printer-refresh-error] p.error");
+  const listFailed = `${t("printers.refresh_failed")} ${codeMessage("connection.failed")}`;
+
+  it("leaves a failed list refresh's message in place when a test page's read succeeds", async () => {
+    const listPagePrinters = vi.fn().mockResolvedValue(PAGE_ROWS);
+    const { el, background } = await mountTable({ listPagePrinters });
+    listPagePrinters.mockRejectedValueOnce({ code: "connection.failed" });
+    let answer!: (page: PageTestPage) => void;
+    background.readPagePrinterTestPage.mockReturnValueOnce(
+      new Promise<PageTestPage>((resolve) => {
+        answer = resolve;
+      }),
+    );
+    q(el, "[data-test=print-test-page-pp1]")!.click();
+    await vi.waitFor(() => expect(background.readPagePrinterTestPage).toHaveBeenCalled());
+    q(el, "[data-test=disable-page-printer-pp2]")!.click();
+    await vi.waitFor(() => expect(refreshError(el)).toBe(listFailed));
+
+    answer({ id: "tp1", status: "sent" });
+    await vi.waitFor(() =>
+      expect(textOf(el, "[data-test=page-printer-test-page-pp1]")).toBe(
+        t("printers.test_page_printed"),
+      ),
+    );
+    await flush(el);
+    expect(refreshError(el)).toBe(listFailed);
+  });
+
+  it("keeps a list refresh's failure that lands after a test page's failed read, when that page's next read succeeds", async () => {
+    const listPagePrinters = vi.fn().mockResolvedValue(PAGE_ROWS);
+    const { el, background } = await mountTable({ listPagePrinters });
+    let failRead!: (error: unknown) => void;
+    let answerRead!: (page: PageTestPage) => void;
+    background.readPagePrinterTestPage
+      .mockReturnValueOnce(
+        new Promise<PageTestPage>((_, reject) => {
+          failRead = reject;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise<PageTestPage>((resolve) => {
+          answerRead = resolve;
+        }),
+      );
+    let failList!: (error: unknown) => void;
+    listPagePrinters.mockReturnValueOnce(
+      new Promise<PagePrinterRow[]>((_, reject) => {
+        failList = reject;
+      }),
+    );
+    const reads = listPagePrinters.mock.calls.length;
+    const readError = () => textOf(el, "[data-test=page-printers-read-error]");
+
+    q(el, "[data-test=print-test-page-pp1]")!.click();
+    await vi.waitFor(() => expect(background.readPagePrinterTestPage).toHaveBeenCalledTimes(1));
+    q(el, "[data-test=disable-page-printer-pp2]")!.click();
+    await vi.waitFor(() => expect(listPagePrinters.mock.calls.length).toBeGreaterThan(reads));
+    failRead({ code: "page_printer.not_found" });
+    await vi.waitFor(() =>
+      expect(readError()).toBe(
+        `${t("printers.refresh_failed")} ${codeMessage("page_printer.not_found")}`,
+      ),
+    );
+    failList({ code: "connection.failed" });
+    await vi.waitFor(() => expect(refreshError(el)).toBe(listFailed));
+    await vi.waitFor(() => expect(background.readPagePrinterTestPage).toHaveBeenCalledTimes(2));
+
+    answerRead({ id: "tp1", status: "sent" });
+    await vi.waitFor(() =>
+      expect(textOf(el, "[data-test=page-printer-test-page-pp1]")).toBe(
+        t("printers.test_page_printed"),
+      ),
+    );
+    await flush(el);
+    expect(readError()).toBeUndefined();
+    expect(refreshError(el)).toBe(listFailed);
+  });
 });
 
 describe("an A4 printer's details", () => {

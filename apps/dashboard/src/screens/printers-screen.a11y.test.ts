@@ -1345,6 +1345,8 @@ const a4States = [
   "test page held",
   "test page printed",
   "test page failed",
+  "switched off, in its details",
+  "alerts under the table",
 ] as const;
 type A4State = (typeof a4States)[number];
 
@@ -1368,12 +1370,16 @@ describe.each(["light", "dark"] as const)("A4 printers in the printers table (%s
         state === "rename refused by the server"
           ? vi.fn().mockRejectedValue({ code: "page_printer.not_found" })
           : vi.fn().mockResolvedValue(undefined),
-      printPagePrinterTestPage: vi.fn().mockResolvedValue({ id: "tp1", status: "waiting" }),
+      printPagePrinterTestPage: vi.fn((id: string) =>
+        state === "alerts under the table" && id === "pp2"
+          ? Promise.reject({ code: "page_printer.not_found" })
+          : Promise.resolve({ id: "tp1", status: "waiting" }),
+      ),
     } as Partial<DashboardApi>);
     Object.assign(api, {
       background: {
         readPagePrinterTestPage:
-          state === "test page read failed"
+          state === "test page read failed" || state === "alerts under the table"
             ? vi.fn().mockRejectedValue({ code: "connection.failed" })
             : vi.fn().mockResolvedValue(testPage ?? null),
       },
@@ -1454,6 +1460,30 @@ describe.each(["light", "dark"] as const)("A4 printers in the printers table (%s
             }[state as string],
           ),
         );
+      await flush(el);
+    }
+    if (state === "switched off, in its details") {
+      const filter = q(el, '[data-test="printers-table"]')!.shadowRoot!.querySelector<HTMLElement>(
+        '[name="status-filter"]',
+      )!;
+      await pickOption(filter, "");
+      await flush(el);
+      q(el, "[data-test=printer-row-pp3]")!.click();
+      await flush(el);
+      expect(q(el, "[data-test=page-printer-detail-rediscover]")).not.toBeNull();
+      expect(
+        (q(el, '[name="page-printer-detail-active"]') as HTMLElementTagNameMap["wt-switch"])
+          .disabled,
+      ).toBe(true);
+    }
+    if (state === "alerts under the table") {
+      // pp1's page goes out and its re-read fails; pp2's is refused from the row menu.
+      q(el, "[data-test=print-test-page-pp1]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=page-printers-read-error]")).not.toBeNull());
+      q(el, "[data-test=print-test-page-pp2]")!.click();
+      await vi.waitFor(() =>
+        expect(q(el, "[data-test=page-printers-action-error]")).not.toBeNull(),
+      );
       await flush(el);
     }
     await expectNoA11yViolations(host);
