@@ -2319,46 +2319,8 @@ export class TillTableOrderScreen extends LitElement {
    * from the dish as it is then. Runs last in `willUpdate`, after everything the check reads is
    * current. */
   #followSentChange(): void {
-    if (this.sentChange === null && this.#sentChangeSeed === undefined) return;
-    const inputs = this.#sentChangeInputs();
-    const last = this.#sentChangeFollowed;
-    if (inputs.length === last.length && inputs.every((each, at) => each === last[at])) return;
-    this.#checkSentChange();
-    this.#sentChangeFollowed = this.#sentChangeInputs();
-  }
-
-  /** What {@link #followSentChange} read, as its last check left it. */
-  #sentChangeFollowed: readonly unknown[] = [];
-
-  /** Everything the check reads. `now` is left out: the Sent panel reads it only for its attention
-   * flag, never for which rows it lists. */
-  #sentChangeInputs(): unknown[] {
-    const store = this.#draftStore;
-    return [
-      this.sentChange,
-      this.#sentChangeSeed,
-      this.sentLinePending,
-      this.currentOrders,
-      this.currentOrdersUnread,
-      this.api,
-      this.party,
-      this.orderId,
-      this.serviceVisit,
-      this.allergyView,
-      this.lines,
-      this.bills,
-      this.products,
-      this.billBalance,
-      this.otherDrafts,
-      store,
-      store?.editsLocked,
-      store?.sending,
-      this.#draftEpoch,
-    ];
-  }
-
-  #checkSentChange(): void {
     const seed = this.#sentChangeSeed;
+    if (this.sentChange === null && seed === undefined) return;
     const pending = this.sentLinePending;
     const members = pending === null ? undefined : this.#sentLineMembers();
     const lines = members === undefined ? undefined : this.#sentChangeLines(members);
