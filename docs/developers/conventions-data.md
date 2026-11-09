@@ -1859,11 +1859,12 @@ the server's shape.
 
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry or left out of the export
 
-A configuration import gives every row whose `id` is text a new one, and rewrites a value to the new
-id only in a table's `id` column, its foreign-key columns, and the columns its module lists as
+A configuration import gives every row whose `id` is text a new one, and rewrites a whole value to the new
+id in a table's `id` column, its foreign-key columns, and the columns its module lists as
 `references` (`importConfigurationTables`, `packages/provisioning/src/configuration-transfer.ts`,
 which reads `pragma_foreign_key_list` for the keys), and the export leaves out the columns a table
-lists in `omit`. Until `locations` is dropped, a column whose foreign key points at it is set to the
+lists in `omit`. Declared `jsonReferences` paths rewrite ids inside JSON as described below.
+Until `locations` is dropped, a column whose foreign key points at it is set to the
 importing venue's row (`venueLocationId`), whatever the export carried. Any other column the export
 carries that holds a row's id arrives holding the EXPORTING venue's id. Before W72a (#1230) the
 import replaced any text equal to a bundle id in every column, so a product named like an id arrived
@@ -1877,8 +1878,31 @@ Guard: `scripts/id-columns-are-references.test.ts`, which migrates a real databa
 transferred table's columns and keys. Weaker than its name: it knows an id column only by a name
 ending `_id` or `_ids`, so a reference named otherwise is unseen; a column on its `NOT_REFERENCES`
 list is trusted by the reason written there, so one that later starts holding an id passes; and a
-declared `_ids` column passes, though the import replaces only a whole value equal to an id
-(`configuration-transfer.ts`, the `idMap.has(value)` test), never ids inside a list.
+JSON column without a `json_valid` CHECK is invisible unless its name ends in `_ids`.
+An `_ids` column needs `jsonReferences` or `omit`; a whole-value `references` entry does not
+describe the ids inside a list. JSON columns holding no row ids need a reason in `JSON_WITHOUT_IDS`.
+
+Short id lists owned by one row use `jsonReferences` (rationalisation design R4). Each declaration
+names a column and paths made of object keys and `*` steps, which visit every object value or array
+element. Export removes an id when no exported row has it: an array loses that element, and an
+object field becomes null. Import rewrites each id through the bundle's id map and refuses a
+missing id with `setup.request_invalid`, naming the table and column. An id naming the source
+operator or a row skipped with that operator is refused too. Both export and import refuse
+malformed JSON, a non-string id, or a non-null container of the wrong kind at the root or after a
+named key. Unrelated scalar values selected by a wildcard are skipped. String values outside the declared paths are not remapped;
+parsing and serialization can normalize whitespace or numeric values. Whole-column nulls, nulls along a path,
+null id fields and missing keys are skipped. Fixed-key rows that an import keeps must be put in
+the id map by their owning module; this helper does not add them. It does not check target kinds.
+
+Deleting a referenced row calls `removeIdFromJson` in the same transaction. It removes matching
+array elements and nulls matching object fields, including nested ones, leaving other rows' text
+unchanged. These choices address the import-rewrite and export-pruning gaps in
+`docs/superpowers/specs/2026-11-02-rationalisation/tables-devices.md` §7. Its third gap is not built:
+department deletion refuses a live profile in `service-delete.ts`, and `checkedScope` in
+`profile-access.ts` refuses disabled departments or zones; retired profiles are deliberately left
+behind. The synthetic round-trip and refusal cases are in
+`packages/provisioning/src/configuration-transfer.json-lists.test.ts`; each later list owner adds
+its own declaration, deletion call and round-trip case.
 
 The export leaves behind each row whose `leaveBehindWhenSet` column is not null (a retired
 device profile, `retired_at`), or whose `leaveBehindWhenFalse` column holds false or 0

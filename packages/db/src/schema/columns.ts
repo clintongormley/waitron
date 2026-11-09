@@ -8,8 +8,7 @@ import { customType, integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
  *
  * Every helper below emits `text`, `integer` or `blob`, so picking the wrong helper of a group
  * leaves the generated schema byte-identical, and what separates them is the helper's NAME, its
- * read mapping and the typechecker. No column type here refuses a wrong value; the one refusal this
- * file builds is an `enumText` column's `check()` constraint. Measured 2026-10-02 on `node:sqlite`
+ * read mapping and the typechecker. No column type here refuses a wrong value. Measured 2026-10-02 on `node:sqlite`
  * (Node v26.7.0, SQLite 3.53.4), in a table with one plain `text` and one plain `integer` column:
  * `'not-a-uuid'`, `'not-a-day'`, `'not-a-time'` and `'{not json'` into the `text` column, and
  * 1000.00, 2147483648 and 32768 into the `integer` one, were each ACCEPTED and stored.
@@ -135,6 +134,9 @@ export const enumCheck = (column: AnyColumn) => {
     sql`, `,
   )})`.inlineParams();
 };
+
+export const jsonShapeCheck = (column: AnyColumn, shape: "array" | "object") =>
+  sql`json_valid(${column}) and json_type(${column}) = ${shape}`.inlineParams();
 
 /**
  * A true/false flag, stored as 0 or 1 and read back as a boolean.
