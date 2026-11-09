@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
+import { equipmentItem, roleOf } from "../../test/pay-equipment-fixtures.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-ticket-view.js";
 import type { TicketIssuer, TillTicketView } from "./till-ticket-view.js";
@@ -61,7 +63,7 @@ const none = { retryOriginal: null, print: null, receiptInstead: null, email: nu
 /** One of each delivery state the sale view words, with the actions B1 offers beside it. */
 const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
   [
-    "no attempt, Print on A4 offered",
+    "no attempt, Print on Office offered",
     {
       current: null,
       originalCompleted: false,
@@ -223,6 +225,38 @@ const deliveryStates: [string, InvoiceDeliveryStatus, boolean][] = [
 ];
 
 describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (theme) => {
+  it.each(["ready", "loading", "read-failed", "save-failed", "empty"] as const)(
+    "has no violations with the expanded Invoice printer row %s",
+    async (state) => {
+      const office = equipmentItem("office", "Office", { kind: "a4" });
+      const { el, host } = await mountWidget<TillTicketView>(
+        "till-ticket-view",
+        {
+          issuer,
+          result: { ...result, invoiceType: "F1" },
+          deliveries: deliveryStates[0]![1],
+          invoicePrintersEnabled: true,
+          invoiceEquipment: roleOf(
+            "invoice",
+            state === "empty" ? null : office,
+            state === "empty" ? [] : [office],
+          ),
+          invoicePrinterLoading: state === "loading",
+          invoicePrinterReadFailed: state === "read-failed",
+          invoicePrinterError:
+            state === "save-failed" ? "Your printer choice was not saved. Try again." : "",
+        },
+        theme,
+      );
+      await userEvent.click(
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=invoice-printer-toggle]")!,
+      );
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[aria-expanded=true]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it.each(["en-GB", "es-ES"])(
     "has no violations with the saved F1 operation date in %s",
     async (locale) => {

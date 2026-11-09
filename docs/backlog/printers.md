@@ -107,6 +107,10 @@ the cause was not found.
 
 ## A790: document and printer routing plan
 
+The invoice view's folded Invoice printer row now saves through Equipment and prints on the named
+destination. The [first slice](../superpowers/plans/2026-11-09-a790-cut-b-shortest-route.md) adds no
+journal or origin adapter; the physical G4 qualification below stays on the larger live Cut B.
+
 Build the complete live Cut B from the
 [venue-only plan](../superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md)
 before A739's payment-window integration. Cut A supplies unmounted authorized offers, routing

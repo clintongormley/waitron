@@ -1302,7 +1302,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **Guest count** (bundle of 2, size S, needs the owner). [Detail](backlog/printers.md#bundle-guest-count)
 
-- **A790. Connect document and printer routing to the live entries.** Build Cut B from the
+- **A790. Connect document and printer routing to the remaining live entries.** The invoice view
+  now saves its folded printer choice to Equipment and prints on the named destination. Build the
+  larger Cut B from the
   [venue-only plan](superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md), using the
   unmounted offers and browser recovery foundation. Qualify the live node/restore origin before
   enabling its request services; then connect Orders, till history and Equipment. A739's payment
