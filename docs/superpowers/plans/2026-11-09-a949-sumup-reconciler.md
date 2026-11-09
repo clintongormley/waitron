@@ -1,49 +1,38 @@
-# A949: recover SumUp payments by Waitron’s reference
+# A949: recover SumUp payments by Waitron's reference
 
-**First outcome:** provision Waitron’s partner block on every reader checkout, enabling existing lost-reply recovery. Completed payout evidence is not a prerequisite. Report audit, durable orphan self-heal and backup-machine support remain A949 scope.
+**First usable slice:** an image update supplies Waitron's reference on reader checkouts without reconnecting venues; existing recovery can find a lost creation reply. Report audit, durable orphan refunds and backup-machine support remain unfinished. Build budget: three hours.
 
-**Authority, relayed from Lane F `questions.md`:** watcher2026-11-09 15:22: 'Decision: every SumUp reader checkout carries Waitron’s affiliate block (app_id + key) with our own reference in affiliate.foreign_transaction_id.'
-Watcher17:52: 'Next: write these into the A949 write-up and runbook, then plan the reconciler against them (plan first, as usual).'
-This closes A1251 and assigns A949 next. Watcher15:52 withheld the audit-only proposal, including its deferrals. No build is approved.
+**Authority:** Lane F watcher, 9 November 15:22: “Decision: every SumUp reader checkout carries Waitron’s affiliate block (app_id + key) with our own reference in affiliate.foreign_transaction_id.” At 17:52: “Next: write these into the A949 write-up and runbook, then plan the reconciler against them (plan first, as usual).” Planning is approved; this build is not.
 
-**Evidence:** [runbook §11](../../research/2026-09-10-sumup-solo-experiments.md#11-a949-cross-account-session-2026-11-09) records Waitron account A (`io.waitron.pos`) working with restaurant B (`MY2NPHDW`) and B’s authorization credential. Reference reads gave 404, then PENDING before tap, then SUCCESSFUL with matching identity, EUR and amount.
-No visibility deadline is established.
-Repeating a reference created another checkout (§10.1): never blindly resend. Unpaid cancellation gave transaction FAILED; only the checkout explained CANCELLED.
-Refund `amount:100` returned 201, with REFUNDED in both event arrays while the original stayed SUCCESSFUL. The script omission was repaired with 11 tests; product `refundOutcomeOf` already accepts REFUNDED.
+**Evidence:** [session §11](../../research/2026-09-10-sumup-solo-experiments.md#11-a949-cross-account-session-2026-11-09) qualifies the cross-account key, 404/PENDING/paid reference reads and REFUNDED events with original SUCCESSFUL. Both saved refunded payments currently classify as captured: two diagnostic failures reproduced the review finding.
 
-## Slice 1: provision Waitron’s block, independently useful, ≤3 hours
+## Proposed build
 
-Excludes report audit, automated refunds, schema/dependency changes and OAuth.
-**Proposed watcher choice:** installers supply one shared Waitron partner key through each venue’s existing dashboard connect form, alongside its own API credential.
-Fix app ID `io.waitron.pos`; remove merchant-created affiliate identities. OAuth is preferred, not approved additional scope.
-`apps/server/src/payments-api.ts:740` seals four fields and evicts the provider. `deploy/Dockerfile:204` ships no credentials CLI. Use that dashboard route, without new deployment configuration.
-Consumer trace: `card-provider.ts` routes live/deferred clients, reader operations and backup verification through `optionsFromSealed`; validation/rotation requires four fields.
-Preserve the vault shape and `-` absence for reads/backups. Change connect/checkout eligibility only.
-Set the app ID server-side; reject conflicting supplied IDs and blank/`-` keys on connect.
-Before checkout HTTP, return the existing definite-refusal outcome for absent/incomplete/foreign affiliate configuration. Checkout POSTs carry the fixed ID, provisioned key and saved `paymentRef`; older credentials retain reads/unpair.
+Deliver `SUMUP_WAITRON_AFFILIATE_KEY` through the existing app-image ARG/ENV and publish-secret checks; fix app ID `io.waitron.pos` in the server adapter. Read it in `sumupClientForTenant`, overriding stored affiliate values but retaining the venue's authorization credential. Remove affiliate fields/help from the dashboard form; connect ignores supplied affiliate values and seals `-`. Preserve the four-field vault, `optionsFromSealed` and backup/read/unpair acceptance. Image restart replaces cached clients; no reconnect, OAuth, new secret store or schema.
 
-**Exact files; changed-line budget: 173 code +335 tests +45 docs =553 total.**
+Missing/blank/whitespace/`-` key fails publication. Contribution `build` also refuses it with existing `payment.provider_credential_rejected` before collection; no attempting row or false card decline. `createCheckout` rejects missing/incomplete/foreign affiliate configuration before HTTP. Source builds need the build argument for real SumUp; demo cash/simulators remain available.
 
-- Code: `packages/payments-sumup/src/card-provider.ts` 30; `packages/payments-sumup/src/sumup-client.ts` 20; `packages/payments-sumup/src/client.ts` 10, including a browser-safe app-ID constant.
-- Code: `packages/payments-sumup/src/dashboard/sumup-connect-form.ts` 80; `packages/payments-sumup/src/dashboard/client.ts` 8; `packages/payments-sumup/src/dashboard/strings.ts` 20; `packages/credentials/src/purposes.ts` 5, comments only. Remove editable app ID; require the Waitron key with English/Spanish errors.
-- Tests: `packages/payments-sumup/src/card-provider.test.ts` 75; `packages/payments-sumup/src/sumup-client.test.ts` 55; `packages/payments-sumup/src/sumup-client.redirects.test.ts` 5; `packages/payments-sumup/src/backup-verification.test.ts` 10; `packages/payments-sumup/src/resolve-pending.test.ts` 70.
-- Tests: `packages/payments-sumup/src/dashboard/sumup-connect-form.test.ts` 60; `packages/payments-sumup/src/dashboard/sumup-connect-form.unsaved.test.ts` 35; `packages/payments-sumup/src/dashboard/sumup-connect-form.a11y.test.ts` 10; `apps/server/src/payments-api.test.ts` 10; `packages/payments-sumup/src/collect.sandbox.test.ts` 5, prerequisites only, never run live.
-- Docs: `deploy/README.md` 10; `apps/server/src/guide/en/table-service.md` 8; `apps/server/src/guide/es/table-service.md` 8; `docs/backlog.md` 3; `docs/backlog/payments.md` 8; `docs/research/2026-09-10-sumup-solo-experiments.md` 8, dated pointer.
+**Watcher choice:** the key is image-readable and rotates through image updates; the package gains a server-side environment read. SumUp says “Affiliate keys are not an authorization mechanism.” ([source](https://developer.sumup.com/tools/authorization/affiliate-keys/), read 9 November.) The owner must arrange the repository secret; this proposal copies none.
 
-**Changed checks for approval:** `card-provider.test.ts:79–120` changes optional/operator app IDs and dash-on-connect to a fixed server app ID plus required key; dashboard `sumup-connect-form.test.ts:183–198` changes optional editable app ID to required key. Preserve the remaining backup/read/draft/merchant/refusal assertions; extend fixtures with the provisioned block.
-**RED/GREEN:** run the named Node/browser/server files; see missing/foreign affiliate refusal assertions fail, implement, rerun. Assert sealed/outgoing fields, no secret response, unchanged backup/reader reads. Retain draft/picker/refusal/redirect assertions; inspect both themes at phone width.
-Join the real client to the existing real-database recovery test: lose the create reply, rebuild the provider over the same database, replay404/PENDING/SUCCESSFUL, and assert one checkout POST, the saved reference and one EUR1.00 capture with SumUp’s refundable id. FAILED resolves failed without claiming cancellation cause. Replay of the two real refunds already passes with wrong-amount/excluded-id controls; retain its receipt, no duplicate test-only slice.
-**Finish:** a provisioned venue recovers the lost creation reply by its saved reference without a second charge; missing configuration sends no charge.
-Reconnect existing installations. Manual provisioning cannot authenticate a pasted key’s issuer; watcher must accept that boundary or choose another distribution plan.
+For unresolved successful payments, completed or uncertain REFUND events use the existing deferred/incident path rather than a new gross capture. FAILED refund events alone do not prove returned money. Keep `lookupRefund`'s correct REFUNDED/amount/id checks; no refund is sent. Test the local state and incident, not only classification.
 
-## Remaining A949 scope: later qualified plans, not approved deferrals
+**Changed-line estimate:** 200 code, 200 tests, 40 docs; 440 total, counting deletions. No generated/dependency changes.
 
-**Report audit:** saved history lacks foreign references; details contain them (§10.7). Qualify matching/paging. SUCCESSFUL is payment; settlement is later clearing. EUR 0.98 SCHEDULED/PENDING cannot populate `reconcile.ts:SettlementRecord`.
-Separately authorize a completed-payout sample before choosing settlement mapping. Never substitute captures/net payouts; this does not hold slice1.
-**Durable reversal before automated refunds (W44):** `packages/payments/src/reverse.ts:37` sends before recording; `packages/payments/src/schema/payment-refunds.ts` has terminal states only. Trace `apps/server/src/bill-refunds.ts` before choosing persistence.
-Record before send; recover uncertain outcomes by event identity without blind SumUp resends. Preserve held-payment, amount-difference, clock and concurrent-claim protections. No new ledger/schema is approved here.
-Then plan mounted report audit/orphan self-heal, including missing-local/ambiguous findings and scheduler/health consumers, as usable ≤3-hour builds with exact files. The withheld audit-only cut is no substitute.
-**Backup machine:** retain automatic amount/time matching for a second Solo on the same account, with unmatched items listed for a manager; other-provider payments identified as paid outside Waitron with operation number/machine through till, day report and accountant exports; and cash-only service without a backup machine. Qualify the second Solo and trace consumers before sizing builds; phone-app POS samples do not qualify it. Ambiguity stays visible.
-Declines, signatures, completed payout/fees and remaining connection/termination probes remain unqualified; callback was not requalified. No unattended paid requests. A760/A1308’s table hold is lifted; any justified schema work rebuilds the current baseline. Protected fiscal invariants must not change.
+**Files:**
 
-**Approval:** one Claude `review-branch` read, then watcher approval of slice1, key distribution and named assertion changes. Later scope needs qualified plans. No product build or provider request is authorized here. A949 remains open.
+- Runtime: `packages/payments-sumup/src/{card-provider,sumup-client,provider}.ts`, `src/dashboard/{sumup-connect-form,client,strings}.ts`; retired-field comments in `packages/credentials/src/purposes.ts`.
+- Delivery: `deploy/Dockerfile`, `.github/workflows/ci.yml`.
+- Tests: SumUp `src/{card-provider,sumup-client,sumup-client.redirects,resolve-pending}.test.ts`, `src/dashboard/sumup-connect-form{,.unsaved,.a11y}.test.ts`; server `src/payments-api.test.ts`; root `scripts/{deploy-image-env.test.ts,ci-workflow.test.mjs}`. SumUp `src/collect.sandbox.test.ts`: prerequisites only, never run live.
+- Docs: `deploy/README.md`, `docs/developers/ci-and-gates.md`, `docs/backlog{.md,/payments.md}`, `apps/server/src/guide/{en,es}/table-service.md` (one connection instruction each).
+
+**Verification:** fail missing-key/no-HTTP and refunded-capture cases before implementation. One joined real-client/database test loses the create reply, rebuilds the provider and recovers by the same reference: one checkout, one capture with SumUp's refundable id. Check outgoing block/query URL; reuse existing pending/failed/grace/backup/ownership cases. Prove critical guards by removal in a disposable candidate. Focused files, normal hook, one Claude branch review and current-head selected CI; EN/ES, both themes, phone/desktop. No whole-package local run or provider request.
+
+**Changed assertions for approval:** replace optional affiliate-field checks with API-key-only form/fixed image block checks; extend checkout/redirect fixtures without weakening refusal/timeout assertions. Root guards gain delivery/publish-refusal cases; preserve existing checks. Retire only deliberately removed fields/help. Preserve merchant selection, backup acceptance, money, permissions and fiscal assertions.
+
+**Finish and limit:** updated venues recover a lost reply without another charge; already-refunded unresolved payments raise the existing incident. Existing missing-reference policy still fails/alerts after 15 minutes without rechecking; that is no vendor visibility guarantee. Completed payout evidence does not gate this slice.
+
+## Remaining A949 scope
+
+Retain [the complete backlog contract](../../backlog/payments.md#the-sumup-reconciler), including all three backup-machine cases. Later plans qualify history/detail matching, completed payout (SCHEDULED/PENDING is insufficient), mounted audit and visible ambiguity. Before automatic refunds, trace callers and first reuse `bill-refunds.ts`'s committed-before-send recovery pattern; no new ledger is assumed. Second-Solo, signature/decline, fees and connection probes remain unqualified. No paid probes or protected fiscal changes. A760/A1308's table hold is lifted.
+
+**Gate:** one permitted Claude reread, then watcher approval of image distribution, refund-recovery repair and named assertion changes. The first read's “Should this exist?” simplification finding stays with the watcher; no product build or landing before its answer. Later scope is not an approved deferral.
