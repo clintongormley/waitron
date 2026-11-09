@@ -8,13 +8,15 @@
 
 > WATCHER 2026-11-09 11:46 — A1251 #2011: Yes: keep the direct stored-description assertion, shorten its title to "stores an English operation description", and batch it with the two #1986 comment deletions on the one A1251 fix branch. No new guard.
 
-**Files and steps (three files, including this plan):**
+**Approval:** Watcher 2026-11-09 12:05 approved `3986199c85` as written, added only deletion of “in its header and” from `docs/backlog/fiscal.md:857`, retained #2006's existing tests without extra instrumentation, and specified no further plan read. One pull request for the batch.
+
+**Files and steps (four files, including this plan):**
 
 1. Delete only the JSDoc and its delimiters at `packages/core/src/record-substitution.ts:57–60`. Add no replacement. Sign off a commit containing only that source deletion, capture its parent SHA, and run `node scripts/comments-only.mjs <literal-parent-SHA>` before changing the title. It compares committed source changes and skips Markdown.
 2. At `apps/server/scripts/demo-seed/testing/provision-venue.test.ts:13`, change only `stores an English operation description for the Spanish practice venue` to `stores an English operation description`. Keep every assertion and fixture.
-3. Inspect the whole diff, sign off the title commit, and run the checks below. Existing A1251 backlog entries retain unfinished audit work; none names these corrections, so this wording repair makes no entry stale. Record completed corrections in the commit/PR, not the backlog.
+3. In `docs/backlog/fiscal.md:857`, delete only “in its header and”; keep the README reference and every A888 check. Inspect the whole diff, sign off the title commit, and run the checks below. Existing A1251 backlog entries retain unfinished audit work. Record completed corrections in the commit/PR, not the backlog.
 
-**Size:** Production source: 4 comment lines removed, 0 executable lines. Tests: 1 line replaced (−1/+1), 0 assertions/fixtures changed. Documentation: this plan, about 35 lines. No generated files.
+**Size:** Production source: 4 comment lines removed, 0 executable lines. Tests: 1 line replaced (−1/+1), 0 assertions/fixtures changed. Documentation: this plan, about 35 lines, and one short phrase removed. No generated files.
 
 **Verification:** Run commands separately and check each exit status and nonzero test count. Run `pnpm --filter @waitron/server exec vitest run scripts/demo-seed/testing/provision-venue.test.ts`. Retain Lane F H2’s unchanged fiscal protection pair with `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`; these protect recording behavior, not prose. The comments-only result proves executable tokens unchanged. Check the title against the literal branch baseline, not an unset shell variable:
 
