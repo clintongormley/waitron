@@ -30,6 +30,26 @@ function fixture() {
   const calls = [];
   const request = async (path, options = {}) => {
     calls.push([path, options]);
+    if (path.includes("/actions/runs?"))
+      return {
+        total_count: path.includes("status=in_progress") ? 1 : 0,
+        workflow_runs: path.includes("status=in_progress")
+          ? [{ ...run, id: 13, run_attempt: 1 }]
+          : [],
+      };
+    if (path.includes("/runs/13/attempts/1/jobs?"))
+      return {
+        total_count: 20,
+        jobs: Array.from({ length: 20 }, (_, id) => ({
+          ...job,
+          id: 200 + id,
+          run_id: 13,
+          run_attempt: 1,
+          status: "in_progress",
+          runner_id: 200 + id,
+          labels: ["ubuntu-latest"],
+        })),
+      };
     if (path.includes("/runs?"))
       return {
         total_count: path.includes("status=in_progress") ? 1 : 0,
@@ -397,7 +417,7 @@ describe("server health recovery", () => {
     const f = fixture();
     f.options.request = async (path, options) => {
       if (path.includes("/actions/runs?")) throw new Error("Unrelated workflow inventory");
-      return f.request(path.replace("/workflows/ci.yml", ""), options);
+      return f.request(path, options);
     };
     expect((await health.serverHealth(f.options)).stuck.map((run) => run.id)).toEqual([12]);
   });

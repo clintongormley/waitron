@@ -141,7 +141,7 @@ External provenance, read 2026-11-06:
 
 Set `DISPOSABLE_TESTS_MODE=server` to route CI jobs to Lane I's disposable Linux
 runners. Same-repository pull requests, main pushes, tags, schedules, manual runs and
-ordinary reruns use the server route. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
+ordinary reruns are eligible for the server route when the hosted-capacity check below selects it. Fork pull requests stay hosted. The `changes`, `server-queue-watchdog`, final `ci` summary and `publish` jobs stay on
 GitHub so routing, recovery and the required result can still run when server assignment
 stops (watcher, 2026-11-08 16:00). Image smoke always uses `ubuntu-latest` until a
 disposable guest is qualified (watcher, 2026-11-09 08:20). CI still passes
@@ -170,8 +170,27 @@ single job. GitHub reports the hosted image job as `image / smoke`.
 expressions locally; these checks do not run a hosted image build. Existing check names, test commands, coverage merges,
 setup retries and execution limits remain unchanged.
 
-The routing job checks CI's queued and running workflows with its own
-read-only Actions token. If a server job has waited five minutes and no server job is
+The routing job uses its existing read-only Actions token. With no stuck server queue,
+it reads this repository's queued and running workflows, including fork pull requests,
+and their current-attempt jobs. Jobs with nonempty labels that do not include
+`self-hosted` count as hosted. Only jobs with status `queued` or `in_progress` count; completed, pending, waiting and unlabelled jobs do not.
+With no queued hosted job and fewer than 20 running hosted jobs, the run uses GitHub;
+otherwise it is eligible for the server. The summary records the running and queued
+counts. This repository-only snapshot neither measures account-wide capacity nor reserves
+slots; simultaneous routing decisions can observe the same room. It chooses a whole
+run, so one decision can add dozens of jobs to GitHub's queue. The routing run's own
+hosted `changes` job counts while running. The cutoff of 20 is the
+owner's approximation (watcher, 2026-11-09 10:01), not a measured account limit.
+`scripts/ci-hosted-route.test.mjs` exercises these decisions with controlled API replies,
+including pagination and incomplete inventories; it does not measure live capacity.
+
+External provenance, read 2026-11-09:
+
+| Claim | Source's words | Application here |
+| --- | --- | --- |
+| The repository run list uses the existing read permission | [GitHub workflow runs](https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository): “Anyone with read access to the repository can use this endpoint” | Routing reads this repository without another credential. |
+
+The existing health check reads CI's queued and running workflows. If a server job has waited five minutes and no server job is
 assigned or running, and no assigned job in those runs started or finished within five
 minutes, this run uses GitHub and records the reason in its summary. An unverifiable
 inventory also chooses GitHub; a timed-out routing step leaves an empty result, which
@@ -187,6 +206,9 @@ unique job IDs and matching run, attempt, head and labels. After the wait it dis
 watchdog; incomplete inventories and refused dispatches fail it. The shell retains its
 1,260-second outer deadline inside a 22-minute job. Timeout selection prefers
 `gnutimeout`, then `gtimeout`, then `timeout`.
+
+Hosted-first routing can leave the server idle; the existing idle probe still checks
+server pickup when no recent server traffic is observed.
 
 The independent Server health workflow runs on GitHub every five minutes, or by manual
 dispatch, on trusted `main` only. With its own Actions write token it rechecks that no

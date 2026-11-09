@@ -45,8 +45,8 @@ function owned(run, repositoryId) {
     ["push", "pull_request", "schedule", "workflow_dispatch"].includes(run.event)
   );
 }
-async function serverJobs(options, run, attempt = run.run_attempt) {
-  const { request, repository, repositoryId, prefix = "dt" } = options;
+async function runJobs(options, run, attempt = run.run_attempt) {
+  const { request, repository } = options;
   const jobs = await inventory(
     request,
     `/repos/${repository}/actions/runs/${run.id}/attempts/${attempt}/jobs`,
@@ -62,7 +62,11 @@ async function serverJobs(options, run, attempt = run.run_attempt) {
     ),
     "Foreign server job inventory",
   );
-  return jobs.filter(
+  return jobs;
+}
+async function serverJobs(options, run, attempt = run.run_attempt) {
+  const { repositoryId, prefix = "dt" } = options;
+  return (await runJobs(options, run, attempt)).filter(
     (job) =>
       job.labels.includes("self-hosted") &&
       job.labels.some((label) =>
@@ -134,12 +138,35 @@ export async function serverRoute(options) {
     }
   }
   const state = await serverHealth(options);
-  return state.stuck.length
-    ? {
-        route: "hosted",
-        reason: `No server jobs are running; server work has waited five minutes in runs ${state.stuck.map((run) => run.id).join(", ")}.`,
-      }
-    : { route: "server", reason: "No stalled server queue was observed." };
+  if (state.stuck.length)
+    return {
+      route: "hosted",
+      reason: `No server jobs are running; server work has waited five minutes in runs ${state.stuck.map((run) => run.id).join(", ")}.`,
+    };
+  const runs = new Map();
+  for (const status of ["queued", "in_progress"]) {
+    for (const run of await inventory(
+      request,
+      `/repos/${repository}/actions/runs?status=${status}`,
+      "workflow_runs",
+    )) {
+      assert.equal(run.repository?.id, repositoryId, "Foreign hosted run inventory");
+      runs.set(run.id, run);
+    }
+  }
+  let running = 0,
+    queued = 0;
+  for (const run of runs.values()) {
+    for (const job of await runJobs(options, run)) {
+      if (!job.labels.length || job.labels.includes("self-hosted")) continue;
+      if (job.status === "in_progress") running++;
+      if (job.status === "queued") queued++;
+    }
+  }
+  return {
+    route: !queued && running < 20 ? "hosted" : "server",
+    reason: `Waitron hosted jobs: ${running} running, ${queued} queued; no stalled server queue was observed.`,
+  };
 }
 
 export async function recoverServer(options) {
