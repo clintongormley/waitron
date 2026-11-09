@@ -125,6 +125,7 @@ export class StreamHost {
   /** Set when the settings are stored but no supervisor could start, so the status can say why. */
   #notStarted: StreamNotStarted | undefined;
   #reloading = false;
+  #reloadCount = 0;
   #stopped = false;
   #retiring: Promise<void> = Promise.resolve();
   /** A stopped supervisor's pointer write can still land after the next one reads the pointer. */
@@ -139,7 +140,8 @@ export class StreamHost {
     await this.#start();
   }
 
-  async #start(duringReload = false): Promise<void> {
+  async #start(): Promise<void> {
+    const reloadCount = this.#reloadCount;
     if (this.#stopped || this.#supervisor !== undefined) return;
     this.#notStarted = undefined;
     const { db, ring, log } = this.#deps;
@@ -176,7 +178,7 @@ export class StreamHost {
       // A supervisor still stopping may still have Litestream running; and a stop() or an
       // overlapping start() may land while this waits.
       await this.#retiring;
-      if (this.#stopped || this.#supervisor !== undefined || (this.#reloading && !duringReload))
+      if (this.#stopped || this.#supervisor !== undefined || this.#reloadCount !== reloadCount)
         return;
       const venueDbPath = join(this.#deps.venueDir, VENUE_FILE);
       const supervisor = new StreamSupervisor({
@@ -240,12 +242,13 @@ export class StreamHost {
   async reload(write?: () => Promise<void>): Promise<void> {
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
     this.#reloading = true;
+    this.#reloadCount += 1;
     try {
       await this.#retire();
       try {
         await write?.();
       } finally {
-        await this.#start(true);
+        await this.#start();
       }
     } finally {
       this.#reloading = false;

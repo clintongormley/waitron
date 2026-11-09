@@ -534,10 +534,9 @@ schedule**, choose **The bucket copy's bucket** again, and save, because they ke
 were saved with. A new recovery key does not change the passwords and keys for your other providers,
 so change those at each provider too. While scheduled backups are on, **Backups** also offers
 **Change the recovery key**; afterwards choose **Make recovery pack** on **Backups** and keep the new
-pack. Scheduled backups made before the change still open with the old key, and so does the sealed
-part holding the passwords and keys in the bucket copy's history from before the change, which is
-kept for a week. A pack can also hold the server key. To replace it, make a new pack with **Also make
-a new server key** ticked: new backups use the new key, and older backups still need the old one.
+pack. Scheduled backups made before the change and the whole older bucket copy still need the
+old key. Keep the matching recovery pack for any older copy you may need to restore. A pack can also
+hold the server key. To replace it, make a new pack with **Also make a new server key** ticked: new backups use the new key, and older backups still need the old one.
 
 **A leaked configuration export.** The file holds every person on your staff list, former staff
 included, with their name, email, telephone, role and status, and their employment records with

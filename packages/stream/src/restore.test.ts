@@ -103,18 +103,28 @@ async function run(
 }
 
 describe("restoreGeneration", () => {
-  it.each([false, true])(
-    "checks a real database object with a ranged keyed read before starting restore: refused=%s",
-    async (refused) => {
+  it.each(["ok", "refused", "paged", "empty"])(
+    "checks a real database object with a ranged keyed read before starting restore: %s",
+    async (mode) => {
       const objectKey = `waitron/${generationPrefix("v1", GENERATION)}0000/0000000000000001-0000000000000001.ltx`;
       const requests: { key: string | undefined; range: string | undefined; path: string }[] = [];
+      const tokens: (string | null)[] = [];
       const server = createServer((req, res) => {
         const url = new URL(req.url!, "http://local");
         if (url.searchParams.has("list-type")) {
           res.setHeader("content-type", "application/xml");
-          res.end(
-            `<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>${objectKey}</Key></Contents></ListBucketResult>`,
-          );
+          const token = url.searchParams.get("continuation-token");
+          tokens.push(token);
+          if (mode === "empty")
+            res.end("<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>");
+          else if (mode === "paged" && token === null)
+            res.end(
+              `<ListBucketResult><IsTruncated>true</IsTruncated><NextContinuationToken>next</NextContinuationToken><Contents><Key>${objectKey.replace(/0000\/.*$/, "marker.json")}</Key></Contents></ListBucketResult>`,
+            );
+          else
+            res.end(
+              `<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>${objectKey}</Key></Contents></ListBucketResult>`,
+            );
           return;
         }
         requests.push({
@@ -122,7 +132,7 @@ describe("restoreGeneration", () => {
           range: req.headers.range,
           path: url.pathname,
         });
-        if (refused) {
+        if (mode === "refused") {
           res.writeHead(403, { "content-type": "application/xml" });
           res.end("<Error><Code>AccessDenied</Code></Error>");
         } else {
@@ -143,16 +153,19 @@ describe("restoreGeneration", () => {
             endpoint: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
           },
         );
-        if (refused) {
+        if (mode === "refused" || mode === "empty") {
           await expect(promise).rejects.toMatchObject({ code: "backup.stream_request_failed" });
           await expect(stat(join(out, "argv"))).rejects.toMatchObject({ code: "ENOENT" });
         } else {
           await promise;
           expect(await readFile(outPath, "utf8")).toBe("db");
         }
-        expect(requests).toEqual([
-          { key: STREAM_KEY, range: "bytes=0-0", path: `/venue-copy/${objectKey}` },
-        ]);
+        expect(requests).toEqual(
+          mode === "empty"
+            ? []
+            : [{ key: STREAM_KEY, range: "bytes=0-0", path: `/venue-copy/${objectKey}` }],
+        );
+        expect(tokens).toEqual(mode === "paged" ? [null, "next"] : [null]);
       } finally {
         vi.mocked(verifyStreamKey).mockImplementation(async () => {});
         server.closeAllConnections();

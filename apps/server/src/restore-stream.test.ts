@@ -448,23 +448,41 @@ describe("prepareStreamRestore", () => {
     await expectStateUntouched(deps.stateDir);
   });
 
-  it("refuses a copy whose database object cannot be read with the kit key and leaves no scratch", async () => {
-    const deps = await prepareDeps(await bucket(), {
-      restoreGeneration: async () => {
-        throw new AppError("backup.stream_request_failed", {
-          operation: "get",
-          key: "database.ltx",
-          status: 403,
-          name: "AccessDenied",
-        });
-      },
-    });
-    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
-      code: "restore.stream_pointer_unverified",
-      params: { reason: "key_or_access" },
-    });
-    await expectStateUntouched(deps.stateDir);
-  });
+  it.each([
+    [403, "AccessDenied"],
+    [503, "SlowDown"],
+    [null, "Error"],
+  ] as const)(
+    "refuses an unreadable database object and retains safe diagnostics: %s %s",
+    async (status, name) => {
+      const logs: unknown[] = [];
+      const deps = await prepareDeps(await bucket(), {
+        log: (level, event, fields) => {
+          logs.push({ level, event, fields });
+        },
+        restoreGeneration: async () => {
+          throw new AppError("backup.stream_request_failed", {
+            operation: "get",
+            key: "database.ltx",
+            status,
+            name,
+          });
+        },
+      });
+      await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+        code: "restore.stream_pointer_unverified",
+        params: { reason: "key_or_access" },
+      });
+      expect(logs).toEqual([
+        {
+          level: "warn",
+          event: "restore.stream_key_check_failed",
+          fields: { errorCode: "backup.stream_request_failed", status, errorName: name },
+        },
+      ]);
+      await expectStateUntouched(deps.stateDir);
+    },
+  );
 
   it("passes any other download failure through as it came, and removes the partial download", async () => {
     const deps = await prepareDeps(await bucket(), {

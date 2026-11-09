@@ -1714,8 +1714,6 @@ declare module "@waitron/shared" {
     "restore.database_set_aside": { folder: string };
     /** The owner's bucket holds no `current.json` for the kit's venue: nothing to rebuild from. */
     "restore.stream_pointer_missing": Record<string, never>;
-    /** `current.json` was not signed by the key the recovery kit carries (`signature`), or names a
-     * different venue (`venue_mismatch`). The key in the bucket is never the one trusted. */
     "restore.stream_pointer_unverified": {
       reason: "signature" | "venue_mismatch" | "key_or_access";
     };
