@@ -1,6 +1,6 @@
 import { getCountryPack, RECIPIENT_REGION_NAMES } from "@waitron/country-packs";
 import { afterEach, describe, expect, it } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { t as uiText, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTicketView } from "./till-ticket-view.js";
@@ -1985,7 +1985,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
   ): InvoiceDeliveryStatus => ({
     current,
     originalCompleted: current?.status === "sent",
-    originalPrinterId: null,
+    originalPrinterId: current?.medium === "a4" ? "p1" : null,
     actions: { ...noActions, ...actions },
     history: current === null ? [] : [current],
   });
@@ -2004,6 +2004,104 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     el.shadowRoot!.querySelector("[data-test=delivery-status]")?.textContent?.trim();
   const button = (el: TillTicketView, name: string) =>
     el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`);
+
+  it("keeps the Invoice printer folded, names A4, and saves a choice without printing", async () => {
+    const { el } = await mountF1({
+      deliveries: statusOf(null, { print: a4Offer }),
+      invoicePrintersEnabled: true,
+      invoiceEquipment: {
+        role: "invoice",
+        selection: "default",
+        chosenId: null,
+        chosen: null,
+        resolved: { id: "p1", name: "Office", available: true },
+        default: { id: "p1", name: "Office", kind: "a4" },
+        choices: [{ id: "p2", name: "Bar", kind: "receipt" }],
+      },
+    });
+    const opened: Event[] = [];
+    const picks: unknown[] = [];
+    const prints: Event[] = [];
+    el.addEventListener("invoice-printer-open", (event) => opened.push(event));
+    el.addEventListener("equipment-change", (event) => picks.push((event as CustomEvent).detail));
+    el.addEventListener("print-invoice", (event) => prints.push(event));
+    expect(el.shadowRoot!.querySelector("wt-combobox")).toBeNull();
+    expect(button(el, "invoice-printer-toggle")).not.toBeNull();
+    await userEvent.click(button(el, "invoice-printer-toggle")!);
+    const field = el.shadowRoot!.querySelector("wt-combobox")!;
+    expect(field).not.toBeNull();
+    expect(field.closest('[role="status"]')).toBeNull();
+    field.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "p2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect(opened).toHaveLength(1);
+    expect(opened[0]!.bubbles && opened[0]!.composed).toBe(true);
+    expect(picks).toEqual([{ role: "invoice", selection: { id: "p2" }, via: "list" }]);
+    expect(prints).toHaveLength(0);
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print on Office");
+  });
+
+  it("shows the default and paper while keeping controls outside delivery announcements", async () => {
+    const { el } = await mountF1({
+      invoicePrintersEnabled: true,
+      invoiceEquipment: {
+        role: "invoice",
+        selection: "default",
+        chosenId: null,
+        chosen: null,
+        resolved: { id: "p1", name: "Office", available: true },
+        default: { id: "p1", name: "Office", kind: "a4" },
+        choices: [],
+      },
+      deliveries: statusOf(attempt({ status: "failed" })),
+      deliveryRefusal: {},
+    });
+    expect(button(el, "invoice-printer-toggle")!.textContent).toContain("Office · A4");
+    await userEvent.click(button(el, "invoice-printer-toggle")!);
+    await el.updateComplete;
+    const field = el.shadowRoot!.querySelector("wt-combobox")!;
+    await field.updateComplete;
+    expect(field.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe(
+      "Use default: Office",
+    );
+    expect(button(el, "delivery-status")!.closest('[role="status"]')).not.toBeNull();
+    expect(
+      button(el, "delivery-refused")!.closest('[role="status"], [role="alert"]'),
+    ).not.toBeNull();
+    expect(field.closest('[role="status"], [role="alert"]')).toBeNull();
+  });
+
+  it("does not say again when the failed A4's destination differs from the offered printer", async () => {
+    const { el } = await mountF1({
+      deliveries: {
+        ...statusOf(attempt({ status: "failed" }), {
+          print: a4Offer,
+          retryOriginal: { medium: "a4" },
+        }),
+        originalPrinterId: "another",
+      },
+    });
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print on Office");
+  });
+
+  it("keeps printing available on a failed chooser read but blocks an unconfirmed pick", async () => {
+    const { el } = await mountF1({
+      deliveries: statusOf(null, { print: a4Offer }),
+      invoicePrintersEnabled: true,
+      invoicePrinterReadFailed: true,
+    });
+    await userEvent.click(button(el, "invoice-printer-toggle")!);
+    expect(button(el, "invoice-printer-read-retry")).not.toBeNull();
+    expect(button(el, "print-invoice")!.hasAttribute("disabled")).toBe(false);
+    Object.assign(el, { invoicePrinterBlocked: true });
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(button(el, "print-invoice")!.hasAttribute("disabled")).toBe(true);
+  });
 
   it.each([
     [
@@ -2091,12 +2189,12 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     expect(button(el, "delivery-status")).toBeNull();
   });
 
-  it("offers Print on A4 only when the status does, and asks for it", async () => {
+  it("offers the named printer only when the status does, and asks for it", async () => {
     const { el } = await mountF1({ deliveries: statusOf(null) });
     expect(button(el, "print-invoice")).toBeNull();
     el.deliveries = statusOf(null, { print: a4Offer });
     await el.updateComplete;
-    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print on A4");
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print on Office");
     expect(button(el, "print-invoice")!.getAttribute("variant")).toBe("secondary");
     let event: Event | undefined;
     el.addEventListener("print-invoice", (e) => {
@@ -2118,13 +2216,11 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       });
       const buttons = el.shadowRoot!.querySelectorAll("[data-test=print-invoice]");
       expect(buttons).toHaveLength(1);
-      expect(buttons[0]!.textContent!.trim()).toBe("Send to the office printer again");
+      expect(buttons[0]!.textContent!.trim()).toBe("Send to Office again");
       setLocale("es-ES");
       el.requestUpdate();
       await el.updateComplete;
-      expect(button(el, "print-invoice")!.textContent!.trim()).toBe(
-        "Volver a enviar a la impresora de oficina",
-      );
+      expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Volver a enviar a Office");
     },
   );
 
@@ -2400,14 +2496,14 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
         print: { ...a4Offer, designation: "duplicate" },
       }),
     });
-    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print a copy on A4");
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print a copy on Office");
     setLocale("es-ES");
     el.requestUpdate();
     await el.updateComplete;
-    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Imprimir una copia en A4");
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Imprimir una copia en Office");
     el.deliveries = statusOf(null, { print: a4Offer });
     await el.updateComplete;
-    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Imprimir en A4");
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Imprimir en Office");
   });
 
   it("names a receipt invoice printer on its print action, a copy included, in English and Spanish", async () => {
@@ -2433,10 +2529,10 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Imprimir en Bar printer");
   });
 
-  it("keeps the A4 words for an A4 invoice printer, never its name", async () => {
+  it("names an A4 invoice printer on its print action", async () => {
     const { el } = await mountF1({ deliveries: statusOf(null, { print: a4Offer }) });
-    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print on A4");
-    expect(button(el, "print-invoice")!.textContent).not.toContain("Office");
+    expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print on Office");
+    expect(button(el, "print-invoice")!.textContent).toContain("Office");
   });
 
   it("says why a delivery action was refused inside the section, apart from a failed read", async () => {

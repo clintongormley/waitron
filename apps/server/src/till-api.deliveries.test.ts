@@ -55,6 +55,8 @@ import { deploymentEnvironment } from "./config.js";
 import { readSettledTicket } from "./till-sale.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
+import { mountDeviceApi } from "./device-api.js";
+import { createPairingMode } from "./pairing-mode.js";
 import { deletePrinter } from "./printer-delete.js";
 import type { TradingContext } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
@@ -252,6 +254,11 @@ async function venue(): Promise<Venue> {
     (...args: unknown[]) => {
       logged.push(args);
     },
+  );
+  mountDeviceApi(
+    app,
+    { db: suite.db, cfg, secureCookies: false, pairingMode: createPairingMode() },
+    () => {},
   );
   const v = { ...fixtures, email, logged, cfg, scriptCfg, app };
   return { ...v, cookie: await till(v) };
@@ -964,6 +971,45 @@ async function invoiceReceiptPrinter(v: Venue): Promise<string> {
 }
 
 describe("a receipt printer as the till's invoice printer", () => {
+  it("saves the authenticated Equipment choice, offers it and prints there without opening a drawer", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    const counter = await invoiceReceiptPrinter(v);
+    const select = async (selection: unknown) => {
+      const response = await v.app.request("/api/device/equipment", {
+        method: "PUT",
+        headers: { cookie: v.cookie, "content-type": "application/json" },
+        body: JSON.stringify({ role: "invoice", selection, via: "list" }),
+      });
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      return body;
+    };
+    await select("default");
+    expect((await readStatus(v, orderId)).body).toMatchObject({
+      actions: { print: { printers: [{ id: v.officeId, kind: "a4" }] } },
+    });
+    expect(await select({ id: counter })).toMatchObject({
+      roles: expect.arrayContaining([
+        expect.objectContaining({
+          role: "invoice",
+          selection: "item",
+          resolved: expect.objectContaining({ id: counter }),
+        }),
+      ]),
+    });
+    expect((await readStatus(v, orderId)).body).toMatchObject({
+      actions: { print: { printers: [{ id: counter, kind: "receipt" }] } },
+    });
+    expect(await deliveryRows(saleId)).toEqual([]);
+    expect(await jobsOf(saleId)).toEqual([]);
+    expect((await printInvoice(v, orderId, randomUUID(), undefined, counter)).status).toBe(200);
+    const jobs = await jobsOf(saleId);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ printerId: counter, kind: "document", receiptCopy: false });
+    expect(opensDrawer(jobs[0]!.payload)).toBe(false);
+  });
+
   it("is offered as a receipt printer", async () => {
     const v = await venue();
     const { orderId } = await invoice(v);

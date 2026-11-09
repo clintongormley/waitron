@@ -34,6 +34,15 @@ it in the receipt language. Order details name it in your screen language.
 Counter payment cannot issue a full invoice yet. Keep the customer's order on a table bill and
 use that bill's payments. Placing a counter order alone does not issue an invoice.
 
+## Choose the invoice printer {#invoice-printer}
+
+To print a full invoice elsewhere, expand **Invoice printer** in the invoice view and choose a
+printer. The list shows A4 and receipt-paper printers allowed for your device. **Use default**
+returns to the profile's default. Your choice is saved in **Equipment** for this device.
+
+Wait for **Print on {printer}** to name your destination, then press it. Choosing a printer alone
+prints nothing. After a failed save, choose **Retry**; use **Refresh** if the list could not load.
+
 ## Avoid duplicate card slips {#reader-slips}
 
 If a card reader prints its own payment slip, open **Card payments** in the dashboard, edit that

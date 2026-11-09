@@ -38,6 +38,16 @@ opcionales en otros países. Por ejemplo, una dirección francesa puede ser **2 
 impresa y el ticket en la pantalla de caja muestran el país en el idioma del ticket. El detalle
 del pedido lo muestra en el idioma de tu pantalla.
 
+## Elegir la impresora de facturas {#invoice-printer}
+
+Para imprimir una factura completa en otro sitio, despliega **Impresora de facturas** en la vista
+de la factura y elige una impresora. La lista muestra las impresoras A4 y de papel de recibo
+permitidas para tu dispositivo. **Usar el predeterminado** vuelve a la predeterminada del perfil.
+La elección se guarda en **Equipo de este dispositivo** para este dispositivo.
+
+Espera a que **Imprimir en {printer}** nombre tu destino y púlsalo. Elegir una impresora por sí solo
+no imprime. Si no se ha guardado, pulsa **Reintentar**; usa **Actualizar** si no se ha podido leer la lista.
+
 ## Evitar justificantes de tarjeta duplicados {#reader-slips}
 
 Si un lector de tarjetas imprime su propio justificante de pago, abre **Pagos con tarjeta** en el
