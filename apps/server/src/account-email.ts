@@ -1,5 +1,10 @@
 import { ACCOUNT_EMAIL_WORDS } from "./i18n/account-email.js";
-import { sendSmtpMessage, type SmtpConnection, type SmtpTransport } from "./smtp-send.js";
+import {
+  sendSmtpMessage,
+  statusAsBefore,
+  type SmtpConnection,
+  type SmtpTransport,
+} from "./smtp-send.js";
 import type { SmtpTestCode } from "./smtp-failure.js";
 import type { AccountActionPurpose } from "@waitron/identity";
 
@@ -137,7 +142,7 @@ ${
       throw new AccountEmailFailure(
         outcome.reason === "email.test_timeout" ? "email.send_timeout" : "email.send_refused",
         outcome.reason,
-        outcome.status === "unknown",
+        statusAsBefore(outcome) === "unknown",
       );
     }
     return "sent";

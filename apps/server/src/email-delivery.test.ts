@@ -5,6 +5,7 @@ import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { isAppError } from "@waitron/shared";
 import {
+  resolveMailDeliveryIn,
   resolveEmailDelivery,
   resolveEmailDeliveryIn,
   resolveInvoiceEmailDelivery,
@@ -221,3 +222,56 @@ describe("invoice email routing", () => {
     });
   });
 });
+
+it.each([
+  [true, "live", "saved", "smtp", "local_capture"],
+  [true, "demo", "saved", "smtp", "local_capture"],
+  [true, "live", "none", "local_capture", "local_capture"],
+  [false, "demo", "none", "local_capture", "local_capture"],
+  [false, "demo", "saved", "local_capture", "local_capture"],
+  [false, "demo", "invalid", "local_capture", "local_capture"],
+  [false, "live", "saved", "smtp", "smtp"],
+  [false, "live", "none", "unconfigured", "unconfigured"],
+  [true, "live", "invalid", "unconfigured", "local_capture"],
+] as const)(
+  "chooses mail delivery for development=%s intent=%s settings=%s",
+  async (devMode, onboardingIntent, settings, notice, invoice) => {
+    await seedVenue(suite.db, { name: "Bar & Kitchen" });
+    if (settings !== "none")
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, ring, {
+          purpose: "email.smtp",
+          value: {
+            url: "smtps://smtp.example.test:465",
+            from:
+              settings === "invalid"
+                ? "one@example.test, two@example.test"
+                : "Venue <venue@example.test>",
+          },
+        }),
+      );
+    for (const [rule, mode] of [
+      ["notice", notice],
+      ["invoice", invoice],
+    ] as const) {
+      expect(
+        await withTransaction(suite.db, (tx) =>
+          resolveMailDeliveryIn(tx, ring, { devMode, onboardingIntent }, rule),
+        ),
+      ).toEqual(
+        mode === "unconfigured"
+          ? { mode }
+          : {
+              mode,
+              smtp:
+                mode === "smtp"
+                  ? {
+                      url: "smtps://smtp.example.test:465",
+                      from: { name: "Bar & Kitchen", address: "venue@example.test" },
+                    }
+                  : { url: "smtp://127.0.0.1:1025", from: "Waitron <no-reply@waitron.test>" },
+            },
+      );
+    }
+  },
+);

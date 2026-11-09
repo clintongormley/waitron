@@ -1,4 +1,4 @@
-import { sendSmtpMessage, type SmtpConnection } from "./smtp-send.js";
+import { sendSmtpMessage, statusAsBefore, type SmtpConnection } from "./smtp-send.js";
 import type { SmtpTestCode } from "./smtp-failure.js";
 
 export type TextEmailOutcome = "sent" | "rejected" | "unknown";
@@ -21,6 +21,6 @@ export function createTextEmailSender(
         // Diagnostics must not change whether a worker may retry this message.
       }
     }
-    return outcome.status;
+    return statusAsBefore(outcome);
   };
 }

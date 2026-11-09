@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import dns from "node:dns";
 import type { Socket } from "node:net";
-import { sendSmtpMessage } from "./smtp-send.js";
+import { sendSmtpMessage, statusAsBefore } from "./smtp-send.js";
 import { smtpRig, smtpTestTls } from "./testing/smtp-settings-fixture.js";
 
 const message = { to: "admin@example.test", subject: "Test subject", text: "Test body" };
@@ -9,8 +9,11 @@ const message = { to: "admin@example.test", subject: "Test subject", text: "Test
 describe("owned SMTP send", () => {
   it.each([
     ["accepted", { status: "sent" }],
-    ["recipient-refused", { status: "rejected", reason: "email.test_refused" }],
-    ["data-refused", { status: "rejected", reason: "email.test_refused" }],
+    [
+      "recipient-refused",
+      { status: "rejected", reason: "email.test_refused", serverRefused: true },
+    ],
+    ["data-refused", { status: "rejected", reason: "email.test_refused", serverRefused: true }],
     ["lost-ack", { status: "unknown", reason: "email.test_refused" }],
     ["silent", { status: "unknown", reason: "email.test_timeout" }],
   ] as const)(
@@ -21,7 +24,7 @@ describe("owned SMTP send", () => {
         expect(
           await sendSmtpMessage(rig.config, message, {
             ca: smtpTestTls.caCertPem,
-            timeoutMs: reply === "silent" ? 100 : 2000,
+            timeoutMs: 2000,
           }),
         ).toEqual(expected);
         await rig.connectionClosed;
@@ -97,7 +100,7 @@ describe("owned SMTP send", () => {
             close() {},
           },
         }),
-      ).toEqual({ status: "rejected", reason: "email.test_refused" });
+      ).toEqual({ status: "rejected", reason: "email.test_refused", serverRefused: true });
     },
   );
 });
@@ -114,6 +117,7 @@ describe("SMTP wire diagnostics", () => {
         url.searchParams.set("requireTLS", "true");
         expect(await sendSmtpMessage({ ...rig.config, url: url.href }, message)).toEqual({
           status: "rejected",
+          serverRefused: true,
           reason: "email.test_starttls_refused",
         });
         expect(rig.authentications).toEqual([]);
@@ -162,7 +166,7 @@ describe("SMTP wire diagnostics", () => {
           await sendSmtpMessage({ ...rig.config, url: url.href }, message, {
             ca: smtpTestTls.caCertPem,
           }),
-        ).toEqual({ status: "rejected", reason });
+        ).toEqual({ status: "rejected", reason, serverRefused: true });
         await rig.connectionClosed;
         expect(rig.sockets.size).toBe(0);
       } finally {
@@ -182,7 +186,11 @@ describe("SMTP wire diagnostics", () => {
           },
           message,
         ),
-      ).toEqual({ status: "unknown", reason: "email.test_certificate_untrusted" });
+      ).toEqual({
+        status: "rejected",
+        reason: "email.test_certificate_untrusted",
+        serverRefused: false,
+      });
       expect(rig.messages).toEqual([]);
       await rig.connectionClosed;
       expect(rig.sockets.size).toBe(0);
@@ -197,7 +205,11 @@ describe("SMTP wire diagnostics", () => {
     try {
       expect(
         await sendSmtpMessage(rig.config, message, { ca: smtpWrongHostTls.caCertPem }),
-      ).toEqual({ status: "unknown", reason: "email.test_certificate_untrusted" });
+      ).toEqual({
+        status: "rejected",
+        reason: "email.test_certificate_untrusted",
+        serverRefused: false,
+      });
       expect(rig.messages).toEqual([]);
       await rig.connectionClosed;
       expect(rig.sockets.size).toBe(0);
@@ -214,7 +226,7 @@ describe("SMTP wire diagnostics", () => {
           { ...rig.config, url: rig.config.url.replace("smtp:", "smtps:") },
           message,
         ),
-      ).toEqual({ status: "unknown", reason: "email.test_tls_refused" });
+      ).toEqual({ status: "rejected", reason: "email.test_tls_refused", serverRefused: false });
       expect(rig.messages).toEqual([]);
       await rig.connectionClosed;
       expect(rig.sockets.size).toBe(0);
@@ -227,7 +239,8 @@ describe("SMTP wire diagnostics", () => {
     const rig = await smtpRig("no-greeting");
     try {
       expect(await sendSmtpMessage(rig.config, message, { timeoutMs: 100 })).toEqual({
-        status: "unknown",
+        status: "rejected",
+        serverRefused: false,
         reason: "email.test_timeout",
       });
       await rig.connectionClosed;
@@ -241,7 +254,8 @@ describe("SMTP wire diagnostics", () => {
     const rig = await smtpRig("accepted");
     await rig.close();
     expect(await sendSmtpMessage(rig.config, message, { timeoutMs: 2000 })).toEqual({
-      status: "unknown",
+      status: "rejected",
+      serverRefused: false,
       reason: "email.test_connection_refused",
     });
   });
@@ -264,7 +278,7 @@ describe("SMTP wire diagnostics", () => {
           message,
           { timeoutMs: 5000 },
         ),
-      ).toEqual({ status: "unknown", reason: "email.test_host_not_found" });
+      ).toEqual({ status: "rejected", reason: "email.test_host_not_found", serverRefused: false });
       expect(lookup.mock.calls.map(([host]) => host)).toEqual(["a987-smtp.invalid"]);
     } finally {
       lookup.mockRestore();
@@ -275,7 +289,8 @@ describe("SMTP wire diagnostics", () => {
     "contains invalid connection input %s",
     async (url) => {
       expect(await sendSmtpMessage({ url, from: "venue@example.test" }, message)).toEqual({
-        status: "unknown",
+        status: "rejected",
+        serverRefused: false,
         reason: "email.test_refused",
       });
     },
@@ -314,7 +329,7 @@ it("does not let URL logging options disclose the SMTP conversation", async () =
         message,
         { ca: smtpTestTls.caCertPem },
       ),
-    ).toEqual({ status: "rejected", reason: "email.test_refused" });
+    ).toEqual({ status: "rejected", reason: "email.test_refused", serverRefused: true });
     expect(spies.flatMap((spy) => spy.mock.calls)).toEqual([]);
   } finally {
     for (const spy of spies) spy.mockRestore();
@@ -345,6 +360,7 @@ it("reaches a configured bracketed IPv6 relay address", async () => {
     });
     expect(await sendSmtpMessage(config, message, { timeoutMs: 2000 })).toEqual({
       status: "rejected",
+      serverRefused: true,
       reason: "email.test_refused",
     });
   } finally {
@@ -352,5 +368,105 @@ it("reaches a configured bracketed IPv6 relay address", async () => {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
     );
+  }
+});
+
+describe("SMTP hand-over", () => {
+  it.each([
+    [false, false],
+    [true, false],
+    [false, true],
+  ] as const)(
+    "distinguishes missing DATA from lost acknowledgement (TLS=%s pipelining=%s)",
+    async (secure, pipelining) => {
+      for (const reply of ["dropped-before-data", "lost-ack"] as const) {
+        const rig = await smtpRig(reply, secure, { pipelining });
+        try {
+          expect(
+            await sendSmtpMessage(rig.config, message, {
+              ca: smtpTestTls.caCertPem,
+              timeoutMs: 2000,
+            }),
+          ).toEqual(
+            reply === "dropped-before-data"
+              ? { status: "rejected", serverRefused: false, reason: "email.test_refused" }
+              : { status: "unknown", reason: "email.test_refused" },
+          );
+          expect(rig.messages).toHaveLength(reply === "lost-ack" ? 1 : 0);
+        } finally {
+          await rig.close();
+        }
+      }
+    },
+  );
+
+  it.each([
+    [false, false],
+    [true, false],
+    [false, true],
+  ] as const)(
+    "distinguishes deadlines before and after DATA (TLS=%s pipelining=%s)",
+    async (secure, pipelining) => {
+      for (const reply of ["silent-before-data", "silent"] as const) {
+        const rig = await smtpRig(reply, secure, { pipelining });
+        try {
+          expect(
+            await sendSmtpMessage(rig.config, message, {
+              ca: smtpTestTls.caCertPem,
+              timeoutMs: reply === "silent" ? 2000 : 100,
+            }),
+          ).toEqual(
+            reply === "silent-before-data"
+              ? { status: "rejected", serverRefused: false, reason: "email.test_timeout" }
+              : { status: "unknown", reason: "email.test_timeout" },
+          );
+          expect(rig.messages).toHaveLength(reply === "silent" ? 1 : 0);
+        } finally {
+          await rig.close();
+        }
+      }
+    },
+  );
+
+  it("refuses two recipients before connecting", async () => {
+    const rig = await smtpRig("accepted");
+    try {
+      expect(
+        await sendSmtpMessage(rig.config, {
+          ...message,
+          to: ["one@example.test", "two@example.test"],
+        }),
+      ).toEqual({ status: "rejected", serverRefused: false, reason: "email.test_refused" });
+      expect(rig.connections).toBe(0);
+    } finally {
+      await rig.close();
+    }
+  });
+});
+
+it("preserves existing caller statuses", () => {
+  expect(statusAsBefore({ status: "sent" })).toBe("sent");
+  expect(statusAsBefore({ status: "unknown", reason: "email.test_refused" })).toBe("unknown");
+  expect(
+    statusAsBefore({ status: "rejected", reason: "email.test_refused", serverRefused: true }),
+  ).toBe("rejected");
+  expect(
+    statusAsBefore({ status: "rejected", reason: "email.test_refused", serverRefused: false }),
+  ).toBe("unknown");
+});
+
+it("contains malformed authentication input before connecting", async () => {
+  const rig = await smtpRig("accepted");
+  try {
+    expect(
+      await sendSmtpMessage(
+        { ...rig.config, url: rig.config.url.replace("://", "://user%zz:secret@") },
+        message,
+        { timeoutMs: 100 },
+      ),
+    ).toEqual({ status: "rejected", serverRefused: false, reason: "email.test_refused" });
+    expect(rig.connections).toBe(0);
+  } finally {
+    await rig.close();
   }
 });

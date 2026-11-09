@@ -7,6 +7,8 @@ type Reply =
   | "accepted"
   | "recipient-refused"
   | "data-refused"
+  | "dropped-before-data"
+  | "silent-before-data"
   | "lost-ack"
   | "silent"
   | "no-greeting"
@@ -31,11 +33,13 @@ export async function smtpRig(
   options: {
     starttls?: true | 454 | 502;
     wrongHostname?: boolean;
+    pipelining?: boolean;
   } = {},
 ) {
   const material = options.wrongHostname ? smtpWrongHostTls : smtpTestTls;
   const sockets = new Set<Socket>();
   const messages: string[] = [];
+  let connections = 0;
   const authentications: string[] = [];
   let received!: () => void;
   let closed!: () => void;
@@ -70,7 +74,7 @@ export async function smtpRig(
           else if (reply === "accepted") socket.write("250 accepted\r\n");
         } else if (line.startsWith("EHLO") || line.startsWith("HELO")) {
           socket.write(
-            `250-invoice-test\r\n${options.starttls === true && !upgraded ? "250-STARTTLS\r\n" : ""}250 AUTH PLAIN\r\n`,
+            `250-invoice-test\r\n${options.pipelining ? "250-PIPELINING\r\n" : ""}${options.starttls === true && !upgraded ? "250-STARTTLS\r\n" : ""}250 AUTH PLAIN\r\n`,
           );
         } else if (line.startsWith("AUTH PLAIN ")) {
           authentications.push(
@@ -81,9 +85,15 @@ export async function smtpRig(
               ? "535 secret-smtp-password refused\r\n"
               : "235 authenticated\r\n",
           );
+        } else if (line.startsWith("MAIL") && reply === "silent-before-data") {
+          return;
         } else if (line.startsWith("MAIL") && reply === "login-required") {
           socket.write("530 secret-smtp-password authentication required\r\n");
         } else if (line.startsWith("RCPT")) {
+          if (reply === "dropped-before-data") {
+            socket.destroy();
+            return;
+          }
           socket.write(
             reply === "recipient-refused"
               ? "550 secret-smtp-password unknown recipient\r\n"
@@ -117,6 +127,7 @@ export async function smtpRig(
     ? createTlsServer({ key: material.serverKeyPem, cert: material.serverCertPem }, handle)
     : createServer(handle);
   server.on("connection", (socket) => {
+    connections++;
     sockets.add(socket);
     socket.on("close", () => {
       sockets.delete(socket);
@@ -130,6 +141,9 @@ export async function smtpRig(
     config: {
       url: `${secure ? "smtps" : "smtp"}://127.0.0.1:${(server.address() as AddressInfo).port}`,
       from: "venue@example.test",
+    },
+    get connections() {
+      return connections;
     },
     messages,
     authentications,
