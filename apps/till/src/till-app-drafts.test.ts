@@ -11343,8 +11343,8 @@ describe("native app phone order view with mixed dish families", () => {
             const before = structuredClone(draft(el).lines);
             expect(innerWidth).toBe(width);
             expect(rows(el)).toEqual(["Beer ×2", "Flan ×1", "Steak ×0.375", "Recorded dish ×2"]);
-            expect(q("[data-browsing]").checkVisibility()).toBe(true);
-            expect(q("[data-draft-pane]").checkVisibility()).toBe(false);
+            expect(q("[data-browsing]").checkVisibility()).toBe(false);
+            expect(q("[data-draft-pane]").checkVisibility()).toBe(true);
             await userEvent.click(q("[data-view=order]"));
             await expect.poll(() => q("[data-draft-pane]").checkVisibility()).toBe(true);
             expect(

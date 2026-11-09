@@ -2897,6 +2897,7 @@ describe("A803 name bill", () => {
     try {
       const { el } = await mountApp({
         setBillName: vi.fn().mockRejectedValue({ code: "draft.taken_over", ownerName: "Bea" }),
+        getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
       });
       const order = await openPartyTable(el);
       emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
@@ -8480,7 +8481,11 @@ describe("till-app: submitting the draft", () => {
 
   it("shows the notice over the floor without moving it, so a tap as it closes lands where it was aimed", async () => {
     const server = groupsServer();
-    const { el } = await mountApp({ ...withCourses(), ...server });
+    const { el } = await mountApp({
+      ...withCourses(),
+      ...server,
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
+    });
     const order = await openPartyTable(el);
     await ring(el, order, beer, steak);
     await fireAll(el, order);

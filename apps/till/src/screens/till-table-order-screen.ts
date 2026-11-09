@@ -2258,6 +2258,9 @@ export class TillTableOrderScreen extends LitElement {
       this.view = "menu";
       this.#browsingScroll = undefined;
     }
+    // A bill switch is left on Menu: the app moves `orderId` before it reads the new bill's lines.
+    const opened = this.hasUpdated ? changed.get("loading") === true : true;
+    if (opened && !this.loading && !this.wide) this.view = this.lines.length > 0 ? "order" : "menu";
     // The app re-points this screen at whichever party holds the table, so a window opened for the
     // old party would otherwise save to the new one. A screen drawn afresh counts its first party as
     // a switch, which keeps a refusal the app still holds from reopening its window.

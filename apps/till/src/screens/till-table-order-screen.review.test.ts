@@ -255,4 +255,60 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     expect(shown(review(el))).toBe(true);
     expect(shown(draftPane(el))).toBe(false);
   });
+
+  it("a screen drawn for a bill with sent lines opens on Order", async () => {
+    const { el, host } = await mount({ lines: [storedDish] });
+    host.style.width = "390px";
+    await resized(el);
+
+    expect(shownView(el)).toBe("order");
+    expect(shown(draftPane(el))).toBe(true);
+    expect(shown(browsing(el))).toBe(false);
+  });
+
+  it("an open that lands with sent lines opens on Order, and with none on Menu", async () => {
+    const { el, host } = await mount({ loading: true });
+    host.style.width = "390px";
+    await resized(el);
+    el.lines = [storedDish];
+    el.loading = false;
+    await el.updateComplete;
+    expect(shownView(el)).toBe("order");
+
+    el.loading = true;
+    await el.updateComplete;
+    el.lines = [];
+    el.loading = false;
+    await el.updateComplete;
+    expect(shownView(el)).toBe("menu");
+  });
+
+  it("a bill switch shows Menu", async () => {
+    const { el, host } = await mount({ lines: [storedDish] });
+    host.style.width = "390px";
+    await resized(el);
+    await showView(el, "order");
+    expect(shownView(el)).toBe("order");
+
+    el.orderId = "wo-5";
+    await el.updateComplete;
+    expect(shownView(el)).toBe("menu");
+  });
+
+  it("at the width and above, the opening view changes nothing", async () => {
+    await page.viewport(1280, 844);
+    try {
+      const { el, host } = await mount({ lines: [storedDish] });
+      await resized(el);
+      expect(viewSwitch(el)).toBeNull();
+      expect(shown(browsing(el))).toBe(true);
+      expect(shown(draftPane(el))).toBe(true);
+
+      host.style.width = "390px";
+      await resized(el);
+      expect(shownView(el)).toBe("menu");
+    } finally {
+      await page.viewport(414, 896);
+    }
+  });
 });
