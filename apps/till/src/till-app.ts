@@ -12926,7 +12926,7 @@ export class TillApp extends LitElement {
     if (followUp === "find-tab" || this.activeTableId !== tableId) return;
     this.submittedNotice = submittedText(draft.tally);
     this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
-    this.#returnToFloor();
+    if (!this.handheldMode) this.#returnToFloor();
   }
 
   #onLateSendAgreed(open: NonNullable<TillApp["lateSendWindow"]>): Promise<void> {

@@ -8734,7 +8734,7 @@ describe("till-app: submitting the draft", () => {
     expect(toast(el)!.message).toBe(t("table.submitted_joined"));
   });
 
-  it("returns a handheld to its floor tab after a complete submission, keeping the order it showed", async () => {
+  it("keeps a handheld on its table after a complete submission", async () => {
     const server = groupsServer();
     const { el } = await mountApp({
       ...server,
@@ -8753,10 +8753,8 @@ describe("till-app: submitting the draft", () => {
     await ring(el, card, beer);
     await fireAll(el, card);
 
-    expect((shell(el) as HTMLElement & { activeScreen?: string }).activeScreen).toBe("floor");
+    expect((shell(el) as HTMLElement & { activeScreen?: string }).activeScreen).toBe("order");
     expect(toast(el)!.message).toBe("Fired: 1 group.");
-    emit(shell(el), "screen-select", { screen: "order" });
-    await flush(el);
     expect(
       tabGrid(el)!.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!
         .orderId,
