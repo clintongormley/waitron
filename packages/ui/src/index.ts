@@ -52,6 +52,7 @@ export { WtDialog } from "./components/wt-dialog.js";
 export { WtModal } from "./components/wt-modal.js";
 export { WtUnsavedChanges } from "./components/wt-unsaved-changes.js";
 export { WtDeleteDialog, type DeleteDialogCopy } from "./components/wt-delete-dialog.js";
+export { WtReportDialog, type ReportDialogCopy } from "./components/wt-report-dialog.js";
 export { WtSwitch } from "./components/wt-switch.js";
 export { WtSlider } from "./components/wt-slider.js";
 export { WtTableToken } from "./components/wt-table-token.js";
