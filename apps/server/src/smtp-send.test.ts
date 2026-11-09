@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import dns from "node:dns";
+import { createAccountEmailSender, accountEmailFailure } from "./account-email.js";
+import { createAttendanceEmailSender } from "./attendance-email.js";
+import { createTextEmailSender } from "./text-email.js";
 import type { Socket } from "node:net";
 import { sendSmtpMessage, statusAsBefore } from "./smtp-send.js";
 import { smtpRig, smtpTestTls } from "./testing/smtp-settings-fixture.js";
@@ -373,14 +376,19 @@ it("reaches a configured bracketed IPv6 relay address", async () => {
 
 describe("SMTP hand-over", () => {
   it.each([
-    [false, false],
-    [true, false],
-    [false, true],
+    [false, false, false],
+    [true, false, false],
+    [false, true, false],
+    [false, false, true],
+    [false, true, true],
   ] as const)(
-    "distinguishes missing DATA from lost acknowledgement (TLS=%s pipelining=%s)",
-    async (secure, pipelining) => {
+    "distinguishes missing DATA from lost acknowledgement (TLS=%s pipelining=%s STARTTLS=%s)",
+    async (secure, pipelining, starttls) => {
       for (const reply of ["dropped-before-data", "lost-ack"] as const) {
-        const rig = await smtpRig(reply, secure, { pipelining });
+        const rig = await smtpRig(reply, secure, {
+          pipelining,
+          ...(starttls ? { starttls: true } : {}),
+        });
         try {
           expect(
             await sendSmtpMessage(rig.config, message, {
@@ -401,19 +409,24 @@ describe("SMTP hand-over", () => {
   );
 
   it.each([
-    [false, false],
-    [true, false],
-    [false, true],
+    [false, false, false],
+    [true, false, false],
+    [false, true, false],
+    [false, false, true],
+    [false, true, true],
   ] as const)(
-    "distinguishes deadlines before and after DATA (TLS=%s pipelining=%s)",
-    async (secure, pipelining) => {
+    "distinguishes deadlines before and after DATA (TLS=%s pipelining=%s STARTTLS=%s)",
+    async (secure, pipelining, starttls) => {
       for (const reply of ["silent-before-data", "silent"] as const) {
-        const rig = await smtpRig(reply, secure, { pipelining });
+        const rig = await smtpRig(reply, secure, {
+          pipelining,
+          ...(starttls ? { starttls: true } : {}),
+        });
         try {
           expect(
             await sendSmtpMessage(rig.config, message, {
               ca: smtpTestTls.caCertPem,
-              timeoutMs: reply === "silent" ? 2000 : 100,
+              timeoutMs: reply === "silent" || starttls ? 2000 : 100,
             }),
           ).toEqual(
             reply === "silent-before-data"
@@ -469,4 +482,97 @@ it("contains malformed authentication input before connecting", async () => {
   } finally {
     await rig.close();
   }
+});
+
+it("sends without login when a relay offers none despite URL credentials", async () => {
+  const rig = await smtpRig("no-login");
+  try {
+    const url = new URL(rig.config.url);
+    url.username = "operator";
+    url.password = "secret-smtp-password";
+    expect(await sendSmtpMessage({ ...rig.config, url: url.href }, message)).toEqual({
+      status: "sent",
+    });
+    expect(rig.authentications).toEqual([]);
+    expect(rig.messages).toHaveLength(1);
+  } finally {
+    await rig.close();
+  }
+});
+
+it("keeps a pipelined MAIL refusal when the relay closes immediately", async () => {
+  const rig = await smtpRig("mail-closing", false, { pipelining: true });
+  try {
+    expect(await sendSmtpMessage(rig.config, message)).toEqual({
+      status: "rejected",
+      serverRefused: true,
+      reason: "email.test_refused",
+    });
+    expect(rig.messages).toEqual([]);
+  } finally {
+    await rig.close();
+  }
+});
+
+it("reports a relay ending without a reply before the deadline", async () => {
+  const rig = await smtpRig("no-greeting");
+  try {
+    const sending = sendSmtpMessage(rig.config, message, { timeoutMs: 2000 });
+    await expect.poll(() => rig.connections).toBe(1);
+    for (const socket of rig.sockets) socket.end();
+    expect(await sending).toEqual({
+      status: "rejected",
+      serverRefused: false,
+      reason: "email.test_refused",
+    });
+  } finally {
+    await rig.close();
+  }
+});
+
+it("keeps a closed-port account send uncertain for the legacy caller", async () => {
+  const rig = await smtpRig("accepted");
+  await rig.close();
+  const send = createAccountEmailSender({ ...rig.config, timeZone: "Europe/Madrid" });
+  const failure = await send({
+    purpose: "password_reset",
+    email: "admin@example.test",
+    displayName: "Alex",
+    actionUrl: "https://example.test/reset",
+    expiresAt: "2026-11-10T12:00:00Z",
+    locale: "en",
+  }).catch(accountEmailFailure);
+  expect(failure).toEqual({
+    problem: "email.send_refused",
+    reason: "email.test_connection_refused",
+    uncertain: true,
+  });
+});
+
+it("keeps a closed-port attendance send unknown for the legacy caller", async () => {
+  const rig = await smtpRig("accepted");
+  await rig.close();
+  expect(
+    await createAttendanceEmailSender()({
+      smtp: rig.config,
+      recipient: "admin@example.test",
+      locale: "en",
+      businessDay: "2026-11-09",
+      venueName: "Test venue",
+      missingKinds: ["in"],
+    }),
+  ).toBe("unknown");
+});
+
+it("keeps a closed-port text send unknown for the legacy caller", async () => {
+  const rig = await smtpRig("accepted");
+  await rig.close();
+  expect(
+    await createTextEmailSender()({
+      smtp: rig.config,
+      recipient: "admin@example.test",
+      subject: "Test subject",
+      text: "Test body",
+    }),
+  ).toBe("unknown");
 });

@@ -5,6 +5,8 @@ import { mintSelfSignedServerCert } from "../self-signed-cert.js";
 
 type Reply =
   | "accepted"
+  | "no-login"
+  | "mail-closing"
   | "recipient-refused"
   | "data-refused"
   | "dropped-before-data"
@@ -71,10 +73,10 @@ export async function smtpRig(
           received();
           if (reply === "lost-ack") socket.destroy();
           else if (reply === "data-refused") socket.write("550 secret-smtp-password rejected\r\n");
-          else if (reply === "accepted") socket.write("250 accepted\r\n");
+          else if (reply === "accepted" || reply === "no-login") socket.write("250 accepted\r\n");
         } else if (line.startsWith("EHLO") || line.startsWith("HELO")) {
           socket.write(
-            `250-invoice-test\r\n${options.pipelining ? "250-PIPELINING\r\n" : ""}${options.starttls === true && !upgraded ? "250-STARTTLS\r\n" : ""}250 AUTH PLAIN\r\n`,
+            `250-invoice-test\r\n${options.pipelining ? "250-PIPELINING\r\n" : ""}${options.starttls === true && !upgraded ? "250-STARTTLS\r\n" : ""}${reply === "no-login" ? "250 OK" : "250 AUTH PLAIN"}\r\n`,
           );
         } else if (line.startsWith("AUTH PLAIN ")) {
           authentications.push(
@@ -85,6 +87,9 @@ export async function smtpRig(
               ? "535 secret-smtp-password refused\r\n"
               : "235 authenticated\r\n",
           );
+        } else if (line.startsWith("MAIL") && reply === "mail-closing") {
+          socket.end("421 relay shutting down\r\n");
+          return;
         } else if (line.startsWith("MAIL") && reply === "silent-before-data") {
           return;
         } else if (line.startsWith("MAIL") && reply === "login-required") {

@@ -87,7 +87,7 @@ export async function sendSmtpMessage(
             },
           });
           connection.on("error", (error) => resolve(failure(error)));
-          connection.on("end", () => resolve(failure(undefined)));
+          connection.on("end", () => setImmediate(() => resolve(failure(undefined))));
           const send = () => {
             // SMTPConnection reads the stream only after the server accepts DATA.
             stream = Readable.from(
@@ -102,7 +102,7 @@ export async function sendSmtpMessage(
             );
           };
           connection.connect(() => {
-            if (auth) {
+            if (auth && connection!.allowsAuth) {
               connection!.login(auth, (error) => (error ? resolve(failure(error)) : send()));
             } else send();
           });
