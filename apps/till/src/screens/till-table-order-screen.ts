@@ -595,7 +595,6 @@ function stationAllowsChange(row: TabLine): boolean {
   );
 }
 
-
 const isAnswer = (read: SplitSources | "failed" | null): read is SplitSources =>
   read !== null && read !== "failed";
 
@@ -1404,8 +1403,8 @@ export class TillTableOrderScreen extends LitElement {
     message: string;
     selection: ModifierConfirmDetail;
   } | null = null;
-  /** The open Sent window whose staged change was thrown away because another device changed its
-   * dish, which its footer says until the fields change again. */
+  /** The open Sent window whose staged change was thrown away because its dish's stored facts
+   * changed, which its footer says until the fields change again. */
   @state() private sentChangeOvertaken: NonNullable<
     TillTableOrderScreen["sentLinePending"]
   > | null = null;
@@ -2316,9 +2315,9 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Keeps the open Sent window's fields on the dish as it is stored. Once the dish can no longer be
-   * changed, or another device changes it, what the fields staged is thrown away and they start
-   * again from the dish as it is then, so Change dish never sends older facts over newer ones. Runs
-   * last in `willUpdate`, after everything the check reads is current. */
+   * changed, or its stored facts change, what the fields staged is thrown away and they start again
+   * from the dish as it is then. Runs last in `willUpdate`, after everything the check reads is
+   * current. */
   #followSentChange(): void {
     const seed = this.#sentChangeSeed;
     if (this.sentChange === null && seed === undefined) return;
