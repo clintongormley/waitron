@@ -15,7 +15,7 @@ import {
 import { createRequest, LiveConnection } from "@waitron/dashboard-kit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { mountPublicModulePage } from "./public-module-page.js";
-import { createFreshSignInGate, type FreshSignInGate } from "./api/fresh-sign-in.js";
+import { createFreshSignInGate } from "./api/fresh-sign-in.js";
 import type { FreshSignInDialog } from "./widgets/fresh-sign-in-dialog.js";
 import { DashboardApi } from "./api/client.js";
 import { diag } from "./diagnostics.js";
@@ -53,17 +53,16 @@ function startSessionDashboard(): void {
   installErrorCapture(window, diag);
 
   const underlyingEpoch = createSessionEpoch();
-  let freshSignIn: FreshSignInGate | undefined;
   const epoch = {
     current: underlyingEpoch.current,
     advance: () => {
-      freshSignIn?.cancel();
+      freshSignIn.cancel();
       return underlyingEpoch.advance();
     },
   };
   const sessionGeneration = epoch.current;
   const signals = createSessionSignals({ sessionGeneration });
-  freshSignIn = createFreshSignInGate({
+  const freshSignIn = createFreshSignInGate({
     sessionGeneration,
     prompt: async (signal) => {
       const shell = app.querySelector("dashboard-app")!;
