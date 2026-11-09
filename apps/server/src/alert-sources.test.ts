@@ -998,6 +998,22 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
     expect(await readAlerts()).toEqual([]);
   });
 
+  it("stops counting a job once a resend of it has printed on another printer", async () => {
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
+    const otherId = await seedPrinter({ locationId, name: "Terrace printer" });
+    const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
+
+    const moved = await withTransaction(
+      suite.db,
+      async (tx) =>
+        (await resendPrintJob(tx, failed, { printerId: otherId, payload: Uint8Array.of(27, 64) }))
+          .jobId,
+    );
+    await setStatus(moved, { status: "done" });
+    expect(await readAlerts()).toEqual([]);
+  });
+
   it("still counts a job whose resend also ran out of attempts, and the resend beside it", async () => {
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });

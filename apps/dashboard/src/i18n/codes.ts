@@ -915,6 +915,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That job is still waiting to print or retry automatically",
     es: "Ese trabajo sigue pendiente de impresión o reintento automático",
   },
+  "print_job.own_printer_only": {
+    en: "This printout can only be reprinted on its own printer. Choose that printer.",
+    es: "Esta impresión solo se puede reimprimir en su propia impresora. Elige esa impresora.",
+  },
+  "print_job.printer_unsuitable": {
+    en: "That printer is disabled, deleted or narrower than this printout. Choose another printer.",
+    es: "Esa impresora está deshabilitada, eliminada o es más estrecha que esta impresión. Elige otra impresora.",
+  },
   "print_job.not_found": {
     en: "That print job no longer exists",
     es: "Ese trabajo de impresión ya no existe",

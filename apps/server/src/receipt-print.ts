@@ -176,7 +176,7 @@ async function readDevicePrinters(
 }
 
 /** Use the filed issuer where available and the current optional trim, address and logo. */
-async function buildReceiptBytes(
+export async function buildReceiptBytes(
   tx: Transaction,
   cfg: Pick<TradingContext, "practiceMode">,
   ticket: TillSaleResult,

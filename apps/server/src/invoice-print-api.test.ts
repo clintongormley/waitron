@@ -42,7 +42,7 @@ import {
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
 } from "./invoice-delivery.js";
-import { endInvoicePrintDeliveries } from "./invoice-print.js";
+import { endInvoicePrintDeliveries, resendInvoicePrintJob } from "./invoice-print.js";
 import { mountPrintApi } from "./print-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { deliverDemoPrinterJobs } from "./demo-printer.js";
@@ -794,6 +794,40 @@ describe("management invoice receipt resends", () => {
       ).toMatchObject({ status: "sent" });
     },
   );
+
+  it("reserves a full invoice's delivery for its receipt laid out on another printer", async () => {
+    const ctx = await setup();
+    await ctx.result({ status: "failed", error: "unsafe", invoiceClaim: await held(ctx) });
+    const other = await withTransaction(suite.db, (tx) =>
+      createPrinter(tx, { name: "Bar", transport: "network_tcp", host: "bar.test" }),
+    );
+    const payload = new Uint8Array([27, 64, 66]);
+    const { jobId } = await withTransaction(suite.db, (tx) =>
+      resendInvoicePrintJob(tx, ctx.job.jobId, "staff", ctx.now(), undefined, {
+        printerId: other.id,
+        payload,
+      }),
+    );
+    const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+    expect(job).toMatchObject({
+      printerId: other.id,
+      payload,
+      saleId: ctx.sale.saleId,
+      receiptCopy: false,
+      resendOf: ctx.job.jobId,
+    });
+    const [delivery] = await suite.db
+      .select()
+      .from(invoiceDeliveries)
+      .where(eq(invoiceDeliveries.printJobId, jobId));
+    expect(delivery).toMatchObject({
+      saleId: ctx.sale.saleId,
+      medium: "receipt",
+      designation: "original",
+      status: "queued",
+      generation: 2,
+    });
+  });
 
   it("refuses resending completed original bytes and leaves its history unchanged", async () => {
     const ctx = await setup();
