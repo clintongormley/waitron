@@ -65,6 +65,17 @@ extra SQL after one complete trigger per breakpoint, refuses trigger SQL for emp
 the journal/date/rollback checks, and documents that rebuilds run serially. No SQL-origin verifier
 or concurrency controller is added.
 
+**As built after A790, 2026-11-09:** #2455 landed as `650929c73215f62ef5a8f0c21b2be581bd30ab4c`
+before 1a. Under the watcher’s 11:20 and 11:30 decisions, its six tables are folded into core’s
+starting migration with the earlier in-flight changes, then `--fold-generated` and its API are
+removed. The one-off rebuild uses the already-approved `de3a1d847e^` generated input and current
+TypeScript schema, retaining #2536’s final trigger source; no journal or snapshot is hand edited.
+The fresh-base protection comparison has the same 246 changed object lines as before, with no
+missing or extra object. The steady backup target is identical between that base and this slice;
+its pin is `7580bd887fa98bca71a5c97cc7f6cfe2a52d52b7f661bcfadd897849eb253155` after A790.
+The historical fold instructions below describe the one-off build; later callers use only
+`rebuild --set <name>` and `rebuild-check --set <name>`.
+
 ## Words used here
 
 - **Migration set:** one folder of drizzle migration files with its own journal table; the eight

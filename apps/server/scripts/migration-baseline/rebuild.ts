@@ -38,7 +38,6 @@ export interface RebuildOptions {
   readonly epochFile?: string;
   readonly generate?: Generate;
   readonly mode?: "write" | "check";
-  readonly foldGenerated?: string;
 }
 export interface RebuildResult {
   readonly outcome: "rebuilt" | "unchanged" | "epoch-only";
@@ -109,25 +108,17 @@ export function readTriggers(file: string): string | null {
   }
   return text;
 }
-export function folderProblems(
-  files: readonly string[],
-  populated: boolean,
-  foldGenerated?: string,
-): string[] {
+export function folderProblems(files: readonly string[], populated: boolean): string[] {
   const allowed = [
     "meta/_journal.json",
     ...(populated ? ["0000_baseline.sql", "meta/0000_snapshot.json"] : []),
   ];
-  if (foldGenerated !== undefined)
-    for (const tag of foldGenerated.split(",")) {
-      allowed.push(`${tag}.sql`, `meta/${tag.slice(0, 4)}_snapshot.json`);
-    }
   return [
     ...files
       .filter((file) => !allowed.includes(file))
       .map(
         (file) =>
-          `drizzle/${file} is not the starting migration; a rebuild would delete it. Move hand-written SQL to triggers/<set>.sql, or pass --fold-generated <tag> for a migration drizzle-kit generated.`,
+          `drizzle/${file} is not the starting migration; a rebuild would delete it. Move hand-written SQL to triggers/<set>.sql.`,
       ),
     ...allowed.filter((file) => !files.includes(file)).map((file) => `drizzle/${file} is missing`),
   ];
@@ -192,40 +183,6 @@ export const runDrizzleKit: Generate = async ({ packageDir, configPath }) => {
     };
   }
 };
-function checkFold(set: RebuildSet, journal: Journal, fold: string): void {
-  const tags = fold.split(",");
-  if (tags.includes("0000_baseline")) throw new Error("Cannot fold 0000_baseline");
-  const selected = journal.entries.slice(1);
-  if (
-    !isDeepStrictEqual(
-      selected.map((e) => e.tag),
-      tags,
-    )
-  )
-    throw new Error(`${fold} must name the generated chain through the last entry`);
-  for (const [i, entry] of selected.entries()) {
-    if (entry.idx < 1) throw new Error(`${entry.tag}: idx must be at least 1`);
-    const previous = journal.entries[i];
-    if (previous === undefined) throw new Error(`${entry.tag}: no previous snapshot`);
-    const before = parse<Snapshot>(
-      join(set.folder, `meta/${String(previous.idx).padStart(4, "0")}_snapshot.json`),
-    );
-    const after = parse<Snapshot>(
-      join(set.folder, `meta/${String(entry.idx).padStart(4, "0")}_snapshot.json`),
-    );
-    if (after.prevId !== before.id) throw new Error(`${entry.tag}: snapshot prevId does not match`);
-    if (isDeepStrictEqual(after.tables, before.tables))
-      throw new Error(
-        `${entry.tag}: not drizzle-generated: its snapshot does not change the schema`,
-      );
-    if (
-      splitStatements(read(join(set.folder, `${entry.tag}.sql`))).some(
-        (s) => createdObject(s)?.kind === "trigger",
-      )
-    )
-      throw new Error(`${entry.tag} holds a CREATE TRIGGER`);
-  }
-}
 function withoutId(snapshot: Snapshot): unknown {
   const rest: Partial<Snapshot> = { ...snapshot };
   delete rest.id;
@@ -237,7 +194,6 @@ export async function rebuildBaseline({
   epochFile = EPOCH_FILE,
   generate = runDrizzleKit,
   mode = "write",
-  foldGenerated,
 }: RebuildOptions): Promise<RebuildResult> {
   const epochText = read(epochFile),
     epoch = JSON.parse(epochText) as Epoch;
@@ -245,13 +201,10 @@ export async function rebuildBaseline({
     populated = entry !== undefined;
   if (!populated && !epoch.emptySets.includes(set.name))
     throw new Error(`${set.name} has no entry in the epoch`);
-  if (foldGenerated?.split(",").includes("0000_baseline"))
-    throw new Error("Cannot fold 0000_baseline");
-  const problems = folderProblems(filesUnder(set.folder), populated, foldGenerated);
+  const problems = folderProblems(filesUnder(set.folder), populated);
   if (problems.length) throw new Error(`${set.name}: ${problems.join("\n")}`);
   const oldJournal = parse<Journal>(join(set.folder, "meta/_journal.json"));
-  if (foldGenerated !== undefined) checkFold(set, oldJournal, foldGenerated);
-  else if (oldJournal.entries.length !== (populated ? 1 : 0))
+  if (oldJournal.entries.length !== (populated ? 1 : 0))
     throw new Error(`${set.name}: journal holds more than the starting migration`);
   const triggerFile = triggerFileFor(set);
   const unexpected = filesUnder(dirname(triggerFile)).filter((file) => file !== `${set.name}.sql`);
@@ -312,7 +265,6 @@ export async function rebuildBaseline({
     )
       differences.push("meta/0000_snapshot.json differs");
     if (journalChanged) differences.push("meta/_journal.json differs");
-    if (foldGenerated !== undefined) differences.push(`fold ${foldGenerated}`);
     const rebuild = differences.length > 0;
     const oldWhen = oldJournal.entries[0]?.when;
     if (oldWhen === undefined) throw new Error(`${set.name}: missing starting journal entry`);

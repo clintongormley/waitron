@@ -3375,11 +3375,9 @@ report as well, as above.) The root guard runs `rebuild-check` for every set in 
 commands do not run there. Their tests run in `apps/server`'s suite, including one real drizzle-kit
 determinism case.
 
-- **`rebuild --set <name> [--fold-generated <tag>]`** generates into a temporary folder, appends
+- **`rebuild --set <name>`** generates into a temporary folder, appends
   `<package>/triggers/<set>.sql`, replaces the starting SQL, snapshot and journal, and updates the
-  epoch's date and hash. It refuses extra migration files before generation; `--fold-generated`
-  permits a named generated chain only when its snapshots change the schema and its SQL creates
-  no trigger. A refusal leaves the set and epoch untouched. The new journal date is at least one
+  epoch's date and hash. It refuses extra migration files before generation. A refusal leaves the set and epoch untouched. The new journal date is at least one
   millisecond after every old entry, or the generation time if later. A second run changes no byte.
   **`rebuild-check --set <name>`** compares without writing the set or epoch. `rebuild` exits 0
   on success and 2 on refusal; `rebuild-check` exits 0 unchanged, 1 if it would change anything,

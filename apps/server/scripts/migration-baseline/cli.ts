@@ -4,7 +4,7 @@
 // Usage: pnpm --filter @waitron/server migration-baseline preserve --reference <absolute dir> --set <name> --from <old-set,...>
 //        pnpm --filter @waitron/server migration-baseline controls --reference <absolute dir> --out <absolute dir>
 //        pnpm --filter @waitron/server migration-baseline copies --dist <absolute dir> --image-root <absolute dir> --report <absolute file>
-//        pnpm --filter @waitron/server migration-baseline rebuild --set <name> [--fold-generated <tag,...>]
+//        pnpm --filter @waitron/server migration-baseline rebuild --set <name>
 //        pnpm --filter @waitron/server migration-baseline rebuild-check --set <name>
 import { existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
@@ -18,20 +18,15 @@ const USAGE =
   "Usage: preserve --reference <absolute dir> --set <name> --from <old-set,...>\n" +
   "       controls --reference <absolute dir> --out <absolute dir>\n" +
   "       copies --dist <absolute dir> --image-root <absolute dir> --report <absolute file>\n" +
-  "       rebuild --set <name> [--fold-generated <tag,...>]\n" +
-  "       rebuild-check --set <name>\n" +
-  "--fold-generated is temporary for #2594, #2536 and #2455 only. Retire it after those in-flight migrations are folded; all later schema changes rebuild the starting migration.";
+  "       rebuild --set <name>\n" +
+  "       rebuild-check --set <name>";
 
-function flags(
-  args: readonly string[],
-  required: readonly string[],
-  optional: readonly string[] = [],
-): Map<string, string> {
+function flags(args: readonly string[], required: readonly string[]): Map<string, string> {
   const found = new Map<string, string>();
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index] ?? "";
     const value = args[index + 1];
-    if (![...required, ...optional].includes(name) || value === undefined || found.has(name)) {
+    if (!required.includes(name) || value === undefined || found.has(name)) {
       throw new Error(USAGE);
     }
     found.set(name, value);
@@ -96,14 +91,13 @@ export async function runCli(
   if (command === "controls") return controls(rest, print);
   if (command === "copies") return copies(rest, print);
   if (command === "rebuild" || command === "rebuild-check") {
-    const found = flags(rest, ["--set"], command === "rebuild" ? ["--fold-generated"] : []);
+    const found = flags(rest, ["--set"]);
     const name = found.get("--set") as string;
     const set = rebuildSets().find((candidate) => candidate.name === name);
     if (set === undefined) throw new Error(`The manifest has no set named ${name}`);
     const result = await rebuildBaseline({
       set,
       mode: command === "rebuild" ? "write" : "check",
-      foldGenerated: found.get("--fold-generated"),
     });
     if (command === "rebuild-check" && result.outcome !== "unchanged") {
       print([`would change ${name}`, ...result.differences].join("\n"));

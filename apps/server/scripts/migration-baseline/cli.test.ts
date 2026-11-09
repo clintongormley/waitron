@@ -30,11 +30,11 @@ describe("the migration-baseline command line", () => {
       );
     },
   );
-  it("rebuild takes only its required and optional flags", async () => {
+  it("rebuild refuses unknown and retired fold flags", async () => {
     await expect(runCli(["rebuild"], () => {})).rejects.toThrow("Usage:");
     await expect(
-      runCli(["rebuild", "--set", "nowhere", "--fold-generated", "0001_x"], () => {}),
-    ).rejects.toThrow("The manifest has no set named nowhere");
+      runCli(["rebuild", "--set", "core", "--fold-generated", "0001_x"], () => {}),
+    ).rejects.toThrow("Usage:");
     await expect(runCli(["rebuild", "--set", "core", "--bogus", "x"], () => {})).rejects.toThrow(
       "Usage:",
     );

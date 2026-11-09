@@ -96,20 +96,6 @@ function bytes(f: ReturnType<typeof fixture>) {
       .sort(),
   ];
 }
-function fold(f: ReturnType<typeof fixture>, tag = "0001_more") {
-  const j = journal();
-  j.entries.push({ idx: 1, version: "6", tag, when: 2000, breakpoints: true });
-  json(join(f.set.folder, "meta/_journal.json"), j);
-  put(
-    join(f.set.folder, `${tag}.sql`),
-    "ALTER TABLE x ADD value text;--> statement-breakpoint\nALTER TABLE x ADD other text;",
-  );
-  json(join(f.set.folder, "meta/0001_snapshot.json"), {
-    ...snapshot("next", { x: { columns: { id: {}, value: {}, other: {} } } }),
-    prevId: "old",
-  });
-}
-
 describe("rebuilding starting migrations", () => {
   it("real drizzle-kit gives the same migration whatever the folder held, and nothing changes the second time", async () => {
     const bookings = rebuildSets().find((set) => set.name === "bookings");
@@ -256,16 +242,16 @@ describe("rebuilding starting migrations", () => {
     },
   );
   it.each([1500, 5000])(
-    "folds a generated migration and dates it after previous entries (%i)",
+    "dates a rebuilt migration after its previous entry (%i)",
     async (generatedWhen) => {
       const f = fixture();
-      fold(f);
+      json(join(f.set.folder, "meta/_journal.json"), journal(2000));
       const generate: Generate = async (input) => {
         const run = await f.generate(input);
         json(join(input.outDir, "meta/_journal.json"), journal(generatedWhen));
         return run;
       };
-      const result = await rebuildBaseline({ ...f, generate, foldGenerated: "0001_more" });
+      const result = await rebuildBaseline({ ...f, generate });
       const expectedWhen = generatedWhen === 1500 ? 2001 : 5000;
       expect(result.when).toBe(expectedWhen);
       expect(
@@ -281,39 +267,6 @@ describe("rebuilding starting migrations", () => {
       ]);
     },
   );
-  it.each([
-    ["unchanged", "does not change the schema"],
-    ["trigger", "holds a CREATE TRIGGER"],
-    ["prevId", "prevId"],
-    ["missing", "snapshot"],
-    ["baseline", "0000_baseline"],
-    ["not last", "last entry"],
-  ])("refuses a fold with %s", async (bad, message) => {
-    const f = fixture();
-    fold(f);
-    let tag = "0001_more";
-    if (bad === "unchanged")
-      json(join(f.set.folder, "meta/0001_snapshot.json"), { ...snapshot("next"), prevId: "old" });
-    if (bad === "trigger") put(join(f.set.folder, `${tag}.sql`), TRIGGER.toLowerCase());
-    if (bad === "prevId")
-      json(join(f.set.folder, "meta/0001_snapshot.json"), {
-        ...snapshot("next", {}),
-        prevId: "wrong",
-      });
-    if (bad === "missing") rmSync(join(f.set.folder, "meta/0001_snapshot.json"));
-    if (bad === "baseline") tag = "0000_baseline";
-    if (bad === "not last") {
-      const j = journal();
-      j.entries.push(
-        { idx: 1, version: "6", tag, when: 2000, breakpoints: true },
-        { idx: 2, version: "6", tag: "0002_more", when: 3000, breakpoints: true },
-      );
-      json(join(f.set.folder, "meta/_journal.json"), j);
-    }
-    const before = bytes(f);
-    await expect(rebuildBaseline({ ...f, foldGenerated: tag })).rejects.toThrow(message);
-    expect(bytes(f)).toEqual(before);
-  });
   it("restores the migration files when writing the epoch is refused", async () => {
     const f = fixture();
     const before = bytes(f);
