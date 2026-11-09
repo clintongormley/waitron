@@ -258,10 +258,10 @@ function firstSetupErrorKey(error: unknown): StringKey | undefined {
     return "shell.first_setup.series_minute_taken";
   return FIRST_SETUP_ERROR_MESSAGES[code];
 }
-/** Whether the page may ask the box what Start again would delete; the box decides the rest. */
 /** The box refused the stop from this page or over this connection, which deletes nothing. */
 const stopNotAccepted = (code: unknown) =>
   code === "setup.owner_required" || code === "setup.connection_insecure";
+/** Whether the page may ask the box what Start again would delete; the box decides the rest. */
 const wipeOffered = (inspection: FirstSetupInspection) =>
   (inspection.pair === "valid" || inspection.pair === "repairable") &&
   inspection.revision !== null &&
