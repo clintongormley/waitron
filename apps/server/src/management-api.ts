@@ -1161,7 +1161,6 @@ export function mountManagementApi(
       }
       const delivery = await withTransaction(deps.db, async (tx) => {
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
-        await deps.assertAccountMailPrimary?.();
         await requireFreshManagementSignIn(tx, sessionId);
         return queueInvitationAnswer(tx, deps, {
           managementSessionId: sessionId,
@@ -1252,7 +1251,6 @@ export function mountManagementApi(
       }
       const delivery = await withTransaction(deps.db, async (tx) => {
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
-        await deps.assertAccountMailPrimary?.();
         await requireFreshManagementSignIn(tx, sessionId);
         await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
         return queueInvitationAnswer(tx, deps, {
@@ -1279,7 +1277,6 @@ export function mountManagementApi(
       }
       const delivery = await withTransaction(deps.db, async (tx) => {
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
-        await deps.assertAccountMailPrimary?.();
         await requireFreshManagementSignIn(tx, sessionId);
         await reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId });
         return queueInvitationAnswer(tx, deps, {
