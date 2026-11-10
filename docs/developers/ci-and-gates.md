@@ -4925,10 +4925,12 @@ seat's PERMISSIONS, not on Codex.
 ### A migration can fail on a box that already has a trigger naming what it changes.
 
 **A migration can fail on a box that already has a trigger naming what it changes.** A rebuild of
-a table another set's trigger BODY reads still fails. Guard: `scripts/migration-upgrade.test.ts`,
-weaker than its name — its rows are synthetic and counted, not compared, and it installs today's
-change-feed list, and today's append-only list less the tables the previous step lacked, at every
-step. Receipt:
+a table another table's trigger BODY reads still fails; from go-live such a migration drops
+and recreates those triggers itself
+([rule](conventions-data.md#from-go-live-a-rebuild-drops-and-recreates-every-trigger-whose-body-reads-the-table)).
+Guard: `scripts/migration-upgrade.test.ts`, weaker than its name — its rows are synthetic and
+counted, not compared, and it installs today's change-feed list, and today's append-only list less
+the tables the previous step lacked, at every step. Receipt:
 [ci-and-gates.md](ci-and-gates.md#a-migration-can-fail-on-a-database-that-already-carries-earlier-migrations-and-what-boot-installed-after-them).
 
 ### The upgrade test makes its scratch directory under `scratchParent()` (`scripts/scratch-dir.mjs`), which picks `/dev/shm` when it exists, because every commit waits for the disk.
