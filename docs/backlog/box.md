@@ -724,11 +724,13 @@ and the real screen, network and disk adapters come with the Linux pull request.
   the adapter. The waits are in `NETWORK_TIMINGS_MS`.
 
 The development recipe and `recipe-setup` rig case were run through TCG emulation on an arm64
-Mac with Docker Desktop on 2026-11-10. The entry point implements only that case; the other
-declared rig cases still need their runners. Firmware/TPM checks still need an appropriate
+Mac with Docker Desktop on 2026-11-10. Later that day,
+[B3-13](https://github.com/clintongormley/waitron/pull/2737) added `installed-refusals` and
+`installed-setup`, including USB-source installation and two disk-only starts. The other
+declared rig cases still need their runners. TPM/Secure Boot checks still need an appropriate
 Linux/KVM/OVMF/swtpm environment or the hardware.
-Still waiting for the installed-root and firmware/TPM work: encrypted recipe/dracut integration,
-firmware disk fixtures and the real observation, mount and cleanup adapters (until then the disk-key store's fixed entry points
+Still waiting for encrypted installed-root and firmware/TPM work: encrypted recipe/dracut integration,
+TPM/Secure Boot disk fixtures and the real observation, mount and cleanup adapters (until then the disk-key store's fixed entry points
 refuse); the root-owned
 check run as root; real power cuts; seal experiments (a)–(i) and every slice-1 measurement.
 PR 2 left for later, from its plan's "Out": the preboot screen and the words for the `explain`
@@ -1142,7 +1144,7 @@ client. No screen calls them yet.
 - The screen's words for the `letter` and `length` refusals, in Spanish and English, come with the
   preboot screen.
 - The key-use record and the startup-fingerprint check before resealing wait for the encrypted
-  installed root and first-start service; the development recipe does not build either.
+  installed root and its key-sealing startup route; the development recipe provides unencrypted startup only.
 - `disk-key.mjs`'s store (reading the record, and writing the key with `writeFile` and `rename`)
   and `wifi-record.mjs`'s reader check their folder and then use the file by path, so a root
   process can swap the folder in between. The installed host's Linux adapters must either open relative to
