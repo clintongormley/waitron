@@ -3,12 +3,35 @@ import { createDiagnosticsLog } from "./log.js";
 import { createInstrumentedFetch, maskPath } from "./instrument-fetch.js";
 
 describe("maskPath", () => {
+  it.each([
+    ["/api/persons/john.smith", "/api/:id/:id"],
+    [
+      "/management-api/products/jane%40example.test/editor?token=secret#note",
+      "/management-api/products/:id/editor",
+    ],
+    ["/management-api/products/menus/editor", "/management-api/products/:id/editor"],
+    ["/api/unknown/guest-name", "/api/:id/:id"],
+    ["/private/guest-name", "/:id/:id"],
+    ["http://[", ":unparseable"],
+    [":unparseable", ":unparseable"],
+  ])("keeps only a complete known template for %s", (path, expected) => {
+    expect(maskPath(path)).toBe(expected);
+  });
   it("masks uuid and numeric segments", () => {
     expect(maskPath("/api/sales/123")).toBe("/api/sales/:id");
     expect(maskPath("/management-api/persons/2f1c8e2a-0000-4000-8000-000000000000")).toBe(
-      "/management-api/persons/:id",
+      "/management-api/:id/:id",
     );
-    expect(maskPath("/management-api/layout")).toBe("/management-api/layout");
+    expect(maskPath("/management-api/layout")).toBe("/management-api/:id");
+  });
+  it.each([
+    "/management-api/session/me",
+    "/management-api/locales",
+    "/management-api/alerts",
+    "/management-api/disk-stop",
+    "/management-api/session/me/profile",
+  ])("names the fixed dashboard request %s without its query", (path) => {
+    expect(maskPath(path + "?email=private@example.test#note")).toBe(path);
   });
 });
 
@@ -68,7 +91,7 @@ describe("createInstrumentedFetch", () => {
     await f(new URL("http://box/api/items/7"));
     expect(seenHeader).toMatch(/^[0-9a-f-]{36}$/i); // a crypto.randomUUID
     const end = log.snapshot().at(-1)!;
-    expect(end.fields).toMatchObject({ method: "GET", path: "/api/items/:id", status: 200 });
+    expect(end.fields).toMatchObject({ method: "GET", path: "/api/:id/:id", status: 200 });
     expect(end.fields.requestId).toBe(seenHeader);
   });
 
@@ -80,22 +103,20 @@ describe("createInstrumentedFetch", () => {
       makeId: () => "rid-3",
     });
     await f("/api/users/5");
-    expect(log.snapshot().at(-1)!.fields.path).toBe("/api/users/:id");
+    expect(log.snapshot().at(-1)!.fields.path).toBe("/api/:id/:id");
   });
 
-  it("keeps the raw path when the url cannot be parsed", async () => {
+  it("does not record an unparseable URL", async () => {
     const log = createDiagnosticsLog();
     const base = vi.fn(async () => new Response("{}", { status: 200 }));
     const f = createInstrumentedFetch(base as unknown as typeof fetch, log, {
       makeId: () => "rid-4",
     });
-    // `new URL("http://[", "http://local")` genuinely throws (invalid IPv6 host), so the raw-path
-    // fallback keeps the unparsed string.
     const raw = "http://[";
     await f(raw);
     const end = log.snapshot().at(-1)!;
     expect(end.fields.requestId).toBe("rid-4");
-    expect(end.fields.path).toBe(raw);
+    expect(end.fields.path).toBe(":unparseable");
   });
 
   it("stringifies an input that is neither a string nor a URL", async () => {
@@ -110,7 +131,7 @@ describe("createInstrumentedFetch", () => {
       toString: () => "http://box/api/persons/2f1c8e2a-0000-4000-8000-000000000000",
     };
     await f(urlish as unknown as URL);
-    expect(log.snapshot().at(-1)!.fields.path).toBe("/api/persons/:id");
+    expect(log.snapshot().at(-1)!.fields.path).toBe("/api/:id/:id");
   });
 
   it("preserves a pre-existing content-type header while adding x-request-id", async () => {
@@ -193,7 +214,7 @@ describe("createInstrumentedFetch", () => {
     const end = log.snapshot().at(-1)!;
     expect(end.fields).toMatchObject({
       method: "DELETE",
-      path: "/api/persons/:id",
+      path: "/api/:id/:id",
       requestId: "rid-req",
     });
   });

@@ -190,3 +190,93 @@ describe("watchBuild when fetch followed a redirect", () => {
     expect(onChange).toHaveBeenCalledWith("b");
   });
 });
+
+describe("the first build for a downloaded report", () => {
+  it("exposes the first valid same-origin build once, while preserving change detection", async () => {
+    const first: string[] = [],
+      changes: string[] = [];
+    const fetch = watchBuild(serving("invalid", "abcdef0", "v1.2.3") as typeof globalThis.fetch, {
+      origin: ORIGIN,
+      onFirstBuild: (build: string) => first.push(build),
+      onChange: (build) => changes.push(build),
+    });
+    await fetch("/api/node");
+    await fetch("/api/node");
+    await fetch("/api/node");
+    expect(first).toEqual(["abcdef0"]);
+    expect(changes).toEqual(["abcdef0"]);
+  });
+
+  it("still exposes a valid build after an earlier invalid build already caused a change notice", async () => {
+    const first: string[] = [],
+      changes: string[] = [];
+    const fetch = watchBuild(serving("a", "b", "abcdef0", "fedcba9") as typeof globalThis.fetch, {
+      origin: ORIGIN,
+      onFirstBuild: (build) => first.push(build),
+      onChange: (build) => changes.push(build),
+    });
+    for (let i = 0; i < 4; i++) await fetch("/api/node");
+    expect(first).toEqual(["abcdef0"]);
+    expect(changes).toEqual(["b"]);
+  });
+
+  it.each(["A123456", "john.smith", "v1.2.3-" + "a".repeat(58), "abcdef"])(
+    "keeps %s out of the report build",
+    async (build) => {
+      const first: string[] = [];
+      const fetch = watchBuild(serving(build, "a".repeat(64)) as typeof globalThis.fetch, {
+        origin: ORIGIN,
+        onFirstBuild: (value) => first.push(value),
+        onChange: () => {},
+      });
+      await fetch("/api/node");
+      expect(first).toEqual([]);
+      await fetch("/api/node");
+      expect(first).toEqual(["a".repeat(64)]);
+    },
+  );
+
+  it("ignores a foreign request and a redirect to another origin before accepting its own build", async () => {
+    const redirected = new Response("{}", { headers: { "x-waitron-build": "abcdef0" } });
+    Object.defineProperty(redirected, "url", { value: "https://elsewhere.test/api/node" });
+    const base = vi
+      .fn()
+      .mockResolvedValueOnce(redirected)
+      .mockResolvedValueOnce(redirected)
+      .mockResolvedValueOnce(new Response("{}", { headers: { "x-waitron-build": "development" } }));
+    const first: string[] = [];
+    const fetch = watchBuild(base as typeof globalThis.fetch, {
+      origin: ORIGIN,
+      onChange: () => {},
+      onFirstBuild: (build: string) => first.push(build),
+    });
+    await fetch("https://elsewhere.test/api/node");
+    await fetch("/redirect");
+    expect(first).toEqual([]);
+    await fetch("/api/node");
+    expect(first).toEqual(["development"]);
+  });
+
+  it("queues the first observer and keeps its throw separate from the answered request", async () => {
+    const tasks: (() => void)[] = [];
+    vi.stubGlobal("queueMicrotask", (task: () => void) => tasks.push(task));
+    try {
+      const failure = new Error("report observer failed");
+      const response = new Response("{}", { headers: { "x-waitron-build": "v1.2.3" } });
+      const fetch = watchBuild(vi.fn(async () => response) as typeof globalThis.fetch, {
+        origin: ORIGIN,
+        onChange: () => {},
+        onFirstBuild: () => {
+          throw failure;
+        },
+      });
+      await expect(fetch("/api/node")).resolves.toBe(response);
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0]).toThrow(failure);
+      await expect(fetch("/api/node")).resolves.toBe(response);
+      expect(tasks).toHaveLength(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

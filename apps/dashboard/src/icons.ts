@@ -8,6 +8,8 @@ import { DROPDOWN_ICONS, NUTRITION_ICONS } from "@waitron/ui";
  */
 export const DASHBOARD_ICONS: Record<string, string> = {
   ...NUTRITION_ICONS,
+  "report-problem":
+    "M2 2H14V11H7L3 14V11H2ZM3.5 3.5V9.5H4.5V11L6.5 9.5H12.5V3.5ZM7.25 4.5H8.75V7.5H7.25ZM7.25 8.5H8.75V10H7.25Z",
   pencil: "M2 10.5 10.5 2 14 5.5 5.5 14H2ZM3.5 11.2v1.3h1.3l7.1-7.1-1.3-1.3Z",
   clock:
     "M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 1.5a5.5 5.5 0 1 1 0 11A5.5 5.5 0 0 1 8 2.5ZM7.25 4H8.75V7.5L11 9 10.2 10.2 7.25 8.25Z",

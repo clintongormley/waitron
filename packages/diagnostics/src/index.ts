@@ -5,3 +5,8 @@ export type { ErrorTarget } from "./error-capture.js";
 export { createInstrumentedFetch, maskPath } from "./instrument-fetch.js";
 export { BUILD_CHANGED_EVENT, watchBuild } from "./build-watch.js";
 export type { BuildWatchOptions } from "./build-watch.js";
+
+export { reportDescriptionValid } from "./report-description.js";
+
+export { captureClientReport, renderClientReport } from "./client-report.js";
+export type { ClientReportEnvironment, ClientReportSnapshot } from "./client-report.js";

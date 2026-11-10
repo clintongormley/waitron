@@ -18,7 +18,7 @@ import { mountPublicModulePage } from "./public-module-page.js";
 import { createFreshSignInGate } from "./api/fresh-sign-in.js";
 import type { FreshSignInDialog } from "./widgets/fresh-sign-in-dialog.js";
 import { DashboardApi } from "./api/client.js";
-import { diag } from "./diagnostics.js";
+import { diag, setReportBuild } from "./diagnostics.js";
 import { createSessionEpoch, createSessionSignals } from "./session-signals.js";
 import { DASHBOARD_ICONS } from "./icons.js";
 import "./dashboard-app.js";
@@ -44,6 +44,7 @@ function startSessionDashboard(): void {
   const instrumentedFetch = createInstrumentedFetch(
     watchBuild(fetch, {
       origin: location.origin,
+      onFirstBuild: setReportBuild,
       onChange: () => window.dispatchEvent(new Event(BUILD_CHANGED_EVENT)),
     }),
     diag,

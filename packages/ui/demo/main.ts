@@ -12,6 +12,7 @@ import "../src/components/wt-button.js";
 import "../src/components/wt-card.js";
 import "../src/components/wt-disclosure.js";
 import "../src/components/wt-dialog.js";
+import "../src/components/wt-report-dialog.js";
 import "../src/components/wt-modal.js";
 import "../src/components/wt-form-actions.js";
 import "../src/components/wt-form-error-summary.js";
@@ -283,7 +284,9 @@ const panel = (theme: "light" | "dark") => `
     <div class="row" style="margin-top:16px">
       <wt-button class="open-dialog">Open dialog</wt-button>
       <wt-button class="open-modal">Open form modal</wt-button>
+      <wt-button class="open-report">Report a problem</wt-button>
     </div>
+    <wt-report-dialog></wt-report-dialog>
     <wt-dialog heading="Void sale">
       This creates a corrective record.
       <wt-button slot="footer" variant="danger">Void</wt-button>
@@ -599,6 +602,30 @@ for (const trigger of app.querySelectorAll<HTMLElement>(".open-dialog")) {
 }
 
 for (const panel of app.querySelectorAll(".panel")) {
+  const report = panel.querySelector("wt-report-dialog")!;
+  report.copy = {
+    heading: "Report a problem",
+    scope:
+      "Save only this browser's activity to a file you keep; nothing is stored on the box or sent anywhere.",
+    warning:
+      "Your description may identify someone. Do not include passwords, payment details or personal information.",
+    description: "What happened?",
+    preview: "Report preview",
+    invalid: "Check your description.",
+    cancel: "Cancel",
+    download: "Download report",
+  };
+  report.preview = '```json\n{"description":""}\n```';
+  panel.querySelector(".open-report")!.addEventListener("click", () => {
+    report.open = true;
+  });
+  report.addEventListener("wt-description-change", (event) => {
+    report.description = (event as CustomEvent<{ value: string }>).detail.value;
+    report.preview = `\`\`\`json\n${JSON.stringify({ description: report.description }, null, 2)}\n\`\`\``;
+  });
+  report.addEventListener("wt-report-download", () => {
+    report.open = false;
+  });
   const modal = panel.querySelector("wt-modal")!;
   panel.querySelector(".open-modal")!.addEventListener("click", () => {
     modal.open = true;

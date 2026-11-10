@@ -212,6 +212,7 @@ it("signed in, the banner has a Help switch between the bell and the account men
   expect([...actions.children].map((child) => child.getAttribute("data-test"))).toEqual([
     "alerts-bell",
     "help-switch",
+    "problem-report",
     "account-menu",
   ]);
   await expect.element(switchButton(el)).toHaveAccessibleName("Help");

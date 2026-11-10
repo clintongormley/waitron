@@ -48,6 +48,7 @@ import { DashboardQueries } from "./api/query-controller.js";
 import { createSessionEpoch, type SessionEpoch } from "./session-signals.js";
 import { consumePermissionReturn, PermissionContinuation } from "./permission-continuation.js";
 import { diag } from "./diagnostics.js";
+import "./problem-report.js";
 import { signalAcceptedPasskeys } from "./passkey-signals.js";
 import type { StringKey } from "./i18n/strings.js";
 // Modules are mounted generically from the browser-safe registry, never named here. `tKit` is the
@@ -773,6 +774,7 @@ export class DashboardApp extends LitElement {
            is the one that shrinks, so the trailing controls keep the first row. */
         .brand-banner {
           display: grid;
+          padding-inline: var(--wt-space-2);
           grid-template-columns: auto minmax(0, max-content) 1fr auto;
           grid-template-areas:
             "toggle logo . actions"
@@ -785,7 +787,7 @@ export class DashboardApp extends LitElement {
         }
         .nav-toggle {
           grid-area: toggle;
-          margin-inline-end: var(--wt-space-3);
+          margin-inline-end: 0;
         }
         .brand-logo {
           grid-area: logo;
@@ -793,7 +795,8 @@ export class DashboardApp extends LitElement {
         }
         .banner-actions {
           grid-area: actions;
-          margin-inline-start: var(--wt-space-2);
+          margin-inline-start: 0;
+          gap: 0;
         }
         /* Powered by moves under the name, rather than past the screen's edge, whenever the name and
            its Live pill on one line do not fit beside it: the name block keeps its content-sized
@@ -2153,6 +2156,7 @@ export class DashboardApp extends LitElement {
         </div>
       </div>
       <div class="banner-actions">
+        ${authenticated ? nothing : html`<dashboard-problem-report data-test="problem-report" .compact=${this.narrow}></dashboard-problem-report>`}
         ${
           authenticated
             ? nothing
@@ -2195,6 +2199,10 @@ export class DashboardApp extends LitElement {
                     : nothing
                 }
                 <wt-help-switch data-test="help-switch" label=${t("help.label")}></wt-help-switch>
+                <dashboard-problem-report
+                  data-test="problem-report"
+                  .compact=${this.narrow}
+                ></dashboard-problem-report>
                 <wt-row-actions
                   icon="person"
                   align="end"

@@ -6,6 +6,13 @@ on the box when its disk fills up. To read the box's log, use **Diagnostics** in
 
 ## Open the page {#open}
 
+To keep a file about a problem in the dashboard, choose **Report a problem** in the top banner.
+You can use it before signing in too. Open the dashboard over HTTPS if the button is missing.
+On a phone, use the speech-bubble button with an exclamation mark.
+Describe what happened, check the preview, then choose **Download report**. The file contains
+this browser's recent activity, rather than the box's log. Nothing is sent or saved on the box.
+Keep passwords, payment details and personal information out of your description.
+
 Open **Settings → Box status**, just above **Diagnostics**. Only people who can manage the system
 see it.
 
