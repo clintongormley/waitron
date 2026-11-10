@@ -45,10 +45,10 @@ const profiles: DeviceProfile[] = [
 ];
 
 const scopeChoices: ProfileScopeChoices = {
-  departments: [{ id: "d1", name: "Restaurante", active: true }],
+  departments: [{ id: "d1", name: "Restaurant", active: true }],
   zones: [
-    { id: "z1", name: "Comedor", departmentId: "d1", active: true },
-    { id: "z2", name: "Terraza", departmentId: "d1", active: true },
+    { id: "z1", name: "Dining room", departmentId: "d1", active: true },
+    { id: "z2", name: "Terrace", departmentId: "d1", active: true },
   ],
 };
 
@@ -88,10 +88,10 @@ function printer(id: string, name: string, active = true): Printer {
 
 /** Two on the receipt list, one off it, and a switched-off one the slip list still holds. */
 const venuePrinters = [
-  printer("pr1", "Barra"),
-  printer("pr2", "Cocina"),
-  printer("pr3", "Terraza"),
-  printer("pr-old", "Vieja", false),
+  printer("pr1", "Bar"),
+  printer("pr2", "Kitchen"),
+  printer("pr3", "Terrace"),
+  printer("pr-old", "Old", false),
 ];
 
 function stubApi(
@@ -270,7 +270,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     await flush(el);
     expect(await saveState(el)).toEqual(["secondary", true, true]);
     await expectNoA11yViolations(host);
-    await rename(el, "Barra");
+    await rename(el, "Bar");
     expect(await saveState(el)).toEqual(["primary", false, false]);
     await expectNoA11yViolations(host);
   });
@@ -285,14 +285,14 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
         receiptPrinterDefaultId: "pr1",
       };
       const api = stubApi(
-        [...venuePrinters, { ...printer("pr-drawer", "Caja"), hasCashDrawer: true }],
+        [...venuePrinters, { ...printer("pr-drawer", "Till"), hasCashDrawer: true }],
         {
           getDeviceProfile: vi.fn().mockResolvedValue(equipped),
           listReaders: vi.fn().mockResolvedValue([
             {
               id: "r1",
               provider: "acme",
-              name: "Mostrador",
+              name: "Counter",
               active: true,
               canEnable: true,
               deviceCount: 0,
@@ -301,7 +301,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
             {
               id: "r2",
               provider: "acme",
-              name: "Terraza",
+              name: "Terrace",
               active: true,
               canEnable: true,
               deviceCount: 0,
@@ -330,7 +330,7 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       );
       expect(el.shadowRoot!.querySelector("[data-test=cash-drawer-printers-pr2]")).not.toBeNull();
       await expectNoA11yViolations(host);
-      await rename(el, "Barra");
+      await rename(el, "Bar");
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
       await flush(el);
       await flush(el);
@@ -511,11 +511,11 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
           narrowedDevices: [
             {
               deviceId: "dv1",
-              deviceName: "Pantalla Pase de la terraza",
+              deviceName: "Pass screen near the terrace",
               lost: {
                 screens: ["pass_monitor"],
                 stations: [{ id: "s1", name: "Grill" }],
-                zones: [{ id: "z1", name: "Comedor" }],
+                zones: [{ id: "z1", name: "Dining room" }],
               },
             },
           ],

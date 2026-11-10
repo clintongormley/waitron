@@ -79,7 +79,7 @@ const NO_PRINTERS = { receiptPrinterIds: [], paymentSlipPrinterIds: [] };
 
 /** The venue's one department and its zones, a switched-off one among them. */
 const scopeChoices: ProfileScopeChoices = {
-  departments: [{ id: "d1", name: "Restaurante", active: true }],
+  departments: [{ id: "d1", name: "Restaurant", active: true }],
   zones: [
     { id: "z1", name: "Dining room", departmentId: "d1", active: true },
     { id: "z2", name: "Terrace", departmentId: "d1", active: true },
@@ -1860,13 +1860,13 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       stubApi({
         getProfileScopeChoices: vi.fn().mockResolvedValue({
           ...scopeChoices,
-          departments: [{ id: "d1", name: "Restaurante $&", active: true }],
+          departments: [{ id: "d1", name: "Restaurant $&", active: true }],
         }),
         listStaff: vi.fn().mockResolvedValue([person("pe-ana", "Ana $&", "staff")]),
       }),
     );
     expect(text(el, "profile-zones-hint")).toBe(
-      t("device_profiles.every_zone_hint").split("{department}").join("Restaurante $&"),
+      t("device_profiles.every_zone_hint").split("{department}").join("Restaurant $&"),
     );
     expect(text(el, "admitted-people")).toBe(
       t("device_profiles.admitted_people").split("{names}").join("Ana $&"),
@@ -1880,7 +1880,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     expect(q(el, "profile-department")!.required).toBe(true);
     expect(q(el, "profile-every-zone")!.checked).toBe(true);
     expect(text(el, "profile-zones-hint")).toBe(
-      t("device_profiles.every_zone_hint").replace("{department}", "Restaurante"),
+      t("device_profiles.every_zone_hint").replace("{department}", "Restaurant"),
     );
     expect(q(el, "profile-starting-zone")!.value).toBe("z1");
     expect(q(el, "profile-starting-zone")!.required).toBe(true);
@@ -2307,7 +2307,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
   it.each([
     [
       "its department is switched off",
-      { ...scopeChoices, departments: [{ id: "d1", name: "Restaurante", active: false }] },
+      { ...scopeChoices, departments: [{ id: "d1", name: "Restaurant", active: false }] },
       ["z1"],
     ],
     ["none of its zones is still on", scopeChoices, ["z4"]],
@@ -2401,7 +2401,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
   it("describes the every-zone switch by its hint", async () => {
     const { el } = await openEdit(profiles[0]!);
     expect((q(el, "profile-every-zone") as unknown as { description: string }).description).toBe(
-      t("device_profiles.every_zone_hint").replace("{department}", "Restaurante"),
+      t("device_profiles.every_zone_hint").replace("{department}", "Restaurant"),
     );
   });
 
@@ -3346,7 +3346,7 @@ describe("the printer lists while the venue's printers are not read", () => {
     await flush(el);
     expect(bottom(el)).toBe(codeMessage("connection.failed"));
     listPrinters.mockResolvedValue([
-      { id: "pr1", name: "Barra", active: true, hasCashDrawer: false } as Printer,
+      { id: "pr1", name: "Bar", active: true, hasCashDrawer: false } as Printer,
     ]);
     liveData.refresh();
     await vi.waitFor(() =>

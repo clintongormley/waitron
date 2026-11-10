@@ -2374,7 +2374,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   text there while preserving Spanish receipt output and locale checks. Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
 
-- **A1241. Continue the dashboard test sample-name cleanup, one small slice per PR.**
+- **A1241. Finish the remaining dashboard test sample names, one small slice per PR.**
   Keep Spanish-language checks, recorded receipt snapshots and the unit-screen accent-search
   fixture `Gin & Tónic`.
   [Detail](backlog/architecture.md#a1241-continue-the-dashboard-test-sample-name-cleanup-one-small-slice-per-pr)
