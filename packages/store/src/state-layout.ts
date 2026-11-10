@@ -15,6 +15,7 @@ export const REBUILD_MARKER = "rebuild-first-start.json";
 export const RESET_REQUEST_FILE = "reset-request.json";
 export const PENDING_ADOPTION_FILE = "pending-adoption.json";
 export const RECOVERY_LOCK_FILE = "recovery.lock";
+export const SCRATCH_DIR = "scratch";
 export const RESTORE_STAGING_DIR = "restore-staging";
 export const BACKUP_STAGING_DIR = "backup-staging";
 export const STREAM_RESTORE_PREFIX = "stream-restore-";
