@@ -2,7 +2,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
-import { authorizeManager } from "@waitron/identity";
+import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
 import { clearRemovedMachine, listServers, removeUnjoinedStandby } from "./membership-removal.js";
@@ -42,12 +42,13 @@ export function mountMembershipRemovalApi(
   const runClear = createErrorBoundary(STATUS, "membership.clearance_failed");
 
   // Admin-only, the same permission that hands a standby its bundle.
-  const authorize = (sessionId: string): Promise<string> =>
+  const authorize = (sessionId: string, fresh = false): Promise<string> =>
     withTransaction(deps.db, async (tx) => {
       const { authorizedBy } = await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: "mirror.create",
       });
+      if (fresh) await requireFreshManagementSignIn(tx, sessionId);
       return authorizedBy;
     });
 
@@ -67,7 +68,7 @@ export function mountMembershipRemovalApi(
     run(c, log, async () => {
       // Authorized before the id is looked at, so a caller without the permission learns nothing
       // about which ids the chart lists.
-      const personId = await authorize(requireManagementSession(c));
+      const personId = await authorize(requireManagementSession(c), true);
       const targetNodeId = c.req.param("nodeId");
       const result = await removeUnjoinedStandby(
         { db: deps.db, node: deps.node, ring: deps.ring, nodeId: deps.nodeId, log },
@@ -79,7 +80,7 @@ export function mountMembershipRemovalApi(
 
   app.post("/management-api/servers/:nodeId/clear", (c) =>
     runClear(c, log, async () => {
-      const personId = await authorize(requireManagementSession(c));
+      const personId = await authorize(requireManagementSession(c), true);
       const result = await clearRemovedMachine(
         { db: deps.db, node: deps.node, ring: deps.ring, nodeId: deps.nodeId, log },
         { targetNodeId: c.req.param("nodeId"), personId },

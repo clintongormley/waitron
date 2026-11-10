@@ -2,7 +2,8 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, isNull, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import {
   billPayments,
   workingOrders,
@@ -119,6 +120,7 @@ async function seedVenueWithStaff(): Promise<Venue> {
       personId: mgr!.id,
     });
     const staffSession = await startManagementSession(tx, { personId: stf!.id });
+    await setFreshManagementSignIn(tx, managerSession.token);
     return { managerSid: managerSession.token, staffSid: staffSession.token };
   });
   return {
@@ -287,6 +289,45 @@ async function sealedStripe(): Promise<Record<string, string> | null> {
     });
   });
 }
+
+it.each(["connect", "disconnect"] as const)(
+  "requires confirmation before provider %s reaches the provider or credential",
+  async (action) => {
+    const venue = await seedVenueWithStaff();
+    const connect = vi.fn(stripeSeat.connect);
+    const app = mountApp(venue, [{ ...stripeSeat, connect }]);
+    expect((await connectStripe(app, venue)).status).toBe(200);
+    connect.mockClear();
+    await withTransaction(suite.db, (tx) =>
+      setFreshManagementSignIn(tx, venue.managerCookie, false),
+    );
+    const before = await sealedStripe();
+    const poolBefore = evicted.length;
+    expect(
+      (
+        await send(app, "GET", "/management-api/payments/providers", {
+          cookie: venue.managerCookie,
+        })
+      ).status,
+    ).toBe(200);
+    const response = await send(
+      app,
+      "POST",
+      `/management-api/payments/providers/stripe/${action}`,
+      {
+        cookie: venue.managerCookie,
+        ...(action === "connect" ? { body: { ...GOOD_KEY, secretKey: "sk_test_next" } } : {}),
+      },
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management_session.proof_required", params: {} },
+    });
+    expect(connect).not.toHaveBeenCalled();
+    expect(await sealedStripe()).toEqual(before);
+    expect(evicted).toHaveLength(poolBefore);
+  },
+);
 
 describe("connect", () => {
   it("seals the credential, returns the merchant name and NO secret, and evicts the pool", async () => {

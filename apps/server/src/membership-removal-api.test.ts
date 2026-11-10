@@ -27,6 +27,7 @@ import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
@@ -68,6 +69,7 @@ async function primary(
     const rows = tx.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
     const personId = rows[0]!.id;
     const session = await startManagementSession(tx, { personId });
+    await setFreshManagementSignIn(tx, session.token);
     return { adminPersonId: personId, token: session.token };
   });
   const lines: Primary["lines"] = [];
@@ -170,6 +172,27 @@ async function holdChartRevoking(
 async function heldTerm(db: Database): Promise<number | undefined> {
   return (await readNodeMembership(db))?.body.term;
 }
+
+it.each(["remove", "clear"] as const)(
+  "requires confirmation before a server %s changes the chart",
+  async (action) => {
+    const p = await primary();
+    const target = action === "remove" ? standby() : evicted();
+    await holdChart(p, [self(p), target]);
+    await withTransaction(p.db, (tx) => setFreshManagementSignIn(tx, p.adminCookie, false));
+    const before = await readNodeMembership(p.db);
+    expect((await list(p, p.adminCookie)).status).toBe(200);
+    const response = await (action === "remove" ? remove : clear)(p, target.nodeId, p.adminCookie);
+    expect(response.status).toBe(400);
+    expect(await errorOf(response)).toEqual({
+      code: "management_session.proof_required",
+      params: {},
+    });
+    expect(await readNodeMembership(p.db)).toEqual(before);
+    expect(await removals(p.db)).toEqual([]);
+    expect(await clearances(p.db)).toEqual([]);
+  },
+);
 
 describe("POST /management-api/servers/:nodeId/remove", () => {
   it("marks a standby that never finished joining evicted in a new chart this node signs, and records who did it", async () => {
