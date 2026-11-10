@@ -2159,7 +2159,11 @@ connection app and the `/legal/*` pages on the main HTTP port and enabled landin
 protected recovery app, Retry, setup inspection and private setup actions stay off that fallback.
 Normal discovery and landing apps mirror the connection guide; their CA downloads parse the public
 certificate and check its signing authority, validity and box constraints before offering it.
-Resolution discovery uses the same public-CA check. An operator TLS choice refuses box repair.
+Resolution discovery uses the same public-CA check. An operator TLS choice refuses box repair. On a
+spare (a joining spare's start and a mirror's starts), both writes answer `connection.refused` to a
+request not proven to come from the box itself (`requestProvenFromBox`,
+`apps/server/src/request-from-box.ts`), and the page shows that request no repair button; the
+recovery page's connection app (`recovery-listener.ts`) has no such check.
 
 The resolution screen opens the guide in a separate tab without passing its draft, owner token or
 password. The page sends no body and omits credentials. Its fixed EN/ES messages distinguish

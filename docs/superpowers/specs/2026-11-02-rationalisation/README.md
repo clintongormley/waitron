@@ -1,5 +1,10 @@
 # Rationalising Waitron's tables, background jobs, environment variables and files — design
 
+> **2026-11-10, A947 3b-4:** the bind guard (`mirror-bind-guard.ts`), `server.mirror_bind_exposed` and
+> `WAITRON_MIRROR_ALLOW_EXPOSED` are gone: a spare listens on the venue's network, and on a mirror both
+> promotion routes answer only a request from the box itself (`promotion.from_box_only`, `promote-api.ts`).
+> Rows below that name them describe the code before that change.
+>
 > **2026-11-08, A1113:** the ambient mirror viewer and its keepalive are removed. Existing viewer-session
 > revocation remains at boot. The bind guard and `WAITRON_MIRROR_ALLOW_EXPOSED` remain for the
 > promotion routes; how a spare listens on the network stays with A947 slice3b.
