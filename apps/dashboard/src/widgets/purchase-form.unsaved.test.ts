@@ -88,7 +88,7 @@ it("a busy purchase ignores delivered field and VAT-choice events without dirtyi
   expect(confirm.disabled).toBe(true);
   const sent: unknown[] = [];
   form.addEventListener("update-purchase", (event) => sent.push((event as CustomEvent).detail));
-  await change(form, "note", "Nota");
+  await change(form, "note", "Memo");
   confirm.click();
   expect(sent).toEqual([
     {
@@ -103,7 +103,7 @@ it("a busy purchase ignores delivered field and VAT-choice events without dirtyi
           total: "121.00",
           regime: "general",
           deductibleProportion: "100.00",
-          note: "Nota",
+          note: "Memo",
         },
         lines: [{ rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" }],
       },

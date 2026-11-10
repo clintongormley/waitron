@@ -13,14 +13,14 @@ afterEach(cleanupWidgets);
 const EDIT_INVOICE: PurchaseInvoice = {
   id: "pi-1",
   supplierTaxId: "B12345678",
-  supplierName: "Distribuciones García SL",
+  supplierName: "Westfield Distribution Ltd",
   supplierInvoiceNumber: "F-2026/001",
   issuedOn: "2026-08-10",
   receivedOn: "2026-08-12",
   total: "121.00",
   regime: "general",
   deductibleProportion: "100.00",
-  note: "Compra de género",
+  note: "Stock purchase",
   lines: [
     { rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" },
     { rate: "10.00", base: "50.00", tax: "5.00", kind: "capital" },
@@ -66,7 +66,7 @@ describe.each(["light", "dark"] as const)("purchase-form a11y (%s theme)", (them
     expect([save.variant, save.disabled]).toEqual(["secondary", true]);
     await expectNoA11yViolations(host);
     el.shadowRoot!.querySelector("[data-test=supplier-name]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "Otro SL" } }),
+      new CustomEvent("wt-change", { detail: { value: "Other Ltd" } }),
     );
     await el.updateComplete;
     await save.updateComplete;

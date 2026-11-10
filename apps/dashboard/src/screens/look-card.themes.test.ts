@@ -39,7 +39,7 @@ const LUCIA: ThemeChoices = {
   textScale: 100,
   text: {},
 };
-const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
+const lucia = theme("t-lucia", "Bar Lucy", LUCIA);
 const xmas = theme("t-xmas", "Christmas", {
   ...WAITRON_CHOICES,
   brandColor: "#7a1f2b",
@@ -53,7 +53,7 @@ function stubApi() {
     theme("t-new", name, choices),
   );
   const saveTheme = vi.fn<DashboardApi["saveTheme"]>(async (id, choices) =>
-    theme(id, id === "t-xmas" ? "Christmas" : "Bar Lucía", choices),
+    theme(id, id === "t-xmas" ? "Christmas" : "Bar Lucy", choices),
   );
   const getVenueTheme = vi.fn(async () => ({ hash: "h2", css: "", logo: null }));
   const api = { createTheme, saveTheme, getVenueTheme } as unknown as DashboardApi;
@@ -166,13 +166,13 @@ describe("the editor's three ways in", () => {
     expect(nameInput(dialog).value).toBe("");
     expect(toggle(dialog).checked).toBe(true);
     expect(nameSave(dialog).disabled).toBe(true);
-    await typeName(el, dialog, "Bar Lucía");
+    await typeName(el, dialog, "Bar Lucy");
     expect(nameSave(dialog).disabled).toBe(false);
     await userEvent.click(nameSave(dialog));
     await expect.poll(() => isEditing(el)).toBe(false);
     expect(createTheme).toHaveBeenCalledTimes(1);
     expect(createTheme).toHaveBeenCalledWith({
-      name: "Bar Lucía",
+      name: "Bar Lucy",
       theme: normaliseChoices({ ...WAITRON_CHOICES, brandColor: "#dd5f5f" }),
       inUse: true,
     });
@@ -404,7 +404,7 @@ describe("opening the editor from the Themes card", () => {
     answer("keep");
     await settle(el);
     expect(heading(el)).toBe("Look");
-    expect(line(el)).toBe("Theme in use: Bar Lucía. Saving changes every screen.");
+    expect(line(el)).toBe("Theme in use: Bar Lucy. Saving changes every screen.");
     expect(corners(el).value).toBe("square");
     expect(editing).toEqual([{ id: "t-lucia" }]);
 
@@ -539,7 +539,7 @@ describe("opening the editor from the Themes card", () => {
     await settle(el);
     expect(heading(el)).toBe("Look");
     expect(editing).toEqual([{ id: "t-lucia" }]);
-    finish(theme("t-lucia", "Bar Lucía", { ...LUCIA, corners: "square" }));
+    finish(theme("t-lucia", "Bar Lucy", { ...LUCIA, corners: "square" }));
     await expect.poll(() => isEditing(el)).toBe(false);
   });
 
@@ -629,14 +629,14 @@ describe("Save as new theme…", () => {
     await el.updateComplete;
     await userEvent.click(button(el, "save-as-new"));
     const dialog = await nameDialog(el);
-    expect(nameInput(dialog).value).toBe("Bar Lucía (copy)");
+    expect(nameInput(dialog).value).toBe("Bar Lucy (copy)");
     expect(toggle(dialog).checked).toBe(true);
     expect(nameSave(dialog).disabled).toBe(false);
     await userEvent.click(nameSave(dialog));
     await expect.poll(() => isEditing(el)).toBe(false);
     expect(createTheme).toHaveBeenCalledTimes(1);
     expect(createTheme).toHaveBeenCalledWith({
-      name: "Bar Lucía (copy)",
+      name: "Bar Lucy (copy)",
       theme: normaliseChoices(LUCIA),
       inUse: true,
     });
@@ -654,7 +654,7 @@ describe("Save as new theme…", () => {
     const { el } = await mount(waitronInUse);
     el.edit({ id: "t-lucia" });
     await el.updateComplete;
-    expect(heading(el)).toBe("Edit theme: Bar Lucía");
+    expect(heading(el)).toBe("Edit theme: Bar Lucy");
     el.list = { themes: [{ ...lucia, name: "Autumn" }, xmas], inUse: null };
     await el.updateComplete;
     expect(heading(el)).toBe("Edit theme: Autumn");
@@ -728,7 +728,7 @@ describe("Save as new theme…", () => {
     expect(nameDialogOf(el).open).toBe(false);
     await userEvent.click(hardButton(el, "save-anyway"));
     const dialog = await nameDialog(el);
-    expect(nameInput(dialog).value).toBe("Bar Lucía (copy)");
+    expect(nameInput(dialog).value).toBe("Bar Lucy (copy)");
     expect(toggle(dialog).checked).toBe(true);
     expect(nameWarnings(dialog)).toEqual([
       "Brand colour: buttons are hard to see on light screens.",
@@ -767,7 +767,7 @@ describe("Save as new theme…", () => {
     await expect.poll(() => hardDialog(el).open).toBe(true);
     await userEvent.click(hardButton(el, "fix-and-save"));
     const dialog = await nameDialog(el);
-    expect(nameInput(dialog).value).toBe("Bar Lucía (copy)");
+    expect(nameInput(dialog).value).toBe("Bar Lucy (copy)");
     expect(toggle(dialog).checked).toBe(true);
     expect(nameWarnings(dialog)).toEqual([]);
     await userEvent.click(nameSave(dialog));
@@ -793,7 +793,7 @@ describe("Save as new theme…", () => {
     await expect.poll(() => saveTheme.mock.calls.length).toBe(1);
     await el.updateComplete;
     expect(button(el, "save-as-new").disabled).toBe(true);
-    finish(theme("t-lucia", "Bar Lucía", { ...LUCIA, corners: "square" }));
+    finish(theme("t-lucia", "Bar Lucy", { ...LUCIA, corners: "square" }));
     await expect.poll(() => isEditing(el)).toBe(false);
   });
 });

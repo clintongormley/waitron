@@ -68,7 +68,7 @@ function nextEvent<T>(el: PurchaseForm, type: string): Promise<CustomEvent<T>> {
 
 async function fillHeaderOnly(el: PurchaseForm): Promise<void> {
   await setInput(el, "supplier-tax-id", "B12345678");
-  await setInput(el, "supplier-name", "Distribuciones García SL");
+  await setInput(el, "supplier-name", "Westfield Distribution Ltd");
   await setInput(el, "supplier-invoice-number", "F-2026/001");
   await setInput(el, "issued-on", "2026-08-10");
   await setInput(el, "received-on", "2026-08-12");
@@ -85,14 +85,14 @@ async function fillValid(el: PurchaseForm): Promise<void> {
 const EDIT_INVOICE: PurchaseInvoice = {
   id: "pi-1",
   supplierTaxId: "B99999999",
-  supplierName: "Proveedor Editado SL",
+  supplierName: "Edited Supplier Ltd",
   supplierInvoiceNumber: "E-2026/007",
   issuedOn: "2026-07-01",
   receivedOn: "2026-07-03",
   total: "242.00",
   regime: "equivalence_surcharge",
   deductibleProportion: "50.00",
-  note: "Con nota",
+  note: "With a note",
   lines: [
     { rate: "10.00", base: "100.00", tax: "10.00", kind: "capital" },
     { rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" },
@@ -210,7 +210,7 @@ describe("purchase-form", () => {
     const detail = (await created).detail;
     expect(detail.header).toEqual({
       supplierTaxId: "B12345678",
-      supplierName: "Distribuciones García SL",
+      supplierName: "Westfield Distribution Ltd",
       supplierInvoiceNumber: "F-2026/001",
       issuedOn: "2026-08-10",
       receivedOn: "2026-08-12",
@@ -227,7 +227,7 @@ describe("purchase-form", () => {
   it("carries a non-empty note, and regime/kind selections, into the create body", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillValid(el);
-    await setInput(el, "note", "Compra de género");
+    await setInput(el, "note", "Stock purchase");
     await setInput(el, "deductible-proportion", "80.00");
     await setSelect(el, "regime", "equivalence_surcharge");
     await setSelect(el, "line-kind-0", "capital");
@@ -238,7 +238,7 @@ describe("purchase-form", () => {
     await click(el, "confirm");
     const detail = (await created).detail;
     expect(detail.header).toMatchObject({
-      note: "Compra de género",
+      note: "Stock purchase",
       deductibleProportion: "80.00",
       regime: "equivalence_surcharge",
     });
@@ -420,7 +420,7 @@ describe("purchase-form", () => {
     await setInput(el, "supplier-tax-id", "   ");
     await click(el, "confirm");
     expect(errorOf(el, "supplier-name")).not.toBe("");
-    await setInput(el, "supplier-name", "Proveedor");
+    await setInput(el, "supplier-name", "Supplier");
     expect(errorOf(el, "supplier-name")).toBe("");
     expect(errorOf(el, "supplier-tax-id")).not.toBe("");
 
@@ -490,7 +490,7 @@ describe("purchase-form", () => {
     expect(errorOf(el, "supplier-name")).toBe("");
     expect(await bottomOf(el)).toBeNull();
     expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
-    await setInput(el, "supplier-name", "Proveedor");
+    await setInput(el, "supplier-name", "Supplier");
     expect(errorOf(el, "supplier-tax-id")).toBe("");
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
@@ -543,7 +543,7 @@ describe("purchase-form", () => {
       el.shadowRoot!.querySelector<HTMLElement & { value: string }>(`[data-test=${id}]`)!.value;
     const sel = (id: string) => el.shadowRoot!.querySelector<ChoiceBox>(`[data-test=${id}]`)!.value;
     expect(value("supplier-tax-id")).toBe("B99999999");
-    expect(value("supplier-name")).toBe("Proveedor Editado SL");
+    expect(value("supplier-name")).toBe("Edited Supplier Ltd");
     expect(value("supplier-invoice-number")).toBe("E-2026/007");
     expect(value("issued-on")).toBe("2026-07-01");
     expect(value("received-on")).toBe("2026-07-03");
@@ -551,7 +551,7 @@ describe("purchase-form", () => {
     expect(sel("regime")).toBe("equivalence_surcharge");
     expect(await shownIn(el, "regime")).toBe(regimeName("equivalence_surcharge", "es-ES"));
     expect(value("deductible-proportion")).toBe("50.00");
-    expect(value("note")).toBe("Con nota");
+    expect(value("note")).toBe("With a note");
     expect(el.shadowRoot!.querySelectorAll("[data-test^=line-rate-]").length).toBe(2);
     expect(value("line-rate-0")).toBe("10.00");
     expect(sel("line-kind-0")).toBe("capital");
@@ -569,21 +569,21 @@ describe("purchase-form", () => {
       el,
       "update-purchase",
     );
-    await setInput(el, "note", "Nota nueva");
+    await setInput(el, "note", "New note");
     await click(el, "confirm");
     const detail = (await updated).detail;
     expect(detail.id).toBe("pi-1");
     expect(detail.patch).toEqual({
       header: {
         supplierTaxId: "B99999999",
-        supplierName: "Proveedor Editado SL",
+        supplierName: "Edited Supplier Ltd",
         supplierInvoiceNumber: "E-2026/007",
         issuedOn: "2026-07-01",
         receivedOn: "2026-07-03",
         total: "242.00",
         regime: "equivalence_surcharge",
         deductibleProportion: "50.00",
-        note: "Nota nueva",
+        note: "New note",
       },
       lines: [
         { rate: "10.00", base: "100.00", tax: "10.00", kind: "capital" },
@@ -669,7 +669,7 @@ describe("purchase-form keyboard submit", () => {
       }),
     );
     expect(events).toHaveLength(1);
-    expect(events[0]!.detail.header.supplierName).toBe("Distribuciones García SL");
+    expect(events[0]!.detail.header.supplierName).toBe("Westfield Distribution Ltd");
     expect(events[0]!.detail.lines).toEqual([
       { rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" },
     ]);
@@ -835,7 +835,7 @@ describe("purchase-form — a server refusal", () => {
     expect(field.shadowRoot!.activeElement).toBe(field.shadowRoot!.querySelector("input"));
 
     // Another field changing leaves it standing.
-    await setInput(el, "supplier-name", "Otro proveedor");
+    await setInput(el, "supplier-name", "Another supplier");
     expect(errorOf(el, "deductible-proportion")).toBe("Refused proportion");
 
     await setInput(el, "deductible-proportion", "50.00");
@@ -857,7 +857,7 @@ describe("purchase-form — a server refusal", () => {
     expect(input.getAttribute("aria-invalid")).toBe("true");
     expect(note.shadowRoot!.querySelector("[data-error]")?.textContent).toBe("Refused note");
 
-    await setInput(el, "note", "Otra nota");
+    await setInput(el, "note", "Another note");
     await note.updateComplete;
     expect(input.getAttribute("aria-invalid")).toBe("false");
     expect(note.shadowRoot!.querySelector("[data-error]")).toBeNull();
@@ -927,7 +927,7 @@ for (const locale of ["en", "es"]) {
       }
     }
     expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
-    await setInput(el, "note", "Nota nueva");
+    await setInput(el, "note", "New note");
     await click(el, "confirm");
     expect(emitted).toHaveLength(1);
     expect(emitted[0]).toMatchObject({

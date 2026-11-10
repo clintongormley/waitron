@@ -27,7 +27,7 @@ function theme(id: string, name: string, choices: ThemeChoices): ThemeView {
   };
 }
 
-const lucia = theme("t-lucia", "Bar Lucía", {
+const lucia = theme("t-lucia", "Bar Lucy", {
   brandColor: "#1e5b3a",
   brandFix: { dark: true },
   background: "tinted",
@@ -87,7 +87,7 @@ describe("dashboard-themes-card", () => {
     ].map((cell) => [cell.dataset.test, text(cell)]);
     expect(names).toEqual([
       ["theme-row-waitron", "Waitron"],
-      ["theme-row-t-lucia", "Bar Lucía"],
+      ["theme-row-t-lucia", "Bar Lucy"],
       ["theme-row-t-xmas", "Christmas"],
       ["theme-row-t-summer", "Summer terrace"],
     ]);
@@ -164,7 +164,7 @@ describe("dashboard-themes-card", () => {
   });
 
   it("the brand chip is the chosen colour, not a fixed shade", async () => {
-    const lemon = theme("t-lemon", "Lemon Café", {
+    const lemon = theme("t-lemon", "Lemon Cafe", {
       ...WAITRON_CHOICES,
       brandColor: "#f2d300",
       brandFix: { light: true },

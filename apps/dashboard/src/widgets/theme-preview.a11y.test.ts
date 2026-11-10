@@ -59,7 +59,7 @@ it.each(cases)("theme preview: $draft, $locale / $mode", async ({ mode, draft, l
   setLocale(locale);
   const { el, host } = await mountWidget<Preview>(
     "dashboard-theme-preview",
-    { theme: deriveTheme(drafts[draft]!), name: "Bar Lucía" },
+    { theme: deriveTheme(drafts[draft]!), name: "Bar Lucy" },
     mode,
   );
   const strings = locale === "es-ES" ? es : en;
@@ -77,9 +77,9 @@ it.each(logoCases)(
       "dashboard-theme-preview",
       {
         theme: deriveTheme(drafts.lucia!),
-        name: "Bar Lucía",
+        name: "Bar Lucy",
         logo: logos[logo]!,
-        legalName: "BAR LUCÍA S.L.",
+        legalName: "BAR LUCY LTD.",
       },
       mode,
     );

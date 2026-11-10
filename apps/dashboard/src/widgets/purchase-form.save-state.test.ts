@@ -17,14 +17,14 @@ afterEach(() => {
 const stored: PurchaseInvoice = {
   id: "pi-1",
   supplierTaxId: "B99999999",
-  supplierName: "Proveedor Editado SL",
+  supplierName: "Edited Supplier Ltd",
   supplierInvoiceNumber: "E-2026/007",
   issuedOn: "2026-07-01",
   receivedOn: "2026-07-03",
   total: "231.00",
   regime: "equivalence_surcharge",
   deductibleProportion: "50.00",
-  note: "Con nota",
+  note: "With a note",
   lines: [
     { rate: "10.00", base: "100.00", tax: "10.00", kind: "capital" },
     { rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" },
@@ -113,13 +113,13 @@ for (const [invoice, locale] of [
 
 it.each([
   ["supplier-tax-id", "B11111111", "B99999999"],
-  ["supplier-name", "Otro SL", "Proveedor Editado SL"],
+  ["supplier-name", "Other Ltd", "Edited Supplier Ltd"],
   ["supplier-invoice-number", "E-2026/008", "E-2026/007"],
   ["issued-on", "2026-07-02", "2026-07-01"],
   ["received-on", "2026-07-04", "2026-07-03"],
   ["total", "232.00", "231.00"],
   ["deductible-proportion", "60", "50.00"],
-  ["note", "Otra nota", "Con nota"],
+  ["note", "Another note", "With a note"],
   ["line-rate-1", "10", "21.00"],
   ["line-base-0", "90.00", "100"],
   ["line-tax-1", "20.00", "21"],
@@ -158,21 +158,21 @@ it("adding a line wakes Save, and removing it quiets Save again", async () => {
 
 it("an edited invoice sends what it holds", async () => {
   const { el, sent } = await mount();
-  await type(el, "supplier-name", "Otro SL");
+  await type(el, "supplier-name", "Other Ltd");
   await press(el);
   expect(sent).toHaveBeenCalledExactlyOnceWith("update-purchase", {
     id: "pi-1",
     patch: {
       header: {
         supplierTaxId: "B99999999",
-        supplierName: "Otro SL",
+        supplierName: "Other Ltd",
         supplierInvoiceNumber: "E-2026/007",
         issuedOn: "2026-07-01",
         receivedOn: "2026-07-03",
         total: "231.00",
         regime: "equivalence_surcharge",
         deductibleProportion: "50.00",
-        note: "Con nota",
+        note: "With a note",
       },
       lines: stored.lines,
     },
@@ -181,7 +181,7 @@ it("an edited invoice sends what it holds", async () => {
 
 it("a changed new invoice its own checks refuse shows its errors and holds Create primary and disabled", async () => {
   const { el, sent } = await mount(null);
-  await type(el, "supplier-name", "Proveedor SL");
+  await type(el, "supplier-name", "Supplier Ltd");
   expect(await state(el)).toEqual(ready);
   await press(el);
   expect(sent).not.toHaveBeenCalled();
@@ -191,25 +191,25 @@ it("a changed new invoice its own checks refuse shows its errors and holds Creat
 
 it("after a save the person kept editing through, Save is quiet once the sent value is typed back", async () => {
   const { el, sent } = await mount();
-  await type(el, "supplier-name", "Otro SL");
+  await type(el, "supplier-name", "Other Ltd");
   await press(el);
   expect(sent).toHaveBeenCalledOnce();
   const done = el.writeCompletion();
-  await type(el, "note", "Más tarde");
+  await type(el, "note", "Later");
   expect(done()).toBe(false);
   expect(await state(el)).toEqual(ready);
-  await type(el, "note", "Con nota");
+  await type(el, "note", "With a note");
   expect(await state(el)).toEqual(quiet);
 });
 
 it("reopened after a save, the stored invoice starts quiet again", async () => {
   const { el } = await mount();
-  await type(el, "supplier-name", "Otro SL");
+  await type(el, "supplier-name", "Other Ltd");
   await press(el);
   expect(el.writeCompletion()()).toBe(true);
   await el.updateComplete;
   el.open = true;
   expect(await state(el)).toEqual(quiet);
-  await type(el, "supplier-name", "Otro SL");
+  await type(el, "supplier-name", "Other Ltd");
   expect(await state(el)).toEqual(ready);
 });

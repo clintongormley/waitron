@@ -576,7 +576,7 @@ describe("DashboardApi", () => {
   });
 
   it("listCatalogues GETs the catalogues with credentials", async () => {
-    const catalogues = [{ id: "c1", name: "Almuerzo", active: true, version: 1 }];
+    const catalogues = [{ id: "c1", name: "Lunch", active: true, version: 1 }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(catalogues));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listCatalogues()).toEqual(catalogues);
@@ -588,35 +588,35 @@ describe("DashboardApi", () => {
   });
 
   it("createCatalogue POSTs the name and returns the created catalogue", async () => {
-    const created = { id: "c2", name: "Cena", active: true, version: 1 };
+    const created = { id: "c2", name: "Dinner", active: true, version: 1 };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.createCatalogue("Cena")).toEqual(created);
+    expect(await api.createCatalogue("Dinner")).toEqual(created);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/catalogues", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Cena" }),
+      body: JSON.stringify({ name: "Dinner" }),
     });
   });
 
   it("duplicateCatalogue POSTs the copy's name to the menu's duplicate route and returns the copy", async () => {
-    const copy = { id: "c3", name: "Cena (copia)", active: true, version: 1 };
+    const copy = { id: "c3", name: "Dinner (copy)", active: true, version: 1 };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(copy, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.duplicateCatalogue("c2", "Cena (copia)")).toEqual(copy);
+    expect(await api.duplicateCatalogue("c2", "Dinner (copy)")).toEqual(copy);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/catalogues/c2/duplicate", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Cena (copia)" }),
+      body: JSON.stringify({ name: "Dinner (copy)" }),
     });
   });
 
   it("listVenueCatalogues GETs the venue's menu membership with credentials", async () => {
     const rows = [
-      { id: "c1", name: "Casa", active: true, version: 1, sellable: true, isDefault: true },
-      { id: "c2", name: "Día", active: true, version: 1, sellable: false, isDefault: false },
+      { id: "c1", name: "House", active: true, version: 1, sellable: true, isDefault: true },
+      { id: "c2", name: "Daytime", active: true, version: 1, sellable: false, isDefault: false },
     ];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
     const api = new DashboardApi("", fetchImpl);
@@ -663,7 +663,7 @@ describe("DashboardApi", () => {
   });
 
   it("listCategories GETs the categories with credentials", async () => {
-    const categories = [{ id: "cat1", name: "Entrantes", parentId: null }];
+    const categories = [{ id: "cat1", name: "Starters", parentId: null }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(categories));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listCategories()).toEqual(categories);
@@ -675,7 +675,7 @@ describe("DashboardApi", () => {
   });
 
   it("createCategory POSTs the category and returns the created category", async () => {
-    const input = { name: "Principales", parentId: "cat1" };
+    const input = { name: "Mains", parentId: "cat1" };
     const created = { id: "cat2", ...input };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
     const api = new DashboardApi("", fetchImpl);
@@ -689,13 +689,13 @@ describe("DashboardApi", () => {
   });
 
   it("reads and updates a category and lists the library products", async () => {
-    const category = { id: "cat1", name: "Entrantes", parentId: null };
+    const category = { id: "cat1", name: "Starters", parentId: null };
     const product = {
       id: "p1",
       catalogueId: "menu1",
       categoryId: "cat1",
       primaryCategoryId: "cat1",
-      name: "Croquetas",
+      name: "Croquettes",
       customerName: { es: "Croquetas caseras" },
       pricingUnit: "each",
       unitPrice: "8.00",
@@ -709,18 +709,18 @@ describe("DashboardApi", () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(category))
-      .mockResolvedValueOnce(jsonResponse({ ...category, name: "Comida" }))
+      .mockResolvedValueOnce(jsonResponse({ ...category, name: "Food" }))
       .mockResolvedValueOnce(jsonResponse([product]));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.getCategory("cat1")).toEqual(category);
-    expect(await api.updateCategory("cat1", { name: "Comida" })).toEqual({
+    expect(await api.updateCategory("cat1", { name: "Food" })).toEqual({
       ...category,
-      name: "Comida",
+      name: "Food",
     });
     expect(await api.listLibraryProducts()).toEqual([product]);
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method, init.body])).toEqual([
       ["/management-api/categories/cat1", "GET", undefined],
-      ["/management-api/categories/cat1", "PATCH", JSON.stringify({ name: "Comida" })],
+      ["/management-api/categories/cat1", "PATCH", JSON.stringify({ name: "Food" })],
       ["/management-api/products", "GET", undefined],
     ]);
   });
@@ -783,7 +783,7 @@ describe("DashboardApi", () => {
         catalogueId: "c1",
         categoryId: null,
         primaryCategoryId: null,
-        name: "Café solo",
+        name: "Black coffee",
         customerName: { es: "Café solo de la casa" },
         pricingUnit: "each",
         unitPrice: "1.50",
@@ -1275,7 +1275,7 @@ describe("DashboardApi — purchase invoices", () => {
   const invoice = {
     id: "pi-1",
     supplierTaxId: "B12345678",
-    supplierName: "Distribuciones García SL",
+    supplierName: "Westfield Distribution Ltd",
     supplierInvoiceNumber: "F-2026/001",
     issuedOn: "2026-08-10",
     receivedOn: "2026-08-12",
@@ -1301,7 +1301,7 @@ describe("DashboardApi — purchase invoices", () => {
     const input = {
       header: {
         supplierTaxId: "B12345678",
-        supplierName: "Distribuciones García SL",
+        supplierName: "Westfield Distribution Ltd",
         supplierInvoiceNumber: "F-2026/001",
         issuedOn: "2026-08-10",
         receivedOn: "2026-08-12",
@@ -1325,7 +1325,7 @@ describe("DashboardApi — purchase invoices", () => {
 
   it("updatePurchaseInvoice PATCHes the header + lines and resolves undefined on a 204", async () => {
     const patch = {
-      header: { supplierName: "Nombre corregido", total: "242.00" },
+      header: { supplierName: "Corrected name", total: "242.00" },
       lines: [{ rate: "10.00", base: "100.00", tax: "10.00", kind: "capital" as const }],
     };
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
@@ -1372,7 +1372,7 @@ describe("DashboardApi — purchase invoices", () => {
 
 describe("DashboardApi — floor plan (zones + tables)", () => {
   it("listZones GETs /management-api/zones with credentials", async () => {
-    const rows = [{ id: "z1", name: "Comedor", displayOrder: 0, active: true }];
+    const rows = [{ id: "z1", name: "Dining room", displayOrder: 0, active: true }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listZones()).toEqual(rows);
@@ -1386,12 +1386,14 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
   it("updateZone PATCHes the addressed zone's mutable slice (empty 204 body)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.updateZone("z1", { name: "Salón", displayOrder: 2 })).resolves.toBeUndefined();
+    await expect(
+      api.updateZone("z1", { name: "Lounge", displayOrder: 2 }),
+    ).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/zones/z1", {
       method: "PATCH",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Salón", displayOrder: 2 }),
+      body: JSON.stringify({ name: "Lounge", displayOrder: 2 }),
     });
   });
 
@@ -1483,7 +1485,7 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
 
 describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
   it("listStations GETs /management-api/stations with credentials", async () => {
-    const rows = [{ id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true }];
+    const rows = [{ id: "s1", name: "Kitchen", displayOrder: 0, isDefault: true, active: true }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listStations()).toEqual(rows);
@@ -1497,38 +1499,38 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
   it("createStation POSTs { name } and returns the id (201)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "s1" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.createStation({ name: "Plancha" })).toEqual({ id: "s1" });
+    expect(await api.createStation({ name: "Grill" })).toEqual({ id: "s1" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Plancha" }),
+      body: JSON.stringify({ name: "Grill" }),
     });
   });
 
   it("createStation carries isDefault without manual order", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "s2" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.createStation({ name: "Barra", isDefault: true })).toEqual({
+    expect(await api.createStation({ name: "Bar", isDefault: true })).toEqual({
       id: "s2",
     });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Barra", isDefault: true }),
+      body: JSON.stringify({ name: "Bar", isDefault: true }),
     });
   });
 
   it("updateStation PATCHes the addressed station's mutable slice (empty 204 body)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.updateStation("s1", { name: "Pase" })).resolves.toBeUndefined();
+    await expect(api.updateStation("s1", { name: "Pass" })).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/stations/s1", {
       method: "PATCH",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Pase" }),
+      body: JSON.stringify({ name: "Pass" }),
     });
   });
 
@@ -1558,7 +1560,7 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "station.name_taken" } }, false, 409));
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.createStation({ name: "Cocina" })).rejects.toMatchObject({
+    await expect(api.createStation({ name: "Kitchen" })).rejects.toMatchObject({
       code: "station.name_taken",
     });
   });
@@ -1576,7 +1578,7 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
   // ── Kitchen courses + fire control ─────────────────────────────────────────────────────────────
 
   it("listCourses GETs /management-api/courses with credentials", async () => {
-    const rows = [{ id: "k1", name: "Entrantes", displayOrder: 0, active: true }];
+    const rows = [{ id: "k1", name: "Starters", displayOrder: 0, active: true }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listCourses()).toEqual(rows);
@@ -1590,24 +1592,24 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
   it("createCourse POSTs { name } and returns the id (201)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "k1" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.createCourse({ name: "Postres" })).toEqual({ id: "k1" });
+    expect(await api.createCourse({ name: "Desserts" })).toEqual({ id: "k1" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/courses", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Postres" }),
+      body: JSON.stringify({ name: "Desserts" }),
     });
   });
 
   it("createCourse can carry an optional displayOrder", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "k2" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.createCourse({ name: "Principales", displayOrder: 1 })).toEqual({ id: "k2" });
+    expect(await api.createCourse({ name: "Mains", displayOrder: 1 })).toEqual({ id: "k2" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/courses", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Principales", displayOrder: 1 }),
+      body: JSON.stringify({ name: "Mains", displayOrder: 1 }),
     });
   });
 
@@ -1615,19 +1617,19 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     await expect(
-      api.updateCourse("k1", { name: "Café", displayOrder: 2 }),
+      api.updateCourse("k1", { name: "Coffee", displayOrder: 2 }),
     ).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/courses/k1", {
       method: "PATCH",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Café", displayOrder: 2 }),
+      body: JSON.stringify({ name: "Coffee", displayOrder: 2 }),
     });
   });
 
   it("deleteCourse returns its complete impact without a disable query", async () => {
     const impact = {
-      target: { id: "k1", name: "Entrantes" },
+      target: { id: "k1", name: "Starters" },
       refusals: [],
       ends: [],
       removes: [{ key: "course_products", count: 2, targets: [] }],
@@ -1643,8 +1645,8 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
 
   it("moveCourse PUTs { to } to the course's position and returns the renumbered list", async () => {
     const rows = [
-      { id: "k2", name: "Principales", displayOrder: 0, active: true },
-      { id: "k1", name: "Entrantes", displayOrder: 1, active: true },
+      { id: "k2", name: "Mains", displayOrder: 0, active: true },
+      { id: "k1", name: "Starters", displayOrder: 1, active: true },
     ];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
     const api = new DashboardApi("", fetchImpl);
@@ -1662,7 +1664,7 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "course.name_taken" } }, false, 409));
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.createCourse({ name: "Entrantes" })).rejects.toMatchObject({
+    await expect(api.createCourse({ name: "Starters" })).rejects.toMatchObject({
       code: "course.name_taken",
     });
   });
@@ -1674,7 +1676,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       id: "d1",
       kind: "kds_station",
       stationId: "s1",
-      label: "Pantalla Cocina",
+      label: "Kitchen screen",
       active: true,
       lastSeenAt: "2026-08-25T14:30:00.000Z",
       enrolledAt: "2026-08-20T09:00:00.000Z",
@@ -1684,7 +1686,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       id: "d2",
       kind: "kds_station",
       stationId: null,
-      label: "Pase",
+      label: "Pass",
       active: false,
       lastSeenAt: null,
       enrolledAt: "2026-08-19T09:00:00.000Z",
@@ -1781,7 +1783,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       {
         id: "j1",
         kind: "device",
-        label: "Pantalla pase",
+        label: "Pass screen",
         createdAt: "2026-09-08T10:00:00.000Z",
         pairingBy: { name: "Ana", mine: false },
       },
@@ -1878,13 +1880,13 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
   });
 
   it("acceptDeviceJoinRequest POSTs the typed name with the profile and kitchen screens", async () => {
-    const accepted = { deviceId: "j1", name: "Pantalla pase", formFactor: "kds" };
+    const accepted = { deviceId: "j1", name: "Pass screen", formFactor: "kds" };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(accepted));
     const api = new DashboardApi("", fetchImpl);
     const kitchenScreens = [{ kind: "pass_monitor" as const, stationIds: null, zoneIds: ["z1"] }];
     expect(
       await api.acceptDeviceJoinRequest("j1", {
-        name: "Pantalla pase",
+        name: "Pass screen",
         profileId: "dp1",
         kitchenScreens,
       }),
@@ -1893,7 +1895,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Pantalla pase", profileId: "dp1", kitchenScreens }),
+      body: JSON.stringify({ name: "Pass screen", profileId: "dp1", kitchenScreens }),
     });
   });
 
@@ -2054,7 +2056,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     const input = {
-      name: "Barra 2",
+      name: "Bar 2",
       profileId: "dp3",
       stationId: "s1",
       receiptPrinterId: "pr1",
@@ -2083,7 +2085,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const api = new DashboardApi("", fetchImpl);
     await expect(
       api.updateDevice("d1", {
-        name: "Barra",
+        name: "Bar",
         profileId: "dp1",
         receiptPrinterId: "pr9",
         paymentSlipPrinterId: null,
@@ -2142,7 +2144,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
   const agents = [
     {
       id: "a1",
-      name: "Cocina agent",
+      name: "Kitchen agent",
       active: true,
       lastSeenAt: "2026-08-25T14:30:00.000Z",
       enrolledAt: "2026-08-20T09:00:00.000Z",
@@ -2158,7 +2160,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
   const printers = [
     {
       id: "p1",
-      name: "Cocina",
+      name: "Kitchen",
       transport: "network_tcp",
       host: "10.0.0.9",
       port: 9100,
@@ -2246,7 +2248,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
   });
 
   it("listPrinterProfiles GETs /management-api/printer-profiles with credentials", async () => {
-    const offers = [{ printerId: "p1", profileId: "dp1", profileName: "Mostrador" }];
+    const offers = [{ printerId: "p1", profileId: "dp1", profileName: "Counter" }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(offers));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listPrinterProfiles()).toEqual(offers);
@@ -2347,7 +2349,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     const rows = [
       {
         agentId: "a1",
-        agentName: "Cocina agent",
+        agentName: "Kitchen agent",
         transport: "usb",
         localKey: "SN-1",
         make: "Epson",
@@ -2411,7 +2413,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     const patch = {
-      name: "Cocina 2",
+      name: "Kitchen 2",
       host: "10.0.0.20",
       active: true,
     };
@@ -2589,7 +2591,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
       takings: { tenderTotal: "1234.50", tipTotal: "42.00", grossTotal: "1234.50" },
       counts: { sales: 37, corrections: 1, voids: 2 },
       openTables: { open: 3, total: 12 },
-      topSellers: [{ name: "Café", quantity: "18.000", total: "36.00", variants: [] }],
+      topSellers: [{ name: "Coffee", quantity: "18.000", total: "36.00", variants: [] }],
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(overview));
     const api = new DashboardApi("", fetchImpl);
@@ -2615,7 +2617,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
           {
             source: "device",
             deviceId: "device-1",
-            deviceName: "Barra 1",
+            deviceName: "Bar 1",
             byMethod: [
               { method: "cash", amount: "80.00", tip: "5.00" },
               { method: "card", amount: "41.00", tip: "0.00" },
@@ -2629,10 +2631,10 @@ describe("DashboardApi — reporting (sales & takings)", () => {
       counts: { sales: 12, corrections: 0, voids: 1 },
       topSellers: [
         {
-          name: "Tapa",
+          name: "Snack",
           quantity: "9.000",
           total: "45.00",
-          variants: [{ name: "Tapa grande", quantity: "9.000", total: "45.00" }],
+          variants: [{ name: "Large snack", quantity: "9.000", total: "45.00" }],
         },
       ],
     };
@@ -2655,7 +2657,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
         taxTotal: "50.00",
         grossTotal: "550.00",
       },
-      topSellers: [{ name: "Menú", quantity: "120.000", total: "1440.00", variants: [] }],
+      topSellers: [{ name: "Menu", quantity: "120.000", total: "1440.00", variants: [] }],
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(period));
     const api = new DashboardApi("", fetchImpl);
@@ -2673,7 +2675,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
         {
           kind: "category",
           id: "c1",
-          name: "Bebidas del día",
+          name: "Drinks of the day",
           depth: 0,
           gross: "12.10",
           net: "10.00",
@@ -2701,7 +2703,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
   });
 
   it("getReportPrinters GETs the report printers route", async () => {
-    const printers = [{ id: "p1", name: "Barra" }];
+    const printers = [{ id: "p1", name: "Bar" }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(printers));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.getReportPrinters()).toEqual(printers);

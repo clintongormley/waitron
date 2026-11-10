@@ -9,7 +9,7 @@ const invoices: PurchaseInvoice[] = [
   {
     id: "pi-1",
     supplierTaxId: "B12345678",
-    supplierName: "Distribuciones García SL",
+    supplierName: "Westfield Distribution Ltd",
     supplierInvoiceNumber: "F-2026/001",
     issuedOn: "2026-08-10",
     receivedOn: "2026-08-12",
@@ -22,14 +22,14 @@ const invoices: PurchaseInvoice[] = [
   {
     id: "pi-2",
     supplierTaxId: "A87654321",
-    supplierName: "Suministros del Sur SA",
+    supplierName: "Southern Supplies Ltd",
     supplierInvoiceNumber: "2026-0042",
     issuedOn: "2026-07-30",
     receivedOn: "2026-08-01",
     total: "48.40",
     regime: "equivalence_surcharge",
     deductibleProportion: "0.00",
-    note: "Recargo de equivalencia",
+    note: "Equivalence surcharge",
     lines: [{ rate: "10.00", base: "44.00", tax: "4.40", kind: "capital" }],
   },
 ];

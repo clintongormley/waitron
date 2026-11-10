@@ -11,8 +11,8 @@ import { absenceKindName } from "../i18n/domain.js";
 useLocale("es-ES");
 
 const roster: RosterEntry[] = [
-  { personId: "me", displayName: "Yo" },
-  { personId: "col1", displayName: "Colega" },
+  { personId: "me", displayName: "Me" },
+  { personId: "col1", displayName: "Colleague" },
 ];
 const shifts: MyShift[] = [
   {
@@ -117,7 +117,7 @@ describe("my-schedule-screen", () => {
     expect(api.listMyAbsences).toHaveBeenCalledTimes(1);
     const text = el.shadowRoot!.textContent ?? "";
     expect(text).toContain("bar"); // the shift's role
-    expect(text).toContain("Colega"); // a colleague name resolved from the roster
+    expect(text).toContain("Colleague"); // a colleague name resolved from the roster
     expect(text).toContain("Vacaciones"); // absence kind, es
     expect(text).toContain("Solicitada"); // absence status, es
   });
@@ -311,7 +311,7 @@ describe("my-schedule-screen — keyboard submit and partial loads", () => {
       await flush(el);
       setInput(el, "abs-from", "2026-07-01");
       setInput(el, "abs-to", "2026-07-05");
-      setInput(el, "abs-note", "boda");
+      setInput(el, "abs-note", "wedding");
       await flush(el);
       const field = el.shadowRoot!.querySelector<
         HTMLElement & { updateComplete: Promise<unknown> }
@@ -329,7 +329,7 @@ describe("my-schedule-screen — keyboard submit and partial loads", () => {
         kind: "holiday",
         startsOn: "2026-07-01",
         endsOn: "2026-07-05",
-        note: "boda",
+        note: "wedding",
       });
     },
   );
@@ -464,7 +464,7 @@ describe("my-schedule-screen fields", () => {
     expect(colleague.placeholder).toBe("—");
     expect(colleague.options).toEqual([
       { value: "", label: "—" },
-      { value: "col1", label: "Colega" },
+      { value: "col1", label: "Colleague" },
     ]);
     expect(colleague.value).toBe("");
 
@@ -532,7 +532,10 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
 
   it("keeps the chosen colleague when the roster refreshes in a different order", async () => {
     const liveData = new LiveData();
-    const withCol2: RosterEntry[] = [...roster, { personId: "col2", displayName: "Segunda" }];
+    const withCol2: RosterEntry[] = [
+      ...roster,
+      { personId: "col2", displayName: "Second colleague" },
+    ];
     const api = Object.assign(stubApi({ getStaffRoster: vi.fn().mockResolvedValue(withCol2) }), {
       liveData,
     });
@@ -544,12 +547,12 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
     liveData.invalidate([{ type: "persons", id: "col2" }]);
     await vi.waitFor(() => expect(api.getStaffRoster).toHaveBeenCalledTimes(2));
     await flush(el);
-    expect(await chosenText(el, "cover-colleague")).toBe("Segunda");
+    expect(await chosenText(el, "cover-colleague")).toBe("Second colleague");
   });
 
   it("keeps the chosen shift when my shifts refresh in a different order", async () => {
     const liveData = new LiveData();
-    const second: MyShift = { ...shifts[0]!, id: "s2", description: "cocina" };
+    const second: MyShift = { ...shifts[0]!, id: "s2", description: "kitchen" };
     const api = Object.assign(
       stubApi({ listMyShifts: vi.fn().mockResolvedValue([shifts[0]!, second]) }),
       { liveData },
@@ -562,7 +565,7 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
     liveData.invalidate([{ type: "shifts", id: "s2" }]);
     await vi.waitFor(() => expect(api.listMyShifts).toHaveBeenCalledTimes(2));
     await flush(el);
-    expect(await chosenText(el, "cover-shift")).toContain("cocina");
+    expect(await chosenText(el, "cover-shift")).toContain("kitchen");
   });
 
   it.each([
@@ -589,7 +592,7 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
           listMyShifts: vi.fn().mockResolvedValue([shifts[0]!, { ...shifts[0]!, id: "s2" }]),
           getStaffRoster: vi
             .fn()
-            .mockResolvedValue([...roster, { personId: "col2", displayName: "Segunda" }]),
+            .mockResolvedValue([...roster, { personId: "col2", displayName: "Second colleague" }]),
         }),
         { liveData },
       );

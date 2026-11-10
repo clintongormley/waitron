@@ -14,7 +14,7 @@ function invoice(overrides: Partial<PurchaseInvoice> = {}): PurchaseInvoice {
   return {
     id: "pi-1",
     supplierTaxId: "B12345678",
-    supplierName: "Distribuciones García SL",
+    supplierName: "Westfield Distribution Ltd",
     supplierInvoiceNumber: "F-2026/001",
     issuedOn: "2026-08-10",
     receivedOn: "2026-08-12",
@@ -39,7 +39,7 @@ describe("purchase-list", () => {
       invoices: [invoice()],
     });
     const text = el.shadowRoot!.querySelector("[data-test=row]")!.textContent!;
-    expect(text).toContain("Distribuciones García SL");
+    expect(text).toContain("Westfield Distribution Ltd");
     expect(text).toContain("F-2026/001");
     expect(text).toContain("2026-08-12");
     expect(text).toContain("121,00\u00a0€");
@@ -207,11 +207,14 @@ describe("purchase-list refreshes", () => {
     const { el } = await mountWidget<PurchaseList>("dashboard-purchase-list", {
       invoices: [invoice({ id: "a" })],
     });
-    el.invoices = [invoice({ id: "a" }), invoice({ id: "b", supplierName: "Bodegas Norte SA" })];
+    el.invoices = [
+      invoice({ id: "a" }),
+      invoice({ id: "b", supplierName: "Northern Cellars Ltd" }),
+    ];
     await el.updateComplete;
     const rows = el.shadowRoot!.querySelectorAll("wt-card[data-test=row]");
     expect(rows).toHaveLength(2);
-    expect(rows[1]!.textContent).toContain("Bodegas Norte SA");
+    expect(rows[1]!.textContent).toContain("Northern Cellars Ltd");
   });
 
   it("stays disarmed through a second outside press, so the next Delete arms instead of deleting", async () => {

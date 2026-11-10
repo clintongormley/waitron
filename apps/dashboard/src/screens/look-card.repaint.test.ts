@@ -34,8 +34,8 @@ function view(id: string, name: string, choices: ThemeChoices): ThemeView {
     warnings: derived.warnings,
   };
 }
-const lucia = view("t-lucia", "Bar Lucía", LUCIA);
-const other = view("t-other", "Terraza", SAVED);
+const lucia = view("t-lucia", "Bar Lucy", LUCIA);
+const other = view("t-other", "Terrace", SAVED);
 
 const rejecting = vi.fn<typeof fetch>(() => Promise.reject(new TypeError("Failed to fetch")));
 const primary = () =>
@@ -66,7 +66,7 @@ async function editAndSave(list: ThemeList) {
     logo: null,
   }));
   const saveTheme = vi.fn(async (id: string, choices: ThemeChoices) =>
-    view(id, "Bar Lucía", choices),
+    view(id, "Bar Lucy", choices),
   );
   const api = { saveTheme, getVenueTheme } as unknown as DashboardApi;
   const { el } = await mountWidget<Card>("dashboard-look-card", { api, list, canEdit: true });

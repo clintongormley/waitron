@@ -9,7 +9,7 @@ const invoices: PurchaseInvoice[] = [
   {
     id: "pi-1",
     supplierTaxId: "B12345678",
-    supplierName: "Distribuciones García SL",
+    supplierName: "Westfield Distribution Ltd",
     supplierInvoiceNumber: "F-2026/001",
     issuedOn: "2026-08-10",
     receivedOn: "2026-08-12",

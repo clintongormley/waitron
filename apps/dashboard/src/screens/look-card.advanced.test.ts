@@ -58,7 +58,7 @@ const CHRISTMAS: ThemeChoices = {
   textScale: 100,
   text: {},
 };
-const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
+const lucia = theme("t-lucia", "Bar Lucy", LUCIA);
 const christmas = theme("t-xmas", "Christmas", CHRISTMAS);
 const LIST: ThemeList = { themes: [lucia, christmas], inUse: lucia.id };
 
@@ -276,7 +276,7 @@ describe("the Look card's Advanced section", () => {
   it("a newer read leaves a draft holding a half-typed code as it is", async () => {
     const { el } = await mountEditing();
     await typeHand(el, "light", "bg", "#12");
-    const newer = theme("t-lucia", "Bar Lucía", { ...LUCIA, corners: "square" });
+    const newer = theme("t-lucia", "Bar Lucy", { ...LUCIA, corners: "square" });
     el.list = { themes: [newer, christmas], inUse: lucia.id };
     await settle(el);
     expect(handCode(el, "light", "bg").value).toBe("#12");
@@ -315,7 +315,7 @@ describe("the Look card's Advanced section", () => {
     saveTheme.mockImplementationOnce(
       (id, choices) =>
         new Promise((resolve) => {
-          release = () => resolve(theme(id, "Bar Lucía", choices));
+          release = () => resolve(theme(id, "Bar Lucy", choices));
         }),
     );
     await typeHand(el, "light", "bg", "#f8f1e1");
@@ -338,7 +338,7 @@ describe("the Look card's Advanced section", () => {
     saveTheme.mockImplementationOnce(
       (id, choices) =>
         new Promise((resolve) => {
-          release = () => resolve(theme(id, "Bar Lucía", choices));
+          release = () => resolve(theme(id, "Bar Lucy", choices));
         }),
     );
     await typeHand(el, "light", "bg", "#f8f1e1");
@@ -876,7 +876,7 @@ describe("the dark version's own button colour", () => {
       saveTheme.mockImplementationOnce(
         (id, choices) =>
           new Promise((resolve) => {
-            release = () => resolve(theme(id, "Bar Lucía", choices));
+            release = () => resolve(theme(id, "Bar Lucy", choices));
           }),
       );
       if (colour === undefined) await typeHand(el, "light", "bg", "#f8f1e1");
@@ -1179,7 +1179,7 @@ describe("text set by hand in Advanced", () => {
     saveTheme.mockImplementationOnce(
       (id: string, choices: ThemeChoices) =>
         new Promise((resolve) => {
-          release = () => resolve(theme(id, "Bar Lucía", choices));
+          release = () => resolve(theme(id, "Bar Lucy", choices));
         }),
     );
     await typeSize(el, "md", "16");
@@ -1304,7 +1304,7 @@ describe("a refused text setting and Advanced's closed line", () => {
     saveTheme.mockImplementationOnce(
       (id: string, choices: ThemeChoices) =>
         new Promise((resolve) => {
-          release = () => resolve(theme(id, "Bar Lucía", choices));
+          release = () => resolve(theme(id, "Bar Lucy", choices));
         }),
     );
     await userEvent.click(button(el, "save"));
