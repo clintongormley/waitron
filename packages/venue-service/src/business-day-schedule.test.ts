@@ -123,10 +123,13 @@ async function fixture(
       dayCutover: "05:00:00",
     });
     const departmentId = randomUUID();
+    const [otherDepartment] = await tx
+      .select({ id: departments.id })
+      .from(departments)
+      .where(eq(departments.name, "Service"));
     await tx.insert(departments).values({
       id: departmentId,
-      locationId: loc,
-      name: "Service",
+      name: otherDepartment === undefined ? "Service" : `Service ${departmentId}`,
       tradingName: "Service",
       active: !options.disabled,
     });
@@ -140,23 +143,24 @@ async function fixture(
       name: "Service",
     });
     // One season covers the whole year, so every weekday range is in it.
-    const seasonId = randomUUID();
-    await tx
-      .insert(seasons)
-      .values({ id: seasonId, locationId: loc, name: "Winter", startsOn: "12-01" });
+    const [winter] = await tx
+      .select({ id: seasons.id })
+      .from(seasons)
+      .where(eq(seasons.name, "Winter"));
+    const seasonId = winter?.id ?? randomUUID();
+    if (winter === undefined)
+      await tx.insert(seasons).values({ id: seasonId, name: "Winter", startsOn: "12-01" });
     const specialDayId = options.date === undefined ? undefined : randomUUID();
     const specialDayDateId = randomUUID();
     if (specialDayId !== undefined) {
       await tx.insert(specialDays).values({
         id: specialDayId,
-        locationId: loc,
         name: "Named day",
         repeatsYearly: options.annual ?? false,
       });
       await tx.insert(specialDayDates).values({
         id: specialDayDateId,
         specialDayId,
-        locationId: loc,
         date: options.date!,
         closedAllDay: options.closed ?? false,
       });
@@ -167,7 +171,7 @@ async function fixture(
       await tx
         .insert(floorZones)
         .values({ id: zoneId, locationId: loc, name: "Zone", active: !options.disabled });
-      await tx.insert(zoneServicePolicies).values({ zoneId, locationId: loc, departmentId });
+      await tx.insert(zoneServicePolicies).values({ zoneId, departmentId });
       if (ranges.length && specialDayId) {
         const dayId = randomUUID();
         await tx.insert(zoneDays).values({ id: dayId, zoneId, specialDayDateId });
@@ -256,14 +260,12 @@ async function paintedDay(
     dayId = randomUUID();
   await tx.insert(specialDays).values({
     id: specialDayId,
-    locationId: v.cfg.locationId,
     name: day.name,
     repeatsYearly: day.repeatsYearly ?? false,
   });
   await tx.insert(specialDayDates).values({
     id: dateId,
     specialDayId,
-    locationId: v.cfg.locationId,
     date: day.date,
     closedAllDay: day.closedAllDay ?? false,
   });
@@ -826,7 +828,6 @@ describe("a waiting change checks the hours written while it waits", () => {
       const departmentId = randomUUID();
       await tx.insert(departments).values({
         id: departmentId,
-        locationId: v.cfg.locationId,
         name: "Bar",
         tradingName: "Bar",
       });
@@ -1005,16 +1006,9 @@ describe("a waiting change checks the hours written while it waits", () => {
     });
     expect(await storedZone(v)).toEqual([]);
   });
-  const specialDayNames = (v: Awaited<ReturnType<typeof fixture>>) =>
+  const specialDayNames = () =>
     withTransaction(suite.db, async (tx) =>
-      (
-        await tx
-          .select({ name: specialDays.name })
-          .from(specialDays)
-          .where(eq(specialDays.locationId, v.cfg.locationId))
-      )
-        .map((row) => row.name)
-        .sort(),
+      (await tx.select({ name: specialDays.name }).from(specialDays)).map((row) => row.name).sort(),
     );
   const seasonNames = () =>
     withTransaction(suite.db, async (tx) => (await readSeasons(tx)).map((s) => s.name));
@@ -1054,11 +1048,11 @@ describe("a waiting change checks the hours written while it waits", () => {
         ],
       },
     });
-    expect(await specialDayNames(v)).toEqual([]);
+    expect(await specialDayNames()).toEqual([]);
     await expect(
       paintDate(v, "menu", "2026-11-04", [range("09:00", "17:00")], at, 1),
     ).resolves.toBeUndefined();
-    expect(await specialDayNames(v)).toEqual(["Special day"]);
+    expect(await specialDayNames()).toEqual(["Special day"]);
   });
   it("refuses a repeating special day crossing the waiting start, parsing it under the start in force", async () => {
     const v = await fixture([]);
@@ -1080,7 +1074,7 @@ describe("a waiting change checks the hours written while it waits", () => {
         ],
       },
     });
-    expect(await specialDayNames(v)).toEqual([]);
+    expect(await specialDayNames()).toEqual([]);
   });
   it("refuses a special day's zone paint crossing the waiting start, and stores one that fits", async () => {
     const v = await fixture([], { zone: true });
@@ -1106,11 +1100,11 @@ describe("a waiting change checks the hours written while it waits", () => {
         ],
       },
     });
-    expect(await specialDayNames(v)).toEqual([]);
+    expect(await specialDayNames()).toEqual([]);
     await expect(
       paintDate(v, "zone", "2026-11-04", [range("09:00", "17:00")], at, 1),
     ).resolves.toBeUndefined();
-    expect(await specialDayNames(v)).toEqual(["Special day"]);
+    expect(await specialDayNames()).toEqual(["Special day"]);
   });
   // The two dates' conflicts came back in either order across repeat runs.
   it("answers a special day clashing only under the waiting start as a waiting-change conflict", async () => {
@@ -1170,7 +1164,7 @@ describe("a waiting change checks the hours written while it waits", () => {
         ]),
       },
     });
-    expect(await specialDayNames(v)).toEqual([]);
+    expect(await specialDayNames()).toEqual([]);
   });
   it("refuses deleting a special day while another holds a clash, and deletes the clashing one", async () => {
     const v = await fixture([]);
@@ -1206,9 +1200,9 @@ describe("a waiting change checks the hours written while it waits", () => {
         ],
       },
     });
-    expect(await specialDayNames(v)).toEqual(["Fiesta", "Market"]);
+    expect(await specialDayNames()).toEqual(["Fiesta", "Market"]);
     await expect(removeSpecialDay(clashing!)).resolves.toBeUndefined();
-    expect(await specialDayNames(v)).toEqual(["Market"]);
+    expect(await specialDayNames()).toEqual(["Market"]);
   });
   it("answers a special-day delete beside hours clashing only under the waiting start as a waiting-change conflict", async () => {
     const v = await fixture([]);
@@ -1222,7 +1216,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: waitingStartClash,
     });
-    expect(await specialDayNames(v)).toEqual(["Market"]);
+    expect(await specialDayNames()).toEqual(["Market"]);
   });
   it("refuses adding a season while a stored range clashes, since the new season copies it", async () => {
     const clash = { weekday: 6, startsAt: "21:00", endsAt: "04:30", reason: "range" };
@@ -1432,10 +1426,7 @@ describe("undated hours are checked against the start in force", () => {
       paintDate(v, "menu", "2026-12-25", [range("09:00", "17:00")], at, 1),
     ).resolves.toBeUndefined();
     const [day] = await withTransaction(suite.db, (tx) =>
-      tx
-        .select({ id: specialDays.id })
-        .from(specialDays)
-        .where(eq(specialDays.locationId, v.cfg.locationId)),
+      tx.select({ id: specialDays.id }).from(specialDays),
     );
     await expect(
       withTransaction(suite.db, (tx) => deleteSpecialDay(tx, day!.id, at, 1)),
@@ -1855,7 +1846,7 @@ it.each([false, true])(
       const winter = { id: v.seasonId };
       const [summer] = await tx
         .insert(seasons)
-        .values({ locationId: v.cfg.locationId, name: "Summer", startsOn: "06-01" })
+        .values({ name: "Summer", startsOn: "06-01" })
         .returning();
       const paint = (seasonId: string, ranges: { startsAt: string; endsAt: string }[]) => {
         const on = <T>(entries: T[]) =>
@@ -1912,7 +1903,7 @@ it("names the season of each season range conflict", async () => {
   const result = await withTransaction(suite.db, async (tx) => {
     const [autumn] = await tx
       .insert(seasons)
-      .values({ locationId: v.cfg.locationId, name: "Autumn", startsOn: "09-01" })
+      .values({ name: "Autumn", startsOn: "09-01" })
       .returning();
     for (const seasonId of [v.seasonId, autumn!.id])
       await replaceMenuWeek(
@@ -1987,7 +1978,6 @@ it("counts a range painted in every season once, so a capped list still names ev
       menuId = randomUUID();
     await tx.insert(departments).values({
       id: secondId,
-      locationId: v.cfg.locationId,
       name: "Bar",
       tradingName: "Bar",
     });
@@ -2160,7 +2150,7 @@ async function busyCalendar(count: number, run = 0) {
       startsOn,
       name: `Season ${i}`,
     }));
-    for (const season of seasonIds) await tx.insert(seasons).values({ ...season, locationId: loc });
+    for (const season of seasonIds) await tx.insert(seasons).values({ ...season });
     const menuId = randomUUID();
     await tx.insert(catalogues).values({ id: menuId, name: "Menu" });
     const departmentsMade: { id: string; lunch: string; dinner: string }[] = [];
@@ -2168,7 +2158,6 @@ async function busyCalendar(count: number, run = 0) {
       const id = fixed(2, d);
       await tx.insert(departments).values({
         id,
-        locationId: loc,
         name: `Department ${d}`,
         tradingName: `Department ${d}`,
       });
@@ -2203,13 +2192,10 @@ async function busyCalendar(count: number, run = 0) {
       const namedId = fixed(4, i),
         namedDateId = fixed(8, i),
         namedDayId = fixed(9, i);
-      await tx
-        .insert(specialDays)
-        .values({ id: namedId, locationId: loc, name: `Named ${i}`, repeatsYearly: true });
+      await tx.insert(specialDays).values({ id: namedId, name: `Named ${i}`, repeatsYearly: true });
       await tx.insert(specialDayDates).values({
         id: namedDateId,
         specialDayId: namedId,
-        locationId: loc,
         date: date((i % 12) + 1, 2 + (i % 14)),
         closedAllDay: i % 5 === 4,
       });
@@ -2229,11 +2215,10 @@ async function busyCalendar(count: number, run = 0) {
         dateId = fixed(6, i);
       await tx
         .insert(specialDays)
-        .values({ id: specialDayId, locationId: loc, name: `Special ${i}`, repeatsYearly: true });
+        .values({ id: specialDayId, name: `Special ${i}`, repeatsYearly: true });
       await tx.insert(specialDayDates).values({
         id: dateId,
         specialDayId,
-        locationId: loc,
         date: date((i % 12) + 1, 1 + (i % 14)),
         closedAllDay: i % 7 === 6,
       });

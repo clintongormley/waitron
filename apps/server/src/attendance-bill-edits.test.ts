@@ -115,12 +115,10 @@ describe("accepted bill edits as order activity", () => {
       expect(answer.status).toBe(opensBill(action) ? 200 : 204);
       const otherBill = opensBill(action) ? (answer.json.billId as string) : p.otherBillId!;
       const saved = await state();
-      expect(saved.facts.map((f) => [f.source, f.personId, f.locationId, f.at, f.outcome])).toEqual(
-        [
-          ["order", v.operatorId, v.cfg.locationId, "2026-01-05T16:40:00.000Z", "qualifying"],
-          ["order", v.operatorId, v.cfg.locationId, "2026-01-05T16:40:00.000Z", "qualifying"],
-        ],
-      );
+      expect(saved.facts.map((f) => [f.source, f.personId, f.at, f.outcome])).toEqual([
+        ["order", v.operatorId, "2026-01-05T16:40:00.000Z", "qualifying"],
+        ["order", v.operatorId, "2026-01-05T16:40:00.000Z", "qualifying"],
+      ]);
       expect(saved.facts.map((f) => f.key.split(":")[1]).sort()).toEqual(
         [p.tabId, otherBill].sort(),
       );

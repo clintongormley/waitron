@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5314aa8c-8d2a-49bc-aeb2-cb27a1959cd0",
+  "id": "8e79f25e-8e77-4582-939c-4245fab1ba5f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "absences": {
@@ -144,13 +144,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "business_day": {
           "name": "business_day",
           "type": "text",
@@ -208,7 +201,6 @@
         "attendance_day_work_scope_uq": {
           "name": "attendance_day_work_scope_uq",
           "columns": [
-            "location_id",
             "business_day"
           ],
           "isUnique": true
@@ -216,27 +208,12 @@
         "attendance_day_work_due_idx": {
           "name": "attendance_day_work_due_idx",
           "columns": [
-            "location_id",
             "next_due_at"
           ],
           "isUnique": false
         }
       },
-      "foreignKeys": {
-        "attendance_day_work_location_id_locations_id_fk": {
-          "name": "attendance_day_work_location_id_locations_id_fk",
-          "tableFrom": "attendance_day_work",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
@@ -276,13 +253,6 @@
         },
         "person_id": {
           "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "location_id": {
-          "name": "location_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -336,7 +306,6 @@
         "attendance_operation_facts_day_idx": {
           "name": "attendance_operation_facts_day_idx",
           "columns": [
-            "location_id",
             "business_day",
             "person_id",
             "at"
@@ -368,19 +337,6 @@
           "tableTo": "persons",
           "columnsFrom": [
             "person_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "attendance_operation_facts_location_id_locations_id_fk": {
-          "name": "attendance_operation_facts_location_id_locations_id_fk",
-          "tableFrom": "attendance_operation_facts",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
           ],
           "columnsTo": [
             "id"
@@ -422,13 +378,6 @@
         },
         "person_id": {
           "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "location_id": {
-          "name": "location_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -539,7 +488,6 @@
           "name": "attendance_questions_shift_uq",
           "columns": [
             "person_id",
-            "location_id",
             "shift_key"
           ],
           "isUnique": true
@@ -548,8 +496,7 @@
           "name": "attendance_questions_subject_uq",
           "columns": [
             "id",
-            "person_id",
-            "location_id"
+            "person_id"
           ],
           "isUnique": true
         },
@@ -573,19 +520,6 @@
           "tableTo": "persons",
           "columnsFrom": [
             "person_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "attendance_questions_location_id_locations_id_fk": {
-          "name": "attendance_questions_location_id_locations_id_fk",
-          "tableFrom": "attendance_questions",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
           ],
           "columnsTo": [
             "id"
@@ -644,13 +578,11 @@
           "tableTo": "attendance_questions",
           "columnsFrom": [
             "canonical_question_id",
-            "person_id",
-            "location_id"
+            "person_id"
           ],
           "columnsTo": [
             "id",
-            "person_id",
-            "location_id"
+            "person_id"
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
@@ -710,13 +642,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
-        },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
         "question_id": {
@@ -805,32 +730,17 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "attendance_response_commands_location_id_locations_id_fk": {
-          "name": "attendance_response_commands_location_id_locations_id_fk",
-          "tableFrom": "attendance_response_commands",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "attendance_response_commands_question_fk": {
           "name": "attendance_response_commands_question_fk",
           "tableFrom": "attendance_response_commands",
           "tableTo": "attendance_questions",
           "columnsFrom": [
             "question_id",
-            "person_id",
-            "location_id"
+            "person_id"
           ],
           "columnsTo": [
             "id",
-            "person_id",
-            "location_id"
+            "person_id"
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
@@ -856,13 +766,6 @@
           "name": "id",
           "type": "text",
           "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -942,7 +845,6 @@
         "attendance_source_state_scope_uq": {
           "name": "attendance_source_state_scope_uq",
           "columns": [
-            "location_id",
             "source",
             "record_kind",
             "key"
@@ -952,7 +854,6 @@
         "attendance_source_state_watch_idx": {
           "name": "attendance_source_state_watch_idx",
           "columns": [
-            "location_id",
             "record_kind",
             "next_due_at",
             "id"
@@ -960,21 +861,7 @@
           "isUnique": false
         }
       },
-      "foreignKeys": {
-        "attendance_source_state_location_id_locations_id_fk": {
-          "name": "attendance_source_state_location_id_locations_id_fk",
-          "tableFrom": "attendance_source_state",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
@@ -1389,13 +1276,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "period_start": {
           "name": "period_start",
           "type": "text",
@@ -1441,17 +1321,9 @@
         }
       },
       "indexes": {
-        "roster_versions_location_idx": {
-          "name": "roster_versions_location_idx",
-          "columns": [
-            "location_id"
-          ],
-          "isUnique": false
-        },
         "roster_versions_published_period_uq": {
           "name": "roster_versions_published_period_uq",
           "columns": [
-            "location_id",
             "period_start",
             "period_end"
           ],
@@ -1460,19 +1332,6 @@
         }
       },
       "foreignKeys": {
-        "roster_versions_location_fk": {
-          "name": "roster_versions_location_fk",
-          "tableFrom": "roster_versions",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "roster_versions_published_by_person_fk": {
           "name": "roster_versions_published_by_person_fk",
           "tableFrom": "roster_versions",
@@ -1681,13 +1540,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "label": {
           "name": "label",
           "type": "text",
@@ -1724,30 +1576,8 @@
           "autoincrement": false
         }
       },
-      "indexes": {
-        "shift_templates_location_idx": {
-          "name": "shift_templates_location_idx",
-          "columns": [
-            "location_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "shift_templates_location_fk": {
-          "name": "shift_templates_location_fk",
-          "tableFrom": "shift_templates",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
@@ -1781,13 +1611,6 @@
         },
         "person_id": {
           "name": "person_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "location_id": {
-          "name": "location_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -1860,19 +1683,6 @@
           "tableTo": "persons",
           "columnsFrom": [
             "person_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "shifts_location_fk": {
-          "name": "shifts_location_fk",
-          "tableFrom": "shifts",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
           ],
           "columnsTo": [
             "id"
@@ -2562,13 +2372,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "name": {
           "name": "name",
           "type": "text",
@@ -2594,30 +2397,15 @@
         }
       },
       "indexes": {
-        "staff_roles_location_name_key": {
-          "name": "staff_roles_location_name_key",
+        "staff_roles_name_key": {
+          "name": "staff_roles_name_key",
           "columns": [
-            "location_id",
             "name"
           ],
           "isUnique": true
         }
       },
-      "foreignKeys": {
-        "staff_roles_location_fk": {
-          "name": "staff_roles_location_fk",
-          "tableFrom": "staff_roles",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {

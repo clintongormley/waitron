@@ -77,9 +77,7 @@ async function venue(options: { oneSeason?: boolean } = {}) {
     ])
     .returning({ id: floorZones.id });
   if (options.oneSeason === true)
-    await db
-      .insert(seasons)
-      .values({ locationId: cfg.locationId, name: "All year", startsOn: "01-01" });
+    await db.insert(seasons).values({ name: "All year", startsOn: "01-01" });
   return scoped(async (tx) => {
     const departmentId = (await createDepartment(tx, { name: "Restaurant", orderStart: "table" }))
       .id;
@@ -486,7 +484,7 @@ type PaintSlot = { periodId: string | null; startsAt: string; endsAt: string };
 type ZoneSlot = { kind: "closed" | "open"; startsAt: string; endsAt: string };
 
 async function specialDay(
-  v: Venue,
+  _v: Venue,
   date: string,
   options: {
     repeats?: boolean;
@@ -498,7 +496,6 @@ async function specialDay(
   const [day] = await db
     .insert(specialDays)
     .values({
-      locationId: v.cfg.locationId,
       name: `Special ${date}`,
       repeatsYearly: options.repeats,
     })
@@ -507,7 +504,6 @@ async function specialDay(
     .insert(specialDayDates)
     .values({
       specialDayId: day!.id,
-      locationId: v.cfg.locationId,
       date,
       closedAllDay: options.closedAllDay,
     })
@@ -809,7 +805,6 @@ describe("readSpecialDayPlan", () => {
       .insert(specialDayDates)
       .values({
         specialDayId: id,
-        locationId: v.cfg.locationId,
         date: "2030-11-29",
         closedAllDay: true,
       })
@@ -848,10 +843,10 @@ describe("readSpecialDayPlan", () => {
   });
 
   it("answers its name and no dates, reading no paint, for a special day with none", async () => {
-    const v = await venue();
+    await venue();
     const [day] = await db
       .insert(specialDays)
-      .values({ locationId: v.cfg.locationId, name: "Undated" })
+      .values({ name: "Undated" })
       .returning({ id: specialDays.id });
     const { result, texts } = await paintStatements((tx) => readSpecialDayPlan(tx, day!.id));
     expect(result).toEqual({
@@ -864,7 +859,7 @@ describe("readSpecialDayPlan", () => {
 
   it("plans no season for a date no season holds", async () => {
     const v = await venue();
-    await db.delete(seasons).where(eq(seasons.locationId, v.cfg.locationId));
+    await db.delete(seasons);
     const id = await specialDay(v, "2030-12-13");
     const found = await scoped((tx) => readSpecialDayPlan(tx, id));
     expect(found!.plan.seasonIdOn).toEqual(new Map([["2030-12-13", null]]));

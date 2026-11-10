@@ -327,8 +327,8 @@ describe("releaseHeldWorkOf", () => {
           events.map((event) => `group:${event.id}`),
         ),
       );
-    expect(facts.map((fact) => [fact.key, fact.personId, fact.locationId]).sort()).toEqual(
-      events.map((event) => [`group:${event.id}`, venue.staffId, venue.cfg.locationId]).sort(),
+    expect(facts.map((fact) => [fact.key, fact.personId]).sort()).toEqual(
+      events.map((event) => [`group:${event.id}`, venue.staffId]).sort(),
     );
   });
 });

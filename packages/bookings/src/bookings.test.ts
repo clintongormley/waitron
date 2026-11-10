@@ -101,7 +101,6 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 /** Insert a booking directly at an arbitrary status, bypassing the lifecycle verbs. */
 async function seedBooking(
-  cfg: VenueCfg,
   createdBy: string,
   status: "booked" | "seated" | "completed" | "no_show" | "cancelled",
 ): Promise<string> {
@@ -109,7 +108,6 @@ async function seedBooking(
     const [row] = await tx
       .insert(bookings)
       .values({
-        locationId: cfg.locationId,
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 2,
@@ -238,10 +236,10 @@ describe("createBooking + listBookings", () => {
     expect(listed.map((b) => b.bookingTime)).toEqual(["18:15:00", "18:15:00"]);
   });
 
-  it("plans the day list on the location and date index, not a scan", async () => {
+  it("plans the day list on the date index, not a scan", async () => {
     await setupVenue();
     const plan = await withTransaction(db, async (tx) => {
-      const emitted = bookingsOnDay(tx, await venueLocationId(tx), "2026-08-21").toSQL();
+      const emitted = bookingsOnDay(tx, "2026-08-21").toSQL();
       const parts = emitted.sql.split("?");
       const statement = sql.raw(`explain query plan ${parts[0]}`);
       emitted.params.forEach((param, i) => {
@@ -251,7 +249,7 @@ describe("createBooking + listBookings", () => {
       return tx.execute<{ detail: string }>(statement);
     });
     const details = plan.rows.map((row) => row.detail);
-    expect(details.some((d) => d.includes("USING INDEX bookings_location_date_idx"))).toBe(true);
+    expect(details.some((d) => d.includes("USING INDEX bookings_date_idx"))).toBe(true);
     expect(details.some((d) => d.includes("SCAN bookings"))).toBe(false);
   });
 });
@@ -337,8 +335,8 @@ describe("updateBooking", () => {
   it.each(["seated", "completed", "no_show", "cancelled"] as const)(
     "rejects an edit of a %s booking with booking.invalid_transition",
     async (status) => {
-      const { cfg, createdBy } = await setupVenue();
-      const id = await seedBooking(cfg, createdBy, status);
+      const { createdBy } = await setupVenue();
+      const id = await seedBooking(createdBy, status);
       const before = await scoped((tx) => getBooking(tx, id));
       await expect(scoped((tx) => updateBooking(tx, id, { partySize: 3 }))).rejects.toMatchObject({
         code: "booking.invalid_transition",
@@ -399,42 +397,42 @@ describe("updateBooking", () => {
 
 describe("lifecycle verbs", () => {
   it("cancelBooking: booked → cancelled, and seated → cancelled", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const bookedId = await seedBooking(cfg, createdBy, "booked");
+    const { createdBy } = await setupVenue();
+    const bookedId = await seedBooking(createdBy, "booked");
     await scoped((tx) => cancelBooking(tx, bookedId));
     expect((await scoped((tx) => getBooking(tx, bookedId)))!.status).toBe("cancelled");
 
-    const seatedId = await seedBooking(cfg, createdBy, "seated");
+    const seatedId = await seedBooking(createdBy, "seated");
     await scoped((tx) => cancelBooking(tx, seatedId));
     expect((await scoped((tx) => getBooking(tx, seatedId)))!.status).toBe("cancelled");
   });
 
   it("markNoShow: booked → no_show; illegal from another state → booking.invalid_transition", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const id = await seedBooking(cfg, createdBy, "booked");
+    const { createdBy } = await setupVenue();
+    const id = await seedBooking(createdBy, "booked");
     await scoped((tx) => markNoShow(tx, id));
     expect((await scoped((tx) => getBooking(tx, id)))!.status).toBe("no_show");
 
-    const seatedId = await seedBooking(cfg, createdBy, "seated");
+    const seatedId = await seedBooking(createdBy, "seated");
     await expect(scoped((tx) => markNoShow(tx, seatedId))).rejects.toMatchObject({
       code: "booking.invalid_transition",
     });
   });
 
   it("completeBooking: seated → completed; illegal from booked → booking.invalid_transition", async () => {
-    const { cfg, createdBy } = await setupVenue();
-    const seatedId = await seedBooking(cfg, createdBy, "seated");
+    const { createdBy } = await setupVenue();
+    const seatedId = await seedBooking(createdBy, "seated");
     await scoped((tx) => completeBooking(tx, seatedId));
     expect((await scoped((tx) => getBooking(tx, seatedId)))!.status).toBe("completed");
 
-    const bookedId = await seedBooking(cfg, createdBy, "booked");
+    const bookedId = await seedBooking(createdBy, "booked");
     await expect(scoped((tx) => completeBooking(tx, bookedId))).rejects.toMatchObject({
       code: "booking.invalid_transition",
     });
   });
 
   it("distinguishes an absent id (booking.not_found) from a wrong-state one (invalid_transition)", async () => {
-    const { cfg, createdBy } = await setupVenue();
+    const { createdBy } = await setupVenue();
     await expect(scoped((tx) => cancelBooking(tx, randomUUID()))).rejects.toMatchObject({
       code: "booking.not_found",
     });
@@ -445,7 +443,7 @@ describe("lifecycle verbs", () => {
       code: "booking.not_found",
     });
 
-    const completedId = await seedBooking(cfg, createdBy, "completed");
+    const completedId = await seedBooking(createdBy, "completed");
     await expect(scoped((tx) => cancelBooking(tx, completedId))).rejects.toMatchObject({
       code: "booking.invalid_transition",
     });

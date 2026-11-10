@@ -309,7 +309,6 @@ describe("floor hierarchy deletion", () => {
     await inTx(v, (tx) =>
       tx.insert(bookings).values({
         id: booking,
-        locationId: v.cfg.locationId,
         tableId: table,
         bookingDate: "2026-01-01",
         bookingTime: "19:00:00",
@@ -360,7 +359,6 @@ describe("floor hierarchy deletion", () => {
     await inTx(v, (tx) =>
       tx.insert(bookings).values({
         id: booking,
-        locationId: v.cfg.locationId,
         tableId: own.noToday.id,
         bookingDate: "2026-01-01",
         bookingTime: "19:00:00",
@@ -452,7 +450,6 @@ describe("floor hierarchy deletion", () => {
     await inTx(v, (tx) =>
       tx.insert(bookings).values({
         id: bookingId,
-        locationId: v.cfg.locationId,
         tableId: own.live[1]!.id,
         bookingDate: "2026-01-01",
         bookingTime: "19:00:00",

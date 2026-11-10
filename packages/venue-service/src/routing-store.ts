@@ -10,7 +10,6 @@ import {
   routingCellPeriods,
   routingCells,
   stationDayStates,
-  venueLocationId,
   zoneServicePolicies,
   type Transaction,
 } from "@waitron/db";
@@ -334,7 +333,6 @@ export async function setRoutingCell(
       await tx
         .insert(routingCells)
         .values({
-          locationId: await venueLocationId(tx),
           categoryId: row.kind === "category" ? row.categoryId : null,
           productId: row.kind === "product" ? row.productId : null,
           noCategory: row.kind === "no_category",

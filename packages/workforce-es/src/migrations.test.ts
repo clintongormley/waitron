@@ -1,54 +1,44 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CHECK_VIOLATION,
+  checkFailed,
   CORE_MIGRATIONS,
-  FOREIGN_KEY_VIOLATION,
   UNIQUE_VIOLATION,
   captureError,
   engineErrorMessage,
   isRefusal,
-  newId,
   nowIso,
-  refusalOn,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { convenioConfig } from "./schema/convenio-config.js";
 import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
-import { seedLocation } from "../test/fixtures.js";
 
-/** The two columns whose value comes from the table's `$defaultFn` rather than from a SQL DEFAULT.
- * Drizzle runs those functions per insert, so a RAW insert has to supply them itself. Every insert
- * below is deliberately raw, because what it is proving is the DEFAULT the MIGRATION declares for
- * each rule column, not the value drizzle would send. */
 function rowIdentity() {
-  return sql`${newId()}, ${nowIso()}`;
+  return sql`${1}, ${nowIso()}`;
 }
-
-let locationId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    locationId = await seedLocation(db);
   },
 });
 
 describe("the workforce-es (convenio_config) migration set", () => {
   it("defaults every rule to the ET statutory floor / today's default for a bare row", async () => {
     await suite.db.execute(sql`
-      insert into convenio_config (id, created_at, location_id)
-      values (${rowIdentity()}, ${locationId})`);
+      insert into convenio_config (id, created_at)
+      values (${rowIdentity()})`);
     const rows = await suite.db.execute<Record<string, unknown>>(sql`
       select working_days_per_week, overtime_model, reference_period_days, compensation_window_days,
         daily_target_minutes, max_weekly_minutes, min_inter_shift_rest_minutes,
         max_ordinary_daily_minutes, break_threshold_minutes, min_break_minutes, weekly_rest_minutes,
         annual_overtime_cap_hours, night_window_start_minute, night_window_end_minute,
         night_premium_pct, split_shift_premium
-      from convenio_config where location_id = ${locationId}`);
+      from convenio_config where id = 1`);
     expect(rows.rows[0]).toEqual({
       working_days_per_week: 5,
       overtime_model: "daily_accrual",
@@ -73,16 +63,15 @@ describe("the workforce-es (convenio_config) migration set", () => {
     // column's read mapping (`packages/db/src/schema/columns.ts`).
     const [row] = await suite.db
       .select({ breaksCountAsWorked: convenioConfig.breaksCountAsWorked })
-      .from(convenioConfig)
-      .where(eq(convenioConfig.locationId, locationId));
+      .from(convenioConfig);
     expect(row!.breaksCountAsWorked).toBe(false);
   });
 
   it("rejects working_days_per_week outside 1..7 (the div-by-zero guard)", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into convenio_config (id, created_at, location_id, working_days_per_week)
-        values (${rowIdentity()}, ${locationId}, 0)`),
+        insert into convenio_config (id, created_at, working_days_per_week)
+        values (${rowIdentity()}, 0)`),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/convenio_config_working_days_ck/);
@@ -93,42 +82,11 @@ describe("the workforce-es (convenio_config) migration set", () => {
     // satisfied by the working-days check the case above drives.
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into convenio_config (id, created_at, location_id, overtime_model)
-        values (${rowIdentity()}, ${locationId}, 'annual_hours')`),
+        insert into convenio_config (id, created_at, overtime_model)
+        values (${rowIdentity()}, 'annual_hours')`),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/convenio_config_overtime_model_ck/);
-  });
-
-  it("allows only one convenio_config per location", async () => {
-    const other = await seedLocation(suite.db);
-    await suite.db.execute(sql`
-      insert into convenio_config (id, created_at, location_id) values (${rowIdentity()}, ${other})`);
-    const error = await captureError(() =>
-      suite.db.execute(sql`
-        insert into convenio_config (id, created_at, location_id)
-        values (${rowIdentity()}, ${other})`),
-    );
-    // SQLite names the TABLE AND COLUMN a unique index was declared on, never the index's own
-    // name, so the key is identified by its target here rather than by the string
-    // `convenio_config_location_uq`.
-    expect(
-      refusalOn(error, UNIQUE_VIOLATION, {
-        table: "convenio_config",
-        columns: ["location_id"],
-      }),
-    ).toBe(true);
-  });
-
-  it("rejects a row whose location does not exist", async () => {
-    const error = await captureError(() =>
-      suite.db.execute(sql`
-        insert into convenio_config (id, created_at, location_id)
-        values (${rowIdentity()}, '00000000-0000-4000-8000-000000000000')`),
-    );
-    // A foreign-key refusal names nothing on this engine — the whole message is
-    // `FOREIGN KEY constraint failed` — so the class is all there is to assert.
-    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 
@@ -140,16 +98,27 @@ describe("convenio_config carries no tenant column", () => {
     expect(rows.rows.map((r) => r.name).filter((name) => name === "tenant_id")).toEqual([]);
   });
 
-  it("keys one row per location with convenio_config_location_uq, and no tenant index", async () => {
-    const indexes = await suite.db.execute<{ name: string; unique: number }>(
-      sql`select name, "unique" from pragma_index_list('convenio_config')`,
+  it("carries no tenant index", async () => {
+    const indexes = await suite.db.execute<{ name: string }>(
+      sql`select name from pragma_index_list('convenio_config')`,
     );
-    const byName = Object.fromEntries(indexes.rows.map((r) => [r.name, r]));
-    expect(byName["convenio_config_location_uq"]?.unique).toBe(1);
-    const keyed = await suite.db.execute<{ name: string }>(
-      sql`select name from pragma_index_info('convenio_config_location_uq')`,
+    expect(indexes.rows.map((row) => row.name).filter((name) => name.includes("tenant"))).toEqual(
+      [],
     );
-    expect(keyed.rows.map((r) => r.name)).toEqual(["location_id"]);
-    expect(Object.keys(byName).filter((name) => name.includes("tenant"))).toEqual([]);
+  });
+});
+
+describe("one venue's agreement", () => {
+  const single = useVenueDb({ migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS] });
+  it("keeps one convenio row", async () => {
+    await seedTenant(single.db);
+    const refused = await captureError(() => single.db.insert(convenioConfig).values({ id: 2 }));
+    expect(checkFailed(refused, "convenio_config_singleton_ck")).toBe(true);
+    await single.db.insert(convenioConfig).values({ id: 1 });
+    const duplicate = await captureError(() => single.db.insert(convenioConfig).values({ id: 1 }));
+    expect(isRefusal(duplicate, UNIQUE_VIOLATION)).toBe(true);
+    expect(await single.db.select({ id: convenioConfig.id }).from(convenioConfig)).toEqual([
+      { id: 1 },
+    ]);
   });
 });

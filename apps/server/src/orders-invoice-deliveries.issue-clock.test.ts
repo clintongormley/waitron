@@ -52,10 +52,7 @@ useVenueDb({
         .returning({ id: pagePrinters.id });
       officeId = office!.id;
       const receipt = { operationDescription: "Restaurante", email: "facturas@example.test" };
-      for (const { id } of await tx
-        .select({ id: departments.id })
-        .from(departments)
-        .where(eq(departments.locationId, venue.cfg.locationId))) {
+      for (const { id } of await tx.select({ id: departments.id }).from(departments)) {
         await tx
           .insert(departmentReceipts)
           .values({ departmentId: id, receipt })

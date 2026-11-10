@@ -293,13 +293,11 @@ describe("deleted service targets", () => {
           isDefault: true,
         }),
       ),
-    ).rejects.toThrow(/UNIQUE constraint failed: departments.location_id/);
+    ).rejects.toThrow(/UNIQUE constraint failed: departments.is_default/);
     expect(await snapshot()).toEqual(beforeClash);
     const nodeId = await seedNode(suite.db);
     await run((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, { ...f.cfg, nodeId }));
-    const ds = await run((tx) =>
-      tx.select().from(departments).where(eq(departments.locationId, f.cfg.locationId)),
-    );
+    const ds = await run((tx) => tx.select().from(departments));
     const zs = await run((tx) =>
       tx.select().from(floorZones).where(eq(floorZones.locationId, f.cfg.locationId)),
     );
@@ -310,12 +308,7 @@ describe("deleted service targets", () => {
     });
     expect(ds.filter((row) => row.isDefault)).toEqual([expect.objectContaining({ active: true })]);
     expect(zs.find((row) => row.id === f.zone)).toMatchObject({ active: false, name: "Counter" });
-    const policy = await run((tx) =>
-      tx
-        .select()
-        .from(zoneServicePolicies)
-        .where(eq(zoneServicePolicies.locationId, f.cfg.locationId)),
-    );
+    const policy = await run((tx) => tx.select().from(zoneServicePolicies));
     expect(policy.filter((row) => row.isCounterDefault)).toEqual([
       expect.objectContaining({ zoneId: expect.any(String) }),
     ]);

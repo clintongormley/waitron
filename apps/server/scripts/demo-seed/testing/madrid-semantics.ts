@@ -246,7 +246,7 @@ export async function canonicalMadridSemantics(
         key = parts("product_id", "sort");
         break;
       case "routing_cells":
-        key = parts("location_id", "category_id", "product_id", "zone_id");
+        key = parts("category_id", "product_id", "zone_id");
         break;
       case "service_steps":
         key = parts("department_id", "position");

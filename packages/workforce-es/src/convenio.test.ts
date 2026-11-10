@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, captureError, newId, nowIso, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, nowIso, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
@@ -72,18 +72,8 @@ describe("resolveWorkTimeRuleset", () => {
 
   it("resolves a fully-customised row, mapping the period_net enum and the scaled premiums", async () => {
     // Every field set to a distinct non-default, so a mapping that dropped or crossed a column shows.
-    const locationId = await venueLocationId(suite.db);
     await suite.db.execute(sql`
-      insert into convenio_config (
-        id, created_at,
-        location_id, working_days_per_week, overtime_model, reference_period_days,
-        compensation_window_days, daily_target_minutes, max_weekly_minutes,
-        min_inter_shift_rest_minutes, max_ordinary_daily_minutes, break_threshold_minutes,
-        min_break_minutes, weekly_rest_minutes, annual_overtime_cap_hours, night_window_start_minute,
-        night_window_end_minute, night_premium_pct, split_shift_premium, breaks_count_as_worked
-      ) values (${newId()}, ${nowIso()},
-        ${locationId}, 6, 'period_net', 120, 60, 470, 2100, 780, 500, 300, 20, 2400, 90,
-        1380, 300, 2500, 1250, true)`);
+      insert into convenio_config (id, created_at, working_days_per_week, overtime_model, reference_period_days, compensation_window_days, daily_target_minutes, max_weekly_minutes, min_inter_shift_rest_minutes, max_ordinary_daily_minutes, break_threshold_minutes, min_break_minutes, weekly_rest_minutes, annual_overtime_cap_hours, night_window_start_minute, night_window_end_minute, night_premium_pct, split_shift_premium, breaks_count_as_worked) values (${1}, ${nowIso()}, 6, 'period_net', 120, 60, 470, 2100, 780, 500, 300, 20, 2400, 90, 1380, 300, 2500, 1250, true)`);
     const ruleset = await resolveWorkTimeRuleset(suite.db);
     expect(ruleset).toEqual({
       workingDaysPerWeek: 6,
@@ -113,19 +103,17 @@ describe("resolveWorkTimeRuleset", () => {
   // ruleset field hold numbers a hundredfold apart. The half-percent case is the one a
   // fraction-versus-percentage mix-up cannot round away.
   it("reads a whole-percent night premium back as a percentage", async () => {
-    const locationId = await venueLocationId(suite.db);
     await suite.db.execute(sql`
-      insert into convenio_config (id, created_at, location_id, night_premium_pct)
-      values (${newId()}, ${nowIso()}, ${locationId}, 2500)`);
+      insert into convenio_config (id, created_at, night_premium_pct)
+      values (${1}, ${nowIso()}, 2500)`);
     const ruleset = await resolveWorkTimeRuleset(suite.db);
     expect(ruleset.nightPremiumPct).toBe(25);
   });
 
   it("reads a half-percent night premium back as a percentage", async () => {
-    const locationId = await venueLocationId(suite.db);
     await suite.db.execute(sql`
-      insert into convenio_config (id, created_at, location_id, night_premium_pct)
-      values (${newId()}, ${nowIso()}, ${locationId}, 1250)`);
+      insert into convenio_config (id, created_at, night_premium_pct)
+      values (${1}, ${nowIso()}, 1250)`);
     const ruleset = await resolveWorkTimeRuleset(suite.db);
     expect(ruleset.nightPremiumPct).toBe(12.5);
   });

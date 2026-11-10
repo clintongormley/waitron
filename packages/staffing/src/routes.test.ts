@@ -251,7 +251,6 @@ describe("the staff-role routes", () => {
         .insert(shifts)
         .values({
           personId: r.ana,
-          locationId: r.cfg.locationId,
           startsAt: "2026-10-14T08:00:00Z",
           startsOffsetMinutes: 120,
           endsAt: "2026-10-14T16:00:00Z",
@@ -444,13 +443,13 @@ async function painted() {
   const special = await withTransaction(suite.db, async (tx) => {
     const [day] = await tx
       .insert(specialDays)
-      .values({ locationId: r.cfg.locationId, name: "Fiesta" })
+      .values({ name: "Fiesta" })
       .returning({ id: specialDays.id });
     const dates = await tx
       .insert(specialDayDates)
       .values([
-        { specialDayId: day!.id, locationId: r.cfg.locationId, date: "2026-08-14" },
-        { specialDayId: day!.id, locationId: r.cfg.locationId, date: "2026-08-15" },
+        { specialDayId: day!.id, date: "2026-08-14" },
+        { specialDayId: day!.id, date: "2026-08-15" },
       ])
       .returning({ id: specialDayDates.id, date: specialDayDates.date });
     return {

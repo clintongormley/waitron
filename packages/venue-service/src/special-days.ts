@@ -9,7 +9,6 @@ import {
   readVenueClock,
   specialDayDates,
   specialDays,
-  venueLocationId,
   ZONE_PAINT_KINDS,
   zoneDayRanges,
   zoneDays,
@@ -1003,12 +1002,7 @@ export async function saveSpecialDay(
 
   const values = { name: parsed.name, repeatsYearly: parsed.repeatsYearly };
   const specialDayId = id ?? newId();
-  let venueId: string | undefined;
-  const venueRowId = async () => (venueId ??= await venueLocationId(tx));
-  if (id === null)
-    await tx
-      .insert(specialDays)
-      .values({ id: specialDayId, locationId: await venueRowId(), ...values });
+  if (id === null) await tx.insert(specialDays).values({ id: specialDayId, ...values });
   else await tx.update(specialDays).set(values).where(eq(specialDays.id, id));
 
   const existing = await tx
@@ -1032,12 +1026,10 @@ export async function saveSpecialDay(
       await tx.update(specialDayDates).set({ closedAllDay }).where(eq(specialDayDates.id, row.id));
   }
   const newDates = parsed.dates.filter((entry) => !dateIds.has(entry.date));
-  const locationId = newDates.length > 0 ? await venueRowId() : "";
   const added = newDates.map((entry) => ({
     ...entry,
     id: newId(),
     specialDayId,
-    locationId,
     holidayName: ruleOf.get(entry.date)!.holidayName,
   }));
   if (added.length > 0) await tx.insert(specialDayDates).values(added);

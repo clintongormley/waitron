@@ -18,13 +18,12 @@ import { BOOKINGS_TEST_MIGRATIONS } from "../testing/migrations.js";
 import { bookings } from "./bookings.js";
 
 describe("the bookings Drizzle table config", () => {
-  it("declares all three FKs, two indexes, no unique key and both checks", () => {
+  it("declares both FKs, two indexes, no unique key and both checks", () => {
     const config = getTableConfig(bookings);
     expect(config.columns.map((c) => c.name)).not.toContain("tenant_id");
     // The only place the keys' names are pinned: drizzle emits the keys unnamed and
     // `pragma foreign_key_list` reports no name, so `../migrations.test.ts` checks shapes only.
     expect(config.foreignKeys.map((fk) => fk.getName())).toEqual([
-      "bookings_location_fk",
       "bookings_table_fk",
       "bookings_tab_fk",
     ]);
@@ -35,7 +34,7 @@ describe("the bookings Drizzle table config", () => {
         i.config.columns.map((c) => ("name" in c ? c.name : "")),
       ]),
     ).toEqual([
-      ["bookings_location_date_idx", ["location_id", "booking_date"]],
+      ["bookings_date_idx", ["booking_date"]],
       [
         "bookings_table_status_date_time_idx",
         ["table_id", "status", "booking_date", "booking_time"],
@@ -84,7 +83,6 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
         // raw insert must name them.
         id: crypto.randomUUID(),
         created_at: new Date().toISOString(),
-        location_id: LOCATION,
         booking_date: "2026-09-01",
         booking_time: time,
         party_size: 2,
@@ -113,7 +111,6 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
       tx.select().from(bookings).where(eq(bookings.id, id)),
     );
     expect(row).not.toHaveProperty("tenantId");
-    expect(row!.locationId).toBe(LOCATION);
     expect(row!.tableId).toBe(TABLE);
     expect(row!.bookingDate).toBe("2026-09-01");
     expect(row!.partySize).toBe(2);
@@ -159,15 +156,6 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     await seedParents();
     const e = await captureError(() =>
       seedBooking("18:00", { tab_id: "dddddddd-0000-4000-8000-000000000001" }),
-    );
-    expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] });
-    expect(engineErrorMessage(e)).toBe("FOREIGN KEY constraint failed");
-  });
-
-  it("refuses a location_id with no locations row (bookings_location_fk)", async () => {
-    await seedParents();
-    const e = await captureError(() =>
-      seedBooking("17:00", { location_id: "eeeeeeee-0000-4000-8000-000000000001" }),
     );
     expect(e).toMatchObject({ errcode: FOREIGN_KEY_VIOLATION[0] });
     expect(engineErrorMessage(e)).toBe("FOREIGN KEY constraint failed");

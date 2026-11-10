@@ -52,7 +52,6 @@ const CLASSIFIED: Record<string, Classification> = {
   },
   shifts: {
     in: [
-      "location_id",
       "starts_at",
       "starts_offset_minutes",
       "ends_at",
@@ -66,7 +65,6 @@ const CLASSIFIED: Record<string, Classification> = {
     in: ["status"],
     out: [
       "id",
-      "location_id",
       "period_start",
       "period_end",
       "published_at",
@@ -99,7 +97,6 @@ const CLASSIFIED: Record<string, Classification> = {
     out: [
       "id",
       "person_id",
-      "location_id",
       "canonical_question_id",
       "shift_key",
       "evidence_keys",
@@ -110,11 +107,11 @@ const CLASSIFIED: Record<string, Classification> = {
   },
   attendance_response_commands: {
     in: ["action", "requested_by_person_id", "authorized_by_person_id", "input", "created_at"],
-    out: ["id", "person_id", "location_id", "question_id", "entry_ids"],
+    out: ["id", "person_id", "question_id", "entry_ids"],
   },
   attendance_operation_facts: {
     in: ["source", "kind", "at", "offset_minutes", "business_day", "outcome"],
-    out: ["sequence", "person_id", "location_id", "key"],
+    out: ["sequence", "person_id", "key"],
   },
   time_entries: "working-time record",
   workforce_chains: {

@@ -1362,7 +1362,6 @@ describe("Cancel item service command", () => {
     expect(accepted[0]).toMatchObject({
       source: "order",
       personId: venue.staffId,
-      locationId: venue.cfg.locationId,
       kind: "order",
     });
     await command();

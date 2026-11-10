@@ -1,3 +1,7 @@
+import {
+  madridWithDroppedColumns,
+  type MadridColumnDrops,
+} from "./testing/madrid-dropped-columns.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { STARTER_COURSE_NAMES } from "@waitron/venue-service";
 import { createHash } from "node:crypto";
@@ -19,6 +23,27 @@ import {
   madridWithRenamedColumns,
   type MadridColumnRenames,
 } from "./testing/madrid-renamed-columns.js";
+
+const DROPPED_COLUMNS: MadridColumnDrops = {
+  departments: ["location_id"],
+  order_service_contexts: ["location_id"],
+  zone_service_policies: ["location_id"],
+  routing_cells: ["location_id"],
+  seasons: ["location_id"],
+  special_days: ["location_id"],
+  special_day_dates: ["location_id"],
+  bookings: ["location_id"],
+  attendance_day_work: ["location_id"],
+  attendance_source_state: ["location_id"],
+  attendance_operation_facts: ["location_id"],
+  attendance_questions: ["location_id"],
+  attendance_response_commands: ["location_id"],
+  roster_versions: ["location_id"],
+  shift_templates: ["location_id"],
+  shifts: ["location_id"],
+  staff_roles: ["location_id"],
+  convenio_config: ["location_id"],
+};
 
 const RENAMED_COLUMNS: MadridColumnRenames = { sale_receipt_guests: { guests: "guest_count" } };
 /** Tables added after the capture; the seed writes no row to them. */
@@ -432,6 +457,9 @@ for (const locale of ["en", "es"] as const) {
           table.foreignKeys.filter((key) => key.id === capturedId).map((key) => ({ ...key, id })),
         );
       }
+      expected[phase] = madridWithDroppedColumns(expected[phase], DROPPED_COLUMNS);
+      expected[phase].tables.convenio_config!.columns.find((column) => column.name === "id")!.type =
+        "INTEGER";
       if (phase !== "before") {
         const courses = expected[phase].tables.kitchen_courses!;
         expect(courses.rows).toEqual({});

@@ -17,10 +17,7 @@ let id: string;
 const policy = { receiptPrintMode: "on_request", printTradingName: false } as const;
 beforeEach(async () => {
   venue = await setupVenue(suite.db);
-  const [row] = await suite.db
-    .select()
-    .from(departments)
-    .where(eq(departments.locationId, venue.cfg.locationId));
+  const [row] = await suite.db.select().from(departments);
   id = row!.id;
   await suite.db
     .update(departmentSalePolicies)

@@ -139,11 +139,8 @@ function nextNif(): string {
   return nifWithControlLetter(50_000_000 + nifCounter);
 }
 
-async function readyDepartment(venueId: string): Promise<void> {
-  const [department] = await suite.db
-    .select({ id: departments.id })
-    .from(departments)
-    .where(eq(departments.locationId, venueId));
+async function readyDepartment(): Promise<void> {
+  const [department] = await suite.db.select({ id: departments.id }).from(departments);
   await suite.db.insert(departmentReceipts).values({
     departmentId: department!.id,
     receipt: { operationDescription: "Venta en establecimiento" },
@@ -208,7 +205,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   );
 
   const venueId = await venueLocationId(suite.db);
-  await readyDepartment(venueId);
+  await readyDepartment();
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
   const catalogue = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -234,8 +231,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     await assignCatalogueToVenue(tx, cat.id);
     const zone = await tx.execute<{ id: string }>(sql`
       select zone_id as id from zone_service_policies
-      where location_id = ${cfg.locationId}
-        and is_counter_default`);
+      where is_counter_default`);
     const offer = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: water.id,
@@ -275,11 +271,10 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       ]);
       variantIds = { double: variants[0]!.id, unavailable: variants[1]!.id };
     }
-    await offerMenuThroughZone(tx, cfg, zone.rows[0]!.id, cat.id, { makeDefault: true });
+    await offerMenuThroughZone(tx, zone.rows[0]!.id, cat.id, { makeDefault: true });
     await tx.execute(sql`
-      insert into routing_cells (id, location_id, category_id, station_id)
-      values (${randomUUID()}, ${cfg.locationId}, ${drinks.id},
-        (select id from kitchen_stations
+      insert into routing_cells (id, category_id, station_id)
+      values (${randomUUID()}, ${drinks.id}, (select id from kitchen_stations
          where location_id = ${cfg.locationId} and is_default))`);
     await publishWorkingMenu(tx, cat.id);
     return {
@@ -597,7 +592,7 @@ describe("recordTillSale", () => {
       from order_service_contexts o
       join working_order_lines w on w.working_order_id = o.working_order_id
       join working_line_contexts l on l.working_order_line_id = w.id
-      where o.location_id = ${cfg.locationId}`);
+      `);
     const attribution = {
       zone_id: zoneId,
       menu_item_id: waterOfferId,
@@ -825,7 +820,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       { db: suite.db, modules: ALL_MODULES },
     );
     const venueId = await venueLocationId(suite.db);
-    await readyDepartment(venueId);
+    await readyDepartment();
     const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
     const productId = await withTransaction(suite.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -1081,7 +1076,7 @@ describe("ordering extras and options — parent + child lines", () => {
       { db: suite.db, modules: ALL_MODULES },
     );
     const venueId = await venueLocationId(suite.db);
-    await readyDepartment(venueId);
+    await readyDepartment();
     const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
     const seeded = await withTransaction(suite.db, async (tx) => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
@@ -2908,10 +2903,7 @@ describe("per-answer receipt presentation", () => {
     "resolves live authored fields on a %s sale and replay without rewriting transaction facts",
     async (method) => {
       const { cfg, zoneId, waterOfferId } = await setupVenue();
-      const [department] = await suite.db
-        .select()
-        .from(departments)
-        .where(eq(departments.locationId, cfg.locationId));
+      const [department] = await suite.db.select().from(departments);
       const global = {
         headerSubtitle: "Venue subtitle",
         footerMessage: "Venue footer",
@@ -3077,10 +3069,7 @@ describe("receipt presentation sources", () => {
     "keeps surviving fields when the %s optional source cannot be read",
     async (source) => {
       const { cfg, zoneId, waterOfferId } = await setupVenue();
-      const [department] = await suite.db
-        .select()
-        .from(departments)
-        .where(eq(departments.locationId, cfg.locationId));
+      const [department] = await suite.db.select().from(departments);
       await suite.db
         .insert(tenantReceipts)
         .values({ id: 1, receipt: { headerSubtitle: "Venue subtitle", phone: "+34910000000" } })
@@ -3158,10 +3147,7 @@ describe("receipt presentation sources", () => {
 describe("receipt presentation address failure", () => {
   it("keeps the sale and surviving trim when the optional current-address read fails", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
-    const [department] = await suite.db
-      .select()
-      .from(departments)
-      .where(eq(departments.locationId, cfg.locationId));
+    const [department] = await suite.db.select().from(departments);
     await suite.db
       .update(departmentReceipts)
       .set({

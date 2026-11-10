@@ -41,10 +41,7 @@ const resetDescription = () =>
     .where(eq(departmentReceipts.departmentId, departmentId));
 beforeAll(async () => {
   venue = await setupVenue(suite.db);
-  const [department] = await suite.db
-    .select()
-    .from(departments)
-    .where(eq(departments.locationId, venue.cfg.locationId));
+  const [department] = await suite.db.select().from(departments);
   departmentId = department!.id;
   await suite.db
     .insert(departmentReceipts)

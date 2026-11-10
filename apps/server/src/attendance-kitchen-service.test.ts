@@ -279,29 +279,18 @@ describe("kitchen service attendance", () => {
     expect(await command(api(recordAttendanceFact), action, order)).toMatchObject({ status: 200 });
     const after = await state();
     expect(
-      after.facts.map((r) => [
-        r.source,
-        r.personId,
-        r.locationId,
-        r.kind,
-        r.at,
-        r.offsetMinutes,
-        r.outcome,
-      ]),
+      after.facts.map((r) => [r.source, r.personId, r.kind, r.at, r.offsetMinutes, r.outcome]),
     ).toEqual([
       [
         action === "group-fire" ? "draft" : "order",
         v.operatorId,
-        v.cfg.locationId,
         "order",
         "2026-01-05T16:40:00.000Z",
         60,
         "qualifying",
       ],
     ]);
-    expect(after.days.map((r) => [r.locationId, r.businessDay, r.dirtyRevision])).toEqual([
-      [v.cfg.locationId, "2026-01-05", 1],
-    ]);
+    expect(after.days.map((r) => [r.businessDay, r.dirtyRevision])).toEqual([["2026-01-05", 1]]);
     const ticket = after.tickets.find((r) => r.id === order.ticketId)!;
     const line = after.lines.find((r) => r.id === order.lineId)!;
     if (action === "hand-over")

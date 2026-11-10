@@ -41,15 +41,13 @@ describe("the full manifest carries the bookings module's table and every FK", (
     expect(rows.rows.map((r) => r.name)).toEqual(["bookings"]);
   });
 
-  it("installs all three FKs — one per parent, each from one column at its parent's primary key", async () => {
+  it("installs both FKs — one per parent, each from one column at its parent's primary key", async () => {
     const rows = await suite.db.execute<ForeignKeyRow>(sql`pragma foreign_key_list('bookings')`);
     expect(
       rows.rows
         .map((r) => ({ from: r.from, table: r.table, to: r.to, onDelete: r.on_delete }))
         .sort((a, b) => (a.from < b.from ? -1 : 1)),
     ).toEqual([
-      // The booking must never orphan its location.
-      { from: "location_id", table: "locations", to: "id", onDelete: "RESTRICT" },
       { from: "tab_id", table: "working_orders", to: "id", onDelete: "NO ACTION" },
       { from: "table_id", table: "dining_tables", to: "id", onDelete: "NO ACTION" },
     ]);
@@ -73,7 +71,7 @@ describe("the full manifest carries the bookings module's table and every FK", (
       withColumns.push([name, info.rows.map((r) => r.name)]);
     }
     expect(withColumns).toEqual([
-      ["bookings_location_date_idx", ["location_id", "booking_date"]],
+      ["bookings_date_idx", ["booking_date"]],
       [
         "bookings_table_status_date_time_idx",
         ["table_id", "status", "booking_date", "booking_time"],

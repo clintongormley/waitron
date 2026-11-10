@@ -39,7 +39,6 @@ async function fixture(active = true) {
   const [dept] = await suite.db
     .insert(departments)
     .values({
-      locationId: cfg.locationId,
       name: "Dining",
       tradingName: "Dining",
       active,
@@ -509,7 +508,6 @@ describe("receipt department lookups", () => {
       .returning();
     await suite.db.insert(orderServiceContexts).values({
       workingOrderId: order.id,
-      locationId: f.cfg.locationId,
       zoneId: zone!.id,
       departmentId: f.id,
       serviceMode: "prepay",

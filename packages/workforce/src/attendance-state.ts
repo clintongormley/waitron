@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { venueLocationId, type Transaction } from "@waitron/db";
+import { type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { AttendanceDay } from "./attendance-types.js";
 import { attendanceDayWork } from "./schema/attendance.js";
@@ -37,8 +37,6 @@ export async function enqueueAttendanceDay(tx: Transaction, day: AttendanceDay):
       .set({ dirtyRevision: sql`${attendanceDayWork.dirtyRevision} + 1` })
       .where(scope);
   } else {
-    await tx
-      .insert(attendanceDayWork)
-      .values({ ...bounds, locationId: await venueLocationId(tx), nextDueAt: bounds.endAt });
+    await tx.insert(attendanceDayWork).values({ ...bounds, nextDueAt: bounds.endAt });
   }
 }

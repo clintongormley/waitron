@@ -102,7 +102,6 @@ async function zone(): Promise<string> {
       .insert(floorZones)
       .values({ id, locationId: v.cfg.locationId, name: `Zone ${id.slice(0, 8)}` });
     await tx.insert(zoneServicePolicies).values({
-      locationId: v.cfg.locationId,
       zoneId: id,
       departmentId: tables!.departmentId,
     });

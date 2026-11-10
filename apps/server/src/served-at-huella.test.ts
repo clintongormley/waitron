@@ -217,7 +217,7 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
     // The table sits in a table_tab zone offering this menu, with a route per product to the
     // venue's default station.
     const { zoneId } = await offerProducts(tx, cfg, { zone: "tables" });
-    await offerMenuThroughZone(tx, cfg, zoneId, cat.id);
+    await offerMenuThroughZone(tx, zoneId, cat.id);
     await publishWorkingMenu(tx, cat.id);
     const table = await createTable(tx, cfg, { label: "T1", zoneId });
     return {

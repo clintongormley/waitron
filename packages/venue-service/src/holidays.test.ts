@@ -182,7 +182,7 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(db, fn);
 
 /** A special day closed all day on `date`, written straight to its tables. */
 async function specialDay(
-  cfg: { locationId: string },
+  _cfg: { locationId: string },
   date: string,
   name: string,
   repeatsYearly = false,
@@ -190,11 +190,9 @@ async function specialDay(
   await run(async (tx) => {
     const [day] = await tx
       .insert(specialDays)
-      .values({ locationId: cfg.locationId, name, repeatsYearly })
+      .values({ name, repeatsYearly })
       .returning({ id: specialDays.id });
-    await tx
-      .insert(specialDayDates)
-      .values({ specialDayId: day!.id, locationId: cfg.locationId, date, closedAllDay: true });
+    await tx.insert(specialDayDates).values({ specialDayId: day!.id, date, closedAllDay: true });
   });
 }
 
@@ -216,11 +214,9 @@ async function seedRetainedGeographyWithSpecialDay(
     .returning();
   const [day] = await tx
     .insert(specialDays)
-    .values({ locationId: cfg.locationId, name, repeatsYearly: false })
+    .values({ name, repeatsYearly: false })
     .returning({ id: specialDays.id });
-  await tx
-    .insert(specialDayDates)
-    .values({ specialDayId: day!.id, locationId: cfg.locationId, date, closedAllDay: false });
+  await tx.insert(specialDayDates).values({ specialDayId: day!.id, date, closedAllDay: false });
 }
 
 async function stored() {
@@ -844,13 +840,7 @@ it("lets a Spanish venue add more special days than the informational local numb
   for (const date of ["2026-03-19", "2026-06-04", "2026-09-08"])
     await specialDay(cfg, date, `Own ${date}`);
   expect(
-    (
-      await run((tx) =>
-        tx.select().from(specialDayDates).where(eq(specialDayDates.locationId, cfg.locationId)),
-      )
-    )
-      .map(({ date }) => date)
-      .sort(),
+    (await run((tx) => tx.select().from(specialDayDates))).map(({ date }) => date).sort(),
   ).toEqual(["2026-03-19", "2026-06-04", "2026-09-08"]);
   expect((await run((tx) => store.readHolidayAreaModel(tx))).localHolidaysPerYear).toBe(0);
   expect((await run((tx) => packageIndex.readHolidayAreaModel(tx))).localHolidaysPerYear).toBe(2);

@@ -419,7 +419,6 @@ describe("attendance_question queue owner", () => {
     async (status) => {
       const { versionId, shiftId } = await seedRota();
       await suite.db.insert(shifts).values({
-        locationId,
         personId,
         rosterVersionId: versionId,
         startsAt: "2026-01-05T18:00:00.000Z",
@@ -751,7 +750,6 @@ describe("attendance_question queue owner", () => {
     const [version] = await suite.db
       .insert(rosterVersions)
       .values({
-        locationId,
         periodStart: "2026-01-05",
         periodEnd: "2026-01-11",
         status: "published",
@@ -759,7 +757,6 @@ describe("attendance_question queue owner", () => {
       })
       .returning();
     await suite.db.insert(shifts).values({
-      locationId,
       personId,
       rosterVersionId: version!.id,
       startsAt: "2026-01-05T09:00:00.000Z",

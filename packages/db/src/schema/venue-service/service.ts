@@ -20,13 +20,11 @@ import { deviceProfiles } from "../device-profiles.js";
 import { floorZones } from "../floor-zones.js";
 import { workingOrderLines, workingOrders } from "../orders.js";
 import { sales } from "../sales.js";
-import { locations } from "../tenants.js";
 
 export const departments = table(
   "departments",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id").notNull(),
     name: label("name").notNull(),
     tradingName: label("trading_name").notNull(),
     isDefault: flag("is_default").notNull().default(false),
@@ -39,35 +37,24 @@ export const departments = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    uniqueIndex("departments_location_name_key")
-      .on(t.locationId, t.name)
+    uniqueIndex("departments_name_key")
+      .on(t.name)
       .where(sql`${t.active} = 1`),
-    uniqueIndex("departments_one_default_per_location_key")
-      .on(t.locationId)
+    uniqueIndex("departments_one_default_key")
+      .on(t.isDefault)
       .where(sql`${t.isDefault}`),
-    foreignKey({
-      columns: [t.locationId],
-      foreignColumns: [locations.id],
-      name: "departments_location_fk",
-    }),
   ],
 );
 
 export const zoneServicePolicies = table(
   "zone_service_policies",
   {
-    locationId: id("location_id").notNull(),
     zoneId: id("zone_id").notNull(),
     departmentId: id("department_id").notNull(),
     isCounterDefault: flag("is_counter_default").notNull().default(false),
   },
   (t) => [
     primaryKey({ columns: [t.zoneId], name: "zone_service_policies_pk" }),
-    foreignKey({
-      columns: [t.locationId],
-      foreignColumns: [locations.id],
-      name: "zone_service_policies_location_fk",
-    }),
     foreignKey({
       columns: [t.zoneId],
       foreignColumns: [floorZones.id],
@@ -79,7 +66,7 @@ export const zoneServicePolicies = table(
       name: "zone_service_policies_department_fk",
     }),
     uniqueIndex("zone_service_policies_one_counter_default_key")
-      .on(t.locationId)
+      .on(t.isCounterDefault)
       .where(sql`${t.isCounterDefault}`),
   ],
 );
@@ -217,7 +204,6 @@ export const orderServiceContexts = table(
   "order_service_contexts",
   {
     workingOrderId: id("working_order_id").notNull(),
-    locationId: id("location_id").notNull(),
     zoneId: id("zone_id").notNull(),
     departmentId: id("department_id").notNull(),
     serviceMode: label("service_mode").notNull(),

@@ -215,10 +215,7 @@ async function venue(): Promise<Venue> {
       })
       .returning({ id: pagePrinters.id });
     const receipt = { email: "facturas@example.test" };
-    for (const { id } of await tx
-      .select({ id: departments.id })
-      .from(departments)
-      .where(eq(departments.locationId, cfg.locationId))) {
+    for (const { id } of await tx.select({ id: departments.id }).from(departments)) {
       await tx
         .insert(departmentReceipts)
         .values({ departmentId: id, receipt })

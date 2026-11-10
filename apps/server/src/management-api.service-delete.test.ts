@@ -378,7 +378,6 @@ it.each([
       const order = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 99 });
       await tx.insert(orderServiceContexts).values({
         workingOrderId: order!.id,
-        locationId: v.cfg.locationId,
         zoneId: code === "zone.order_in_progress" ? f.zoneId : v.counter.zoneId,
         departmentId: f.departmentId,
         serviceMode: "prepay",
@@ -411,7 +410,6 @@ it.each([
         });
       if (code === "table.booked")
         await tx.insert(bookings).values({
-          locationId: v.cfg.locationId,
           bookingDate: "2026-01-01",
           bookingTime: "20:00:00",
           contactName: "Guest",

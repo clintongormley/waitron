@@ -45,23 +45,22 @@ async function painted() {
   return inTx(async (tx) => {
     const [waiter] = await tx
       .insert(staffRoles)
-      .values({ locationId: v.cfg.locationId, name: "Waiter" })
+      .values({ name: "Waiter" })
       .returning({ id: staffRoles.id });
     const [special] = await tx
       .insert(specialDays)
-      .values({ locationId: v.cfg.locationId, name: "Fiesta" })
+      .values({ name: "Fiesta" })
       .returning({ id: specialDays.id });
     const dates = await tx
       .insert(specialDayDates)
       .values([
-        { specialDayId: special!.id, locationId: v.cfg.locationId, date: "2026-08-14" },
+        { specialDayId: special!.id, date: "2026-08-14" },
         {
           specialDayId: special!.id,
-          locationId: v.cfg.locationId,
           date: "2026-08-15",
           closedAllDay: true,
         },
-        { specialDayId: special!.id, locationId: v.cfg.locationId, date: "2026-08-21" },
+        { specialDayId: special!.id, date: "2026-08-21" },
       ])
       .returning({ id: specialDayDates.id, date: specialDayDates.date });
     const dept: AreaRef = { kind: "department", id: v.departmentId };
@@ -235,11 +234,10 @@ describe("readStaffingMonth", () => {
         .where(eq(locations.id, v.cfg.locationId));
       const [row] = await tx
         .insert(specialDays)
-        .values({ locationId: v.cfg.locationId, name: "Semana Santa", repeatsYearly: true })
+        .values({ name: "Semana Santa", repeatsYearly: true })
         .returning({ id: specialDays.id });
       await tx.insert(specialDayDates).values({
         specialDayId: row!.id,
-        locationId: v.cfg.locationId,
         date: "2025-04-18",
         holidayName: "Viernes Santo",
       });
@@ -278,10 +276,7 @@ describe("rota counts in the staffing month", () => {
         startsOffsetMinutes: 120,
         endsOffsetMinutes: 120,
       });
-      const [role] = await tx
-        .select()
-        .from(staffRoles)
-        .where(eq(staffRoles.locationId, v.cfg.locationId));
+      const [role] = await tx.select().from(staffRoles);
       await tx
         .insert(shiftAssignments)
         .values({ shiftId, departmentId: v.departmentId, staffRoleId: role!.id });

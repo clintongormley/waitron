@@ -1,13 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  specialDayDates,
-  specialDays,
-  venueLocationId,
-  withTransaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, specialDayDates, specialDays, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { readCalendarDays } from "./hours.js";
@@ -32,14 +26,12 @@ it.each(["calendar", "special days", "opening hours"] as const)(
           timeZone: "Europe/Madrid",
           dayCutover: "06:00:00",
         });
-        const cfg = { locationId: await venueLocationId(tx) };
         const [special] = await tx
           .insert(specialDays)
-          .values({ locationId: cfg.locationId, name: "Annual closure", repeatsYearly: true })
+          .values({ name: "Annual closure", repeatsYearly: true })
           .returning({ id: specialDays.id });
         await tx.insert(specialDayDates).values({
           specialDayId: special!.id,
-          locationId: cfg.locationId,
           date: "2026-10-10",
           closedAllDay: true,
         });

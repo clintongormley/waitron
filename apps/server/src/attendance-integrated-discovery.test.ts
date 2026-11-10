@@ -1,12 +1,6 @@
 import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  newId,
-  withTransaction,
-  type Transaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, newId, withTransaction, type Transaction } from "@waitron/db";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
@@ -24,7 +18,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS, PAYMENTS_MIGRATIONS],
 });
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
-let locationId: string, personId: string, nodeId: string, orderId: string;
+let personId: string, nodeId: string, orderId: string;
 const requestAt = new Date("2026-01-05T11:00:00Z"),
   later = new Date("2026-01-09T12:00:00Z");
 beforeEach(async () => {
@@ -35,7 +29,6 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  locationId = await venueLocationId(suite.db);
   nodeId = await seedNode(suite.db);
   const [person] = await suite.db
     .insert(persons)
@@ -100,7 +93,6 @@ it.each(["captured", "accepted_offline"] as const)(
     expect(fact).toMatchObject({
       key,
       personId,
-      locationId,
       at: "2026-01-05T11:00:00.000Z",
       outcome: "qualifying",
     });

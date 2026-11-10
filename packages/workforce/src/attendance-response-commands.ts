@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { type Transaction, venueLocationId } from "@waitron/db";
+import { type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError, type Origin } from "@waitron/shared";
 import type {
@@ -263,7 +263,6 @@ export async function executeAttendanceCommand(
     requestedByPersonId: requester,
     authorizedByPersonId: authorizer,
     personId,
-    locationId: question ? await venueLocationId(tx) : null,
     questionId,
     action: payload.action,
     input: payload,

@@ -1,13 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  catalogues,
-  departments,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, catalogues, departments, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { readCalendarDays } from "./hours.js";
@@ -30,19 +24,15 @@ async function fixture() {
       timeZone: "Europe/Madrid",
       dayCutover: "04:30:00",
     });
-    const venueId = await venueLocationId(tx);
-    const cfg = { locationId: venueId };
     const [department, inactive] = await tx
       .insert(departments)
       .values([
         {
-          locationId: cfg.locationId,
           name: "Dining",
           tradingName: "Dining",
           isDefault: true,
         },
         {
-          locationId: cfg.locationId,
           name: "Terrace",
           tradingName: "Terrace",
         },

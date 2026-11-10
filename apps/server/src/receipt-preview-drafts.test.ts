@@ -24,10 +24,7 @@ beforeEach(async () => {
   await suite.db
     .update(contentLanguages)
     .set({ defaultLanguage: "es", languages: ["es", "ca", "gl", "eu"] });
-  [{ id: departmentId }] = await suite.db
-    .select({ id: departments.id })
-    .from(departments)
-    .where(eq(departments.locationId, venue.cfg.locationId));
+  [{ id: departmentId }] = await suite.db.select({ id: departments.id }).from(departments);
 });
 function ask(body: unknown, cookie = venue.managerCookie) {
   const app = new Hono();

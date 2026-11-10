@@ -97,7 +97,6 @@ function evidence(
   return {
     source: "whole-payment",
     personId,
-    locationId: v.cfg.locationId,
     kind: "payment",
     at: instant,
     offsetMinutes: 60,

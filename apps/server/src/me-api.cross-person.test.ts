@@ -172,19 +172,17 @@ async function cookieFor(personId: string): Promise<string> {
 /** Through the table definition, for `seedPerson`'s reason. */
 async function seedShift(
   personId: string,
-  locationId: string,
+  _locationId: string,
   startsAt: string,
   endsAt: string,
 ): Promise<string> {
   const { rows: versions } = await suite.db.execute<{ id: string }>(sql`
-    select id from roster_versions where location_id=${locationId}
-      and period_start='2026-01-01' and period_end='2026-12-31' and status='published'`);
+    select id from roster_versions where period_start='2026-01-01' and period_end='2026-12-31' and status='published'`);
   let rosterVersionId = versions[0]?.id;
   if (rosterVersionId === undefined) {
     const [version] = await suite.db
       .insert(rosterVersions)
       .values({
-        locationId,
         periodStart: "2026-01-01",
         periodEnd: "2026-12-31",
         status: "published",
@@ -198,7 +196,6 @@ async function seedShift(
     .values({
       personId,
       rosterVersionId,
-      locationId,
       startsAt,
       startsOffsetMinutes: 0,
       endsAt,

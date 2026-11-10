@@ -206,12 +206,12 @@ const week = (cells: Partial<Record<number, WeekCell>> = {}): WeekDay[] =>
 const unsetWeek = (): WeekDay[] =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, cell: { mode: "not_set", periods: [] } }));
 
-const venueDates = (fx: Fixture) =>
+const venueDates = () =>
   db
     .select({ id: specialDays.id, date: specialDayDates.date, name: specialDays.name })
     .from(specialDayDates)
     .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
-    .where(eq(specialDayDates.locationId, fx.cfg.locationId))
+
     .orderBy(asc(specialDayDates.date));
 
 const createDay = (
@@ -484,7 +484,7 @@ describe("writing Hours", () => {
     for (const cookie of [fx.manager, fx.supervisor, fx.staff, fx.expired, undefined]) {
       for (const body of bodies) {
         expect((await send(fx, "PUT", "/hours/week", cookie, body)).status).toBe(404);
-        expect(await venueDates(fx)).toEqual([]);
+        expect(await venueDates()).toEqual([]);
       }
     }
   });
@@ -632,7 +632,7 @@ describe("retired special-date routes", () => {
       });
       expect(await row()).toEqual(before);
     }
-    expect(await venueDates(fx)).toEqual([{ id: day.id, date: "2030-10-15", name: "Staff party" }]);
+    expect(await venueDates()).toEqual([{ id: day.id, date: "2030-10-15", name: "Staff party" }]);
   });
 });
 
@@ -644,10 +644,10 @@ describe("retired station-hours range route", () => {
   ])("answers 404 for %s without changing saved data for any session", async (path) => {
     const fx = await fixture();
     await createDay("2030-10-15", { closedAllDay: true });
-    const beforeDates = await venueDates(fx);
+    const beforeDates = await venueDates();
     for (const cookie of [fx.manager, fx.supervisor, fx.staff, fx.expired, undefined]) {
       expect((await send(fx, "GET", path, cookie)).status).toBe(404);
-      expect(await venueDates(fx)).toEqual(beforeDates);
+      expect(await venueDates()).toEqual(beforeDates);
     }
   });
 });

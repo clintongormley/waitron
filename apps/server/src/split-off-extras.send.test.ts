@@ -252,8 +252,7 @@ describe("sending split-off extras", () => {
           stationId: routingCells.stationId,
           noPreparation: routingCells.noPreparation,
         })
-        .from(routingCells)
-        .where(eq(routingCells.locationId, venue.cfg.locationId));
+        .from(routingCells);
       expect(cells).toHaveLength(4);
       expect(cells).toEqual(
         expect.arrayContaining([

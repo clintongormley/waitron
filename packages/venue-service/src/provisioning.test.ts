@@ -145,8 +145,8 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
 
     it("adds no courses when promoting a department already authored by the venue", async () => {
       await seedVenue(db, { invoiceLocales: ["en-GB"] });
-      const locationId = await venueLocationId(db);
-      await db.insert(departments).values({ locationId, name: "Dining", tradingName: "Dining" });
+      await venueLocationId(db);
+      await db.insert(departments).values({ name: "Dining", tradingName: "Dining" });
       const node = { nodeId: await seedNode(db) };
       await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
       expect((await db.execute(sql`select name from kitchen_courses`)).rows).toEqual([]);
@@ -164,13 +164,11 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       operationDescription: "Hospitality",
       defaultCatalogueId: menu!.id,
     });
-    const venueId = await venueLocationId(db);
-    const locationId = venueId;
     const node = { nodeId: await seedNode(db) };
     const seed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const rows = () =>
       db.execute(
-        sql`select p.name, p.menu_id, d.weekday, s.starts_at, s.ends_at from menu_periods p join departments dep on dep.id = p.department_id join department_day_ranges s on s.period_id = p.id join department_days d on d.id = s.day_id join seasons se on se.id = d.season_id and se.starts_on = '12-01' where dep.location_id = ${locationId} order by d.weekday`,
+        sql`select p.name, p.menu_id, d.weekday, s.starts_at, s.ends_at from menu_periods p join departments dep on dep.id = p.department_id join department_day_ranges s on s.period_id = p.id join department_days d on d.id = s.day_id join seasons se on se.id = d.season_id and se.starts_on = '12-01'  order by d.weekday`,
       );
     await seed();
     expect((await rows()).rows).toEqual(
@@ -183,7 +181,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       })),
     );
     await db.execute(
-      sql`update department_day_ranges set ends_at = '16:00:00' where period_id = (select p.id from menu_periods p join departments d on d.id = p.department_id where d.location_id = ${locationId})`,
+      sql`update department_day_ranges set ends_at = '16:00:00' where period_id = (select p.id from menu_periods p join departments d on d.id = p.department_id )`,
     );
     await seed();
     expect((await rows()).rows).toEqual(
@@ -208,26 +206,24 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       operationDescription: "Restaurant",
       defaultCatalogueId: menu!.id,
     });
-    const venueId = await venueLocationId(db);
-    const locationId = venueId;
     const node = { nodeId: await seedNode(db) };
 
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
     const rows = await db.execute<{ name: string; trading_name: string }>(sql`
-      select name, trading_name from departments where location_id = ${locationId}`);
+      select name, trading_name from departments `);
     expect(rows.rows).toEqual([{ name: "The Square", trading_name: "The Square" }]);
     const zones = await db.execute<{ name: string }>(sql`
       select z.name from zone_service_policies p join floor_zones z on z.id = p.zone_id
-      where p.location_id = ${locationId} and p.is_counter_default = 1`);
+      where p.is_counter_default = 1`);
     expect(zones.rows).toEqual([{ name: STARTER_ZONE_NAMES.Counter.es }]);
     const periods = await db.execute<{ name: string }>(sql`
       select p.name from menu_periods p join departments d on d.id = p.department_id
-      where d.location_id = ${locationId}`);
+      `);
     expect(periods.rows).toEqual([{ name: STARTER_PERIOD_NAMES.Open.es }]);
     const steps = await db.execute<{ name: string }>(sql`
       select s.name from service_steps s join departments d on d.id = s.department_id
-      where d.location_id = ${locationId} order by s.position`);
+       order by s.position`);
     expect(steps.rows).toEqual(
       STARTER_STEPS.map((step) => ({ name: STARTER_STEP_NAMES[step.name].es })),
     );
@@ -258,7 +254,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
             }>(sql`
               select s.name, s.start, s.minutes, s.position from service_steps s
               join departments d on d.id = s.department_id
-              where d.location_id = ${locationId} order by s.position`)
+               order by s.position`)
           ).rows,
       };
     }
@@ -274,27 +270,26 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
 
     it("a second run of the seed puts back no step the venue deleted", async () => {
-      const { locationId, seed, steps } = await venue("Starter re-run");
+      const { seed, steps } = await venue("Starter re-run");
       await seed();
       expect(await steps()).toHaveLength(3);
       await db.execute(
-        sql`delete from service_steps where department_id in (select id from departments where location_id = ${locationId})`,
+        sql`delete from service_steps where department_id in (select id from departments )`,
       );
       await seed();
       expect(await steps()).toEqual([]);
     });
 
     it("the seed adds no steps to the department it promotes to default", async () => {
-      const { locationId, seed, steps } = await venue("Starter promote");
+      const { seed, steps } = await venue("Starter promote");
       const [department] = await db
         .insert(departments)
-        .values({ locationId, name: "Bar", tradingName: "Bar", active: true })
+        .values({ name: "Bar", tradingName: "Bar", active: true })
         .returning({ id: departments.id });
       await seed();
       const [promoted] = await db
         .select({ id: departments.id, isDefault: departments.isDefault })
-        .from(departments)
-        .where(eq(departments.locationId, locationId));
+        .from(departments);
       expect(promoted).toEqual({ id: department!.id, isDefault: true });
       expect(await steps()).toEqual([]);
     });
@@ -325,8 +320,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(db);
-    const locationId = venueId;
     const node = { nodeId: await seedNode(db) };
 
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
@@ -340,7 +333,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       select order_start, paid_when, collection_number, receipt_print_mode, print_trading_name
       from department_sale_policies
       where department_id = (
-        select id from departments where location_id = ${locationId} and is_default = 1
+        select id from departments where is_default = 1
       )`);
     expect(department.rows).toEqual([
       {
@@ -360,7 +353,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       from zone_sale_policies
       where zone_id = (
         select zone_id from zone_service_policies
-        where location_id = ${locationId} and is_counter_default = 1
+        where is_counter_default = 1
       )`);
     expect(zone.rows).toEqual([
       { paid_when: null, collection_number: null, receipt_print_mode: null },
@@ -420,8 +413,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       operationDescription: "Hospitality",
       defaultCatalogueId: menu!.id,
     });
-    const venueId = await venueLocationId(db);
-    const locationId = venueId;
     const node = { nodeId: await seedNode(db) };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const listed = async () =>
@@ -429,7 +420,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         await db.execute(sql`
       select p.id, p.menu_id, p.name, p.colour
       from menu_periods p join departments d on d.id = p.department_id
-      where d.location_id = ${locationId}`)
+      `)
       ).rows;
     await runSeed();
     const original = await listed();
@@ -570,7 +561,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       const defaults = async () => {
         const rows = await db.execute<{ department_id: string; zone_id: string }>(sql`
           select department_id, zone_id from zone_service_policies
-          where location_id = ${locationId} and is_counter_default = 1`);
+          where is_counter_default = 1`);
         return rows.rows[0]!;
       };
       return { locationId, profiles, runSeed, access, defaults };

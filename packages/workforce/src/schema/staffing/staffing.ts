@@ -8,7 +8,6 @@ import {
   id,
   kitchenStations,
   label,
-  locations,
   newId,
   persons,
   seasons,
@@ -26,18 +25,12 @@ export const staffRoles = table(
   "staff_roles",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id").notNull(),
     name: label("name").notNull(),
     colour: calendarColour("colour").notNull().default("grey"),
     position: count("position").notNull().default(0),
   },
   (t) => [
-    foreignKey({
-      columns: [t.locationId],
-      foreignColumns: [locations.id],
-      name: "staff_roles_location_fk",
-    }),
-    uniqueIndex("staff_roles_location_name_key").on(t.locationId, t.name),
+    uniqueIndex("staff_roles_name_key").on(t.name),
     check("staff_roles_name_ck", sql`trim(${t.name}) <> ''`),
     check("staff_roles_colour_ck", enumCheck(t.colour)),
   ],

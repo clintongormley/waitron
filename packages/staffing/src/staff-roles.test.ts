@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, venueLocationId, withTransaction, type Transaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   WORKFORCE_MIGRATIONS,
@@ -59,7 +59,6 @@ async function assignShift(v: Venue, personId: string, staffRoleId: string) {
       .insert(shifts)
       .values({
         personId,
-        locationId: v.cfg.locationId,
         startsAt: "2026-10-14T08:00:00Z",
         startsOffsetMinutes: 120,
         endsAt: "2026-10-14T16:00:00Z",
@@ -122,11 +121,11 @@ describe("staff roles", () => {
     ).rejects.toMatchObject({ code: "staff_role.name_taken", params: { name: "Waiter" } });
   });
 
-  it("plans the name check on the location and name index, not a scan", async () => {
+  it("plans the name check on the name index, not a scan", async () => {
     await seedVenueWithStaff(suite.db);
     for (const except of [null, randomUUID()]) {
       const plan = await inTx(async (tx) => {
-        const emitted = staffRolesNamed(tx, await venueLocationId(tx), "Waiter", except).toSQL();
+        const emitted = staffRolesNamed(tx, "Waiter", except).toSQL();
         const parts = emitted.sql.split("?");
         const statement = sql.raw(`explain query plan ${parts[0]}`);
         emitted.params.forEach((param, i) => {
@@ -136,9 +135,7 @@ describe("staff roles", () => {
         return tx.execute<{ detail: string }>(statement);
       });
       const details = plan.rows.map((row) => row.detail);
-      expect(details.some((d) => d.includes("USING INDEX staff_roles_location_name_key"))).toBe(
-        true,
-      );
+      expect(details.some((d) => d.includes("USING INDEX staff_roles_name_key"))).toBe(true);
       expect(details.some((d) => d.includes("SCAN staff_roles"))).toBe(false);
     }
   });

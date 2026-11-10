@@ -418,8 +418,8 @@ beforeAll(async () => {
     });
     const special = await addProductToMenu(tx, { menuId: specials.id, productId: pastrami.id });
     await publishWorkingMenu(tx, specials.id);
-    await offerMenuThroughZone(tx, v.cfg, deliCounter.id, specials.id);
-    await offerMenuThroughZone(tx, v.cfg, bar.id, specials.id);
+    await offerMenuThroughZone(tx, deliCounter.id, specials.id);
+    await offerMenuThroughZone(tx, bar.id, specials.id);
     const deliTable = await createTable(tx, v.cfg, { label: "D1", zoneId: deliTables.id });
     return {
       bar: bar.id,

@@ -298,7 +298,6 @@ beforeEach(async () => {
   const [published] = await suite.db
     .insert(rosterVersions)
     .values({
-      locationId,
       periodStart: "2026-02-09",
       periodEnd: "2026-02-15",
       status: "published",
@@ -310,7 +309,6 @@ beforeEach(async () => {
     .values([
       {
         personId: martaId,
-        locationId,
         startsAt: "2026-02-14T03:41:00Z",
         startsOffsetMinutes: 60,
         endsAt: "2026-02-14T11:41:00Z",
@@ -320,7 +318,6 @@ beforeEach(async () => {
       },
       {
         personId: colleagueId,
-        locationId,
         startsAt: COLLEAGUE.shift.startsAt,
         startsOffsetMinutes: COLLEAGUE.shift.offsetMinutes,
         endsAt: "2026-03-05T09:17:00Z",
@@ -378,7 +375,6 @@ beforeEach(async () => {
     {
       id: martaQuestion,
       personId: martaId,
-      locationId,
       businessDay: "2026-04-18",
       startAt: "2026-04-18T04:00:00.000Z",
       endAt: "2026-04-19T04:00:00.000Z",
@@ -391,7 +387,6 @@ beforeEach(async () => {
     {
       id: colleagueQuestion,
       personId: colleagueId,
-      locationId,
       businessDay: "2026-04-25",
       startAt: "2026-04-25T04:00:00.000Z",
       endAt: "2026-04-26T04:00:00.000Z",
@@ -436,7 +431,7 @@ beforeEach(async () => {
     createdAt: string;
   }) => {
     await suite.db.run(
-      sql`insert into attendance_response_commands (id, requested_by_person_id, authorized_by_person_id, person_id, location_id, question_id, action, input, entry_ids, created_at) values (${row.id}, ${row.by}, ${row.by}, ${row.personId}, ${locationId}, ${row.questionId}, ${row.action}, ${JSON.stringify(row.input)}, ${JSON.stringify([entry!.id])}, ${row.createdAt})`,
+      sql`insert into attendance_response_commands (id, requested_by_person_id, authorized_by_person_id, person_id, question_id, action, input, entry_ids, created_at) values (${row.id}, ${row.by}, ${row.by}, ${row.personId}, ${row.questionId}, ${row.action}, ${JSON.stringify(row.input)}, ${JSON.stringify([entry!.id])}, ${row.createdAt})`,
     );
   };
   await response({
@@ -489,7 +484,6 @@ beforeEach(async () => {
       source: "clock",
       key: "clock:marta-2",
       personId: martaId,
-      locationId,
       kind: "break",
       at: "2026-03-07T21:30:00.000Z",
       offsetMinutes: 60,
@@ -500,7 +494,6 @@ beforeEach(async () => {
       source: "order",
       key: "order:colleague-1",
       personId: colleagueId,
-      locationId,
       kind: "order",
       at: COLLEAGUE.fact.at,
       offsetMinutes: COLLEAGUE.fact.offsetMinutes,
@@ -513,8 +506,8 @@ beforeEach(async () => {
   const [rooftop, cellar] = await suite.db
     .insert(departments)
     .values([
-      { locationId, name: "Rooftop bar", tradingName: "Rooftop bar" },
-      { locationId, name: COLLEAGUE.area, tradingName: COLLEAGUE.area },
+      { name: "Rooftop bar", tradingName: "Rooftop bar" },
+      { name: COLLEAGUE.area, tradingName: COLLEAGUE.area },
     ])
     .returning({ id: departments.id });
   const bartender = "00000000-0000-4000-8000-000000000001";
@@ -525,9 +518,7 @@ beforeEach(async () => {
     [sommelier, COLLEAGUE.staffRole],
     [barback, "Barback"],
   ] as const)
-    await suite.db.run(
-      sql`insert into staff_roles (id, location_id, name) values (${id}, ${locationId}, ${name})`,
-    );
+    await suite.db.run(sql`insert into staff_roles (id, name) values (${id}, ${name})`);
   for (const [personId, roleId] of [
     [martaId, bartender],
     [colleagueId, sommelier],

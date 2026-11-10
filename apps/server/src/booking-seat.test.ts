@@ -191,9 +191,8 @@ describe("bookings seat route → real seatTable", () => {
       source: string;
       device_id: string | null;
       location_id: string;
-      booking_location_id: string;
     }>(
-      sql`select wo.source, wo.device_id, wo.location_id, b.location_id as booking_location_id
+      sql`select wo.source, wo.device_id, wo.location_id
             from working_orders wo join bookings b on b.tab_id = wo.id
            where wo.id = ${tabId}`,
     );
@@ -202,7 +201,6 @@ describe("bookings seat route → real seatTable", () => {
         source: "dashboard",
         device_id: null,
         location_id: v.tillCfg.locationId,
-        booking_location_id: v.tillCfg.locationId,
       },
     ]);
   });

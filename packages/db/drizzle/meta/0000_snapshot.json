@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ffb45c5d-ec22-406e-b1c4-0a39ec3f5e14",
+  "id": "63ae565b-a5ca-4045-a62f-6dbafd2f8052",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -15322,13 +15322,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "name": {
           "name": "name",
           "type": "text",
@@ -15392,39 +15385,24 @@
         }
       },
       "indexes": {
-        "departments_location_name_key": {
-          "name": "departments_location_name_key",
+        "departments_name_key": {
+          "name": "departments_name_key",
           "columns": [
-            "location_id",
             "name"
           ],
           "isUnique": true,
           "where": "\"departments\".\"active\" = 1"
         },
-        "departments_one_default_per_location_key": {
-          "name": "departments_one_default_per_location_key",
+        "departments_one_default_key": {
+          "name": "departments_one_default_key",
           "columns": [
-            "location_id"
+            "is_default"
           ],
           "isUnique": true,
           "where": "\"departments\".\"is_default\""
         }
       },
-      "foreignKeys": {
-        "departments_location_fk": {
-          "name": "departments_location_fk",
-          "tableFrom": "departments",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -15574,13 +15552,6 @@
           "name": "working_order_id",
           "type": "text",
           "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -16005,13 +15976,6 @@
     "zone_service_policies": {
       "name": "zone_service_policies",
       "columns": {
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "zone_id": {
           "name": "zone_id",
           "type": "text",
@@ -16039,26 +16003,13 @@
         "zone_service_policies_one_counter_default_key": {
           "name": "zone_service_policies_one_counter_default_key",
           "columns": [
-            "location_id"
+            "is_counter_default"
           ],
           "isUnique": true,
           "where": "\"zone_service_policies\".\"is_counter_default\""
         }
       },
       "foreignKeys": {
-        "zone_service_policies_location_fk": {
-          "name": "zone_service_policies_location_fk",
-          "tableFrom": "zone_service_policies",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "zone_service_policies_zone_fk": {
           "name": "zone_service_policies_zone_fk",
           "tableFrom": "zone_service_policies",
@@ -16432,13 +16383,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "category_id": {
           "name": "category_id",
           "type": "text",
@@ -16488,7 +16432,6 @@
         "routing_cells_category_every_zone_key": {
           "name": "routing_cells_category_every_zone_key",
           "columns": [
-            "location_id",
             "category_id"
           ],
           "isUnique": true,
@@ -16497,7 +16440,6 @@
         "routing_cells_category_zone_key": {
           "name": "routing_cells_category_zone_key",
           "columns": [
-            "location_id",
             "category_id",
             "zone_id"
           ],
@@ -16507,7 +16449,6 @@
         "routing_cells_product_every_zone_key": {
           "name": "routing_cells_product_every_zone_key",
           "columns": [
-            "location_id",
             "product_id"
           ],
           "isUnique": true,
@@ -16516,7 +16457,6 @@
         "routing_cells_product_zone_key": {
           "name": "routing_cells_product_zone_key",
           "columns": [
-            "location_id",
             "product_id",
             "zone_id"
           ],
@@ -16526,7 +16466,6 @@
         "routing_cells_all_zone_key": {
           "name": "routing_cells_all_zone_key",
           "columns": [
-            "location_id",
             "zone_id"
           ],
           "isUnique": true,
@@ -16535,7 +16474,6 @@
         "routing_cells_no_category_every_zone_key": {
           "name": "routing_cells_no_category_every_zone_key",
           "columns": [
-            "location_id",
             "no_category"
           ],
           "isUnique": true,
@@ -16544,7 +16482,6 @@
         "routing_cells_no_category_zone_key": {
           "name": "routing_cells_no_category_zone_key",
           "columns": [
-            "location_id",
             "no_category",
             "zone_id"
           ],
@@ -16553,19 +16490,6 @@
         }
       },
       "foreignKeys": {
-        "routing_cells_location_fk": {
-          "name": "routing_cells_location_fk",
-          "tableFrom": "routing_cells",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "routing_cells_category_fk": {
           "name": "routing_cells_category_fk",
           "tableFrom": "routing_cells",
@@ -18224,13 +18148,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "name": {
           "name": "name",
           "type": "text",
@@ -18255,38 +18172,22 @@
         }
       },
       "indexes": {
-        "seasons_location_starts_key": {
-          "name": "seasons_location_starts_key",
+        "seasons_starts_key": {
+          "name": "seasons_starts_key",
           "columns": [
-            "location_id",
             "starts_on"
           ],
           "isUnique": true
         },
-        "seasons_location_name_key": {
-          "name": "seasons_location_name_key",
+        "seasons_name_key": {
+          "name": "seasons_name_key",
           "columns": [
-            "location_id",
             "name"
           ],
           "isUnique": true
         }
       },
-      "foreignKeys": {
-        "seasons_location_fk": {
-          "name": "seasons_location_fk",
-          "tableFrom": "seasons",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
@@ -18317,13 +18218,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "date": {
           "name": "date",
           "type": "text",
@@ -18348,10 +18242,9 @@
         }
       },
       "indexes": {
-        "special_day_dates_location_date_key": {
-          "name": "special_day_dates_location_date_key",
+        "special_day_dates_date_key": {
+          "name": "special_day_dates_date_key",
           "columns": [
-            "location_id",
             "date"
           ],
           "isUnique": true
@@ -18369,19 +18262,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "special_day_dates_location_fk": {
-          "name": "special_day_dates_location_fk",
-          "tableFrom": "special_day_dates",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -18404,13 +18284,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "name": {
           "name": "name",
           "type": "text",
@@ -18428,21 +18301,7 @@
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "special_days_location_fk": {
-          "name": "special_days_location_fk",
-          "tableFrom": "special_days",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {

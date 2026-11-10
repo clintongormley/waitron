@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
-import { enumCheck, enumType, id, json, locations, table, tsString } from "@waitron/db";
+import { enumCheck, enumType, id, json, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import type { AttendanceCommandPayload } from "../attendance-contract.js";
 import { attendanceQuestions } from "./attendance.js";
@@ -27,7 +27,6 @@ export const attendanceResponseCommands = table(
     personId: id("person_id")
       .notNull()
       .references(() => persons.id, { onDelete: "restrict" }),
-    locationId: id("location_id").references(() => locations.id, { onDelete: "restrict" }),
     questionId: id("question_id"),
     action: responseAction("action").notNull(),
     input: json<AttendanceCommandPayload>("input").notNull(),
@@ -36,12 +35,8 @@ export const attendanceResponseCommands = table(
   },
   (t) => [
     foreignKey({
-      columns: [t.questionId, t.personId, t.locationId],
-      foreignColumns: [
-        attendanceQuestions.id,
-        attendanceQuestions.personId,
-        attendanceQuestions.locationId,
-      ],
+      columns: [t.questionId, t.personId],
+      foreignColumns: [attendanceQuestions.id, attendanceQuestions.personId],
       name: "attendance_response_commands_question_fk",
     }).onDelete("restrict"),
     index("attendance_response_commands_question_idx").on(t.personId, t.questionId),

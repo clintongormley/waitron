@@ -37,10 +37,7 @@ beforeEach(async () => {
   await withTransaction(suite.db, async (tx) => {
     await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
     const receipt = { operationDescription: "Restaurante", email: "dining@example.test" };
-    const rows = await tx
-      .select({ id: departments.id })
-      .from(departments)
-      .where(eq(departments.locationId, venue.cfg.locationId));
+    const rows = await tx.select({ id: departments.id }).from(departments);
     for (const { id } of rows) {
       await tx
         .insert(departmentReceipts)

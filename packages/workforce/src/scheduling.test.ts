@@ -214,8 +214,7 @@ describe("publishRoster", () => {
 
     const rows = await suite.db.execute<{ id: string; status: string }>(sql`
       select id, status from roster_versions
-      where location_id = ${locationId}
-        and period_start = ${period.periodStart} and period_end = ${period.periodEnd}`);
+      where period_start = ${period.periodStart} and period_end = ${period.periodEnd}`);
     const byId = new Map(rows.rows.map((r) => [r.id, r.status]));
     expect(byId.get(v1)).toBe("superseded");
     expect(byId.get(v2)).toBe("published");
@@ -914,13 +913,11 @@ describe("copyPublishedToDraft", () => {
       periodEnd: "2026-05-10",
       status: "draft",
     });
-    expect(
-      await countRows(sql`select count(*) as n from shifts where location_id=${locationId}`),
-    ).toBe(0);
+    expect(await countRows(sql`select count(*) as n from shifts `)).toBe(0);
   });
 
   it("serializes two simultaneous copies so only one draft is created", async () => {
-    const { locationId, versionId } = await publishedWeek();
+    const { versionId } = await publishedWeek();
     const results = await Promise.allSettled([
       run((tx) => backend.copyPublishedToDraft(tx, { versionId })),
       run((tx) => backend.copyPublishedToDraft(tx, { versionId })),
@@ -929,9 +926,7 @@ describe("copyPublishedToDraft", () => {
     const failure = results.find((result) => result.status === "rejected") as PromiseRejectedResult;
     expect(failure.reason).toMatchObject({ code: "roster.draft_exists", params: {} });
     expect(
-      await countRows(
-        sql`select count(*) as n from roster_versions where location_id=${locationId} and status='draft'`,
-      ),
+      await countRows(sql`select count(*) as n from roster_versions where status='draft'`),
     ).toBe(1);
   });
 
@@ -977,18 +972,14 @@ describe("copyPublishedToDraft", () => {
   it.each(["draft", "superseded"] as const)(
     "refuses a %s source without creating a version",
     async (status) => {
-      const { locationId, versionId } = await publishedWeek();
+      const { versionId } = await publishedWeek();
       await suite.db.execute(
         sql`update roster_versions set status=${status}, published_at=${status === "draft" ? null : "2026-01-01T00:00:00Z"} where id=${versionId}`,
       );
       expect(
         await refusalOf(() => run((tx) => backend.copyPublishedToDraft(tx, { versionId }))),
       ).toEqual({ code: "roster.not_published", params: { rosterVersionId: versionId } });
-      expect(
-        await countRows(
-          sql`select count(*) as n from roster_versions where location_id=${locationId}`,
-        ),
-      ).toBe(1);
+      expect(await countRows(sql`select count(*) as n from roster_versions `)).toBe(1);
     },
   );
 
@@ -1006,11 +997,7 @@ describe("copyPublishedToDraft", () => {
     expect(
       await refusalOf(() => run((tx) => backend.copyPublishedToDraft(tx, { versionId }))),
     ).toEqual({ code: "roster.draft_exists", params: {} });
-    expect(
-      await countRows(
-        sql`select count(*) as n from roster_versions where location_id=${locationId}`,
-      ),
-    ).toBe(2);
+    expect(await countRows(sql`select count(*) as n from roster_versions `)).toBe(2);
   });
 
   it("moves both ends of requested and accepted swaps, leaves decided history, and permits the pending decisions", async () => {
@@ -1102,7 +1089,7 @@ describe("copyPublishedToDraft", () => {
   });
 
   it("rolls back the copy and pending swap move when its caller's transaction fails", async () => {
-    const { locationId, versionId, shiftId } = await publishedWeek();
+    const { versionId, shiftId } = await publishedWeek();
     const other = await seedPerson(suite.db, "Swap recipient");
     const swapId = await insertShiftSwap(suite.db, {
       requestedByPersonId: personId,
@@ -1115,14 +1102,8 @@ describe("copyPublishedToDraft", () => {
         throw new Error("after copy");
       }),
     ).rejects.toThrow("after copy");
-    expect(
-      await countRows(
-        sql`select count(*) as n from roster_versions where location_id=${locationId}`,
-      ),
-    ).toBe(1);
-    expect(
-      await countRows(sql`select count(*) as n from shifts where location_id=${locationId}`),
-    ).toBe(1);
+    expect(await countRows(sql`select count(*) as n from roster_versions `)).toBe(1);
+    expect(await countRows(sql`select count(*) as n from shifts `)).toBe(1);
     expect(
       (await suite.db.execute(sql`select from_shift_id from shift_swaps where id=${swapId}`)).rows,
     ).toEqual([{ from_shift_id: shiftId }]);

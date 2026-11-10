@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
-import { newId, readVenueClock, venueLocationId } from "@waitron/db";
+import { newId, readVenueClock } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
@@ -100,13 +100,11 @@ export const recordAttendanceFact: AttendanceRecorder = async (tx, fact) => {
   }
   const at = new Date(Math.floor(instant.getTime() / 1000) * 1000);
   const clock = await readVenueClock(tx);
-  const venueId = await venueLocationId(tx);
   const businessDay = businessDayAt(clock, at);
   await tx.insert(attendanceOperationFacts).values({
     source: fact.source,
     key: fact.key,
     personId: fact.personId,
-    locationId: venueId,
     kind: fact.kind,
     at: at.toISOString(),
     offsetMinutes: offsetMinutes(at.getTime(), clock.timeZone),

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
-import { count, id, locations, newId, nowIso, table, tsString } from "@waitron/db";
+import { count, id, newId, nowIso, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { rosterVersions } from "./roster-versions.js";
 
@@ -14,7 +14,6 @@ export const shifts = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     personId: id("person_id").notNull(),
-    locationId: id("location_id").notNull(),
     startsAt: tsString("starts_at").notNull(),
     startsOffsetMinutes: count("starts_offset_minutes").notNull(),
     endsAt: tsString("ends_at").notNull(),
@@ -29,11 +28,6 @@ export const shifts = table(
       columns: [t.personId],
       foreignColumns: [persons.id],
       name: "shifts_person_fk",
-    }).onDelete("restrict"),
-    foreignKey({
-      columns: [t.locationId],
-      foreignColumns: [locations.id],
-      name: "shifts_location_fk",
     }).onDelete("restrict"),
     foreignKey({
       columns: [t.rosterVersionId],

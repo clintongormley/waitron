@@ -112,7 +112,7 @@ beforeEach(async () => {
   seriesId = series!.id;
   const [department] = await db
     .insert(departments)
-    .values({ locationId: placeId, name: "Dining", tradingName: "Dining" })
+    .values({ name: "Dining", tradingName: "Dining" })
     .returning();
   departmentId = department!.id;
   zones = (
@@ -151,7 +151,6 @@ async function target(
   if (zoneId !== null)
     await db.insert(orderServiceContexts).values({
       workingOrderId: orderId,
-      locationId: cfg.locationId,
       departmentId,
       zoneId,
       serviceMode: "ticket_then_pay",

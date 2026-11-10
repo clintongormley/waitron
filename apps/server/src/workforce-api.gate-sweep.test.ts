@@ -120,12 +120,11 @@ async function send(
   });
 }
 
-async function seedAcceptedSwap(personId: string, locationId: string): Promise<string> {
+async function seedAcceptedSwap(personId: string): Promise<string> {
   const [shift] = await suite.db
     .insert(shifts)
     .values({
       personId,
-      locationId,
       startsAt: "2026-03-02T09:00:00Z",
       startsOffsetMinutes: 0,
       endsAt: "2026-03-02T13:00:00Z",
@@ -202,7 +201,7 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
 
   it("a manager decides a swap and an absence — the decider columns come back through the route", async () => {
     const a = await setupVenue();
-    const swapA = await seedAcceptedSwap(a.personId, a.locationId);
+    const swapA = await seedAcceptedSwap(a.personId);
     const absA = await seedRequestedAbsence(a.personId);
     const appA = mountApp();
 
@@ -295,7 +294,6 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
     const [version] = await suite.db
       .insert(rosterVersions)
       .values({
-        locationId: v.locationId,
         periodStart: "2026-03-02",
         periodEnd: "2026-03-08",
         status: "published",
@@ -304,7 +302,6 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
       .returning({ id: rosterVersions.id });
     await suite.db.insert(shifts).values({
       personId: v.personId,
-      locationId: v.locationId,
       startsAt: "2026-03-02T09:00:00Z",
       startsOffsetMinutes: 0,
       endsAt: "2026-03-02T13:00:00Z",

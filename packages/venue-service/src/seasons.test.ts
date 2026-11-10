@@ -99,10 +99,10 @@ describe("ensureDefaultSeasons", () => {
   });
 
   it("leaves a venue that already has a season alone", async () => {
-    const locationId = await newLocation("One season");
+    await newLocation("One season");
     const [own] = await db
       .insert(seasons)
-      .values({ locationId, name: "All year", startsOn: "01-01" })
+      .values({ name: "All year", startsOn: "01-01" })
       .returning({ id: seasons.id });
     const result = await withTransaction(db, (tx) => ensureDefaultSeasons(tx));
     expect(result).toEqual([{ id: own!.id, name: "All year", startsOn: "01-01", colour: "grey" }]);
@@ -179,10 +179,10 @@ describe("ensureDefaultSeasons", () => {
   });
 
   it("reads the venue's seasons, ordered by start", async () => {
-    const mine = await newLocation("Mine");
+    await newLocation("Mine");
     await db.insert(seasons).values([
-      { locationId: mine, name: "Late", startsOn: "10-01" },
-      { locationId: mine, name: "Early", startsOn: "02-01" },
+      { name: "Late", startsOn: "10-01" },
+      { name: "Early", startsOn: "02-01" },
     ]);
     const read = await withTransaction(db, (tx) => readSeasons(tx));
     expect(shape(read)).toEqual([
@@ -219,9 +219,9 @@ async function autumnVenue() {
   const stored = await db
     .insert(seasons)
     .values([
-      { locationId: cfg.locationId, name: "Autumn", startsOn: "09-01" },
-      { locationId: cfg.locationId, name: "Late autumn", startsOn: "11-01" },
-      { locationId: cfg.locationId, name: "Winter", startsOn: "12-01" },
+      { name: "Autumn", startsOn: "09-01" },
+      { name: "Late autumn", startsOn: "11-01" },
+      { name: "Winter", startsOn: "12-01" },
     ])
     .returning({ id: seasons.id, name: seasons.name });
   const seasonId = (name: string) => stored.find((season) => season.name === name)!.id;
@@ -575,10 +575,10 @@ describe("saveSeasons", () => {
   });
 
   it("refuses deleting every season", async () => {
-    const locationId = await newLocation("Lone season, saveSeasons");
+    await newLocation("Lone season, saveSeasons");
     const [only] = await db
       .insert(seasons)
-      .values({ locationId, name: "All year", startsOn: "01-01" })
+      .values({ name: "All year", startsOn: "01-01" })
       .returning({ id: seasons.id });
     expect(await refusal(change({ delete: [only!.id] }))).toEqual({
       code: "season.invalid",

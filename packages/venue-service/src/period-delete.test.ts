@@ -293,7 +293,7 @@ describe("what deleting a period touches", () => {
     await specialDay(v, "Anniversary", ["2026-10-20"], lunch);
     const [cell] = await db
       .insert(routingCells)
-      .values({ locationId: v.locationId, stationId: v.stationId, noCategory: true })
+      .values({ stationId: v.stationId, noCategory: true })
       .returning({ id: routingCells.id });
     await db.insert(routingCellPeriods).values({
       cellId: cell!.id,
@@ -372,7 +372,7 @@ describe("deleting a period", () => {
       (
         await db
           .insert(routingCells)
-          .values({ locationId: v.locationId, stationId: v.stationId, ...values })
+          .values({ stationId: v.stationId, ...values })
           .returning({ id: routingCells.id })
       )[0]!.id;
     const noCategory = await cell({ noCategory: true });
@@ -440,8 +440,7 @@ describe("deleting a period", () => {
       })
       .from(routingCellPeriods)
       .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
-      .innerJoin(menuPeriods, eq(menuPeriods.id, routingCellPeriods.periodId))
-      .where(eq(routingCells.locationId, v.locationId));
+      .innerJoin(menuPeriods, eq(menuPeriods.id, routingCellPeriods.periodId));
     const periods = await db
       .select({ name: menuPeriods.name })
       .from(menuPeriods)

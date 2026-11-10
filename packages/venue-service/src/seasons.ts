@@ -6,7 +6,6 @@ import {
   departments,
   readVenueClock,
   seasons,
-  venueLocationId,
   type Transaction,
 } from "@waitron/db";
 import { AppError, CALENDAR_COLOURS, type CalendarColour, type ErrorParams } from "@waitron/shared";
@@ -51,14 +50,12 @@ export async function ensureDefaultSeasons(
   const existing = await readSeasons(tx);
   if (existing.length > 0) return existing;
   const language = staffLanguage ?? (await readStarterStaffLanguage(tx));
-  const venueRowId = await venueLocationId(tx);
   const inserted = await tx
     .insert(seasons)
     .values(
       DEFAULT_SEASONS.map((season) => ({
         ...season,
         name: starterName(STARTER_SEASON_NAMES, season.name, language),
-        locationId: venueRowId,
       })),
     )
     .returning(SEASON_COLUMNS);
@@ -174,12 +171,10 @@ export async function saveSeasons(
       .where(eq(seasons.id, entry.id!));
   for (const { id, name, startsOn, colour } of changed)
     await tx.update(seasons).set({ name, startsOn, colour }).where(eq(seasons.id, id!));
-  let venueId: string | undefined;
-  const venueRowId = async () => (venueId ??= await venueLocationId(tx));
   for (const { name, startsOn, colour, split } of added) {
     const [row] = await tx
       .insert(seasons)
-      .values({ name, startsOn, colour, locationId: await venueRowId() })
+      .values({ name, startsOn, colour })
       .returning({ id: seasons.id });
     for (const [departmentId, weeks] of departmentWeeks) {
       const week = weeks.get(split);

@@ -1,13 +1,7 @@
 // Booking operations run on the caller's transaction. Route handlers own authorization.
 import "./errors.js";
 import { and, asc, eq, inArray, sql, type InferSelectModel } from "drizzle-orm";
-import {
-  savedPart,
-  tableInService,
-  diningTables,
-  venueLocationId,
-  type Transaction,
-} from "@waitron/db";
+import { savedPart, tableInService, diningTables, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { CoreServices } from "@waitron/module";
 import { bookings } from "./schema/bookings.js";
@@ -76,7 +70,6 @@ export async function createBooking(
   const [row] = await tx
     .insert(bookings)
     .values({
-      locationId: await venueLocationId(tx),
       bookingDate: input.bookingDate,
       bookingTime: storedTime(input.bookingTime),
       partySize: input.partySize,
@@ -90,13 +83,11 @@ export async function createBooking(
   return { id: row!.id };
 }
 
-/** Names the venue's row only so `bookings_location_date_idx`, which leads with `location_id`, plans
- *  the read; without it the day list scans every booking. */
-export function bookingsOnDay(tx: Transaction, venueId: string, date: string) {
+export function bookingsOnDay(tx: Transaction, date: string) {
   return tx
     .select()
     .from(bookings)
-    .where(and(eq(bookings.locationId, venueId), eq(bookings.bookingDate, date)))
+    .where(eq(bookings.bookingDate, date))
     .orderBy(asc(bookings.bookingTime), asc(bookings.id));
 }
 
@@ -104,7 +95,7 @@ export async function listBookings(
   tx: Transaction,
   { date }: { date: string },
 ): Promise<Booking[]> {
-  return bookingsOnDay(tx, await venueLocationId(tx), date);
+  return bookingsOnDay(tx, date);
 }
 
 export async function getBooking(tx: Transaction, id: string): Promise<Booking | undefined> {

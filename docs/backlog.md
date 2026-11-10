@@ -2289,8 +2289,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   qualification under the [approved simple release plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-06-simple-private-ui-release.md).
 
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
-  2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: S18e
-  and the schema slices S20–S28; every other slice has landed. S18 has a plan
+  2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: 5b–5h
+  of A1308's slice 5; every other slice has landed. S18 has a plan
   ([S18 plan](superpowers/plans/2026-11-04-a1301-s18-contract-cleanup.md)); its S18e builds the
   approved [venue-id design](superpowers/specs/2026-11-04-a1301-venue-id-design.md) and is held by
   A1308, since it adds a table.

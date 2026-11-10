@@ -177,7 +177,6 @@ export async function createDepartment(
   const [row] = await tx
     .insert(departments)
     .values({
-      locationId: await venueLocationId(tx),
       name: input.name,
       tradingName: input.tradingName ?? input.name,
     })
@@ -396,7 +395,6 @@ export async function configureZone(
   await tx
     .insert(zoneServicePolicies)
     .values({
-      locationId: await venueLocationId(tx),
       zoneId: input.zoneId,
       departmentId: input.departmentId,
     })
@@ -1071,7 +1069,6 @@ export async function recordOrderServiceContext(
   const context = await resolveZoneContext(tx, zoneId);
   await tx.insert(orderServiceContexts).values({
     workingOrderId,
-    locationId: await venueLocationId(tx),
     zoneId: context.zoneId,
     departmentId: context.departmentId,
     serviceMode: context.serviceMode,
@@ -1369,7 +1366,6 @@ export async function copyOrderServiceContext(
   if (context === null) return;
   await tx.insert(orderServiceContexts).values({
     workingOrderId: toWorkingOrderId,
-    locationId: await venueLocationId(tx),
     zoneId: context.zoneId,
     departmentId: context.departmentId,
     serviceMode: context.serviceMode,

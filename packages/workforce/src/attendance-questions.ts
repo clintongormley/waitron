@@ -1,5 +1,5 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { venueLocationId, type Transaction } from "@waitron/db";
+import { type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { assertAttendanceDay } from "./attendance-state.js";
 import type { AttendanceQuestion } from "./attendance-types.js";
@@ -136,7 +136,6 @@ export async function upsertAttendanceQuestion(
       .insert(attendanceQuestions)
       .values({
         personId: input.personId,
-        locationId: await venueLocationId(tx),
         businessDay: input.day.businessDay,
         startAt: new Date(input.day.startAt).toISOString(),
         endAt: new Date(input.day.endAt).toISOString(),

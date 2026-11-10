@@ -123,7 +123,6 @@ for (const enabled of [true, false]) {
         if (enabled) {
           await withTransaction(suite.db, (tx) =>
             tx.insert(bookings).values({
-              locationId: cfg.locationId,
               tableId: table!.id,
               bookingDate: "2026-10-11",
               bookingTime: "20:00",
@@ -179,7 +178,6 @@ for (const enabled of [true, false]) {
           const [booking] = await suite.db
             .insert(bookings)
             .values({
-              locationId: cfg.locationId,
               tableId: table!.id,
               bookingDate: "2026-01-01",
               bookingTime: "20:00:00",

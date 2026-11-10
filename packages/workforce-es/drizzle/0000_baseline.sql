@@ -1,6 +1,5 @@
 CREATE TABLE `convenio_config` (
-	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
+	`id` integer PRIMARY KEY NOT NULL,
 	`working_days_per_week` integer DEFAULT 5 NOT NULL,
 	`overtime_model` text DEFAULT 'daily_accrual' NOT NULL,
 	`reference_period_days` integer,
@@ -23,9 +22,7 @@ CREATE TABLE `convenio_config` (
 	`split_min_gap_minutes` integer,
 	`continuous_paid_break_minutes` integer,
 	`created_at` text NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "convenio_config_singleton_ck" CHECK("convenio_config"."id" = 1),
 	CONSTRAINT "convenio_config_working_days_ck" CHECK("convenio_config"."working_days_per_week" between 1 and 7),
 	CONSTRAINT "convenio_config_overtime_model_ck" CHECK("convenio_config"."overtime_model" in ('daily_accrual', 'period_net'))
 );
---> statement-breakpoint
-CREATE UNIQUE INDEX `convenio_config_location_uq` ON `convenio_config` (`location_id`);

@@ -69,10 +69,7 @@ async function venue() {
   const v = await seedVenueWithStaff(suite.db);
   const area: AreaRef = { kind: "department", id: v.departmentId };
   const staffRoleId = await tx(async (t) => {
-    const [r] = await t
-      .insert(staffRoles)
-      .values({ locationId: v.cfg.locationId, name: "Waiter" })
-      .returning();
+    const [r] = await t.insert(staffRoles).values({ name: "Waiter" }).returning();
     await t.insert(personStaffRoles).values({ personId: v.ana, staffRoleId: r!.id });
     await t.insert(employments).values({
       personId: v.ana,
@@ -121,7 +118,6 @@ async function rawShift(
     const [s] = await t
       .insert(shifts)
       .values({
-        locationId: v.cfg.locationId,
         personId: v.ana,
         startsAt,
         endsAt,
@@ -164,25 +160,22 @@ async function seasonHours(
     });
   });
 }
-async function specialDay(cfg: Cfg, name: string, date: string, closedAllDay = false) {
+async function specialDay(_cfg: Cfg, name: string, date: string, closedAllDay = false) {
   return tx(async (t) => {
     const [special] = await t
       .insert(specialDays)
-      .values({ locationId: cfg.locationId, name })
+      .values({ name })
       .returning({ id: specialDays.id });
     const [row] = await t
       .insert(specialDayDates)
-      .values({ specialDayId: special!.id, locationId: cfg.locationId, date, closedAllDay })
+      .values({ specialDayId: special!.id, date, closedAllDay })
       .returning({ id: specialDayDates.id });
     return { id: special!.id, dateId: row!.id };
   });
 }
-async function addSeason(cfg: Cfg, name: string, startsOn: string) {
+async function addSeason(_cfg: Cfg, name: string, startsOn: string) {
   return tx(async (t) => {
-    const [row] = await t
-      .insert(seasons)
-      .values({ locationId: cfg.locationId, name, startsOn })
-      .returning({ id: seasons.id });
+    const [row] = await t.insert(seasons).values({ name, startsOn }).returning({ id: seasons.id });
     return row!.id;
   });
 }

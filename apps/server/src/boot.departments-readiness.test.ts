@@ -37,10 +37,7 @@ it.each(["ES-common", "GB-vat"])(
       .update(nodes)
       .set({ filingModule: pack === "GB-vat" ? "none" : "verifactu" })
       .where(eq(nodes.id, venue.cfg.nodeId));
-    const rows = await suite.db
-      .select()
-      .from(departments)
-      .where(eq(departments.locationId, venue.cfg.locationId));
+    const rows = await suite.db.select().from(departments);
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows)
       await suite.db.delete(departmentReceipts).where(eq(departmentReceipts.departmentId, row.id));

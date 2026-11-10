@@ -35,10 +35,9 @@ describe("the staffing tables in workforce's set", () => {
     );
   });
 
-  it("creates staff_roles with a location, a name, a colour and a position", async () => {
+  it("creates staff_roles with a name, a colour and a position", async () => {
     expect(await columnsOf("staff_roles")).toEqual({
       id: { notNull: 1, pk: 1 },
-      location_id: { notNull: 1, pk: 0 },
       name: { notNull: 1, pk: 0 },
       colour: { notNull: 1, pk: 0 },
       position: { notNull: 1, pk: 0 },

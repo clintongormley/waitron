@@ -1074,9 +1074,8 @@ product failures.
   slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
-  slices. Still open: S18e and the schema slices S20–S28; every other slice has landed. The
-  personal-data export's `location` key and its readme line go with S22, and the backup screen's
-  folder wording goes with S18e.
+  slices. Still open: 5b–5h of A1308's slice 5; the backup screen's folder wording goes with
+  the venue-id work.
   `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
   `venueLocationId` are on main for the remaining consumer slices (S1, #2379).
   `@waitron/db/testing/seed.js` has `seedVenue` and `seedWorkingOrder`, and
@@ -1134,7 +1133,7 @@ product failures.
     lines they left (fixed ids the helpers cannot keep, second-location cases and standby copies)
     with their owning slice in their commit messages and PR bodies; F3 (#2427) lists its lines
     with the reason each was left. Reporting's
-    `seedVenueWithSeries` and `seedOpenOrder` and workforce's `seedLocation` still write a raw
+    `seedVenueWithSeries` and `seedOpenOrder` still write a raw
     second location when a cross-location case calls them again; the code slices that delete
     those cases remove that branch. fiscal-verifactu's own helpers and the tests outside F2's list
     (`certificate-install`, `seed-single-venue`, `void-issue-clock`) are S3's. Left as they were

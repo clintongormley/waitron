@@ -388,8 +388,8 @@ describe("mountWorkforceApi — publish", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .insert(convenioConfig)
-        .values({ locationId })
-        .onConflictDoNothing({ target: convenioConfig.locationId });
+        .values({ id: 1 })
+        .onConflictDoNothing({ target: convenioConfig.id });
     });
   }
 
@@ -500,7 +500,6 @@ describe("mountWorkforceApi — swap + absence approvals", () => {
         .insert(shifts)
         .values({
           personId,
-          locationId,
           startsAt: "2026-03-02T09:00:00Z",
           startsOffsetMinutes: 0,
           endsAt: "2026-03-02T13:00:00Z",
@@ -681,11 +680,11 @@ describe("roster warnings while planning", () => {
     await suite.db.delete(convenioConfig);
   });
   async function warningLocation(withRules = true, overrides = {}) {
-    if (withRules) await suite.db.insert(convenioConfig).values({ locationId, ...overrides });
+    if (withRules) await suite.db.insert(convenioConfig).values({ ...overrides });
     return locationId;
   }
   async function version(
-    locationId: string,
+    _locationId: string,
     periodStart: string,
     status: "published" | "draft" | "superseded",
   ) {
@@ -693,7 +692,6 @@ describe("roster warnings while planning", () => {
     const [row] = await suite.db
       .insert(rosterVersions)
       .values({
-        locationId,
         periodStart,
         periodEnd: end,
         status,
@@ -703,7 +701,7 @@ describe("roster warnings while planning", () => {
     return row!.id;
   }
   async function planned(
-    locationId: string,
+    _locationId: string,
     startsAt: string,
     endsAt: string,
     rosterVersionId: string | null = null,
@@ -713,7 +711,6 @@ describe("roster warnings while planning", () => {
     const [row] = await suite.db
       .insert(shifts)
       .values({
-        locationId,
         personId: worker,
         startsAt,
         endsAt,
@@ -962,7 +959,6 @@ it("uses the enabled provider for planned-versus-actual paid time", async () => 
   const nodeId = await seedNode(suite.db, locationId);
   await suite.db.delete(convenioConfig);
   await suite.db.insert(convenioConfig).values({
-    locationId,
     breakThresholdMinutes: 300,
     splitMinSegmentMinutes: 180,
     splitMaxSegmentMinutes: 300,

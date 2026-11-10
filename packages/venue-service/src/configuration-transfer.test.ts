@@ -469,7 +469,6 @@ describe("validateRoutingConfiguration", () => {
     const { category = null, product = null, zone = null, station = null, noCategory = 0 } = spec;
     return {
       id: randomUUID(),
-      location_id: "location",
       category_id: category,
       product_id: product,
       zone_id: zone,
@@ -931,7 +930,6 @@ describe("deleted hierarchy rows in a configuration bundle", () => {
     tables.routing_cells = [
       {
         id: "cell",
-        location_id: "location",
         category_id: null,
         product_id: null,
         zone_id: PATIO,
@@ -1241,14 +1239,12 @@ describe("season weeks in a configuration bundle", () => {
       seasons: [
         {
           id: "s-autumn",
-          location_id: "venue",
           name: "Autumn",
           starts_on: "09-01",
           colour: "orange",
         },
         {
           id: "s-winter",
-          location_id: "venue",
           name: "Winter",
           starts_on: "12-01",
           colour: "blue",
@@ -1516,19 +1512,17 @@ describe("special days in a configuration bundle", () => {
         { id: BAR_PERIOD, department_id: RESTAURANT, name: "Bar", colour: "red", menu_id: "m-bar" },
         { id: LUNCH, department_id: RESTAURANT, name: "Lunch", colour: "blue", menu_id: "m-lunch" },
       ],
-      special_days: [{ id: "fiesta", location_id: "venue", name: "Fiesta", repeats_yearly: 1 }],
+      special_days: [{ id: "fiesta", name: "Fiesta", repeats_yearly: 1 }],
       special_day_dates: [
         {
           id: "fiesta-15",
           special_day_id: "fiesta",
-          location_id: "venue",
           date: "2025-08-15",
           closed_all_day: 0,
         },
         {
           id: "fiesta-16",
           special_day_id: "fiesta",
-          location_id: "venue",
           date: "2025-08-16",
           closed_all_day: 1,
         },
@@ -1610,11 +1604,10 @@ describe("special days in a configuration bundle", () => {
 
   it("refuses two special-day dates on one date, a one-off on a repeating date's later year, but not before it begins", () => {
     const twice = specialTables();
-    twice.special_days!.push({ id: "other", location_id: "venue", name: "Other" });
+    twice.special_days!.push({ id: "other", name: "Other" });
     twice.special_day_dates!.push({
       id: "other-15",
       special_day_id: "other",
-      location_id: "venue",
       date: "2027-08-15",
       closed_all_day: 0,
     });
@@ -1625,11 +1618,7 @@ describe("special days in a configuration bundle", () => {
     oneOffs.special_days![0]!.repeats_yearly = 0;
     oneOffs.special_day_dates![1]!.date = "2025-08-15";
     expect(() => validate(oneOffs, clock)).toThrowError(refusal("special_day_dates.date"));
-    // The import sets every foreign key into `locations` to the importing venue's row.
-    oneOffs.special_day_dates![1]!.location_id = "elsewhere";
-    expect(() => validate(oneOffs, clock)).toThrowError(refusal("special_day_dates.date"));
     twice.special_day_dates![2]!.date = "2027-08-15";
-    twice.special_day_dates![2]!.location_id = "elsewhere";
     expect(() => validate(twice, clock)).toThrowError(refusal("special_day_dates.date"));
   });
 
@@ -1656,11 +1645,10 @@ describe("special days in a configuration bundle", () => {
   it("compares a repeating holiday date in its first year only, as the bundle carries no holiday lists", () => {
     const tables = specialTables();
     tables.special_day_dates![0]!.holiday_name = "Asunción de la Virgen";
-    tables.special_days!.push({ id: "other", location_id: "venue", name: "Other" });
+    tables.special_days!.push({ id: "other", name: "Other" });
     tables.special_day_dates!.push({
       id: "other-15",
       special_day_id: "other",
-      location_id: "venue",
       date: "2027-08-15",
       closed_all_day: 0,
     });
@@ -1679,7 +1667,6 @@ describe("special days in a configuration bundle", () => {
     tables.seasons = [
       {
         id: "s-autumn",
-        location_id: "venue",
         name: "Autumn",
         starts_on: "09-01",
         colour: "orange",
@@ -1754,7 +1741,6 @@ describe("special days in a configuration bundle", () => {
       tables.seasons = [
         {
           id: "s-autumn",
-          location_id: "venue",
           name: "Autumn",
           starts_on: "09-01",
           colour: "orange",
@@ -1817,7 +1803,6 @@ describe("special days in a configuration bundle", () => {
     const tables = zoneClosedOn([], "21:00:00", "22:00:00", true);
     tables.seasons!.push({
       id: "s-winter",
-      location_id: "venue",
       name: "Winter",
       starts_on: "11-01",
       colour: "blue",

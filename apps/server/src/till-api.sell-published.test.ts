@@ -192,10 +192,7 @@ async function setupLunch(): Promise<Lunch> {
     simplifiedInvoiceLimit: null,
   };
   const seeded = await withTransaction(suite.db, async (tx) => {
-    for (const department of await tx
-      .select({ id: departments.id })
-      .from(departments)
-      .where(eq(departments.locationId, cfg.locationId)))
+    for (const department of await tx.select({ id: departments.id }).from(departments))
       await tx.insert(departmentReceipts).values({
         departmentId: department.id,
         receipt: { operationDescription: "Venta en establecimiento" },
@@ -255,13 +252,12 @@ async function setupLunch(): Promise<Lunch> {
     await addProducts(tx, postres.id, [flan.id]);
     const zone = await tx.execute<{ id: string }>(sql`
       select zone_id as id from zone_service_policies
-      where location_id = ${cfg.locationId} and is_counter_default`);
+      where is_counter_default`);
     const zoneId = zone.rows[0]!.id;
-    await offerMenuThroughZone(tx, cfg, zoneId, lunch.id, { makeDefault: true });
+    await offerMenuThroughZone(tx, zoneId, lunch.id, { makeDefault: true });
     await tx.execute(sql`
-      insert into routing_cells (id, location_id, category_id, station_id)
-      values (${randomUUID()}, ${cfg.locationId}, ${category.id},
-        (select id from kitchen_stations where location_id = ${cfg.locationId} and is_default))`);
+      insert into routing_cells (id, category_id, station_id)
+      values (${randomUUID()}, ${category.id}, (select id from kitchen_stations where location_id = ${cfg.locationId} and is_default))`);
     const [person] = await tx
       .insert(persons)
       .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
@@ -479,7 +475,7 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
     const brunch = await withTransaction(suite.db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Brunch" });
       await addProductToMenu(tx, { menuId: menu.id, productId: v.burger.productId });
-      await offerMenuThroughZone(tx, v.cfg, v.zoneId, menu.id, { displayOrder: 1 });
+      await offerMenuThroughZone(tx, v.zoneId, menu.id, { displayOrder: 1 });
       return publishWorkingMenu(tx, menu.id);
     });
     const before = await written();

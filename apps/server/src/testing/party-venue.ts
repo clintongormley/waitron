@@ -476,7 +476,7 @@ export async function pricedInZone(
       productId: v.productId(productName),
       grossPrice: price,
     });
-    await offerMenuThroughZone(tx, v.cfg, zoneId, menu.id, { makeDefault: true });
+    await offerMenuThroughZone(tx, zoneId, menu.id, { makeDefault: true });
     await publishWorkingMenu(tx, menu.id);
     return offer.id;
   });

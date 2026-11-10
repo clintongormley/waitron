@@ -326,7 +326,6 @@ it("a different permitted manager cannot recover another requester's command rec
 
 it("delivers paid totals through every attendance read route", async () => {
   await suite.db.insert(convenioConfig).values({
-    locationId: venue.cfg.locationId,
     breakThresholdMinutes: 300,
     splitMinSegmentMinutes: 180,
     splitMaxSegmentMinutes: 300,

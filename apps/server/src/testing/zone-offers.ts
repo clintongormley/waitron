@@ -67,7 +67,7 @@ export async function offerProducts(
   }
 
   const menuId = await ownMenu(tx);
-  await offerMenuThroughZone(tx, cfg, zoneId, menuId);
+  await offerMenuThroughZone(tx, zoneId, menuId);
 
   const productIds = [...new Set(options.productIds ?? (await topLevelProducts(tx)))];
   const offerByProduct = await placeOnTopLevel(tx, menuId, productIds);
@@ -102,12 +102,7 @@ async function resolveZone(
     const [counter] = await tx
       .select({ zoneId: zoneServicePolicies.zoneId })
       .from(zoneServicePolicies)
-      .where(
-        and(
-          eq(zoneServicePolicies.locationId, cfg.locationId),
-          eq(zoneServicePolicies.isCounterDefault, true),
-        ),
-      );
+      .where(and(eq(zoneServicePolicies.isCounterDefault, true)));
     zoneId = counter?.zoneId ?? (await floorZone(tx, cfg, COUNTER_ZONE));
   } else {
     zoneId = await floorZone(tx, cfg, TABLES_ZONE);

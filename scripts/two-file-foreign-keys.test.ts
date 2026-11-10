@@ -124,7 +124,13 @@ describe("no key crosses between a node's own tables and the venue's", () => {
     expect(printed).toContain("sale_lines -> sales");
     expect(printed).toContain("webauthn_credentials -> persons");
     expect(edges.length).toBeGreaterThanOrEqual(100);
-    expect(new Set(edges.map((edge) => edge.set)).size).toBeGreaterThanOrEqual(6);
+    expect([...new Set(edges.map((edge) => edge.set))].sort()).toEqual([
+      "packages/bookings/drizzle",
+      "packages/db/drizzle",
+      "packages/fiscal-verifactu/drizzle",
+      "packages/payments/drizzle",
+      "packages/workforce/drizzle",
+    ]);
   });
 });
 

@@ -127,7 +127,6 @@ describe("direct line service attendance", () => {
         r.source,
         r.key,
         r.personId,
-        r.locationId,
         r.kind,
         r.at,
         r.offsetMinutes,
@@ -138,16 +137,13 @@ describe("direct line service attendance", () => {
         "order",
         `${order.id}:${order.revision + 1}:${action}`,
         v.operatorId,
-        v.cfg.locationId,
         "order",
         "2026-01-05T16:40:00.000Z",
         60,
         "qualifying",
       ],
     ]);
-    expect(after.days.map((r) => [r.locationId, r.businessDay, r.dirtyRevision])).toEqual([
-      [v.cfg.locationId, "2026-01-05", 1],
-    ]);
+    expect(after.days.map((r) => [r.businessDay, r.dirtyRevision])).toEqual([["2026-01-05", 1]]);
     const line = after.lines.find((r) => r.id === order.lineId)!;
     if (action === "course") expect(line.courseId).toBe(courseId);
     if (action === "make-at") expect(line.makeAtStationId).toBe(stationId);

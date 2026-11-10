@@ -8,7 +8,6 @@ import {
   enumType,
   id,
   label,
-  locations,
   newId,
   nowIso,
   table,
@@ -34,7 +33,6 @@ export const bookings = table(
   "bookings",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id").notNull(),
     bookingDate: day("booking_date").notNull(),
     bookingTime: timeOfDay("booking_time").notNull(),
     partySize: count("party_size").notNull(),
@@ -55,11 +53,6 @@ export const bookings = table(
   },
   (t) => [
     foreignKey({
-      columns: [t.locationId],
-      foreignColumns: [locations.id],
-      name: "bookings_location_fk",
-    }).onDelete("restrict"),
-    foreignKey({
       columns: [t.tableId],
       foreignColumns: [diningTables.id],
       name: "bookings_table_fk",
@@ -69,7 +62,7 @@ export const bookings = table(
       foreignColumns: [workingOrders.id],
       name: "bookings_tab_fk",
     }),
-    index("bookings_location_date_idx").on(t.locationId, t.bookingDate),
+    index("bookings_date_idx").on(t.bookingDate),
     // `../floor.ts`'s reserved-on-floor read filters on the first three and ranges on the time.
     index("bookings_table_status_date_time_idx").on(
       t.tableId,

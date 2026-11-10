@@ -320,7 +320,7 @@ What each file holds
 ${PROFILE_LINE}
 ${SIGN_IN_LINE}
 - employment.json: your employment contracts: the contract type, contracted minutes per week, start and end dates and pay rate. Used to manage your employment and pay; your contracted minutes are the baseline for overtime.
-- rota.json: your shifts (their times, location and the state of the rota each is on), the availability recorded for you, and the shift swaps you asked for or were offered, with the other person's name and who decided them. Used to plan the rota.
+- rota.json: your shifts (their times and the state of the rota each is on), the availability recorded for you, and the shift swaps you asked for or were offered, with the other person's name and who decided them. Used to plan the rota.
 - absences.json: your absences: the kind (holiday, sick leave, other leave or unpaid), the dates, whether it was approved, who decided it and any note. Used to plan the rota around your time off.
 - attendance.json: the questions the box asked you about missing clock-in or clock-out times or an automatic clock-out, the reminder email about a question on missing times, if the box prepared one, the answers you or a supervisor, manager or admin gave and who authorised them, and the activity (sign-ins, orders, payments, breaks) the box records to notice them. Used to keep your working-time record complete.
 - staff-roles.json: the staff roles you can fill, and the area and staff role of each of your shifts that has been given one. Used to plan who covers each area.

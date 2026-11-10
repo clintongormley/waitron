@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { generateSync } from "otplib";
-import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -54,7 +54,6 @@ let manager: string;
 // Carries `locale = 'es-ES'`, distinct from `VENUE_LOCALE`, so `locale` and `venueLocale` are
 // pinned to their two different sources.
 let localed: string;
-let locationId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -66,7 +65,6 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Retail",
     });
-    locationId = await venueLocationId(db);
     const [meRow] = await db
       .insert(persons)
       .values({ displayName: "Me", pinHash: hashPin("1111"), role: "staff" })
@@ -151,14 +149,12 @@ async function send(
 
 async function insertShift(personId: string, startsAt: string, endsAt: string): Promise<string> {
   const { rows: versions } = await suite.db.execute<{ id: string }>(sql`
-    select id from roster_versions where location_id=${locationId}
-      and period_start='2026-01-01' and period_end='2026-12-31' and status='published'`);
+    select id from roster_versions where period_start='2026-01-01' and period_end='2026-12-31' and status='published'`);
   let rosterVersionId = versions[0]?.id;
   if (rosterVersionId === undefined) {
     const [version] = await suite.db
       .insert(rosterVersions)
       .values({
-        locationId,
         periodStart: "2026-01-01",
         periodEnd: "2026-12-31",
         status: "published",
@@ -171,7 +167,6 @@ async function insertShift(personId: string, startsAt: string, endsAt: string): 
     .insert(shifts)
     .values({
       personId,
-      locationId,
       startsAt,
       startsOffsetMinutes: 0,
       endsAt,
@@ -567,7 +562,6 @@ describe("mountMeApi — shifts", () => {
         const [version] = await suite.db
           .insert(rosterVersions)
           .values({
-            locationId,
             periodStart: "2026-09-07",
             periodEnd: "2026-09-13",
             status,
@@ -578,7 +572,6 @@ describe("mountMeApi — shifts", () => {
       }
       await suite.db.insert(shifts).values({
         personId: me,
-        locationId,
         rosterVersionId,
         startsAt: "2026-09-07T10:00:00Z",
         endsAt: "2026-09-07T18:00:00Z",

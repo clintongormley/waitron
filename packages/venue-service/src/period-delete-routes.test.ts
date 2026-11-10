@@ -131,7 +131,7 @@ async function routed() {
     await specialDay("Past celebration", PAST, [slot(lunch, "13:00", "15:00")]);
     const [cell] = await tx
       .insert(routingCells)
-      .values({ locationId, stationId: station!.id, noCategory: true })
+      .values({ stationId: station!.id, noCategory: true })
       .returning({ id: routingCells.id });
     await tx.insert(routingCellPeriods).values({
       cellId: cell!.id,
@@ -212,8 +212,7 @@ async function stored(r: Routed) {
     .select({ period: menuPeriods.name })
     .from(routingCellPeriods)
     .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
-    .innerJoin(menuPeriods, eq(menuPeriods.id, routingCellPeriods.periodId))
-    .where(eq(routingCells.locationId, r.locationId));
+    .innerJoin(menuPeriods, eq(menuPeriods.id, routingCellPeriods.periodId));
   const periods = await db
     .select({ name: menuPeriods.name })
     .from(menuPeriods)

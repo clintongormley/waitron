@@ -34,10 +34,7 @@ async function seed(withMenu = true, receiptLocale = "en-GB") {
     nodeId: await seedNode(db),
   };
   await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, cfg));
-  const [department] = await db
-    .select()
-    .from(departments)
-    .where(eq(departments.locationId, cfg.locationId));
+  const [department] = await db.select().from(departments);
   return { cfg, department: department! };
 }
 
@@ -174,8 +171,8 @@ describe("setup's saved first opening hours", () => {
   });
 
   it("has no summary for a venue with no seasons", async () => {
-    const { cfg } = await seed();
-    await suite.db.delete(seasons).where(eq(seasons.locationId, cfg.locationId));
+    await seed();
+    await suite.db.delete(seasons);
     expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });
 

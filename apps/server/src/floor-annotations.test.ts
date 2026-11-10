@@ -58,7 +58,6 @@ function asApp<T>(cfg: TradingContext, fn: (tx: Transaction) => Promise<T>): Pro
 async function insertBooking(cfg: WithVenueRowId, tableId: string, time: string): Promise<void> {
   await asApp(cfg, (tx) =>
     tx.insert(bookings).values({
-      locationId: cfg.locationId,
       tableId,
       bookingDate: "2026-09-15",
       bookingTime: time,

@@ -486,7 +486,6 @@ describe("current department A4 document", () => {
     const [department] = await suite.db
       .insert(departments)
       .values({
-        locationId: venue.cfg.locationId,
         name: "A4 dining",
         tradingName: "Now renamed",
         active: false,
@@ -621,7 +620,7 @@ describe("A4 current optional source matrix", () => {
     const issued = await issue(backend);
     const [department] = await suite.db
       .insert(departments)
-      .values({ locationId: venue.cfg.locationId, name: "A4 explicit", tradingName: "A4 explicit" })
+      .values({ name: "A4 explicit", tradingName: "A4 explicit" })
       .returning();
     await suite.db.insert(saleReceiptHeaders).values({
       saleId: issued.saleId,
@@ -676,7 +675,7 @@ describe("A4 current optional source matrix", () => {
     const issued = await issue(backend, true, "ca-ES");
     const [department] = await suite.db
       .insert(departments)
-      .values({ locationId: venue.cfg.locationId, name: "A4 language", tradingName: "A4 language" })
+      .values({ name: "A4 language", tradingName: "A4 language" })
       .returning();
     await suite.db.insert(saleReceiptHeaders).values({
       saleId: issued.saleId,
@@ -748,7 +747,6 @@ describe("A4 filed language outside the current pack choices", () => {
     const [department] = await suite.db
       .insert(departments)
       .values({
-        locationId: venue.cfg.locationId,
         name: `Filed ${printed}`,
         tradingName: "Filed language",
       })
@@ -872,7 +870,6 @@ describe("A4 department-only decoration", () => {
     const [department] = await suite.db
       .insert(departments)
       .values({
-        locationId: venue.cfg.locationId,
         name: "A4 isolated",
         tradingName: "Mutable trading name",
       })
@@ -1006,7 +1003,6 @@ describe("the theme's logo on the A4 invoice", () => {
     const [row] = await suite.db
       .insert(departments)
       .values({
-        locationId: venue.cfg.locationId,
         name: `A4 logo ${randomUUID()}`,
         tradingName: "A4 dining",
       })

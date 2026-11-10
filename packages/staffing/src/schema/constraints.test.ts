@@ -29,7 +29,7 @@ async function venue() {
     const locationId = await venueLocationId(tx);
     const [department] = await tx
       .insert(departments)
-      .values({ locationId, name: "Dining room", tradingName: "Dining room" })
+      .values({ name: "Dining room", tradingName: "Dining room" })
       .returning({ id: departments.id });
     const [station] = await tx
       .insert(kitchenStations)
@@ -37,19 +37,19 @@ async function venue() {
       .returning({ id: kitchenStations.id });
     const [season] = await tx
       .insert(seasons)
-      .values({ locationId, name: "Summer", startsOn: "06-01" })
+      .values({ name: "Summer", startsOn: "06-01" })
       .returning({ id: seasons.id });
     const [special] = await tx
       .insert(specialDays)
-      .values({ locationId, name: "Christmas" })
+      .values({ name: "Christmas" })
       .returning({ id: specialDays.id });
     const [date] = await tx
       .insert(specialDayDates)
-      .values({ specialDayId: special!.id, locationId, date: "2026-12-25" })
+      .values({ specialDayId: special!.id, date: "2026-12-25" })
       .returning({ id: specialDayDates.id });
     const [role] = await tx
       .insert(staffRoles)
-      .values({ locationId, name: "Waiter" })
+      .values({ name: "Waiter" })
       .returning({ id: staffRoles.id });
     return {
       locationId,
@@ -74,12 +74,10 @@ async function count(table: typeof staffingDays | typeof staffingBlocks) {
 }
 
 it("lets the colour CHECK take every calendar colour and refuses an unknown one", async () => {
-  const v = await venue();
+  await venue();
   const insert = (colour: string) =>
     withTransaction(suite.db, (tx) =>
-      tx
-        .insert(staffRoles)
-        .values({ locationId: v.locationId, name: `Role ${colour}`, colour: colour as never }),
+      tx.insert(staffRoles).values({ name: `Role ${colour}`, colour: colour as never }),
     );
   for (const colour of CALENDAR_COLOURS) await insert(colour);
   await expect(insert("beige")).rejects.toThrow("CHECK constraint failed: staff_roles_colour_ck");
@@ -200,7 +198,6 @@ async function assignedShift(v: Awaited<ReturnType<typeof venue>>) {
       .insert(shifts)
       .values({
         personId: person!.id,
-        locationId: v.locationId,
         startsAt: "2026-10-14T08:00:00Z",
         startsOffsetMinutes: 120,
         endsAt: "2026-10-14T16:00:00Z",

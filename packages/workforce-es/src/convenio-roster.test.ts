@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from "vitest";
-import { CORE_MIGRATIONS, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { WORKFORCE_MIGRATIONS, validateRoster, type PlannedShift } from "@waitron/workforce";
@@ -16,7 +16,7 @@ beforeEach(async () => {
 });
 
 it("characterizes stored agreement values reaching break and weekly-rest warnings", async () => {
-  await suite.db.insert(convenioConfig).values({ locationId: await venueLocationId(suite.db) });
+  await suite.db.insert(convenioConfig).values({});
   const baseline = await resolveWorkTimeRuleset(suite.db);
   await suite.db.update(convenioConfig).set({
     weeklyRestMinutes: 2880,

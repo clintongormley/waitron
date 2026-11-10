@@ -34,7 +34,6 @@ async function fixture() {
     const [department] = await tx
       .insert(departments)
       .values({
-        locationId: cfg.locationId,
         name: "Dining",
         tradingName: "Dining",
         isDefault: true,
@@ -45,15 +44,13 @@ async function fixture() {
 }
 
 /** A special day "Festival" on 2026-10-09, written straight to its tables. */
-async function festival(f: Awaited<ReturnType<typeof fixture>>) {
+async function festival() {
   return withTransaction(suite.db, async (tx) => {
     const [day] = await tx
       .insert(specialDays)
-      .values({ locationId: f.cfg.locationId, name: "Festival", repeatsYearly: false })
+      .values({ name: "Festival", repeatsYearly: false })
       .returning({ id: specialDays.id });
-    await tx
-      .insert(specialDayDates)
-      .values({ specialDayId: day!.id, locationId: f.cfg.locationId, date: "2026-10-09" });
+    await tx.insert(specialDayDates).values({ specialDayId: day!.id, date: "2026-10-09" });
     return day!.id;
   });
 }
@@ -61,7 +58,7 @@ async function festival(f: Awaited<ReturnType<typeof fixture>>) {
 describe("Calendar without a station-hours page model", () => {
   it("keeps local stations separate from special-day Calendar facts", async () => {
     const f = await fixture();
-    const special = await festival(f);
+    const special = await festival();
     const ids = await withTransaction(suite.db, async (tx) => {
       const [bar, prep, kitchen] = await tx
         .insert(kitchenStations)
@@ -97,8 +94,8 @@ describe("Calendar without a station-hours page model", () => {
   });
 
   it("keeps special days without station-hour fields when the venue has no stations", async () => {
-    const f = await fixture();
-    const special = await festival(f);
+    await fixture();
+    const special = await festival();
     const model = await withTransaction(suite.db, (tx) =>
       readSpecialDaysModel(tx, "2026-10-09", "2026-10-09", at),
     );
@@ -122,7 +119,6 @@ it("keeps local department names in the Opening hours model without station colu
     const [row] = await tx
       .insert(departments)
       .values({
-        locationId: f.cfg.locationId,
         name: "Closed dining",
         tradingName: "Closed dining",
         active: false,

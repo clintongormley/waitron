@@ -41,7 +41,7 @@ beforeAll(async () => {
   const cfg = { locationId: venueId };
   const [department] = await db
     .insert(departments)
-    .values({ locationId: cfg.locationId, name: "Restaurant", tradingName: "Restaurant" })
+    .values({ name: "Restaurant", tradingName: "Restaurant" })
     .returning({ id: departments.id });
   departmentId = department!.id;
   const [course] = await db
@@ -157,13 +157,13 @@ describe("the service_steps table", () => {
 describe("the service_step_completions table", () => {
   async function stepAndParty(name: string) {
     return withTransaction(db, async (tx) => {
-      const [location] = await tx
+      await tx
         .insert(locations)
         .values({ name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
         .returning({ id: locations.id });
       const [department] = await tx
         .insert(departments)
-        .values({ locationId: location!.id, name: "Restaurant", tradingName: "Restaurant" })
+        .values({ name, tradingName: name })
         .returning({ id: departments.id });
       const [row] = await tx
         .insert(serviceSteps)

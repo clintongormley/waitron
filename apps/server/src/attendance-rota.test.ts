@@ -43,7 +43,7 @@ beforeEach(async () => {
   otherId = workers[1]!.id;
   const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
   cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
-  await suite.db.insert(convenioConfig).values({ locationId });
+  await suite.db.insert(convenioConfig).values({});
   app = new Hono();
   mountWorkforceApi(app, { db: suite.db, cfg: { nodeId: crypto.randomUUID() } }, () => {});
 });
@@ -104,7 +104,6 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
     await add(await version());
     expect(await days()).toEqual([
       expect.objectContaining({
-        locationId,
         businessDay: "2026-01-05",
         startAt: "2026-01-05T03:00:00.000Z",
         endAt: "2026-01-06T03:00:00.000Z",

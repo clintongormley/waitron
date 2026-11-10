@@ -234,11 +234,10 @@ async function setupVenue(): Promise<{
     });
     const counter = await tx.execute<{ zone_id: string }>(sql`
       select zone_id from zone_service_policies
-      where location_id=${cfg.locationId} and is_counter_default`);
-    await offerMenuThroughZone(tx, cfg, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
+      where is_counter_default`);
+    await offerMenuThroughZone(tx, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
     await publishWorkingMenu(tx, cat.id);
     await tx.insert(routingCells).values({
-      locationId: cfg.locationId,
       categoryId: drinksCategory.id,
       stationId: null,
       noPreparation: true,
@@ -252,10 +251,7 @@ async function setupVenue(): Promise<{
       .values({ displayName: "Responsable", pinHash: fixturePinHash("5555"), role: "supervisor" })
       .returning({ id: persons.id });
     const { products: available } = await listAvailableProducts(tx);
-    for (const department of await tx
-      .select({ id: departments.id })
-      .from(departments)
-      .where(eq(departments.locationId, cfg.locationId)))
+    for (const department of await tx.select({ id: departments.id }).from(departments))
       await tx
         .insert(departmentReceipts)
         .values({
@@ -309,10 +305,7 @@ async function configureReceipt(
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
     if (opts.mode !== undefined) {
-      const scopedDepartments = await tx
-        .select({ id: departments.id })
-        .from(departments)
-        .where(eq(departments.locationId, cfg.locationId));
+      const scopedDepartments = await tx.select({ id: departments.id }).from(departments);
       await tx
         .update(departmentSalePolicies)
         .set({ receiptPrintMode: opts.mode })
@@ -1275,10 +1268,10 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
   it("keeps the filed identity and trading snapshot on reprint after venue corrections", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await suite.db.execute(
-      sql`update departments set name = 'Staff department name', trading_name = 'Guest trading name' where location_id = ${cfg.locationId}`,
+      sql`update departments set name = 'Staff department name', trading_name = 'Guest trading name' `,
     );
     await suite.db.execute(
-      sql`update department_sale_policies set print_trading_name = 1 where department_id in (select id from departments where location_id = ${cfg.locationId})`,
+      sql`update department_sale_policies set print_trading_name = 1 where department_id in (select id from departments )`,
     );
     const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "on_request", printerId });
@@ -2509,7 +2502,7 @@ describe("persisted cash receipt facts", () => {
   it("returns the filed department heading on first sale and replay after a rename", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const scopes = await suite.db.execute<{ zone_id: string; department_id: string }>(sql`
-      select zone_id, department_id from zone_service_policies where location_id = ${cfg.locationId}
+      select zone_id, department_id from zone_service_policies
       limit 1
     `);
     const [scope] = scopes.rows;
@@ -3145,7 +3138,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
         .from(invoiceSeries)
         .where(eq(invoiceSeries.purpose, "full"));
       const scope = await tx.execute<{ zone_id: string }>(
-        sql`select zone_id from zone_service_policies where location_id = ${cfg.locationId} limit 1`,
+        sql`select zone_id from zone_service_policies  limit 1`,
       );
       await createOpenOrder(
         tx,

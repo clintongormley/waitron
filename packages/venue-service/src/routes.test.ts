@@ -3409,9 +3409,7 @@ it.each(["create", "rename"])("allows department route %s onto a deleted name", 
       ).status,
     ).toBe(204);
   expect(replacement.id).not.toBe(old.id);
-  expect(
-    await db.select().from(departments).where(eq(departments.locationId, fx.locationId)),
-  ).toEqual(
+  expect(await db.select().from(departments)).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ id: old.id, name: "Deli", active: false }),
       expect.objectContaining({ id: replacement.id, name: "Deli", active: true }),
@@ -3430,9 +3428,7 @@ it("saves combined department settings onto a deleted name", async () => {
     name: "Taken",
   });
   expect(response.status).toBe(200);
-  expect(
-    await db.select().from(departments).where(eq(departments.locationId, fx.locationId)),
-  ).toEqual(
+  expect(await db.select().from(departments)).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ id: old.id, name: "Taken", active: false }),
       expect.objectContaining({ id: fx.departmentId, name: "Taken", active: true }),

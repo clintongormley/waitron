@@ -1223,10 +1223,7 @@ async function getReceiptOverHttp(
 
 const RECEIPT_POLICY = { receiptPrintMode: "auto", printTradingName: true } as const;
 async function receiptDepartment() {
-  const [department] = await suite.db
-    .select()
-    .from(departments)
-    .where(eq(departments.locationId, venueCfg!.locationId));
+  const [department] = await suite.db.select().from(departments);
   return department!.id;
 }
 async function receiptPath() {
@@ -2214,11 +2211,9 @@ const departmentReceiptPath = (id: string) =>
   `/management-api/venue-service/departments/${id}/receipt`;
 async function departmentFixture(active = true): Promise<string> {
   await suite.db.update(contentLanguages).set({ languages: ["es", "ca", "gl", "eu"] });
-  const locationId = venueCfg!.locationId as string;
   const [row] = await suite.db
     .insert(departments)
     .values({
-      locationId,
       name: `Receipt ${randomUUID()}`,
       tradingName: "Receipt",
       active,

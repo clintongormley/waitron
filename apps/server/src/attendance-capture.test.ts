@@ -110,7 +110,6 @@ describe("transactional attendance operation capture", () => {
         source: "whole-payment",
         key: "attempt:one",
         personId,
-        locationId,
         kind: "payment",
         at: "2026-01-05T16:40:23.000Z",
         offsetMinutes: 60,
@@ -120,7 +119,6 @@ describe("transactional attendance operation capture", () => {
     ]);
     expect(await suite.db.select().from(attendanceDayWork)).toMatchObject([
       {
-        locationId,
         businessDay: "2026-01-05",
         startAt: "2026-01-05T03:00:00.000Z",
         endAt: "2026-01-06T03:00:00.000Z",
@@ -141,7 +139,7 @@ describe("transactional attendance operation capture", () => {
       { ...original, outcome: "qualifying" },
     ]);
     expect(await suite.db.select().from(attendanceDayWork)).toMatchObject([
-      { locationId, businessDay: "2026-01-05", dirtyRevision: 2 },
+      { businessDay: "2026-01-05", dirtyRevision: 2 },
     ]);
   });
   it("unchanged replay leaves the saved day revision alone", async () => {

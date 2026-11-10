@@ -131,7 +131,7 @@ async function setupVenue(options: {
     taxId: nextNif(),
     dayCutover: "05:00",
     simulatorCard: options.simulatorCard,
-    seed: async (tx, cfg) => {
+    seed: async (tx) => {
       const restaurant = await createBareDepartment(tx, "Restaurant", MONDAY_10_00);
       const deli = await createBareDepartment(tx, "Deli", MONDAY_10_00);
       const zone = async (name: string, departmentId: string) =>
@@ -166,7 +166,7 @@ async function setupVenue(options: {
       );
       const versions = {} as Record<MenuName, string>;
       for (const name of MENUS) versions[name] = await publishWorkingMenu(tx, menus[name]);
-      await offerMenuThroughZone(tx, cfg, deliCounterZone, menus["Deli takeaway"], {
+      await offerMenuThroughZone(tx, deliCounterZone, menus["Deli takeaway"], {
         makeDefault: true,
       });
       if (options.timetable) {
@@ -194,9 +194,9 @@ async function setupVenue(options: {
           0,
         );
       } else {
-        await offerMenuThroughZone(tx, cfg, barZone, menus["Drinks menu"], { makeDefault: true });
+        await offerMenuThroughZone(tx, barZone, menus["Drinks menu"], { makeDefault: true });
         for (const menu of [menus["Breakfast menu"], menus["Midday menu"], menus["Coffee menu"]])
-          await offerMenuThroughZone(tx, cfg, barZone, menu);
+          await offerMenuThroughZone(tx, barZone, menu);
       }
       return {
         departmentId: restaurant,

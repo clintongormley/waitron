@@ -31,12 +31,12 @@ const suite = useVenueDb({
 const noopLog: Logger = () => {};
 
 /** Stores No preparation in the category's Every zone cell and, given a zone, its cell there. */
-async function routeCategory(locationId: string, categoryId: string, zoneId?: string) {
+async function routeCategory(_locationId: string, categoryId: string, zoneId?: string) {
   await suite.db
     .insert(routingCells)
     .values([
-      { locationId, categoryId, noPreparation: true },
-      ...(zoneId === undefined ? [] : [{ locationId, categoryId, zoneId, noPreparation: true }]),
+      { categoryId, noPreparation: true },
+      ...(zoneId === undefined ? [] : [{ categoryId, zoneId, noPreparation: true }]),
     ]);
 }
 
@@ -456,7 +456,6 @@ describe("sections and the reporting and routing they do not touch", () => {
     ).toBe(204);
     await routeCategory(v.locationId, categoryId);
     await suite.db.insert(routingCells).values({
-      locationId: v.locationId,
       productId,
       noPreparation: true,
     });
@@ -534,9 +533,7 @@ it("duplicating a menu leaves every menu period naming the source and none namin
   const app = mountApp();
   const source = await createCatalogue(app, v.managerCookie, "Dinner to duplicate");
   const department = (
-    await suite.db.execute<{ id: string }>(
-      sql`select id from departments where location_id = ${v.locationId} limit 1`,
-    )
+    await suite.db.execute<{ id: string }>(sql`select id from departments  limit 1`)
   ).rows[0]!.id;
   const periodId = crypto.randomUUID();
   await suite.db.execute(

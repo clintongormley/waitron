@@ -92,10 +92,7 @@ describe("publishRoster under concurrent publishers", () => {
       expect((reason as AppError).code).toBe("roster.period_already_published");
     }
 
-    const rows = await suite.db
-      .select({ status: rosterVersions.status })
-      .from(rosterVersions)
-      .where(eq(rosterVersions.locationId, locationId));
+    const rows = await suite.db.select({ status: rosterVersions.status }).from(rosterVersions);
     expect(rows.filter((r) => r.status === "published")).toHaveLength(1);
     expect(rows).toHaveLength(PUBLISHERS);
   });

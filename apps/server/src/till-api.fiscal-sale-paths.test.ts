@@ -189,10 +189,7 @@ async function setupVenue(): Promise<{
 
   const venueId = await venueLocationId(suite.db);
   const cfg = tillConfigFromVenue(venue, venueId);
-  const [department] = await suite.db
-    .select()
-    .from(departments)
-    .where(eq(departments.locationId, cfg.locationId));
+  const [department] = await suite.db.select().from(departments);
   await suite.db.insert(departmentReceipts).values({
     departmentId: department!.id,
     receipt: { operationDescription: "Venta en establecimiento" },
@@ -233,14 +230,14 @@ async function setupVenue(): Promise<{
     });
     const counter = await tx.execute<{ zone_id: string }>(sql`
       select zone_id from zone_service_policies
-      where location_id=${cfg.locationId} and is_counter_default`);
-    await offerMenuThroughZone(tx, cfg, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
+      where is_counter_default`);
+    await offerMenuThroughZone(tx, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
     await publishWorkingMenu(tx, cat.id);
     const defaultStation = sql`(select id from kitchen_stations
            where location_id = ${cfg.locationId} and is_default)`;
     await tx.insert(routingCells).values([
-      { locationId: cfg.locationId, categoryId: foodCategory.id, stationId: defaultStation },
-      { locationId: cfg.locationId, categoryId: drinkCategory.id, stationId: defaultStation },
+      { categoryId: foodCategory.id, stationId: defaultStation },
+      { categoryId: drinkCategory.id, stationId: defaultStation },
     ]);
     // A staff person with a KNOWN PIN ("5555"), so the login route can verify their credential and
     // the sale is attributed to them.
@@ -2654,7 +2651,7 @@ describe("handheld sales and device capability gates", () => {
     const { cfg, available, operatorId } = await setupVenue();
     await suite.db.execute(sql`
       update department_sale_policies set paid_when = 'ticket_then_pay'
-      where department_id in (select id from departments where location_id = ${cfg.locationId})`);
+      where department_id in (select id from departments )`);
     const modeCfg: TradingContext = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -2974,7 +2971,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
       update department_sale_policies set receipt_print_mode='on_request'
       where department_id in (
         select department_id from zone_service_policies
-        where location_id=${cfg.locationId} and is_counter_default
+        where is_counter_default
       )`);
     return printer.id;
   });

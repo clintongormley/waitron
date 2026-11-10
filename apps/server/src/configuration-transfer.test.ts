@@ -389,7 +389,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 11,
+  version: 12,
   settings: {},
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
@@ -526,8 +526,7 @@ describe("configuration transfer database path", () => {
     );
     transferred.tables.convenio_config = [
       {
-        id: "99999999-aaaa-aaaa-aaaa-999999999999",
-        location_id: await venueLocationId(suite.db),
+        id: 1,
         created_at: "2026-11-08T08:00:00.000Z",
         weekly_rest_minutes: 2880,
         break_threshold_minutes: 300,
@@ -540,9 +539,7 @@ describe("configuration transfer database path", () => {
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
     const [row] = await targetSuite.db.select().from(convenioConfig);
-    expect(row!.locationId).toBe(await venueLocationId(targetSuite.db));
-    expect(row!.locationId).not.toBe(await venueLocationId(suite.db));
-    expect(row!.id).not.toBe("99999999-aaaa-aaaa-aaaa-999999999999");
+    expect(row!.id).toBe(1);
     expect(await resolveWorkTimeRuleset(targetSuite.db)).toMatchObject({
       weeklyRestMinutes: 2880,
       breakThresholdMinutes: 300,
@@ -805,15 +802,13 @@ describe("configuration transfer database path", () => {
       });
       await tx.insert(shiftTemplates).values({
         id: "88888888-aaaa-aaaa-aaaa-888888888888",
-        locationId: venueId,
         label: "Evening",
         weekday: 1,
         startsMinute: 1020,
         endsMinute: 120,
       });
       await tx.insert(convenioConfig).values({
-        id: "99999999-aaaa-aaaa-aaaa-999999999999",
-        locationId: venueId,
+        id: 1,
         weeklyRestMinutes: 2880,
         breakThresholdMinutes: 300,
         minBreakMinutes: 20,
@@ -859,7 +854,6 @@ describe("configuration transfer database path", () => {
       });
       await tx.insert(bookings).values({
         id: "dddddddd-bbbb-bbbb-bbbb-dddddddddddd",
-        locationId: venueId,
         bookingDate: "2026-09-10",
         bookingTime: "20:00",
         partySize: 2,
@@ -1948,14 +1942,12 @@ it("transfers staff roles, who holds them and a painted season week under new id
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const sourceVenueId = await venueLocationId(suite.db);
-  const scope = { locationId: sourceVenueId };
   const original = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, { name: "Staffed room" });
     const [season] = await tx
       .select({ id: seasons.id })
       .from(seasons)
-      .where(eq(seasons.locationId, scope.locationId))
+
       .limit(1);
     const [holder] = await tx
       .insert(persons)
@@ -1966,9 +1958,9 @@ it("transfers staff roles, who holds them and a painted season week under new id
     // Raw: apps/server does not depend on @waitron/staffing, and these tables have no `$defaultFn`
     // column beyond the ids supplied here.
     await tx.execute(sql`
-      insert into staff_roles (id, location_id, name, colour, position)
-      values (${waiter}, ${scope.locationId}, 'Waiter', 'blue', 0),
-             (${runner}, ${scope.locationId}, 'Runner', 'green', 1)`);
+      insert into staff_roles (id, name, colour, position)
+      values (${waiter}, 'Waiter', 'blue', 0),
+             (${runner}, 'Runner', 'green', 1)`);
     await tx.execute(sql`
       insert into person_staff_roles (person_id, staff_role_id) values (${holder!.id}, ${waiter})`);
     const days: string[] = [];
@@ -1999,26 +1991,24 @@ it("transfers staff roles, who holds them and a painted season week under new id
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
-  const targetVenueId = await venueLocationId(targetSuite.db);
   const roles = await targetSuite.db.execute(sql`
-    select r.location_id, r.name, r.colour, r.position, p.display_name as holder
+    select r.name, r.colour, r.position, p.display_name as holder
     from staff_roles r
     left join person_staff_roles h on h.staff_role_id = r.id
     left join persons p on p.id = h.person_id
     order by r.position`);
   expect(roles.rows).toEqual([
     {
-      location_id: targetVenueId,
       name: "Waiter",
       colour: "blue",
       position: 0,
       holder: "Holder",
     },
-    { location_id: targetVenueId, name: "Runner", colour: "green", position: 1, holder: null },
+    { name: "Runner", colour: "green", position: 1, holder: null },
   ]);
   const week = await targetSuite.db.execute(sql`
     select d.id as day_id, d.department_id, d.season_id, h.person_id, b.staff_role_id,
-      dep.name as department, s.location_id as season_location, d.weekday, d.station_id,
+      dep.name as department, d.weekday, d.station_id,
       d.special_day_date_id, r.name as role, b.headcount, b.starts_at, b.ends_at
     from staffing_days d
     join departments dep on dep.id = d.department_id
@@ -2034,7 +2024,7 @@ it("transfers staff roles, who holds them and a painted season week under new id
     person_id: role === "Waiter" ? expect.any(String) : null,
     staff_role_id: expect.any(String),
     department: "Staffed room",
-    season_location: targetVenueId,
+
     weekday,
     station_id: null,
     special_day_date_id: null,
@@ -2070,7 +2060,7 @@ it("transfers a station's painted season day and a special day's painted date un
     const [season] = await tx
       .select({ id: seasons.id })
       .from(seasons)
-      .where(eq(seasons.locationId, scope.locationId))
+
       .limit(1);
     const cook = randomUUID();
     const specialDay = randomUUID();
@@ -2079,13 +2069,13 @@ it("transfers a station's painted season day and a special day's painted date un
     const dateDay = randomUUID();
     // Raw: apps/server does not depend on @waitron/staffing.
     await tx.execute(sql`
-      insert into staff_roles (id, location_id, name, colour, position)
-      values (${cook}, ${scope.locationId}, 'Cook', 'red', 0)`);
+      insert into staff_roles (id, name, colour, position)
+      values (${cook}, 'Cook', 'red', 0)`);
     await tx.execute(sql`
-      insert into special_days (id, location_id, name) values (${specialDay}, ${scope.locationId}, 'Feast day')`);
+      insert into special_days (id, name) values (${specialDay}, 'Feast day')`);
     await tx.execute(sql`
-      insert into special_day_dates (id, special_day_id, location_id, date)
-      values (${date}, ${specialDay}, ${scope.locationId}, '2027-08-03')`);
+      insert into special_day_dates (id, special_day_id, date)
+      values (${date}, ${specialDay}, '2027-08-03')`);
     await tx.execute(sql`
       insert into staffing_days (id, station_id, season_id, weekday)
       values (${stationDay}, ${station!.id}, ${season!.id}, 2)`);
@@ -2116,8 +2106,8 @@ it("transfers a station's painted season day and a special day's painted date un
   const days = await targetSuite.db.execute(sql`
     select d.id as day_id, d.department_id, d.station_id, d.season_id, d.special_day_date_id,
       b.staff_role_id, dep.name as department, st.name as station, st.location_id as station_location,
-      s.location_id as season_location, d.weekday, sd.date, sp.name as special_day,
-      sd.location_id as date_location, r.name as role, b.headcount, b.starts_at, b.ends_at
+      d.weekday, sd.date, sp.name as special_day,
+      r.name as role, b.headcount, b.starts_at, b.ends_at
     from staffing_days d
     left join departments dep on dep.id = d.department_id
     left join kitchen_stations st on st.id = d.station_id
@@ -2138,11 +2128,11 @@ it("transfers a station's painted season day and a special day's painted date un
       department: null,
       station: "Staffed grill",
       station_location: targetVenueId,
-      season_location: targetVenueId,
+
       weekday: 2,
       date: null,
       special_day: null,
-      date_location: null,
+
       role: "Cook",
       headcount: 2,
       starts_at: "12:00",
@@ -2158,11 +2148,11 @@ it("transfers a station's painted season day and a special day's painted date un
       department: "Terrace",
       station: null,
       station_location: null,
-      season_location: null,
+
       weekday: null,
       date: "2027-08-03",
       special_day: "Feast day",
-      date_location: targetVenueId,
+
       role: "Cook",
       headcount: 4,
       starts_at: "19:00",
@@ -5490,7 +5480,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(11);
+  expect(exported.version).toBe(12);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -5721,10 +5711,9 @@ it("exports and imports all seven cell classes into another venue, remapping eve
     expect(sourceIds).not.toContain(id);
   expect(sourceIds).not.toContain(targetVenueId);
   const cells = await targetSuite.db.execute<Record<string, unknown>>(sql`
-    select location_id, category_id, product_id, zone_id, station_id, no_preparation, no_category
+    select category_id, product_id, zone_id, station_id, no_preparation, no_category
     from routing_cells`);
   const cell = (values: Record<string, unknown>) => ({
-    location_id: targetVenueId,
     category_id: null,
     product_id: null,
     zone_id: null,
@@ -5905,14 +5894,14 @@ it("carries a cell's period choices with their cell, including a period whose me
 
 async function insertSpecialDay(
   tx: Parameters<Parameters<typeof withTransaction>[1]>[0],
-  cfg: { locationId: string },
+  _cfg: { locationId: string },
   day: { date: string; name: string; closedAllDay?: boolean },
 ) {
   const id = randomUUID();
-  await tx.execute(sql`insert into special_days (id, location_id, name, repeats_yearly)
-    values (${id}, ${cfg.locationId}, ${day.name}, 0)`);
-  await tx.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date, closed_all_day)
-    values (${randomUUID()}, ${id}, ${cfg.locationId}, ${day.date}, ${day.closedAllDay ? 1 : 0})`);
+  await tx.execute(sql`insert into special_days (id, name, repeats_yearly)
+    values (${id}, ${day.name}, 0)`);
+  await tx.execute(sql`insert into special_day_dates (id, special_day_id, date, closed_all_day)
+    values (${randomUUID()}, ${id}, ${day.date}, ${day.closedAllDay ? 1 : 0})`);
   return { id };
 }
 
@@ -5928,7 +5917,7 @@ describe("special days in a configuration transfer", () => {
 
   async function named(db: typeof suite.db, located: { locationId: string }): Promise<Named> {
     const departmentRows = await db.execute<{ id: string; name: string }>(sql`
-      select id, name from departments where location_id = ${located.locationId}`);
+      select id, name from departments `);
     const stationRows = await db.execute<{ id: string; name: string }>(sql`
       select id, name from kitchen_stations where location_id = ${located.locationId}`);
     return {
@@ -5938,11 +5927,11 @@ describe("special days in a configuration transfer", () => {
     };
   }
 
-  async function specialDaysByName(db: typeof suite.db, located: { locationId: string }) {
+  async function specialDaysByName(db: typeof suite.db) {
     const rows = await db.execute<{ date: string; name: string; closed_all_day: number }>(sql`
       select d.date, s.name, d.closed_all_day from special_day_dates d
       join special_days s on s.id = d.special_day_id
-      where d.location_id = ${located.locationId} order by d.date`);
+       order by d.date`);
     return {
       dates: rows.rows.map((row) => ({
         date: row.date,
@@ -5961,7 +5950,7 @@ describe("special days in a configuration transfer", () => {
     await withTransaction(suite.db, async (tx) => {
       const [department] = await tx
         .insert(departments)
-        .values({ locationId: venueId, name: "Deli", tradingName: "Deli" })
+        .values({ name: "Deli", tradingName: "Deli" })
         .returning({ id: departments.id });
       await tx.insert(departmentSalePolicies).values({ departmentId: department!.id });
       await tx.insert(kitchenStations).values([
@@ -6023,17 +6012,13 @@ describe("special days in a configuration transfer", () => {
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
 
-    const expected = await specialDaysByName(suite.db, {
-      locationId: await venueLocationId(suite.db),
-    });
+    const expected = await specialDaysByName(suite.db);
     expect(expected.dates.map((date) => date.date)).toEqual([
       "2026-12-24",
       "2026-12-25",
       "2027-01-01",
     ]);
-    const actual = await specialDaysByName(targetSuite.db, {
-      locationId: await venueLocationId(targetSuite.db),
-    });
+    const actual = await specialDaysByName(targetSuite.db);
     expect(actual.dates).toEqual(expected.dates);
 
     const sourceIds = new Set(transferred.tables.special_days!.map((row) => row.id));
@@ -6052,14 +6037,14 @@ describe("special days in a configuration transfer", () => {
 
   const namedOn = async (
     tx: Parameters<Parameters<typeof withTransaction>[1]>[0],
-    cfg: { locationId: string },
+    _cfg: { locationId: string },
     date: string,
   ) =>
     (
       await tx.execute<{ date: string; name: string }>(sql`
         select d.date, s.name from special_day_dates d
         join special_days s on s.id = d.special_day_id
-        where d.location_id = ${cfg.locationId} and d.date = ${date}`)
+        where d.date = ${date}`)
     ).rows[0] ?? null;
 
   it("leaves default station hours behind while keeping its special day and open state", async () => {
@@ -6191,16 +6176,13 @@ describe("public holidays in a configuration transfer", () => {
     const geographies = await db.execute<Record<string, string | null>>(sql`
       select country, province_code, city, city_key, area_key
       from holiday_geographies order by city_key`);
-    const ids = await db.execute<{ id: string; city: string }>(sql`
-      select id, city from locations`);
-    const city = new Map(ids.rows.map((row) => [row.id, row.city]));
-    const entries = await db.execute<{ location_id: string; date: string; name: string }>(sql`
-      select d.location_id, d.date, s.name from special_day_dates d
+    const entries = await db.execute<{ city: string; date: string; name: string }>(sql`
+      select (select city from locations) as city, d.date, s.name from special_day_dates d
       join special_days s on s.id = d.special_day_id order by d.date, s.name`);
     return {
       geographies: geographies.rows,
       entries: entries.rows.map((row) => ({
-        city: city.get(row.location_id)?.trim().toLowerCase(),
+        city: row.city?.trim().toLowerCase(),
         date: row.date,
         name: row.name,
       })),
@@ -6322,17 +6304,16 @@ describe("public holidays in a configuration transfer", () => {
     expect(inMadrid.aran.facts).toEqual([]);
     const special = await targetSuite.db.execute<{
       id: string;
-      location_id: string;
       name: string;
       close_whole_venue: number;
     }>(sql`
-      select s.id, d.location_id, s.name, d.closed_all_day as close_whole_venue
+      select s.id, s.name, d.closed_all_day as close_whole_venue
       from special_day_dates d join special_days s on s.id = d.special_day_id
       where d.date = '2026-01-06'`);
     expect(special.rows).toEqual([
       {
         id: expect.any(String),
-        location_id: targetVenueId,
+
         name: "Three Kings",
         close_whole_venue: 1,
       },
@@ -6631,7 +6612,6 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
-  const targetVenueId = await venueLocationId(targetSuite.db);
   const seasonsHolding = await targetSuite.db.execute(sql`
     select count(distinct t.season_id) as seasons
     from department_day_ranges x join department_days t on t.id=x.day_id
@@ -6639,7 +6619,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
   expect(seasonsHolding.rows).toEqual([{ seasons: 4 }]);
   const rows = await targetSuite.db.execute(sql`
     select distinct p.id as period_id, d.id as department_id, c.id as customer_id, s.menu_id as staff_id,
-      d.location_id, p.name, p.colour, c.name as customer, sc.name as staff, s.display_order,
+      p.name, p.colour, c.name as customer, sc.name as staff, s.display_order,
       t.weekday, x.starts_at, x.ends_at
     from menu_periods p join departments d on d.id=p.department_id
     join catalogues c on c.id=p.menu_id join menu_period_staff_menus s on s.period_id=p.id
@@ -6652,7 +6632,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       department_id: expect.any(String),
       customer_id: expect.any(String),
       staff_id: expect.any(String),
-      location_id: targetVenueId,
+
       name: "Night transfer",
       colour: "blue",
       customer: "Period customer",
@@ -6667,7 +6647,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
       department_id: expect.any(String),
       customer_id: expect.any(String),
       staff_id: expect.any(String),
-      location_id: targetVenueId,
+
       name: "Night transfer",
       colour: "blue",
       customer: "Period customer",
@@ -6846,9 +6826,9 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, exported, ALL_MODULES, versions),
   });
-  const venueId = await venueLocationId(targetSuite.db);
+  await venueLocationId(targetSuite.db);
   const imported = await withTransaction(targetSuite.db, async (tx) => {
-    const rows = await tx.select().from(departments).where(eq(departments.locationId, venueId));
+    const rows = await tx.select().from(departments);
     const idFor = (name: string) => rows.find((row) => row.name === name)!.id;
     const global = await getReceipt(tx);
     const empty = await readDepartmentReceipt(tx, cfg, idFor("Empty receipt"));
@@ -7725,11 +7705,11 @@ describe("seasons in a configuration transfer", () => {
   const saturday = <T>(entries: T[]) =>
     [0, 1, 2, 3, 4, 5, 6].map((weekday) => (weekday === 6 ? entries : []));
 
-  async function seasonsOf(db: typeof suite.db, located: { locationId: string }) {
+  async function seasonsOf(db: typeof suite.db) {
     return db
       .select({ name: seasons.name, startsOn: seasons.startsOn, colour: seasons.colour })
       .from(seasons)
-      .where(eq(seasons.locationId, located.locationId))
+
       .orderBy(seasons.startsOn);
   }
 
@@ -7749,25 +7729,16 @@ describe("seasons in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
-    const scope = { locationId: venueId };
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(seasons)
         .set({ name: "Harvest", startsOn: "09-15", colour: "teal" })
-        .where(
-          and(
-            eq(seasons.locationId, scope.locationId),
-            eq(seasons.name, STARTER_SEASON_NAMES.Autumn.es),
-          ),
-        );
+        .where(and(eq(seasons.name, STARTER_SEASON_NAMES.Autumn.es)));
       const ids = new Map(
-        (
-          await tx
-            .select({ id: seasons.id, name: seasons.name })
-            .from(seasons)
-            .where(eq(seasons.locationId, scope.locationId))
-        ).map((season) => [season.name, season.id]),
+        (await tx.select({ id: seasons.id, name: seasons.name }).from(seasons)).map((season) => [
+          season.name,
+          season.id,
+        ]),
       );
       const department = await createDepartment(tx, {
         name: "Season transfer",
@@ -7810,7 +7781,7 @@ describe("seasons in a configuration transfer", () => {
         { seasonId: ids.get(STARTER_SEASON_NAMES.Winter.es)! },
       );
     });
-    const exported = await seasonsOf(suite.db, scope);
+    const exported = await seasonsOf(suite.db);
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
       ALL_MODULES,
@@ -7838,9 +7809,7 @@ describe("seasons in a configuration transfer", () => {
       { name: "Harvest", startsOn: "09-15", colour: "teal" },
       { name: STARTER_SEASON_NAMES.Winter.es, startsOn: "12-01", colour: "blue" },
     ]);
-    expect(
-      await seasonsOf(targetSuite.db, { locationId: await venueLocationId(targetSuite.db) }),
-    ).toEqual(exported);
+    expect(await seasonsOf(targetSuite.db)).toEqual(exported);
     expect(await saturdays(targetSuite.db)).toEqual([
       { season: "Harvest", period: "Dinner", starts_at: "20:00:00", ends_at: "02:00:00" },
       {
@@ -7879,7 +7848,7 @@ describe("special days in a configuration transfer", () => {
   const FIESTA_EVENING = new Date("2030-08-15T19:30:00Z");
   const CLOSED_EVENING = new Date("2030-08-16T19:30:00Z");
 
-  async function fiestaRows(db: typeof suite.db, locationId: string) {
+  async function fiestaRows(db: typeof suite.db) {
     const paint = await db.execute(sql`
       select s.name, s.repeats_yearly, d.date, d.closed_all_day, dep.name as department,
         p.name as period, r.starts_at, r.ends_at
@@ -7888,13 +7857,13 @@ describe("special days in a configuration transfer", () => {
       left join departments dep on dep.id=dd.department_id
       left join department_day_ranges r on r.day_id=dd.id
       left join menu_periods p on p.id=r.period_id
-      where s.location_id=${locationId} and d.location_id=${locationId}
+
       order by d.date, r.starts_at`);
     const zones = await db.execute(sql`
       select d.date, z.name as zone, r.kind, r.starts_at, r.ends_at
       from special_day_dates d join zone_days zd on zd.special_day_date_id=d.id
       join floor_zones z on z.id=zd.zone_id join zone_day_ranges r on r.day_id=zd.id
-      where d.location_id=${locationId} order by d.date, r.starts_at`);
+       order by d.date, r.starts_at`);
     return { paint: paint.rows, zones: zones.rows };
   }
 
@@ -7905,8 +7874,6 @@ describe("special days in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
-    const scope = { locationId: venueId };
     await withTransaction(suite.db, async (tx) => {
       const department = await createDepartment(tx, {
         name: "Fiesta restaurant",
@@ -7924,11 +7891,11 @@ describe("special days in a configuration transfer", () => {
       const [fiesta, fifteenth, sixteenth, restaurantDay, terraceDay] = [1, 2, 3, 4, 5].map(() =>
         randomUUID(),
       );
-      await tx.execute(sql`insert into special_days (id, location_id, name, repeats_yearly)
-        values (${fiesta}, ${scope.locationId}, 'Fiesta', 1)`);
-      await tx.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date, closed_all_day)
-        values (${fifteenth}, ${fiesta}, ${scope.locationId}, '2029-08-15', 0),
-          (${sixteenth}, ${fiesta}, ${scope.locationId}, '2029-08-16', 1)`);
+      await tx.execute(sql`insert into special_days (id, name, repeats_yearly)
+        values (${fiesta}, 'Fiesta', 1)`);
+      await tx.execute(sql`insert into special_day_dates (id, special_day_id, date, closed_all_day)
+        values (${fifteenth}, ${fiesta}, '2029-08-15', 0),
+          (${sixteenth}, ${fiesta}, '2029-08-16', 1)`);
       await tx.execute(sql`insert into department_days (id, department_id, season_id, weekday, special_day_date_id)
         values (${restaurantDay}, ${department.id}, null, null, ${fifteenth})`);
       await tx.execute(sql`insert into department_day_ranges (id, day_id, department_id, period_id, starts_at, ends_at)
@@ -7964,9 +7931,7 @@ describe("special days in a configuration transfer", () => {
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
     });
-    const targetVenueId = await venueLocationId(targetSuite.db);
-
-    const exported = await fiestaRows(suite.db, await venueLocationId(suite.db));
+    const exported = await fiestaRows(suite.db);
     expect(exported).toEqual({
       paint: [
         {
@@ -8010,21 +7975,15 @@ describe("special days in a configuration transfer", () => {
         },
       ],
     });
-    expect(await fiestaRows(targetSuite.db, targetVenueId)).toEqual(exported);
+    expect(await fiestaRows(targetSuite.db)).toEqual(exported);
 
-    const targetScope = { locationId: targetVenueId };
     const [department] = await targetSuite.db
       .select({ id: departments.id })
       .from(departments)
-      .where(
-        and(
-          eq(departments.name, "Fiesta restaurant"),
-          eq(departments.locationId, targetScope.locationId),
-        ),
-      );
+      .where(and(eq(departments.name, "Fiesta restaurant")));
     const zone = await targetSuite.db.execute<{ id: string }>(
       sql`select z.id from floor_zones z join zone_service_policies p on p.zone_id=z.id
-        where z.name='Fiesta terrace' and p.location_id=${targetVenueId}`,
+        where z.name='Fiesta terrace'`,
     );
     const answers = await withTransaction(targetSuite.db, async (tx) => ({
       fiesta: await VENUE_SERVICE.resolveDepartmentService(tx, department!.id, FIESTA_EVENING),
@@ -8270,7 +8229,6 @@ it.each([true, false])(
       modules: ALL_MODULES,
     });
     await suite.db.insert(convenioConfig).values({
-      locationId: await venueLocationId(suite.db),
       breakThresholdMinutes: 300,
       splitMinSegmentMinutes: 180,
       splitMaxSegmentMinutes: 300,

@@ -41,9 +41,9 @@ const EXPECTED: Record<
 > = {
   departments: {
     table: departments,
-    foreignKeys: ["departments_location_fk"],
+    foreignKeys: [],
     checks: [],
-    indexes: ["departments_location_name_key", "departments_one_default_per_location_key"],
+    indexes: ["departments_name_key", "departments_one_default_key"],
     uniqueConstraints: [],
     primaryKeys: [],
   },
@@ -62,11 +62,7 @@ const EXPECTED: Record<
   },
   zone_service_policies: {
     table: zoneServicePolicies,
-    foreignKeys: [
-      "zone_service_policies_location_fk",
-      "zone_service_policies_zone_fk",
-      "zone_service_policies_department_fk",
-    ],
+    foreignKeys: ["zone_service_policies_zone_fk", "zone_service_policies_department_fk"],
     checks: [],
     indexes: ["zone_service_policies_one_counter_default_key"],
     uniqueConstraints: [],
@@ -124,7 +120,6 @@ const EXPECTED: Record<
   routing_cells: {
     table: routingCells,
     foreignKeys: [
-      "routing_cells_location_fk",
       "routing_cells_category_fk",
       "routing_cells_product_fk",
       "routing_cells_zone_fk",
@@ -239,8 +234,8 @@ describe("venue-service schema", () => {
       ...getTableConfig(routingCells).indexes,
     ].filter((index) => index.config.where !== undefined);
     expect(partial.map((index) => [index.config.name, index.config.unique])).toEqual([
-      ["departments_location_name_key", true],
-      ["departments_one_default_per_location_key", true],
+      ["departments_name_key", true],
+      ["departments_one_default_key", true],
       ["zone_service_policies_one_counter_default_key", true],
       ["kitchen_notices_open_idx", false],
       ["routing_cells_category_every_zone_key", true],
@@ -265,12 +260,9 @@ describe("department name storage", () => {
       .returning();
     return row!.id;
   }
-  async function insert(locationId: string, name: string) {
+  async function insert(_locationId: string, name: string) {
     return withTransaction(suite.db, async (tx) => {
-      const [row] = await tx
-        .insert(departments)
-        .values({ locationId, name, tradingName: name })
-        .returning();
+      const [row] = await tx.insert(departments).values({ name, tradingName: name }).returning();
       return row!;
     });
   }
@@ -290,12 +282,5 @@ describe("department name storage", () => {
     const locationId = await location("Venue");
     await insert(locationId, "Deli");
     await expect(insert(locationId, "Deli")).rejects.toThrow("UNIQUE constraint failed:");
-  });
-  it("allows equal names in separate locations", async () => {
-    await seedTenant(suite.db);
-    const first = await insert(await location("Venue A"), "Deli");
-    const second = await insert(await location("Venue B"), "Deli");
-    expect(second.id).not.toBe(first.id);
-    expect([first.name, second.name]).toEqual(["Deli", "Deli"]);
   });
 });

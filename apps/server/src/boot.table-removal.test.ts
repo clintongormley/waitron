@@ -90,7 +90,6 @@ for (const [mode, status] of [
             const [booking] = await tx
               .insert(bookings)
               .values({
-                locationId: venue.cfg.locationId,
                 tableId,
                 bookingDate: "2099-01-01",
                 bookingTime: "20:00",

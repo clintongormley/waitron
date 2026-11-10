@@ -23,7 +23,6 @@ beforeEach(async () => {
     });
     await suite.db.insert(bookings).values({
       id: "record",
-      locationId: "location",
       bookingDate: "2026-10-25",
       bookingTime: "19:30:00",
       partySize: 4,

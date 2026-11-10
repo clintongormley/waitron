@@ -727,7 +727,6 @@ describe("invoice-choice email context at trading boot", () => {
       const [department] = await suite.db
         .insert(departments)
         .values({
-          locationId: ctx.location,
           name: "Dining",
           tradingName: "Dining",
           isDefault: true,

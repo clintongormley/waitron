@@ -55,7 +55,7 @@ async function makeTable(v: Venue, label: string): Promise<string> {
 
 /** Insert a booking row directly — this read test only needs rows in the table. */
 async function insertBooking(
-  v: Venue,
+  _v: Venue,
   fields: {
     tableId: string | null;
     date: string;
@@ -67,11 +67,9 @@ async function insertBooking(
     // `id` and `created_at` supplied for the reason `setupVenue` gives.
     await tx.execute(sql`
       insert into bookings
-        (id, created_at, location_id, table_id, booking_date, booking_time, party_size,
-         contact_name, created_by, status)
+        (id, created_at, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
       values
-        (${newId()}, ${nowIso()}, ${v.locationId}, ${fields.tableId}, ${fields.date}, ${fields.time},
-         2, 'Ana', ${randomUUID()}, ${fields.status ?? "booked"})`);
+        (${newId()}, ${nowIso()}, ${fields.tableId}, ${fields.date}, ${fields.time}, 2, 'Ana', ${randomUUID()}, ${fields.status ?? "booked"})`);
   });
 }
 

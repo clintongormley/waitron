@@ -82,33 +82,20 @@ async function state() {
 }
 async function expectActivity(id: string, revision: number, action: string, personId = worker) {
   expect(
-    (await operations()).map((r) => [
-      r.source,
-      r.key,
-      r.personId,
-      r.locationId,
-      r.kind,
-      r.at,
-      r.outcome,
-    ]),
+    (await operations()).map((r) => [r.source, r.key, r.personId, r.kind, r.at, r.outcome]),
   ).toEqual([
     [
       "order",
       `${id}:${revision}:${action}`,
       personId,
-      v.cfg.locationId,
       "order",
       "2026-01-05T16:40:00.000Z",
       "qualifying",
     ],
   ]);
   expect(
-    (await suite.db.select().from(attendanceDayWork)).map((r) => [
-      r.locationId,
-      r.businessDay,
-      r.dirtyRevision,
-    ]),
-  ).toEqual([[v.cfg.locationId, "2026-01-05", 1]]);
+    (await suite.db.select().from(attendanceDayWork)).map((r) => [r.businessDay, r.dirtyRevision]),
+  ).toEqual([["2026-01-05", 1]]);
 }
 type Action = "park" | "save" | "line" | "label" | "discard";
 async function act(

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS, products, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -85,12 +85,10 @@ it("changes presentation without rewriting product, variant, section, folder, re
       invoiceLocales: ["es-ES"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(tx);
     for (const active of [true, false]) {
       const [department] = await tx
         .insert(departments)
         .values({
-          locationId: venueId,
           name: active ? "Dining" : "Closed",
           tradingName: "Room",
           active,

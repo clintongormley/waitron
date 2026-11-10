@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, tenants, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { contentLanguages } from "@waitron/catalogue";
@@ -29,15 +29,13 @@ async function fixture(role: "manager" | "staff" = "manager") {
     invoiceLocales: ["gl-ES"],
     operationDescription: "Bootstrap",
   });
-  const venueId = await venueLocationId(suite.db);
-  const cfg = { locationId: venueId };
   await suite.db
     .insert(contentLanguages)
     .values({ defaultLanguage: "es", languages: ["es", "ca", "en"] })
     .onConflictDoNothing({ target: contentLanguages.id });
   const [department] = await suite.db
     .insert(departments)
-    .values({ locationId: cfg.locationId, name: randomUUID(), tradingName: "Deli" })
+    .values({ name: randomUUID(), tradingName: "Deli" })
     .returning();
   await suite.db.insert(departmentSalePolicies).values({ departmentId: department!.id, ...policy });
   await suite.db.insert(departmentReceipts).values({

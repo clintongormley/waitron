@@ -2271,7 +2271,6 @@ CREATE TABLE `department_sale_policies` (
 --> statement-breakpoint
 CREATE TABLE `departments` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`name` text NOT NULL,
 	`trading_name` text NOT NULL,
 	`is_default` integer DEFAULT false NOT NULL,
@@ -2279,12 +2278,11 @@ CREATE TABLE `departments` (
 	`needs_clearing` integer DEFAULT false NOT NULL,
 	`late_send_needs_manager` integer DEFAULT false NOT NULL,
 	`release_reminder_minutes` integer DEFAULT 10,
-	`created_at` text NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action
+	`created_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `departments_location_name_key` ON `departments` (`location_id`,`name`) WHERE "departments"."active" = 1;--> statement-breakpoint
-CREATE UNIQUE INDEX `departments_one_default_per_location_key` ON `departments` (`location_id`) WHERE "departments"."is_default";--> statement-breakpoint
+CREATE UNIQUE INDEX `departments_name_key` ON `departments` (`name`) WHERE "departments"."active" = 1;--> statement-breakpoint
+CREATE UNIQUE INDEX `departments_one_default_key` ON `departments` (`is_default`) WHERE "departments"."is_default";--> statement-breakpoint
 CREATE TABLE `device_profile_service_access` (
 	`device_profile_id` text PRIMARY KEY NOT NULL,
 	`department_id` text NOT NULL,
@@ -2305,7 +2303,6 @@ CREATE TABLE `device_profile_zones` (
 --> statement-breakpoint
 CREATE TABLE `order_service_contexts` (
 	`working_order_id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`zone_id` text NOT NULL,
 	`department_id` text NOT NULL,
 	`service_mode` text NOT NULL,
@@ -2367,16 +2364,14 @@ CREATE TABLE `zone_sale_policies` (
 );
 --> statement-breakpoint
 CREATE TABLE `zone_service_policies` (
-	`location_id` text NOT NULL,
 	`zone_id` text PRIMARY KEY NOT NULL,
 	`department_id` text NOT NULL,
 	`is_counter_default` integer DEFAULT false NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `zone_service_policies_one_counter_default_key` ON `zone_service_policies` (`location_id`) WHERE "zone_service_policies"."is_counter_default";--> statement-breakpoint
+CREATE UNIQUE INDEX `zone_service_policies_one_counter_default_key` ON `zone_service_policies` (`is_counter_default`) WHERE "zone_service_policies"."is_counter_default";--> statement-breakpoint
 CREATE TABLE `kitchen_notices` (
 	`id` text PRIMARY KEY NOT NULL,
 	`station_id` text NOT NULL,
@@ -2444,14 +2439,12 @@ CREATE TABLE `routing_cell_periods` (
 CREATE UNIQUE INDEX `routing_cell_periods_cell_period_key` ON `routing_cell_periods` (`cell_id`,`period_id`);--> statement-breakpoint
 CREATE TABLE `routing_cells` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`category_id` text,
 	`product_id` text,
 	`zone_id` text,
 	`station_id` text,
 	`no_preparation` integer DEFAULT false NOT NULL,
 	`no_category` integer DEFAULT false NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`zone_id`) REFERENCES `floor_zones`(`id`) ON UPDATE no action ON DELETE no action,
@@ -2462,13 +2455,13 @@ CREATE TABLE `routing_cells` (
 	CONSTRAINT "routing_cells_no_category_ck" CHECK("routing_cells"."no_category" = 0 or ("routing_cells"."no_category" = 1 and "routing_cells"."category_id" is null and "routing_cells"."product_id" is null))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `routing_cells_category_every_zone_key` ON `routing_cells` (`location_id`,`category_id`) WHERE "routing_cells"."category_id" is not null and "routing_cells"."zone_id" is null;--> statement-breakpoint
-CREATE UNIQUE INDEX `routing_cells_category_zone_key` ON `routing_cells` (`location_id`,`category_id`,`zone_id`) WHERE "routing_cells"."category_id" is not null and "routing_cells"."zone_id" is not null;--> statement-breakpoint
-CREATE UNIQUE INDEX `routing_cells_product_every_zone_key` ON `routing_cells` (`location_id`,`product_id`) WHERE "routing_cells"."product_id" is not null and "routing_cells"."zone_id" is null;--> statement-breakpoint
-CREATE UNIQUE INDEX `routing_cells_product_zone_key` ON `routing_cells` (`location_id`,`product_id`,`zone_id`) WHERE "routing_cells"."product_id" is not null and "routing_cells"."zone_id" is not null;--> statement-breakpoint
-CREATE UNIQUE INDEX `routing_cells_all_zone_key` ON `routing_cells` (`location_id`,`zone_id`) WHERE "routing_cells"."category_id" is null and "routing_cells"."product_id" is null and "routing_cells"."no_category" = 0 and "routing_cells"."zone_id" is not null;--> statement-breakpoint
-CREATE UNIQUE INDEX `routing_cells_no_category_every_zone_key` ON `routing_cells` (`location_id`,`no_category`) WHERE "routing_cells"."no_category" = 1 and "routing_cells"."zone_id" is null;--> statement-breakpoint
-CREATE UNIQUE INDEX `routing_cells_no_category_zone_key` ON `routing_cells` (`location_id`,`no_category`,`zone_id`) WHERE "routing_cells"."no_category" = 1 and "routing_cells"."zone_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `routing_cells_category_every_zone_key` ON `routing_cells` (`category_id`) WHERE "routing_cells"."category_id" is not null and "routing_cells"."zone_id" is null;--> statement-breakpoint
+CREATE UNIQUE INDEX `routing_cells_category_zone_key` ON `routing_cells` (`category_id`,`zone_id`) WHERE "routing_cells"."category_id" is not null and "routing_cells"."zone_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `routing_cells_product_every_zone_key` ON `routing_cells` (`product_id`) WHERE "routing_cells"."product_id" is not null and "routing_cells"."zone_id" is null;--> statement-breakpoint
+CREATE UNIQUE INDEX `routing_cells_product_zone_key` ON `routing_cells` (`product_id`,`zone_id`) WHERE "routing_cells"."product_id" is not null and "routing_cells"."zone_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `routing_cells_all_zone_key` ON `routing_cells` (`zone_id`) WHERE "routing_cells"."category_id" is null and "routing_cells"."product_id" is null and "routing_cells"."no_category" = 0 and "routing_cells"."zone_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX `routing_cells_no_category_every_zone_key` ON `routing_cells` (`no_category`) WHERE "routing_cells"."no_category" = 1 and "routing_cells"."zone_id" is null;--> statement-breakpoint
+CREATE UNIQUE INDEX `routing_cells_no_category_zone_key` ON `routing_cells` (`no_category`,`zone_id`) WHERE "routing_cells"."no_category" = 1 and "routing_cells"."zone_id" is not null;--> statement-breakpoint
 CREATE TABLE `station_day_states` (
 	`id` text PRIMARY KEY NOT NULL,
 	`station_id` text NOT NULL,
@@ -2692,36 +2685,30 @@ CREATE UNIQUE INDEX `department_days_date_key` ON `department_days` (`department
 CREATE UNIQUE INDEX `department_days_department_key` ON `department_days` (`id`,`department_id`);--> statement-breakpoint
 CREATE TABLE `seasons` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`name` text NOT NULL,
 	`starts_on` text NOT NULL,
 	`colour` text DEFAULT 'grey' NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "seasons_name_ck" CHECK(trim("seasons"."name") <> ''),
 	CONSTRAINT "seasons_starts_on_ck" CHECK("seasons"."starts_on" glob '[01][0-9]-[0-3][0-9]' and "seasons"."starts_on" <> '02-29')
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `seasons_location_starts_key` ON `seasons` (`location_id`,`starts_on`);--> statement-breakpoint
-CREATE UNIQUE INDEX `seasons_location_name_key` ON `seasons` (`location_id`,`name`);--> statement-breakpoint
+CREATE UNIQUE INDEX `seasons_starts_key` ON `seasons` (`starts_on`);--> statement-breakpoint
+CREATE UNIQUE INDEX `seasons_name_key` ON `seasons` (`name`);--> statement-breakpoint
 CREATE TABLE `special_day_dates` (
 	`id` text PRIMARY KEY NOT NULL,
 	`special_day_id` text NOT NULL,
-	`location_id` text NOT NULL,
 	`date` text NOT NULL,
 	`closed_all_day` integer DEFAULT false NOT NULL,
 	`holiday_name` text,
 	FOREIGN KEY (`special_day_id`) REFERENCES `special_days`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "special_day_dates_date_ck" CHECK("special_day_dates"."date" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]')
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `special_day_dates_location_date_key` ON `special_day_dates` (`location_id`,`date`);--> statement-breakpoint
+CREATE UNIQUE INDEX `special_day_dates_date_key` ON `special_day_dates` (`date`);--> statement-breakpoint
 CREATE TABLE `special_days` (
 	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
 	`name` text NOT NULL,
 	`repeats_yearly` integer DEFAULT false NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "special_days_name_ck" CHECK(trim("special_days"."name") <> '')
 );
 --> statement-breakpoint

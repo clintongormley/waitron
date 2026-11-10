@@ -50,16 +50,13 @@ beforeEach(async () => {
     });
     await db.insert(departments).values({
       id: "department",
-      locationId: "venue",
       name: "Inactive department",
       tradingName: "Recorded business",
       active: false,
       createdAt: "2026-10-20T08:00:00.000Z",
     });
-    await db
-      .insert(seasons)
-      .values({ id: "season", locationId: "venue", name: "Summer", startsOn: "06-01" });
-    await db.insert(staffRoles).values({ id: "role", locationId: "venue", name: "Cook" });
+    await db.insert(seasons).values({ id: "season", name: "Summer", startsOn: "06-01" });
+    await db.insert(staffRoles).values({ id: "role", name: "Cook" });
     await db.insert(personStaffRoles).values({ personId: "person", staffRoleId: "role" });
     await db
       .insert(staffingDays)
@@ -75,7 +72,6 @@ beforeEach(async () => {
     await db.insert(shifts).values({
       id: "shift",
       personId: "person",
-      locationId: "venue",
       startsAt: "2026-10-20T12:00:00.000Z",
       endsAt: "2026-10-20T16:00:00.000Z",
       startsOffsetMinutes: 0,
@@ -239,10 +235,10 @@ describe("staffing backup evidence", () => {
       await db
         .insert(kitchenStations)
         .values({ id: "station", locationId: "venue", name: "Grill" });
-      await db.insert(specialDays).values({ id: "special", locationId: "venue", name: "Holiday" });
+      await db.insert(specialDays).values({ id: "special", name: "Holiday" });
       await db
         .insert(specialDayDates)
-        .values({ id: "date", specialDayId: "special", locationId: "venue", date: "2026-10-20" });
+        .values({ id: "date", specialDayId: "special", date: "2026-10-20" });
       await corrupt(
         db,
         "update staffing_days set department_id=null,station_id='station',season_id=null,weekday=null,special_day_date_id='date'",
@@ -265,9 +261,7 @@ describe("staffing backup evidence", () => {
     ])
       await corrupt(restored.db, `delete from "${table}"`);
     expect(await run({ absent: true, sourceSchema: 0 })).toEqual(passed);
-    await restored.db
-      .insert(staffRoles)
-      .values({ id: "invented", locationId: "venue", name: "Invented role" });
+    await restored.db.insert(staffRoles).values({ id: "invented", name: "Invented role" });
     expect((await run({ absent: true, sourceSchema: 0 })).status).toBe("invalid");
   });
   it("keeps unexpected query errors unavailable", async () => {

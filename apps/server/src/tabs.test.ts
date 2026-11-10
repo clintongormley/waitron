@@ -1139,7 +1139,6 @@ describe("listTablesWithState (occupancy)", () => {
       const [department] = await tx
         .insert(departments)
         .values({
-          locationId: cfg.locationId,
           name: "Restaurant",
           tradingName: "Restaurant",
         })
@@ -1153,7 +1152,7 @@ describe("listTablesWithState (occupancy)", () => {
       await tx.execute(
         sql`update zone_sale_policies set order_start = 'table' where zone_id = ${zone.id}`,
       );
-      await offerMenuThroughZone(tx, cfg, zone.id, menuId, { makeDefault: true });
+      await offerMenuThroughZone(tx, zone.id, menuId, { makeDefault: true });
       await setRoutingCell(
         tx,
         { row: { kind: "category", categoryId }, zoneId: null },

@@ -21,8 +21,7 @@ beforeEach(async () => {
       operationDescription: "Hospitality",
     });
     await suite.db.insert(convenioConfig).values({
-      id: "agreement",
-      locationId: "venue",
+      id: 1,
       workingDaysPerWeek: 4,
       overtimeModel: "period_net",
       referencePeriodDays: 90,
@@ -183,23 +182,7 @@ describe("agreement backup evidence", () => {
       await corrupt(db, "update convenio_config set overtime_model=x'01'");
     expect((await run()).status).toBe("invalid");
   });
-  it("refuses missing location references on both copies", async () => {
-    for (const db of [original.db, restored.db])
-      await corrupt(db, "update convenio_config set location_id='missing'");
-    expect((await run()).status).toBe("invalid");
-  });
-  it.each(["before", "after"])("checks %s references independently", async (side) => {
-    expect(await run()).toEqual(passed);
-    expect(
-      (
-        await run(
-          side === "before"
-            ? { wrap: hideTable("locations") }
-            : { wrapAfter: hideTable("locations") },
-        )
-      ).status,
-    ).toBe("invalid");
-  });
+
   it("covers inactive populated state and refuses false zero", async () => {
     expect((await run({ sourceSchema: 0 })).status).toBe("invalid");
   });
@@ -208,10 +191,10 @@ describe("agreement backup evidence", () => {
     expect(await run({ absent: true, sourceSchema: 0 })).toEqual(passed);
     await restored.db
       .insert(convenioConfig)
-      .values({ id: "invented", locationId: "venue", createdAt: "2026-10-20T08:00:00.000Z" });
+      .values({ id: 1, createdAt: "2026-10-20T08:00:00.000Z" });
     expect((await run({ absent: true, sourceSchema: 0 })).status).toBe("invalid");
   });
-  it("accepts no config and no parent reference", async () => {
+  it("accepts an empty configuration table", async () => {
     for (const db of [original.db, restored.db]) db.run(sql`delete from convenio_config`);
     expect(await run({ wrap: hideTable("locations") })).toEqual(passed);
   });
@@ -221,7 +204,7 @@ describe("agreement backup evidence", () => {
       run({
         wrap: (q) => ({
           async *rows(statement, values) {
-            if (statement.includes("not exists")) throw failure;
+            if (statement === "select * from convenio_config") throw failure;
             yield* q.rows(statement, values);
           },
         }),

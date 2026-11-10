@@ -14,7 +14,6 @@ import "../errors.js";
 
 export async function offerMenuThroughZone(
   tx: Transaction,
-  cfg: { locationId: string },
   zoneId: string,
   menuId: string,
   options: { displayOrder?: number; makeDefault?: boolean } = {},
@@ -27,12 +26,7 @@ export async function offerMenuThroughZone(
   const [policy] = await tx
     .select({ departmentId: zoneServicePolicies.departmentId })
     .from(zoneServicePolicies)
-    .where(
-      and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(zoneServicePolicies.zoneId, zoneId),
-      ),
-    );
+    .where(eq(zoneServicePolicies.zoneId, zoneId));
   if (policy === undefined) throw new AppError("service_zone.not_found", { zoneId });
   const [stored] = await tx
     .select({ id: menuPeriods.id, menuId: menuPeriods.menuId })

@@ -43,7 +43,6 @@ for (const enabled of [true, false]) {
         const [version] = await tx
           .insert(rosterVersions)
           .values({
-            locationId: venue.cfg.locationId,
             periodStart: "2026-01-05",
             periodEnd: "2026-01-11",
             status: "published",
@@ -53,7 +52,6 @@ for (const enabled of [true, false]) {
         const [shift] = await tx
           .insert(shifts)
           .values({
-            locationId: venue.cfg.locationId,
             personId: venue.personId,
             rosterVersionId: version!.id,
             startsAt: "2026-01-05T09:00:00Z",
@@ -66,14 +64,13 @@ for (const enabled of [true, false]) {
           const [department] = await tx
             .insert(departments)
             .values({
-              locationId: venue.cfg.locationId,
               name: "Kitchen",
               tradingName: "Customer kitchen",
             })
             .returning();
           const staffRoleId = crypto.randomUUID();
           await tx.execute(
-            sql`insert into staff_roles (id, location_id, name, colour, position) values (${staffRoleId}, ${venue.cfg.locationId}, 'Sous chef', 'green', 0)`,
+            sql`insert into staff_roles (id, name, colour, position) values (${staffRoleId}, 'Sous chef', 'green', 0)`,
           );
           await tx.execute(
             sql`insert into shift_assignments (shift_id, department_id, staff_role_id) values (${shift!.id}, ${department!.id}, ${staffRoleId})`,

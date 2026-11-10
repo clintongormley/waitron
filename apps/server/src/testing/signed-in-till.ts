@@ -106,10 +106,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
   };
   const seeded = await withTransaction(db, async (tx) => {
     const seed = await options.seed(tx, cfg);
-    for (const department of await tx
-      .select({ id: departments.id })
-      .from(departments)
-      .where(eq(departments.locationId, cfg.locationId)))
+    for (const department of await tx.select({ id: departments.id }).from(departments))
       await tx
         .insert(departmentReceipts)
         .values({

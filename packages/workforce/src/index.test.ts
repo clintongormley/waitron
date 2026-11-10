@@ -161,12 +161,7 @@ describe("roster_versions constraint declarations (forces the lazy extraConfig c
     const config = getTableConfig(api.rosterVersions);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toEqual(
-      expect.arrayContaining([
-        "roster_versions_location_fk",
-        "roster_versions_published_by_person_fk",
-      ]),
-    );
+    expect(fkNames).toEqual(expect.arrayContaining(["roster_versions_published_by_person_fk"]));
 
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("roster_versions_period_ck");
@@ -175,14 +170,13 @@ describe("roster_versions constraint declarations (forces the lazy extraConfig c
 });
 
 describe("shifts constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares shifts' three foreign keys and its offset/interval checks", () => {
+  it("declares shifts' two foreign keys and its offset/interval checks", () => {
     const config = getTableConfig(api.shifts);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
     expect(fkNames).toEqual(
       expect.arrayContaining([
         "shifts_person_fk",
-        "shifts_location_fk",
         // SET NULL on delete: a discarded version detaches its shifts.
         "shifts_roster_version_fk",
       ]),
@@ -233,7 +227,7 @@ describe("shift_templates constraint declarations (forces the lazy extraConfig c
     const config = getTableConfig(api.shiftTemplates);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toEqual(expect.arrayContaining(["shift_templates_location_fk"]));
+    expect(fkNames).toEqual([]);
 
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("shift_templates_label_ck");
@@ -274,10 +268,10 @@ describe("staffing's tables' constraint declarations (forces the lazy extraConfi
     };
 
     expect(names(api.staffRoles)).toEqual({
-      foreignKeys: ["staff_roles_location_fk"],
+      foreignKeys: [],
       primaryKeys: [],
       checks: ["staff_roles_colour_ck", "staff_roles_name_ck"],
-      indexes: ["staff_roles_location_name_key"],
+      indexes: ["staff_roles_name_key"],
     });
     expect(names(api.personStaffRoles)).toEqual({
       foreignKeys: ["person_staff_roles_person_fk", "person_staff_roles_role_fk"],

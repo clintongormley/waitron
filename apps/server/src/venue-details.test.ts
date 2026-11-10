@@ -56,7 +56,7 @@ let venue: Venue;
 beforeEach(async () => {
   venue = await setupVenue(suite.db);
   await suite.db.execute(
-    sql`update departments set name = 'Dining department', trading_name = 'Customer trading name' where location_id = ${venue.cfg.locationId}`,
+    sql`update departments set name = 'Dining department', trading_name = 'Customer trading name' `,
   );
 });
 const read = () => withTransaction(suite.db, (tx) => readVenueDetails(tx));
@@ -755,9 +755,7 @@ describe("unavailable country and own expected values", () => {
     );
     expect(saved.model.details.name).toBe("Changed venue display");
     expect(saved.model.issuer.legalName).toBe("Deli Test SL");
-    const { rows } = await suite.db.execute(
-      sql`select name, trading_name from departments where location_id = ${venue.cfg.locationId}`,
-    );
+    const { rows } = await suite.db.execute(sql`select name, trading_name from departments `);
     expect(rows).toEqual([{ name: "Dining department", trading_name: "Customer trading name" }]);
   });
 });
@@ -962,7 +960,7 @@ describe("venue details preserve committed history", () => {
     );
     await withTransaction(suite.db, async (tx) => {
       const periods = await tx.execute<{ id: string; department_id: string }>(
-        sql`select p.id, p.department_id from menu_periods p join departments d on d.id = p.department_id where d.location_id = ${venue.cfg.locationId} and p.name = 'Always'`,
+        sql`select p.id, p.department_id from menu_periods p join departments d on d.id = p.department_id where p.name = 'Always'`,
       );
       for (const period of periods.rows)
         await replaceMenuWeek(
@@ -1109,7 +1107,6 @@ describe("venue detail consumer reads", () => {
     await suite.db.insert(floorTodayTables).values({ tableId: table!.id });
     await suite.db.insert(bookings).values([
       {
-        locationId: venue.cfg.locationId,
         tableId: table!.id,
         bookingDate: "2026-10-03",
         bookingTime: "02:00:00",
@@ -1118,7 +1115,6 @@ describe("venue detail consumer reads", () => {
         createdBy: randomUUID(),
       },
       {
-        locationId: venue.cfg.locationId,
         tableId: table!.id,
         bookingDate: "2026-10-02",
         bookingTime: "23:45:00",

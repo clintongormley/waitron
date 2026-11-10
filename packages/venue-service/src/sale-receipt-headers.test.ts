@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, invoiceSeries, sales, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, sales } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -20,8 +20,6 @@ describe("sale receipt header snapshot", () => {
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
     });
-    const venueId = await venueLocationId(db);
-    const locationId = venueId;
     const nodeId = await seedNode(db);
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, { nodeId }));
     const [series] = await db
@@ -46,7 +44,7 @@ describe("sale receipt header snapshot", () => {
       })
       .returning({ id: sales.id });
     const department = await db.execute<{ id: string }>(sql`
-      select id from departments where location_id = ${locationId}`);
+      select id from departments `);
     const departmentId = department.rows[0]!.id;
 
     await db.execute(sql`

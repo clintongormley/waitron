@@ -81,7 +81,7 @@ describe("seedFloor", () => {
         select c.name as category_name, s.name as station_name from routing_cells r
         join categories c on c.id = r.category_id join kitchen_stations s on s.id = r.station_id
         join floor_zones z on z.id = r.zone_id
-        where r.location_id = ${locationId} and z.name = 'Upstairs bar' order by c.name`)
+        where z.name = 'Upstairs bar' order by c.name`)
       ).rows;
     });
     expect(rows).toEqual([
@@ -111,7 +111,7 @@ describe("seedFloor", () => {
         select name from sqlite_master where type = 'table' and name = 'hours_week_cells'`);
       const { rows: periods } = await tx.execute<{ name: string }>(sql`
         select p.name from menu_periods p join departments d on d.id = p.department_id
-        where d.location_id = ${locationId} order by d.name`);
+         order by d.name`);
       const { rows: zones } = await tx.execute<{ id: string }>(sql`
         select id from floor_zones where location_id = ${locationId} and name = 'Upstairs bar'`);
       const { rows: stations } = await tx.execute<{ id: string }>(sql`
@@ -204,7 +204,7 @@ describe("seedFloor", () => {
       }>(sql`
         select d.trading_name as department, s.name, s.start, s.minutes
         from service_steps s join departments d on d.id = s.department_id
-        where d.location_id = ${locationId} order by d.trading_name, s.position`);
+         order by d.trading_name, s.position`);
       return rows;
     });
 
@@ -385,7 +385,7 @@ describe("seedFloor", () => {
           dataSet: CASA_DELGADO_ES,
         });
         const { rows: departments } = await tx.execute<{ id: string }>(
-          sql`select id from departments where location_id = ${locationId} and active`,
+          sql`select id from departments where active`,
         );
         const sets = await readFloorPlanSets(tx);
         const placed: Record<string, string[]> = {};
@@ -439,7 +439,7 @@ describe("seedFloor", () => {
     const seeding = withTransaction(suite.db, async (tx) => {
       const { rows } = await tx.execute<{ zone_id: string }>(
         sql`select zone_id from zone_service_policies
-            where location_id = ${locationId} and is_counter_default limit 1`,
+            where is_counter_default limit 1`,
       );
       await createTable(tx, { locationId: locationId } as WithVenueRowId, {
         label: "Stray",
@@ -460,7 +460,7 @@ describe("seedFloor", () => {
     const seeding = withTransaction(suite.db, async (tx) => {
       const { rows } = await tx.execute<{ zone_id: string }>(sql`
         select zone_id from zone_service_policies
-        where location_id = ${locationId} and is_counter_default limit 1`);
+        where is_counter_default limit 1`);
       await createTable(
         tx,
         { locationId: locationId } as WithVenueRowId,
@@ -498,7 +498,7 @@ describe("seedFloor", () => {
         const { rows } = await tx.execute<{ name: string; trading_name: string }>(
           sql`select d.name, d.trading_name from departments d
               join department_sale_policies p on p.department_id = d.id
-              where d.location_id = ${locationId} order by p.order_start desc`,
+               order by p.order_start desc`,
         );
         return rows;
       });
