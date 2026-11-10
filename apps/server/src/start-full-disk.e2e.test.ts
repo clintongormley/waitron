@@ -1115,6 +1115,8 @@ describe("a start on a real full disk", () => {
       small.unfill();
       await handle?.stop();
       await store.close();
+      // Leave room on the shared small filesystem for the remaining cases.
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
