@@ -384,6 +384,7 @@ export class TillFinishTableDialog extends LitElement {
         })}
         ${this.refundAtTill ? html`<p data-refund-at-till>${t("cancel_item.refund_at_till")}</p>` : nothing}
         <wt-combobox
+          ?preserve-order=${true /* Preserve configured reason position. */}
           name="reason"
           required
           .label=${t("adjust.reason")}

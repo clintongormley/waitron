@@ -248,18 +248,6 @@ the new names answer supersedes that allowance only.
 and [reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) retain every role name.
 See [A7](#roles-the-admin-can-edit-a7) for the two implementation cuts and their remaining gates.
 
-## Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order says so
-
-- **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
-  says so** (owner decision 2026-09-12). **`wt-select` is retired** (owner, 2026-10-02): `wt-combobox`
-  is the one dropdown (A178b–f). Still open:
-  `wt-combobox` does not sort its options, and `compareLabels`
-  (`packages/shared/src/compare-labels.ts`, used by `wt-data-table`) builds its `Intl.Collator`
-  with no language, so it sorts in the default language of whatever runs it — in `wt-data-table`,
-  the browser's. It should sort in the signed-in person's chosen language (owner, 2026-10-17): the
-  order differs, since Node's `Intl.Collator` puts "Ñoquis" between "Nísperos" and "Nuez" in
-  English, and after "Nuez", before "Olivas", in Spanish.
-
 ## Shared database-backed table paging, search and sorting
 
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
@@ -523,6 +511,10 @@ than becoming new items.
 
 
 ## Decisions and deliberate limits
+
+- Dropdown and browser table labels use the app language. Server-sorted display lists, including
+  delete-refusal names and role holders, keep the runtime's default comparison; the watcher
+  confirmed these are outside the dropdown/table work (2026-11-10 18:27, Lane D questions).
 
 - **Theme choice and certificate help (watcher, 2026-11-10 17:19).** The saved choice remains
   local to its scheme, host and port. A plain-HTTP landing page can therefore follow the device

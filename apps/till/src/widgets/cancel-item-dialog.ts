@@ -551,6 +551,7 @@ export class TillCancelItemDialog extends LitElement {
           this.#needsReason()
             ? html`
                 <wt-combobox
+                  ?preserve-order=${true /* Preserve configured reason position. */}
                   name="reason"
                   required
                   searchPlaceholder=${t("form.combobox_search")}

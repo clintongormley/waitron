@@ -1070,6 +1070,7 @@ export class ProductList extends LitElement {
         ...(this.courses.length
           ? {
               filter: {
+                preserveOrder: true, // Configured course order, then No course.
                 label: t("product.course"),
                 allLabel: t("product.filter_course_all"),
                 multiple: {

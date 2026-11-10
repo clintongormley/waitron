@@ -2327,6 +2327,7 @@ export class PrintersScreen extends LitElement {
             >${a.active ? t("printers.agent_status_active") : t("printers.agent_status_disabled")}</span
           >`,
         filter: {
+          preserveOrder: true, // Active before disabled.
           label: t("printers.status"),
           allLabel: t("printers.filter_all"),
           initial: "active",
@@ -3540,6 +3541,7 @@ export class PrintersScreen extends LitElement {
                 </div>`;
         },
         filter: {
+          preserveOrder: true, // Active before disabled.
           label: t("printers.status"),
           allLabel: t("printers.filter_all"),
           initial: "active",

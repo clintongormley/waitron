@@ -524,6 +524,7 @@ export class MyScheduleScreen extends LitElement {
       <h2 id="cover-h">${t("myschedule.cover_title")}</h2>
       <div class="form">
         <wt-combobox
+          ?preserve-order=${true /* Preserve shift chronology. */}
           name="cover-shift"
           data-test="cover-shift"
           label=${t("myschedule.cover_shift")}

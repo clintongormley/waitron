@@ -452,6 +452,7 @@ describe("till-equipment-dialog", () => {
     expect(picker.value).toBe("P2");
     expect(picker.options.at(-1)).toEqual({
       value: "P2",
+      fixed: true,
       label: t("equipment.switched_off").replace("{item}", "Bar printer"),
     });
     expect(resolvedText(el, "receipt")).toBe("Bar printer");

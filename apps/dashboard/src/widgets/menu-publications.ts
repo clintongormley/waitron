@@ -830,6 +830,7 @@ export class MenuPublicationsPanel extends LitElement {
         repeated === null
           ? nothing
           : html`<wt-combobox
+              ?preserve-order=${true /* Preserve earlier/later occurrence. */}
               class="field"
               name="occurrence"
               required

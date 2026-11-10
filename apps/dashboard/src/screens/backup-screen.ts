@@ -1540,7 +1540,7 @@ export class BackupScreen extends LitElement {
         search="never"
         label=${t("backup.destination.bucket")}
         .options=${[
-          { value: "none", label: t("backup.destination.bucket_none") },
+          { value: "none", fixed: true, label: t("backup.destination.bucket_none") },
           {
             value: "stream-bucket",
             label: t("backup.destination.choice_stream"),

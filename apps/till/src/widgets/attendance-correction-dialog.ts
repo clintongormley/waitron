@@ -337,7 +337,21 @@ export class AttendanceCorrectionDialog extends LitElement {
                 .error=${this.attempted ? errors.rows[index]!.time : ""}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "time")}
               ></wt-input>
-              ${this.#choices(row).length > 1 ? html`<wt-combobox name=${`attendanceOffset${index}`} required .label=${t("attendance.offset")} .value=${row.offset} .disabled=${this.busy} .options=${this.#choices(row).map((choice) => ({ value: String(choice.offset), label: `${row.time} ${offsetLabel(choice.offset)}` }))} .error=${this.attempted ? errors.rows[index]!.offset : ""} @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "offset")}></wt-combobox>` : nothing}
+              ${
+                this.#choices(row).length > 1
+                  ? html`<wt-combobox
+                      ?preserve-order=${true /* Preserve repeated-time offsets. */}
+                      name=${`attendanceOffset${index}`}
+                      required
+                      .label=${t("attendance.offset")}
+                      .value=${row.offset}
+                      .disabled=${this.busy}
+                      .options=${this.#choices(row).map((choice) => ({ value: String(choice.offset), label: `${row.time} ${offsetLabel(choice.offset)}` }))}
+                      .error=${this.attempted ? errors.rows[index]!.offset : ""}
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "offset")}
+                    ></wt-combobox>`
+                  : nothing
+              }
             </fieldset>`,
         )}
         <wt-textarea

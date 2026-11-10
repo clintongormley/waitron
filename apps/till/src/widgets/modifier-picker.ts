@@ -762,6 +762,7 @@ export class TillModifierPicker extends LitElement {
                 !this.#hasCourse
                   ? nothing
                   : html`<wt-combobox
+                      ?preserve-order=${true /* Preserve configured course position. */}
                       name="course"
                       label=${`${t("table.course_label")} · ${productName(this.product)}`}
                       placeholder=${this.coursePlaceholder || this.courseChoices.find((choice) => choice.value === "")?.label || ""}

@@ -4,7 +4,9 @@ import { classMap } from "lit/directives/class-map.js";
 import { guard } from "lit/directives/guard.js";
 import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
-import { foldCache, foldForSearch, searchFor } from "@waitron/shared";
+import { createLabelComparator, foldCache, foldForSearch, searchFor } from "@waitron/shared";
+import { ChangeObserver } from "../change-observer.js";
+import { subscribePageLanguage } from "../page-language.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 import "./wt-icon.js";
 import { popupIndex, popupPlacement } from "../popup-helpers.js";
@@ -12,6 +14,8 @@ import { popupIndex, popupPlacement } from "../popup-helpers.js";
 export interface ComboboxOption {
   value: string;
   label: string;
+  /** Keep this row in place while sorting the options on either side. */
+  fixed?: boolean;
   /** A registered wt-icon name, drawn before the label. */
   icon?: string;
   /** Consecutive options with the same group render under one heading. */
@@ -389,6 +393,8 @@ export class WtCombobox extends LitElement {
   @property({ type: Boolean, reflect: true }) invalid = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property({ attribute: false }) options: ComboboxOption[] = [];
+  /** Retain a configured, chronological or lifecycle sequence instead of label order. */
+  @property({ type: Boolean, attribute: "preserve-order" }) preserveOrder = false;
   @property() noResultsLabel = "No results";
   @property() searchPlaceholder = "Search";
   @property({ type: Boolean, reflect: true }) multiple = false;
@@ -438,6 +444,49 @@ export class WtCombobox extends LitElement {
   private readonly listboxId = uniqueId("wt-combobox-listbox");
   private readonly errorId = uniqueId("wt-combobox-error");
   private readonly hintId = uniqueId("wt-combobox-hint");
+  constructor() {
+    super();
+    new ChangeObserver(this, subscribePageLanguage);
+  }
+  private order?: {
+    options: ComboboxOption[];
+    language: string;
+    preserve: boolean;
+    rows: ComboboxOption[];
+  };
+
+  private get orderedOptions(): ComboboxOption[] {
+    const language = document.documentElement.lang;
+    if (
+      this.order?.options === this.options &&
+      this.order.language === language &&
+      this.order.preserve === this.preserveOrder
+    )
+      return this.order.rows;
+    const rows = [...this.options];
+    if (!this.preserveOrder) {
+      const compare = createLabelComparator(language);
+      const fixed = (option: ComboboxOption) =>
+        option.value === "" || option.action || option.fixed;
+      for (let start = 0; start < rows.length;) {
+        if (fixed(rows[start]!)) {
+          start++;
+          continue;
+        }
+        let end = start + 1;
+        while (end < rows.length && !fixed(rows[end]!) && rows[end]!.group === rows[start]!.group)
+          end++;
+        rows.splice(
+          start,
+          end - start,
+          ...rows.slice(start, end).sort((a, b) => compare(a.label, b.label)),
+        );
+        start = end;
+      }
+    }
+    this.order = { options: this.options, language, preserve: this.preserveOrder, rows };
+    return rows;
+  }
 
   private get hasSearchBox(): boolean {
     if (this.allowAdd || this.search === "always") return true;
@@ -445,7 +494,7 @@ export class WtCombobox extends LitElement {
   }
 
   private get filteredOptions(): ComboboxOption[] {
-    return this.filter(this.options);
+    return this.filter(this.orderedOptions);
   }
 
   private readonly foldCache = foldCache<ComboboxOption>();
@@ -717,7 +766,7 @@ export class WtCombobox extends LitElement {
     if (this.multiple) return;
     event.preventDefault();
     // All options, not the filtered ones: the search text left from the last opening is not shown.
-    const options = this.options;
+    const options = this.orderedOptions;
     const current = this.indexOfChosen(options);
     const index = this.typeAhead(event.key, options, current, true);
     if (index >= 0 && index !== current) this.commitSelection(options[index]!.value, event);
@@ -812,10 +861,12 @@ export class WtCombobox extends LitElement {
     ) {
       this.reservedTexts = this.stableWidth ? this.widthTexts() : [];
     }
-    if (changed.has("options") && this.activeIndex >= 0) {
+    const previousOrder = this.order?.rows;
+    const nextOrder = this.orderedOptions;
+    if (previousOrder !== undefined && previousOrder !== nextOrder && this.activeIndex >= 0) {
       // The active row follows its option by value, and the add row stays active while it is shown;
       // failing that, the chosen row, else the first.
-      const previous = this.filter(changed.get("options") as ComboboxOption[])[this.activeIndex];
+      const previous = this.filter(previousOrder)[this.activeIndex];
       const kept = previous
         ? this.filteredOptions.findIndex((option) => option.value === previous.value)
         : this.showAddRow

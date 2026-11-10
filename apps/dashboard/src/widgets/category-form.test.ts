@@ -171,3 +171,10 @@ it("keeps a refused category write that names no field of the form for the botto
     _form: codeMessage("category.not_found"),
   });
 });
+
+it("uses the current dashboard language in the label wrapper", () => {
+  const previous = currentLocale();
+  onTestFinished(() => setLocale(previous));
+  setLocale("es-ES");
+  expect(byLabel("Ñoquis", "Nuez")).toBeGreaterThan(0);
+});

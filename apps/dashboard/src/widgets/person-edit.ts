@@ -346,6 +346,7 @@ export class PersonEdit extends LitElement {
                     }}
                   ></wt-combobox>
                   <wt-combobox
+                    ?preserve-order=${true /* Preserve account lifecycle. */}
                     data-test="edit-status"
                     name="status"
                     label=${t("person.status_label")}

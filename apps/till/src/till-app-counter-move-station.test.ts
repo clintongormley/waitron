@@ -224,13 +224,16 @@ async function choose(el: TillApp, stationId = "grill", rounds = 6): Promise<voi
 }
 
 /** Picks a station in the open dialog's own field, as a person would. */
-async function pick(el: TillApp, index: number): Promise<void> {
-  const field = dialog(el)!.shadowRoot!.querySelector<
-    HTMLElement & { updateComplete: Promise<unknown> }
-  >('wt-combobox[name="station"]')!;
+async function pick(el: TillApp, stationId: string): Promise<void> {
+  const field = dialog(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[name="station"]',
+  )!;
   field.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
   await field.updateComplete;
-  field.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')[index]!.click();
+  const label = field.options.find(({ value }) => value === stationId)!.label;
+  [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')]
+    .find((row) => row.textContent!.trim() === label)!
+    .click();
   await flush(el);
 }
 const dialogMove = (el: TillApp) =>
@@ -598,7 +601,7 @@ it("A738 collection station confirmation sends once and locks the basket until i
   const { el, picker } = await inspectPlaced({ moveDishStation });
   await userEvent.click(picker.querySelector<HTMLElement>("[data-move-station]")!);
   await flush(el);
-  await pick(el, 1);
+  await pick(el, "grill");
   dialogMove(el).click();
   dialogMove(el).click();
   await flush(el);
@@ -971,7 +974,7 @@ describe("till-app: moving a paid counter order to another station", () => {
 
   it("a second press of the dialog's Move handled before the till redraws sends no second move", async () => {
     const el = await openMove();
-    await pick(el, 1);
+    await pick(el, "grill");
 
     dialogMove(el).click();
     dialogMove(el).click();

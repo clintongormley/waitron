@@ -1,6 +1,21 @@
 import { compareDecimal, decimal, type Decimal } from "./money.js";
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+const collators = new Map<string | undefined, Intl.Collator>([[undefined, collator]]);
+
+function collatorFor(language?: string): Intl.Collator {
+  const key = language || undefined;
+  let result = collators.get(key);
+  if (result === undefined) {
+    try {
+      result = new Intl.Collator(key, { numeric: true, sensitivity: "base" });
+    } catch {
+      result = collator;
+    }
+    collators.set(key, result);
+  }
+  return result;
+}
 
 type LabelKey = { parts: string[]; numbers: (Decimal | null)[] };
 
@@ -14,7 +29,7 @@ function labelKey(label: string): LabelKey {
   };
 }
 
-function compareKeys(left: LabelKey, right: LabelKey): number {
+function compareKeys(left: LabelKey, right: LabelKey, collator: Intl.Collator): number {
   for (let index = 0; index < Math.min(left.parts.length, right.parts.length); index++) {
     const x = left.numbers[index]!;
     const y = right.numbers[index]!;
@@ -30,12 +45,13 @@ function compareKeys(left: LabelKey, right: LabelKey): number {
   return left.parts.length - right.parts.length;
 }
 
-export function compareLabels(a: string, b: string): number {
-  return compareKeys(labelKey(a), labelKey(b));
+export function compareLabels(a: string, b: string, language?: string): number {
+  return compareKeys(labelKey(a), labelKey(b), collatorFor(language));
 }
 
 /** Keep the name cache within one sort so changed lists do not retain old keys. */
-export function createLabelComparator(): (a: string, b: string) => number {
+export function createLabelComparator(language?: string): (a: string, b: string) => number {
+  const collator = collatorFor(language);
   const keys = new Map<string, LabelKey>();
   const keyFor = (label: string): LabelKey => {
     let key = keys.get(label);
@@ -45,5 +61,5 @@ export function createLabelComparator(): (a: string, b: string) => number {
     }
     return key;
   };
-  return (a, b) => compareKeys(keyFor(a), keyFor(b));
+  return (a, b) => compareKeys(keyFor(a), keyFor(b), collator);
 }

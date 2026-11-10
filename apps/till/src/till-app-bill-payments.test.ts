@@ -7991,7 +7991,10 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
     )!;
     field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
     await field.updateComplete;
-    field.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")[1]!.click();
+    const label = field.options.find((option) => option.value === "a4")!.label;
+    [...field.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")]
+      .find((option) => option.textContent!.trim() === label)!
+      .click();
     await form.updateComplete;
     await fillAndSave(el);
 

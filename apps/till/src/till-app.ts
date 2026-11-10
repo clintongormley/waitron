@@ -2735,7 +2735,12 @@ export class TillApp extends LitElement {
     this.addEventListener(THEME_SELECTED_EVENT, applyThemePick);
     // Re-renders on a locale switch, so `keyed(currentLocale(), …)` recreates the shell's screens,
     // which read `t()` at render time.
-    new LocaleChangeController(this);
+    const applyLocale = () => {
+      document.documentElement.lang = currentLocale();
+      this.requestUpdate();
+    };
+    applyLocale();
+    new LocaleChangeController(this, applyLocale);
     new ThemeChoiceController(this);
     // Subscribed before any widget, so the marks this sets inside the basket's own notification
     // reach every later listener in that same notification.

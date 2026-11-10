@@ -1342,6 +1342,7 @@ export class SpecialDayPainter extends LitElement {
 
   private picker(department: Department, zone: Department["zones"][number] | undefined) {
     return html`<wt-combobox
+      ?preserve-order=${true /* Preserve department/zone tree. */}
       slot="picker"
       name="department"
       label=${t("painter.department")}

@@ -23,6 +23,7 @@ import {
   matchRanges,
   pruneExpanded,
   rowInModel,
+  routingSearch,
   searchRows,
   stationDuring,
   usedStations,
@@ -1611,4 +1612,27 @@ describe("stationDuring", () => {
     expect(stationDuring(lines, "breakfast", kitchen)).toBe(kitchen);
     expect(stationDuring([], "lunch", null)).toBeNull();
   });
+});
+
+it("reorders routing rows and an existing search after a language switch", () => {
+  const previous = currentLocale();
+  try {
+    setLocale("en-GB");
+    const venue = model([], [item("gnocchi", null, "Ñoquis"), item("nut", null, "Nuez")]);
+    const search = routingSearch(venue);
+    const names = () =>
+      search("n")!
+        .rows.filter(({ match }) => match)
+        .map(({ entry }) => entry.name);
+    expect(names()).toEqual(["Ñoquis", "Nuez"]);
+    setLocale("es-ES");
+    expect(
+      visibleRoutingRows(venue, none)
+        .filter(({ row }) => row.kind === "product")
+        .map(({ name }) => name),
+    ).toEqual(["Nuez", "Ñoquis"]);
+    expect(names()).toEqual(["Nuez", "Ñoquis"]);
+  } finally {
+    setLocale(previous);
+  }
 });

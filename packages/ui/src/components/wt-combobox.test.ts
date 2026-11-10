@@ -36,7 +36,11 @@ test("a narrow field keeps enough value room beside the larger chevron", async (
   expect(value.clientWidth).toBeGreaterThanOrEqual(159);
 });
 
-afterEach(cleanup);
+const pageLanguage = document.documentElement.lang;
+afterEach(() => {
+  cleanup();
+  document.documentElement.lang = pageLanguage;
+});
 
 async function mountCombobox(html = '<wt-combobox label="Dietary tags"></wt-combobox>') {
   const el = (await mount(html)) as WtCombobox;
@@ -44,6 +48,73 @@ async function mountCombobox(html = '<wt-combobox label="Dietary tags"></wt-comb
   const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
   return { el, trigger, popup };
 }
+
+test("sorts labels within groups while keeping empty and fixed anchors", async () => {
+  const options: ComboboxOption[] = [
+    { value: "", label: "Use default", group: "One" },
+    { value: "z", label: "Zulu", group: "One" },
+    { value: "a", label: "Alpha", group: "One", disabled: true },
+    { value: "fixed", label: "Middle", group: "One", fixed: true },
+    { value: "d", label: "Delta", group: "One" },
+    { value: "b", label: "Beta", group: "One" },
+    { value: "action", label: "Add", group: "One", action: true },
+    { value: "s", label: "Sierra", group: "Two" },
+    { value: "c", label: "Charlie", group: "Two" },
+  ];
+  const original = [...options];
+  const el = await mountWith('<wt-combobox label="Choices"></wt-combobox>', options);
+  expect(optionRows(el).map((row) => row.textContent!.trim())).toEqual([
+    "Use default",
+    "Alpha",
+    "Zulu",
+    "Middle",
+    "Beta",
+    "Delta",
+    "Add",
+    "Charlie",
+    "Sierra",
+  ]);
+  expect(options).toEqual(original);
+  el.preserveOrder = true;
+  await el.updateComplete;
+  expect(optionRows(el).map((row) => row.textContent!.trim())).toEqual(
+    original.map((o) => o.label),
+  );
+});
+
+test("reorders in the live page language while keeping the active option", async () => {
+  document.documentElement.lang = "en";
+  const el = await mountWith('<wt-combobox label="Choices" search="never"></wt-combobox>', [
+    { value: "enye", label: "Ñoquis" },
+    { value: "n", label: "Nuez" },
+  ]);
+  const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
+  trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(activeRowText(el, listbox(el))).toBe("Ñoquis");
+  document.documentElement.lang = "es";
+  await expect
+    .poll(() => optionRows(el).map((row) => row.textContent!.trim()))
+    .toEqual(["Nuez", "Ñoquis"]);
+  expect(activeRowText(el, listbox(el))).toBe("Ñoquis");
+  await userEvent.keyboard("{Enter}");
+  expect(el.value).toBe("enye");
+});
+
+test("closed typeahead and equal-ranked search use the label order", async () => {
+  const el = await mountWith('<wt-combobox label="Choices" search="never"></wt-combobox>', [
+    { value: "two", label: "Berry 2" },
+    { value: "one", label: "Berry 1" },
+  ]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.focus();
+  await userEvent.keyboard("b");
+  expect(el.value).toBe("one");
+  el.search = "always";
+  await el.updateComplete;
+  await userEvent.keyboard("b");
+  await el.updateComplete;
+  expect(optionRows(el).map((row) => row.textContent!.trim())).toEqual(["Berry 1", "Berry 2"]);
+});
 
 test("renders its label", async () => {
   const { el } = await mountCombobox();
@@ -237,7 +308,13 @@ test("a search of only punctuation lists nothing", async () => {
 test("a search of only spaces is no search", async () => {
   const { el, search } = await openSearch(DRINKS);
   await userEvent.type(search, "  ");
-  expect(optionLabels(el)).toEqual(DRINKS.map((option) => option.label));
+  expect(optionLabels(el)).toEqual([
+    "Gin",
+    "Gin & Tónic",
+    "Ginger Ale",
+    "Tonic Gin",
+    "Virgin Mary",
+  ]);
 });
 
 test("matches are ranked within each group, and the groups keep their order", async () => {
@@ -1780,7 +1857,7 @@ test("an option's icon is drawn before its label and hidden from screen readers"
     { value: "halal", label: "Halal" },
   ]);
   await userEvent.click(fieldParts(el).trigger);
-  const [withIcon, without] = optionRows(el);
+  const [without, withIcon] = optionRows(el);
   const icon = withIcon!.querySelector<HTMLElement>('wt-icon[name="leaf"]')!;
   expect(icon.getAttribute("aria-hidden")).toBe("true");
   const label = withIcon!.querySelector<HTMLElement>(".option-label")!;
@@ -1800,7 +1877,7 @@ const DESCRIBED: ComboboxOption[] = [
 
 test("an option's description is a second line under its label, inside the row, muted and small", async () => {
   const el = await mountWith(
-    '<wt-combobox label="Ordering" value="staff"></wt-combobox>',
+    '<wt-combobox label="Ordering" value="staff" preserve-order></wt-combobox>',
     DESCRIBED,
   );
   host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
@@ -1828,7 +1905,10 @@ test("an option's description is a second line under its label, inside the row, 
 });
 
 test("a screen reader names a described option by both its lines, so it hears the description with the row", async () => {
-  const el = await mountWith('<wt-combobox label="Ordering"></wt-combobox>', DESCRIBED);
+  const el = await mountWith(
+    '<wt-combobox label="Ordering" preserve-order></wt-combobox>',
+    DESCRIBED,
+  );
   await userEvent.click(fieldParts(el).trigger);
   const [, staff, plain] = optionRows(el);
   await expect
@@ -1840,10 +1920,13 @@ test("a screen reader names a described option by both its lines, so it hears th
 });
 
 test("after filtering, the active row is still named by its own two lines", async () => {
-  const el = await mountWith('<wt-combobox label="Ordering" search="always"></wt-combobox>', [
-    ...DESCRIBED,
-    { value: "meal", label: "Staff meal", description: "Given to staff at no charge." },
-  ]);
+  const el = await mountWith(
+    '<wt-combobox label="Ordering" search="always" preserve-order></wt-combobox>',
+    [
+      ...DESCRIBED,
+      { value: "meal", label: "Staff meal", description: "Given to staff at no charge." },
+    ],
+  );
   await userEvent.click(fieldParts(el).trigger);
   const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
   await userEvent.type(search, "staff");
@@ -1861,7 +1944,7 @@ test("after filtering, the active row is still named by its own two lines", asyn
 });
 
 test("an option without a description, or with an empty one, draws its label alone, with no second line and no labelledby or describedby", async () => {
-  const el = await mountWith('<wt-combobox label="Ordering"></wt-combobox>', [
+  const el = await mountWith('<wt-combobox label="Ordering" preserve-order></wt-combobox>', [
     ...DESCRIBED,
     { value: "blank", label: "Blank", description: "" },
   ]);
@@ -1876,7 +1959,7 @@ test("an option without a description, or with an empty one, draws its label alo
 
 test("the closed field shows the chosen option's label alone, without its description", async () => {
   const el = await mountWith(
-    '<wt-combobox label="Ordering" value="public"></wt-combobox>',
+    '<wt-combobox label="Ordering" value="public" preserve-order></wt-combobox>',
     DESCRIBED,
   );
   expect(fieldParts(el).value.textContent!.trim()).toBe("Public");
@@ -1924,7 +2007,10 @@ function changesOf(el: WtCombobox): unknown[] {
 }
 
 test("a disabled option is marked aria-disabled and drawn in the muted token, its label and its description alike", async () => {
-  const el = await mountWith('<wt-combobox label="Product"></wt-combobox>', WITH_DISABLED);
+  const el = await mountWith(
+    '<wt-combobox label="Product" preserve-order></wt-combobox>',
+    WITH_DISABLED,
+  );
   host.style.setProperty("--wt-color-text", "rgb(1, 2, 3)");
   host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
   await userEvent.click(fieldParts(el).trigger);
@@ -1939,7 +2025,10 @@ test("a disabled option is marked aria-disabled and drawn in the muted token, it
 });
 
 test("a hovered disabled option does not paint the hover background a choosable one does", async () => {
-  const el = await mountWith('<wt-combobox label="Product"></wt-combobox>', WITH_DISABLED);
+  const el = await mountWith(
+    '<wt-combobox label="Product" preserve-order></wt-combobox>',
+    WITH_DISABLED,
+  );
   host.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
   await userEvent.click(fieldParts(el).trigger);
   const [rye, wine] = optionRows(el);
@@ -1966,7 +2055,10 @@ test("a disabled primary row draws its label and icon in the muted token, not th
 });
 
 test("clicking a disabled option chooses nothing, sends no change and leaves the list open", async () => {
-  const el = await mountWith('<wt-combobox label="Product"></wt-combobox>', WITH_DISABLED);
+  const el = await mountWith(
+    '<wt-combobox label="Product" preserve-order></wt-combobox>',
+    WITH_DISABLED,
+  );
   const changes = changesOf(el);
   await userEvent.click(fieldParts(el).trigger);
   await userEvent.click(optionRows(el)[1]!, FORCE);
@@ -1979,7 +2071,10 @@ test("clicking a disabled option chooses nothing, sends no change and leaves the
 });
 
 test("the arrows reach a disabled option, and Enter on it chooses nothing and submits nothing", async () => {
-  const el = await mountWith('<wt-combobox label="Product"></wt-combobox>', WITH_DISABLED);
+  const el = await mountWith(
+    '<wt-combobox label="Product" preserve-order></wt-combobox>',
+    WITH_DISABLED,
+  );
   const changes = changesOf(el);
   await userEvent.click(fieldParts(el).trigger);
   const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
@@ -1997,7 +2092,7 @@ test("the arrows reach a disabled option, and Enter on it chooses nothing and su
 
 test("without a search box, Enter and Space on a disabled option choose nothing", async () => {
   const el = await mountWith(
-    '<wt-combobox label="Product" search="never"></wt-combobox>',
+    '<wt-combobox label="Product" search="never" preserve-order></wt-combobox>',
     WITH_DISABLED,
   );
   const changes = changesOf(el);
@@ -2013,7 +2108,10 @@ test("without a search box, Enter and Space on a disabled option choose nothing"
 });
 
 test("in a multiple choice, a disabled option is never toggled on", async () => {
-  const el = await mountWith('<wt-combobox label="Product" multiple></wt-combobox>', WITH_DISABLED);
+  const el = await mountWith(
+    '<wt-combobox label="Product" multiple preserve-order></wt-combobox>',
+    WITH_DISABLED,
+  );
   const changes = changesOf(el);
   await userEvent.click(fieldParts(el).trigger);
   await userEvent.keyboard("{ArrowDown}{ArrowDown}{Enter}");
@@ -2035,7 +2133,10 @@ test("a disabled action row sends no action", async () => {
 });
 
 test("a search finds a disabled option and shows it with its description, named by both its lines", async () => {
-  const el = await mountWith('<wt-combobox label="Product"></wt-combobox>', WITH_DISABLED);
+  const el = await mountWith(
+    '<wt-combobox label="Product" preserve-order></wt-combobox>',
+    WITH_DISABLED,
+  );
   await userEvent.click(fieldParts(el).trigger);
   await userEvent.type(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "wi");
   const rows = optionRows(el);
@@ -2490,7 +2591,10 @@ const PANTRY: ComboboxOption[] = [
 ];
 
 test("typing on a closed list without a search box chooses the first option starting with the typed text, without opening", async () => {
-  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  const el = await mountWith(
+    '<wt-combobox label="Pantry" search="never" preserve-order></wt-combobox>',
+    PANTRY,
+  );
   const changes: string[] = [];
   el.addEventListener("wt-change", (event) =>
     changes.push((event as CustomEvent<{ value: string }>).detail.value),
@@ -2508,7 +2612,7 @@ test("typing on a closed list without a search box chooses the first option star
 
 test("type-ahead that matches the option already chosen sends no change", async () => {
   const el = await mountWith(
-    '<wt-combobox label="Pantry" search="never" value="olive"></wt-combobox>',
+    '<wt-combobox label="Pantry" search="never" value="olive" preserve-order></wt-combobox>',
     PANTRY,
   );
   const changed = vi.fn();
@@ -2521,7 +2625,7 @@ test("type-ahead that matches the option already chosen sends no change", async 
 
 test("type-ahead that matches nothing leaves the value alone", async () => {
   const el = await mountWith(
-    '<wt-combobox label="Pantry" search="never" value="olive"></wt-combobox>',
+    '<wt-combobox label="Pantry" search="never" value="olive" preserve-order></wt-combobox>',
     PANTRY,
   );
   fieldParts(el).trigger.focus();
@@ -2530,7 +2634,10 @@ test("type-ahead that matches nothing leaves the value alone", async () => {
 });
 
 test("the typed text starts again 500 ms after the last key", async () => {
-  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  const el = await mountWith(
+    '<wt-combobox label="Pantry" search="never" preserve-order></wt-combobox>',
+    PANTRY,
+  );
   const { trigger } = fieldParts(el);
   // Dispatched rather than typed: the page's timers are faked here, and a real keystroke travels
   // through the test runner, which needs them.
@@ -2553,7 +2660,10 @@ test("the typed text starts again 500 ms after the last key", async () => {
 });
 
 test("a repeated first letter steps through the options starting with it", async () => {
-  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  const el = await mountWith(
+    '<wt-combobox label="Pantry" search="never" preserve-order></wt-combobox>',
+    PANTRY,
+  );
   const { trigger } = fieldParts(el);
   const press = (key: string) =>
     trigger.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
@@ -2572,7 +2682,10 @@ test("a repeated first letter steps through the options starting with it", async
 });
 
 test("the same letter pressed again inside 500 ms steps on to the next option starting with it, on a closed trigger", async () => {
-  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  const el = await mountWith(
+    '<wt-combobox label="Pantry" search="never" preserve-order></wt-combobox>',
+    PANTRY,
+  );
   const { trigger } = fieldParts(el);
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
@@ -2589,7 +2702,10 @@ test("the same letter pressed again inside 500 ms steps on to the next option st
 });
 
 test("the same letter pressed again inside 500 ms steps on to the next row starting with it, in an open list", async () => {
-  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  const el = await mountWith(
+    '<wt-combobox label="Pantry" search="never" preserve-order></wt-combobox>',
+    PANTRY,
+  );
   fieldParts(el).trigger.focus();
   await userEvent.keyboard("{ArrowDown}");
   const list = listbox(el);
@@ -2611,7 +2727,10 @@ test("the same letter pressed again inside 500 ms steps on to the next row start
 });
 
 test("keys with a modifier, and type-ahead on a closed multiple choice, change nothing", async () => {
-  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  const el = await mountWith(
+    '<wt-combobox label="Pantry" search="never" preserve-order></wt-combobox>',
+    PANTRY,
+  );
   const { trigger, popup } = fieldParts(el);
   const press = (init: KeyboardEventInit) =>
     !trigger.dispatchEvent(
@@ -2624,7 +2743,7 @@ test("keys with a modifier, and type-ahead on a closed multiple choice, change n
   expect(popup.matches(":popover-open")).toBe(false);
 
   const multi = await mountWith(
-    '<wt-combobox label="Pantry" search="never" multiple></wt-combobox>',
+    '<wt-combobox label="Pantry" search="never" multiple preserve-order></wt-combobox>',
     PANTRY,
   );
   fieldParts(multi).trigger.dispatchEvent(
@@ -2727,7 +2846,10 @@ test("Enter with no active row in a list without a search box picks nothing", as
 });
 
 test("a printable key in an open list without a search box moves to the next row starting with it", async () => {
-  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  const el = await mountWith(
+    '<wt-combobox label="Pantry" search="never" preserve-order></wt-combobox>',
+    PANTRY,
+  );
   fieldParts(el).trigger.focus();
   await userEvent.keyboard("{ArrowDown}");
   expect(activeRowText(el, listbox(el))).toBe("Pack a new one…");
@@ -2948,7 +3070,10 @@ test("a printable key that matches nothing opens the list with no row active", a
 });
 
 test("a printable key matching no row in an open list without a search box keeps the active row", async () => {
-  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', PANTRY);
+  const el = await mountWith(
+    '<wt-combobox label="Pantry" search="never" preserve-order></wt-combobox>',
+    PANTRY,
+  );
   fieldParts(el).trigger.focus();
   await userEvent.keyboard("{ArrowDown}{ArrowDown}");
   expect(activeRowText(el, listbox(el))).toBe("Olive");
@@ -3010,7 +3135,7 @@ test("type-ahead on a closed list ignores the search text left from an earlier o
 
 test("Space, Enter and printable keys in a list without a search box are consumed", async () => {
   const el = await mountWith(
-    '<wt-combobox label="Pantry" search="never" multiple></wt-combobox>',
+    '<wt-combobox label="Pantry" search="never" multiple preserve-order></wt-combobox>',
     PANTRY,
   );
   await userEvent.click(fieldParts(el).trigger);
@@ -3298,7 +3423,7 @@ function startPaddings(el: WtCombobox): string[] {
 }
 
 test("with no search text, a row is indented by its depth times --wt-space-4 beyond its own start padding", async () => {
-  const el = await mountWith('<wt-combobox label="Category"></wt-combobox>', TREE);
+  const el = await mountWith('<wt-combobox label="Category" preserve-order></wt-combobox>', TREE);
   host.style.setProperty("--wt-space-3", "10px");
   host.style.setProperty("--wt-space-4", "7px");
   await userEvent.click(fieldParts(el).trigger);
@@ -3314,7 +3439,7 @@ test("with no search text, a row is indented by its depth times --wt-space-4 bey
 
 test("the closed trigger shows a chosen option's valueLabel, while its row in the list shows its label", async () => {
   const el = await mountWith(
-    '<wt-combobox label="Category" value="cocktails"></wt-combobox>',
+    '<wt-combobox label="Category" value="cocktails" preserve-order></wt-combobox>',
     TREE,
   );
   expect(fieldParts(el).value.textContent!.trim()).toBe("Drinks › Alcoholic drinks › Cocktails");
@@ -3324,14 +3449,17 @@ test("the closed trigger shows a chosen option's valueLabel, while its row in th
 });
 
 test("a multiple choice with one option chosen shows that option's valueLabel", async () => {
-  const el = await mountWith('<wt-combobox label="Category" multiple></wt-combobox>', TREE);
+  const el = await mountWith(
+    '<wt-combobox label="Category" multiple preserve-order></wt-combobox>',
+    TREE,
+  );
   el.values = ["alcoholic"];
   await el.updateComplete;
   expect(fieldParts(el).value.textContent!.trim()).toBe("Drinks › Alcoholic drinks");
 });
 
 test("while searching, a row matches on its valueLabel and shows it, with no indent; clearing the search restores both", async () => {
-  const el = await mountWith('<wt-combobox label="Category"></wt-combobox>', TREE);
+  const el = await mountWith('<wt-combobox label="Category" preserve-order></wt-combobox>', TREE);
   host.style.setProperty("--wt-space-3", "10px");
   host.style.setProperty("--wt-space-4", "7px");
   await userEvent.click(fieldParts(el).trigger);
@@ -3351,7 +3479,10 @@ test("at phone width, a panel near the right edge that widens for a search's ful
   const [viewportWidth, viewportHeight] = [innerWidth, innerHeight];
   await page.viewport(390, 844);
   try {
-    const el = await mountWith('<wt-combobox label="Category" hide-label></wt-combobox>', TREE);
+    const el = await mountWith(
+      '<wt-combobox label="Category" hide-label preserve-order></wt-combobox>',
+      TREE,
+    );
     el.style.cssText = "position: fixed; left: 230px; top: 40px; width: 150px";
     await el.updateComplete;
     const { trigger, popup } = fieldParts(el);
@@ -3379,7 +3510,10 @@ test("at phone width, a panel near the right edge that widens for a search's ful
 });
 
 test("a panel opened near the bottom keeps its search box where it was while a search shrinks the list", async () => {
-  const el = await mountWith('<wt-combobox label="Category" hide-label></wt-combobox>', TREE);
+  const el = await mountWith(
+    '<wt-combobox label="Category" hide-label preserve-order></wt-combobox>',
+    TREE,
+  );
   el.style.cssText = `position: fixed; left: 20px; top: ${innerHeight - 60}px; width: 250px`;
   await el.updateComplete;
   const { trigger, popup } = fieldParts(el);
@@ -3418,7 +3552,10 @@ test("a described row shows its valueLabel while searching", async () => {
 });
 
 test("stable-width reserves the width of each option's closed text, its valueLabel when it has one", async () => {
-  const el = await mountWith('<wt-combobox label="Category" stable-width></wt-combobox>', TREE);
+  const el = await mountWith(
+    '<wt-combobox label="Category" stable-width preserve-order></wt-combobox>',
+    TREE,
+  );
   const reserved = [...el.shadowRoot!.querySelectorAll(".width-option")].map((span) =>
     span.textContent!.trim(),
   );
@@ -3467,7 +3604,7 @@ test('appearance="link" draws the chosen value then the action word, with no fie
 });
 
 test("the appearance property is reflected to its attribute, and defaults to the field", async () => {
-  const el = await mountWith('<wt-combobox label="Category"></wt-combobox>', TREE);
+  const el = await mountWith('<wt-combobox label="Category" preserve-order></wt-combobox>', TREE);
   expect(el.appearance).toBe("field");
   el.appearance = "link";
   await el.updateComplete;

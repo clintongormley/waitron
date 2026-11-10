@@ -172,8 +172,8 @@ export class TillStationChoiceDialog extends LitElement {
     const firstOption = moving
       ? currentListed
         ? []
-        : [{ value: NO_STATION, label: t("move_station.choose") }]
-      : [{ value: NO_STATION, label: t("move_station.rules") }];
+        : [{ value: NO_STATION, fixed: true, label: t("move_station.choose") }]
+      : [{ value: NO_STATION, fixed: true, label: t("move_station.rules") }];
     const options = [
       ...firstOption,
       ...this.stations.map((station) => ({

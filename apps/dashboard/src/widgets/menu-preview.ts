@@ -915,7 +915,7 @@ export class MenuPreviewPanel extends LitElement {
           label=${t("customer_menu.view")}
           .value=${view.kind === "internal" ? "internal" : view.language}
           .options=${[
-            { value: "internal", label: t("customer_menu.internal") },
+            { value: "internal", fixed: true, label: t("customer_menu.internal") },
             ...config.languages.map((language) => ({
               value: language,
               label: languageDisplayName(language, currentLocale()),

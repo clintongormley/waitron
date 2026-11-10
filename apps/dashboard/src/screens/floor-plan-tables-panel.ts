@@ -4,7 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import { createLabelComparator } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
-import { fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { PlanPlacement } from "../api/client.js";
 import {
@@ -276,7 +276,7 @@ export class FloorPlanTablesPanel extends LitElement {
   }
 
   override render() {
-    const compare = createLabelComparator();
+    const compare = createLabelComparator(currentLocale());
     const tables = [...this.draft.tables].sort((a, b) => compare(tableName(a), tableName(b)));
     return html`
       <div class="foot">

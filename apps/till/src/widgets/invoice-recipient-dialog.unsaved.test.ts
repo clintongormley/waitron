@@ -297,8 +297,10 @@ async function chooseDelivery(form: TillInvoiceRecipientDialog, value: string) {
   const field = deliveryField(form);
   field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
   await field.updateComplete;
-  const index = field.options.findIndex((option) => option.value === value);
-  field.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")[index]!.click();
+  const label = field.options.find((option) => option.value === value)!.label;
+  [...field.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")]
+    .find((row) => row.textContent!.trim() === label)!
+    .click();
   await form.updateComplete;
 }
 

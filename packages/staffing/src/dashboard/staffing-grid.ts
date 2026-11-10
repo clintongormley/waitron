@@ -755,6 +755,7 @@ export class StaffingGrid extends LitElement {
           ? nothing
           : html`<div class="fields">
                 <wt-combobox
+                  ?preserve-order=${true /* Preserve configured staff-role position. */}
                   name="staff-role"
                   label=${t("staffing.grid.staff_role")}
                   required

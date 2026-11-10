@@ -534,6 +534,7 @@ export class SeasonsWindow extends LitElement {
           aria-describedby=${startError ? startErrorId : nothing}
         >
           <wt-combobox
+            ?preserve-order=${true /* Preserve day chronology. */}
             name=${`season-${index}-day`}
             label=${t("season.day")}
             required
@@ -547,6 +548,7 @@ export class SeasonsWindow extends LitElement {
             @wt-change=${on("day")}
           ></wt-combobox>
           <wt-combobox
+            ?preserve-order=${true /* Preserve month chronology. */}
             name=${`season-${index}-month`}
             label=${t("season.month")}
             required

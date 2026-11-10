@@ -447,7 +447,7 @@ export class StaffingMonthView extends LitElement {
   #picker(areas: readonly StaffingArea[]) {
     const chosen = this.#chosen(areas);
     const options = [
-      { value: ALL, label: t("staffing.month.all_areas") },
+      { value: ALL, fixed: true, label: t("staffing.month.all_areas") },
       ...areas.map(({ area, name }) => ({ value: areaKey(area), label: name })),
     ];
     return html`<wt-combobox

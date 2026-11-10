@@ -627,6 +627,7 @@ export class CatalogueBrowser extends LitElement {
         ${
           this.operation === "move"
             ? html`<wt-combobox
+                ?preserve-order=${true /* Preserve category tree. */}
                 name="destination"
                 required
                 label=${t("folders.destination")}

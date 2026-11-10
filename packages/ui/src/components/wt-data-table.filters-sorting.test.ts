@@ -1,3 +1,4 @@
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanup, mount, mountInShadowRoot } from "../test-helpers.js";
@@ -5,11 +6,13 @@ import type { WtCombobox } from "./wt-combobox.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-data-table.js";
 
+const pageLanguage = document.documentElement.lang;
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   sessionStorage.clear();
   localStorage.clear();
+  document.documentElement.lang = pageLanguage;
 });
 
 type Row = { id: string; name: string; status: string; value?: string | number | null };
@@ -46,6 +49,47 @@ function rowKeys(el: WtDataTable<Row>): string[] {
     row.getAttribute("data-row-key")!,
   );
 }
+
+test("text rows re-sort when the page language changes", async () => {
+  document.documentElement.lang = "en";
+  // The native Spanish name supplies its accented n without duplicating translated text.
+  const label = SUPPORTED_LOCALES.find(({ code }) => code === "es-ES")!.label;
+  const plain = label.normalize("NFD").replace(/\p{M}/gu, "");
+  const el = await table({
+    rows: [
+      { id: "enye", name: label, status: "" },
+      { id: "n", name: plain, status: "" },
+    ],
+    columns: [nameColumn],
+    sortKey: "name",
+  });
+  expect(rowKeys(el)).toEqual(["enye", "n"]);
+  document.documentElement.lang = "es";
+  await expect.poll(() => rowKeys(el)).toEqual(["n", "enye"]);
+});
+
+test("filter dropdowns keep fixed anchors and declared lifecycle order", async () => {
+  const options = [
+    { value: "z", label: "Zulu" },
+    { value: "a", label: "Alpha" },
+    { value: "tail", label: "Missing", fixed: true },
+  ];
+  const el = await table({
+    rows: widthRows,
+    columns: [{ ...nameColumn, filter: { ...statusFilter, options } }],
+  });
+  await openFilters(el);
+  expect(await offeredLabels(el, "name")).toEqual(["Any status", "Alpha", "Zulu", "Missing"]);
+  el.columns = [{ ...nameColumn, filter: { ...statusFilter, options, preserveOrder: true } }];
+  await el.updateComplete;
+  const filter = el.shadowRoot!.querySelector<WtCombobox>('[data-filter="name"]')!;
+  await filter.updateComplete;
+  expect(
+    [...filter.shadowRoot!.querySelectorAll('[role="option"]')].map((row) =>
+      row.textContent!.trim(),
+    ),
+  ).toEqual(["Any status", "Zulu", "Alpha", "Missing"]);
+});
 
 function headerWidths(el: WtDataTable<Row>): number[] {
   return [...el.shadowRoot!.querySelectorAll("thead th")].map(

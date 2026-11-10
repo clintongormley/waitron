@@ -2608,6 +2608,7 @@ export class PaymentsScreen extends LitElement {
         <section slot="readers">
           <div class="reader-tools">
             <wt-combobox
+              ?preserve-order=${true /* Preserve active/disabled/all lifecycle. */}
               name="reader-status-filter"
               label=${t("payments.reader_col_status")}
               search="auto"

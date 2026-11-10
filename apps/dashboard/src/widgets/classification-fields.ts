@@ -63,6 +63,7 @@ export interface CategoryPathFieldOptions {
  */
 export function categoryPathField(options: CategoryPathFieldOptions) {
   return html`<wt-combobox
+    ?preserve-order=${true /* Preserve category tree. */}
     appearance="link"
     name=${options.name}
     label=${options.label}

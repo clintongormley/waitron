@@ -2782,6 +2782,7 @@ async function edgeMenu(up = false, fits = false) {
   box.style.cssText = "position:fixed;top:100px;left:40px;width:800px;height:300px;overflow:auto";
   el.parentElement!.append(box);
   box.append(el);
+  await settle(el);
   const key = up ? "edge-30" : "edge-0";
   const from = grip(el, key);
   if (up) box.scrollTop = from.getBoundingClientRect().top - box.getBoundingClientRect().top - 100;

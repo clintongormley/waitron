@@ -9,7 +9,7 @@ import {
   tableNoMatches,
 } from "@waitron/dashboard-kit";
 import { addDecimal, decimal, formatMoney } from "@waitron/shared";
-import { baseStyles, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, type ComboboxOption, type DataTableColumn } from "@waitron/ui";
 import { MAX_ENTRY_PAGE_SIZE } from "../entry-pages.js";
 import { isFullComp } from "../full-comp.js";
 import type {
@@ -561,7 +561,7 @@ export class AdjustmentReportScreen extends LitElement {
   }
 
   /** Every reason the range counted, by name, and the chosen one even when the range lost it. */
-  #reasonOptions(report: AdjustmentReport): { value: string; label: string }[] {
+  #reasonOptions(report: AdjustmentReport): ComboboxOption[] {
     const reasons = report.overall.byReason.map((reason) => ({
       id: reason.reasonId,
       name: reason.reasonName,
@@ -572,7 +572,7 @@ export class AdjustmentReportScreen extends LitElement {
     }
     reasons.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
     return [
-      { value: ALL_REASONS, label: t("adjustment_report.entries.all_reasons") },
+      { value: ALL_REASONS, fixed: true, label: t("adjustment_report.entries.all_reasons") },
       ...reasons.map((reason) => ({ value: reason.id, label: reason.name })),
     ];
   }

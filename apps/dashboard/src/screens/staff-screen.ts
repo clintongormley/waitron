@@ -489,7 +489,7 @@ export class StaffScreen extends LitElement {
           label=${t("staff.filter_role")}
           search="auto"
           .options=${[
-            { value: "all", label: t("staff.filter_all_roles") },
+            { value: "all", fixed: true, label: t("staff.filter_all_roles") },
             ...rolesByName().map((role) => ({ value: role, label: roleName(role) })),
           ]}
           .value=${this.roleFilter}
@@ -497,6 +497,7 @@ export class StaffScreen extends LitElement {
             (this.roleFilter = event.detail.value as PersonRole | "all")}
         ></wt-combobox>
         <wt-combobox
+          ?preserve-order=${true /* Preserve current/active/pending/suspended/all lifecycle. */}
           data-test="status-filter"
           name="status-filter"
           label=${t("staff.filter_status")}

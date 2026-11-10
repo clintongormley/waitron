@@ -446,6 +446,7 @@ export class ModifiersScreen extends LitElement {
         sortValue: (list) => this.#statusText(kind, list),
         cell: (list) => this.#statusText(kind, list),
         filter: {
+          preserveOrder: true, // Active before disabled.
           label: t(`${kind}.status`),
           allLabel: t(`${kind}.filter_status_all`),
           value: (list) => (list.active ? "active" : "inactive"),

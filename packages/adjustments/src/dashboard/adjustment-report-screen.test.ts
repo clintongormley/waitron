@@ -1705,7 +1705,7 @@ describe("the reason filter", () => {
     });
     expect(reasonField(el).value).toBe("r-staff");
     expect(reasonField(el).options).toEqual([
-      { value: "all", label: "All reasons" },
+      { value: "all", fixed: true, label: "All reasons" },
       { value: "r-staff", label: "Staff meal" },
     ]);
     expect(entriesTable(el).emptyMessage).toBe(tableNoMatches());

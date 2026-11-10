@@ -43,9 +43,10 @@ async function choose(form: TillStationTodayDialog, value: string) {
   const f = form.shadowRoot!.querySelector("wt-combobox")!;
   f.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
   await f.updateComplete;
-  f.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')[
-    f.options.findIndex((o) => o.value === value)
-  ]!.click();
+  const label = f.options.find((option) => option.value === value)!.label;
+  [...f.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')]
+    .find((option) => option.textContent!.trim() === label)!
+    .click();
   await form.updateComplete;
 }
 async function question(app: StationTodayLeaveApp) {

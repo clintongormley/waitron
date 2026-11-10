@@ -156,6 +156,7 @@ export class VatReturnScreen extends LitElement {
       <p class="intro">${t("vat_return.intro")}</p>
       <div class="form">
         <wt-combobox
+          ?preserve-order=${true /* Preserve year chronology. */}
           name="year"
           label=${t("vat_return.year")}
           required
@@ -167,6 +168,7 @@ export class VatReturnScreen extends LitElement {
             this.#change("year", event.detail.value)}
         ></wt-combobox>
         <wt-combobox
+          ?preserve-order=${true /* Preserve quarter chronology. */}
           name="period"
           label=${t("vat_return.period")}
           required

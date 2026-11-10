@@ -130,6 +130,15 @@ it.each([
           ? ["random-last", "random-middle", "random-first"]
           : ["random-first", "random-middle", "random-last"]),
       ]);
+      const field = combobox(el, "unit")!;
+      await field.updateComplete;
+      field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+      await field.updateComplete;
+      expect(
+        [...field.shadowRoot!.querySelectorAll('[role="option"]')].map((row) =>
+          row.textContent!.trim(),
+        ),
+      ).toEqual(labels);
       expect(units).toEqual(original);
     } finally {
       setLocale(before);
@@ -2332,12 +2341,7 @@ it("returns focus to the Modifiers control after every nested form it can open",
   }
 });
 
-type Combobox = HTMLElement & {
-  value: string;
-  values: string[];
-  placeholder: string;
-  options: { value: string; label: string }[];
-};
+type Combobox = HTMLElementTagNameMap["wt-combobox"];
 function combobox(el: ProductEditor, name: string) {
   return el.shadowRoot!.querySelector<Combobox>(`wt-combobox[name="${name}"]`);
 }
@@ -5271,7 +5275,7 @@ it("picks the unit from a shared dropdown behind the price field, Each being its
   expect(box.search).toBe("auto");
   expect(box.placeholder).toBe(t("editor.unit_each"));
   expect(box.options).toEqual([
-    { value: EACH_CHOICE, label: t("editor.unit_each") },
+    { value: EACH_CHOICE, fixed: true, label: t("editor.unit_each") },
     { value: unit.id, label: "Each (ea)" },
     { value: litre.id, label: "Litre (l)" },
   ]);

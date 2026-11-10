@@ -1151,7 +1151,12 @@ export class DashboardApp extends LitElement {
     this.addEventListener(THEME_SELECTED_EVENT, applyThemePick);
     // Repaint the shell on language changes; authenticated screens are recreated by their locale key.
     // Login observes the locale itself so its current attempt survives the switch.
-    new LocaleChangeController(this);
+    const applyLocale = () => {
+      document.documentElement.lang = currentLocale();
+      this.requestUpdate();
+    };
+    applyLocale();
+    new LocaleChangeController(this, applyLocale);
   }
 
   override connectedCallback(): void {
