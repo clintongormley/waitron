@@ -1,3 +1,24 @@
+> **2026-11-10, watcher's clearance:** the campaign watcher cleared this plan with four changes
+> (its words, 2026-11-10 17:16: "a watcher decision, not an owner approval"), folded in here, each
+> changed spot marked "2026-11-10 (watcher):". (1) Every pull request not yet built has a size in
+> lines, code and tests apart, in "Sizes" under "The cut, and why", and two are split before
+> building: 3b-5 into **3b-5a** (Tasks 5.1–5.6b: the pair link, the joining route and its words) and
+> **3b-5b** (Tasks 5.7–5.10: the store and its listener); 3b-6 into **3b-6a** (Tasks 6.1–6.5, 6.3b,
+> 6.3c, and 6.7: the copy and finishing), **3b-6b** (Tasks 6.8a–6.10: the two-box test and the guide)
+> and **3b-6c** (Tasks 6.5b–6.5d and 6.9b: the backup-settings push). So there are eleven pull
+> requests, not eight. The watcher listed the push before the test; the letters here follow the
+> order they can land in, because Task 6.9b adds its phases to the test file Task 6.8b creates. The
+> watcher's ranges did not name Task 6.7 (the joined screen's words); it goes in 3b-6a, because its
+> words become true there. (2) Task 6.9's `main-restart-mid-join` phase keeps its new check, that
+> the join still finishes after the main box restarts mid-copy, and drops the repeated check that
+> the main box does not wait and reads the spare as `J`, with its control: Task G.3b proves that on
+> a real boot. (3) Task 5.6's Step 3 cites the lines that set a box to keep its clock by internet
+> time. (4) Nothing else: the only other edits are what the splits need (each part's own final
+> checks, Task 6.7's place, and `@waitron/store` added to the typechecks of 3b-5b and 3b-6a, whose
+> tasks change its `state-layout.ts`). PR 3b-3's tasks are unchanged (it is being built). The dated notes
+> below, and the review-response tables at the end, name "3b-5" and "3b-6" as they were when written;
+> which part holds each task is in the header facts.
+
 > **2026-11-10, revision answering the Fable review**
 > (`~/waitron-campaign/item-a947-3b-fable-review.md`, 13 findings; each has a row in "Review response
 > (Fable review → revision of 2026-11-10)" at the end, and each changed spot is marked "2026-11-10
@@ -102,47 +123,73 @@ the slice table (`:776-796`) and "Slice 3 as built" (`:1731-1760`, Rulings R12 a
 
 ## The header facts, for scheduling
 
-- **Eight pull requests**, in order: 3b-1, 3b-2, 3b-3, 3b-4, 3b-5, **3b-G**, 3b-6, then **3b-F**.
+- **Eleven pull requests** (**2026-11-10 (watcher):** eight before 3b-5 and 3b-6 were split), in
+  order: 3b-1, 3b-2, 3b-3, 3b-4, 3b-5a, 3b-5b, **3b-G**, 3b-6a, 3b-6b, 3b-6c, then **3b-F**.
   Each leaves `main` green and working on its own (the cut is explained below). 3b-1 depends on
   nothing and may be built beside the others. 3b-3 comes after 3b-2: Tasks 3.1 and 3.3 call
   `boxHostnameFor`, which Task 2.1 creates. 3b-G comes after 3b-4 (Task G.2 calls Task 4.1's
-  lookup) and may be built beside 3b-5. **3b-6 lands only after 3b-G is on `main`**, because 3b-6
-  is what makes a lost `node.db` dangerous (fact 16) and 3b-G holds the refusal for it.
-  **2026-11-10 (Fable review):** 3b-6 also needs lane J's A1342 landed. Its endorsement half is
-  #2651 (`86fc25ff13`) and its stop on newer backup evidence is #2654 (`ecab367313`), both on
-  `main` (`git log --oneline | grep "#2651\|#2654"`); the owner accepted that stop as clearing the
-  before-3b-6 gate (`docs/backlog/replication-cloud.md:526-527`). Before 3b-6 is built, the session
-  running this plan checks with the watcher that no other part of A1342 is meant to come first.
-  The order 3b-3, 3b-4, 3b-5, 3b-G, 3b-6, 3b-F is unchanged, and 3b-6 waits for no owner answer.
-- **Fiscal: two of the eight, both landed by the owner.** **3b-G** changes the start steps that
+  lookup) and may be built beside 3b-5a and 3b-5b.
+  - **2026-11-10 (watcher): which tasks each split part holds.** **3b-5a**, the pair link, the
+    joining route and its words: Tasks 5.1, 5.2, 5.3, 5.4, 5.5, 5.5b-1, 5.5b-2, 5.6, 5.6b and its
+    final checks, Task 5.6c. **3b-5b**, the store and its listener: Tasks 5.7, 5.8, 5.9, 5.10 and
+    its final checks, Task 5.11; built after 3b-5a, whose pair link (Task 5.1) and store port
+    setting (Task 5.5) it reads. **3b-6a**, the copy and finishing: Tasks 6.1, 6.2, 6.3, 6.3b,
+    6.3c, 6.4, 6.5, 6.7 and its final checks, Task 6.7b. **3b-6b**, the two-box test and the guide:
+    Tasks 6.8a, 6.8b, 6.8c, 6.9 and 6.10, whose final checks are its own. **3b-6c**, the
+    backup-settings push: Tasks 6.5b, 6.5c, 6.5d, 6.9b and its final checks, Task 6.10b; after
+    3b-6b, because Task 6.9b adds phases to the test file Task 6.8b creates and places them around
+    the phases of Tasks 6.8c and 6.9. 3b-6a comes after 3b-5b (Task 6.1 streams to the store Tasks
+    5.7 and 5.8 run). Where the rest of the plan says "3b-5" or "3b-6" with no letter, it means all
+    the parts of that pull request.
+  - **3b-6a lands only after 3b-G is on `main`** (2026-11-10 (watcher): the rule said "3b-6"), because 3b-6a is what makes a lost `node.db`
+    dangerous: fact 16's danger is a spare whose `venue.db` holds the main box's sales and its own
+    `nodes` row, which is what 3b-6a's copy brings (Tasks 6.3–6.5), and 3b-G holds the refusal for
+    it (Task G.3). **2026-11-10 (watcher):** 3b-6b and 3b-6c build on 3b-6a's code, so they land
+    after it, and so after 3b-G too; the rule needs nothing more of them.
+  - **2026-11-10 (Fable review):** 3b-6 also needs lane J's A1342 landed (**2026-11-10 (watcher):**
+    from 3b-6a, its first part). Its endorsement half is
+    #2651 (`86fc25ff13`) and its stop on newer backup evidence is #2654 (`ecab367313`), both on
+    `main` (`git log --oneline | grep "#2651\|#2654"`); the owner accepted that stop as clearing the
+    before-3b-6 gate (`docs/backlog/replication-cloud.md:526-527`). Before 3b-6a is built, the session
+    running this plan checks with the watcher that no other part of A1342 is meant to come first.
+    The order 3b-3, 3b-4, 3b-5, 3b-G, 3b-6, 3b-F is unchanged (**2026-11-10 (watcher):** with 3b-5
+    and 3b-6 each landing as its parts, in letter order), and 3b-6 waits for no owner answer.
+- **Fiscal: two of the eleven, both landed by the owner** (**2026-11-10 (watcher):** "of the
+  eight" before the split; none of the five split parts is FISCAL). **3b-G** changes the start steps that
   decide whether a box files: what the start check trusts, how the boot reconcile reaches a peer,
   a new start refusal for a box that lost its `node.db`, and (**2026-11-10 (Fable review)**, D19,
   D16 judgement 3) how the start check reads a spare that answers that it is still joining (D16; house precedent: A1018 Slice 3,
   "decides, before the first filing pass, whether a box may file", landed as FISCAL, #2436). **3b-F**
   lets a venue that files with Veri*Factu add a spare; its content depends on the owner's question
-  Q1. By their file lists, the other six touch nothing in `packages/fiscal-verifactu` and add no
+  Q1. By their file lists, the other nine (**2026-11-10 (watcher):** six before the split) touch
+  nothing in `packages/fiscal-verifactu` and add no
   start refusal. **Two of their tasks do touch the start check, and stay out of 3b-G by a judgement
   the owner may overrule (D16):** Task 4.1 (in 3b-4) changes how the start check reaches another
-  box by name, and Task 6.2 (in 3b-6) writes the spare's `nodes` row, which the already-landed start
-  check then counts. Each PR's body says so in its first line.
-- **Migration: yes, in `node.db` only**, in 3b-5: a new table `node_pair_link` in the node
-  migration set (`packages/node-db/drizzle`). No `venue.db` migration in any of the eight.
+  box by name, and Task 6.2 (in 3b-6a, **2026-11-10 (watcher)**) writes the spare's `nodes` row,
+  which the already-landed start check then counts. Each of those two PRs' bodies says so in its
+  first line.
+- **Migration: yes, in `node.db` only**, in 3b-5a (**2026-11-10 (watcher):** Task 5.1 is in
+  3b-5a; 3b-5b changes no migration): a new table `node_pair_link` in the node
+  migration set (`packages/node-db/drizzle`). No `venue.db` migration in any of the eleven.
   **2026-11-08:** since A1308 1a (#2628) every migration set holds exactly one starting migration,
   and the node set's is `0000_baseline.sql`. Task 5.1 changes the TypeScript schema and runs
   `pnpm --filter @waitron/node-db db:generate` (`packages/node-db/package.json:14`:
   `migration-baseline rebuild --set node`), which rebuilds that starting migration;
   `scripts/starting-migrations.test.ts` refuses a second file (its cases "every set holds one
   starting migration and nothing else" and "refuses an additional migration in a copy" ran, P31).
-  The rebuild edits a migration that has shipped, so under CLAUDE.md §3 3b-5 ships only with a
-  venue reset, named in its PR's first line (Task 5.11). Revision 4's "no venue reset is needed: the
+  The rebuild edits a migration that has shipped, so under CLAUDE.md §3 3b-5a ships only with a
+  venue reset, named in its PR's first line (Task 5.6c; **2026-11-10 (watcher):** was 3b-5 and
+  Task 5.11). Revision 4's "no venue reset is needed: the
   table is additive" no longer holds. The D18 amendment adds no migration.
-- **Review path: full** for 3b-2 to 3b-6, 3b-G and 3b-F. They touch trust and authentication (keys,
+- **Review path: full** for 3b-2 to 3b-6 (**2026-11-10 (watcher):** every part of 3b-5 and 3b-6),
+  3b-G and 3b-F. They touch trust and authentication (keys,
   certificates, an access key, who a box believes, what a mirror serves to the network),
   cross-package contracts (`@waitron/node-db`, `@waitron/membership`'s chart minting, the stream's
   target in `stream-host.ts`, the till's server router) and, in 3b-G and 3b-F, whether a box may
   file and when a fiscal module's spare may exist. **2026-11-08:** D18 adds two contracts to 3b-6's
   list (`@waitron/shared`'s `HandoverKind` and `@waitron/handover`'s envelope kinds, Task 6.5b) and
-  one to 3b-5's (the joining bundle's `backupSettings`, Task 5.5b-2); both PRs were already full. 3b-1 (a binary and its licence notices in the
+  one to 3b-5's (the joining bundle's `backupSettings`, Task 5.5b-2); both PRs were already full.
+  **2026-11-10 (watcher):** those land in 3b-6c and 3b-5a. 3b-1 (a binary and its licence notices in the
   image) touches no risk trigger and takes the light path. The Codex run-it seat runs on every
   branch.
 
@@ -386,7 +433,7 @@ the end, which gives the command and what it printed.
     (`box-reach.ts:104-112`), but those are reached through the box already.
 24. **The setup app's joined screen says the join stalls**, and sends the person to "whoever
     installed this server" (`apps/setup/src/i18n/strings/finish.ts:73-81`). True until the join
-    finishes, so its words change in 3b-6, not before.
+    finishes, so its words change in 3b-6, not before (**2026-11-10 (watcher):** in 3b-6a, with the copy, Task 6.7).
 25. **Every start also runs a second, plain-HTTP app on the landing port.** `startLandingListener`
     (`boot.ts:849-880`) serves `buildLandingApp` on `config.landingPort` at `config.httpHost`; the
     full start, mirrors included, calls it (`boot.ts:3736`), as do the setup, latch, restricted and
@@ -432,20 +479,50 @@ the end, which gives the command and what it printed.
 | **3b-2** | Each box's own name in its chart row and mDNS answers; the mDNS lookup that ignores the box's own answers; who answers `waitron.local`; the console's second address; tills show one line per box | a one-box venue keeps selling at `waitron.local`; nothing calls the lookup yet | no | no | full |
 | **3b-3** | A joining spare's authority becomes the venue's, installed with its leaf, and marked; both resets empty `tls/` and `secrets.env` on a box that joined; every start checks the leaf's names and signer | no spare finishes joining yet; a main box's files are unchanged but for its leaf's added name | no | no | full |
 | **3b-4** | Boxes reach and trust each other: the lookup in every box-to-box call, a mirror that listens on the network with its landing pages and its promotion kept to its own screen (**2026-11-10 (Fable review):** R13's charts that vouch for every listed box landed as #2651, so Task 4.4 is dropped; the open dashboard was removed by A1113, #2592) | no box has a counted peer before 3b-6, so the start check still proceeds | no (D16 judgement 1) | no | full |
-| **3b-5** | The store on the spare and the pair's access key: `node_pair_link`, a joining route that needs no relay and refuses first, the spare passing each refusal on in its own words, the spare running versitygw behind a TLS listener that checks the main box's client certificate, the bucket screen and rotation refusing while a spare is joined; the join carries the main box's backup settings (D18) | the store runs and receives nothing | no | **yes**: `node.db`'s starting migration is rebuilt, so it ships with a venue reset (correction (1)) | full |
+| **3b-5a** (2026-11-10 (watcher): first part of 3b-5) | The pair link and the joining route: `node_pair_link`, a joining route that needs no relay and refuses first, the pair's access key handed out and kept, the spare passing each refusal on in its own words, the setup app's words; the join carries the main box's backup settings (D18) | the spare still never finishes joining (fact 2), and nothing reads the pair's key yet | no | **yes**: `node.db`'s starting migration is rebuilt, so it ships with a venue reset (correction (1)) | full |
+| **3b-5b** (2026-11-10 (watcher): second part of 3b-5) | The store and its listener: the spare running versitygw behind a TLS listener that checks the main box's client certificate, the bucket screen and rotation refusing while a spare is joined | the store runs and receives nothing | no | no | full |
 | **3b-G** | The start steps that decide whether a box files: the start check trusts only the venue authority (R12); the boot reconcile reaches a real box; a box with a lost `node.db` refuses to start (A1274); **2026-11-10 (Fable review; claim check):** a spare still joining says so, and the start check sets it aside, so a counted spare still joining never makes the main box wait on its own (D19, Task G.3b) | no box has a counted peer or a mirror link to a real box before 3b-6, so on a real venue only the A1274 refusal can fire, and only on a box that holds a chart naming it but no mode row | **yes — the owner lands it** (D16) | no | full |
-| **3b-6** | Joining brings the data: the main box streams to the spare and writes its `nodes` row when the store answers; the spare restores, places and checks its first copy and finishes joining; a two-box end-to-end test on a main box without Veri*Factu; the setup app's and the guide's words; the joining spare reads its stream key from the backup settings the join gave it, the main box sends it every later change, and a main box with no backup recovery key refuses a join (D18; the owner's answer to Q2, 2026-11-10) | a venue that does not file with Veri*Factu adds a spare end to end; a Veri*Factu venue is still refused before anything is reserved | no (D16 judgement 2) | no | full |
-| **3b-F** | A Veri*Factu venue can add a spare (Q1 decides how); the stream loop's Veri*Factu box B gains its spare steps | lands last; until then the refusal of 3b-5 stands | **yes — the owner lands it** | no | full |
+| **3b-6a** (2026-11-10 (watcher): first part of 3b-6) | Joining brings the data: the main box streams to the spare and writes its `nodes` row when the store answers; the spare restores, places and checks its first copy and finishes joining; the joining spare reads its stream key from the backup settings the join gave it, and a main box with no backup recovery key refuses a join (D18; the owner's answer to Q2, 2026-11-10); the setup app's words, its joined screen's included | a venue that does not file with Veri*Factu adds a spare end to end; a Veri*Factu venue is still refused before anything is reserved | no (D16 judgement 2) | no | full |
+| **3b-6b** (2026-11-10 (watcher): second part of 3b-6) | A two-box end-to-end test on a main box without Veri*Factu, with the two test seams it needs in `boot.ts`; the guide's section on adding a spare | it adds a test file, optional test seams in `boot.ts` (Task 6.8a), and guide words | no | no | full |
+| **3b-6c** (2026-11-10 (watcher): third part of 3b-6) | The backup-settings push: the spare's route that takes the settings its main box signs, the main box's duty that sends every later change and catches up a spare that was off, new words for `handover.backup_settings_differ`, and their two-box phases (D18) | until it lands, the spare holds the settings the join gave it, and a handover after a change is refused `handover.backup_settings_differ`, as the offer's comparison does today (Task 6.5d) | no | no | full |
+| **3b-F** | A Veri*Factu venue can add a spare (Q1 decides how); the stream loop's Veri*Factu box B gains its spare steps | lands last; until then the refusal of 3b-5a (2026-11-10 (watcher)) stands | **yes — the owner lands it** | no | full |
 
 Why this order: names (3b-2) and the authority (3b-3) before trust, because 3b-4 and 3b-G pin
 `tls/ca.crt` and find boxes by their own names; trust before data, because 3b-6's main box must
 verify the spare and the spare the main box; the store before the stream; 3b-G before 3b-6, because
-3b-6 makes a lost `node.db` dangerous; the Veri*Factu change last. The owner lands two PRs: 3b-G,
-which can be ready as soon as 3b-4 lands, and 3b-F. The other six never wait for the owner, though
-3b-6 waits for 3b-G to be on `main`. A venue with the Veri*Factu module switched off proves 3b-6 end
-to end without 3b-F: the main box's own modules are what the join checks (D12), and with
+3b-6 makes a lost `node.db` dangerous (**2026-11-10 (watcher):** 3b-6a's copy does); the Veri*Factu change last. The owner lands two PRs: 3b-G,
+which can be ready as soon as 3b-4 lands, and 3b-F. The other nine never wait for the owner, though
+3b-6a waits for 3b-G to be on `main` (**2026-11-10 (watcher):** "the other six" and "3b-6" before
+the split; 3b-6b and 3b-6c come after 3b-6a). A venue with the Veri*Factu module switched off
+proves 3b-6 end to end without 3b-F (in 3b-6b's two-box test): the main box's own modules are what
+the join checks (D12), and with
 `{"fiscal-verifactu": false}` the refusal does not fire, while the stream loop's
 `{"fiscal-none": false}` refuses `module.operation_invalid` (probe P24).
+
+**Sizes (2026-11-10 (watcher)).** Lines changed (added plus removed), production code and tests apart.
+
+| PR | State | Tasks | Code | Tests | Total |
+| --- | --- | --- | --- | --- | --- |
+| 3b-1 (#2721, `5079524221`) | landed, measured | 2 | 4,468, of which 3,733 are versitygw's generated licence text and 735 hand-written | 319 | 4,787 |
+| 3b-2 (#2742, `2eee23d7f4`) | landed, measured | 7 | 457 | 1,519 (1,494 tests, 25 test support) | 1,976 |
+| 3b-3 | being built; estimate | 4 | about 350 | about 700 | about 1,050 |
+| 3b-4 | estimate | 5 | about 300 | about 850 | about 1,150 |
+| 3b-5a | estimate | 10 | about 800, plus about 170 lines of rebuilt migration and snapshot | about 1,350 | about 2,300 |
+| 3b-5b | estimate | 5 | about 400 | about 650 | about 1,050 |
+| 3b-G | estimate | 5 | about 220 | about 950 | about 1,150 |
+| 3b-6a | estimate | 9 | about 700 | about 1,250 | about 1,950 |
+| 3b-6b | estimate | 5 | about 70, plus about 90 lines of guide | about 850, most of it test support (the two-box harness and phases) | about 1,000 |
+| 3b-6c | estimate | 5 | about 300 | about 750 | about 1,050 |
+| 3b-F | estimate, under Q1's option (c) | 4 | about 50 | about 450 | about 500 |
+
+Method: the landed rows are `git show --numstat` of each squash commit, counting `*.test.*` files as
+tests, `src/testing/` as test support, and leaving out documentation (58 lines in 3b-1, 60 in
+3b-2); this gives 3b-2 1,976 lines, not the watcher's 1,841, which this count does not reproduce. The other
+rows are estimates, not counts: each task's Files and Step 1 lists were judged against 3b-2's
+measured rate of about 75 code and 250 test lines for each of its six building tasks, and the
+migration's share from the node set's snapshot today (8 tables in 503 lines;
+`packages/node-db/drizzle/meta/0000_snapshot.json`). By this estimate 3b-5a is the largest, above
+3b-2's measured size.
 
 ## Which A1018 slices each 3b PR unblocks
 
@@ -461,16 +538,16 @@ the A1018 plan, not run.
 
 | A1018 piece | What stops it on real boxes today | Unblocked by |
 | --- | --- | --- |
-| Slice 3 (landed): the start check counts a joined spare | no box has finished joining (fact 2); the main box cannot verify the spare's signed answer (R13) and does not pin its certificate (R12) | 3b-G (R12), 3b-6 (the `nodes` row); **2026-11-10 (Fable review):** R13 by #2651, on `main` |
+| Slice 3 (landed): the start check counts a joined spare | no box has finished joining (fact 2); the main box cannot verify the spare's signed answer (R13) and does not pin its certificate (R12) | 3b-G (R12), 3b-6a (the `nodes` row; **2026-11-10 (watcher):** was 3b-6); **2026-11-10 (Fable review):** R13 by #2651, on `main` |
 | Slice 4 (#2442, open): the final copy served to the selected box | M2 asks M1 by a signed query (A1018 plan Task 4.8): it needs M1's own address, the lookup and trust, and M1 must know M2's key | 3b-2 (addresses), 3b-4 (lookup, trust); R13 by #2651 (2026-11-10 (Fable review)) |
-| Slice 5: controlled handover, server | M1 cannot reach a mirror bound to loopback (fact 6); Task 5.3 refuses `handover.destination_unaddressable` while M2's chart address equals M1's; M1 cannot find M2 by name; M2 never finished joining | 3b-2, 3b-4, 3b-G, 3b-6 for a non-Veri*Factu venue. For a Veri*Factu venue: 3b-F, and — under Q1's default — the activation itself must first write the spare's dormant setup (fact 18), which neither the A1018 plan nor A947's 4b says today |
+| Slice 5: controlled handover, server | M1 cannot reach a mirror bound to loopback (fact 6); Task 5.3 refuses `handover.destination_unaddressable` while M2's chart address equals M1's; M1 cannot find M2 by name; M2 never finished joining | 3b-2, 3b-4, 3b-G, 3b-6a for a non-Veri*Factu venue; **2026-11-10 (watcher):** and 3b-6c, without which a handover after the main box's backup settings change is refused `handover.backup_settings_differ` (Task 6.5d). For a Veri*Factu venue: 3b-F, and — under Q1's default — the activation itself must first write the spare's dormant setup (fact 18), which neither the A1018 plan nor A947's 4b says today |
 | Slice 6: controlled handover screens | the dashboard opens "M2's own handover page", which needs an address of M2's own | 3b-2 (the address), 3b-3 (its certificate). Whether each till platform finds a two-part `.local` name stays A947 4d's measurement |
 | Slice 7: emergency handover, server | as Slice 5, plus a copy on M2 | as Slice 5; the continuous copy is 3c |
 | Slice 8: emergency declaration page | reached at M2's own address | 3b-2, 3b-3; passkeys there wait for A947 4b/4d (A1018 decision 9, `2026-11-02-a1018-handover-build.md:322-323`) |
 | Slices 10–11: the return batch | M1 ↔ M2 calls over the venue's network, after a handover | 3b-4 for the calls; a handover first needs Slices 5 or 7, so as those |
 | Slices 12a–12b: the reconciliation list and the VAT return line | nothing of their own on the network: they act on what Slice 11 returned | reachable when Slices 10–11 are |
-| Slice 13: becoming the spare | the returning box must join as a spare | 3b-6; for a Veri*Factu venue also 3b-F |
-| Slice 14: a last copy from a selected backup | it places a backup as the copy of a spare (`2026-11-02-a1018-handover-build.md:3705-3713`), so it needs a joined spare | 3b-6; for a Veri*Factu venue also 3b-F |
+| Slice 13: becoming the spare | the returning box must join as a spare | 3b-6a (2026-11-10 (watcher): was 3b-6); for a Veri*Factu venue also 3b-F |
+| Slice 14: a last copy from a selected backup | it places a backup as the copy of a spare (`2026-11-02-a1018-handover-build.md:3705-3713`), so it needs a joined spare | 3b-6a (2026-11-10 (watcher): was 3b-6); for a Veri*Factu venue also 3b-F |
 
 ## The backlog items this plan was asked to place
 
@@ -492,7 +569,7 @@ the A1018 plan, not run.
 | A1284, an environment-set vault key | no | no production box sets it (`deploy/` names none, per the entry) |
 | A1285, the staged reset and `secrets.env` | **partly** | Task 3.2: on a box that joined, the staged reset now removes `secrets.env` (fact 19). The entry's other cases are untouched |
 | A1295, the venue authority pair in backups | **yes, by removal** | Task 3.1: a joined spare's authority becomes its `tls/ca.crt` and `tls/ca.key`, which backup verification already checks as a pair; `venue-ca.*` go |
-| A spare's backup settings (the owner's answer of 2026-11-04, A1018 Slice 5's Ruling O3): joining gives `backup.env`, later changes follow, and a spare that was off catches up | **yes** (amendment of 2026-11-08, revised 2026-11-10) | Decision D18. Tasks 5.5b-1 and 5.5b-2 (3b-5): the join carries it. Task 6.3 (3b-6): the joining spare's first copy reads its stream key from it. Tasks 6.5b and 6.5c (3b-6): the spare's route, on its full start, and the main box's duty that sends every change from the spare's first full start on, and until a spare that was off answers. Tasks 6.3b and 6.3c (3b-6): a main box with no recovery key refuses a join, the option the owner chose for Q2 (2026-11-10). Task 6.5d: words for the existing refusal. Task 6.9b: the two-box phases. The offer's comparison stays the check before the main box stops selling. A1273's key ring stays under D7, and D18 says why |
+| A spare's backup settings (the owner's answer of 2026-11-04, A1018 Slice 5's Ruling O3): joining gives `backup.env`, later changes follow, and a spare that was off catches up | **yes** (amendment of 2026-11-08, revised 2026-11-10) | Decision D18 (**2026-11-10 (watcher):** parts as split). Tasks 5.5b-1 and 5.5b-2 (3b-5a): the join carries it. Task 6.3 (3b-6a): the joining spare's first copy reads its stream key from it. Tasks 6.5b and 6.5c (3b-6c): the spare's route, on its full start, and the main box's duty that sends every change from the spare's first full start on, and until a spare that was off answers. Tasks 6.3b and 6.3c (3b-6a): a main box with no recovery key refuses a join, the option the owner chose for Q2 (2026-11-10). Task 6.5d (3b-6c): words for the existing refusal. Task 6.9b (3b-6c): the two-box phases. The offer's comparison stays the check before the main box stops selling. A1273's key ring stays under D7, and D18 says why |
 | A1296, code-quality follow-ups from 3a | no | none is on 3b's path except the hand-written HTTPS client; 3b extends `boxExchange`; `boxDownload` is D4's one exception |
 
 ---
@@ -757,7 +834,7 @@ the A1018 plan, not run.
   `boot.ts:1904-1909`; the round-3 check did not name this one, and it is included by the same
   rule) and Task G.3 (a lost `node.db` refuses to start, so the box neither sells nor files);
   **2026-11-10 (Fable review):** Task G.3b joins them, by judgement 3 below.
-  Isolating them keeps 3b-4, 3b-5 and 3b-6 autonomous. **Two judgements** keep two tasks that touch
+  Isolating them keeps 3b-4, 3b-5 and 3b-6 (**2026-11-10 (watcher):** every part of each) autonomous. **Two judgements** keep two tasks that touch
   the start check out of 3b-G; the owner may overrule either.
 
   **Judgement 1, Task 4.1 (3b-4).** The start check sends every peer query through `boxExchange`
@@ -768,29 +845,32 @@ the A1018 plan, not run.
   stops it filing (`:218`); before Task 4.1 a `.local` peer is never reached in the box image (fact
   7), so such an answer cannot arrive. It stays in 3b-4 because `boxExchange` is also what the
   spare's setup uses to find the main box: moving it would put the joining path of 3b-4 and 3b-5
-  behind the owner's landing. In practice its effect on the start check before 3b-6 is small: until
+  (**2026-11-10 (watcher):** 3b-5a, which holds the joining route) behind the owner's landing. In
+  practice its effect on the start check before 3b-6a is small: until
   3b-2 every box's address is `https://waitron.local`, which the check skips as its own address,
-  and no box has a counted peer before 3b-6 (round-4 claim check, I2; read, not run). 3b-4's PR body
+  and no box has a counted peer before 3b-6a (round-4 claim check, I2; read, not run). 3b-4's PR body
   says in its first line: "From this PR, a box's start check can reach another box listed by a
   `.local` name, so an answer from such a box can now stop it filing at start; nothing else in the
   check changes." If the owner reads that as a fiscal change, 3b-4 is relabelled and waits for the
   owner.
 
-  **Judgement 2, Task 6.2 (3b-6)** writes
+  **Judgement 2, Task 6.2 (3b-6a; 2026-11-10 (watcher): was 3b-6)** writes
   the spare's `nodes` row, after which the landed start check counts the spare, so a main box with
   a silent spare waits at its start. That is the rule the owner already landed (CLAUDE.md §5: a box
   "asks it by signed query before selling or filing, and waits while every box it counts is
-  silent"); Task 6.2 changes neither the check's code nor its rule, so 3b-6 is not labelled FISCAL.
-  3b-6's PR body says in its first line that from this PR a main box with a joined spare waits at
-  start while the spare is silent. If the owner reads that as a fiscal change, 3b-6 is relabelled
-  and waits for the owner; nothing else in the cut moves.
+  silent"); Task 6.2 changes neither the check's code nor its rule, so 3b-6a is not labelled FISCAL.
+  3b-6a's PR body says in its first line that from this PR a main box with a joined spare waits at
+  start while the spare is silent. If the owner reads that as a fiscal change, 3b-6a is relabelled
+  and waits for the owner; nothing else in the cut moves. **2026-11-10 (watcher):** this judgement and its
+  first line go with Task 6.2, in 3b-6a.
 
   **Judgement 3, Task G.3b (3b-G), 2026-11-10 (Fable review; lane A decision, 2026-11-10 (Fable
   review); mechanism replaced by lane A decision, 2026-11-10 (claim check)).** D19 changes the start
   check's own code (how it reads a counted box that says it is joining) and what the latch start's
   status route answers, so the main box proceeds where today it waits. That is a start step
   deciding whether a box files, so it goes in the owner-landed 3b-G. It is a judgement the owner may
-  overrule both ways: to move G.3b into 3b-6 (where the `nodes` row is first written, Task 6.2), or
+  overrule both ways: to move G.3b into 3b-6a (where the `nodes` row is first written, Task 6.2;
+  2026-11-10 (watcher): was 3b-6), or
   to refuse D19 and keep today's wait, accepting finding 1's two-way wait as the cost (lifted only
   by an administrator's Carry on). 3b-G's PR body names it.
 - **D17 — One spare per venue in 3b, and an unfinished join can be cleared.** The pair link holds
@@ -878,7 +958,7 @@ the A1018 plan, not run.
     key is replaced soon after. 3c, which makes the spare follow the stream into that file, must
     allow for that row from the spare's first start as a mirror. Backups do not run on it
     (`backup-supervisor.ts:401`: enabled only on the primary). Read, not run.
-  - **(i) At joining** (Tasks 5.5b-1 and 5.5b-2, 3b-5): the bundle carries `backupSettings` beside
+  - **(i) At joining** (Tasks 5.5b-1 and 5.5b-2, 3b-5a, 2026-11-10 (watcher)): the bundle carries `backupSettings` beside
     `credentialsRing` and `moduleOverrides`. The spare checks it with the same check the writer uses
     (Task 5.5b-1), so a bundle carrying a name or value the writer would refuse is
     `mirror.bundle_fetch_failed` (`mirror-bundle-fetch.ts:393`) before adopt writes anything
@@ -888,7 +968,7 @@ the A1018 plan, not run.
     joined: the staged reset gains it (today it keeps it, `reset-request.test.ts:239`; the list is
     `reset-request.ts:109-117`), and `waitron.sh reset` already empties every state entry but `tls/`
     and `records/` (`deploy/waitron.sh:806-809`).
-  - **(ii) Every later change, and (iii) a spare that was off** (Tasks 6.5b and 6.5c, 3b-6): the
+  - **(ii) Every later change, and (iii) a spare that was off** (Tasks 6.5b and 6.5c, 3b-6c, 2026-11-10 (watcher)): the
     main box pushes. A duty on the one main box runs while its pair link is `streaming` (Task 6.2:
     the spare's store has answered), the same state in which it streams to the spare (Task 6.1).
     Every 5 seconds it reads its own file and, when the digest differs from the last one this spare
@@ -1109,7 +1189,7 @@ can refuse any of them.
 | 8 | §4 item 1: a rotation's previous key travels in the bundle | rotation is refused while a spare holds the ring; a spare that finished joining cannot be removed in this version, so its venue does not rotate (D7) | nothing sends a new ring to a spare | no |
 | 9 | (not in the design) resets | a box that joined another empties `tls/` and `secrets.env` on reset (D13) | otherwise a reused box keeps the old venue's authority and key ring | no |
 | 10 | §11: the first full copy "measured on the pinned Litestream with the internet unplugged" in 3b | the owner measures it after 3b-6 lands; 3b's PRs land without it; the backlog entry stays open until then (D14) | the measurement needs two real boxes, which no implementer has | no |
-| 11 | §11: "every slice adds its step to the stream loop test" | 3b-6's two-box steps run in a new file, `spare-join.e2e.test.ts`, on a main box with the Veri*Factu module switched off; the stream loop's box B gains its spare steps in 3b-F (Task F.2b) | the loop's box B files with Veri*Factu, so its join is refused until 3b-F (probe P24); a test that cannot pass when its PR lands is not planned | no |
+| 11 | §11: "every slice adds its step to the stream loop test" | 3b-6's two-box steps (**2026-11-10 (watcher):** 3b-6b's, with 3b-6c's phases added) run in a new file, `spare-join.e2e.test.ts`, on a main box with the Veri*Factu module switched off; the stream loop's box B gains its spare steps in 3b-F (Task F.2b) | the loop's box B files with Veri*Factu, so its join is refused until 3b-F (probe P24); a test that cannot pass when its PR lands is not planned | no |
 | 12 | (not in the design) how many spares | one spare per venue in 3b: a second join is refused while one is joined (D17) | the pair link holds one row per box | no |
 
 Not a departure: §4 item 5 says joining prints a QR label for each box; §11 places the labels in 4d,
@@ -1200,7 +1280,9 @@ request for this revision; none is claimed approved here.
    waiting, and so must every start while a spare stays stuck in its latch start (D19: the spare
    says it is joining and is set aside; with another counted box silent the main box still waits,
    claim check round). Tests: Task
-   G.3b, and Task 6.9's `main-restart-mid-join` phase between `spare-join` and `spare-copy`. A spare
+   G.3b, and Task 6.9's `main-restart-mid-join` phase between `spare-join` and `spare-copy`
+   (**2026-11-10 (watcher):** that phase now checks only that the join still finishes after the main
+   box restarts; that the main box does not wait is Task G.3b's, on a real boot). A spare
    switched off while counted still makes it wait (D17).
 
 ---
@@ -1759,7 +1841,7 @@ can be a check made per request, and have `boot.ts` refuse both writes, with the
     answer 403 `authorization.not_permitted`; `GET /api/node/handover/:operationId` is on the open-read
     list and answers 404 `handover.operation_unknown` for the walk's made-up id; none records an
     operation (`node_handover_operations` is empty afterwards). They are expected, not a STOP.
-    From Task 6.5b (3b-6, D18) the walk also expects `POST /api/node/backup-settings` among the
+    From Task 6.5b (3b-6c, 2026-11-10 (watcher); D18) the walk also expects `POST /api/node/backup-settings` among the
     signed routes: with no credentials it answers 400 `spare.settings_invalid` (`{ reason:
     "envelope" }`) and writes no `backup.env`; Task 6.5b adds it, with its row in its Changed checks;
   - **"a joining spare serves the network only what D8 item 7 lists"** — boot a latch start (a
@@ -1824,11 +1906,16 @@ two promotion rows changes).
 
 ---
 
-## PR 3b-5 — the store on the spare, and the pair's access key
+## PR 3b-5a — the pair link, the joining route and its words
+
+**2026-11-10 (watcher):** 3b-5, "the store on the spare, and the pair's access key", is split in
+two before building. This PR, 3b-5a, holds Tasks 5.1 to 5.6b and its final checks, Task 5.6c;
+3b-5b, from Task 5.7 on, holds the store and its listener and is built after this one lands.
 
 Full review path. **Rebuilds `node.db`'s starting migration, so it ships with a venue reset**
 (**2026-11-08**, correction (1): since A1308 1a, #2628, a migration set has one starting migration
-and a schema change rebuilds it; revision 4 said this PR added a migration).
+and a schema change rebuilds it; revision 4 said this PR added a migration). **2026-11-10
+(watcher):** Task 5.1 is in this part, so the venue reset is 3b-5a's; 3b-5b ships without one.
 
 ### Task 5.1: `node_pair_link` in node.db's starting migration, and its readers
 
@@ -2179,7 +2266,8 @@ on; this task's tests stub the API.
     rather than promise one, and the times shown let the person see which box is off.
   - Read, not run: that connecting a box to the internet sets its clock (the same premise as the
     recovery page's existing words, `apps/server/src/i18n/recovery-page.ts:292`). Step 3 tests it as
-    far as a dev stack can.
+    far as a dev stack can, and (2026-11-10 (watcher)) cites the lines that set a box to take
+    internet time.
 
 - [ ] **Step 1: Write the failing tests.** "shows the bucket refusal's words with both choices";
   "shows the name refusal and leaves Connect working"; "shows the Veri*Factu refusal and Back";
@@ -2192,7 +2280,13 @@ on; this task's tests stub the API.
   set 30 minutes wrong while unplugged, plug it in and read the time again within two minutes; if
   the box cannot be had, record that this was not run and say so in the PR body rather than claim
   it. If the clock does not come right, STOP and report: the words would promise a step that does
-  not work.
+  not work. **2026-11-10 (watcher): the evidence the words rest on**, read on `main` at
+  `1c3450adb4`: every `install`, upgrades included, "runs `timedatectl set-ntp true` as root … to
+  ask the system to keep its clock in step with internet time" (`deploy/README.md:121-122`), and
+  the box image's recipe lists `systemd-timesyncd` among its packages (`deploy/box/mkosi.conf:19`),
+  the time service that README names (`deploy/README.md:125`). That shows the box is set to take
+  internet time; it does not show how soon the clock comes right once plugged in, which is what
+  the test above is for.
 - [ ] **Step 4: Run** it — PASS; `pnpm --filter @waitron/setup typecheck`.
 - [ ] **Step 5: Commit** `git commit -s -m "setup: words for a join refused by a bucket copy, a name in use, a joined standby, two clocks apart, or Veri*Factu"`.
 
@@ -2239,6 +2333,28 @@ existing assertion turns out to need changing, STOP and report.
 - [ ] **Step 4: Run** them — PASS; then `src/setup-api.test.ts src/adopt.test.ts`; root
   `scripts/errors-reachable.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "joining: the spare shows each of the main box's refusals in its own words"`.
+
+### Task 5.6c: Final checks for 3b-5a
+
+**2026-11-10 (watcher):** new, taken from Task 5.11 when 3b-5 was split; the typecheck list is the
+packages Tasks 5.1 to 5.6b touch.
+
+- [ ] Typecheck `@waitron/server`, `@waitron/node-db`, `@waitron/credentials`, `@waitron/setup`;
+  `pnpm format:check`; root `scripts/errors-reachable.test.ts`, `scripts/write-path-tables.test.ts`,
+  `scripts/alert-codes.test.ts` (no new incident code is expected; it must stay green),
+  `scripts/personal-log-params.test.ts`, `scripts/english-only.test.ts`. PR first line (correction
+  (1)): "Venue reset: this rebuilds node.db's starting migration (`node_pair_link`). A spare joins
+  with no Cloud relay; the main box refuses before anything is reserved and hands out the pair's
+  access key and its backup settings, and the spare shows each refusal in its own words; nothing
+  uses the key yet." `/finish-branch`, full path.
+
+---
+
+## PR 3b-5b — the store on the spare
+
+**2026-11-10 (watcher):** the second part of 3b-5: Tasks 5.7 to 5.10 and its final checks, Task
+5.11. Built after 3b-5a lands: Task 5.7 starts the store from the pair link Task 5.1 adds, and Task
+5.8 listens on the store port Task 5.5 adds. Full review path. No migration, so no venue reset.
 
 ### Task 5.7: The spare runs the store
 
@@ -2361,15 +2477,19 @@ a joined spare.)
 - [ ] **Step 4: Run** it — PASS; root `scripts/errors-reachable.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "credentials: no key ring rotation while a spare holds the ring"`.
 
-### Task 5.11: Final checks for 3b-5
+### Task 5.11: Final checks for 3b-5b
 
-- [ ] Typecheck `@waitron/server`, `@waitron/node-db`, `@waitron/credentials`, `@waitron/setup`,
-  `@waitron/dashboard`; `pnpm format:check`; root `scripts/errors-reachable.test.ts`,
+**2026-11-10 (watcher):** was "for 3b-5"; now 3b-5b's only. The typecheck list keeps the packages
+Tasks 5.7 to 5.10 touch, and the venue reset moved to 3b-5a's first line with Task 5.1.
+
+- [ ] Typecheck `@waitron/server`, `@waitron/credentials`, `@waitron/dashboard`, and
+  `@waitron/store` (its `state-layout.ts` gains Tasks 5.7's and 5.8's names; Task 5.11 did not
+  list it before); `pnpm format:check`; root `scripts/errors-reachable.test.ts`,
   `scripts/write-path-tables.test.ts`, `scripts/alert-codes.test.ts` (no new incident code is
   expected; it must stay green), `scripts/personal-log-params.test.ts`, `scripts/english-only.test.ts`.
-  PR first line (**2026-11-08**, correction (1)): "Venue reset: this rebuilds node.db's starting
-  migration (`node_pair_link`). A spare runs its store, which admits only its main box; nothing
-  streams to it yet." `/finish-branch`, full path.
+  PR first line: "A spare runs its store, which admits only its main box; nothing streams to it
+  yet." (**2026-11-08**, correction (1)'s venue-reset sentence is 3b-5a's, Task 5.6c.)
+  `/finish-branch`, full path.
 
 ---
 
@@ -2378,8 +2498,9 @@ a joined spare.)
 Full review path. **FISCAL** (D16): it changes what the start check trusts (R12) and how the boot
 reconcile reaches a peer — the two start steps that can stop a box filing — and adds a start
 refusal for a box that lost its `node.db`, so that box neither sells nor files. Built after 3b-4
-(Task G.2 uses Task 4.1's lookup), beside 3b-5; **landed before 3b-6**, which makes a lost
-`node.db` dangerous (fact 16). The fiscal suites run unedited. PR first line: "FISCAL — a box
+(Task G.2 uses Task 4.1's lookup), beside 3b-5a and 3b-5b; **landed before 3b-6a**, whose copy
+makes a lost `node.db` dangerous (fact 16; **2026-11-10 (watcher):** was "beside 3b-5" and "before
+3b-6"). The fiscal suites run unedited. PR first line: "FISCAL — a box
 trusts only the venue's authority when it asks another box at start, its start-time chart check
 reaches a real box, and a box that lost its own record does not start selling or filing (A947 3b-G)."
 **2026-11-10 (Fable review; claim check):** the first line gains, at its end, "; and a spare still
@@ -2548,7 +2669,7 @@ A1274's backlog entry saying so, and that it could cost a filing.
 ### Task G.3b: A spare still joining says so, and the start check sets it aside (D19)
 
 2026-11-10 (Fable review); mechanism replaced by lane A decision, 2026-11-10 (claim check). In 3b-G
-by D16 judgement 3, which the owner may overrule. Built after 3b-4, beside 3b-5, as the rest of
+by D16 judgement 3, which the owner may overrule. Built after 3b-4, beside 3b-5a and 3b-5b (2026-11-10 (watcher)), as the rest of
 3b-G.
 
 **Files:** Modify `apps/server/src/peer-status-api.ts` (`PeerStatusBody`, `:52`, gains `joining?:
@@ -2598,11 +2719,27 @@ that would refuse the field is a STOP. Tests `boot-peer-check.test.ts`, `peer-st
 
 ---
 
-## PR 3b-6 — joining brings the data
+## PR 3b-6 — joining brings the data, in three pull requests
 
-Full review path. Unblocks "finished joining" for a venue that does not file with Veri*Factu.
-Lands only after 3b-G is on `main` (fact 16). Not labelled FISCAL; D16 states why, and the PR
-body's first line says: "From this PR, a main box with a joined spare asks it at start and waits
+**2026-11-10 (watcher): 3b-6 is split in three before building.** The tasks below keep their numbers
+and their place in this section; each belongs to one part, and each part is its own pull request,
+landed in this order:
+
+| Part | Tasks | Final checks | PR first line |
+| --- | --- | --- | --- |
+| **3b-6a**, the copy and finishing | 6.1, 6.2, 6.3, 6.3b, 6.3c, 6.4, 6.5, 6.7 | Task 6.7b | the one quoted in the next paragraph (D16 judgement 2) |
+| **3b-6b**, the two-box test and the guide | 6.8a, 6.8b, 6.8c, 6.9, 6.10 | Task 6.10's own | given in Task 6.10 |
+| **3b-6c**, the backup-settings push | 6.5b, 6.5c, 6.5d, 6.9b | Task 6.10b | given in Task 6.10b |
+
+3b-6a lands only after 3b-G is on `main`, because its copy is what fact 16 is about. 3b-6b comes
+after 3b-6a: its two-box test runs the whole join. 3b-6c comes after 3b-6b: Task 6.9b's phases go
+into the test file Task 6.8b creates, beside the phases of Tasks 6.8c and 6.9. Task 6.11 (the
+owner's measurement) follows the last of them.
+
+Full review path, every part. Unblocks "finished joining" for a venue that does not file with
+Veri*Factu (**2026-11-10 (watcher):** 3b-6a does). Lands only after 3b-G is on `main` (fact 16;
+**2026-11-10 (watcher):** 3b-6a, and the other two after it). Not labelled FISCAL; D16 states why,
+and 3b-6a's PR body's first line says: "From this PR, a main box with a joined spare asks it at start and waits
 while it is silent (the landed A1018 Slice 3 rule), and a venue that does not file with Veri*Factu
 can add a spare that receives its data over the venue's network." Task number 6.6 moved to 3b-G
 (Task G.3) and is not reused. **2026-11-08 (D18):** Tasks 6.3b and 6.3c are written for Q2's option
@@ -2871,6 +3008,8 @@ ensureMirrorViewer -- apps/server/src` finds it nowhere); the
 
 ### Task 6.5b: The spare takes the backup settings its main box signs, and nobody else's (D18, amendment of 2026-11-08)
 
+**2026-11-10 (watcher):** in 3b-6c.
+
 **Files:** Modify `packages/shared/src/handover-envelope-types.ts` (`HandoverKind`, `:4`, gains
 `"backup-settings"`), `packages/handover/src/envelope.ts` (`HANDOVER_KINDS`, `:6`, gains it, last).
 Create `apps/server/src/spare-settings-api.ts`:
@@ -2931,6 +3070,8 @@ No word a person sees: the three codes are answered only to another box (Task 6.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a spare takes the backup settings its main box signs, and nobody else's"`.
 
 ### Task 6.5c: The main box sends its backup settings, and every change, until the spare has them
+
+**2026-11-10 (watcher):** in 3b-6c.
 
 **Files:** Create `apps/server/src/spare-settings.ts`:
 - `sendBackupSettings(deps: { node; ring; nodeId; stateDir; exchange: { timeoutMs: number; fetch?; authorityOf? } }, to: { nodeId: string; contactUrl: string }): Promise<{ delivered: true; digest: string | null } | { delivered: false; reason: string }>`
@@ -3001,6 +3142,8 @@ Task 6.2's own duty changes the same lists; whichever lands second adds its row 
 
 ### Task 6.5d: Words for `handover.backup_settings_differ` that name the next step (D18)
 
+**2026-11-10 (watcher):** in 3b-6c.
+
 The handover start is not changed: the offer's comparison already is the check before the main box
 stops selling (D18 (iv)), and from 3b-6 the duty keeps the spare current. Only the words change.
 
@@ -3045,6 +3188,8 @@ staff do).
 
 ### Task 6.7: The setup app's joined screen tells the truth
 
+**2026-11-10 (watcher):** in 3b-6a (the watcher's ranges did not name this task; its words become true with 3b-6a's copy).
+
 **Files:** Modify `apps/setup/src/i18n/strings/finish.ts` (the `done.stalled.*` keys,
 `:74-79` in English and `:157-162` in Spanish, and `done.break_glass.join_stalled`, `:71-72` and
 `:153-154`, go; new `done.joining.*`), the joined screen
@@ -3071,9 +3216,20 @@ The words:
 - [ ] **Step 4: Run** it — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "setup: the joined screen says the spare is taking its copy"`.
 
+### Task 6.7b: Final checks for 3b-6a
+
+**2026-11-10 (watcher):** new, taken from Task 6.10's final checks when 3b-6 was split. The guide
+checks stay with Task 6.10, since this part changes no guide.
+
+- [ ] Typecheck every package Tasks 6.1 to 6.5 and 6.7 touch (`@waitron/server`, `@waitron/setup`,
+  `@waitron/store`); `pnpm format:check`; root `scripts/errors-reachable.test.ts`. PR first line:
+  the D16 judgement-2 sentence quoted at the head of this section, then "A spare now receives the
+  venue's data over the venue's network and finishes joining (venues that do not file with
+  Veri*Factu; 3b-F brings those)." `/finish-branch`, full path.
+
 ### Task 6.8a: The seams a third in-process server needs
 
-**Why** (departure 11, C1): 3b-6's two-box steps run in a new test file on a main box whose
+**Why** (departure 11, C1): 3b-6's two-box steps (**2026-11-10 (watcher):** in 3b-6b) run in a new test file on a main box whose
 `modules.json` is `{"fiscal-verifactu": false}`, because the stream loop's box B files with
 Veri*Factu — box A's `modules.json` is `{"fiscal-none": false}`
 (`testing/stream-loop-scenario.ts:451-454`) and B is a bucket restore of A with a Veri*Factu paper
@@ -3092,7 +3248,9 @@ each of which signals this process, so a test that let them run would stop its o
 full start's `:3509` and the stepdown's `:3984` already go through `restart`, which `:1288` takes
 from `seams.stepdown.restart`. Revision 4's setup-start backup-repair restart (`:1389` then) is gone:
 #2461 (`14d632cbb3`) deleted it (`git log -S "mountFirstSetupBackupApi(" -- apps/server/src/boot.ts`). The latch start's restarts after the first copy and
-after finishing (Tasks 6.3, 6.5) are new code and take the seam from the start). Tests in the
+after finishing (Tasks 6.3, 6.5) are new code and take the seam from the start; **2026-11-10
+(watcher):** those two tasks now land earlier, in 3b-6a, so if either restart there does not
+already go through `restart`, this task routes it through). Tests in the
 suites that already boot each start: `boot.setup-routes.test.ts`, `boot.adoption-allocation.test.ts`.
 
 - [ ] **Step 1: Write the failing tests.** "an adopt in the setup start restarts through the seam,
@@ -3167,12 +3325,13 @@ The phases:
   (phase 3) and `spare-copy` (phase 4).** S is started with its copy attempts held (Task 6.8a's
   `spareCopy.hold` seam, released at the end of this phase), so S is certain to be in its latch
   start. Once M's pair link reads `streaming` (M has written S's `nodes` row), M restarts through
-  the restart seam. M's start does not wait: its `handover.start_check` line gives S `J`, set
-  aside, and M's `/api/node` answers `acceptingSales: true` (D19, Task G.3b). Then the hold is
-  released and `spare-copy` must still pass, so a main box restarted mid-join does not stop the
-  join either. Control, run once, recorded in the PR body and restored: leave the joining field out
-  of the latch start's mount (Task G.3b) and see this phase fail with M on its waiting page (S
-  `S`, `no_chart`).
+  the restart seam. Then the hold is released and `spare-copy` must still pass, so a main box
+  restarted mid-join does not stop the join. **2026-11-10 (watcher):** this phase no longer checks
+  that M's start does not wait (its `handover.start_check` line giving S `J`, and its `/api/node`
+  answering `acceptingSales: true`), and its control (the joining field left out of the latch
+  start's mount, M on its waiting page) is dropped: Task G.3b's booted case "a main box restarted
+  while its spare is still joining starts without waiting", with its own control, proves that on a
+  real boot.
 5. `start-check`: M restarts; its start check asks S at `box-<S>` and counts its verified answer
    (R13 end to end, from #2651, under 3b-G's pin), with no `own_address`.
 6. `loopback-only`: no socket the servers in this process opened went to an address other than
@@ -3192,6 +3351,8 @@ The phases:
 - [ ] **Step 4: Commit** `git commit -s -m "test: the main box counts its spare, and joining stays on the venue's network"`.
 
 ### Task 6.9b: The two-box test — the spare's backup settings, from the join on (D18)
+
+**2026-11-10 (watcher):** in 3b-6c.
 
 **Files:** as Task 6.8c. M starts with Task 6.5c's `spareSettings` seam at `retryMs` 2 seconds, so
 the phases add seconds, not half a minute, to the stream job (Task 6.9 Step 3's budget).
@@ -3246,12 +3407,25 @@ the switch is A947 4b–4e; a joined spare cannot be removed (fact 26), so addin
 When switching lands, its slice removes the sentence);
 the session running this plan adds the backlog entry D17 names ("a joined standby cannot be retired, so a dead spare makes
 the main box wait at every start"), in the A947 area;
-`docs/developers/conventions-data.md` (one entry: the pair link and the store). Final checks:
+`docs/developers/conventions-data.md` (one entry: the pair link and the store). Final checks
+(**2026-11-10 (watcher):** now 3b-6b's only; 3b-6a's are Task 6.7b and 3b-6c's Task 6.10b):
 typecheck every touched package, `pnpm format:check`, root `scripts/guide-links.test.ts`,
 `apps/server` `src/guide-content.test.ts`, `scripts/errors-reachable.test.ts`,
-`scripts/claude-md-pointers.test.ts`. PR first line: "A spare now receives the venue's data over the
-venue's network and finishes joining (venues that do not file with Veri*Factu; 3b-F brings those)."
-`/finish-branch`, full path.
+`scripts/claude-md-pointers.test.ts`. PR first line (**2026-11-10 (watcher):** the earlier line,
+"A spare now receives the venue's data …", moved to 3b-6a, Task 6.7b): "A two-box test proves a
+spare joins, takes its copy and is counted over the venue's network, and the guide explains adding
+a spare (venues that do not file with Veri*Factu; 3b-F brings those)." `/finish-branch`, full path.
+
+### Task 6.10b: Final checks for 3b-6c
+
+**2026-11-10 (watcher):** new, taken from Task 6.10's final checks when 3b-6 was split. The guide
+checks stay with Task 6.10: Task 6.5d says the guide gains nothing from this part.
+
+- [ ] Typecheck every package Tasks 6.5b to 6.5d touch (`@waitron/shared`, `@waitron/handover`,
+  `@waitron/server`, `@waitron/dashboard`); `pnpm format:check`; root
+  `scripts/errors-reachable.test.ts`. PR first line: "A spare keeps its main box's backup settings:
+  the main box sends them after every change, and to a spare that was off once it answers again
+  (D18)." `/finish-branch`, full path.
 
 ### Task 6.11: The owner's measurement, and recording it (no implementer)
 
@@ -3369,7 +3543,8 @@ The phases, with box C a third server folder booted in setup mode:
 ## What CI and the simulation prove, and what needs the owner's two boxes
 
 **Proved in CI** (the stream job runs Linux with both binaries), **by PR:**
-- **3b-6**, `spare-join.e2e.test.ts`, on a main box with the Veri*Factu module switched off: the
+- **3b-6** (**2026-11-10 (watcher):** 3b-6b, which adds the file, and 3b-6c, which adds Task 6.9b's
+  phases), `spare-join.e2e.test.ts`, on a main box with the Veri*Factu module switched off: the
   store, the pipes, the pair's key, the client certificate and the authority pin, end to end on
   loopback; the refusal while a bucket streams, reaching the spare's setup route in its own code,
   and the join after the bucket is stopped; the first full copy, the placement, finishing joining,
@@ -3383,6 +3558,9 @@ The phases, with box C a third server folder booted in setup mode:
 - **3b-G** has no end-to-end step of its own: its changes are proved by their own suites
   (Tasks G.1–G.3b), and 3b-6's `start-check` phase runs under G.1's pin. **2026-11-10 (Fable
   review):** 3b-6's `main-restart-mid-join` phase (Task 6.9) is G.3b's two-box proof.
+  **2026-11-10 (watcher):** no longer: that phase now proves only that the join still finishes
+  after the main box restarts mid-copy; that the main box does not wait is proved by Task G.3b's
+  own booted case.
 This is a simulation: servers on one machine, names resolved by an injected lookup, one network
 interface. The mDNS lookup's own-address filter is proved with fake sockets
 (Task 2.2) and was measured with two Linux containers (probe P14), not on the box image.
@@ -3406,7 +3584,7 @@ it is kept in a file on the box that writes it — not in the venue's database, 
 receives does not carry it (fact 18). The design says nothing fiscal is reserved at joining (§4
 item 3: "No fiscal identity is reserved at joining… This design adds nothing to that"). Today's code
 refuses to add a spare to a Veri*Factu venue at all — after the main box has already reserved for it
-and listed it (fact 1); 3b-5 moves that refusal before anything is reserved.
+and listed it (fact 1); 3b-5 (3b-5a, Task 5.3, 2026-11-10 (watcher)) moves that refusal before anything is reserved.
 
 **A worked example.** Friday afternoon, before service, you plug the second box in, open its setup
 page and press Connect, signing in as yourself. On Saturday at 21:40 the main box dies, and the
@@ -3440,7 +3618,7 @@ Stated once, with its worked example, in D18 (amendment of 2026-11-08, revised 2
 **Answered, 2026-11-10 (Fable review):** the owner chose option (i), refuse the join, in the owner's words
 "Yes, refuse the join (Recommended)" (desk, 2026-11-10 14:34, recorded in
 `~/waitron-campaign-shared/desk/done/20261110-0946-A-a947-q2-spare-without-backups.md`). Tasks 6.3b
-and 6.3c build it; 3b-6 waits for no answer.
+and 6.3c build it (in 3b-6a, 2026-11-10 (watcher)); 3b-6 waits for no answer.
 
 ---
 
