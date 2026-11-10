@@ -1,4 +1,5 @@
 import { AppError } from "./errors.js";
+import { zoneOffsetFormatter } from "./zone-formatters.js";
 
 export type SavedTimeZone =
   { kind: "missing" } | { kind: "invalid" } | { kind: "valid"; timeZone: string };
@@ -32,7 +33,7 @@ export function timeZoneOffsetMinutes(timeZone: string, instant: Date): number {
   if (!Number.isFinite(instant.getTime())) {
     throw new AppError("venue.time_zone_conversion_failed", { reason: "invalid_instant" });
   }
-  const rendered = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" })
+  const rendered = zoneOffsetFormatter(timeZone)
     .formatToParts(instant)
     .find((part) => part.type === "timeZoneName")?.value;
   const match = /^GMT(?:([+-])(\d{2}):(\d{2}))?$/.exec(rendered ?? "");

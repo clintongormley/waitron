@@ -1,4 +1,5 @@
 import { AppError, type ErrorParams } from "./errors.js";
+import { zoneDateFormatter, zoneNameFormatter, zoneOffsetFormatter } from "./zone-formatters.js";
 
 export type CutoverChange = Readonly<{ effectiveBusinessDay: string; dayCutover: string }>;
 export type BusinessDayClock = Readonly<{
@@ -31,8 +32,7 @@ function validateCutover(value: string): void {
 function validateClock(clock: BusinessDayClock): void {
   let zone: string;
   try {
-    zone = new Intl.DateTimeFormat("en-US", { timeZone: clock.timeZone }).resolvedOptions()
-      .timeZone;
+    zone = zoneNameFormatter(clock.timeZone).resolvedOptions().timeZone;
   } catch {
     invalid("invalid_time_zone");
   }
@@ -57,7 +57,7 @@ function cutoverAt(clock: BusinessDayClock, day: string): string {
 }
 
 function offsetMinutes(at: number, timeZone: string): number {
-  const rendered = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" })
+  const rendered = zoneOffsetFormatter(timeZone)
     .formatToParts(new Date(at))
     .find((part) => part.type === "timeZoneName")?.value;
   const match = /^GMT(?:([+-])(\d{2}):(\d{2}))?$/.exec(rendered ?? "");
@@ -110,12 +110,7 @@ export function businessDayBounds(clock: BusinessDayClock, day: string): Busines
 export function businessDayAt(clock: BusinessDayClock, at: Date): string {
   validateClock(clock);
   if (!Number.isFinite(at.getTime())) invalid("invalid_instant");
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: clock.timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(at);
+  const parts = zoneDateFormatter(clock.timeZone).formatToParts(at);
   const civilDay = ["year", "month", "day"]
     .map((key) => parts.find((part) => part.type === key)!.value)
     .join("-");

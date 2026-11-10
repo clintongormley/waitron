@@ -1,7 +1,14 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { nodes, readVenueClock, type Transaction } from "@waitron/db";
-import { businessDayAt, businessDayBoundaryAt, businessDayBounds } from "@waitron/shared";
+import {
+  businessDayAt,
+  businessDayBoundaryAt,
+  businessDayBounds,
+  zoneDateFormatter,
+  zoneNameFormatter,
+  zoneOffsetFormatter,
+} from "@waitron/shared";
 import type { BusinessDayClock, NodeId } from "@waitron/shared";
 import type { DailyCloseInput, PeriodVatInput } from "./types.js";
 
@@ -17,7 +24,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export function validateTimeZone(tz: string): void {
   let resolved: string;
   try {
-    resolved = new Intl.DateTimeFormat("en-US", { timeZone: tz }).resolvedOptions().timeZone;
+    resolved = zoneNameFormatter(tz).resolvedOptions().timeZone;
   } catch {
     throw new Error(`reporting: invalid IANA time zone: ${JSON.stringify(tz)}`);
   }
@@ -74,7 +81,7 @@ export function validateBusinessDayRange(input: {
  * `GMT±HH:MM`.
  */
 function zoneOffsetMinutes(utcMs: number, timeZone: string): number {
-  const rendered = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" })
+  const rendered = zoneOffsetFormatter(timeZone)
     .formatToParts(new Date(utcMs))
     .find((part) => part.type === "timeZoneName")!.value;
   const parsed = /^GMT(?:([+-])(\d{2}):(\d{2}))?$/.exec(rendered);
@@ -124,12 +131,7 @@ export function businessDayOf(instant: Date, input: BusinessDayClock): string {
  * a business day turns at the cutover. The caller validates `timeZone` first.
  */
 export function civilDateOf(instant: Date, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(instant);
+  const parts = zoneDateFormatter(timeZone).formatToParts(instant);
   return ["year", "month", "day"].map((key) => parts.find((p) => p.type === key)!.value).join("-");
 }
 

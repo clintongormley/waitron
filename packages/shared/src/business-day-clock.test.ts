@@ -170,3 +170,52 @@ describe("dated business-day boundaries", () => {
     expect(businessDayAt(clock, new Date(boundary))).toBe("2026-08-04");
   });
 });
+
+describe("formatter reuse", () => {
+  it("builds no date formatter when a zone already read is read again", () => {
+    const tokyo = { ...madrid(), timeZone: "Asia/Tokyo" };
+    const at = new Date("2026-08-04T08:15:00.000Z");
+    const Formatter = Intl.DateTimeFormat;
+    const built = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (locales, options) {
+      return new Formatter(locales, options);
+    });
+    try {
+      expect(businessDayAt(tokyo, at)).toBe("2026-08-04");
+      expect(built.mock.calls.length).toBeGreaterThan(0);
+      built.mockClear();
+      expect(businessDayAt(tokyo, at)).toBe("2026-08-04");
+      expect(cutoverForBusinessDay(tokyo, "2026-08-04")).toBe("05:00");
+      expect(businessDayBoundaryAt(tokyo, "2026-08-04")).toBe("2026-08-03T20:00:00.000Z");
+      expect(businessDayBounds(tokyo, "2026-08-04")).toStrictEqual({
+        startAt: "2026-08-03T20:00:00.000Z",
+        endAt: "2026-08-04T20:00:00.000Z",
+      });
+      expect(built).not.toHaveBeenCalled();
+    } finally {
+      built.mockRestore();
+    }
+  });
+
+  it("refuses an unknown zone on every reading, not only the first", () => {
+    const mars = { ...madrid(), timeZone: "Mars/Olympus" };
+    const at = new Date("2026-08-04T08:15:00.000Z");
+    for (let reading = 0; reading < 2; reading++) {
+      expect(() => businessDayAt(mars, at)).toThrowError(
+        expect.objectContaining({
+          code: "business_day.clock_invalid",
+          params: { reason: "invalid_time_zone" },
+        }),
+      );
+    }
+  });
+
+  it("answers each zone with its own day at the same instant", () => {
+    const newYork = { ...madrid(), timeZone: "America/New_York" };
+    const at = new Date("2026-08-04T08:15:00.000Z");
+    expect(businessDayAt(madrid(), at)).toBe("2026-08-04");
+    expect(businessDayAt(newYork, at)).toBe("2026-08-03");
+    expect(businessDayAt(madrid(), at)).toBe("2026-08-04");
+    expect(businessDayBoundaryAt(madrid(), "2026-08-04")).toBe("2026-08-04T03:00:00.000Z");
+    expect(businessDayBoundaryAt(newYork, "2026-08-04")).toBe("2026-08-04T09:00:00.000Z");
+  });
+});

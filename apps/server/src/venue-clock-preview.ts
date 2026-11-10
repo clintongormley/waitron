@@ -1,6 +1,6 @@
 import { businessDayStart, civilDateOf as civilDate, venueMomentAt } from "@waitron/reporting";
 import type { BusinessDayClock } from "@waitron/shared";
-import { AppError, cutoverForBusinessDay } from "@waitron/shared";
+import { AppError, cutoverForBusinessDay, zoneOffsetFormatter } from "@waitron/shared";
 import type { VenueClockPreview, VenueClockView } from "./venue-detail-types.js";
 import "./errors.js";
 
@@ -10,10 +10,7 @@ function view(at: Date, clock: Clock): VenueClockView | null {
   if (!/^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(clock.dayCutover)) return null;
   const moment = venueMomentAt(at, clock);
   if (!moment) return null;
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: clock.timeZone,
-    timeZoneName: "longOffset",
-  });
+  const formatter = zoneOffsetFormatter(clock.timeZone);
   const offset = (ms: number) =>
     formatter.formatToParts(new Date(ms)).find((p) => p.type === "timeZoneName")!.value;
   const transitions: VenueClockView["transitions"] = [];

@@ -1,6 +1,6 @@
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { createOpenOrder } from "./working-order.js";
 import { Hono } from "hono";
@@ -333,6 +333,30 @@ describe("venue clock preview", () => {
       role === undefined ? undefined : role === "staff" ? venue.staffCookie : venue.managerCookie;
     const response = await app.request(path, { headers: cookie ? { cookie } : {} });
     expect(response.status).toBe(status);
+  });
+  it("builds no offset formatter when a zone already previewed is previewed again", async () => {
+    const chatham =
+      "/management-api/venue-details/clock-preview?timeZone=Pacific%2FChatham&dayCutover=05%3A00";
+    const Formatter = Intl.DateTimeFormat;
+    const built = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (locales, options) {
+      return new Formatter(locales, options);
+    });
+    const offsetZones = () =>
+      built.mock.calls
+        .filter(([, options]) => options?.timeZoneName === "longOffset")
+        .map(([, options]) => options?.timeZone);
+    try {
+      const first = await app.request(chatham, { headers: { cookie: venue.managerCookie } });
+      expect(first.status).toBe(200);
+      expect(offsetZones()).toContain("Pacific/Chatham");
+      built.mockClear();
+      const again = await app.request(chatham, { headers: { cookie: venue.managerCookie } });
+      expect(again.status).toBe(200);
+      expect(await again.json()).toEqual(await first.json());
+      expect(offsetZones()).toEqual([]);
+    } finally {
+      built.mockRestore();
+    }
   });
   it.each([
     ["timeZone=Nowhere&dayCutover=05%3A00", "timeZone", "time_zone"],

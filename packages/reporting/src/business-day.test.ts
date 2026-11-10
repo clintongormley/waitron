@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { CORE_MIGRATIONS, nodes, withTransaction, venueLocationId } from "@waitron/db";
@@ -94,6 +94,56 @@ describe("civilDateOf", () => {
   it("rolls the year in the venue's zone, not in UTC's", () => {
     expect(civilDateOf(new Date("2026-12-31T23:30:00Z"), "Europe/Madrid")).toBe("2027-01-01");
     expect(civilDateOf(new Date("2027-01-01T03:00:00Z"), "America/New_York")).toBe("2026-12-31");
+  });
+});
+
+describe("formatter reuse", () => {
+  it("builds no date formatter when a zone already read is read again", () => {
+    const tokyo = { cutoverChanges: [], timeZone: "Asia/Tokyo", dayCutover: "06:00" };
+    const at = new Date("2026-10-02T22:30:00Z");
+    const Formatter = Intl.DateTimeFormat;
+    const built = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (locales, options) {
+      return new Formatter(locales, options);
+    });
+    try {
+      validateTimeZone("Asia/Tokyo");
+      expect(civilDateOf(at, "Asia/Tokyo")).toBe("2026-10-03");
+      expect(venueMomentAt(at, tokyo)).toEqual({
+        businessDay: "2026-10-03",
+        weekday: 6,
+        timeOfDay: "07:30",
+      });
+      expect(built.mock.calls.length).toBeGreaterThan(0);
+      built.mockClear();
+      validateTimeZone("Asia/Tokyo");
+      expect(civilDateOf(at, "Asia/Tokyo")).toBe("2026-10-03");
+      expect(venueMomentAt(at, tokyo)).toEqual({
+        businessDay: "2026-10-03",
+        weekday: 6,
+        timeOfDay: "07:30",
+      });
+      expect(built).not.toHaveBeenCalled();
+    } finally {
+      built.mockRestore();
+    }
+  });
+
+  it("refuses an unknown zone on every reading, not only the first", () => {
+    for (let reading = 0; reading < 2; reading++) {
+      expect(() => validateTimeZone("Mars/Olympus")).toThrow(
+        'reporting: invalid IANA time zone: "Mars/Olympus"',
+      );
+    }
+  });
+
+  it("answers each zone with its own date and time at the same instant", () => {
+    const at = new Date("2026-10-03T02:00:00Z");
+    const clock = (timeZone: string) => ({ cutoverChanges: [], timeZone, dayCutover: "06:00" });
+    expect(civilDateOf(at, "Europe/Madrid")).toBe("2026-10-03");
+    expect(civilDateOf(at, "America/New_York")).toBe("2026-10-02");
+    expect(civilDateOf(at, "Europe/Madrid")).toBe("2026-10-03");
+    expect(venueMomentAt(at, clock("Europe/Madrid"))?.timeOfDay).toBe("04:00");
+    expect(venueMomentAt(at, clock("America/New_York"))?.timeOfDay).toBe("22:00");
   });
 });
 

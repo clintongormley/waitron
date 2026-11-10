@@ -210,12 +210,13 @@ describe("retained clock candidate validation", () => {
     expect((await read()).savedZone).toEqual({ kind: "invalid" });
   });
   it("keeps an unreadable conversion separate from an invalid saved name", async () => {
-    const Formatter = Intl.DateTimeFormat;
-    vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (locales, options) {
-      const formatter = new Formatter(locales, options);
-      if (options?.timeZoneName === "longOffset")
-        vi.spyOn(formatter, "formatToParts").mockReturnValue([]);
-      return formatter;
+    const formatToParts = Intl.DateTimeFormat.prototype.formatToParts;
+    vi.spyOn(Intl.DateTimeFormat.prototype, "formatToParts").mockImplementation(function (
+      this: Intl.DateTimeFormat,
+      date,
+    ) {
+      if (this.resolvedOptions().timeZoneName === "longOffset") return [];
+      return formatToParts.call(this, date);
     });
     await expect(preview()).rejects.toMatchObject({
       code: "venue.time_zone_conversion_failed",
