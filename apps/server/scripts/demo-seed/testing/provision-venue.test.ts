@@ -67,8 +67,8 @@ describe("the demo scripts' test venue", () => {
 
     expect(
       suite.db.all(sql`
-        select name, address_line1, invoice_locales, fiscal_territory, time_zone
-        from locations
+        select json_extract(settings.doc, '$.name') as name, json_extract(settings.doc, '$.addressLine1') as address_line1, invoice_locales, fiscal_territory, time_zone
+        from locations cross join settings on settings.module = 'venue'
       `),
     ).toEqual([fixture.location]);
   });

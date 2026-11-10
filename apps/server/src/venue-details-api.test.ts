@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
@@ -139,9 +140,7 @@ describe("venue details HTTP boundary", () => {
       error: { code: "venue.detail_invalid", params: { field: "city", reason: "required" } },
     });
     expect((await initial()).details).toEqual(model.details);
-    await suite.db.execute(
-      sql`update locations set city = 'New saved town' where id = ${venue.cfg.locationId}`,
-    );
+    await seedVenueSettings(suite.db, { city: "New saved town" });
     const stale = await request("PATCH", venue.managerCookie, {
       expected: model.details,
       changes: { name: "Not committed", city: "My town" },

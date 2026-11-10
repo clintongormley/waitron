@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
@@ -83,14 +84,13 @@ it.each(["name", "fiscalTerritory"] as const)(
   async (field) => {
     await fixture();
     await withTransaction(suite.db, (tx) =>
-      tx.execute(
-        field === "name"
-          ? sql`update locations set name = 'Renamed venue'`
-          : sql`update locations set fiscal_territory = 'ES-common'`,
-      ),
+      field === "name"
+        ? seedVenueSettings(tx, { name: "Renamed venue" })
+        : tx.execute(sql`update locations set fiscal_territory = 'ES-common'`),
     );
     const before = {
       venue: (await suite.db.execute(sql`select * from locations`)).rows,
+      document: (await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows,
       series: (await suite.db.execute(sql`select * from invoice_series order by purpose`)).rows,
     };
     await expect(recoverProvisionedVenue(suite.db, { venue }, ALL_MODULES)).rejects.toMatchObject(
@@ -98,6 +98,7 @@ it.each(["name", "fiscalTerritory"] as const)(
     );
     expect({
       venue: (await suite.db.execute(sql`select * from locations`)).rows,
+      document: (await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows,
       series: (await suite.db.execute(sql`select * from invoice_series order by purpose`)).rows,
     }).toEqual(before);
   },

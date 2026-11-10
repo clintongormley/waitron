@@ -73,6 +73,7 @@ const dependencies = [
   "attendance_response_commands",
   "persons",
   "locations",
+  "settings.venue",
   "location_day_cutover_changes",
   "location_business_day_settings",
 ];

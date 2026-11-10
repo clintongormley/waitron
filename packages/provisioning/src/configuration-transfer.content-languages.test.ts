@@ -206,9 +206,13 @@ describe("required languages before configuration replacement", () => {
       ),
     ).rejects.toMatchObject({ code: "content.language_required", params: { language: "ca" } });
     expect((await suite.db.execute(sql`select * from content_languages`)).rows).toEqual(before);
-    expect((await suite.db.execute(sql`select province from locations`)).rows).toEqual([
-      { province: "Barcelona" },
-    ]);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select json_extract(settings.doc, '$.province') as province from locations cross join settings on settings.module = 'venue'`,
+        )
+      ).rows,
+    ).toEqual([{ province: "Barcelona" }]);
     bundle.tables.content_languages![0]!.languages = '["en","es","ca"]';
     await withTransaction(suite.db, (tx) =>
       importConfigurationTables(tx, bundle, [catalogue], bundle.modules),

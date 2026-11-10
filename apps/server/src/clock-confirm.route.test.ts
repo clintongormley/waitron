@@ -1742,7 +1742,7 @@ function storedIssueDate(recordId: string): string {
 
 function venueName(): string {
   const [row] = venue.db.all<{ name: string }>(
-    sql`select name from locations where id = ${venue.cfg.locationId}`,
+    sql`select json_extract(settings.doc, '$.name') as name from locations cross join settings on settings.module = 'venue' where id = ${venue.cfg.locationId}`,
   );
   return row!.name;
 }

@@ -193,6 +193,7 @@ export function placedSpareFixture(boxes: {
       operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
     });
+    await seedVenueSettings(spareBefore.db, { name: "Restaurant" });
     await spareBefore.db.insert(nodes).values({
       id: standby.nodeId,
       locationId: venueId,

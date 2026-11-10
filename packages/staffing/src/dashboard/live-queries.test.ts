@@ -39,6 +39,7 @@ describe("QUERY_DEPENDENCIES", () => {
       "kitchen_stations",
       "tenants",
       "locations",
+      "settings.venue",
       "location_day_cutover_changes",
       "holiday_geographies",
       "seasons",

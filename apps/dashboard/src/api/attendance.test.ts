@@ -192,6 +192,7 @@ describe("dashboard attendance wire and live reads", () => {
       "attendance_response_commands",
       "persons",
       "locations",
+      "settings.venue",
       "location_day_cutover_changes",
       "location_business_day_settings",
     ].map((type) => ({ type }));
@@ -280,6 +281,7 @@ it.each([
   "attendance_response_commands",
   "persons",
   "locations",
+  "settings.venue",
   "location_day_cutover_changes",
   "location_business_day_settings",
 ])("a %s event refreshes mounted record reads passively", async (type) => {

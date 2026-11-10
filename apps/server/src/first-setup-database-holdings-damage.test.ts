@@ -234,7 +234,9 @@ it.each([
     const held = await heldSetup({ pendingWal: true });
     const modules = withHoldings(held, async (db) => {
       // Only the main file read alone misses the row in the -wal.
-      const { rows } = await db.execute<{ n: number }>("select count(*) as n from settings");
+      const { rows } = await db.execute<{ n: number }>(
+        "select count(*) as n from settings where module = 'adjustments'",
+      );
       if (rows[0]!.n === 0) throw failure;
       return { records: 0, accepted: 0 };
     });

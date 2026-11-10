@@ -95,7 +95,9 @@ it("pendingWal leaves a committed row in venue.db-wal", async () => {
   url.searchParams.set("immutable", "1");
   const immutable = new DatabaseSync(url, { readOnly: true });
   try {
-    expect(immutable.prepare("select count(*) as n from settings").get()).toEqual({
+    expect(
+      immutable.prepare("select count(*) as n from settings where module = 'adjustments'").get(),
+    ).toEqual({
       n: 0,
     });
   } finally {
@@ -108,7 +110,9 @@ it("pendingWal leaves a committed row in venue.db-wal", async () => {
       await copyFile(join(f.roots.venueDir, name), join(aside, name));
     const copy = new DatabaseSync(join(aside, "venue.db"));
     try {
-      expect(copy.prepare("select count(*) as n from settings").get()).toEqual({ n: 1 });
+      expect(
+        copy.prepare("select count(*) as n from settings where module = 'adjustments'").get(),
+      ).toEqual({ n: 1 });
     } finally {
       copy.close();
     }
@@ -127,7 +131,9 @@ it("a row written into one test's held database stays in that test's own copy", 
         "insert into settings (module, version, revision, doc, updated_at) values ('adjustments', 1, 1, '{}', ?)",
       )
       .run(new Date().toISOString());
-    expect(venue.prepare("select count(*) as n from settings").get()).toEqual({ n: 1 });
+    expect(
+      venue.prepare("select count(*) as n from settings where module = 'adjustments'").get(),
+    ).toEqual({ n: 1 });
   } finally {
     venue.close();
   }
@@ -137,7 +143,9 @@ it("the next test's held database is migrated and holds none of the previous tes
   const f = await heldSetup();
   const venue = new DatabaseSync(join(f.roots.venueDir, "venue.db"), { readOnly: true });
   try {
-    expect(venue.prepare("select count(*) as n from settings").get()).toEqual({ n: 0 });
+    expect(
+      venue.prepare("select count(*) as n from settings where module = 'adjustments'").get(),
+    ).toEqual({ n: 0 });
   } finally {
     venue.close();
   }
