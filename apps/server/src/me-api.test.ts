@@ -13,7 +13,6 @@ import {
   hashPassword,
   hashSessionToken,
   persons,
-  verifyPassword,
   verifyPin,
   webauthnCredentials,
 } from "@waitron/identity";
@@ -31,9 +30,10 @@ import type { Logger } from "./logger.js";
 import { mountMeApi, type MeApiDeps } from "./me-api.js";
 import { flushAccountMail } from "./testing/account-mail.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { wrongTotpCode } from "./testing/authenticator.js";
 import "./errors.js";
-import { failingDerivationsOf, watchingDerivations } from "./testing/watched-scrypt.js";
+import { watchingDerivations } from "./testing/watched-scrypt.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -115,9 +115,11 @@ function mountApp(overrides: Partial<MeApiDeps> = {}): Hono {
   return app;
 }
 
-async function cookieFor(personId: string): Promise<string> {
+async function cookieFor(personId: string, fresh = true): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
-    return startManagementSession(tx, { personId });
+    const session = await startManagementSession(tx, { personId });
+    if (fresh) await setFreshManagementSignIn(tx, session.token);
+    return session;
   });
   return `${MANAGEMENT_COOKIE}=${session.token}`;
 }
@@ -418,7 +420,6 @@ describe("mountMeApi — profile credentials", () => {
     const response = await send(mountApp(), "PUT", "/management-api/session/me/password", {
       cookie: await cookieFor(me),
       body: {
-        currentPassword: "current password",
         totp: generateSync({ secret }),
         password: "replacement password",
       },
@@ -447,7 +448,6 @@ describe("mountMeApi — profile credentials", () => {
         telephone: null,
         email: "new@example.com",
         locale: "en-GB",
-        currentPassword: "current password",
       },
     });
     expect(await saved.json()).toEqual({ emailVerificationSent: true, delivery: "queued" });
@@ -1096,6 +1096,86 @@ describe("mountMeApi — own credentials and second factor", () => {
     return row!;
   }
 
+  it.each([
+    ["PUT", "password", { password: "replacement password" }],
+    ["PUT", "pin", { pin: "8642" }],
+    [
+      "PUT",
+      "profile",
+      {
+        displayName: "Window",
+        firstNames: "Alex",
+        lastNames: "Rivera",
+        telephone: null,
+        email: "new@example.test",
+        locale: "en-GB",
+      },
+    ],
+    ["POST", "totp/begin", {}],
+    ["POST", "recovery-codes", {}],
+    ["DELETE", "totp", {}],
+    ["DELETE", "google", {}],
+    ["DELETE", "passkeys/key", {}],
+  ] as const)(
+    "requires the shared confirmation before %s %s without changing account data",
+    async (method, path, body) => {
+      const personId = await personWithPassword({
+        email: `window-${personCount + 1}@example.test`,
+        googleSubject: `window-${personCount}`,
+      });
+      const cookie = await cookieFor(personId, false);
+      const keyId = crypto.randomUUID();
+      await suite.db
+        .insert(webauthnCredentials)
+        .values({ id: keyId, personId, credentialId: keyId, publicKey: "public" });
+      const before = await personRow(personId);
+      const res = await send(
+        mountApp(),
+        method,
+        `/management-api/session/me/${path.replace("passkeys/key", `passkeys/${keyId}`)}`,
+        { cookie, body: { ...body, currentPassword: PASSWORD } },
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "management_session.proof_required", params: {} },
+      });
+      expect(await personRow(personId)).toEqual(before);
+      expect(suite.db.all(sql`select id from webauthn_credentials where id=${keyId}`)).toEqual([
+        { id: keyId },
+      ]);
+      expect(
+        suite.db.all(sql`select id from totp_enrollments where person_id=${personId}`),
+      ).toEqual([]);
+      expect(suite.db.all(sql`select id from recovery_codes where person_id=${personId}`)).toEqual(
+        [],
+      );
+      expect(suite.db.all(sql`select id from outgoing_mail where person_id=${personId}`)).toEqual(
+        [],
+      );
+    },
+  );
+
+  it("reuses one confirmation for a passwordless person's PIN and Google changes", async () => {
+    const personId = await personWithPassword({
+      passwordHash: null,
+      googleSubject: "passwordless-window",
+    });
+    const cookie = await cookieFor(personId);
+    const app = mountApp();
+    const pin = await send(app, "PUT", "/management-api/session/me/pin", {
+      cookie,
+      body: { pin: "8642" },
+    });
+    expect(pin.status).toBe(204);
+    expect(await verifyPin("8642", (await personRow(personId)).pinHash!)).toBe(true);
+    const google = await send(app, "DELETE", "/management-api/session/me/google", {
+      cookie,
+      body: {},
+    });
+    expect(google.status).toBe(204);
+    expect((await personRow(personId)).googleSubject).toBeNull();
+  });
+
   it("refuses an email change on a spare but still saves other profile details", async () => {
     const email = `spare-profile-${personCount + 1}@example.test`;
     const personId = await personWithPassword({ email });
@@ -1113,7 +1193,6 @@ describe("mountMeApi — own credentials and second factor", () => {
       telephone: null,
       email: `changed-${email}`,
       locale: "en-GB",
-      currentPassword: PASSWORD,
     };
     const refused = await send(app, "PUT", "/management-api/session/me/profile", { cookie, body });
     expect(refused.status).toBe(403);
@@ -1122,6 +1201,7 @@ describe("mountMeApi — own credentials and second factor", () => {
     });
     expect((await personRow(personId)).pendingEmail).toBeNull();
     expect(suite.db.all(sql`select id from outgoing_mail where person_id=${personId}`)).toEqual([]);
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie, false));
     const saved = await send(app, "PUT", "/management-api/session/me/profile", {
       cookie,
       body: { ...body, email },
@@ -1147,7 +1227,6 @@ describe("mountMeApi — own credentials and second factor", () => {
           telephone: null,
           email,
           locale: "en-GB",
-          currentPassword: PASSWORD,
         },
       });
       expect(response.status).toBe(200);
@@ -1171,11 +1250,11 @@ describe("mountMeApi — own credentials and second factor", () => {
     },
   );
 
-  it("changes the person's own PIN once the current password is confirmed", async () => {
+  it("changes the person's own PIN inside the confirmation window", async () => {
     const personId = await personWithPassword();
     const res = await send(mountApp(), "PUT", "/management-api/session/me/pin", {
       cookie: await cookieFor(personId),
-      body: { currentPassword: PASSWORD, pin: "8642" },
+      body: { pin: "8642" },
     });
     expect(res.status).toBe(204);
     const row = await personRow(personId);
@@ -1190,7 +1269,7 @@ describe("mountMeApi — own credentials and second factor", () => {
     for (let attempt = 0; attempt < 5; attempt++) {
       const res = await send(app, "PUT", "/management-api/session/me/pin", {
         cookie,
-        body: { currentPassword: PASSWORD, pin: "1" },
+        body: { pin: "1" },
       });
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: { code: string } }).error.code).toBe("pin.too_short");
@@ -1201,7 +1280,7 @@ describe("mountMeApi — own credentials and second factor", () => {
     const personId = await personWithPassword();
     const res = await send(mountApp(), "PUT", "/management-api/session/me/pin", {
       cookie: await cookieFor(personId),
-      body: { currentPassword: PASSWORD, pin: 8642 },
+      body: { pin: 8642 },
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
@@ -1216,7 +1295,7 @@ describe("mountMeApi — own credentials and second factor", () => {
 
     const begun = await send(app, "POST", "/management-api/session/me/totp/begin", {
       cookie,
-      body: { currentPassword: PASSWORD },
+      body: {},
     });
     expect(begun.status).toBe(200);
     const enrollment = (await begun.json()) as {
@@ -1228,6 +1307,7 @@ describe("mountMeApi — own credentials and second factor", () => {
     expect(enrollment.uri).toContain(enrollment.secret);
     expect((await personRow(personId)).totpSecret).toBeNull();
 
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie, false));
     const finished = await send(app, "POST", "/management-api/session/me/totp/finish", {
       cookie,
       body: {
@@ -1240,9 +1320,10 @@ describe("mountMeApi — own credentials and second factor", () => {
     expect(firstCodes.length).toBeGreaterThan(0);
     expect((await personRow(personId)).totpSecret).not.toBeNull();
 
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie));
     const regenerated = await send(app, "POST", "/management-api/session/me/recovery-codes", {
       cookie,
-      body: { currentPassword: PASSWORD, totp: generateSync({ secret: enrollment.secret }) },
+      body: { totp: generateSync({ secret: enrollment.secret }) },
     });
     expect(regenerated.status).toBe(200);
     const secondCodes = ((await regenerated.json()) as { codes: string[] }).codes;
@@ -1251,7 +1332,7 @@ describe("mountMeApi — own credentials and second factor", () => {
 
     const disabled = await send(app, "DELETE", "/management-api/session/me/totp", {
       cookie,
-      body: { currentPassword: PASSWORD, totp: generateSync({ secret: enrollment.secret }) },
+      body: { totp: generateSync({ secret: enrollment.secret }) },
     });
     expect(disabled.status).toBe(204);
     expect((await personRow(personId)).totpSecret).toBeNull();
@@ -1263,7 +1344,7 @@ describe("mountMeApi — own credentials and second factor", () => {
     const cookie = await cookieFor(personId);
     const begun = await send(app, "POST", "/management-api/session/me/totp/begin", {
       cookie,
-      body: { currentPassword: PASSWORD },
+      body: {},
     });
     const { enrollmentId, secret } = (await begun.json()) as {
       enrollmentId: string;
@@ -1280,11 +1361,11 @@ describe("mountMeApi — own credentials and second factor", () => {
     expect((await personRow(personId)).totpSecret).toBeNull();
   });
 
-  it("unlinks the person's Google sign-in once the current password is confirmed", async () => {
+  it("unlinks the person's Google sign-in inside the confirmation window", async () => {
     const personId = await personWithPassword({ googleSubject: "google-subject-unlink" });
     const res = await send(mountApp(), "DELETE", "/management-api/session/me/google", {
       cookie: await cookieFor(personId),
-      body: { currentPassword: PASSWORD },
+      body: {},
     });
     expect(res.status).toBe(204);
     expect((await personRow(personId)).googleSubject).toBeNull();
@@ -1306,14 +1387,14 @@ describe("mountMeApi — own credentials and second factor", () => {
       mountApp(),
       "DELETE",
       `/management-api/session/me/passkeys/${crypto.randomUUID()}`,
-      { cookie: await cookieFor(personId), body: { currentPassword: PASSWORD } },
+      { cookie: await cookieFor(personId), body: {} },
     );
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: { code: "passkey.not_registered", params: {} } });
   });
 });
 
-describe("mountMeApi — the current password is checked before the write lock is taken", () => {
+describe("mountMeApi — account request refusal ordering", () => {
   const PASSWORD = "current password";
   let count = 0;
 
@@ -1333,24 +1414,21 @@ describe("mountMeApi — the current password is checked before the write lock i
     return row!.id;
   }
 
-  it("refuses a malformed profile as before when deriving the current password's key fails", async () => {
+  it("refuses a malformed profile before requesting confirmation", async () => {
     const personId = await personWithPassword();
-    const cookie = await cookieFor(personId);
+    const cookie = await cookieFor(personId, false);
 
-    const res = await failingDerivationsOf("a password whose key cannot be derived", () =>
-      send(mountApp(), "PUT", "/management-api/session/me/profile", {
-        cookie,
-        body: {
-          displayName: " ",
-          firstNames: "Alex",
-          lastNames: "Rivera",
-          telephone: null,
-          email: `changed-${personId}@example.com`,
-          locale: "en-GB",
-          currentPassword: "a password whose key cannot be derived",
-        },
-      }),
-    );
+    const res = await send(mountApp(), "PUT", "/management-api/session/me/profile", {
+      cookie,
+      body: {
+        displayName: " ",
+        firstNames: "Alex",
+        lastNames: "Rivera",
+        telephone: null,
+        email: `changed-${personId}@example.com`,
+        locale: "en-GB",
+      },
+    });
 
     expect({ status: res.status, body: await res.json() }).toEqual({
       status: 400,
@@ -1364,11 +1442,11 @@ describe("mountMeApi — the current password is checked before the write lock i
     ["DELETE", "/management-api/session/me/totp"],
     ["DELETE", "/management-api/session/me/google"],
   ])(
-    "answers %s %s from a signed-out browser with a malformed password as signed out, as before",
+    "answers %s %s from a signed-out browser with a malformed authenticator code as signed out, as before",
     async (method, path) => {
       const res = await send(mountApp(), method, path, {
         cookie: `${MANAGEMENT_COOKIE}=${crypto.randomUUID()}`,
-        body: { currentPassword: 1234 },
+        body: { totp: 1234 },
       });
 
       expect(res.status).toBe(401);
@@ -1387,7 +1465,7 @@ describe("mountMeApi — the current password is checked before the write lock i
     const { result, order, outside } = await watchingDerivations(() =>
       send(app, "PUT", "/management-api/session/me/pin", {
         cookie,
-        body: { currentPassword: PASSWORD, pin: "8642" },
+        body: { pin: "8642" },
       }),
     );
 
@@ -1409,7 +1487,6 @@ describe("mountMeApi — the current password is checked before the write lock i
         telephone: null,
         email: "not an email",
         locale: "en-GB",
-        currentPassword: PASSWORD,
       },
     });
 
@@ -1434,7 +1511,6 @@ describe("mountMeApi — the current password is checked before the write lock i
           telephone: null,
           email: `lock-user-${count}@example.com`,
           locale: "en-GB",
-          currentPassword: PASSWORD,
         },
       }),
     );

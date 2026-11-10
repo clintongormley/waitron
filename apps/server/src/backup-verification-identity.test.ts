@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
@@ -42,10 +43,10 @@ describe("archived operational TOTP derivation", () => {
       const session = await withTransaction(suite.db, (tx) =>
         startManagementSession(tx, { personId: person!.id }),
       );
+      await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
       await withTransaction(suite.db, (tx) =>
         beginOwnTotpEnrollment(tx, {
           managementSessionId: session.token,
-          currentPassword: "correct horse",
           keyRing: ring,
         }),
       );

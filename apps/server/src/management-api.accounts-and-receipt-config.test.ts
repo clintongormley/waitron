@@ -52,11 +52,6 @@ import {
 } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
-import {
-  watchingDerivations,
-  writerBesideRequest,
-  whileChangingOnLockRequest,
-} from "./testing/watched-scrypt.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -340,7 +335,7 @@ describe("Management API staff + session routes", () => {
     const startLink = await app.request("/management-api/session/me/google", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ currentPassword: PASSWORD }),
+      body: JSON.stringify({}),
     });
     expect(startLink.status).toBe(200);
     const linkUrl = new URL(
@@ -1686,7 +1681,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
       await app.request("/management-api/session/me/google", {
         method: "POST",
         headers: { ...json, cookie },
-        body: JSON.stringify({ currentPassword: PASSWORD }),
+        body: JSON.stringify({}),
       }),
       await app.request(`/management-api/google/callback?state=${state}&code=c`, {
         headers: { cookie: `waitron_google_flow=${state}` },
@@ -1759,7 +1754,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     const startLink = await app.request("/management-api/session/me/google", {
       method: "POST",
       headers: { cookie, ...json },
-      body: JSON.stringify({ currentPassword: PASSWORD, totp: "000000" }),
+      body: JSON.stringify({ totp: "000000" }),
     });
     expect(startLink.status).toBe(200);
     await suite.db.execute(sql`update google_oidc_states set person_id = null`);
@@ -1778,40 +1773,22 @@ describe("Management API — Google sign-in edges, credential checks and staff l
     expect(linked.rows[0]!.count).toBe(0);
   });
 
-  it("throttles repeated wrong current passwords on a credential change", async () => {
+  it("requires confirmation before starting a Google link and queues no ceremony", async () => {
     await setupTenant();
     const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
     const cookie = await login(app, MANAGER_EMAIL);
-    const startLink = (currentPassword: unknown) =>
-      app.request("/management-api/session/me/google", {
-        method: "POST",
-        headers: { cookie, ...json },
-        body: JSON.stringify({ currentPassword }),
-      });
-    for (let i = 0; i < 4; i++) {
-      const wrong = await startLink("not the password");
-      expect(wrong.status).toBe(401);
-      expect(await wrong.json()).toEqual({ error: { code: "password.invalid", params: {} } });
-    }
-    const blocked = await startLink(PASSWORD);
-    expect(blocked.status).toBe(429);
-    expect(await blocked.json()).toMatchObject({ error: { code: "password.throttled" } });
-  });
-
-  it("refuses a Google link whose current password is missing or not text as password.invalid", async () => {
-    await setupTenant();
-    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
-    const cookie = await login(app, MANAGER_EMAIL);
-    for (const body of [{}, { currentPassword: 12345 }]) {
-      const res = await app.request("/management-api/session/me/google", {
-        method: "POST",
-        headers: { cookie, ...json },
-        body: JSON.stringify(body),
-      });
-      expect(res.status).toBe(401);
-      expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
-      expect(res.headers.get("set-cookie")).toBeNull();
-    }
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie, false));
+    const res = await app.request("/management-api/session/me/google", {
+      method: "POST",
+      headers: { cookie, ...json },
+      body: "{}",
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "management_session.proof_required", params: {} },
+    });
+    expect(suite.db.all(sql`select id from google_oidc_states`)).toEqual([]);
+    expect(res.headers.get("set-cookie")).toBeNull();
   });
 
   it("does not count a credential change that failed for another reason towards the throttle", async () => {
@@ -1822,7 +1799,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
       app.request("/management-api/session/me/google", {
         method: "POST",
         headers: { cookie, ...json },
-        body: JSON.stringify({ currentPassword: PASSWORD }),
+        body: JSON.stringify({}),
       });
     await suite.db.execute(sql`alter table google_oidc_states rename to google_oidc_states_away`);
     try {
@@ -2258,101 +2235,6 @@ describe("Management API — fresh sign-in for people changes", () => {
     expect(
       (await suite.db.select().from(persons).where(eq(persons.id, staffId)))[0]!.pinHash,
     ).toBeNull();
-  });
-});
-
-describe("Management API — a credential change checks the current password before the write lock is taken", () => {
-  const json = { "content-type": "application/json" };
-  const routes = [
-    { name: "passkey registration options", path: "/management-api/passkey/register/options" },
-    { name: "starting a Google link", path: "/management-api/session/me/google" },
-  ];
-
-  it.each(routes)("lets another writer commit while $name derives the key", async ({ path }) => {
-    await setupTenant();
-    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
-    const cookie = await login(app, MANAGER_EMAIL);
-
-    const { result, order, outside } = await writerBesideRequest(suite.db, async () =>
-      app.request(path, {
-        method: "POST",
-        headers: { cookie, ...json },
-        body: JSON.stringify({ currentPassword: PASSWORD }),
-      }),
-    );
-
-    expect(result.status).toBe(200);
-    expect(order).toEqual(["writer", "request's transaction"]);
-    expect(outside).toBe(1);
-  });
-
-  it("refuses a current password that was changed while its key was being derived", async () => {
-    const { managerId } = await setupTenant();
-    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
-    const cookie = await login(app, MANAGER_EMAIL);
-
-    const res = await whileChangingOnLockRequest(
-      suite.db,
-      async (tx) => {
-        await tx
-          .update(persons)
-          .set({ passwordHash: hashPassword("changed elsewhere") })
-          .where(eq(persons.id, managerId));
-      },
-      async () =>
-        app.request("/management-api/session/me/google", {
-          method: "POST",
-          headers: { cookie, ...json },
-          body: JSON.stringify({ currentPassword: PASSWORD }),
-        }),
-    );
-
-    expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
-    const states = await suite.db.execute<{ count: number }>(
-      sql`select count(*) as count from google_oidc_states`,
-    );
-    expect(states.rows[0]!.count).toBe(0);
-  });
-
-  it("derives no key for a credential change the slow-down refuses", async () => {
-    await setupTenant();
-    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
-    const cookie = await login(app, MANAGER_EMAIL);
-    const startLink = async (currentPassword: string) =>
-      app.request("/management-api/session/me/google", {
-        method: "POST",
-        headers: { cookie, ...json },
-        body: JSON.stringify({ currentPassword }),
-      });
-    for (let i = 0; i < 4; i++) expect((await startLink("not the password")).status).toBe(401);
-
-    const { result, order, outside } = await watchingDerivations(() => startLink(PASSWORD));
-
-    expect(result.status).toBe(429);
-    expect({ order, outside }).toEqual({ order: [], outside: 0 });
-  });
-  it("derives a key only for the attempts the slow-down lets through when eight arrive at once", async () => {
-    await setupTenant();
-    const app = mountApp(undefined, undefined, { exchange: vi.fn<typeof exchangeGoogleCode>() });
-    const cookie = await login(app, MANAGER_EMAIL);
-
-    const { result, order, outside } = await watchingDerivations(() =>
-      Promise.all(
-        Array.from({ length: 8 }, () =>
-          app.request("/management-api/session/me/google", {
-            method: "POST",
-            headers: { cookie, ...json },
-            body: JSON.stringify({ currentPassword: "not the password" }),
-          }),
-        ),
-      ),
-    );
-
-    const statuses = result.map((res) => res.status);
-    expect(statuses.filter((status) => status === 401)).toHaveLength(4);
-    expect(statuses.filter((status) => status === 429)).toHaveLength(4);
-    expect(outside + order.length).toBe(4);
   });
 });
 

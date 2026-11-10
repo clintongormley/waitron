@@ -183,7 +183,7 @@ function errors(el: ProfileScreen): string[] {
     .filter((error) => error !== "");
 }
 
-it.each(Object.keys(OPENERS) as Mode[])(
+it.each(["details", "password", "pin", "email", ...SECURED_MODES] as Mode[])(
   "%s opens with Save quiet, and neither a press, a host click nor Enter marks or sends anything",
   async (mode) => {
     const { el, api } = await openMode(mode);
@@ -247,26 +247,21 @@ it.each([
   ["totp", "beginTotp"],
   ["google", "beginGoogleLink"],
   ["passkey", "passkeyRegisterOptions"],
-] as const)(
-  "%s: typing the current password makes Save ready, and sends %s",
-  async (mode, request) => {
-    const { el, api } = await openMode(mode);
-    await type(el, "currentPassword", "secret-password");
-    expect(await state(el)).toEqual(ready);
-    await press(el);
-    expect(sent(api)).toEqual([request]);
-  },
-);
+] as const)("%s: confirmation without a draft is ready and sends %s", async (mode, request) => {
+  const { el, api } = await openMode(mode);
+  expect(await state(el)).toEqual(ready);
+  await press(el);
+  expect(sent(api)).toEqual([request]);
+});
 
 it.each([
   ["recovery", "regenerateRecoveryCodes"],
   ["disable-totp", "disableTotp"],
   ["unlink-google", "unlinkGoogle"],
 ] as const)(
-  "%s: typing the current password and code makes Save ready, and sends %s",
+  "%s: typing the authenticator code makes Save ready, and sends %s",
   async (mode, request) => {
     const { el, api } = await openMode(mode);
-    await type(el, "currentPassword", "secret-password");
     await type(el, "totp", "123456");
     expect(await state(el)).toEqual(ready);
     await press(el);
@@ -276,7 +271,7 @@ it.each([
 
 it("a changed new-password form its own checks refuse stays primary and disabled", async () => {
   const { el, api } = await openMode("password");
-  await type(el, "currentPassword", "secret-password");
+  await type(el, "password", "short");
   expect(await state(el)).toEqual(ready);
   await press(el);
   expect(sent(api)).toEqual([]);
@@ -303,7 +298,6 @@ it("typing the emailed code makes Save ready and sends only that code", async ()
 
 it("the authenticator's code step, which the first step leaves open, starts quiet", async () => {
   const { el, api } = await openMode("totp");
-  await type(el, "currentPassword", "secret-password");
   await press(el);
   expect(q(el, "[data-test=authenticator-qr]")).not.toBeNull();
   expect(await state(el)).toEqual(quiet);
@@ -351,16 +345,15 @@ it("each mode opened after another starts quiet and wakes on its own edit", asyn
   q(el, "[data-test=change-pin]")!.click();
   await settle(el);
   expect(await state(el)).toEqual(quiet);
-  await type(el, "currentPassword", "secret-password");
+  await type(el, "pin", "4321");
   expect(await state(el)).toEqual(ready);
 });
 
 it("Enter in a changed field presses Save, so the unchanged cases' Enter reaches it too", async () => {
   const { el, api } = await openMode("pin");
-  await type(el, "currentPassword", "secret-password");
   await type(el, "pin", "4321");
   await type(el, "confirmPin", "4321");
-  inner(el, "currentPassword").focus();
+  inner(el, "pin").focus();
   await userEvent.keyboard("{Enter}");
   await settle(el);
   expect(sent(api)).toEqual(["changePin"]);

@@ -355,7 +355,6 @@ describe("login-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
     await flush(el);
     expect(api.passkeyRegisterOptions).toHaveBeenLastCalledWith({
-      currentPassword: "new password",
       totp: "654321",
     });
   });
@@ -407,7 +406,7 @@ describe("login-screen", () => {
     expect((el as unknown as { actionValidated: boolean }).actionValidated).toBe(false);
   });
 
-  it("offers a passkey after activation and uses the newly set password for registration", async () => {
+  it("offers a passkey after activation through the shared confirmation", async () => {
     history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
     const api = stubApi({
       passkeyRegisterOptions: vi.fn().mockResolvedValue({
@@ -445,9 +444,7 @@ describe("login-screen", () => {
     expect(navigator.credentials.create).not.toHaveBeenCalled();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
     await flush(el);
-    expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({
-      currentPassword: "a replacement password",
-    });
+    expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({});
     expect(api.passkeyRegisterVerify).toHaveBeenCalledWith({
       challengeHandle: "register",
       response: expect.objectContaining({ id: "new-key" }),
@@ -1992,7 +1989,6 @@ describe("login-screen: password and second factor", () => {
     pressEnter(el, "one-time-code");
     await flush(el);
     expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({
-      currentPassword: "correct horse battery",
       totp: "654321",
     });
   });
@@ -2066,9 +2062,7 @@ describe("login-screen: the passkey offer after sign-in", () => {
     const { el, api } = await offer();
     click(el, "setup-passkey");
     await flush(el);
-    expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({
-      currentPassword: "correct horse battery",
-    });
+    expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({});
   });
 
   it("reports a failed passkey ceremony with the passkey message and keeps the offer open", async () => {

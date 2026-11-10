@@ -39,6 +39,10 @@ The design adds a long-lived browser cookie holding a random token, stored on th
 (CLAUDE.md §3, "Store anything that works as a live login as a hash"). How long a browser stays
 remembered: 30 days from its last sign-in (choice 7b).
 
+**Implementation update, 2026-11-10:** the shared window now covers your own sign-in changes,
+including passwordless accounts. An enrolled authenticator still needs its own code for each
+change; recovery codes cannot replace it. The account behavior below describes the original design baseline.
+
 ## 2. Asked again: what exists today
 
 One check already exists: `confirmFreshSignIn` (`apps/server/src/fresh-sign-in.ts:45`) asks for your

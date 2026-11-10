@@ -30,7 +30,6 @@ import {
   regenerateOwnRecoveryCodes,
   disableOwnTotp,
   unlinkOwnGoogle,
-  normalizeAndValidateEmail,
   type TotpKeyRing,
 } from "@waitron/identity";
 import { SUPPORTED_LOCALES, AppError } from "@waitron/shared";
@@ -175,15 +174,15 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  const updateProfile = ownPasswordChanges(deps.db, profileThrottle);
+  const changeAccount = ownPasswordChanges(deps.db, profileThrottle);
+  const updateProfile: typeof changeAccount = (token, input, change) =>
+    changeAccount(token, input, change, false);
   const textField = (body: Record<string, unknown>, field: string): string => {
     if (typeof body[field] !== "string")
       throw new AppError("management.request_invalid", { field });
     return body[field];
   };
   const credentials = (body: Record<string, unknown>) => ({
-    currentPassword:
-      body.currentPassword === undefined ? undefined : textField(body, "currentPassword"),
     totp: body.totp === undefined ? undefined : textField(body, "totp"),
     keyRing: credentialKeyRing,
   });
@@ -222,7 +221,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
           });
           return { changed, mode };
         },
-        (person) => normalizeAndValidateEmail(input.email) !== person.email,
       );
       if (changed === null) return c.json({ emailVerificationSent: false });
       if (mode === "unconfigured")

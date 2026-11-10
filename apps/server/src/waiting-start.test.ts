@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID } from "node:crypto";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
@@ -787,9 +788,9 @@ describe("the waiting start", () => {
     const enrolWithCodes = (personId: string) =>
       withTransaction(suite.db, async (tx) => {
         const { token } = await startManagementSession(tx, { personId });
+        await setFreshManagementSignIn(tx, token);
         const { enrollmentId, secret } = await beginOwnTotpEnrollment(tx, {
           managementSessionId: token,
-          currentPassword: ADMIN.password,
           keyRing: TOTP_KEY_RING,
         });
         const { codes } = await finishOwnTotpEnrollment(tx, {

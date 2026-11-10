@@ -289,15 +289,15 @@ describe("your profile", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-passkey]")!.click();
     await flush(el);
     expect(modal.open).toBe(true);
-    expect(el.shadowRoot!.querySelector("wt-input[name=currentPassword]")).not.toBeNull();
+    expect(modal.heading).toBe(t("profile.remove_passkey"));
     // The delayed "close" this Cancel caused, arriving only now — it must not undo "remove".
     modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
     await flush(el);
     expect(modal.open).toBe(true);
-    expect(el.shadowRoot!.querySelector("wt-input[name=currentPassword]")).not.toBeNull();
+    expect(modal.heading).toBe(t("profile.remove_passkey"));
   });
-  it("hides the change-password action for an account with no password", async () => {
-    const { el, host } = await mount({
+  it("lets a passwordless account set a password through confirmation", async () => {
+    const { el, api, host } = await mount({
       getProfile: vi.fn().mockResolvedValue({
         displayName: "Alex",
         firstNames: "Alex",
@@ -312,9 +312,15 @@ describe("your profile", () => {
         passkeys: [],
       }),
     });
-    expect(el.shadowRoot!.querySelector('[data-test="change-password"]')).toBeNull();
-    expect(el.shadowRoot!.textContent).toContain(t("profile.password_recovery"));
+    expect(el.shadowRoot!.querySelector('[data-test="change-password"]')).not.toBeNull();
+
     expect(el.shadowRoot!.textContent).toContain(t("login.password"));
+    await click(el, "change-password");
+    expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe(t("profile.add_password"));
+    input(el, "password", "replacement password");
+    input(el, "confirmPassword", "replacement password");
+    await click(el, "save");
+    expect(api.changePassword).toHaveBeenCalledWith({ password: "replacement password" });
     await expectNoA11yViolations(host);
   });
   it("shows a passkey's name and keeps a numbered fallback for unnamed keys", async () => {
@@ -485,9 +491,9 @@ describe("your profile", () => {
   it("starts Google linking when the installation is configured", async () => {
     const { el, api } = await mount();
     await click(el, "setup-google");
-    input(el, "currentPassword", "correct horse");
+
     await click(el, "save");
-    expect(api.beginGoogleLink).toHaveBeenCalledWith({ currentPassword: "correct horse" });
+    expect(api.beginGoogleLink).toHaveBeenCalledWith({});
     expect(el.navigate as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       "https://accounts.google.test/link",
     );
@@ -558,24 +564,18 @@ describe("your profile", () => {
       await page.viewport(width, height);
     }
   });
-  it("requires current credentials for an email change and gives each password field a reveal control", async () => {
+  it("saves an email change through the shared confirmation without an inline password", async () => {
     const { el, api, host } = await mount();
     await editDetails(el);
     input(el, "email", "new@example.com");
     await flush(el);
-    await click(el, "save");
-    expect(api.saveProfile).not.toHaveBeenCalled();
-    input(el, "currentPassword", "current");
-    const field = el.shadowRoot!.querySelector("wt-input[name=currentPassword]")!;
-    expect(field.shadowRoot!.querySelector("input")!.autocomplete).toBe("current-password");
-    field.querySelector<HTMLElement>("[slot=end]")!.click();
-    await flush(el);
-    expect(field.shadowRoot!.querySelector("input")!.type).toBe("text");
-    await expectNoA11yViolations(host);
+    expect(el.shadowRoot!.querySelector("wt-input[name=currentPassword]")).toBeNull();
     await click(el, "save");
     expect(api.saveProfile).toHaveBeenCalledWith(
-      expect.objectContaining({ email: "new@example.com", currentPassword: "current" }),
+      expect.objectContaining({ email: "new@example.com" }),
     );
+    expect(api.saveProfile.mock.calls[0]![0]).not.toHaveProperty("currentPassword");
+    await expectNoA11yViolations(host);
   });
   it("shows a pending replacement address and confirms its emailed code", async () => {
     const { el, api } = await mount({
@@ -599,42 +599,33 @@ describe("your profile", () => {
     await click(el, "save");
     expect(api.confirmProfileEmail).toHaveBeenCalledWith("123456");
   });
-  it("validates matching new passwords and reports a rejected current password beside its input", async () => {
+  it("validates matching new passwords before the shared confirmation", async () => {
     const { el, api } = await mount();
     await click(el, "change-password");
-    input(el, "currentPassword", "current");
     input(el, "password", "replacement password");
     input(el, "confirmPassword", "different");
     await click(el, "save");
     expect(api.changePassword).not.toHaveBeenCalled();
     input(el, "confirmPassword", "replacement password");
-    api.changePassword.mockRejectedValueOnce({ code: "password.invalid" });
     await click(el, "save");
-    expect(
-      el.shadowRoot!.querySelector("wt-input[name=currentPassword]")!.getAttribute("error"),
-    ).toBeTruthy();
-    await click(el, "save");
-    expect(api.changePassword).toHaveBeenCalledWith({
-      currentPassword: "current",
-      password: "replacement password",
-    });
+    expect(api.changePassword).toHaveBeenCalledWith({ password: "replacement password" });
   });
   it("changes the PIN after confirming the current login", async () => {
     const { el, api } = await mount();
     await click(el, "change-pin");
-    input(el, "currentPassword", "current");
+
     input(el, "pin", "4321");
     input(el, "confirmPin", "4321");
     await click(el, "save");
-    expect(api.changePin).toHaveBeenCalledWith({ currentPassword: "current", pin: "4321" });
+    expect(api.changePin).toHaveBeenCalledWith({ pin: "4321" });
   });
   it("adds a passkey for this session and confirms removal with current credentials", async () => {
     const warn = vi.spyOn(console, "warn");
     const { el, api } = await mount();
     await click(el, "add-passkey");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
-    expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({ currentPassword: "current" });
+    expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({});
     // The library warns if optionsJSON is omitted and its deprecated call shape is used.
     expect(warn).not.toHaveBeenCalled();
     expect(navigator.credentials.create).toHaveBeenCalledExactlyOnceWith({
@@ -665,14 +656,14 @@ describe("your profile", () => {
       },
     });
     await click(el, "remove-passkey");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
-    expect(api.removePasskey).toHaveBeenCalledWith("credential", { currentPassword: "current" });
+    expect(api.removePasskey).toHaveBeenCalledWith("credential", {});
   });
   it("tells the browser's password manager which passkeys are accepted after adding one and after removing one", async () => {
     const { el, api } = await mount();
     await click(el, "add-passkey");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     await flush(el);
     expect(api.passkeySignals).toHaveBeenCalledOnce();
@@ -688,7 +679,7 @@ describe("your profile", () => {
       displayName: "Alex",
     });
     await click(el, "remove-passkey");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     await flush(el);
     expect(api.passkeySignals).toHaveBeenCalledTimes(2);
@@ -699,11 +690,11 @@ describe("your profile", () => {
       passkeyRegisterVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
     });
     await click(el, "add-passkey");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     await click(el, "cancel");
     await click(el, "change-pin");
-    input(el, "currentPassword", "current");
+
     input(el, "pin", "4321");
     input(el, "confirmPin", "4321");
     await click(el, "save");
@@ -713,16 +704,16 @@ describe("your profile", () => {
     expect(signalAll).not.toHaveBeenCalled();
     expect(signalDetails).not.toHaveBeenCalled();
   });
-  it("takes the medium height only for the password step of setting up an authenticator", async () => {
+  it("sizes authenticator setup to its remaining contents", async () => {
     const { el } = await mount();
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
     await editDetails(el);
     expect(modal.hasAttribute("height")).toBe(false);
     await click(el, "cancel");
     await click(el, "setup-authenticator");
-    expect(modal.getAttribute("size")).toBe("standard");
-    expect(modal.getAttribute("height")).toBe("medium");
-    input(el, "currentPassword", "current");
+    expect(modal.getAttribute("size")).toBe("compact");
+    expect(modal.hasAttribute("height")).toBe(false);
+
     await click(el, "save");
     expect(el.shadowRoot!.querySelector("[data-test=authenticator-qr]")).not.toBeNull();
     expect(modal.getAttribute("size")).toBe("standard");
@@ -731,9 +722,9 @@ describe("your profile", () => {
   it("sets up an authenticator and shows recovery codes once", async () => {
     const { el, api } = await mount();
     await click(el, "setup-authenticator");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
-    expect(api.beginTotp).toHaveBeenCalledWith({ currentPassword: "current" });
+    expect(api.beginTotp).toHaveBeenCalledWith({});
     const qr = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=authenticator-qr]")!;
     expect(qr.src).toMatch(/^data:image\/png;base64,/);
     expect(qr.alt).toBe(t("profile.authenticator_qr_alt"));
@@ -771,16 +762,16 @@ describe("your profile", () => {
     });
     await flush(el);
     await click(el, "disable-authenticator");
-    input(el, "currentPassword", "current");
+
     input(el, "totp", "123456");
     await click(el, "save");
-    expect(api.disableTotp).toHaveBeenCalledWith({ currentPassword: "current", totp: "123456" });
+    expect(api.disableTotp).toHaveBeenCalledWith({ totp: "123456" });
 
     await click(el, "unlink-google");
-    input(el, "currentPassword", "current");
+
     input(el, "totp", "123456");
     await click(el, "save");
-    expect(api.unlinkGoogle).toHaveBeenCalledWith({ currentPassword: "current", totp: "123456" });
+    expect(api.unlinkGoogle).toHaveBeenCalledWith({ totp: "123456" });
   });
 
   it("labels the field 'Display name' and requires it under its own message", async () => {
@@ -853,7 +844,7 @@ describe("your profile", () => {
       new DOMException("already registered", "InvalidStateError"),
     );
     await click(el, "add-passkey");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     expect(api.passkeyRegisterVerify).not.toHaveBeenCalled();
     expect(await bottomOf(el)).toBe(codeMessage("passkey.already_registered"));
@@ -866,7 +857,7 @@ describe("your profile", () => {
       new DOMException("already registered", "InvalidStateError"),
     );
     await click(el, "add-passkey");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
     await modal.updateComplete;
@@ -877,8 +868,7 @@ describe("your profile", () => {
     expect(message!.getAttribute("role")).toBe("alert");
     expect(footer.firstElementChild).toBe(message);
     expect(body.querySelector("[data-error]")).toBeNull();
-    const fields = [...modal.querySelectorAll("wt-input")];
-    const lastField = fields.at(-1)!.getBoundingClientRect();
+    const lastField = modal.querySelector(".fields")!.getBoundingClientRect();
     const box = message!.getBoundingClientRect();
     expect(box.top).toBeGreaterThanOrEqual(lastField.bottom);
     for (const button of modal.querySelectorAll("wt-form-actions wt-button")) {
@@ -897,7 +887,7 @@ describe("your profile", () => {
       new DOMException("authenticator failed", "UnknownError"),
     );
     await click(el, "add-passkey");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     expect(api.passkeyRegisterVerify).not.toHaveBeenCalled();
     const bottom = await bottomOf(el);
@@ -912,7 +902,7 @@ describe("your profile", () => {
       new DOMException("cancelled", "NotAllowedError"),
     );
     await click(el, "add-passkey");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     expect(await bottomOf(el)).toBe("");
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
@@ -923,7 +913,7 @@ describe("your profile", () => {
       passkeyRegisterVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
     });
     await click(el, "add-passkey");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     expect(await bottomOf(el)).toBe(codeMessage("passkey.challenge_expired"));
   });
@@ -1026,7 +1016,7 @@ describe("your profile — validation, refusals and the remaining actions", () =
     });
     await flush(el);
     await click(el, "setup-google");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     expect(location.hash).toBe("#google-link-probe");
   });
@@ -1112,7 +1102,7 @@ describe("your profile — validation, refusals and the remaining actions", () =
       ),
     });
     await click(el, "change-pin");
-    input(el, "currentPassword", "current");
+
     input(el, "pin", "4321");
     input(el, "confirmPin", "4321");
     await flush(el);
@@ -1121,25 +1111,8 @@ describe("your profile — validation, refusals and the remaining actions", () =
     finish();
     await flush(el);
     expect(api.changePin).toHaveBeenCalledExactlyOnceWith({
-      currentPassword: "current",
       pin: "4321",
     });
-  });
-
-  it("hides a revealed password again on a second press", async () => {
-    const { el } = await mount();
-    await click(el, "change-password");
-    const current = field(el, "currentPassword");
-    const reveal = current.querySelector<HTMLElement>("[slot=end]")!;
-    reveal.click();
-    await flush(el);
-    expect(current.shadowRoot!.querySelector("input")!.type).toBe("text");
-    reveal.click();
-    await flush(el);
-    expect(current.shadowRoot!.querySelector("input")!.type).toBe("password");
-    expect(current.querySelector("[slot=end]")!.getAttribute("aria-label")).toBe(
-      t("login.show_password"),
-    );
   });
 
   it("asks for the authenticator code as well when the account has one", async () => {
@@ -1147,7 +1120,7 @@ describe("your profile — validation, refusals and the remaining actions", () =
       getProfile: vi.fn().mockResolvedValue(await baseProfile({ hasTotp: true })),
     });
     await click(el, "change-pin");
-    input(el, "currentPassword", "current");
+
     input(el, "pin", "4321");
     input(el, "confirmPin", "4321");
     await click(el, "save");
@@ -1158,10 +1131,12 @@ describe("your profile — validation, refusals and the remaining actions", () =
   it("names each missing or short new-password field", async () => {
     const { el, api } = await mount();
     await click(el, "change-password");
-    input(el, "currentPassword", "current");
+    input(el, "password", "replacement password");
     await click(el, "save");
-    expect(field(el, "password").error).toBe(t("form.password_required"));
     expect(field(el, "confirmPassword").error).toBe(t("form.confirm_password_required"));
+    input(el, "password", "");
+    await flush(el);
+    expect(field(el, "password").error).toBe(t("form.password_required"));
     input(el, "password", "short");
     input(el, "confirmPassword", "short");
     await click(el, "save");
@@ -1173,9 +1148,11 @@ describe("your profile — validation, refusals and the remaining actions", () =
   it("names each missing, short or mismatched PIN field", async () => {
     const { el, api } = await mount();
     await click(el, "change-pin");
-    input(el, "currentPassword", "current");
+    input(el, "confirmPin", "4321");
     await click(el, "save");
     expect(field(el, "pin").error).toBe(t("form.pin_required"));
+    input(el, "confirmPin", "");
+    await flush(el);
     expect(field(el, "confirmPin").error).toBe(t("form.pin_required"));
     input(el, "pin", "12");
     input(el, "confirmPin", "13");
@@ -1218,7 +1195,7 @@ describe("your profile — validation, refusals and the remaining actions", () =
       finishTotp: vi.fn().mockRejectedValue({ code: "totp.invalid" }),
     });
     await click(el, "setup-authenticator");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     input(el, "setupCode", "000000");
     await click(el, "save");
@@ -1236,11 +1213,10 @@ describe("your profile — validation, refusals and the remaining actions", () =
     expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe(
       t("profile.replace_recovery_codes"),
     );
-    input(el, "currentPassword", "current");
+
     input(el, "totp", "123456");
     await click(el, "save");
     expect(api.regenerateRecoveryCodes).toHaveBeenCalledExactlyOnceWith({
-      currentPassword: "current",
       totp: "123456",
     });
     expect(el.shadowRoot!.querySelector("[data-test=recovery-code-list]")!.textContent).toBe(
@@ -1321,11 +1297,10 @@ describe("your profile — validation, refusals and the remaining actions", () =
       input(el, "pin", "4321");
       input(el, "confirmPin", "4321");
     }
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     expect(reject).toHaveBeenCalledTimes(1);
     expect(field(el, fieldName).error).toBe(codeMessage(code));
-    expect(field(el, "currentPassword").error).toBe("");
   });
 
   it("puts a taken display name beside its field, the generic sentence above Save, and clears the field when it is edited", async () => {
@@ -1369,12 +1344,12 @@ describe("your profile — validation, refusals and the remaining actions", () =
     expect(tabs.value).toBe("security");
   });
 
-  it("offers no passkey removal on an account without a password", async () => {
+  it("offers passkey removal on an account without a password", async () => {
     const { el } = await mount({
       getProfile: vi.fn().mockResolvedValue(await baseProfile({ hasPassword: false })),
     });
     expect(el.shadowRoot!.querySelector(".passkey-item")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=remove-passkey]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=remove-passkey]")).not.toBeNull();
   });
 
   it("stays open when a close event bubbles up from inside the modal", async () => {
@@ -1408,7 +1383,6 @@ describe("your profile — errors at the bottom of the form, not above it", () =
   it("says nothing until Save, then marks each field, focuses the first and waits for them", async () => {
     const { el, api } = await mount();
     await click(el, "change-pin");
-    expect(field(el, "currentPassword").error).toBe("");
     expect(field(el, "pin").error).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect([save(el).variant, save(el).disabled]).toEqual(["secondary", true]);
@@ -1416,14 +1390,12 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     input(el, "pin", "12");
     await click(el, "save");
     expect(api.changePin).not.toHaveBeenCalled();
-    expect(field(el, "currentPassword").error).toBe(t("form.password_required"));
     expect(field(el, "pin").error).toBe(codeMessage("pin.too_short"));
     expect(field(el, "pin").value).toBe("12");
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(save(el).disabled).toBe(true);
-    await vi.waitFor(() => expect(focused(el, "currentPassword")).toBe(true));
+    await vi.waitFor(() => expect(focused(el, "pin")).toBe(true));
 
-    input(el, "currentPassword", "current");
     input(el, "pin", "4321");
     input(el, "confirmPin", "4321");
     await flush(el);
@@ -1439,22 +1411,22 @@ describe("your profile — errors at the bottom of the form, not above it", () =
   });
 
   it("focuses the field a refusal names and leaves Save working until that field changes", async () => {
-    const changePassword = vi.fn().mockRejectedValue({ code: "password.invalid" });
+    const changePassword = vi.fn().mockRejectedValue({ code: "password.too_short" });
     const { el } = await mount({ changePassword });
     await click(el, "change-password");
-    input(el, "currentPassword", "wrong");
+
     input(el, "password", "replacement password");
     input(el, "confirmPassword", "replacement password");
     await click(el, "save");
     expect(changePassword).toHaveBeenCalledTimes(1);
-    expect(field(el, "currentPassword").error).toBe(codeMessage("password.invalid"));
+    expect(field(el, "password").error).toBe(codeMessage("password.too_short"));
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(await nativeSaveDisabled(el)).toBe(false);
-    await vi.waitFor(() => expect(focused(el, "currentPassword")).toBe(true));
+    await vi.waitFor(() => expect(focused(el, "password")).toBe(true));
 
-    input(el, "currentPassword", "current");
+    input(el, "password", "another replacement");
+    input(el, "confirmPassword", "another replacement");
     await flush(el);
-    expect(field(el, "currentPassword").error).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(save(el).disabled).toBe(false);
   });
@@ -1473,7 +1445,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
       await editDetails(el);
       input(el, "email", "new@example.com");
       await flush(el);
-      input(el, "currentPassword", "current");
+
       await click(el, "save");
       expect(saveProfile).toHaveBeenCalledTimes(1);
       expect(field(el, name).error).toBe(codeMessage(code));
@@ -1502,11 +1474,10 @@ describe("your profile — errors at the bottom of the form, not above it", () =
         .mockRejectedValue({ code: "profile.invalid", params: { field: "displayName" } }),
     });
     await click(el, "add-passkey");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     expect(el.shadowRoot!.querySelector("[name=passkeyName]")).toBeNull();
     expect(await bottomOf(el)).toBe(codeMessage("profile.invalid"));
-    expect(field(el, "currentPassword").error).toBe("");
     expect(await nativeSaveDisabled(el)).toBe(false);
   });
 
@@ -1515,7 +1486,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
       finishTotp: vi.fn().mockRejectedValue({ code: "totp.invalid" }),
     });
     await click(el, "setup-authenticator");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     input(el, "setupCode", "000000");
     await click(el, "save");
@@ -1539,20 +1510,19 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     );
     const { el } = await mount({ changePassword });
     await click(el, "change-password");
-    input(el, "currentPassword", "wrong");
+
     input(el, "password", "replacement password");
     input(el, "confirmPassword", "replacement password");
     await click(el, "save");
-    input(el, "currentPassword", "");
+    input(el, "password", "");
     await flush(el);
-    reject({ code: "password.invalid" });
+    reject({ code: "password.too_short" });
     await flush(el);
-    expect(field(el, "currentPassword").error).toBe(codeMessage("password.invalid"));
+    expect(field(el, "password").error).toBe(codeMessage("password.too_short"));
     expect(await nativeSaveDisabled(el)).toBe(true);
 
-    input(el, "currentPassword", "current");
+    input(el, "password", "replacement password");
     await flush(el);
-    expect(field(el, "currentPassword").error).toBe("");
     expect(await nativeSaveDisabled(el)).toBe(false);
   });
 
@@ -1638,14 +1608,13 @@ describe("your profile — errors at the bottom of the form, not above it", () =
       .mockReturnValue(new Promise<void>((resolve) => (finish = resolve)));
     const { el } = await mount({ changePin });
     await click(el, "change-pin");
-    input(el, "currentPassword", "current");
+
     input(el, "pin", "4321");
     input(el, "confirmPin", "4321");
     await click(el, "save");
     expect(await bottomOf(el)).toBe(codeMessage("server.internal"));
     expect(save(el).disabled).toBe(false);
-    for (const name of ["currentPassword", "pin", "confirmPin"])
-      expect(field(el, name).error).toBe("");
+    for (const name of ["pin", "confirmPin"]) expect(field(el, name).error).toBe("");
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await el.updateComplete;
@@ -1659,7 +1628,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
       changePin: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
     await click(el, "change-pin");
-    input(el, "currentPassword", "current");
+
     input(el, "pin", "4321");
     input(el, "confirmPin", "4321");
     await click(el, "save");
@@ -1678,7 +1647,6 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     await click(el, "cancel");
     await click(el, "change-pin");
-    expect(field(el, "currentPassword").error).toBe("");
     expect(field(el, "pin").error).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect([save(el).variant, save(el).disabled]).toEqual(["secondary", true]);
@@ -1687,73 +1655,11 @@ describe("your profile — errors at the bottom of the form, not above it", () =
   it("asks nothing of the authenticator code until the code step's own Save", async () => {
     const { el } = await mount();
     await click(el, "setup-authenticator");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     expect(field(el, "setupCode").error).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect([save(el).variant, save(el).disabled]).toEqual(["secondary", true]);
-  });
-});
-
-describe("your profile — the signed-in email is named as the username beside the current-password field", () => {
-  function expectSavedUsernameBeside(el: ProfileScreen, email: string) {
-    const root = el.shadowRoot!;
-    const username = root.querySelector<HTMLInputElement>("input[autocomplete=username]");
-    expect(username, "a username field beside the current password").not.toBeNull();
-    expect(username!.value).toBe(email);
-    expect(username!.type).toBe("email");
-    expect(username!.readOnly).toBe(true);
-    expect(username!.tabIndex).toBe(-1);
-    expect(username!.getAttribute("aria-hidden")).toBe("true");
-    const password = root.querySelector<HTMLElement>("wt-input[name=currentPassword]")!;
-    expect(password.shadowRoot!.querySelector("input")!.autocomplete).toBe("current-password");
-    expect(username!.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
-      0,
-    );
-    const box = username!.getBoundingClientRect();
-    expect(box.width).toBeLessThanOrEqual(1);
-    expect(box.height).toBeLessThanOrEqual(1);
-  }
-
-  it("on every step that asks for the current password", async () => {
-    const { el } = await mount();
-    for (const action of [
-      "change-password",
-      "change-pin",
-      "add-passkey",
-      "remove-passkey",
-      "setup-authenticator",
-      "setup-google",
-    ]) {
-      await click(el, action);
-      expectSavedUsernameBeside(el, "alex@example.com");
-      await click(el, "cancel");
-    }
-    await editDetails(el);
-    input(el, "email", "new@example.com");
-    await flush(el);
-    expectSavedUsernameBeside(el, "alex@example.com");
-  });
-
-  it("on the steps an authenticator and a linked Google account add", async () => {
-    const profile = { ...(await apiStub().getProfile()), hasTotp: true, hasGoogle: true };
-    const { el } = await mount({ getProfile: vi.fn().mockResolvedValue(profile) });
-    for (const action of ["recovery-codes", "disable-authenticator", "unlink-google"]) {
-      await click(el, action);
-      expectSavedUsernameBeside(el, "alex@example.com");
-      await click(el, "cancel");
-    }
-  });
-
-  it("names no username for an account with no email, and none on a step that asks no password", async () => {
-    const { el } = await mount();
-    await editDetails(el);
-    expect(el.shadowRoot!.querySelector("input[autocomplete=username]")).toBeNull();
-    await click(el, "cancel");
-    const profile = { ...(await apiStub().getProfile()), email: null };
-    const { el: noEmail } = await mount({ getProfile: vi.fn().mockResolvedValue(profile) });
-    expect(noEmail.shadowRoot!.querySelector("wt-input[name=currentPassword]")).not.toBeNull();
-    expect(noEmail.shadowRoot!.querySelector("input[autocomplete=username]")).toBeNull();
   });
 });
 
@@ -1774,7 +1680,7 @@ describe("your profile — a save's message across an outage", () => {
   it("keeps a save's connection failure when the reads recover", async () => {
     const { el, api, liveData, value } = await mountLive();
     await click(el, "change-pin");
-    input(el, "currentPassword", "current");
+
     input(el, "pin", "4321");
     input(el, "confirmPin", "4321");
     api.getProfile.mockRejectedValue({ code: "connection.failed" });
@@ -1799,7 +1705,7 @@ describe("your profile — a save's message across an outage", () => {
       new DOMException("already registered", "InvalidStateError"),
     );
     await click(el, "add-passkey");
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     expect(await bottomOf(el)).toBe(codeMessage("passkey.already_registered"));
     api.getProfile.mockRejectedValue({ code: "connection.failed" });
@@ -1823,7 +1729,7 @@ describe("A403 passkey controls", () => {
     expect(el.shadowRoot!.querySelector("[data-test=save]")!.textContent!.trim()).toBe(
       t("action.add"),
     );
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
   });
@@ -1896,7 +1802,7 @@ describe("profile confirmation delivery messages", () => {
           await editDetails(el);
           input(el, "email", "new@example.com");
           await flush(el);
-          input(el, "currentPassword", "current");
+
           await click(el, "save");
           await vi.waitFor(() =>
             expect(
@@ -1921,7 +1827,7 @@ describe("profile confirmation delivery messages", () => {
     await editDetails(el);
     input(el, "email", "new@example.com");
     await flush(el);
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     const signin = vi.fn();
     el.addEventListener("admin-sign-in", signin);
@@ -1944,7 +1850,7 @@ describe("profile confirmation delivery messages", () => {
     await editDetails(el);
     input(el, "email", "new@example.com");
     await flush(el);
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     expect(
       el.shadowRoot!.querySelector("[data-test=email-settings-link]")?.getAttribute("href"),
@@ -1975,7 +1881,7 @@ describe("profile confirmation delivery messages", () => {
     await editDetails(el);
     input(el, "email", "new@example.com");
     await flush(el);
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     expect(el.shadowRoot!.querySelector("[data-test=email-status-text]")?.textContent?.trim()).toBe(
       t("profile.email_unconfigured"),
@@ -1997,7 +1903,7 @@ describe("profile confirmation delivery messages", () => {
     await editDetails(el);
     input(el, "email", "new@example.com");
     await flush(el);
-    input(el, "currentPassword", "current");
+
     await click(el, "save");
     await vi.waitFor(() => expect(api.saveProfile).toHaveBeenCalledOnce());
     el.remove();
@@ -2023,7 +1929,7 @@ describe("profile confirmation delivery messages", () => {
     await editDetails(el);
     input(el, "email", "new@example.com");
     await flush(el);
-    input(el, "currentPassword", "current");
+
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
     const saved = new Promise<void>((resolve) =>
       modal.addEventListener("wt-close", () => resolve(), { once: true }),

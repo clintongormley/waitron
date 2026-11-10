@@ -11,8 +11,7 @@ import type { SecretCheck } from "./secret-check.js";
 import { hashPin, verifyPin } from "./verify-pin.js";
 import { hashPassword, verifyPassword } from "./verify-password.js";
 import { checkManagerPassword, loginManager, loginManagerById } from "./manager-login.js";
-import { changeOwnPassword, checkOwnPassword, verifyOwnCredentials } from "./profile.js";
-import { beginGoogleLink } from "./google-oidc.js";
+import { checkOwnPassword, verifyOwnFreshSignIn } from "./profile.js";
 import { startManagementSession } from "./management-session.js";
 import { encryptTotpSecret } from "./mfa.js";
 import {
@@ -548,7 +547,7 @@ describe("checkOwnPassword", () => {
     passwordSpy.mockClear();
 
     const person = await run((tx) =>
-      verifyOwnCredentials(tx, {
+      verifyOwnFreshSignIn(tx, {
         ...owner,
         currentPassword: "correct horse",
         checked,
@@ -583,7 +582,7 @@ describe("checkOwnPassword", () => {
     });
     const code = await codeOf(() =>
       run((tx) =>
-        verifyOwnCredentials(tx, {
+        verifyOwnFreshSignIn(tx, {
           ...owner,
           currentPassword: "correct horse",
           checked,
@@ -598,7 +597,7 @@ describe("checkOwnPassword", () => {
   });
 });
 
-describe("the profile changes with a check", () => {
+describe("the fresh confirmation with a password check", () => {
   it("derive no key inside the transaction when the check matches", async () => {
     const owner = await ownSession();
     const checked = await checkOwnPassword(suite.db, {
@@ -608,26 +607,14 @@ describe("the profile changes with a check", () => {
     passwordSpy.mockClear();
 
     const person = await run((tx) =>
-      verifyOwnCredentials(tx, {
+      verifyOwnFreshSignIn(tx, {
         ...owner,
         currentPassword: "correct horse",
         checked,
         keyRing: TOTP_KEY_RING,
       }),
     );
-    const begun = await run((tx) =>
-      beginGoogleLink(tx, {
-        clientId: "client.apps.googleusercontent.com",
-        redirectUri: "https://waitron.example/management-api/google/callback",
-        ...owner,
-        currentPassword: "correct horse",
-        checked,
-        keyRing: TOTP_KEY_RING,
-      }),
-    );
-
     expect(person.id).toBe(owner.personId);
-    expect(begun.state).toEqual(expect.any(String));
     expect(passwordSpy).not.toHaveBeenCalled();
   });
 
@@ -638,7 +625,7 @@ describe("the profile changes with a check", () => {
 
     const code = await codeOf(() =>
       run((tx) =>
-        verifyOwnCredentials(tx, {
+        verifyOwnFreshSignIn(tx, {
           ...owner,
           currentPassword: "wrong horse",
           checked,
@@ -658,10 +645,10 @@ describe("the profile changes with a check", () => {
     const verify = (currentPassword: string, checked: unknown) =>
       codeOf(() =>
         run((tx) =>
-          verifyOwnCredentials(tx, {
+          verifyOwnFreshSignIn(tx, {
             ...owner,
             currentPassword,
-            checked: checked as Parameters<typeof verifyOwnCredentials>[1]["checked"],
+            checked: checked as Parameters<typeof verifyOwnFreshSignIn>[1]["checked"],
             keyRing: TOTP_KEY_RING,
           }),
         ),
@@ -677,18 +664,11 @@ describe("the profile changes with a check", () => {
       ...owner,
       currentPassword: "correct horse",
     });
-    await run((tx) =>
-      changeOwnPassword(tx, {
-        ...owner,
-        currentPassword: "correct horse",
-        password: "battery staple",
-        keyRing: TOTP_KEY_RING,
-      }),
-    );
+    await setPassword(owner.personId, "battery staple");
 
     const code = await codeOf(() =>
       run((tx) =>
-        verifyOwnCredentials(tx, {
+        verifyOwnFreshSignIn(tx, {
           ...owner,
           currentPassword: "correct horse",
           checked,
@@ -710,7 +690,7 @@ describe("the profile changes with a check", () => {
 
     const code = await codeOf(() =>
       run((tx) =>
-        verifyOwnCredentials(tx, {
+        verifyOwnFreshSignIn(tx, {
           ...owner,
           currentPassword: "correct horse",
           checked,

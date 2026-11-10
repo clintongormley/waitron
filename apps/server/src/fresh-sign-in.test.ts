@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { eq, sql } from "drizzle-orm";
 import { generateSync } from "otplib";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -59,14 +60,15 @@ async function enrolTotp(personId: string, token: string): Promise<string[]> {
     .update(persons)
     .set({ totpSecret: encryptTotpSecret(secret, TOTP_KEY_RING.current) })
     .where(eq(persons.id, personId));
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
   const { codes } = await withTransaction(suite.db, (tx) =>
     regenerateOwnRecoveryCodes(tx, {
       managementSessionId: token,
-      currentPassword: "correct horse",
       totp: generateSync({ secret }),
       keyRing: TOTP_KEY_RING,
     }),
   );
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token, false));
   return codes;
 }
 

@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -88,7 +89,6 @@ describe("your profile", () => {
       method: "PUT",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        currentPassword: "current password",
         password: "replacement password",
       }),
     });
@@ -107,7 +107,7 @@ describe("your profile", () => {
       app.request(`/management-api/session/me/passkeys/${id}`, {
         method: "DELETE",
         headers: { cookie, "content-type": "application/json" },
-        body: JSON.stringify({ currentPassword: "replacement password" }),
+        body: JSON.stringify({}),
       });
     expect((await remove(otherKey)).status).toBe(404);
     expect((await remove(ownKey)).status).toBe(204);
@@ -164,7 +164,9 @@ async function seedPerson(name: string): Promise<string> {
 
 async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
-    return startManagementSession(tx, { personId });
+    const session = await startManagementSession(tx, { personId });
+    await setFreshManagementSignIn(tx, session.token);
+    return session;
   });
   return `${MANAGEMENT_COOKIE}=${session.token}`;
 }

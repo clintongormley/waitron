@@ -87,21 +87,20 @@ function unload() {
 for (const [action, field] of [
   ["change-password", "password"],
   ["change-pin", "pin"],
-  ["remove-passkey", "currentPassword"],
+  ["remove-passkey", "totp"],
   ["recovery-codes", "totp"],
-  ["disable-authenticator", "currentPassword"],
-  ["unlink-google", "currentPassword"],
-  ["add-passkey", "currentPassword"],
+  ["disable-authenticator", "totp"],
+  ["unlink-google", "totp"],
+  ["add-passkey", "totp"],
   ["confirm-email", "setupCode"],
-  ["setup-google", "currentPassword"],
-  ["setup-authenticator", "currentPassword"],
+  ["setup-google", "totp"],
 ] as const) {
   it(`${action} keeps unsubmitted values on Escape, then discards only after approval`, async () => {
     const { app, screen } = await mount({
       getProfile: async () => ({
         ...profile,
         hasGoogle: action !== "setup-google",
-        hasTotp: action !== "setup-authenticator",
+        hasTotp: true,
       }),
     });
     await click(screen, action);
@@ -164,7 +163,6 @@ it("a refused credential write retains its values and blocks dismissal during th
       }),
   });
   await click(screen, "change-pin");
-  change(screen, "currentPassword", "proof");
   change(screen, "totp", "123456");
   change(screen, "pin", "1234");
   change(screen, "confirmPin", "1234");
@@ -243,8 +241,7 @@ it("authenticator enrollment consumes proof before starting a clean code-entry s
     finishTotp: async () => ({ codes: ["RECOVERY"] }),
   });
   await click(screen, "setup-authenticator");
-  change(screen, "currentPassword", "proof");
-  expect(unload()).toBe(true);
+  expect(unload()).toBe(false);
   await click(screen, "save");
   await expect
     .poll(() => screen.shadowRoot!.querySelector("wt-input[name=setupCode]"))
@@ -295,11 +292,10 @@ it("successful Google proof clears its scope before the external redirect", asyn
     dirtyAtNavigate = app.leave.coordinator.isDirty();
   };
   await click(screen, "setup-google");
-  change(screen, "currentPassword", "proof");
   change(screen, "totp", "123456");
   await click(screen, "save");
   await expect.poll(() => dirtyAtNavigate).toBe(false);
-  expect(received).toEqual({ currentPassword: "proof", totp: "123456" });
+  expect(received).toEqual({ totp: "123456" });
   expect(unload()).toBe(false);
 });
 it("a saved PIN commits before refresh refuses and closes without a discard question", async () => {
@@ -317,13 +313,12 @@ it("a saved PIN commits before refresh refuses and closes without a discard ques
     },
   });
   await click(mounted.screen, "change-pin");
-  change(mounted.screen, "currentPassword", "proof");
   change(mounted.screen, "totp", "123456");
   change(mounted.screen, "pin", "1234");
   change(mounted.screen, "confirmPin", "1234");
   await click(mounted.screen, "save");
   await expect.poll(() => dirtyAtRefresh).toBe(false);
-  expect(received).toEqual({ pin: "1234", currentPassword: "proof", totp: "123456" });
+  expect(received).toEqual({ pin: "1234", totp: "123456" });
   expect(mounted.screen.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
   expect(unload()).toBe(false);
 });
@@ -342,7 +337,6 @@ it("a disconnected authenticator enrollment result cannot repopulate secret fiel
       }),
   });
   await click(screen, "setup-authenticator");
-  change(screen, "currentPassword", "proof");
   await click(screen, "save");
   screen.remove();
   resolve({
@@ -394,7 +388,7 @@ for (const action of ["recovery-codes", "setup-google", "confirm-email"] as cons
       await click(screen, action);
       if (action === "confirm-email") change(screen, "setupCode", "123456");
       else {
-        change(screen, "currentPassword", "proof");
+        change(screen, "totp", "123456");
         change(screen, "totp", "123456");
       }
       await click(screen, "save");
@@ -421,7 +415,7 @@ for (const action of ["recovery-codes", "setup-google", "confirm-email"] as cons
   }
 }
 
-it("passkey enrollment preserves newer unsubmitted identity proof", async () => {
+it("passkey enrollment preserves a newer unsubmitted authenticator code", async () => {
   let resolve!: () => void;
   let received: unknown;
   vi.spyOn(navigator.credentials, "create").mockResolvedValue({
@@ -457,10 +451,9 @@ it("passkey enrollment preserves newer unsubmitted identity proof", async () => 
     },
   });
   await click(screen, "add-passkey");
-  change(screen, "currentPassword", "proof");
   change(screen, "totp", "123456");
   await click(screen, "save");
-  change(screen, "currentPassword", "newer proof");
+  change(screen, "totp", "654321");
   resolve();
   await expect.poll(() => received).toEqual(expect.objectContaining({ challengeHandle: "handle" }));
   expect(received).not.toHaveProperty("name");
@@ -471,9 +464,9 @@ it("passkey enrollment preserves newer unsubmitted identity proof", async () => 
           .disabled,
     )
     .toBe(false);
-  expect(value(screen, "currentPassword")).toBe("newer proof");
+  expect(value(screen, "totp")).toBe("654321");
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  change(screen, "currentPassword", "proof");
+  change(screen, "totp", "123456");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 it("a disconnected passkey editor never opens a browser ceremony from a late options reply", async () => {
@@ -493,7 +486,6 @@ it("a disconnected passkey editor never opens a browser ceremony from a late opt
     },
   });
   await click(screen, "add-passkey");
-  change(screen, "currentPassword", "proof");
   change(screen, "totp", "123456");
   await click(screen, "save");
   screen.remove();
@@ -525,7 +517,6 @@ it("a departed PIN reply cannot release or close a replacement password write", 
       }),
   });
   await click(screen, "change-pin");
-  change(screen, "currentPassword", "proof");
   change(screen, "totp", "123456");
   change(screen, "pin", "1234");
   change(screen, "confirmPin", "1234");
@@ -535,7 +526,7 @@ it("a departed PIN reply cannot release or close a replacement password write", 
   await screen.updateComplete;
   await click(screen, "change-password");
   expect(screen.shadowRoot!.querySelector("wt-input[name=password]")).not.toBeNull();
-  change(screen, "currentPassword", "proof2");
+  change(screen, "totp", "654321");
   change(screen, "totp", "234567");
   change(screen, "password", "new-password");
   change(screen, "confirmPassword", "new-password");
@@ -558,7 +549,6 @@ it("reverting a detail email excludes the now-hidden proof from its submitted dr
   await screen.updateComplete;
   change(screen, "email", "different@example.com");
   await screen.updateComplete;
-  change(screen, "currentPassword", "proof");
   change(screen, "totp", "123456");
   change(screen, "email", "ada@example.com");
   await screen.updateComplete;
@@ -570,7 +560,7 @@ it("reverting a detail email excludes the now-hidden proof from its submitted dr
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
 });
 
-it("a Google-link reply retains newer proof input instead of redirecting away from it", async () => {
+it("a Google-link reply retains a newer authenticator code instead of redirecting away from it", async () => {
   let finish!: () => void;
   const destinations: string[] = [];
   const { screen } = await mount({
@@ -586,20 +576,20 @@ it("a Google-link reply retains newer proof input instead of redirecting away fr
     destinations.push(url);
   };
   await click(screen, "setup-google");
-  change(screen, "currentPassword", "submitted");
+  change(screen, "totp", "123456");
   change(screen, "totp", "123456");
   await click(screen, "save");
   await expect.poll(() => typeof finish).toBe("function");
-  change(screen, "currentPassword", "newer");
+  change(screen, "totp", "654321");
   finish();
   await expect
     .poll(() => screen.shadowRoot!.querySelector<HTMLButtonElement>("[data-test=save]")!.disabled)
     .toBe(false);
   expect(destinations).toEqual([]);
-  expect(value(screen, "currentPassword")).toBe("newer");
+  expect(value(screen, "totp")).toBe("654321");
   expect(screen.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
   expect(unload()).toBe(true);
-  change(screen, "currentPassword", "submitted");
+  change(screen, "totp", "123456");
   expect(unload()).toBe(false);
 });
 
@@ -612,7 +602,6 @@ it("a pending PIN write ignores a delivered Cancel and a details-editor request"
       }),
   });
   await click(screen, "change-pin");
-  change(screen, "currentPassword", "proof");
   change(screen, "totp", "123456");
   change(screen, "pin", "1234");
   change(screen, "confirmPin", "1234");

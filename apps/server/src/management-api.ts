@@ -755,7 +755,9 @@ export function mountManagementApi(
     deps.accountActionRateLimiters?.completion ?? createAccountActionRateLimiter();
   const googleCodeExchange = deps.googleCodeExchange ?? exchangeGoogleCode;
   const googleFlowCookie = "waitron_google_flow";
-  const withCredentialChange = ownPasswordChanges(deps.db, credentialChangeThrottle);
+  const changeAccount = ownPasswordChanges(deps.db, credentialChangeThrottle);
+  const withCredentialChange: typeof changeAccount = (token, input, change) =>
+    changeAccount(token, input, change, false);
   const bindGoogleFlow = (c: Context, state: string): void => {
     setCookie(c, googleFlowCookie, state, {
       httpOnly: true,
@@ -799,9 +801,6 @@ export function mountManagementApi(
       const out = await withCredentialChange(
         sessionId,
         () => ({
-          ...(typeof body.currentPassword === "string"
-            ? { currentPassword: body.currentPassword }
-            : {}),
           ...(typeof body.totp === "string" ? { totp: body.totp } : {}),
           keyRing: credentialKeyRing,
           clientId: deps.googleOidc!.clientId,
@@ -1869,14 +1868,9 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
-      if (typeof body.currentPassword !== "string") {
-        throw new AppError("management.request_invalid", { field: "currentPassword" });
-      }
-      const currentPassword = body.currentPassword;
       const out = await withCredentialChange(
         sessionId,
         () => ({
-          currentPassword,
           ...(typeof body.totp === "string" ? { totp: body.totp } : {}),
           keyRing: credentialKeyRing,
         }),

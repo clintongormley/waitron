@@ -1400,8 +1400,9 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   [Correction](backlog/self-service-refusals.md#sign-in).
 
 - **A1437. Dashboard sign-in and SMS through Cloud — the shared window still needs the
-  own-account, connection, fiscal and box actions.** Backups, recovery material, exports and
-  people management use the fifteen-minute session window. Continue the remaining parts of the cleared
+  connection, fiscal and box actions.** Backups, recovery material, exports, people management
+  and your own sign-in changes use the fifteen-minute session window. Own-account changes retain
+  their authenticator-code check. Continue the remaining parts of the cleared
   [ask-again plan](superpowers/plans/2026-11-09-a1437-1-dashboard-reproof.md).
   Email/browser checks, enrolment and SMS stay in the
   [design](superpowers/specs/2026-11-09-a1437-dashboard-sign-in-rules-design.md).

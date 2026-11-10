@@ -8,7 +8,6 @@ import { startManagementSession } from "./management-session.js";
 import type { ManagementSession } from "./management-session.js";
 import { verifyOwnCredentials } from "./profile.js";
 import type { TotpKeyRing } from "./mfa.js";
-import type { SecretCheck } from "./secret-check.js";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 
@@ -85,11 +84,8 @@ export async function beginGoogleLink(
   tx: Transaction,
   input: GoogleStartInput & {
     managementSessionId: string;
-    currentPassword?: string;
     totp?: string;
     keyRing: TotpKeyRing;
-    /** From `checkOwnPassword`, taken before the transaction opened. */
-    checked?: SecretCheck;
   },
 ) {
   const person = await verifyOwnCredentials(tx, input);

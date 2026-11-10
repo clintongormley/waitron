@@ -15,6 +15,7 @@ import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shar
 import { foldForUniqueness } from "./fold.js";
 import { confirmEmailChangeByCode, queueAccountMail } from "./account-action.js";
 import { passkeyProviderName } from "./passkey-providers.js";
+import { requireFreshManagementSignIn } from "./fresh-sign-in.js";
 import { resolveManagementSession } from "./management-session.js";
 import {
   asPersonUniqueViolation,
@@ -40,11 +41,8 @@ interface Owner {
   managementSessionId: string;
 }
 interface Credentials {
-  currentPassword?: string;
   totp?: string;
   keyRing: TotpKeyRing;
-  /** From {@link checkOwnPassword}, taken before the transaction opened. */
-  checked?: SecretCheck;
 }
 
 /**
@@ -118,9 +116,9 @@ export async function requireEnrolledCode(
 async function verifyCurrent(
   tx: Transaction,
   person: typeof persons.$inferSelect,
-  credentials: Credentials,
+  credentials: Owner & Credentials,
 ): Promise<void> {
-  await checkCurrentPassword(person, credentials);
+  await requireFreshManagementSignIn(tx, credentials.managementSessionId);
   // No recovery code here: these changes need the authenticator itself.
   await requireEnrolledCode(tx, person, { totp: credentials.totp }, credentials.keyRing);
 }
@@ -131,7 +129,8 @@ async function verifyCurrent(
  */
 export async function verifyOwnFreshSignIn(
   tx: Transaction,
-  input: Owner & Credentials & { recoveryCode?: string },
+  input: Owner &
+    Credentials & { currentPassword?: string; recoveryCode?: string; checked?: SecretCheck },
 ): Promise<typeof persons.$inferSelect> {
   const person = await ownPerson(tx, input);
   await checkCurrentPassword(person, input);
@@ -144,7 +143,7 @@ export async function verifyOwnFreshSignIn(
   return person;
 }
 
-/** Resolve the signed-in person and require their current login factors before a sensitive change. */
+/** Require the session’s confirmation window and, when enrolled, the authenticator code. */
 export async function verifyOwnCredentials(
   tx: Transaction,
   input: Owner & Credentials,

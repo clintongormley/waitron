@@ -11,6 +11,7 @@ import {
   loginWithGoogle,
 } from "./google-oidc.js";
 import { codeOf, openManagementSession, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
+import { hashSessionToken } from "./session-token.js";
 import { encryptTotpSecret } from "./mfa.js";
 
 const suite = useVenueDb({
@@ -42,10 +43,12 @@ describe("Google OpenID Connect state", () => {
 
   it("binds a link ceremony to the signed-in person and consumes state once", async () => {
     const owner = await openManagementSession(suite.db, "staff");
+    await suite.db.run(
+      sql`update management_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(owner.token)}`,
+    );
     const begun = await run((tx) =>
       beginGoogleLink(tx, {
         managementSessionId: owner.token,
-        currentPassword: "correct horse",
         ...config,
         keyRing: TOTP_KEY_RING,
       }),
@@ -58,20 +61,19 @@ describe("Google OpenID Connect state", () => {
     );
   });
 
-  it("requires current credentials before starting a link ceremony", async () => {
+  it("requires confirmation before starting a link ceremony", async () => {
     const owner = await openManagementSession(suite.db, "staff");
     expect(
       await codeOf(() =>
         run((tx) =>
           beginGoogleLink(tx, {
             managementSessionId: owner.token,
-            currentPassword: "wrong",
             ...config,
             keyRing: TOTP_KEY_RING,
           }),
         ),
       ),
-    ).toBe("password.invalid");
+    ).toBe("management_session.proof_required");
   });
 
   it("links by stable subject, prevents duplicates, and signs an active linked person in", async () => {

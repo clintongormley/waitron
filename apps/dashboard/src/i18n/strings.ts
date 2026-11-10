@@ -1173,6 +1173,7 @@ export const en = {
 
   "profile.reload": "Reload profile",
   "profile.change_password": "Change password",
+  "profile.add_password": "Set a password",
   "profile.change_pin": "Change PIN",
   "profile.phone_unverified": "(Unverified)",
   "profile.pending_email": "New email awaiting confirmation",
@@ -1207,7 +1208,7 @@ export const en = {
   "profile.passkeys": "Passkeys",
   "profile.no_passkeys": "You haven’t added a passkey yet.",
   "profile.remove_passkey": "Remove this passkey?",
-  "profile.confirm_identity": "Enter your current password to confirm this change.",
+  "profile.confirm_identity": "You may be asked to confirm it is you before this change.",
   "profile.password_recovery":
     "To set a password, sign out and choose “I’ve forgotten my password” when logging in.",
   "fresh_sign_in.password": "Password",
@@ -5010,6 +5011,7 @@ export const es: Record<StringKey, string> = {
 
   "profile.reload": "Volver a cargar el perfil",
   "profile.change_password": "Cambiar contraseña",
+  "profile.add_password": "Crear una contraseña",
   "profile.change_pin": "Cambiar PIN",
   "profile.phone_unverified": "(Sin verificar)",
   "profile.pending_email": "Nuevo correo pendiente de confirmación",
@@ -5045,7 +5047,7 @@ export const es: Record<StringKey, string> = {
   "profile.passkeys": "Passkeys",
   "profile.no_passkeys": "Todavía no has añadido ninguna passkey.",
   "profile.remove_passkey": "¿Eliminar esta passkey?",
-  "profile.confirm_identity": "Introduce tu contraseña actual para confirmar este cambio.",
+  "profile.confirm_identity": "Es posible que debas confirmar que eres tú antes de este cambio.",
   "profile.password_recovery":
     "Para crear una contraseña, cierra la sesión y elige «¿Has olvidado tu contraseña?» al iniciar sesión.",
   "fresh_sign_in.password": "Contraseña",

@@ -31,7 +31,6 @@ import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError } from "../passkey-errors.js";
 import { signalAcceptedPasskeys } from "../passkey-signals.js";
-import { autofillUsername, autofillUsernameStyles } from "../widgets/autofill-username.js";
 
 type Mode =
   | "view"
@@ -54,7 +53,6 @@ type Field =
   | "telephone"
   | "email"
   | "locale"
-  | "currentPassword"
   | "password"
   | "confirmPassword"
   | "pin"
@@ -68,7 +66,6 @@ const emptyFields = (): Record<Field, string> => ({
   telephone: "",
   email: "",
   locale: "",
-  currentPassword: "",
   password: "",
   confirmPassword: "",
   pin: "",
@@ -86,7 +83,6 @@ const inLocale = (iso: string, form: Intl.DateTimeFormatOptions): string =>
 export class ProfileScreen extends LitElement {
   static override styles = [
     baseStyles,
-    autofillUsernameStyles,
     css`
       :host {
         display: block;
@@ -525,8 +521,7 @@ export class ProfileScreen extends LitElement {
     const add = (...fields: Field[]) => fields.forEach((field) => shown.add(field));
     if (this.mode === "details")
       add("firstNames", "lastNames", "displayName", "email", "telephone", "locale");
-    if (this.needsCredentials)
-      add("currentPassword", ...(this.profile?.hasTotp ? ["totp" as const] : []));
+    if (this.needsCredentials) add(...(this.profile?.hasTotp ? ["totp" as const] : []));
     if (this.mode === "password") add("password", "confirmPassword");
     if (this.mode === "pin") add("pin", "confirmPin");
     if (this.mode === "email" || (this.mode === "totp" && this.totpSetup !== null))
@@ -540,7 +535,6 @@ export class ProfileScreen extends LitElement {
     if (this.mode === "details") Object.assign(errors, this.#detailsErrors());
 
     if (this.needsCredentials) {
-      if (!f.currentPassword) errors.currentPassword = t("form.password_required");
       if (this.profile!.hasTotp && !f.totp) errors.totp = t("profile.code_required");
     }
     if (this.mode === "password") {
@@ -591,7 +585,8 @@ export class ProfileScreen extends LitElement {
   }
 
   async #save(): Promise<void> {
-    if (this.busy || saveActionState(this.#scope).unchanged) return;
+    if (this.busy || (this.#shownFields().size > 0 && saveActionState(this.#scope).unchanged))
+      return;
     const f = this.fields;
     const operation = ++this.#operation;
     const scope = this.#scope;
@@ -606,7 +601,7 @@ export class ProfileScreen extends LitElement {
     }
     this.busy = true;
     const credentials = this.needsCredentials
-      ? { currentPassword: f.currentPassword, ...(this.profile!.hasTotp ? { totp: f.totp } : {}) }
+      ? { ...(this.profile!.hasTotp ? { totp: f.totp } : {}) }
       : {};
     try {
       let emailResult: ProfileSaveResult | undefined;
@@ -636,7 +631,7 @@ export class ProfileScreen extends LitElement {
         scope?.commit(submitted);
         this.totpQr = qr;
         this.totpSetup = setup;
-        this.fields = { ...this.fields, currentPassword: "", totp: "" };
+        this.fields = { ...this.fields, totp: "" };
         this.#registerDraft();
         this.attempted = false;
         return;
@@ -723,27 +718,25 @@ export class ProfileScreen extends LitElement {
       const field =
         code === "profile.invalid" && typeof paramsField === "string"
           ? (paramsField as Field)
-          : code === "password.invalid"
-            ? "currentPassword"
-            : code === "totp.invalid"
-              ? this.mode === "totp" && this.totpSetup !== null
-                ? "setupCode"
-                : "totp"
-              : code === "person.email_taken" || code === "person.email_invalid"
-                ? "email"
-                : code === "person.display_name_taken"
-                  ? "displayName"
-                  : code === "person.telephone_invalid"
-                    ? "telephone"
-                    : code === "password.too_short"
-                      ? "password"
-                      : code === "pin.too_short"
-                        ? "pin"
-                        : code === "locale.unsupported"
-                          ? "locale"
-                          : code === "account_action.invalid" && this.mode === "email"
-                            ? "setupCode"
-                            : undefined;
+          : code === "totp.invalid"
+            ? this.mode === "totp" && this.totpSetup !== null
+              ? "setupCode"
+              : "totp"
+            : code === "person.email_taken" || code === "person.email_invalid"
+              ? "email"
+              : code === "person.display_name_taken"
+                ? "displayName"
+                : code === "person.telephone_invalid"
+                  ? "telephone"
+                  : code === "password.too_short"
+                    ? "password"
+                    : code === "pin.too_short"
+                      ? "pin"
+                      : code === "locale.unsupported"
+                        ? "locale"
+                        : code === "account_action.invalid" && this.mode === "email"
+                          ? "setupCode"
+                          : undefined;
       if (field !== undefined && this.#shownFields().has(field)) {
         this.requestRefused = { [field]: message };
         this.#focusFirstInvalid();
@@ -781,10 +774,7 @@ export class ProfileScreen extends LitElement {
       if (this.#download === download) this.downloading = false;
     }
   }
-  async #addPasskey(
-    credentials: { currentPassword?: string; totp?: string },
-    active: () => boolean,
-  ): Promise<void> {
+  async #addPasskey(credentials: { totp?: string }, active: () => boolean): Promise<void> {
     const { challengeHandle, options } = await this.api.passkeyRegisterOptions(credentials);
     if (!active()) return;
     const response = await startRegistration({
@@ -805,7 +795,7 @@ export class ProfileScreen extends LitElement {
       case "details":
         return t("profile.details");
       case "password":
-        return t("profile.change_password");
+        return t(this.profile?.hasPassword ? "profile.change_password" : "profile.add_password");
       case "pin":
         return t("profile.change_pin");
       case "totp":
@@ -921,20 +911,15 @@ export class ProfileScreen extends LitElement {
           <div class="action-row">
             <div class="text">
               <span class="field-value">${t("login.password")}</span>
-              ${p.hasPassword ? nothing : html`<span class="field-meta">${t("profile.password_recovery")}</span>`}
             </div>
-            ${
-              p.hasPassword
-                ? html`<wt-button
-                    data-test="change-password"
-                    class="card-action accent-primary"
-                    aria-label=${t("profile.change_password")}
-                    ?disabled=${this.busy}
-                    @click=${() => this.#edit("password")}
-                    >${t("action.change")}</wt-button
-                  >`
-                : nothing
-            }
+            <wt-button
+              data-test="change-password"
+              class="card-action accent-primary"
+              aria-label=${t(p.hasPassword ? "profile.change_password" : "profile.add_password")}
+              ?disabled=${this.busy}
+              @click=${() => this.#edit("password")}
+              >${t(p.hasPassword ? "action.change" : "action.add")}</wt-button
+            >
           </div>
           <div class="action-row">
             <span class="field-value">${t("person.pin")}</span>
@@ -979,18 +964,14 @@ export class ProfileScreen extends LitElement {
                   >${provider}<span class="passkey-use">${lastUsed}</span></span
                 >
               </div>
-              ${
-                p.hasPassword
-                  ? html`<wt-button
-                      data-test="remove-passkey"
-                      class="card-action accent-danger"
-                      ?disabled=${this.busy}
-                      aria-label=${fill("profile.remove_passkey_name", { name })}
-                      @click=${() => this.#edit("remove", key.id)}
-                      >${t("action.remove")}</wt-button
-                    >`
-                  : nothing
-              }
+              <wt-button
+                data-test="remove-passkey"
+                class="card-action accent-danger"
+                ?disabled=${this.busy}
+                aria-label=${fill("profile.remove_passkey_name", { name })}
+                @click=${() => this.#edit("remove", key.id)}
+                >${t("action.remove")}</wt-button
+              >
             </div>`;
           })}
 
@@ -1108,7 +1089,7 @@ export class ProfileScreen extends LitElement {
       ${
         this.needsCredentials
           ? html`<p class="hint">${t("profile.confirm_identity")}</p>
-              ${autofillUsername(p.email)}${this.#input("currentPassword", "profile.current_password", "password", "current-password")}${p.hasTotp ? this.#input("totp", "profile.totp", "text", "one-time-code") : nothing}`
+              ${p.hasTotp ? this.#input("totp", "profile.totp", "text", "one-time-code") : nothing}`
           : nothing
       }
       ${this.mode === "password" ? html`${this.#input("password", "account.new_password", "password", "new-password")}${this.#input("confirmPassword", "account.confirm_password", "password", "new-password")}` : nothing}
@@ -1141,12 +1122,14 @@ export class ProfileScreen extends LitElement {
   }
   #renderModal(p: OwnProfile) {
     const form = this.#formState();
-    const s = saveActionState(this.#scope);
+    const s =
+      this.#shownFields().size === 0
+        ? { variant: "primary", unchanged: false }
+        : saveActionState(this.#scope);
     this.#fieldErrors = form.fields;
     return html`
       <wt-modal
-        size=${this.mode === "details" || this.mode === "totp" ? "standard" : "compact"}
-        height=${this.mode === "totp" && this.totpSetup === null ? "medium" : nothing}
+        size=${this.mode === "details" || (this.mode === "totp" && this.totpSetup !== null) ? "standard" : "compact"}
         heading=${this.#modalHeading()}
         .open=${this.mode !== "view"}
         .dismissible=${!this.busy}
