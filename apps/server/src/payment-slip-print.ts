@@ -72,7 +72,7 @@ export async function printSalePaymentSlip(
       // rows were written in.
       .orderBy(payments.settledAt, sql`${payments}.rowid`);
     if (cards.length === 0) return;
-    await enqueueSlips(tx, cfg, workingOrderId, cards, sale.locale);
+    await enqueueSlips(tx, cfg, workingOrderId, cards, sale.locale, false);
   });
 }
 
@@ -119,7 +119,14 @@ export async function printBillPaymentSlip(
     const cards = (await readBillSlipPayments(tx, workingOrderId)).filter(
       (card) => card.id === paymentId,
     );
-    await enqueueSlips(tx, cfg, workingOrderId, cards, (await readReceiptLanguage(tx)).locale);
+    await enqueueSlips(
+      tx,
+      cfg,
+      workingOrderId,
+      cards,
+      (await readReceiptLanguage(tx)).locale,
+      true,
+    );
   });
 }
 
@@ -135,9 +142,10 @@ async function enqueueSlips(
     last4: string | null;
     entryMode: string | null;
     authCode: string | null;
-    remaining?: number | null;
+    remaining: number | null;
   }[],
   locale: string,
+  copy: boolean,
 ): Promise<void> {
   const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
   if (printer === undefined) return;
@@ -168,13 +176,8 @@ async function enqueueSlips(
       tip,
       card,
       invoiceLocale: locale,
-      copy: true,
-      remaining:
-        payment.remaining === undefined
-          ? "0.00"
-          : payment.remaining === null
-            ? null
-            : centsToDecimal(payment.remaining),
+      copy,
+      remaining: payment.remaining === null ? null : centsToDecimal(payment.remaining),
       printer: { paperWidth: printer.paperWidth, resolution: printer.resolution },
     });
     await enqueuePrintJob(tx, printer.id, payload, "document", { venueId });

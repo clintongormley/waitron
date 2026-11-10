@@ -10,6 +10,8 @@
 
 **Build checkpoint, 10 November 19:22:** the watcher cleared growth to about 760 changed lines plus review fixes, with an outside review again before about 850. Its same note says implementation waits for #2736; reconciliation with the 18:44 release is pending in Lane F questions. Existing work stays local while that gate is settled.
 
+**Watcher correction, 10 November 19:26:** the 19:22 build hold above was a mistake. The 18:44 release stands: build and review cut 3 now; open no PR until #2736 is on main. The roughly 760-line forecast and roughly 850-line stop including review fixes remain.
+
 ## Cut 3: historical balances and a copy before full payment
 
 **Finish:** reopen **Pay → Payments → Print a copy** beside a received reader payment, including an unpaid bill. Reuse the existing sale-level slip action after settlement; change only its first-tender visibility to any eligible reader capture. Add no per-payment ticket controls or history navigation.
