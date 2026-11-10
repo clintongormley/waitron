@@ -191,7 +191,7 @@ function product(
     catalogueId: "cat-1",
     categoryId: "category-1",
     primaryCategoryId: "category-1",
-    name: "Croquetas de jamón",
+    name: "Ham croquettes",
     customerName: { es: "Croquetas caseras de jamón ibérico" },
     unitId: "unit-each",
     unit: {
@@ -240,23 +240,23 @@ describe("product-list", () => {
   it("searches names only: a product's and its variants', and a folder's own", async () => {
     const { el, table, root } = await mountTree({
       categories: [
-        { id: "beb", name: "Bebidas", parentId: null, color: null },
+        { id: "beb", name: "Drinks", parentId: null, color: null },
         { id: "mix", name: "Mixers", parentId: "beb", color: null },
       ],
       products: [
         product({
           id: "cerveza",
-          name: "Cerveza",
+          name: "Beer",
           primaryCategoryId: "mix",
           unitPrice: "2.50",
           ordering: "not_sold_separately",
           modifiers: [{ kind: "extras", id: "ex-1" }],
           variants: [
-            { ...bunVariant, id: "cana", name: "Caña", unitPrice: null },
-            { ...bunVariant, id: "jarra", name: "Jarra", unitPrice: null },
+            { ...bunVariant, id: "cana", name: "Glass", unitPrice: null },
+            { ...bunVariant, id: "jarra", name: "Jug", unitPrice: null },
           ],
         }),
-        product({ id: "agua", name: "Agua", primaryCategoryId: null }),
+        product({ id: "agua", name: "Artesian water", primaryCategoryId: null }),
       ],
       extraLists: [{ id: "ex-1", name: "Tapas" }],
     });
@@ -266,8 +266,8 @@ describe("product-list", () => {
       await table.updateComplete;
       return rowKeys(root);
     };
-    expect(await searchFor("jarra")).toContain("cerveza");
-    expect(await searchFor("cerveza caña")).toContain("cerveza");
+    expect(await searchFor("jug")).toContain("cerveza");
+    expect(await searchFor("beer glass")).toContain("cerveza");
     const price = cellUnder(root, "cerveza", t("product.price")).textContent!;
     expect(price).toContain("2,50");
     for (const other of [
@@ -276,16 +276,16 @@ describe("product-list", () => {
       euros("2,50"),
       t("product.ordering_not_sold_separately"),
       "Tapas",
-      "bebidas mixers",
+      "drinks mixers",
     ]) {
       expect(await searchFor(other), other).toEqual([]);
     }
-    expect(await searchFor("bebidas")).toEqual(["folder:beb"]);
+    expect(await searchFor("drinks")).toEqual(["folder:beb"]);
   });
 
   it("hands the table the same rows until the products, categories, draft or Show archived change", async () => {
     const { el, table } = await mountTree({
-      products: [...treeProducts(), product({ id: "gone", name: "Anchoas", active: false })],
+      products: [...treeProducts(), product({ id: "gone", name: "Anchovies", active: false })],
     });
     const redraw = async (change: () => void | Promise<void>) => {
       const before = table.rows;
@@ -311,20 +311,20 @@ describe("product-list", () => {
 
   it("redraws a cell from a renamed modifier list while the rows stay the same", async () => {
     const { el, table, root } = await mountTree({
-      categories: [{ id: "comida", name: "Comida", parentId: null, color: null }],
+      categories: [{ id: "comida", name: "Food", parentId: null, color: null }],
       products: [
         product({ primaryCategoryId: "comida", modifiers: [{ kind: "extras", id: "ex-1" }] }),
       ],
-      extraLists: [{ id: "ex-1", name: "Salsas" }],
+      extraLists: [{ id: "ex-1", name: "Sauces" }],
     });
     await openRow(el, "folder:comida");
     const rows = table.rows;
-    el.extraLists = [{ id: "ex-1", name: "Salsas caseras" }];
+    el.extraLists = [{ id: "ex-1", name: "House sauces" }];
     await el.updateComplete;
     await table.updateComplete;
     expect(table.rows).toBe(rows);
     expect(cellUnder(root, "prod-1", t("editor.modifiers")).textContent!.trim()).toBe(
-      "Salsas caseras",
+      "House sauces",
     );
   });
 
@@ -464,13 +464,13 @@ describe("product-list", () => {
   it("shows the staff name, not the customer-facing one and not the id", async () => {
     const products = [
       product({
-        name: "Croquetas",
+        name: "Staff croquettes",
         customerName: { es: "Croquetas caseras", en: "Ham croquettes" },
       }),
     ];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
     const row = productRows(await tableRoot(el))[0]!;
-    expect(row.textContent).toContain("Croquetas");
+    expect(row.textContent).toContain("Staff croquettes");
     expect(row.textContent).not.toContain("Croquetas caseras");
     expect(row.textContent).not.toContain("Ham croquettes");
     expect(row.textContent).not.toContain(products[0]!.id);
@@ -557,11 +557,11 @@ describe("product-list", () => {
   });
 
   it("uses a named kebab menu containing Edit and Archive", async () => {
-    const products = [product({ id: "p7", name: "Tarta de queso" })];
+    const products = [product({ id: "p7", name: "Cheesecake" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
     const actions = (await tableRoot(el)).querySelector<HTMLElement>('[data-test="actions-p7"]')!;
     expect(actions.tagName).toBe("WT-ROW-ACTIONS");
-    expect(actions.getAttribute("label")).toContain("Tarta de queso");
+    expect(actions.getAttribute("label")).toContain("Cheesecake");
     expect(actions.querySelector('[data-test="edit-p7"]')?.textContent).toContain(t("action.edit"));
     expect(actions.querySelector('[data-test="delete-p7"]')?.textContent).toContain(
       t("product.archive"),
@@ -731,10 +731,10 @@ describe("product-list", () => {
   });
 
   // The Modifiers column names the lists a manager attached through `Product.modifiers`. Two things
-  // are set up to fail on the TEXT rather than pass on an empty cell: `opt-2` ("Punto") is a loaded
+  // are set up to fail on the TEXT rather than pass on an empty cell: `opt-2` ("Doneness") is a loaded
   // options list this product does NOT hold, so a column printing the loaded set instead of the
   // attachments names it; and the cell is asserted whole with `toBe`, so resolving the `extras` ref
-  // against the options lists — which also reaches "Punto" — loses "Salsas".
+  // against the options lists — which also reaches "Doneness" — loses "Sauces".
   it("shows attached modifier list names, and no main category, VAT or labels column", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -747,13 +747,13 @@ describe("product-list", () => {
         }),
       ],
       categories: [
-        { id: "reporting", name: "Comida", parentId: null, color: null },
-        { id: "seasonal", name: "Temporada", parentId: null, color: null },
+        { id: "reporting", name: "Food", parentId: null, color: null },
+        { id: "seasonal", name: "Seasonal", parentId: null, color: null },
       ],
-      extraLists: [{ id: "ex-1", name: "Salsas" }],
+      extraLists: [{ id: "ex-1", name: "Sauces" }],
       optionLists: [
-        { id: "opt-1", name: "Punto de la carne" },
-        { id: "opt-2", name: "Punto" },
+        { id: "opt-1", name: "Meat doneness" },
+        { id: "opt-2", name: "Doneness" },
       ],
     });
     const root = await tableRoot(el);
@@ -766,7 +766,7 @@ describe("product-list", () => {
     expect(headers).not.toContain("Etiquetas");
     expect(root.querySelector('input[data-column="labels"]')).toBeNull();
     expect(cellUnder(root, "prod-1", t("editor.modifiers")).textContent!.trim()).toBe(
-      "Salsas, Punto de la carne",
+      "Sauces, Meat doneness",
     );
   });
 
@@ -783,13 +783,13 @@ describe("product-list", () => {
         }),
       ],
       extraLists: [],
-      optionLists: [{ id: "opt-1", name: "Punto" }],
+      optionLists: [{ id: "opt-1", name: "Doneness" }],
     });
     const cell = cellUnder(await tableRoot(el), "prod-1", t("editor.modifiers"));
     expect(cell.textContent!.trim()).toBe(
       `${t("editor.missing_choice")}, ${t("editor.missing_choice")}`,
     );
-    expect(cell.textContent).not.toContain("Punto");
+    expect(cell.textContent).not.toContain("Doneness");
   });
 
   it("shows a visible placeholder for an unresolved modifier list id, and none for a category the list does not hold", async () => {
@@ -1031,8 +1031,8 @@ describe("product-list", () => {
   it("starts with Show archived off, so an archived product is hidden until it is turned on", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
-        product({ id: "gone", name: "Anchoas", active: false, available: true }),
-        product({ id: "sold-out", name: "Boquerones", active: true, available: false }),
+        product({ id: "gone", name: "Anchovies", active: false, available: true }),
+        product({ id: "sold-out", name: "White anchovies", active: true, available: false }),
       ],
     });
     const root = await tableRoot(el);
@@ -1052,8 +1052,8 @@ describe("product-list", () => {
   it("reads Availability's Archived from active and Unavailable from available, keeping an Unavailable product listed", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
-        product({ id: "gone", name: "Anchoas", active: false, available: true }),
-        product({ id: "sold-out", name: "Boquerones", active: true, available: false }),
+        product({ id: "gone", name: "Anchovies", active: false, available: true }),
+        product({ id: "sold-out", name: "White anchovies", active: true, available: false }),
       ],
     });
     await showArchived(el);
@@ -1174,7 +1174,7 @@ describe("product-list", () => {
               id: "w175",
               name: "175 ml",
               customerName: { en: "Large glass of wine", es: "Copa grande de vino" },
-              kitchenName: "VINO 175",
+              kitchenName: "WINE 175",
               unitPrice: "4.75",
               allergensInherited: true,
               effective: {
@@ -1189,8 +1189,8 @@ describe("product-list", () => {
         }),
       ],
       categories: [
-        { id: "food", name: "Comida", parentId: null, color: null },
-        { id: "drinks", name: "Bebidas", parentId: null, color: null },
+        { id: "food", name: "Food", parentId: null, color: null },
+        { id: "drinks", name: "Drinks", parentId: null, color: null },
       ],
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -1218,7 +1218,7 @@ describe("product-list", () => {
               id: "w175",
               name: "175 ml",
               customerName: { en: "Large glass of wine", es: "Copa grande de vino" },
-              kitchenName: "VINO 175",
+              kitchenName: "WINE 175",
               unitPrice: "4.75",
               allergensInherited: true,
               effective: {
@@ -1234,7 +1234,7 @@ describe("product-list", () => {
               id: "w125",
               name: "125 ml",
               customerName: { en: "Small glass of wine", es: "Copa pequeña de vino" },
-              kitchenName: "VINO 125",
+              kitchenName: "WINE 125",
               unitPrice: null,
             },
           ],
@@ -1301,7 +1301,7 @@ describe("product-list", () => {
       const { el } = await mountWidget<ProductList>("dashboard-product-list", {
         products: [
           product({ id: "bun", variants: [bunVariant, removed] }),
-          product({ id: "off", name: "Anchoas", active: false }),
+          product({ id: "off", name: "Anchovies", active: false }),
         ],
       });
       await showArchived(el);
@@ -1373,7 +1373,7 @@ describe("product-list", () => {
     const removed = { ...bunVariant, id: "large", name: "Large", active: false };
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
-        product({ id: "off", name: "Anchoas", active: false, variants: [bunVariant, removed] }),
+        product({ id: "off", name: "Anchovies", active: false, variants: [bunVariant, removed] }),
       ],
     });
     await showArchived(el);
@@ -1399,7 +1399,7 @@ describe("product-list", () => {
 
   it("offers only View on an archived product and Edit and Archive on an active one", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ id: "bun" }), product({ id: "off", name: "Anchoas", active: false })],
+      products: [product({ id: "bun" }), product({ id: "off", name: "Anchovies", active: false })],
     });
     await showArchived(el);
     const root = await tableRoot(el);
@@ -1487,7 +1487,7 @@ describe("product-list", () => {
 
   it("renders a decorative thumbnail served from /media when image is set", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ image: mediaTestReference("abc123.webp"), name: "Croquetas" })],
+      products: [product({ image: mediaTestReference("abc123.webp"), name: "Staff croquettes" })],
     });
     const img = (await tableRoot(el)).querySelector<HTMLImageElement>("[data-test=thumb] img")!;
     expect(img).not.toBeNull();
@@ -1509,7 +1509,7 @@ describe("product-list", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({ image: null, available: false }),
-        product({ id: "off", name: "Anchoas", active: false }),
+        product({ id: "off", name: "Anchovies", active: false }),
       ],
     });
     await showArchived(el);
@@ -1617,7 +1617,7 @@ describe("product-list", () => {
           unitId: EACH_UNIT_ID,
           unit: { ...product().unit, id: EACH_UNIT_ID },
         }),
-        product({ id: "ham", name: "Jamón", unitId: "kg", unit: kilo, unitPrice: "48.00" }),
+        product({ id: "ham", name: "Sliced ham", unitId: "kg", unit: kilo, unitPrice: "48.00" }),
       ],
     });
     const root = await tableRoot(el);
@@ -1842,7 +1842,7 @@ describe("the product list at phone width", () => {
   // A long unbroken product name widens the name column past a phone's screen.
   const phoneProducts = () => [
     product({ id: "a" }),
-    product({ id: "b", name: "Croquetas-caseras-de-jamon-iberico-de-bellota-y-queso-azul" }),
+    product({ id: "b", name: "Homemade-croquettes-with-cured-ham-and-blue-country-cheese" }),
   ];
   it.each(["en-GB", "es-ES"])(
     "keeps every product row's menu on screen and uncovered at 390 px while the other columns scroll sideways (%s)",
@@ -2191,34 +2191,34 @@ describe("the product list at phone width", () => {
 
   const longCategory = {
     id: "long",
-    name: "Embutidos ibéricos y quesos curados de la casa",
+    name: "House cured meats and mature farmhouse cheeses",
     parentId: null,
     color: null,
   };
   const longProduct = () =>
     product({
       id: "croquetas",
-      name: "Croquetas caseras de jamón ibérico de bellota",
+      name: "Homemade croquettes with old cured ham chunks",
       primaryCategoryId: "long",
       variants: [
-        { ...bunVariant, id: "r10", name: "Ración de diez croquetas caseras de jamón" },
-        { ...bunVariant, id: "r6", name: "Media ración de seis croquetas" },
-        { ...bunVariant, id: "r4", name: "Tapa de cuatro" },
-        { ...bunVariant, id: "r2", name: "Dos" },
+        { ...bunVariant, id: "r10", name: "Portion of ten handmade aged ham fritters" },
+        { ...bunVariant, id: "r6", name: "Half portion of six croquettes" },
+        { ...bunVariant, id: "r4", name: "Four croquettes" },
+        { ...bunVariant, id: "r2", name: "Double" },
       ],
     });
   const singleWords = () => ({
     categories: [
-      { id: "long", name: "Embutidosibéricosyquesoscuradosdelacasa", parentId: null, color: null },
+      { id: "long", name: "Housecuredmeatsandmaturefarmhousecheese", parentId: null, color: null },
     ],
     products: [
       product({
         id: "croquetas",
-        name: "Croquetascaserasdejamónibéricodebellota",
+        name: "Homemadecroquetteswithagedfarmhousehams",
         primaryCategoryId: "long",
         variants: [
-          { ...bunVariant, id: "r10", name: "Racióndediezcroquetascaserasdejamón" },
-          { ...bunVariant, id: "r6", name: "Mediaración" },
+          { ...bunVariant, id: "r10", name: "Portionoftenhandmadeagedhamfritters" },
+          { ...bunVariant, id: "r6", name: "Halfportion" },
         ],
       }),
     ],
@@ -2325,7 +2325,7 @@ describe("the product list at phone width", () => {
             "*",
             longProduct().name,
             t("product.variant_count").replace("{count}", "4"),
-            "Ración de diez croquetas caseras de jamón",
+            "Portion of ten handmade aged ham fritters",
           ]),
         );
         const wrapped = texts.filter(({ lines }) => lines > 1).map(({ text }) => text);
@@ -2333,7 +2333,7 @@ describe("the product list at phone width", () => {
           expect.arrayContaining([
             longCategory.name,
             longProduct().name,
-            "Ración de diez croquetas caseras de jamón",
+            "Portion of ten handmade aged ham fritters",
           ]),
         );
       }),
@@ -2383,9 +2383,9 @@ describe("the product list at phone width", () => {
         const wrapped = texts.filter(({ lines }) => lines > 1).map(({ text }) => text);
         expect(wrapped).toEqual(
           expect.arrayContaining([
-            "Embutidosibéricosyquesoscuradosdelacasa",
-            "Croquetascaserasdejamónibéricodebellota",
-            "Racióndediezcroquetascaserasdejamón",
+            "Housecuredmeatsandmaturefarmhousecheese",
+            "Homemadecroquetteswithagedfarmhousehams",
+            "Portionoftenhandmadeagedhamfritters",
           ]),
         );
       }),
@@ -2458,7 +2458,7 @@ describe("the product list at phone width", () => {
       onPhone(locale, 390, async () => {
         const { el, root } = await mountLong({}, true);
         expectNamesClear(await nameTexts(root), [ROOT_KEY, "folder:long"]);
-        el.search = "bellota";
+        el.search = "chunks";
         await el.updateComplete;
         await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
         expect(rowKeys(root)).toContain("croquetas");
@@ -2473,14 +2473,14 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 1280, async () => {
         const { el, root } = await mountLong({
-          categories: [{ id: "long", name: "Embutidos", parentId: null, color: null }],
+          categories: [{ id: "long", name: "Cured meats", parentId: null, color: null }],
           products: [
             product({
               id: "croquetas",
               primaryCategoryId: "long",
               variants: [
-                { ...bunVariant, id: "r10", name: "Ración de diez" },
-                { ...bunVariant, id: "r6", name: "Media ración" },
+                { ...bunVariant, id: "r10", name: "Portion of ten" },
+                { ...bunVariant, id: "r6", name: "Half portion" },
               ],
             }),
           ],
@@ -2563,11 +2563,11 @@ describe("the product list as a tree", () => {
 
   it("names a category's activator by a name holding a replacement pattern as written", async () => {
     const { root } = await mountTree({
-      categories: [{ ...drinks, name: "Bebidas $&" }, beer, food],
+      categories: [{ ...drinks, name: "Drinks $&" }, beer, food],
     });
     expect(
       root.querySelector('tr[data-row-key="folder:d"] .row-activate')!.getAttribute("aria-label"),
-    ).toBe(t("folders.open_named").split("{name}").join("Bebidas $&"));
+    ).toBe(t("folders.open_named").split("{name}").join("Drinks $&"));
   });
 
   it("opens and closes a category from a click or Enter on its row, saying which it will do", async () => {
@@ -2701,9 +2701,7 @@ describe("the product list as a tree", () => {
     const root = await tableRoot(el);
     const activator = (key: string) =>
       root.querySelector<HTMLButtonElement>(`tr[data-row-key="${key}"] .row-activate`)!;
-    expect(activator("bun").getAttribute("aria-label")).toBe(
-      `${t("action.edit")}: Croquetas de jamón`,
-    );
+    expect(activator("bun").getAttribute("aria-label")).toBe(`${t("action.edit")}: Ham croquettes`);
     activator("bun").click();
     activator("bun").focus();
     await userEvent.keyboard("{Enter}");
@@ -2836,7 +2834,7 @@ describe("the product list as a tree", () => {
           products: [
             product({
               id: "keg",
-              name: "Cerveza-de-barril-artesana-de-temporada-con-nombre-largo",
+              name: "Seasonal-craft-draught-beer-with-a-very-long-house-name",
               primaryCategoryId: "k",
             }),
           ],
@@ -3638,7 +3636,7 @@ describe("a product's variants in the list", () => {
     const products = () => [
       product({
         id: "solo",
-        name: "Solomillo",
+        name: "Tenderloin",
         variants: [
           { ...bunVariant, id: "b", name: "450g", unitPrice: "20.00" },
           { ...bunVariant, id: "c", name: "250g", unitPrice: "30.00" },
@@ -3647,11 +3645,11 @@ describe("a product's variants in the list", () => {
       }),
       product({
         id: "racion",
-        name: "Pulpo",
+        name: "Octopus",
         variants: [
-          { ...bunVariant, id: "z", name: "Ración 10", unitPrice: "1.00" },
+          { ...bunVariant, id: "z", name: "Portion 10", unitPrice: "1.00" },
           { ...bunVariant, id: "y", name: "0,25 kg", unitPrice: "5.00" },
-          { ...bunVariant, id: "m", name: "Ración 2", unitPrice: "9.00" },
+          { ...bunVariant, id: "m", name: "Portion 2", unitPrice: "9.00" },
           { ...bunVariant, id: "x", name: "0,5 kg", unitPrice: "3.00" },
         ],
       }),
@@ -3785,10 +3783,10 @@ describe("the Products tree's Name column", () => {
   const solomillo = () =>
     product({
       id: "loin",
-      name: "Solomillo",
+      name: "Tenderloin",
       primaryCategoryId: "m",
       image: "loin.png",
-      variants: [{ ...bunVariant, id: "s250", name: "Solomillo 250g", unitPrice: "12.00" }],
+      variants: [{ ...bunVariant, id: "s250", name: "Tenderloin 250g", unitPrice: "12.00" }],
     });
 
   const deepProducts = () => [
@@ -3982,7 +3980,7 @@ describe("the Products tree's Name column", () => {
     it("lets a long name use the room the photo gave up, up to its row's pinned actions", async () => {
       const long = product({
         id: "croquetas",
-        name: "Croquetas caseras de jamón ibérico de bellota",
+        name: "Homemade croquettes with old cured ham chunks",
         primaryCategoryId: "m",
         image: "croquetas.png",
       });
@@ -4805,7 +4803,7 @@ describe("a category whose name wraps", () => {
           categories: [
             {
               id: "long",
-              name: "Charcuterie y quesos ibéricos de bellota",
+              name: "Charcuterie and mature farmhouse cheeses",
               parentId: null,
               color: "#b12525",
             },
@@ -5296,7 +5294,7 @@ describe("variant media slot", () => {
   const roastChicken = () =>
     product({
       id: "pollo",
-      name: "Pollo asado",
+      name: "Roast chicken",
       primaryCategoryId: "f",
       image: mediaTestReference("pollo.webp"),
       color: "#256bb1",
@@ -5305,9 +5303,9 @@ describe("variant media slot", () => {
         {
           ...bunVariant,
           id: "quarter",
-          name: "1/4 Pollo",
+          name: "1/4 Chicken",
           customerName: { es: "Cuarto de pollo" },
-          kitchenName: "1/4 POLLO",
+          kitchenName: "1/4 CHICKEN",
           image: null,
         },
       ],
@@ -5315,10 +5313,10 @@ describe("variant media slot", () => {
   const omelette = () =>
     product({
       id: "tortilla",
-      name: "Tortilla",
+      name: "Spanish omelette",
       primaryCategoryId: "f",
       color: "#b12525",
-      variants: [{ ...bunVariant, id: "pincho", name: "Pincho", image: null }],
+      variants: [{ ...bunVariant, id: "pincho", name: "Slice", image: null }],
     });
 
   async function mountOpen() {
@@ -5367,7 +5365,7 @@ describe("variant media slot", () => {
     expect(media.tagName).toBe("A");
     expect(media.getAttribute("href")).toBe("/manage/catalogue/product/quarter?field=image");
     expect(media.getAttribute("aria-label")).toBe(
-      t("product.edit_named").replace("{name}", "1/4 Pollo"),
+      t("product.edit_named").replace("{name}", "1/4 Chicken"),
     );
     const sent: unknown[] = [];
     for (const type of ["edit-product", "product-colour"])
