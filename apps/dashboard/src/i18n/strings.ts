@@ -2059,7 +2059,7 @@ export const en = {
   "backup.destination.stream_location": "Backups will be stored in",
   "backup.destination.folder_required": "Enter the folder to save backups in.",
   "backup.destination.folder_refused":
-    "The box cannot use this folder. Remove any tab, line break or other control character.",
+    "The box cannot use this folder. Choose a folder outside the box’s scratch folder and remove any tab, line break or other control character.",
   "backup.destination.stream_prefix_refused":
     "Backups cannot use the bucket copy's folder inside its bucket. Choose a folder on this box.",
   "backup.archive_test.timed_out": "The bucket took too long to answer.",
@@ -5933,7 +5933,7 @@ export const es: Record<StringKey, string> = {
   "backup.destination.stream_location": "Las copias se guardarán en",
   "backup.destination.folder_required": "Escribe la carpeta donde guardar las copias.",
   "backup.destination.folder_refused":
-    "La caja no puede usar esta carpeta. Quita cualquier tabulador, salto de línea u otro carácter de control.",
+    "La caja no puede usar esta carpeta. Elige una carpeta fuera de la carpeta scratch de la caja y quita cualquier tabulador, salto de línea u otro carácter de control.",
   "backup.destination.stream_prefix_refused":
     "Las copias no pueden usar la carpeta de la copia en el bucket dentro de su bucket. Elige una carpeta de esta caja.",
   "backup.archive_test.timed_out": "El bucket ha tardado demasiado en responder.",

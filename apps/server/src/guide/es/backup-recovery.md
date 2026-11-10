@@ -125,7 +125,7 @@ no sustituyas ninguno de los dos registros de claves basándote en este mensaje.
 Si las copias programadas están desactivadas porque no se pueden usar sus ajustes guardados, abre
 **Copias de seguridad** y lee el error junto al estado de las copias. Elige de nuevo los destinos
 y el horario. **Activar las copias** sustituye los ajustes guardados; sal sin aplicarlos
-para conservarlos. Si se rechaza una carpeta, corrígela antes de volver a aplicar. Aunque se guarden
+para conservarlos. Elige una carpeta de copias fuera de la carpeta scratch de la caja; los arranques vacían scratch para quitar las copias temporales. Si se rechaza una carpeta, corrígela antes de volver a aplicar. Aunque se guarden
 los ajustes, puede fallar su carga: comprueba el estado antes de confiar en una copia nueva.
 
 Si **Copias de seguridad** indica que no se pueden usar los ajustes guardados, elige **Lo que ha

@@ -1,3 +1,4 @@
+import { inScratch } from "./scratch.js";
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import type { Context, Hono } from "hono";
@@ -443,6 +444,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           stream,
           held: heldSettings,
         });
+        if (destinations.some((d) => d.kind === "local-fs" && inScratch(deps.stateDir, d.dir)))
+          throw requestInvalid("dir");
         const settings: Omit<ArchiveSettings, "revision"> = {
           enabled: true,
           destinations,

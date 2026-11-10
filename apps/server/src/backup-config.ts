@@ -1,3 +1,4 @@
+import { assertOutsideScratch } from "./scratch.js";
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { codeOf } from "@waitron/server-kit";
@@ -406,5 +407,17 @@ function heldUsableKey(env: Env): string | undefined {
   } catch (error) {
     if (isAppError(error) && error.code === "backup.recovery_key_too_short") return undefined;
     throw error;
+  }
+}
+
+/** Used before startup sweeps, without requiring a recovery key or opening a database. */
+export function assertBackupOutsideScratch(env: Env, stateDir: string): void {
+  for (const destination of parseDestinations(env, "scratch-path-check")) {
+    if (destination.kind === "local-fs")
+      assertOutsideScratch(
+        stateDir,
+        destination.dir,
+        "WAITRON_BACKUP_DIR / WAITRON_BACKUP_DESTINATIONS",
+      );
   }
 }

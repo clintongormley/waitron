@@ -1,3 +1,4 @@
+import { assertBackupOutsideScratch } from "./backup-config.js";
 import { LOGS_DIR, VENUE_DIR_NAME } from "@waitron/store";
 import {
   httpPortFrom,
@@ -338,6 +339,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
     log: deps.log,
   };
+  assertBackupOutsideScratch(deps.baseEnv, deps.stateDir);
   const space = await freeSpaceAtStart({
     ...cleanUp,
     stateDir: deps.stateDir,

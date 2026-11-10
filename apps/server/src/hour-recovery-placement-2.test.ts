@@ -459,7 +459,12 @@ describe("selected-hour admission before archive placement", () => {
         expect(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")).toBe(marker);
         expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
         expect(
-          (await readdir(f.roots.stateDir)).filter((name) => name.startsWith("restore-entry-")),
+          (
+            await readdir(join(f.roots.stateDir, "scratch")).catch((error: unknown) => {
+              if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+              throw error;
+            })
+          ).filter((name) => name.startsWith("restore-entry-")),
         ).toEqual([]);
       }
     },
@@ -818,7 +823,12 @@ describe("selected-hour admission before archive placement", () => {
         ),
       ).toEqual([]);
       expect(
-        (await readdir(f.roots.stateDir)).filter((name) => name.startsWith("stream-restore-")),
+        (
+          await readdir(join(f.roots.stateDir, "scratch")).catch((error: unknown) => {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+            throw error;
+          })
+        ).filter((name) => name.startsWith("stream-restore-")),
       ).toEqual([]);
     },
   );

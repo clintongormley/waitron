@@ -3173,8 +3173,8 @@ delete" in `free-space-now.test.ts`.
   read its backup settings, or after a settings reload could not open the venue database, it holds
   none (`backup-supervisor.ts`, `reload`; `backup-supervisor.test.ts`, "keeps archives off and
   reports the code when the settings could not be loaded", expects `destinations: []`), so a
-  destination inside a `backup-encrypt-` folder is then deleted. The start's clean-up never reads
-  the destinations at all ([box.md](../backlog/box.md#every-starts-clean-up-deletes-a-backup-folder-configured-inside-backup-staging-under-a-backup-encrypt--name)).
+  destination inside a `backup-encrypt-` folder is then deleted. Backup configuration and dashboard
+  saves now refuse local destinations under scratch; startup also refuses venue and log paths there.
 - The staging turn is in-process only. Another process writing backup staging is not kept out by
   it; the only other product writer found is the start, which a held venue folder stops (A978).
   Found by `grep -rn "BACKUP_STAGING_DIR\|stagingDir"` over `apps` and `packages`, not run.

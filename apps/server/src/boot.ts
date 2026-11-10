@@ -405,6 +405,7 @@ import { mountBackupApi } from "./backup-api.js";
 import { createSealedStateRefresher, type SealedStateStatus } from "./sealed-state.js";
 import {
   isBackupManagedByEnvironment as backupKeysInEnv,
+  assertBackupOutsideScratch,
   loadBackupSettings,
   loadRecoveryKey,
 } from "./backup-config.js";
@@ -1053,6 +1054,7 @@ async function bootServer(
 ): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
+  if (backupKeysInEnv(base)) assertBackupOutsideScratch(env, config.stateDir);
   // Here rather than in `loadConfig`: `health.ts` imports from `config.ts` to build `DUTY_BUDGET_MS`,
   // so `config.ts` importing it back would be a cycle. An idle host sleeps `config.maxTickMs`
   // verbatim, so a ceiling at or past the drain budget would read the drain duty as stale.

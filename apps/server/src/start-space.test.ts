@@ -726,3 +726,15 @@ describe("defaults", () => {
     expect(CRASH_REPORT_KEEP_MS).toBe(604_800_000);
   });
 });
+
+it.each(["venueDir", "logDir"] as const)(
+  "refuses a %s inside scratch before deleting its files",
+  async (field) => {
+    const protectedDir = join(stateDir, "scratch", "kept");
+    const saved = join(protectedDir, field === "venueDir" ? "venue.db" : "waitron.log");
+    await touch(saved);
+    const { deps: d } = deps({ [field]: protectedDir, free: 5000 });
+    await expect(freeSpaceAtStart(d)).rejects.toMatchObject({ code: "server.config_invalid" });
+    expect(existsSync(saved)).toBe(true);
+  },
+);

@@ -540,9 +540,9 @@ called weaker than its name, the topic file lists what it does not see.
   which run while no backup supervisor is running in this process**. Guard:
   `scripts/backup-staging-touchers.test.ts`, weaker than its name. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#backup-staging-is-touched-only-inside-the-staging-turn).
-- **Every temporary working folder lives in `<state>/scratch/`, made only by a process that holds
-  the venue folder from before it makes it; every start empties `scratch/` once it holds the venue
-  folder (`emptyScratch`).** Nothing guards the first half; `scripts/no-tmpdir-scratch.test.ts`
+- **Backup/restore staging, stream/entry restore working folders, setup-holdings copies and node
+  snapshots use `<state>/scratch/`, made only while the process holds the venue folder; every start
+  empties `scratch/` once it holds the venue folder (`emptyScratch`).** Nothing guards the first half; `scripts/no-tmpdir-scratch.test.ts`
   guards production calls of `tmpdir`, weaker than its name: reads text. Cloud snapshots keep
   their own staging until the one backup service lands (fl2's explicit exception).
   [Detail](docs/developers/conventions-data.md#one-process-per-venue-folder).

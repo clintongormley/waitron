@@ -971,7 +971,6 @@
   "src/restore-request.test.ts": 2,
   "src/restore-request.verification.test.ts": 4.8,
   "src/restore-secrets.test.ts": 2.6,
-  "src/restore-staging-dirs.test.ts": 2.6,
   "src/restore-stream.test.ts": 7.4,
   "src/restore.test.ts": 10.5,
   "src/restricted-page.test.ts": 1.5,

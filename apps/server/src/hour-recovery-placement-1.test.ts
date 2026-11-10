@@ -678,7 +678,9 @@ describe("selected-hour admission before archive placement", () => {
     expect(output.join("\n")).not.toContain(key.secret);
     expect(output.join("\n")).not.toContain("separate bucket password");
     expect(
-      (await readdir(f.roots.stateDir)).filter((name) => name.startsWith("stream-restore-")),
+      (await readdir(join(f.roots.stateDir, "scratch"))).filter((name) =>
+        name.startsWith("stream-restore-"),
+      ),
     ).toEqual([]);
   });
 
@@ -747,7 +749,9 @@ describe("selected-hour admission before archive placement", () => {
     expect(output.join("\n")).not.toContain(key.secret);
     expect(output.join("\n")).not.toContain(kit.recoveryKey);
     expect(
-      (await readdir(f.roots.stateDir)).filter((name) => name.startsWith("stream-restore-")),
+      (await readdir(join(f.roots.stateDir, "scratch"))).filter((name) =>
+        name.startsWith("stream-restore-"),
+      ),
     ).toEqual([]);
   });
 

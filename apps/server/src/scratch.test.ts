@@ -12,7 +12,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { deleteScratchEntries, emptyScratch, listScratch } from "./scratch.js";
+import {
+  assertOutsideScratch,
+  deleteScratchEntries,
+  emptyScratch,
+  listScratch,
+} from "./scratch.js";
 
 vi.mock("node:fs/promises", async (original) => {
   const fs = await original<typeof import("node:fs/promises")>();
@@ -79,4 +84,12 @@ it("only the listed entries are deleted", async () => {
   await mkdir(join(scratch, "new"));
   expect(await deleteScratchEntries(root, listed!, log)).toBe(1);
   expect(await readdir(scratch)).toEqual(["new"]);
+});
+
+it("refuses a configured folder whose existing parent links into scratch", async () => {
+  await mkdir(scratch);
+  await symlink(scratch, join(root, "alias"));
+  expect(() =>
+    assertOutsideScratch(root, join(root, "alias", "backups"), "WAITRON_BACKUP_DIR"),
+  ).toThrow(expect.objectContaining({ code: "server.config_invalid" }));
 });

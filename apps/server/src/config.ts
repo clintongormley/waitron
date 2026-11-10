@@ -9,6 +9,7 @@ import { parseBoxAddresses } from "./box-reach.js";
 import { tryLoadNodeIdentity } from "./node-config.js";
 import type { NodeIdentityConfig } from "./node-config.js";
 import { loadTillAppSettings, type TillAppSettings } from "./till-config.js";
+import { assertOutsideScratch } from "./scratch.js";
 import { isUnset } from "./env-value.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import "./errors.js";
@@ -402,6 +403,10 @@ export function loadConfig(
   const stateDir = env.WAITRON_STATE_DIR;
   // Computed once so `venueDir` and `logDir` default under the returned `stateDir`.
   const resolvedStateDir = resolveConfigDir(stateDir, defaultStateRoot);
+  const venueDir = resolveConfigDir(env.WAITRON_VENUE_DIR, join(resolvedStateDir, VENUE_DIR_NAME));
+  const logDir = resolveLogDir(env, resolvedStateDir);
+  assertOutsideScratch(resolvedStateDir, venueDir, "WAITRON_VENUE_DIR");
+  assertOutsideScratch(resolvedStateDir, logDir, "WAITRON_LOG_DIR");
   const httpHost = env.WAITRON_HTTP_HOST;
   // A half-configured pair is refused rather than silently falling back to plain HTTP; the error
   // names the missing variable.
@@ -494,10 +499,10 @@ export function loadConfig(
     ...(isUnset(env.WAITRON_TUNNEL_CONTROL_DIR)
       ? {}
       : { tunnelControlDir: resolve(env.WAITRON_TUNNEL_CONTROL_DIR) }),
-    venueDir: resolveConfigDir(env.WAITRON_VENUE_DIR, join(resolvedStateDir, VENUE_DIR_NAME)),
+    venueDir,
     // Validated at load so a typo fails boot rather than minting a certificate for it.
     boxAddresses: parseBoxAddresses(env.WAITRON_BOX_ADDRESSES),
-    logDir: resolveLogDir(env, resolvedStateDir),
+    logDir,
     logMaxBytes: positiveInt(env, "WAITRON_LOG_MAX_BYTES", DEFAULT_LOG_MAX_BYTES),
     logMaxFiles: positiveInt(env, "WAITRON_LOG_MAX_FILES", DEFAULT_LOG_MAX_FILES),
     ...(tls === undefined ? {} : { tls }),

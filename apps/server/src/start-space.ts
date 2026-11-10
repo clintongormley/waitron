@@ -6,7 +6,12 @@ import { BACKUP_KEY_PREFIX } from "./backup-keys.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
-import { deleteScratchEntries, emptyScratch, listScratch } from "./scratch.js";
+import {
+  assertOutsideScratch,
+  deleteScratchEntries,
+  emptyScratch,
+  listScratch,
+} from "./scratch.js";
 
 export const START_FREE_SPACE_FLOOR = 256 * 1024 * 1024;
 export const CRASH_REPORT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
@@ -56,6 +61,8 @@ export interface StartSpaceDeps {
 export async function freeSpaceAtStart(
   deps: StartSpaceDeps,
 ): Promise<{ freeBytes: number | null; belowFloor: boolean }> {
+  assertOutsideScratch(deps.stateDir, deps.venueDir, "WAITRON_VENUE_DIR");
+  if (deps.logDir !== null) assertOutsideScratch(deps.stateDir, deps.logDir, "WAITRON_LOG_DIR");
   const dirs = [deps.stateDir, deps.venueDir];
   const before = await lowestFreeBytes(dirs, deps.statfs);
   const failed = (error: unknown) =>

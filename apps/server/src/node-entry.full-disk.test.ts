@@ -573,3 +573,15 @@ describe("a start that fails on a full disk", () => {
     expect(recordedStartFailureCode("a thrown string")).toBeUndefined();
   });
 });
+
+it("refuses an environment backup inside scratch before cleanup removes its archive", async () => {
+  const destination = join(STATE_DIR, "scratch", "saved-backups");
+  await mkdir(destination, { recursive: true });
+  dirs.push(destination);
+  const archive = join(destination, "saved.backup.enc");
+  await writeFile(archive, "keep");
+  const d = deps({ baseEnv: { WAITRON_BACKUP_DIR: destination } }, () => 100 * MIB);
+  await expect(runEntry(d)).rejects.toMatchObject({ code: "server.config_invalid" });
+  expect(await readFile(archive, "utf8")).toBe("keep");
+  expect(d.startServer).not.toHaveBeenCalled();
+});
