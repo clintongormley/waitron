@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { recordSale } from "@waitron/core";
 import {
-  managementSessions,
   invoiceSeries,
   saleLines,
   sales,
@@ -14,7 +13,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  hashSessionToken,
   hashPin,
   persons,
   registerModulePermissions,
@@ -23,6 +21,7 @@ import {
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, deviceOrigin, seriesId } from "@waitron/shared";
+import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
@@ -104,10 +103,7 @@ beforeEach(async () => {
       .returning();
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
-    await tx
-      .update(managementSessions)
-      .set({ provedAt: new Date().toISOString() })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    await setFreshManagementSignIn(tx, token);
     const original = await recordSale(
       tx,
       backend,

@@ -1,24 +1,13 @@
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import {
-  managementSessions,
-  sales,
-  saleSettlements,
-  tenders,
-  tenderRefunds,
-  withTransaction,
-} from "@waitron/db";
+import { sales, saleSettlements, tenders, tenderRefunds, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  hashSessionToken,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
+import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, nodeId, saleId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
+import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { steadyClock, staticResolver } from "../test/write-path-fixtures.js";
@@ -87,10 +76,7 @@ beforeEach(async () => {
       .values({ displayName: "Administrator", role: "admin" })
       .returning();
     token = (await startManagementSession(tx, { personId: person!.id })).token;
-    await tx
-      .update(managementSessions)
-      .set({ provedAt: new Date().toISOString() })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    await setFreshManagementSignIn(tx, token);
     return person!.id;
   });
   ids = [];
@@ -491,10 +477,7 @@ it("refuses a second administrator's reuse of the first administrator's action k
       .values({ displayName: "Second administrator", role: "admin" })
       .returning();
     const session = await startManagementSession(tx, { personId: other!.id });
-    await tx
-      .update(managementSessions)
-      .set({ provedAt: new Date().toISOString() })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(session.token)));
+    await setFreshManagementSignIn(tx, session.token);
     return session.token;
   });
   const before = await snapshot();

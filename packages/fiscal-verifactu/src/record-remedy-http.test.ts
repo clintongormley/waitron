@@ -16,6 +16,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { AltaInput } from "@waitron/verifactu";
+import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { appendToChain, readChainHead } from "./chain.js";
@@ -76,10 +77,7 @@ beforeEach(async () => {
       .returning();
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
-    await tx
-      .update(managementSessions)
-      .set({ provedAt: new Date().toISOString() })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    await setFreshManagementSignIn(tx, token);
     const original = await appendToChain(
       tx,
       node.nodeId,

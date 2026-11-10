@@ -36,7 +36,8 @@ También confirmas antes de cambiar las copias de seguridad, descargar archivos 
 mostrar la clave de recuperación de las copias o exportar la configuración o los datos de otro
 miembro del personal. La misma confirmación cubre conectar o desconectar proveedores de pagos,
 cambiar el servidor de correo o la conexión Cloud, activar el acceso remoto, preparar un equipo
-sustituto, instalar el certificado fiscal, cambiar la razón social y quitar un servidor. Usa tu contraseña o passkey y, si tienes
+sustituto, instalar el certificado fiscal, cambiar la razón social y quitar un servidor.
+Usa tu contraseña o passkey y, si tienes
 verificación en dos pasos, un código del autenticador o de recuperación. La confirmación cubre
 estas acciones en este navegador durante 15 minutos o hasta que termine tu sesión.
 Elige **Cancelar** para dejar la acción sin realizar. Si el disco está lleno, abre **Estado del

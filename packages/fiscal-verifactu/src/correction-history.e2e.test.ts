@@ -3,7 +3,6 @@ import { Hono } from "hono";
 import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { previewCorrectionAmounts, recordCorrection, recordSale } from "@waitron/core";
 import {
-  managementSessions,
   captureError,
   invoiceSeries,
   newId,
@@ -14,7 +13,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  hashSessionToken,
   hashPin,
   loginWithPin,
   persons,
@@ -33,6 +31,7 @@ import {
   type SeriesId,
 } from "@waitron/shared";
 import { computeHuella, validate } from "@waitron/verifactu";
+import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
@@ -214,10 +213,7 @@ it("refuses an invoice the agency refused, then, once its fix files it at 10%, a
     ).id,
   }));
   const app = new Hono();
-  await suite.db
-    .update(managementSessions)
-    .set({ provedAt: new Date().toISOString() })
-    .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
   mountRecordRemedies(
     app,
     {

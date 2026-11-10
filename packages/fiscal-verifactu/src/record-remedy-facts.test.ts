@@ -1,16 +1,16 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeEach, expect, it } from "vitest";
-import { managementSessions, sales, withTransaction } from "@waitron/db";
+import { sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  hashSessionToken,
   hashPin,
   persons,
   registerModulePermissions,
   startManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { listFilingCases, openFilingCase } from "./filing-cases.js";
@@ -55,10 +55,7 @@ beforeEach(async () => {
       .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
       .returning();
     token = (await startManagementSession(tx, { personId: person!.id })).token;
-    await tx
-      .update(managementSessions)
-      .set({ provedAt: new Date().toISOString() })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    await setFreshManagementSignIn(tx, token);
     const original = await appendToChain(
       tx,
       node.nodeId,

@@ -1,10 +1,9 @@
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { managementSessions, sales, tenants, withTransaction } from "@waitron/db";
+import { sales, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  hashSessionToken,
   hashPin,
   persons,
   registerModulePermissions,
@@ -13,6 +12,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, saleId as brandSaleId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
+import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { steadyClock, staticResolver } from "../test/write-path-fixtures.js";
@@ -62,10 +62,7 @@ beforeEach(async () => {
       .returning();
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
-    await tx
-      .update(managementSessions)
-      .set({ provedAt: new Date().toISOString() })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+    await setFreshManagementSignIn(tx, token);
     const original = await appendToChain(
       tx,
       node.nodeId,
