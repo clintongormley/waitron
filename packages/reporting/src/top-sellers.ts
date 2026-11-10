@@ -28,7 +28,10 @@ function reaches(money: SQL, returned: SQL): SQL {
  * it is the correction, in issue order, at which the line's corrections first add up to its money
  * (gross where the line stored one, else net); any other counts no dishes. The sum leaves out a
  * correction voided at or before the moment the one being counted was issued, so a day's count
- * never changes after the day; a void reverses exactly what its sale was counted as.
+ * never changes after the day; a void reverses exactly what its sale was counted as. It assumes a
+ * line's corrections, voided ones included, never take more than its money, as the exact-split and
+ * whole-invoice paths refuse; past that, a void followed by a further correction can return the
+ * dish twice.
  *
  * Invalid inputs are a caller precondition and throw a plain `Error` before any query runs.
  */

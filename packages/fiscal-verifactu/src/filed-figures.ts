@@ -18,9 +18,8 @@ type Version = Pick<
 const IDS_PER_QUERY = 1000;
 
 const ANSWERED = new Set(["aceptado", "aceptado_con_errores"]);
-/** Every other state, and no envío, still waits for an answer: a held (`detenido`, `retenido`)
- * version has none yet, and is sent by a probe or once released (drain.ts,
- * record-remedy-held.ts). */
+/** Every other state, and no envío, still waits for an answer: a held (`detenido`) version is
+ * sent by the drain's probe or once its chain is released (drain.ts). */
 const ACCEPTED_OR_REFUSED = new Set([...ANSWERED, "rechazado"]);
 
 /** The keys `toDetalleDesglose` (./backend.ts) writes, and no other. */

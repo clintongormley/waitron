@@ -1104,8 +1104,8 @@ Size after these: about 175 production and 320 test lines.
   The administrator's corrective-invoice remedy for a refused original files what it filed before:
   a refused version is answered, so nothing waits (`record-remedy-corrective-http.test.ts`, the
   refused original and the refused fix of it both pass).
-- "Waits for its answer" means the newest filed version's submission is queued, being sent, held
-  behind its chain (`detenido`) or set aside (`retenido`), or has no submission row; accepted,
+- "Waits for its answer" means the newest filed version's submission is queued, being sent or held
+  behind its chain (`detenido`), or has no submission row; accepted,
   accepted with errors and refused are answered (`newestAwaitingAnswer` in
   `packages/fiscal/src/backend.ts`, set by `packages/fiscal-verifactu/src/filed-figures.ts`).
 - The preview's moved path: naming dishes refuses `sale.correction_scope_invalid`
@@ -1130,6 +1130,6 @@ Size after these: about 175 production and 320 test lines.
 - A cancellation is refused while a fix waits for its answer, the same rule as the preview and the
   exact-split path.
 
-**Size** (`git diff --numstat 0b7f37048f`, TypeScript only): production 531 lines added and 170
+**Size** (`git diff --numstat 0b7f37048f`, TypeScript only): production 533 lines added and 170
 removed; tests, test fixtures and the fake backend 1,122 added and 49 removed. The plan review
 estimated about 175 and 320, before point 5, the till wording and the reviews' fixes were added.
