@@ -3659,6 +3659,7 @@ async function bootServer(
   const unsubscribeFromChanges = subscribeToChanges(changeSubscriber(liveEvents, log));
   undoOnFailure.push(async () => liveEvents.close());
   undoOnFailure.push(async () => unsubscribeFromChanges());
+  // A running menu pass must settle before the stream stops on a failed start.
   undoOnFailure.splice(undoOnFailure.indexOf(stopJobRunner), 1);
   undoOnFailure.push(stopJobRunner);
   jobRunner.add(

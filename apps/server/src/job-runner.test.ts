@@ -254,11 +254,61 @@ describe("job runner", () => {
       runner.signalStepdown();
       await advance();
       const closing = runner.stopJobs();
-      runner = createJobRunner({ now: () => new Date(), log });
+      runner = createJobRunner({ now: () => new Date(), log, subscribe: () => () => {} });
       await expect(closing).rejects.toBe(failure);
       expect(unhandled).toEqual([]);
     } finally {
       process.off("unhandledRejection", remember);
+    }
+  });
+
+  it("awaits every stop hook before reporting one hook's failure", async () => {
+    const failure = Error("stop failed");
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let settled = false;
+    let stopped = false;
+    let caught: unknown;
+    runner.add(
+      job({
+        onStop: async () => {
+          throw failure;
+        },
+      }),
+    );
+    runner.add(
+      job({
+        name: "clock.watch",
+        onStop: async () => {
+          await held;
+          stopped = true;
+        },
+      }),
+    );
+    await advance();
+    const closing = runner.stopJobs().then(
+      () => {
+        settled = true;
+      },
+      (error: unknown) => {
+        settled = true;
+        caught = error;
+      },
+    );
+    try {
+      await advance();
+      expect(settled).toBe(false);
+      expect(stopped).toBe(false);
+      release();
+      await closing;
+      expect(stopped).toBe(true);
+      expect(caught).toBe(failure);
+    } finally {
+      release();
+      await closing;
+      runner = createJobRunner({ now: () => new Date(), log, subscribe: () => () => {} });
     }
   });
 

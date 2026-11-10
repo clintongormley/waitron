@@ -2,6 +2,7 @@ import { subscribeToChanges } from "@waitron/db";
 import type { ResourceChange } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import { JOB_CATALOGUE, type JobName } from "./job-catalogue.js";
+import { closeAll } from "./close-all.js";
 import { createLoopWaker } from "./loop-wake.js";
 import { realSleep, sleepMsFor } from "./loop.js";
 import type { Logger } from "./logger.js";
@@ -221,7 +222,7 @@ export function createJobRunner(deps: {
       if (!stopping) {
         unsubscribe();
         for (const job of jobs.values()) job.controller.abort();
-        stopping = Promise.all([...jobs.values()].map((job) => job.loop)).then(() => {});
+        stopping = closeAll([...jobs.values()].map((job) => () => job.loop));
       }
       return stopping;
     },
