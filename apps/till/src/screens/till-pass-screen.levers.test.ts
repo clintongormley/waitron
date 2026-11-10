@@ -895,3 +895,41 @@ describe("A773 pass screen: a group card's Ready refused on a kitchen display", 
     expect(text(leverError(el))).toBe(`#7 T7: ${codeMessage("kitchen_screen.zone_not_allowed")}`);
   });
 });
+
+describe("A797 pass screen: a refusal names the card as its heading does", () => {
+  const shortNamedApi = (bumpGroupReady: Fn) => {
+    const card = groupCard({
+      orders: [
+        {
+          orderId: "order-7",
+          orderNumber: 7,
+          tableLabel: "Terrace 4 + Terrace 5",
+          tableShortNames: ["T5", "T4"],
+          kitchenNote: null,
+        },
+      ],
+    });
+    return fakeApi({
+      getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(passBoard({ inProgress: [card] }))),
+      bumpGroupReady,
+    });
+  };
+
+  it("a Ready refusal's label names the bill's tables by their short names", async () => {
+    const el = await mountTill(
+      shortNamedApi(vi.fn().mockRejectedValue(refused("device.forbidden_action", 403))),
+    );
+    await press(el, '[data-group-ready="g-1"]');
+    expect(text(leverError(el))).toBe(`#7 T4+T5: ${codeMessage("device.forbidden_action")}`);
+  });
+
+  it("party.out_of_date names the bill's tables by their short names", async () => {
+    const el = await mountTill(
+      shortNamedApi(vi.fn().mockRejectedValue(refused("party.out_of_date"))),
+    );
+    await press(el, '[data-group-ready="g-1"]');
+    expect(text(tableChanged(el))).toBe(
+      `${t("station.table_changed_named").replace("{table}", "T4+T5")} ${t("station.table_changed")}`,
+    );
+  });
+});

@@ -8688,11 +8688,13 @@ export type PassRowRead = Omit<PassRow, "zoneId" | "stationWaitsNow" | "stationC
   deliveryTableId: string | null;
 };
 
-/** Every live kitchen item `scope` selects, with the facts the pass card and release read. */
+/** Every live kitchen item `scope` selects, with the facts the pass card and release read; each
+ *  bill's `tableShortNames` only `withShortNames`. */
 export async function readPassRows(
   tx: Transaction,
   scope: SQL,
   nowMs: number,
+  { withShortNames = false }: { withShortNames?: boolean } = {},
 ): Promise<PassRowRead[]> {
   const rows = await tx
     .select({
@@ -8786,9 +8788,10 @@ export async function readPassRows(
     tx,
     rows.map((row) => row.orderId),
   );
+  const bills = [...new Map(rows.map((row) => [row.orderId, row])).values()];
   const tableLabels = await orderTableLabels(
     tx,
-    [...new Map(rows.map((row) => [row.orderId, row])).values()].map((row) => ({
+    bills.map((row) => ({
       id: row.orderId,
       partyId: row.partyId,
       deliveryTableId: row.deliveryTableId,
@@ -8796,6 +8799,9 @@ export async function readPassRows(
       label: row.label,
     })),
   );
+  const tableShortNames = withShortNames
+    ? await readBillTableShortNames(tx, bills)
+    : new Map<string, string[]>();
 
   return rows.map((row) => {
     const thresholds: StationThresholds = {
@@ -8874,6 +8880,7 @@ export async function readPassRows(
       order: {
         orderNumber: row.orderNumber,
         ...optional("tableLabel", tableLabels.get(row.orderId) ?? undefined),
+        ...optional("tableShortNames", tableShortNames.get(row.orderId)),
         kitchenNote: kitchenNotes.get(row.orderId)!.note,
         ...optional("formerNumbers", former.get(row.orderId)),
         openedAt: row.openedAt,

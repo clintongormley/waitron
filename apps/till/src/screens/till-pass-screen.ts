@@ -13,7 +13,7 @@ import "../widgets/stale-since.js";
 import "../widgets/pass-board.js";
 import "../widgets/kitchen-columns-dialog.js";
 import { passColumnNames } from "../widgets/pass-board.js";
-import type { PassMode } from "../state/pass-view.js";
+import { type PassMode, passOrderPlace } from "../state/pass-view.js";
 import {
   type ColumnKey,
   type ColumnScope,
@@ -61,7 +61,8 @@ function lostLines(screen: Pick<DevicePassBoard, "stations" | "zones">): string[
 
 function cardLabel(card: PassCard): string {
   const numbers = card.orders.map((order) => `#${order.orderNumber}`).join(" · ");
-  const table = card.orders[0]?.tableLabel;
+  const first = card.orders[0];
+  const table = first === undefined ? undefined : passOrderPlace(first);
   return table ? `${numbers} ${table}` : numbers;
 }
 
@@ -444,7 +445,9 @@ export class TillPassScreen extends LitElement {
       if (this.#isCurrent(boardId)) {
         if ((error as { code?: string } | null)?.code === "party.out_of_date") {
           const first = card.orders[0];
-          this.#tableChangedNext = { table: first?.tableLabel ?? `#${first?.orderNumber ?? ""}` };
+          this.#tableChangedNext = {
+            table: (first && passOrderPlace(first)) ?? `#${first?.orderNumber ?? ""}`,
+          };
         } else this.#leverRefused(card, error);
       }
     }

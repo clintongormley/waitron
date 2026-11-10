@@ -220,14 +220,15 @@ every dish is ready. **Overview** is hidden until you show it in **Columns**, an
 It leaves out dimmed dishes and counts the rest as the kitchen screen's does, with dishes held or
 waiting for the pass after the **+**.
 
-A card's heading says what the waiter sent, **New order**, **Next course** or **Added** (a held
-card says none of them), then its order number, table and group. Its minutes count from when the
-waiter sent it; a **Ready** card shows **Ready 3 min**, counted from when its last dish was ready,
-and a held card shows none. The card's left edge takes the brand colour, then turns red, as time
-passes since its dishes were sent, by their stations' late flags. A ready dish keeps counting, so a
-**Ready** card turns red too. A dish sent too long ago says **Forgotten**, and the row above the
-columns counts the red cards (**2 overdue**). Each dish shows its state and station, such as
-**Preparing · Grill**; a held dish shows neither.
+A card's heading says what the waiter sent, **New order**, **Next course** or **Added** (a held card
+says none of them), then its order number, table and group. It names a table by its [short
+name](table-service.md#short-names), such as **T4**, or **T4+T5** for tables joined together. Its
+minutes count from when the waiter sent it; a **Ready** card shows **Ready 3 min**, counted from
+when its last dish was ready, and a held card shows none. The card's left edge takes the brand
+colour, then turns red, as time passes since its dishes were sent, by their stations' late flags. A
+ready dish keeps counting, so a **Ready** card turns red too. A dish sent too long ago says
+**Forgotten**, and the row above the columns counts the red cards (**2 overdue**). Each dish shows
+its state and station, such as **Preparing · Grill**; a held dish shows neither.
 
 A dish whose [station waits for the pass](kitchen-service.md#station-waits) is not cooked until
 the pass fires it. When the waiter

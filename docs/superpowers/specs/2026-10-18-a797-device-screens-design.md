@@ -13,6 +13,7 @@ build plan `docs/superpowers/plans/2026-10-24-a797-device-screens-build.md`.** N
 Q51 any more (§10).
 Backlog entries: `docs/backlog.md` "Design the fixed screens for each kind of device" (two entries) and
 [its detail](../../backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01).
+(2026-11-10: A797 finished with slice 12b; the `docs/backlog.md` entries are deleted.)
 
 Pictures, in `docs/backlog/mockups/a797-device-screens/` (redrawn for this revision; `-dark` is the
 dark theme): **01** `01-handheld-floor` (+ dark), **02** `02-handheld-order`, **03**

@@ -581,7 +581,7 @@ describe("permanent station deletion", () => {
     expect(before.kitchen_print_jobs).toHaveLength(4);
     expect(before.print_jobs).toHaveLength(4);
   });
-  it("names seated and joined-table preparation with the existing pass display label", async () => {
+  it("names seated and joined-table preparation by the tables' full names (orderTableLabels)", async () => {
     const { v, id } = await fixture();
     const single = await seat(v, await v.table("Mesa 4"));
     const multi = await seat(v, await v.table("Mesa 5"));

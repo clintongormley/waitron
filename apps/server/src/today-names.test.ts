@@ -307,7 +307,7 @@ describe("a group renamed for today, as the kitchen sees it", () => {
     expect(slips[0]!.join(" ")).toContain(fromTo(name, await labelOf(table.t9!)));
   });
 
-  it("the expo board names the order by the group's name", async () => {
+  it("the expo board's tableLabel for the order is the group's name", async () => {
     const { table, guests } = await seatedGroup();
     const name = suffixed("García birthday");
     await rename(table.c4!, name);

@@ -16,6 +16,7 @@ import {
   type ItemView,
   type PassMode,
   passCardViews,
+  passOrderPlace,
   passOverdueCount,
   passOverviewDishes,
 } from "../state/pass-view.js";
@@ -526,7 +527,7 @@ export class TillPassBoard extends LitElement {
         ${card.orders.map(
           (order) =>
             html`<span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
-              ${order.tableLabel ? html`<span class="label">${order.tableLabel}</span>` : nothing}`,
+              ${placeLabel(passOrderPlace(order))}`,
         )}
         ${card.group === undefined ? nothing : html`<span class="group-name">${groupName(card.group)}</span>`}
         ${kitchenAllergyMarker(view.allergy)} ${this.#age(view)}
@@ -695,6 +696,10 @@ export class TillPassBoard extends LitElement {
       this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     return `age-${band}${band === "forgotten" && !reduced ? " flash" : ""}`;
   }
+}
+
+function placeLabel(place: string | undefined): TemplateResult | typeof nothing {
+  return place ? html`<span class="label">${place}</span>` : nothing;
 }
 
 /** A portion's time is keyed only as the Forgotten mark it draws: the server stamps each ticket

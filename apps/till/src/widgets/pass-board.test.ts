@@ -1126,3 +1126,24 @@ describe("A773 pass board widget", () => {
     });
   });
 });
+
+describe("A797 pass card heading", () => {
+  it("names a bill's tables by their short names, not its label", async () => {
+    const card = passCard({
+      key: "group:p9:g9",
+      target: { kind: "group", partyId: "p9", groupId: "g9" },
+      orders: [
+        {
+          orderId: "order-9",
+          orderNumber: 21,
+          tableLabel: "Terrace 4 + Terrace 5",
+          tableShortNames: ["T4", "T5"],
+          kitchenNote: null,
+        },
+      ],
+    });
+    const el = await mountBoard({ board: passBoard({ inProgress: [card] }) });
+
+    expect(cardOf(el, card.key).querySelector(".label")!.textContent).toBe("T4+T5");
+  });
+});

@@ -1,4 +1,5 @@
 import { BAND_RANK, classifyBand, type TimingBand } from "@waitron/shared";
+import { mergeLabel } from "@waitron/ui";
 import type { PassBoard, PassCard, PassCardItem, TicketState } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import type { ColumnKey } from "./kitchen-columns.js";
@@ -156,6 +157,12 @@ function cardView(
     groupReady: levers && card.target.kind === "group",
     courseReady: levers ? readyCourses(card, dishes) : [],
   };
+}
+
+/** Where a card's bill is, as its heading and refusals name it: its tables by their short names,
+ *  as the kitchen card names them, else its label. */
+export function passOrderPlace(order: PassCard["orders"][number]): string | undefined {
+  return order.tableShortNames === undefined ? order.tableLabel : mergeLabel(order.tableShortNames);
 }
 
 /** The server sorted each column; the view keeps its order. */
