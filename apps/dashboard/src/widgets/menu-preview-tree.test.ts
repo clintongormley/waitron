@@ -416,7 +416,7 @@ it.each(["light", "dark"] as const)(
     setLocale("es-ES");
     const { el, host } = await mountWidget<MenuPreviewPanel>(
       "dashboard-menu-preview",
-      { preview: fixture(), menuName: "Almuerzo" },
+      { preview: fixture(), menuName: "Lunch" },
       theme,
     );
     expect(el.shadowRoot!.querySelector('[data-group="details"] h3')!.textContent).toBe(

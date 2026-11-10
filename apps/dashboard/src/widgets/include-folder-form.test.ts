@@ -65,9 +65,9 @@ function submitted(el: Form) {
 }
 
 it("puts a menu name holding a replacement pattern into its heading as written", async () => {
-  const el = await includeForm({ menuName: "Carta $&" });
+  const el = await includeForm({ menuName: "Menu $&" });
   expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe(
-    t("menus.include_edit_heading").split("{name}").join("Carta $&"),
+    t("menus.include_edit_heading").split("{name}").join("Menu $&"),
   );
 });
 
