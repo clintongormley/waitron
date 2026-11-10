@@ -14,7 +14,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   hashSessionToken,
@@ -315,8 +315,9 @@ it("delivers a write made outside withTransaction on the next transaction the pr
   const { location, zone } = await withTransaction(suite.db, async (tx) => {
     const [location] = await tx
       .insert(locations)
-      .values({ name: "Before probe", invoiceLocales: ["es"], operationDescription: "probe" })
+      .values({ invoiceLocales: ["es"], operationDescription: "probe" })
       .returning({ id: locations.id });
+    await seedVenueSettings(tx, { name: "Before probe" });
     const [zone] = await tx
       .insert(floorZones)
       .values({ locationId: location!.id, name: "Probe tables" })
@@ -333,7 +334,7 @@ it("delivers a write made outside withTransaction on the next transaction the pr
     await reader.read();
     await suite.db
       .insert(locations)
-      .values({ name: "Probe", invoiceLocales: ["es"], operationDescription: "probe" });
+      .values({ invoiceLocales: ["es"], operationDescription: "probe" });
     await suite.db
       .insert(diningTables)
       .values({ locationId: location!.id, zoneId: zone!.id, label: "T9" });

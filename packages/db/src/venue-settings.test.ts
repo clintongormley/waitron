@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import * as api from "./index.js";
@@ -59,6 +60,7 @@ describe("the venue document", () => {
       .insert(locations)
       .values({ invoiceLocales: ["es"], operationDescription: "Meals" })
       .returning({ id: locations.id });
+    await seedVenueSettings(suite.db, {});
     expect(await api.venueLocationId(suite.db)).toBe(row!.id);
   });
 

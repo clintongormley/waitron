@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createHook } from "node:async_hooks";
 import { X509Certificate, createPrivateKey } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -79,10 +80,11 @@ beforeAll(async () => {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
   await suite.db.insert(locations).values({
     id: LOCATION,
-    name: "Local",
+
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
+  await seedVenueSettings(suite.db, { name: "Local" });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Node 1" });
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, NODE);
 });

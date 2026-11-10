@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   endorseKey,
@@ -116,8 +116,9 @@ describe("the held document's check against the keys this box stores", () => {
     const { db, nodeId } = await box();
     const [loc] = await db
       .insert(locations)
-      .values({ name: "Terraza", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
+      .values({ invoiceLocales: ["es-ES"], operationDescription: "Venta" })
       .returning({ id: locations.id });
+    await seedVenueSettings(db, { name: "Terraza" });
     const otherId = await seedNode(db, loc!.id);
     const other = generateNodeKeyPair();
     await setNodePublicKey(db, otherId, other.publicKey);
@@ -145,7 +146,7 @@ describe("the held document's check against the keys this box stores", () => {
       const { db, nodeId } = await box();
       const [loc] = await db
         .insert(locations)
-        .values({ name: "Terraza", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
+        .values({ invoiceLocales: ["es-ES"], operationDescription: "Venta" })
         .returning({ id: locations.id });
       const mainId = await seedNode(db, loc!.id);
       await pinMainBoxKey(suite.node, nodeId, { nodeId: mainId, publicKey: MAIN.publicKey });

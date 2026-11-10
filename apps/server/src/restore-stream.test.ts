@@ -134,7 +134,7 @@ beforeAll(async () => {
     .values({ id: 1, country: "ES", taxId: VENUE.taxId, legalName: VENUE.legalName });
   await db.insert(locations).values({
     id: T.locationId,
-    name: VENUE.venueName,
+
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });

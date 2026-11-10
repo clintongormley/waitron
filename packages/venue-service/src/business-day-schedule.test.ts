@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { readZoneKeepOpenState } from "./operations.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { saveSeasonWeeks } from "./season-weeks.js";
@@ -116,12 +117,13 @@ async function fixture(
     const loc = randomUUID();
     await tx.insert(locations).values({
       id: loc,
-      name: "Clock venue",
+
       invoiceLocales: ["en"],
       operationDescription: "Restaurant",
       timeZone: before.timeZone,
       dayCutover: "05:00:00",
     });
+    await seedVenueSettings(tx, { name: "Clock venue" });
     const departmentId = randomUUID();
     const [otherDepartment] = await tx
       .select({ id: departments.id })
@@ -2139,7 +2141,7 @@ async function busyCalendar(count: number, run = 0) {
     const loc = randomUUID();
     await tx.insert(locations).values({
       id: loc,
-      name: "Busy venue",
+
       invoiceLocales: ["en"],
       operationDescription: "Restaurant",
       timeZone: before.timeZone,

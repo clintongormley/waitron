@@ -16,7 +16,7 @@ import {
   withTransaction,
   type Database,
 } from "@waitron/db";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { cadenas, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { hashPin, persons } from "@waitron/identity";
@@ -120,10 +120,11 @@ beforeAll(async () => {
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Archive source" });
     await tx.insert(locations).values({
       id: ids.location,
-      name: "Archive location",
+
       invoiceLocales: ["es"],
       operationDescription: "Venta",
     });
+    await seedVenueSettings(tx, { name: "Archive location" });
     await tx.insert(nodes).values({ id: ids.node, locationId: ids.location, name: "Archive node" });
     await tx.insert(invoiceSeries).values({
       id: ids.series,

@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
@@ -23,10 +24,11 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + FKs)
       .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.db.insert(locations).values({
       id: LOCATION_A,
-      name: "Loc A",
+
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
+    await seedVenueSettings(suite.db, { name: "Loc A" });
   });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

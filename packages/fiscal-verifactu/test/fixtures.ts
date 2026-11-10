@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
 import { registroSif } from "../src/schema/sif.js";
 
@@ -54,10 +54,11 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
   if (venueId === undefined) {
     await db.insert(locations).values({
       id: TENANT_A.locationId,
-      name: "Local principal",
+
       invoiceLocales: ["es"],
       operationDescription: "Venta en establecimiento",
     });
+    await seedVenueSettings(db, { name: "Local principal" });
     venueId = TENANT_A.locationId;
   }
   await db.insert(nodes).values({ id: TENANT_A.nodeId, locationId: venueId, name: "Node 1" });
@@ -111,7 +112,7 @@ export async function seedTenants(db: Database): Promise<void> {
   if (venueId === undefined) {
     await db.insert(locations).values({
       id: TENANT_A.locationId,
-      name: "Local principal",
+
       invoiceLocales: ["es"],
       operationDescription: "Venta en establecimiento",
     });
@@ -131,7 +132,7 @@ export async function seedVenueNodes(db: Database): Promise<void> {
     .onConflictDoNothing({ target: tenants.id });
   await db.insert(locations).values({
     id: TENANT_A.locationId,
-    name: "Local principal",
+
     invoiceLocales: ["es"],
     operationDescription: "Venta en establecimiento",
   });
@@ -252,7 +253,6 @@ async function insertLocationNodeSeries(
       : await tx
           .insert(locations)
           .values({
-            name: "Sala principal",
             invoiceLocales: ["es-ES"],
             operationDescription: "Venta en establecimiento",
           })

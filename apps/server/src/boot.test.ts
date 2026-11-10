@@ -103,7 +103,7 @@ import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { Turns } from "./backup-turns.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
 import { freePort } from "./testing/free-ports.js";
-import { seedDevice, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedWorkingOrder, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   TILL_LOCATION_ID,
   TILL_ENV,
@@ -2542,10 +2542,11 @@ describe("startServer, against a migrated venue directory", () => {
     const other = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     await sharedDb.insert(locations).values({
       id: other,
-      name: "Other",
+
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     });
+    await seedVenueSettings(sharedDb, { name: "Other" });
     try {
       const error = await startServer({
         ...KEY_ENV,

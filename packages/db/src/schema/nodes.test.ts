@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -41,10 +42,11 @@ async function seed(db: Database): Promise<void> {
   LOCATION_A = await venueLocationId(db);
   await db.insert(locations).values({
     id: LOCATION_B,
-    name: "Fixture Location B",
+
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
+  await seedVenueSettings(db, { name: "Fixture Location B" });
 }
 
 describe("nodes schema", () => {

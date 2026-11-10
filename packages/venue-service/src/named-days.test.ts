@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -29,13 +30,13 @@ async function fixture() {
     const [location] = await tx
       .insert(locations)
       .values({
-        name: randomUUID(),
         invoiceLocales: ["en-GB"],
         operationDescription: "Hospitality",
         timeZone: "Europe/Madrid",
         dayCutover: "06:00:00",
       })
       .returning();
+    await seedVenueSettings(tx, { name: randomUUID() });
     const cfg = { locationId: location!.id };
     const [department, other] = await tx
       .insert(departments)

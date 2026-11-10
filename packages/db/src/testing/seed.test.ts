@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import type { Database } from "../client.js";
@@ -129,11 +130,11 @@ describe("seedNode", () => {
     const [loc] = await db
       .insert(locations)
       .values({
-        name: "Test location",
         invoiceLocales: ["es"],
         operationDescription: "Restaurant",
       })
       .returning({ id: locations.id });
+    await seedVenueSettings(db, { name: "Test location" });
     const location = loc!.id;
     const node = await seedNode(db, location);
     const result = await db.execute<{ n: number }>(
@@ -146,7 +147,7 @@ describe("seedNode", () => {
     await seedVenue(db);
     const [second] = await db
       .insert(locations)
-      .values({ name: "Second", invoiceLocales: ["es"], operationDescription: "Restaurant" })
+      .values({ invoiceLocales: ["es"], operationDescription: "Restaurant" })
       .returning({ id: locations.id });
     const node = await seedNode(db, second!.id);
     const [row] = await db
@@ -179,7 +180,6 @@ describe("seedKitchenStation", () => {
     const [loc] = await db
       .insert(locations)
       .values({
-        name: "Test location",
         invoiceLocales: ["es"],
         operationDescription: "Restaurant",
       })
@@ -225,7 +225,6 @@ describe("seedDevice", () => {
     const [loc] = await database
       .insert(locations)
       .values({
-        name: "Test location",
         invoiceLocales: ["es"],
         operationDescription: "Restaurant",
       })
@@ -282,7 +281,7 @@ describe("seedDevice", () => {
     await seedVenue(db);
     const [second] = await db
       .insert(locations)
-      .values({ name: "Second", invoiceLocales: ["es"], operationDescription: "Restaurant" })
+      .values({ invoiceLocales: ["es"], operationDescription: "Restaurant" })
       .returning({ id: locations.id });
     const { deviceId } = await seedDevice(db, { locationId: second!.id });
     const [row] = await db

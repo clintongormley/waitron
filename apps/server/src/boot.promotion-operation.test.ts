@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -100,12 +101,13 @@ it.each(["account", "key"])(
       .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Operation SL" });
     await suite.db.insert(locations).values({
       id: LOCATION,
-      name: "Restaurant",
+
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "05:00",
     });
+    await seedVenueSettings(suite.db, { name: "Restaurant" });
     await suite.db.insert(nodes).values({
       id: NODE,
       locationId: LOCATION,

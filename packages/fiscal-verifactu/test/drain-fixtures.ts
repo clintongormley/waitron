@@ -16,7 +16,7 @@ import type { Entorno, RegistroRow } from "../src/registro-row.js";
 import { TEST_SISTEMA, nifWithControlLetter } from "../src/testing/seed.js";
 import { seedTenantWithSif } from "./fixtures.js";
 import { steadyClock } from "./write-path-fixtures.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenueSettings } from "@waitron/db/testing/seed.js";
 
 /**
  * Every row here is inserted through its TABLE DEFINITION, for the reason `./fixtures.ts`'s own
@@ -453,12 +453,12 @@ export async function seedSecondChain(
           await db
             .insert(locations)
             .values({
-              name: "Sala B",
               invoiceLocales: ["es"],
               operationDescription: "Venta en establecimiento",
             })
             .returning({ id: locations.id })
         )[0]!;
+  await seedVenueSettings(db, { name: "Sala B" });
   const [node] = await db
     .insert(nodes)
     .values({ locationId: location!.id, name: "Node B" })
@@ -508,7 +508,6 @@ export async function seedIndependentChain(
           await db
             .insert(locations)
             .values({
-              name: "Sala Z",
               invoiceLocales: ["es"],
               operationDescription: "Venta en establecimiento",
             })
@@ -574,7 +573,6 @@ export async function seedPinnedChain(
           await db
             .insert(locations)
             .values({
-              name: `Sala ${params.sifId.slice(0, 4)}`,
               invoiceLocales: ["es"],
               operationDescription: "Venta en establecimiento",
             })

@@ -1,7 +1,7 @@
 import { insertAttendanceMail, setAttendanceMail } from "../test/fixtures.js";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
@@ -151,11 +151,11 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
   const [loc] = await db
     .insert(locations)
     .values({
-      name: "Harbour Terrace",
       invoiceLocales: ["en"],
       operationDescription: "Sale on premises",
     })
     .returning({ id: locations.id });
+  await seedVenueSettings(db, { name: "Harbour Terrace" });
   const locationId = loc!.id;
   const publishedVersion = await insertRosterVersion(db, { locationId });
   await db

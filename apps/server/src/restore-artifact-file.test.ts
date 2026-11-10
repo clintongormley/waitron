@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
@@ -55,10 +56,11 @@ beforeAll(async () => {
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "File roundtrip" });
     await tx.insert(locations).values({
       id: ids.location,
-      name: "File location",
+
       invoiceLocales: ["es"],
       operationDescription: "Venta",
     });
+    await seedVenueSettings(tx, { name: "File location" });
     await tx.insert(nodes).values({ id: ids.node, locationId: ids.location, name: "File node" });
     await tx.insert(invoiceSeries).values({ id: ids.series, nodeId: ids.node, code: "FILE" });
     await tx.insert(invoiceSeries).values({ nodeId: ids.node, code: "FULL", purpose: "full" });

@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { connect, createServer as createNetServer } from "node:net";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -242,10 +243,11 @@ async function seedVenueWithNode(directory: string): Promise<void> {
       .values({ id: 1, country: "ES", taxId: "90444444J", legalName: "Failed Start SL" });
     await db.insert(locations).values({
       id: TILL_LOCATION_ID,
-      name: "Barra",
+
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
+    await seedVenueSettings(db, { name: "Barra" });
     await db.insert(nodes).values({
       id: TILL_ENV.WAITRON_NODE_ID,
       locationId: TILL_LOCATION_ID,

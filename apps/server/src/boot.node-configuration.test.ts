@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -202,12 +203,12 @@ it.each([
       .values({ id: 1, country: "GB", taxId: "GB123456789", legalName: "British Test Ltd" });
     await source.db.insert(locations).values({
       id: LOCATION,
-      name: "Counter",
-      province: "London",
+
       timeZone: "Europe/London",
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
     });
+    await seedVenueSettings(source.db, { name: "Counter", province: "London" });
     await source.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Own box" });
     const server = await startServer({ ...(await environment(true)), WAITRON_TILL_LOCALE: raw });
     try {
@@ -244,8 +245,7 @@ it.each([
       .values({ id: 1, country: "GB", taxId: "GB123456789", legalName: "British Test Ltd" });
     await source.db.insert(locations).values({
       id: LOCATION,
-      name: "Counter",
-      province: "London",
+
       timeZone: "Europe/London",
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
@@ -289,8 +289,7 @@ it.each(["mirror", "primary"] as const)(
       .values({ id: 1, country: "GB", taxId: "GB123456789", legalName: "British Test Ltd" });
     await source.db.insert(locations).values({
       id: LOCATION,
-      name: "Counter",
-      province: "London",
+
       timeZone: "Europe/London",
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",

@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomBytes } from "node:crypto";
 import {
   credentialRevision,
@@ -630,7 +631,8 @@ describe("venueTimeZone", () => {
     await seedTenantNodeSif(suite.db);
     await suite.db
       .insert(locations)
-      .values({ name: "Second venue", invoiceLocales: ["en"], operationDescription: "Restaurant" });
+      .values({ invoiceLocales: ["en"], operationDescription: "Restaurant" });
+    await seedVenueSettings(suite.db, { name: "Second venue" });
     const error = await captureError(() => withTransaction(suite.db, (tx) => venueTimeZone(tx)));
     expect(error).toMatchObject({ code: "provisioning.second_venue" });
   });

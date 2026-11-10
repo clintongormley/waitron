@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { requireCountryTimeZone } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
@@ -306,6 +307,7 @@ export async function applyVenue(
             timeZone: action.timeZone,
             dayCutover: action.dayCutover,
           });
+          await seedVenueSettings(tx, {});
           await createVenueSettings(
             tx,
             {
