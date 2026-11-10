@@ -304,6 +304,46 @@ it("lists exactly differing stored overrides as zone links", async () => {
   links[1]!.click();
   expect(heard).toEqual([{ zoneId: "z2" }]);
 });
+it("a receipt refusal belongs to its department and reveals its Save control", async () => {
+  const { el } = await mount();
+  const editor = document.createElement("div");
+  editor.attachShadow({ mode: "open" }).innerHTML =
+    '<wt-button data-test="save-receipt">Save</wt-button>';
+  el.receiptEditor = html`${editor}`;
+  await el.updateComplete;
+  const control = editor.shadowRoot!.querySelector("wt-button")!;
+  await control.updateComplete;
+  const native = control.shadowRoot!.querySelector("button")!;
+  const changed: string[] = [];
+  el.addEventListener("department-tab-change", (event) =>
+    changed.push((event as CustomEvent<{ tab: string }>).detail.tab),
+  );
+  editor.dispatchEvent(
+    new CustomEvent("department-receipt-refused", {
+      detail: { departmentId: "d2" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  expect(el.tab).toBe("details");
+  expect(changed).toEqual([]);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    native.blur();
+    editor.dispatchEvent(
+      new CustomEvent("department-receipt-refused", {
+        detail: { departmentId: "d1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    expect(el.tab).toBe("receipt");
+    await expect.poll(() => editor.shadowRoot!.activeElement).toBe(control);
+    expect(control.shadowRoot!.activeElement).toBe(native);
+    expect(changed).toEqual(["receipt"]);
+  }
+});
 it("does not link department settings to a receipt page", async () => {
   const { el } = await mount();
   expect(el.shadowRoot!.querySelector("[data-test=edit-receipt]")).toBeNull();

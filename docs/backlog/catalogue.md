@@ -1125,7 +1125,7 @@ tests. Media still validates required image names and translates its refusal to
   in `packages/db/src/configuration-transfer.ts`), so an imported variant can arrive with a stored
   category that the effective category and the editor's read then ignore.
 - **A1074. A configuration import does not range-check a department's reminder minutes**, so a
-  file could store 0, a negative number or 999; only the department save refuses them. Left open
+  file could store a negative number or 999; only the department save refuses them. Left open
   by A756 PR 4's review (#2020).
 
 ## Bundle: Tabs selected visible
