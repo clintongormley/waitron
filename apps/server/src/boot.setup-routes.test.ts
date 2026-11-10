@@ -34,7 +34,9 @@ import {
   readContentLanguages,
   writeContentLanguages,
 } from "@waitron/catalogue";
-import type { StartedServer } from "./boot.js";
+import type { StartedServer, StartServerSeams } from "./boot.js";
+import type { MdnsQuerySocket } from "./box-lookup.js";
+import type { MdnsSocket } from "./mdns.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
@@ -365,10 +367,12 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       extraPortCount = 0,
       beforeStart,
       onStarted,
+      seams = {},
     }: {
       extraPortCount?: number;
       beforeStart?: (stateDir: string) => Promise<void>;
       onStarted?: (server: StartedServer) => void;
+      seams?: StartServerSeams;
     } = {},
   ): Promise<void> {
     const [port, ...drawn] = await freePorts(1 + extraPortCount);
@@ -415,7 +419,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             ...env,
           },
           {},
-          { testClock },
+          { testClock, ...seams },
         );
         onStarted?.(server);
         let closeTls: (() => Promise<void>) | undefined;
@@ -512,6 +516,64 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       }
     }
   });
+
+  it("the setup start's ask timer stops when the server closes", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    let asks = 0;
+    const querySocket = (): MdnsQuerySocket => {
+      let onError: ((err: Error) => void) | undefined;
+      return {
+        on: ((event: string, handler: (err: Error) => void) => {
+          if (event === "error") onError = handler;
+        }) as MdnsQuerySocket["on"],
+        query: () => {
+          asks += 1;
+          queueMicrotask(() => onError?.(new Error("send EHOSTUNREACH")));
+        },
+        destroy: (cb) => cb?.(),
+      };
+    };
+    let onQuery: ((q: { questions: { name: string; type: string }[] }) => void) | undefined;
+    const answered: string[] = [];
+    const responderSocket: MdnsSocket = {
+      on: ((event: string, handler: never) => {
+        if (event === "query") onQuery = handler;
+      }) as MdnsSocket["on"],
+      respond: (response) => answered.push(...response.answers.map((a) => a.name)),
+      destroy: (cb) => cb?.(),
+    };
+    const random = vi.fn(() => 0);
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
+    try {
+      await withSetupBoot(
+        venue.directory,
+        { WAITRON_HTTP_HOST: "0.0.0.0" },
+        async () => {
+          await vi.waitFor(() => expect(random).toHaveBeenCalledTimes(1));
+          onQuery?.({ questions: [{ name: "waitron.local", type: "A" }] });
+          expect(answered).toContain("waitron.local");
+        },
+        {
+          seams: {
+            mdnsQuerySocket: querySocket,
+            mdnsSocket: () => responderSocket,
+            setupAskRandom: random,
+          },
+        },
+      );
+      const scheduled = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 30_000);
+      expect(scheduled).toBeGreaterThanOrEqual(0);
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(setTimeoutSpy.mock.results[scheduled]!.value);
+      expect(asks).toBe(1);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 120_000);
 
   it("finishes a provision whose venue had already committed, re-using that venue rather than minting another", async () => {
     beforeServerStarts();

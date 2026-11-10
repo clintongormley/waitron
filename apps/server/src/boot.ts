@@ -346,7 +346,14 @@ import { accountPurposeKey, resolveAccountKey } from "./account-key.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { mountGuidePages } from "./guide-pages.js";
-import { startMdnsResponder, type MdnsResponder, type MdnsSocket } from "./mdns.js";
+import {
+  startMdnsResponder,
+  watchVenueNameInSetup,
+  type MdnsResponder,
+  type MdnsSocket,
+} from "./mdns.js";
+import type { MdnsQuerySocket } from "./box-lookup.js";
+import { ownInterfaceAddresses } from "./request-from-box.js";
 import { boxHostnameFor } from "./box-name.js";
 import { startMenuActivation } from "./menu-activation.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
@@ -981,6 +988,10 @@ export interface StartServerSeams {
   waitingStart?: { intervalMs?: number; secure?: (c: Context) => boolean };
   /** The mDNS responder's socket; unset, the real multicast one. */
   mdnsSocket?: () => MdnsSocket;
+  /** The socket the setup start asks whether another box answers `waitron.local`. */
+  mdnsQuerySocket?: () => MdnsQuerySocket;
+  /** Draws the setup start's delay between those asks; unset, `Math.random`. */
+  setupAskRandom?: () => number;
 }
 
 /**
@@ -1638,15 +1649,31 @@ async function bootServer(
     const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
     const server = startListening({ ...config, tls }, app, now, log);
     undoOnFailure.push(() => closeListener(server));
-    const mdns = startMdnsResponder({
-      names: () => [BOX_HOSTNAME],
+    const venueName = watchVenueNameInSetup({
+      hostname: BOX_HOSTNAME,
+      devMode: config.devMode,
+      httpHost: config.httpHost,
+      random: seams.setupAskRandom ?? Math.random,
+      makeSocket: seams.mdnsQuerySocket,
+      ownAddresses: () => [...ownInterfaceAddresses(), ...boxAddresses()],
+      log,
+    });
+    undoOnFailure.push(() => venueName.stop());
+    const responder = startMdnsResponder({
+      names: venueName.names,
       makeSocket: seams.mdnsSocket,
       devMode: config.devMode,
       httpHost: config.httpHost,
       getAddresses: boxAddresses,
       log,
     });
-    undoOnFailure.push(() => mdns.stop());
+    undoOnFailure.push(() => responder.stop());
+    const mdns: MdnsResponder = {
+      stop: async () => {
+        await venueName.stop();
+        await responder.stop();
+      },
+    };
     return makeStartedServer(
       server,
       health,
