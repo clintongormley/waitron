@@ -6,7 +6,7 @@ import { checkFiscalChains } from "./handover-chain-check.js";
 import { openFilingCase, openAcceptedWithErrorsCase } from "./filing-cases.js";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import { canonicalize } from "@waitron/membership";
+import { canonicalize, type CanonicalValue } from "@waitron/membership";
 
 export type ReturnRow = Record<string, string | number | null>;
 export interface ReturnedOriginals {
@@ -97,6 +97,8 @@ export async function receiveReturnedOriginals(
   returned: ReturnedOriginals,
   now: Date,
 ): Promise<{ complete: boolean }> {
+  if (!returnBatchFits(returned))
+    throw new AppError("fiscal.return_invalid", { reason: "batch exceeds bounds" });
   for (const sale of returned.sales) {
     if (
       !held(tx, "nodes", sale.node_id) ||
@@ -415,4 +417,115 @@ function returnFingerprint(returned: ReturnedOriginals, sourceNodeId: string, re
       }),
     )
     .digest("hex");
+}
+
+export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOriginals[] {
+  const empty = (): ReturnedOriginals => ({
+    records: [],
+    sales: [],
+    devices: [],
+    heads: [],
+    deliveries: [],
+    tenders: [],
+    settlements: [],
+    voids: [],
+    substitutions: [],
+    inventory: snapshot.inventory,
+  });
+  const batches: ReturnedOriginals[] = [];
+  const sent = new Set<ReturnRow[string]>();
+  let current = empty();
+  for (const record of snapshot.records) {
+    const ids = new Set([record.sale_id]);
+    for (const id of ids) {
+      const sale = snapshot.sales.find((row) => row.id === id);
+      if (sale?.corrects_sale_id) ids.add(sale.corrects_sale_id);
+      for (const substitution of snapshot.substitutions)
+        if (substitution.substitution_sale_id === id) ids.add(substitution.substituted_sale_id);
+    }
+    const unit = empty();
+    unit.records = [record];
+    unit.sales = snapshot.sales.filter((row) => ids.has(row.id) && !sent.has(row.id));
+    const newIds = new Set(unit.sales.map((row) => row.id));
+    unit.tenders = snapshot.tenders.filter((row) => newIds.has(row.sale_id));
+    unit.settlements = snapshot.settlements.filter((row) => newIds.has(row.sale_id));
+    unit.voids = snapshot.voids.filter((row) => newIds.has(row.sale_id));
+    unit.substitutions = snapshot.substitutions.filter((row) =>
+      newIds.has(row.substitution_sale_id),
+    );
+    const deviceIds = new Set([record.device_id, ...unit.sales.map((row) => row.device_id)]);
+    unit.devices = snapshot.devices.filter((row) => deviceIds.has(row.id));
+    unit.heads = snapshot.heads;
+    unit.deliveries = snapshot.deliveries.filter((row) => row.registro_id === record.id);
+    if (!returnBatchFits(unit))
+      throw new AppError("fiscal.return_invalid", {
+        reason: "sale/payment unit exceeds batch bounds",
+      });
+    const merged = empty();
+    for (const key of Object.keys(merged) as (keyof ReturnedOriginals)[]) {
+      if (key === "inventory") continue;
+      merged[key] = [
+        ...new Map(
+          [...current[key], ...unit[key]].map((row) => [
+            row.id ?? row.node_id ?? row.registro_id,
+            row,
+          ]),
+        ).values(),
+      ];
+    }
+    if (!returnBatchFits(merged)) {
+      batches.push(current);
+      current = unit;
+    } else current = merged;
+    for (const id of newIds) sent.add(id);
+  }
+  if (current.records.length || batches.length === 0) batches.push(current);
+  return batches;
+}
+
+function returnBatchFits(batch: ReturnedOriginals) {
+  return (
+    Object.values(batch).reduce(
+      (count, rows) => count + (Array.isArray(rows) ? rows.length : 0),
+      0,
+    ) <= 100 && Buffer.byteLength(JSON.stringify(batch)) <= 256 * 1024
+  );
+}
+
+export function readReturnedBatch(raw: CanonicalValue): ReturnedOriginals {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
+    throw new AppError("fiscal.return_invalid", { reason: "malformed batch" });
+  const data = raw as Record<string, CanonicalValue>;
+  const keys = [
+    "records",
+    "sales",
+    "devices",
+    "heads",
+    "deliveries",
+    "tenders",
+    "settlements",
+    "voids",
+    "substitutions",
+  ];
+  if (
+    typeof data.inventory !== "string" ||
+    Object.keys(data).some((key) => key !== "inventory" && !keys.includes(key)) ||
+    keys.some((key) => {
+      const rows = data[key];
+      return (
+        !Array.isArray(rows) ||
+        rows.some(
+          (row) =>
+            !row ||
+            typeof row !== "object" ||
+            Array.isArray(row) ||
+            Object.values(row).some(
+              (value) => value !== null && typeof value !== "string" && typeof value !== "number",
+            ),
+        )
+      );
+    })
+  )
+    throw new AppError("fiscal.return_invalid", { reason: "malformed batch" });
+  return data as unknown as ReturnedOriginals;
 }

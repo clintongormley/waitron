@@ -1,3 +1,4 @@
+import type { Transaction } from "@waitron/db";
 import type { CanonicalValue } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
 import type { BackupQuery } from "@waitron/store";
@@ -7,6 +8,15 @@ import "./errors.js";
 /** What a module vouches for, and checks, in a copy of the venue database handed to another box. */
 export interface ModuleHandoverContribution {
   summarise(query: BackupQuery): Promise<CanonicalValue>;
+  returnRecords?: {
+    read(tx: Transaction, sourceNodeId: string): Promise<CanonicalValue[]>;
+    receive(
+      tx: Transaction,
+      sourceNodeId: string,
+      batch: CanonicalValue,
+      now: Date,
+    ): Promise<boolean>;
+  };
   checkCopy?(query: BackupQuery): Promise<"ok" | "broken">;
 }
 

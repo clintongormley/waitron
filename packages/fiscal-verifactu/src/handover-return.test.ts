@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
+  insertInChunks,
   billPayments,
   type Database,
   sales,
@@ -22,6 +23,7 @@ import { acceptReturnClash, listFilingCases } from "./filing-cases.js";
 import { appendToChain } from "./chain.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
 import {
+  makeReturnedBatches,
   readReturnedOriginals,
   receiveReturnedOriginals,
   type ReturnRow,
@@ -470,23 +472,19 @@ it("returns late tender and settlement facts even for an already-held original",
   await withTransaction(receiver.db, (tx) =>
     receiveReturnedOriginals(tx, source.nodeId, first, now),
   );
-  await suite.db
-    .insert(tenders)
-    .values({
-      id: "late-tender",
-      saleId: source.saleId,
-      method: "cash",
-      amount: 200,
-      tipAmount: 200,
-      settledAt: "2026-07-20T17:21:00.000Z",
-    });
-  await suite.db
-    .insert(saleSettlements)
-    .values({
-      id: "late-settlement",
-      saleId: source.saleId,
-      settledAt: "2026-07-20T17:21:00.000Z",
-    });
+  await suite.db.insert(tenders).values({
+    id: "late-tender",
+    saleId: source.saleId,
+    method: "cash",
+    amount: 200,
+    tipAmount: 200,
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
+  await suite.db.insert(saleSettlements).values({
+    id: "late-settlement",
+    saleId: source.saleId,
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
   const returned = await withTransaction(suite.db, (tx) =>
     readReturnedOriginals(tx, source.nodeId),
   );
@@ -530,35 +528,29 @@ it("inserts an earlier sale's settlement before its later corrective sale", asyn
   const node = await seedNode(suite.db, "Source");
   await copyBase();
   const parent = await appendOriginal(node, "Source", 1);
-  await suite.db
-    .insert(tenders)
-    .values({
-      id: "earlier-payment",
-      saleId: parent.saleId,
-      method: "cash",
-      amount: 100,
-      tipAmount: 100,
-      settledAt: "2026-07-20T17:20:31.000Z",
-    });
-  await suite.db
-    .insert(saleSettlements)
-    .values({
-      id: "earlier-settlement",
-      saleId: parent.saleId,
-      settledAt: "2026-07-20T17:20:31.000Z",
-    });
+  await suite.db.insert(tenders).values({
+    id: "earlier-payment",
+    saleId: parent.saleId,
+    method: "cash",
+    amount: 100,
+    tipAmount: 100,
+    settledAt: "2026-07-20T17:20:31.000Z",
+  });
+  await suite.db.insert(saleSettlements).values({
+    id: "earlier-settlement",
+    saleId: parent.saleId,
+    settledAt: "2026-07-20T17:20:31.000Z",
+  });
   const [parentSale] = await suite.db.select().from(sales).where(eq(sales.id, parent.saleId));
   const correctionId = saleId("10000000-0000-4000-8000-000000000002");
-  await suite.db
-    .insert(sales)
-    .values({
-      ...parentSale!,
-      id: correctionId,
-      invoiceNumber: 2,
-      issuedAt: "2026-07-20T17:20:32.000Z",
-      correctsSaleId: parent.saleId,
-      total: -100,
-    });
+  await suite.db.insert(sales).values({
+    ...parentSale!,
+    id: correctionId,
+    invoiceNumber: 2,
+    issuedAt: "2026-07-20T17:20:32.000Z",
+    correctsSaleId: parent.saleId,
+    total: -100,
+  });
   const pending = altaFor(node, correctionId, 2, 35);
   pending.input.IDEmisorFactura = parent.issuerTaxId;
   pending.input.SistemaInformatico.NumeroInstalacion = parent.installation;
@@ -583,39 +575,35 @@ it("inserts an earlier sale's settlement before its later corrective sale", asyn
 
 async function billPayment(db: Database, id: string) {
   const order = await seedWorkingOrder(db);
-  await db
-    .insert(billPayments)
-    .values({
-      id,
-      workingOrderId: order.id,
-      submissionId: id,
-      fingerprint: id,
-      kind: "contribution",
-      method: "cash",
-      applied: 200,
-      tendered: 200,
-      state: "received",
-      requestedBy: "operator",
-      source: "device",
-      deviceId: db.all<{ id: string }>(sql`select id from devices limit 1`)[0]!.id,
-      receivedAt: "2026-07-20T17:21:00.000Z",
-    });
+  await db.insert(billPayments).values({
+    id,
+    workingOrderId: order.id,
+    submissionId: id,
+    fingerprint: id,
+    kind: "contribution",
+    method: "cash",
+    applied: 200,
+    tendered: 200,
+    state: "received",
+    requestedBy: "operator",
+    source: "device",
+    deviceId: db.all<{ id: string }>(sql`select id from devices limit 1`)[0]!.id,
+    receivedAt: "2026-07-20T17:21:00.000Z",
+  });
 }
 
 it("clears a bill-payment link whose payment the receiver does not hold", async () => {
   const source = await original("Source", 1, copyBase);
   await billPayment(suite.db, "source-payment");
-  await suite.db
-    .insert(tenders)
-    .values({
-      id: "payment-tender",
-      saleId: source.saleId,
-      method: "cash",
-      amount: 200,
-      tipAmount: 200,
-      settledAt: "2026-07-20T17:21:00.000Z",
-      billPaymentId: "source-payment",
-    });
+  await suite.db.insert(tenders).values({
+    id: "payment-tender",
+    saleId: source.saleId,
+    method: "cash",
+    amount: 200,
+    tipAmount: 200,
+    settledAt: "2026-07-20T17:21:00.000Z",
+    billPaymentId: "source-payment",
+  });
   const returned = await withTransaction(suite.db, (tx) =>
     readReturnedOriginals(tx, source.nodeId),
   );
@@ -640,17 +628,15 @@ it("rolls back both incoming payment facts on a named payment clash and opens a 
   );
   await billPayment(suite.db, "shared-payment");
   await billPayment(receiver.db, "shared-payment");
-  await receiver.db
-    .insert(tenders)
-    .values({
-      id: "receiver-tender",
-      saleId: source.saleId,
-      method: "cash",
-      amount: 200,
-      tipAmount: 200,
-      settledAt: "2026-07-20T17:21:00.000Z",
-      billPaymentId: "shared-payment",
-    });
+  await receiver.db.insert(tenders).values({
+    id: "receiver-tender",
+    saleId: source.saleId,
+    method: "cash",
+    amount: 200,
+    tipAmount: 200,
+    settledAt: "2026-07-20T17:21:00.000Z",
+    billPaymentId: "shared-payment",
+  });
   await suite.db.insert(tenders).values([
     {
       id: "a-earlier-tender",
@@ -670,13 +656,11 @@ it("rolls back both incoming payment facts on a named payment clash and opens a 
       billPaymentId: "shared-payment",
     },
   ]);
-  await suite.db
-    .insert(saleSettlements)
-    .values({
-      id: "incoming-settlement",
-      saleId: source.saleId,
-      settledAt: "2026-07-20T17:21:00.000Z",
-    });
+  await suite.db.insert(saleSettlements).values({
+    id: "incoming-settlement",
+    saleId: source.saleId,
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
   const returned = await withTransaction(suite.db, (tx) =>
     readReturnedOriginals(tx, source.nodeId),
   );
@@ -858,13 +842,11 @@ it("selects and receives a substitution's earlier sale from a different node", a
   pending.input.Destinatarios = { IDDestinatario: [{ NombreRazon: "Customer", NIF: "89890001K" }] };
   await withTransaction(suite.db, async (tx) => {
     await appendToChain(tx, source.nodeId, pending);
-    await tx
-      .insert(saleSubstitutions)
-      .values({
-        id: "cross-node-substitution",
-        substitutionSaleId: replacementSaleId,
-        substitutedSaleId: parent.saleId,
-      });
+    await tx.insert(saleSubstitutions).values({
+      id: "cross-node-substitution",
+      substitutionSaleId: replacementSaleId,
+      substitutedSaleId: parent.saleId,
+    });
   });
   await checkFixture();
 
@@ -905,4 +887,104 @@ it("withholds confirmation for changed commercial facts even when the record is 
   expect(await withTransaction(receiver.db, listFilingCases)).toEqual([
     expect.objectContaining({ registroId: source.recordId, cause: "fiscal.return_clash" }),
   ]);
+});
+
+it("batches real originals within the row and byte bounds without splitting payment facts", async () => {
+  const node = await seedNode(suite.db, "Source");
+  await copyBase();
+  for (let number = 1; number <= 51; number++) await appendOriginal(node, "Source", number);
+  const [last] = suite.db.all<{ sale_id: string }>(
+    sql`select sale_id from registros_facturacion order by secuencia desc limit 1`,
+  );
+  await suite.db
+    .insert(tenders)
+    .values({
+      id: "batch-payment",
+      saleId: last!.sale_id,
+      method: "cash",
+      amount: 200,
+      tipAmount: 200,
+      settledAt: "2026-07-20T17:21:00.000Z",
+    });
+  await suite.db
+    .insert(saleSettlements)
+    .values({
+      id: "batch-settlement",
+      saleId: last!.sale_id,
+      settledAt: "2026-07-20T17:21:00.000Z",
+    });
+  const returned = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, node.nodeId));
+  const batches = makeReturnedBatches(returned);
+
+  expect(batches.length).toBeGreaterThan(1);
+  expect(batches.flatMap((batch) => batch.records)).toEqual(returned.records);
+  const paidBatch = batches.find((batch) => batch.sales.some((row) => row.id === last!.sale_id))!;
+  expect(paidBatch.tenders.map((row) => row.id)).toEqual(["batch-payment"]);
+  expect(paidBatch.settlements.map((row) => row.id)).toEqual(["batch-settlement"]);
+  for (const batch of batches) {
+    expect(
+      Object.values(batch).reduce((n, rows) => n + (Array.isArray(rows) ? rows.length : 0), 0),
+    ).toBeLessThanOrEqual(100);
+    expect(Buffer.byteLength(JSON.stringify(batch))).toBeLessThanOrEqual(256 * 1024);
+    expect(
+      await withTransaction(receiver.db, (tx) =>
+        receiveReturnedOriginals(tx, node.nodeId, batch, new Date("2026-07-20T17:22:00.000Z")),
+      ),
+    ).toEqual({ complete: true });
+  }
+  expect(
+    receiver.db
+      .all<{ id: string }>(sql`select id from registros_facturacion order by secuencia`)
+      .map((row) => row.id),
+  ).toEqual(returned.records.map((row) => row.id));
+});
+
+it("refuses an indivisible sale/payment unit over the row bound", async () => {
+  const source = await original("Source", 1, copyBase);
+  await insertInChunks(
+    suite.db,
+    tenders,
+    Array.from({ length: 101 }, (_, index) => ({
+      id: `payment-${index}`,
+      saleId: source.saleId,
+      method: "cash" as const,
+      amount: 100,
+      tipAmount: 100,
+      settledAt: "2026-07-20T17:21:00.000Z",
+    })),
+  );
+  const returned = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, source.nodeId),
+  );
+  expect(() => makeReturnedBatches(returned)).toThrowError(
+    expect.objectContaining({ code: "fiscal.return_invalid" }),
+  );
+  await expect(
+    withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, returned, new Date("2026-07-20T17:22:00.000Z")),
+    ),
+  ).rejects.toMatchObject({
+    code: "fiscal.return_invalid",
+    params: { reason: "batch exceeds bounds" },
+  });
+});
+
+it("refuses a single oversized byte payload before inserting it", async () => {
+  const source = await original("Source", 1, copyBase);
+  const returned = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, source.nodeId),
+  );
+  returned.sales[0]!.counterparty_legal_name = "x".repeat(256 * 1024);
+  expect(() => makeReturnedBatches(returned)).toThrowError(
+    expect.objectContaining({ code: "fiscal.return_invalid" }),
+  );
+  await expect(
+    withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, returned, new Date("2026-07-20T17:22:00.000Z")),
+    ),
+  ).rejects.toMatchObject({
+    code: "fiscal.return_invalid",
+    params: { reason: "batch exceeds bounds" },
+  });
+  expect(receiver.db.all<{ n: number }>(sql`select count(*) n from sales`)).toEqual([{ n: 0 }]);
 });
