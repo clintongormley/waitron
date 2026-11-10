@@ -149,6 +149,11 @@ since A393, 409 at `packages/venue-service/src/routes.ts:109` and `management-ap
 names and 404 for a zone in the path, and `route.subject_not_found` and `route.station_inactive`
 400; the till answers those two 404 and 409 (`apps/server/src/till-api.ts:572-573`).
 `zone.department_inactive` is raised nowhere now.
+**2026-11-10 (A394-11):** `course.not_found` now answers 400 on the catalogue boundary
+(`apps/server/src/catalogue-api.ts:357`) and stays 404 on the till (`till-api.ts:537`),
+management-api (`management-api.ts:247`) and venue-service (`packages/venue-service/src/routes.ts:100`).
+The catalogue's other body-id changes, and the routes that keep 404, are under
+`apps/server/src/catalogue-api.ts` below.
 
 ## Client contract: clients branch on the code, not the status
 
@@ -475,6 +480,10 @@ Status changes:
   for `menu_section.wrong_role`, `menu.shortcut_unreachable`, `extras.product_has_variants`. Tests
   to change: `catalogue-api.test.ts:1123-1138,2651-2655` (and the question-9 pins listed in part 1).
   Size M. Depends on: A394-3 (same file).
+  **2026-11-10 (A394-11):** done — a menu, folder, product, section or course that only a request
+  body names now answers 400; path ids keep 404, as do the routes where the path and the body raise
+  the same code. The folder summary's query ids keep 404 (question 8), and question 9's codes are
+  unchanged.
 - **A394-12 — Management API: body ids answer 400.** Files: `apps/server/src/management-api.ts`
   (`STATUS` `:222-317`), `apps/server/src/tables.ts` for the `table.zone_inactive` split. Changes
   `printer.not_found`, `zone.not_found`, `station.not_found`, `course.not_found` → 400 where a body
@@ -796,6 +805,11 @@ tests use path targets). `menu.shortcut_unreachable` (`menu-home.ts:147,162`; pi
   broken venue setting, not a clash with the request.
 - `menu.reset_required` is unmapped, so 400 (`menu-publication.ts:184`). It is caused by the
   format of stored data, not by the request. Pinned at 400 by `catalogue-api.test.ts:5836`.
+
+**2026-11-10 (A394-11):** the body-id rows above now answer 400 (the location routes are now
+`/management-api/venue/…`, A1301), except PATCH `/categories/:id`, POST `/sections/:id/members` and
+the two replace routes, whose path raises the same code and so keep 404, and GET `/folders/summary`,
+whose query ids keep 404 (question 8).
 
 ---
 

@@ -171,7 +171,8 @@ describe("startFreeSpaceWatch", () => {
     const tick = async () => {
       const n = armed.length;
       armed.at(-1)!.fn();
-      await vi.waitFor(() => expect(armed.length).toBe(n + 1));
+      // A reading may write and sync the 8 MiB spare file, which took over a second on a CI runner.
+      await vi.waitFor(() => expect(armed.length).toBe(n + 1), { timeout: 30_000 });
     };
     return { handle, armed, seen, reading, now, state, tick, ...spy };
   }
