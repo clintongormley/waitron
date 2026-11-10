@@ -1683,7 +1683,7 @@ export const en = {
   "bill_pay.unconfirmed":
     "This payment could not be confirmed. Check again continues this same payment: if it was not recorded, it may charge the card or record the cash payment.",
   "bill_pay.unconfirmed_elsewhere":
-    "A payment on this bill could not be confirmed. On the bill, press Pay items, then Check again to continue that same payment.",
+    "A payment on this bill could not be confirmed. On the bill, press Pay, then Check again to continue that same payment.",
   "bill_pay.unconfirmed_elsewhere_handheld":
     "A payment on this bill could not be confirmed. On the bill, press Pay, then Check again to continue that same payment.",
   "bill_pay.unanswered_title": "Payment not confirmed",
@@ -3623,7 +3623,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.unconfirmed":
     "No se ha podido confirmar este cobro. Comprobar de nuevo continúa ese mismo cobro: si no estaba registrado, puede cobrar la tarjeta o registrar el efectivo.",
   "bill_pay.unconfirmed_elsewhere":
-    "Un pago de esta cuenta no se ha podido confirmar. En la cuenta, pulsa Pagar artículos y luego Comprobar de nuevo para continuar ese mismo pago.",
+    "Un pago de esta cuenta no se ha podido confirmar. En la cuenta, pulsa Cobrar y luego Comprobar de nuevo para continuar ese mismo pago.",
   "bill_pay.unconfirmed_elsewhere_handheld":
     "Un pago de esta cuenta no se ha podido confirmar. En la cuenta, pulsa Cobrar y luego Comprobar de nuevo para continuar ese mismo pago.",
   "bill_pay.unanswered_title": "Cobro sin confirmar",

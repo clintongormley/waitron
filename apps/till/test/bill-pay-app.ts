@@ -396,13 +396,26 @@ export async function openTable(el: TillApp): Promise<TillTableOrderScreen> {
   return tableOrder(el);
 }
 
-export async function openDialog(el: TillApp, way: "items" | "contribution" | "share" | "rest") {
+export async function openDialog(
+  el: TillApp,
+  way: "items" | "contribution" | "share" | "rest",
+  recovery?: "settling",
+) {
   const order = tableOrder(el);
   order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
   await flush(el);
-  if (way !== "rest") {
-    const pay = dialog(el);
-    pay?.shadowRoot?.querySelector<HTMLInputElement>(`input[name="way"][value="${way}"]`)?.click();
+  const pay = dialog(el);
+  if (pay === null) {
+    if (recovery !== "settling")
+      expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).not.toBeNull();
+    return;
+  }
+  if (way !== "rest" && !pay.busy && !pay.confirmationLocked) {
+    const choice = pay.shadowRoot!.querySelector<HTMLInputElement>(
+      `input[name="way"][value="${way}"]`,
+    );
+    expect(choice).not.toBeNull();
+    choice!.click();
     await flush(el);
   }
 }

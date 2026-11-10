@@ -5188,7 +5188,8 @@ export class TillTableOrderScreen extends LitElement {
   #paysOnSheet(shown: PartyBill | undefined): boolean {
     if (
       !this.handheld &&
-      (shown === undefined || compareDecimal(decimal(shown.total), decimal("0")) === 0)
+      shown !== undefined &&
+      compareDecimal(decimal(shown.total), decimal("0")) === 0
     )
       return false;
     if (this.paymentConfirmation !== undefined) return this.handheld && shown?.status === "placed";

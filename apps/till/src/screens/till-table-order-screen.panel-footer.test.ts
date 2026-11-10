@@ -56,6 +56,12 @@ it.each([false, true])(
   },
 );
 
+it("keeps one Pay entry while the bill list is unread", async () => {
+  const { el } = await mountFooter({ bills: [] });
+  expect(q(el, "till-tender-pay, [data-open-bill-pay]")).toBeNull();
+  expect(el.shadowRoot!.querySelectorAll("[data-pay-sheet]")).toHaveLength(1);
+});
+
 it("keeps zero-total completion on the whole-sale path", async () => {
   const { el } = await mountFooter({
     bills: [{ ...footerBill, total: "0.00", outstanding: "0.00" }],

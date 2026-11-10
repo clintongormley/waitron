@@ -5748,7 +5748,7 @@ describe("till-app: a bill payment on the card reader", () => {
         received = true;
         emit(dialog(el)!, "bill-pay-close");
         await flush(el);
-        await openDialog(el, "share");
+        await openDialog(el, "share", "settling");
       },
     };
   }

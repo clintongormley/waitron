@@ -59,7 +59,7 @@ card was taken:
 - **At the counter, or a table's bill paid in one go from the presented bill:** once payments are
   back, pay that order again the same way. The payment is recorded without charging the card a
   second time.
-- **From the bill's payment options (Whole bill, Pay items, Contribute or Split equally):** the
+- **From the bill's Pay window:** the
   payment stays waiting, and the server records it by itself once payments are back.
 
 With the internet the server usually puts its clock right by itself. Otherwise an
