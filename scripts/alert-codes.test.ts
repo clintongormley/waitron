@@ -57,6 +57,7 @@ const NOT_RECORDED = new Set([
   "sale.already_substituted",
   "sale.already_voided",
   "sale.correction_exceeds_total",
+  "sale.correction_history_unusable",
   "sale.correction_line_not_on_invoice",
   "sale.correction_line_not_reversed",
   "sale.correction_lines_mismatch",
