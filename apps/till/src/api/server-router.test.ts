@@ -702,6 +702,25 @@ describe("ServerRouter: one line per box", () => {
     ]);
   });
 
+  it("never follows an own-name entry that the page's answer hides in the same round, whatever it answered", async () => {
+    const r = new ServerRouter({
+      origin: PAGE,
+      fetchImpl: probeFetch({
+        [PAGE]: { acceptingSales: false, term: 2, nodeId: "n1" },
+        [OWN]: { acceptingSales: true, term: 3, nodeId: "n1" },
+      }),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ nodeId: "n1", url: OWN }]);
+    const moved = vi.fn();
+    r.addEventListener("server-changed", moved);
+    await r.probeNow();
+    expect(r.statuses().map((s) => s.url)).toEqual([PAGE]);
+    expect(moved).not.toHaveBeenCalled();
+    expect(r.current).toBe(PAGE);
+    expect(r.waiting).toBe(true);
+  });
+
   it("stays on the page's origin when its own name answers primary at the same term", async () => {
     const r = new ServerRouter({
       origin: PAGE,
