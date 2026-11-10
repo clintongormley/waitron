@@ -14,7 +14,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { StringKey } from "../i18n/strings.js";
 import "../widgets/numeric-pad.js";
-import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
+import { chooserStyles } from "../widgets/chooser-styles.js";
 import { themeChooser } from "../widgets/theme-chooser.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 import type { ServerStatus } from "../api/server-router.js";
@@ -55,7 +55,7 @@ export class TillLockScreen extends LitElement {
 
   static override styles = [
     baseStyles,
-    languageChooserStyles,
+    chooserStyles,
     css`
       :host {
         display: block;

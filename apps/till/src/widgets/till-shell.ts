@@ -36,7 +36,7 @@ import "@waitron/ui/src/components/wt-help-switch.js";
 import "@waitron/ui/src/components/wt-menu-row.js";
 import "@waitron/ui/src/components/wt-venue-logo.js";
 import "@waitron/ui/src/components/wt-powered-by.js";
-import { PHONE_WIDTH, languageChooserStyles } from "./language-chooser-styles.js";
+import { PHONE_WIDTH, chooserStyles } from "./chooser-styles.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 import "./guide-sheet.js";
 
@@ -128,7 +128,7 @@ export class TillShell extends LitElement {
 
   static override styles = [
     baseStyles,
-    languageChooserStyles,
+    chooserStyles,
     themeChoicesStyles,
     css`
       :host {

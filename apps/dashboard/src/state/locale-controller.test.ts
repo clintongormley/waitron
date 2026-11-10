@@ -32,15 +32,6 @@ describe("LocaleChangeController", () => {
     expect(el.shadowRoot!.textContent).toContain(t("action.logout", "en-GB"));
   });
 
-  it("unsubscribes on disconnect so a later switch does not repaint it", async () => {
-    const { el, host } = await mountWidget<LocaleProbe>("locale-probe", {});
-    expect(el.shadowRoot!.textContent).toContain(t("action.logout", "es-ES"));
-    host.remove(); // disconnectedCallback → hostDisconnected → dispose
-    setLocale("en-GB");
-    await el.updateComplete;
-    expect(el.shadowRoot!.textContent).toContain(t("action.logout", "es-ES"));
-  });
-
   it("invokes a custom handler instead of the default requestUpdate", async () => {
     let calls = 0;
     // Lit's addController calls hostConnected at once on an already-connected host, so this

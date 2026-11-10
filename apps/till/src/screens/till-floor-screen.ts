@@ -9,7 +9,7 @@ import {
   nothing,
   unsafeCSS,
 } from "lit";
-import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
+import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import type { FloorView, FloorViewChoices } from "../state/floor-view-memory.js";
 import { MediaQueryController } from "../state/media-query-controller.js";
 import { customElement, property, state } from "lit/decorators.js";

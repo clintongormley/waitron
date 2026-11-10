@@ -521,15 +521,6 @@ than becoming new items.
 - **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.**
   [Detail](dashboard.md#dragging-a-row-a180-994-and-1003--two-things-seen-left-as-they-were)
 
-## Bundle: Theme logo
-
-2 entries, size M.
-
-- **The box's trust page still follows the device's setting, not the Theme choice (left open by
-  A681).**
-  [Detail](dashboard.md#the-boxs-trust-page-still-follows-the-devices-setting-not-the-theme-choice-left-open-by-a681)
-- **Four tidy-ups A681's review left for later (#1842, 2026-10-17).**
-  [Detail](dashboard.md#four-tidy-ups-a681s-review-left-for-later-1842-2026-10-17)
 
 ## Bundle: Box reset tab
 
@@ -541,6 +532,14 @@ than becoming new items.
   [Detail](dashboard.md#loose-ends-left-by-a501-1552)
 
 ## Decisions and deliberate limits
+
+- **Theme choice and certificate help (watcher, 2026-11-10 17:19).** The saved choice remains
+  local to its scheme, host and port. A plain-HTTP landing page can therefore follow the device
+  while the HTTPS app uses a saved choice; no choice is carried between origins. See the
+  [theme contract](../developers/design-system.md#themes).
+- **A681 chooser tidy-up (watcher, 2026-11-10 17:19).** Keep the current chooser show/close
+  steps: sharing their listener and focus calls would add methods while each chooser still owns
+  its open state, and the language chooser still owns pending-load cancellation.
 
 - **A1247 (watcher, 2026-11-10):** Keep Availability without a guide link and leave the table,
   tabs and menu-row wrapper APIs unchanged; no user was named for a wrapper link.
@@ -839,23 +838,6 @@ The per-form classifications remain in the [A331 plan](../superpowers/plans/2026
   An isolated run of the complete file on the branch's earlier head passed. The cause remains
   unverified. Capture the current scroll/limit, pointer position, drag state and visible box
   before attributing it to the scroll helper.
-
-## The box's trust page still follows the device's setting, not the Theme choice (left open by A681).
-
-The trust page (`apps/server/src/trust-page.ts`, its logo in
-  `trust-page-logo.ts`) is rendered by the server with no script, so it never reads the choice
-  saved in the browser; it is the only server-rendered page under `apps/server/src` that reads the
-  device's setting at all. Open.
-
-
-## Four tidy-ups A681's review left for later (#1842, 2026-10-17).
-
-None is a defect; each
-  reshapes working code. (1) One shared "redraw when this changes" helper
-  for the theme and the language. (2) Move more of the two choosers' repeated open and close steps
-  into `packages/ui/src/menu-popover.ts`. (3) Rename the till's `language-chooser-styles.ts`, which
-  now places the Theme menu too. (4) Handle a theme pick with a plain handler in each app instead
-  of `ThemeChoiceController`'s `applies` option. Take them when next working in those files.
 
 
 ## Loose ends left by signing a dashboard tab out when its box has been reset (A485, #1545).

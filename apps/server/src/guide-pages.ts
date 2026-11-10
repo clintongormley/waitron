@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { PAGE_THEME_SCRIPT as THEME_SCRIPT, PAGE_THEME_STYLE } from "./page-theme.js";
 import type { Context, Hono } from "hono";
 import { GUIDE_LANGUAGES, GUIDE_PAGES, guideRoot, readGuide } from "./guide-catalogue.js";
 import { renderGuide } from "./guide-markdown.js";
@@ -40,10 +41,7 @@ export const GUIDE_PAGE_TOKENS: Readonly<Record<string, readonly [string, string
   "--wt-font-size-xl": "22px",
 };
 
-/** The `localStorage` key the apps save the chosen theme under (`packages/ui/src/theme-choice.ts`). */
-export const GUIDE_THEME_KEY = "waitron-theme";
-
-const THEME_SCRIPT = `try{var t=localStorage.getItem(${JSON.stringify(GUIDE_THEME_KEY)});if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
+export { GUIDE_THEME_KEY } from "./page-theme.js";
 
 const CSP = `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${createHash("sha256").update(THEME_SCRIPT).digest("base64")}'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`;
 
@@ -61,8 +59,7 @@ const STYLE = `:root {
 color-scheme: light dark;
 ${tokenDeclarations()}
 }
-:root[data-theme="light"] { color-scheme: light; }
-:root[data-theme="dark"] { color-scheme: dark; }
+${PAGE_THEME_STYLE}
 body {
 margin: 0;
 background: var(--wt-color-bg);

@@ -14,7 +14,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { TillApi } from "../api/client.js";
-import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
+import { chooserStyles } from "../widgets/chooser-styles.js";
 import { themeChooser } from "../widgets/theme-chooser.js";
 
 const POLL_MS = 2_000;
@@ -34,7 +34,7 @@ const POLL_MS = 2_000;
 export class TillEnrolScreen extends LitElement {
   static override styles = [
     baseStyles,
-    languageChooserStyles,
+    chooserStyles,
     css`
       :host {
         display: block;

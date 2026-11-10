@@ -1,3 +1,4 @@
+import { PAGE_THEME_SCRIPT, PAGE_THEME_STYLE } from "./page-theme.js";
 import type { BoxTlsInspection } from "./box-tls-repair.js";
 import { renderConnectionPage } from "./connection-bootstrap-page.js";
 import { DEVICE_HELP, DEVICE_ORDER, type DeviceHelp, type DeviceId } from "./trust-page-devices.js";
@@ -97,6 +98,7 @@ export function renderTrustPage(input: TrustPageInput): string {
 <title>Waitron — connect to this server</title>
 <style>
 :root { color-scheme: light dark; font: 17px/1.55 system-ui, sans-serif; }
+${PAGE_THEME_STYLE}
 body { margin: 0; } main { max-width: 44rem; margin: auto; padding: 1.5rem 1.5rem 4rem; }
 h1 { line-height: 1.2; font-size: 1.5rem; } h2 { font-size: 1.2rem; } section { margin: 2rem 0; }
 a { color: light-dark(#174da1, #9ec5ff); } li { margin-block: .5rem; }
@@ -121,7 +123,7 @@ code, a { overflow-wrap: anywhere; }
 .logo svg { width: 9.5rem; height: auto; display: block; }
 .qr svg { max-width: 14rem; height: auto; background: white; }
 :focus-visible { outline: 3px solid light-dark(#174da1, #9ec5ff); outline-offset: 4px; }
-</style></head><body><main>
+</style><script>${PAGE_THEME_SCRIPT}</script></head><body><main>
 <div class="logo">${TRUST_PAGE_LOGO_SVG}</div>
 <h1>Connect <span class="accent">securely</span> to this Waitron server</h1>
 <p>You need to install the Waitron secure certificate before entering passwords and sensitive information into this website:</p>

@@ -137,7 +137,7 @@ it("drops the troubleshooting box the owner did not want", () => {
 it("shows the Waitron logo without fetching anything", () => {
   const html = renderTrustPage(base);
   expect(html).toContain('aria-label="Waitron"');
-  expect(html).not.toMatch(/<(img|script|link)\b/);
+  expect(html).not.toMatch(/<(img|link)\b|<script[^>]+\bsrc=/);
 });
 
 it("shows a QR only when one was rendered, and says nothing when there is none", () => {

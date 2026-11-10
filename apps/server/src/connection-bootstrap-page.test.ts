@@ -488,3 +488,91 @@ it.each(["en", "es"] as const)(
     }
   },
 );
+
+async function themeInks(page: Page) {
+  return page.evaluate(() => ({
+    mark: getComputedStyle(document.querySelector(".wt-logo-mark")!).fill,
+    word: getComputedStyle(document.querySelector(".wt-logo-word")!).fill,
+    action: getComputedStyle(document.querySelector(".button, button")!).backgroundColor,
+  }));
+}
+
+it.each([false, true])(
+  "saved theme paints the page and logo against the device, connection=%s",
+  async (connection) => {
+    for (const [saved, device, inks] of [
+      [
+        "light",
+        "dark",
+        { mark: "rgb(31, 111, 235)", word: "rgb(22, 24, 29)", action: "rgb(31, 111, 235)" },
+      ],
+      [
+        "dark",
+        "light",
+        { mark: "rgb(76, 141, 255)", word: "rgb(236, 238, 242)", action: "rgb(76, 141, 255)" },
+      ],
+    ] as const) {
+      const context = await browser!.newContext({ colorScheme: device });
+      try {
+        await context.addInitScript(
+          (choice) => localStorage.setItem("waitron-theme", choice),
+          saved,
+        );
+        const page = await context.newPage();
+        await open(page, retained, undefined, connection ? {} : { connection: undefined });
+        expect(await themeInks(page)).toEqual(inks);
+      } finally {
+        await context.close();
+      }
+    }
+  },
+);
+
+it.each(["missing", "invalid", "blocked"])(
+  "%s storage leaves the device in charge",
+  async (storage) => {
+    const context = await browser!.newContext({ colorScheme: "dark" });
+    try {
+      await context.addInitScript((mode) => {
+        if (mode === "invalid") localStorage.setItem("waitron-theme", "sepia");
+        if (mode === "blocked")
+          Object.defineProperty(window, "localStorage", {
+            get() {
+              throw new DOMException("Blocked", "SecurityError");
+            },
+          });
+      }, storage);
+      const page = await context.newPage();
+      await open(page);
+      expect(await themeInks(page)).toEqual({
+        mark: "rgb(76, 141, 255)",
+        word: "rgb(236, 238, 242)",
+        action: "rgb(76, 141, 255)",
+      });
+      await page.emulateMedia({ colorScheme: "light" });
+      expect(await themeInks(page)).toEqual({
+        mark: "rgb(31, 111, 235)",
+        word: "rgb(22, 24, 29)",
+        action: "rgb(31, 111, 235)",
+      });
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+it("without JavaScript certificate help keeps readable device inks", async () => {
+  const context = await browser!.newContext({ colorScheme: "dark", javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await open(page, retained, undefined, { connection: undefined });
+    expect(await page.getByRole("link", { name: "Download the certificate" }).isVisible()).toBe(
+      true,
+    );
+    expect(
+      await page.locator(".wt-logo-word").evaluate((word) => getComputedStyle(word).fill),
+    ).toBe("rgb(236, 238, 242)");
+  } finally {
+    await context.close();
+  }
+});

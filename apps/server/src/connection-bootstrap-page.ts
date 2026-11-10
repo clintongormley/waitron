@@ -1,3 +1,4 @@
+import { PAGE_THEME_SCRIPT, PAGE_THEME_STYLE } from "./page-theme.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { BoxTlsInspection } from "./box-tls-repair.js";
 import { CONNECTION_TEXT, CONNECTION_DEVICE_ES } from "./connection-bootstrap-strings.js";
@@ -35,8 +36,7 @@ color-scheme: light dark;
 --wt-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 --wt-font-size-md: 14px; --wt-font-size-lg: 18px; --wt-font-size-xl: 22px;
 }
-:root[data-theme="light"] { color-scheme: light; }
-:root[data-theme="dark"] { color-scheme: dark; }
+${PAGE_THEME_STYLE}
 body { margin: 0; background: var(--wt-color-bg); color: var(--wt-color-text); font: var(--wt-font-size-md)/1.6 var(--wt-font-family); }
 main { max-width: 680px; margin: auto; padding: var(--wt-space-5) var(--wt-space-4) var(--wt-space-6); }
 h1 { font-size: var(--wt-font-size-xl); line-height: 1.3; }
@@ -163,7 +163,7 @@ button?.addEventListener("click", async () => {
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>Waitron — ${words.title}</title>
 <style>${STYLE}</style>
-<script>try { const theme = localStorage.getItem("waitron-theme"); if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme; } catch {}</script>
+<script>${PAGE_THEME_SCRIPT}</script>
 </head><body data-connection-state="${status.state}"><main>
 <div class="logo">${TRUST_PAGE_LOGO_SVG}</div>
 <nav aria-label="${words.language}"><a href="?lang=en" lang="en"${locale === "en" ? ' aria-current="page"' : ""}>${CONNECTION_TEXT.en.languageName}</a><a href="?lang=es" lang="es"${locale === "es" ? ' aria-current="page"' : ""}>${CONNECTION_TEXT.es.languageName}</a></nav>

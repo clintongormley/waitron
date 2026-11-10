@@ -13,7 +13,7 @@ import type { ColumnKey } from "../state/kitchen-columns.js";
 import type { OverviewRow } from "../state/kitchen-overview.js";
 import { extraNutrition } from "./diet-badges.js";
 import { snapshotDescriptionFor, quantityText } from "./dish-format.js";
-import { PHONE_WIDTH } from "./language-chooser-styles.js";
+import { PHONE_WIDTH } from "./chooser-styles.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { extraAmount } from "./queue-crossrefs.js";
 

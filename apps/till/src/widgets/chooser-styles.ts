@@ -8,7 +8,7 @@ export const PHONE_WIDTH = "(max-width: 40rem)";
  * chooser, at the top right on a screen with no top bar, and at phone width the trigger shows the
  * short code. The breakpoint is a literal because a media query cannot read a token.
  */
-export const languageChooserStyles = css`
+export const chooserStyles = css`
   .language-corner {
     display: flex;
     justify-content: flex-end;

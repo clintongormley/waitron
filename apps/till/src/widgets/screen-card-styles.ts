@@ -1,5 +1,5 @@
 import { css, unsafeCSS } from "lit";
-import { PHONE_WIDTH } from "./language-chooser-styles.js";
+import { PHONE_WIDTH } from "./chooser-styles.js";
 
 /**
  * A screen drawn as one card, with `wt-card`'s frame. Drawn here rather than with `wt-card`, which

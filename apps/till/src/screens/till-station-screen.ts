@@ -8,7 +8,7 @@ import {
   unsafeCSS,
 } from "lit";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
-import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
+import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import { helpBadge, kitchenHelpStyles } from "../widgets/help-badge.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { UrlStateController, baseStyles } from "@waitron/ui";

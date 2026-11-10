@@ -131,6 +131,7 @@ export {
   THEME_SELECTED_EVENT,
   THEME_STORAGE_KEY,
   ThemeChoiceController,
+  applyThemePick,
   chooseTheme,
   currentThemeChoice,
   isThemeChoice,
@@ -242,3 +243,5 @@ export {
   type InvoiceChoiceApi,
   type DocumentPrinterState,
 } from "./document-printer-form.js";
+
+export { ChangeObserver } from "./change-observer.js";
