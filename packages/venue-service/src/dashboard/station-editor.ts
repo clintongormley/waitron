@@ -659,6 +659,7 @@ export class StationEditor extends LitElement {
           <wt-switch
             name="waitsForPass"
             label=${t("prep.waits_for_pass")}
+            .description=${t("prep.waits_for_pass_hint")}
             .checked=${this.draft.waitsForPass}
             @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
               event.stopPropagation();
@@ -709,6 +710,7 @@ export class StationEditor extends LitElement {
           <wt-switch
             name="showsRestOfOrder"
             label=${t("prep.shows_rest_of_order")}
+            .description=${t("prep.shows_rest_of_order_hint")}
             .checked=${this.draft.showsRestOfOrder}
             @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
               event.stopPropagation();
@@ -753,6 +755,7 @@ export class StationEditor extends LitElement {
           <wt-switch
             name="printHeldWork"
             label=${t("prep.print_held_work")}
+            .description=${t("prep.print_held_work_hint")}
             .checked=${this.draft.printHeldWork}
             @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
               event.stopPropagation();

@@ -36,6 +36,7 @@ export class SeasonChips extends LitElement {
         border: 1px solid;
         border-radius: var(--wt-radius-full);
         font: inherit;
+        overflow-wrap: anywhere;
       }
       .chip button {
         padding: 0;
@@ -43,6 +44,7 @@ export class SeasonChips extends LitElement {
         background: transparent;
         color: inherit;
         font: inherit;
+        overflow-wrap: anywhere;
         cursor: pointer;
       }
       .chip button:focus-visible {
