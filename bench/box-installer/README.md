@@ -34,8 +34,8 @@ docker run -d --name waitron-b3-rehearsal --cpus 4 --memory 8g \
   --security-opt apparmor=unconfined --tmpfs /run --tmpfs /tmp \
   waitron-b3-tools:rehearsal
 git ls-files -co --exclude-standard -z | tar --null -T - -cf "$inputs/source.tar"
-docker cp "$inputs/source.tar" waitron-b3-rehearsal:/tmp/source.tar
-docker exec waitron-b3-rehearsal tar -xf /tmp/source.tar -C /source
+docker cp "$inputs/source.tar" waitron-b3-rehearsal:/work/source.tar
+docker exec waitron-b3-rehearsal tar -xf /work/source.tar -C /source
 docker cp "$inputs" waitron-b3-rehearsal:/inputs
 docker exec -w /source waitron-b3-rehearsal pnpm install --frozen-lockfile
 docker exec -w /source/apps/setup waitron-b3-rehearsal \
