@@ -35,6 +35,7 @@ function defaultStorage(): Pick<Storage, "getItem" | "setItem"> | undefined {
 
 interface Tracked {
   url: string;
+  nodeId?: string;
   label: string;
   state: ServerState;
   term: number | null;
@@ -53,6 +54,9 @@ export class ServerRouter extends EventTarget {
   /** The initial `""` never equals a real signature, so the first change always dispatches. */
   #stateSignature = "";
   #chart: HeldChart | null = null;
+  /** A box is listed both as the page's origin and under its own name; once the origin has said
+   * which node it is, the entry carrying that node id is the same server and is left out. */
+  #originNodeId: string | undefined;
   /** `url chart-term answered-term` triples already posted: a server is handed each held chart
    * once per answer, so a box that refused it while answering no term is handed it again once it
    * answers its own older term. */
@@ -85,7 +89,7 @@ export class ServerRouter extends EventTarget {
   }
 
   statuses(): ServerStatus[] {
-    return this.#servers.map((s) => ({
+    return this.#shown().map((s) => ({
       url: s.url,
       label: s.label,
       state: s.state,
@@ -136,14 +140,20 @@ export class ServerRouter extends EventTarget {
   }
 
   async #runRound(): Promise<void> {
-    await Promise.all(this.#servers.map((s) => this.#probe(s)));
-    const yes = this.#servers.filter((s) => s.state === "primary");
+    await Promise.all(this.#shown().map((s) => this.#probe(s)));
+    const yes = this.#shown().filter((s) => s.state === "primary");
     this.#waiting = yes.length === 0;
     if (yes.length > 0) {
       const best = yes.reduce((a, b) => ((b.term ?? -1) > (a.term ?? -1) ? b : a));
       if (best.url !== this.#current) this.#move(best.url);
     }
     this.#emitStateChanged();
+  }
+
+  #shown(): Tracked[] {
+    const own = this.#originNodeId;
+    if (own === undefined) return this.#servers;
+    return this.#servers.filter((s) => s.url === this.#origin || s.nodeId !== own);
   }
 
   /** Dispatch only when the rendered state changed, so a steady probe round drives no repaint. */
@@ -184,7 +194,11 @@ export class ServerRouter extends EventTarget {
       const body = (await res.json()) as {
         acceptingSales?: unknown;
         term?: unknown;
+        nodeId?: unknown;
       };
+      if (s.url === this.#origin && typeof body.nodeId === "string") {
+        this.#originNodeId = body.nodeId;
+      }
       s.state = body.acceptingSales === true ? "primary" : "standby";
       s.term = typeof body.term === "number" ? body.term : null;
       this.#handChart(s.url, s.term);
@@ -240,10 +254,12 @@ export class ServerRouter extends EventTarget {
       if (prev !== undefined) {
         // A probe mutates this tracked object after its fetch resolves. Retain it when getTill refreshes
         // the same URL mid-probe so that successful result remains in the active list.
+        prev.nodeId = e.nodeId;
         next.push(prev);
       } else {
         next.push({
           url,
+          nodeId: e.nodeId,
           label: parsed.hostname,
           state: "unknown",
           term: null,

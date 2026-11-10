@@ -642,6 +642,85 @@ describe("ServerRouter — handing on the held chart", () => {
   });
 });
 
+describe("ServerRouter: one line per box", () => {
+  const PAGE = "https://waitron.local";
+  const OWN = "https://box-n1xx.waitron.local";
+  const OTHER = "https://box-n2yy.waitron.local";
+
+  function probesOf(fetchImpl: typeof fetch, origin: string): number {
+    return (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([input]) => String(input) === `${origin}/api/node`,
+    ).length;
+  }
+
+  it("an own-name entry that never answers is hidden behind the page origin", async () => {
+    const fetchImpl = probeFetch({
+      [PAGE]: { acceptingSales: true, term: 2, nodeId: "n1" },
+      [OWN]: "down",
+    });
+    const r = new ServerRouter({ origin: PAGE, fetchImpl, storage: memoryStorage() });
+    r.setServers([{ nodeId: "n1", url: OWN }]);
+    await r.probeNow();
+    expect(r.statuses()).toEqual([
+      { url: PAGE, label: "waitron.local", state: "primary", term: 2 },
+    ]);
+    const before = probesOf(fetchImpl, OWN);
+    await r.probeNow();
+    expect(probesOf(fetchImpl, OWN)).toBe(before);
+    expect(r.current).toBe(PAGE);
+  });
+
+  it("two boxes are two servers", async () => {
+    const r = new ServerRouter({
+      origin: PAGE,
+      fetchImpl: probeFetch({
+        [PAGE]: { acceptingSales: true, term: 2, nodeId: "n1" },
+        [OTHER]: { acceptingSales: false, term: 2, nodeId: "n2" },
+      }),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ nodeId: "n2", url: OTHER }]);
+    await r.probeNow();
+    await r.probeNow();
+    expect(r.statuses().map((s) => s.url)).toEqual([PAGE, OTHER]);
+  });
+
+  it("before the origin has reported its node id, every entry is shown", async () => {
+    const r = new ServerRouter({
+      origin: PAGE,
+      fetchImpl: probeFetch({
+        [PAGE]: "down",
+        [OWN]: { acceptingSales: false, term: 2, nodeId: "n1" },
+      }),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ nodeId: "n1", url: OWN }]);
+    await r.probeNow();
+    expect(r.statuses()).toEqual([
+      { url: PAGE, label: "waitron.local", state: "unreachable", term: null },
+      { url: OWN, label: "box-n1xx.waitron.local", state: "standby", term: 2 },
+    ]);
+  });
+
+  it("stays on the page's origin when its own name answers primary at the same term", async () => {
+    const r = new ServerRouter({
+      origin: PAGE,
+      fetchImpl: probeFetch({
+        [PAGE]: { acceptingSales: true, term: 2, nodeId: "n1" },
+        [OWN]: { acceptingSales: true, term: 2, nodeId: "n1" },
+      }),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ nodeId: "n1", url: OWN }]);
+    const moved = vi.fn();
+    r.addEventListener("server-changed", moved);
+    await r.probeNow();
+    await r.probeNow();
+    expect(r.current).toBe(PAGE);
+    expect(moved).not.toHaveBeenCalled();
+  });
+});
+
 describe("withServerTarget", () => {
   it("rewrites a relative path onto the current target and leaves absolute inputs alone", async () => {
     const seen: string[] = [];
