@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import {
   billPayments,
   devices,
@@ -12,6 +12,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { readBillEditState } from "./bill-editing.js";
 import { decimal } from "@waitron/shared";
 import { receiptLabelsFor } from "@waitron/country-packs";
@@ -227,6 +228,8 @@ it("rejects a payment on another bill and offers no copy for an own-slip reader"
   ).toHaveProperty("remainingAfter", 2000);
 });
 
+beforeEach(() => withTransaction(venue.db, tx => tx.update(cardReaders).set({ printsOwnSlipAutomatically: false })));
+
 const readerContribution = {
   kind: "contribution",
   amount: "10.00",
@@ -237,9 +240,6 @@ const readerContribution = {
 } as const;
 
 it("prints a requested slip only for the fresh confirmed reader capture", async () => {
-  await withTransaction(venue.db, (tx) =>
-    tx.update(cardReaders).set({ printsOwnSlipAutomatically: false }),
-  );
   const billId = await tabWith(venue, "Botella tinto");
   const body = {
     submissionId: randomUUID(),
@@ -296,14 +296,15 @@ it.each([null, "true", 1])(
   },
 );
 
-it.each(["whole", "short", "presented"])(
+it.each(["whole", "short", "presented", "issued"])(
   "prints the %s card slip once and rejects an invalid choice",
   async (kind) => {
     await withTransaction(venue.db, (tx) =>
       tx.update(cardReaders).set({ printsOwnSlipAutomatically: false }),
     );
     const id = await tabWith(venue, "Botella tinto");
-    if (kind === "presented")
+    if (kind === "issued") await issueOrderInvoice({ ...venue, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
+    if (kind === "presented" || kind === "issued")
       expect(
         (
           await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/place`, {
@@ -354,10 +355,10 @@ it.each(["whole", "short", "presented"])(
   },
 );
 
-it("keeps money received and warns when the selected slip printer disappears during collect", async () => {
-  await withTransaction(venue.db, (tx) =>
-    tx.update(cardReaders).set({ printsOwnSlipAutomatically: false }),
-  );
+it.each(["before", "during"])("keeps money received and warns when the selected slip printer disappears %s collect", async (when) => {
+  const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
+  onTestFinished(() => withTransaction(venue.db, tx => tx.update(devices).set({ paymentSlipPrinterId: device!.paymentSlipPrinterId }).where(eq(devices.id, venue.deviceId))));
+  if (when === "before") await withTransaction(venue.db, tx => tx.update(devices).set({ paymentSlipPrinterId: null }).where(eq(devices.id, venue.deviceId)));
   const billId = await tabWith(venue, "Botella tinto");
   const before = (await venue.db.select().from(printJobs)).length;
   const calls = venue.card.collectCalls.length;
@@ -383,13 +384,6 @@ it("keeps money received and warns when the selected slip printer disappears dur
     balance: { received: "10.00" },
   });
   expect(await venue.db.select().from(printJobs)).toHaveLength(before);
-  const [other] = await venue.db.select().from(devices).where(eq(devices.id, venue.device2Id));
-  await withTransaction(venue.db, (tx) =>
-    tx
-      .update(devices)
-      .set({ paymentSlipPrinterId: other!.paymentSlipPrinterId })
-      .where(eq(devices.id, venue.deviceId)),
-  );
 });
 
 it("keeps the order language chosen before the reader answers", async () => {
@@ -482,6 +476,7 @@ it("recovers received money after an unclear answer without recovering the slip 
 });
 
 it("keeps a received payment when enqueueing its requested slip fails", async () => {
+  const log = vi.fn();
   const id = await tabWith(venue, "Botella tinto");
   const before = (await venue.db.select().from(printJobs)).length;
   venue.db.run(
@@ -489,7 +484,7 @@ it("keeps a received payment when enqueueing its requested slip fails", async ()
   );
   try {
     const answer = await send(
-      venue.app,
+      venue.appWith({ log }),
       venue.cookie,
       "POST",
       `/api/working-orders/${id}/payments`,
@@ -500,6 +495,7 @@ it("keeps a received payment when enqueueing its requested slip fails", async ()
       },
     );
     expect(answer.status).toBe(200);
+    expect(log).toHaveBeenCalledWith("warn", "payment.slip_print_failed", expect.objectContaining({ workingOrderId: id }));
     expect(answer.json).toMatchObject({
       outcome: "received",
       slipPrintFailed: true,
@@ -547,4 +543,36 @@ it("uses the explicitly selected reader's own-slip setting", async () => {
     ).status,
   ).toBe(200);
   expect(await venue.db.select().from(printJobs)).toHaveLength(before + 1);
+});
+
+it("rolls back the whole-card attempt when preparing its optional slip fails", async () => {
+  const id = await tabWith(venue, "Botella tinto");
+  const calls = venue.card.collectCalls.length;
+  venue.db.run(sql`create temp table printers (broken text)`);
+  try {
+    const answer = await send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [], printCardSlip: true });
+    expect(answer.status).toBe(500);
+    expect(venue.card.collectCalls).toHaveLength(calls);
+    const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(order!.paymentAttemptAt).toBeNull();
+  } finally { venue.db.run(sql`drop table temp.printers`); }
+});
+
+
+it("ignores a forged slip request without the print capability", async () => {
+  const profiles = await venue.db.select().from(deviceProfiles);
+  onTestFinished(() => withTransaction(venue.db, async tx => {
+    for (const profile of profiles) await tx.update(deviceProfiles).set({ capabilities: profile.capabilities }).where(eq(deviceProfiles.id, profile.id));
+  }));
+  await withTransaction(venue.db, async tx => {
+    for (const profile of profiles) await tx.update(deviceProfiles).set({ capabilities: validateCapabilities(profile.capabilities).filter(capability => capability !== "print-receipt") }).where(eq(deviceProfiles.id, profile.id));
+  });
+  const id = await tabWith(venue, "Botella tinto");
+  const before = (await venue.db.select().from(printJobs)).length;
+  const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
+    submissionId: randomUUID(), ...readerContribution, printCardSlip: true,
+  });
+  expect(paid.status).toBe(200);
+  expect(paid.json).toMatchObject({ outcome: "received" });
+  expect(await venue.db.select().from(printJobs)).toHaveLength(before);
 });

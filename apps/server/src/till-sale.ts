@@ -1278,7 +1278,8 @@ async function payIntegrated(
           },
           () => deps.clock.now().instant,
         );
-        return { kind: "settle" as const, outstanding, attendanceKey };
+        return { kind: "settle" as const, outstanding, attendanceKey,
+          slip: await freezeCardSlip(tx, cfg, req.id, req.printCardSlip, deps.readerId) };
       }
 
       // After the recovery above, so a till pressing Pay again to file a captured payment is never
@@ -1376,6 +1377,7 @@ async function payIntegrated(
       wasPlaced,
       attemptAt,
       attendanceKey,
+      slip: await freezeCardSlip(tx, cfg, req.id, req.printCardSlip, deps.readerId),
     };
   });
 
@@ -1397,12 +1399,7 @@ async function payIntegrated(
     );
   }
 
-  const slip =
-    req.printCardSlip === true
-      ? await withTransaction(deps.db, (tx) =>
-          freezeCardSlip(tx, cfg, req.id, req.printCardSlip, deps.readerId),
-        )
-      : undefined;
+  const slip = prepared.slip;
   // ---- P2 (no tx) ----
   const tip = tipOf(cfg, req);
   const baseAmount =
@@ -1471,7 +1468,7 @@ async function payIntegrated(
         )
       : null;
   if (short !== null)
-    return { ...short, ...(await printCapturedCardSlip(deps.db, cfg, req.id, result, slip)) };
+    return { ...short, ...(await printCapturedCardSlip(deps.db, cfg, req.id, result, slip, undefined, deps.log)) };
   if (prepared.kind === "settle") {
     const { outstanding, attendanceKey } = prepared;
     const answer: IntegratedPayOutcome = {
@@ -1497,6 +1494,7 @@ async function payIntegrated(
         result,
         slip,
         subtractDecimal(result.amount, baseAmount),
+        deps.log,
       )),
     };
   }
@@ -1519,7 +1517,7 @@ async function payIntegrated(
   return {
     outcome: "captured",
     ticket,
-    ...(await printCapturedCardSlip(deps.db, cfg, req.id, result, slip, actualTip)),
+    ...(await printCapturedCardSlip(deps.db, cfg, req.id, result, slip, actualTip, deps.log)),
   };
 }
 

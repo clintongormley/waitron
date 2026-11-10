@@ -4485,6 +4485,19 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(warning?.message).toContain(money("125.00"));
   });
 
+  it("forwards a counter whole-card slip choice and warns without charging again", async () => {
+    const el = await retrieved({
+      listWorkingOrders: vi.fn().mockResolvedValue([held({ hasPayments: false, outstanding: "120.00" })]),
+      getBillBalance: vi.fn().mockResolvedValue(balanceOf({ workingOrderId: "wo-1", outstanding: "120.00" })),
+      pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: invoiceOf("120.00"), slipPrintFailed: true }),
+    });
+    emit(counter(el), "collect-card", { printCardSlip: true });
+    await flush(el);
+    expect(api.pay).toHaveBeenCalledOnce();
+    expect(vi.mocked(api.pay).mock.calls[0]![0]).toHaveProperty("printCardSlip", true);
+    expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toBe(t("payment_slip.capture_failed"));
+  });
+
   it("shows actual reader money and opens payment of the remainder after a short capture", async () => {
     const warning = {
       provider: "stripe",

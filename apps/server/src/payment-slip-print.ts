@@ -1,4 +1,6 @@
 import "./errors.js";
+import { codeOf } from "@waitron/server-kit";
+import type { Logger } from "./logger.js";
 import { and, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
   billPayments,
@@ -30,7 +32,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { resolvePaymentSlipPrinter } from "./receipt-print.js";
 import type { OriginConfig } from "./trading-context.js";
 
-type CardSlipRequest = { printerId: string; locale: string } | undefined;
+type CardSlipRequest = { printerId: string; locale: string } | null | undefined;
 
 export async function freezeCardSlip(
   tx: Transaction,
@@ -55,7 +57,7 @@ export async function freezeCardSlip(
     if (reader?.printsOwnSlipAutomatically === true) return;
   }
   const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
-  if (printer === undefined) return;
+  if (printer === undefined) return null;
   const [order] = await tx
     .select({ locale: workingOrders.receiptLocale })
     .from(workingOrders)
@@ -70,8 +72,10 @@ export async function printCapturedCardSlip(
   result: PaymentResult,
   requested: CardSlipRequest,
   wholeTip?: Decimal,
+  log?: Logger,
 ): Promise<{ slipPrintFailed?: true }> {
   if (requested === undefined) return {};
+  if (requested === null) return { slipPrintFailed: true };
   try {
     // Money has committed; a printer refusal must not roll back or retry the charge.
     await withTransaction(db, async (tx) => {
@@ -112,7 +116,8 @@ export async function printCapturedCardSlip(
       );
     });
     return {};
-  } catch {
+  } catch (error) {
+    log?.("warn", "payment.slip_print_failed", { workingOrderId, errorCode: codeOf(error) });
     return { slipPrintFailed: true };
   }
 }

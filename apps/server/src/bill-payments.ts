@@ -1627,7 +1627,7 @@ export async function takeReaderBillPayment(
       );
       return {
         ...answer,
-        ...(await printCapturedCardSlip(deps.db, cfg, workingOrderId, result, begun.slip)),
+        ...(await printCapturedCardSlip(deps.db, cfg, workingOrderId, result, begun.slip, undefined, deps.log)),
       };
     }
     return await withTransaction(deps.db, async (tx) => {
