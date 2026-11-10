@@ -136,8 +136,7 @@ function sellingControls(el: HTMLElement): Record<string, [HTMLElement, HTMLElem
     controls[`${name} remove`] = [line.querySelector<HTMLElement>(".remove")!, basket];
   }
   controls.total = [inShadow(total, ".amount"), total];
-  controls["cash button"] = [inShadow(tender, ".pay"), tender];
-  controls["card button"] = [inShadow(tender, ".pay-card"), tender];
+  controls["pay button"] = [inShadow(tender, "[data-counter-pay]"), tender];
   controls["hold button"] = [inShadow(tender, ".hold"), tender];
   return controls;
 }
@@ -163,8 +162,7 @@ const allWhole = Object.fromEntries(
     "Croquetas price",
     "Croquetas remove",
     "total",
-    "cash button",
-    "card button",
+    "pay button",
     "hold button",
   ].map((name) => [name, "whole"]),
 );
@@ -223,7 +221,7 @@ it.each([100, 130])(
     expect(basket.left).toBeGreaterThanOrEqual(browser.right);
     expect(basket.top).toBeLessThan(browser.bottom);
     const shown = await placement(el);
-    const outsideBasket = ["total", "cash button", "card button", "hold button"];
+    const outsideBasket = ["total", "pay button", "hold button"];
     expect(Object.fromEntries(outsideBasket.map((name) => [name, shown[name]]))).toEqual(
       Object.fromEntries(outsideBasket.map((name) => [name, "whole"])),
     );
@@ -405,7 +403,7 @@ it("on a 1280 px till, keeps the basket beside the menu, with the total and the 
   expect(basket.left).toBeGreaterThanOrEqual(browser.right);
   expect(basket.top).toBeLessThan(browser.bottom);
   const shown = await placement(el);
-  const outsideBasket = ["total", "cash button", "card button", "hold button"];
+  const outsideBasket = ["total", "pay button", "hold button"];
   expect(Object.fromEntries(outsideBasket.map((name) => [name, shown[name]]))).toEqual(
     Object.fromEntries(outsideBasket.map((name) => [name, "whole"])),
   );
@@ -509,7 +507,7 @@ describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
           )
           .toBeVisible();
         const controls = sellingControls(grid);
-        for (const name of ["total", "cash button", "card button", "hold button"]) {
+        for (const name of ["total", "pay button", "hold button"]) {
           const [control] = controls[name]!;
           const rect = control.getBoundingClientRect();
           expect(rect.top, name).toBeGreaterThanOrEqual(0);

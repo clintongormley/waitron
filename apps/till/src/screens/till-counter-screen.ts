@@ -244,6 +244,7 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) defaultStationId?: string;
   @property() orderFlow: OrderFlow = "prepay";
   @property() stage: "order" | "collect" = "order";
+  @property({ type: Boolean }) paymentWindow = false;
   @property() operatorName = "";
   @property() invoiceLocale = "es-ES";
 
@@ -373,13 +374,6 @@ export class TillCounterScreen extends LitElement {
       <p>
         ${t("table.bill_to_pay").replace("{amount}", () => formatMoney(outstanding, currentLocale()))}
       </p>
-      <wt-button
-        variant="primary"
-        data-pay-rest
-        .disabled=${this.busy}
-        @click=${() => this.dispatchEvent(new CustomEvent("counter-bill-pay", { detail: { amount: outstanding }, bubbles: true, composed: true }))}
-        >${t("bill.take_rest")}</wt-button
-      >
     </section>`;
   }
 
@@ -416,6 +410,7 @@ export class TillCounterScreen extends LitElement {
         <div class="total-cell"><till-total .store=${this.store}></till-total></div>
         <div class="payment-cell">
           ${this.payRest === null ? nothing : this.#takeRest(this.payRest)}<till-tender-pay
+            .paymentWindow=${this.stage === "order" || this.paymentWindow}
             .store=${this.store}
             .busy=${this.busy || this.payHeld}
             .held=${this.payHeld && !this.busy}

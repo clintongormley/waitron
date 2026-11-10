@@ -2308,24 +2308,10 @@ describe("till-app counter: the guests the receipt prints", () => {
   const guests = (el: TillApp) =>
     pane(el).shadowRoot!.querySelector<Pane & { value: string }>('[name="guests"]');
 
-  async function typeGuests(el: TillApp, text: string): Promise<void> {
-    const stepper = guests(el)!;
-    await stepper.updateComplete;
-    const input = stepper.shadowRoot!.querySelector("input")!;
-    input.value = text;
-    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-    await flush(el);
-  }
-
-  async function payCash(el: TillApp): Promise<void> {
-    const panel = pane(el);
-    panel.shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
-    await flush(el);
-    const pad = panel.shadowRoot!.querySelector<Pane>("till-numeric-pad")!;
-    await pad.updateComplete;
-    pad.shadowRoot!.querySelector<HTMLElement>('[data-key="5"]')!.click();
-    await panel.updateComplete;
-    panel.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+  async function payCash(el: TillApp, guestCount?: number): Promise<void> {
+    emit(el.shadowRoot!.querySelector("till-counter-screen")!, "confirm-payment", {
+      method: "cash", amount: "5", ...(guestCount === undefined ? {} : { guestCount }),
+    });
     await flush(el);
   }
 
@@ -2342,7 +2328,7 @@ describe("till-app counter: the guests the receipt prints", () => {
 
   it("a cash sale with the field untouched sends no guests line beside a bare tender", async () => {
     const { el, c } = await counterWithCoffee();
-    expect(guests(el)!.value).toBe("");
+    expect(guests(el)).toBeNull();
 
     await payCash(el);
 
@@ -2368,11 +2354,9 @@ describe("till-app counter: the guests the receipt prints", () => {
     expect(vi.mocked(api.collectOrder).mock.calls[0]![4]).toBeNull();
   });
 
-  it("a cash sale after typing 2 sends 2", async () => {
+  it("a whole-order cash request forwards the chosen count of 2", async () => {
     const { el } = await counterWithCoffee();
-    await typeGuests(el, "2");
-
-    await payCash(el);
+    await payCash(el, 2);
 
     const call = vi.mocked(api.recordSale).mock.calls[0]!;
     expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });

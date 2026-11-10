@@ -6479,9 +6479,14 @@ order number and retrieved-name handling; it does not create a timestamp name. P
 without editing the optional field. The action and list use Park and Parked orders; sending an
 unpaid Counter order uses Send. Course and group Held remains distinct.
 
-The payment card still offers Cash and Card and retains its existing full-invoice, receipt-language,
-post-payment receipt behavior. In practice, Approve, Decline and No answer are offered before Card; No answer leaves recovery to a manager. The bill-payment dialog offers the same three results, including on phones. Practice phones use the simulator without selecting a hardware reader. A739 owns the remaining replacement. Cash, Card and Park use
-the shared medium button size; Send fills its own row when the zone offers sending before payment.
+A positive-total Counter basket offers Pay beside Park. Pay opens the shared bill-payment window
+with Whole bill selected. After a partial payment, its balance and Cash/Card choices stay in that
+window; reopening Pay uses the remaining balance. A placed order without an invoice uses the same
+window; issued-invoice collection and zero-total completion keep their existing whole-order controls.
+Full-invoice and receipt-language entry stay available. In practice, Approve, Decline and No answer
+are offered before Card; No answer leaves recovery to a manager. Practice phones use the simulator
+without selecting a hardware reader. Pay and Park use the shared medium button size; Send fills its
+own row when the zone offers sending before payment.
 
 ### Shared bill payment window
 

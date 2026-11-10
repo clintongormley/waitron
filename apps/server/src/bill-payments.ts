@@ -15,6 +15,7 @@ import {
   billPayments,
   insertInChunks,
   isUniqueViolation,
+  sales,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -983,10 +984,18 @@ export async function requireOpenBill(tx: Transaction, workingOrderId: string): 
 
 async function requirePayableBill(tx: Transaction, workingOrderId: string): Promise<void> {
   const [order] = await tx
-    .select({ status: workingOrders.status })
+    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
   if (order?.status === "placed") {
+    if (order.partyId === null) {
+      const [invoice] = await tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(eq(sales.workingOrderId, workingOrderId))
+        .limit(1);
+      if (invoice === undefined) return;
+    }
     const [part] = await tx
       .select({ id: billPayments.id })
       .from(billPayments)

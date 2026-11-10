@@ -483,14 +483,14 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({ invoicePrinter: null }),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
-    retrieveWorkingOrder: vi.fn().mockResolvedValue({
-      kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
-      id: "wo-1",
+    retrieveWorkingOrder: vi.fn(async (id: string) => ({
+      kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 3 },
+      id,
       orderNumber: 5,
       label: "Mesa 4",
       revision: 3,
       lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
-    }),
+    })),
     abandonWorkingOrder: vi.fn().mockResolvedValue(undefined),
     updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 4 }),
     placeOrder: vi.fn().mockResolvedValue(placedResult),
@@ -513,6 +513,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listZones: vi.fn().mockResolvedValue([]),
     seatTable: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
+    getBillBalance: vi.fn(async (id: string) => balanceOf({ workingOrderId: id, total: "3.00", outstanding: "3.00" })),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     fireCourse: vi.fn().mockResolvedValue(undefined),
@@ -786,7 +787,7 @@ function deferredTables(): {
 }
 
 describe("till-app", () => {
-  it("asks before counter Pay, saves a chosen station, then takes payment", async () => {
+  it("asks before Counter Pay and saves a chosen station before opening the window", async () => {
     const order: string[] = [];
     const askSaleDeadEnds = vi.fn(async () => {
       order.push("ask");
@@ -813,7 +814,7 @@ describe("till-app", () => {
     const c = await toCounter(el);
     c.store.addProduct(coffee, "1");
     await flush(el);
-    tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+    tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
     await flush(el);
     expect(askSaleDeadEnds).toHaveBeenCalledWith({
       step: "pay",
@@ -831,20 +832,10 @@ describe("till-app", () => {
     await flush(el);
     expect(c.store.lines[0]!.makeAt).toBe("kitchen");
     expect(recordSale).not.toHaveBeenCalled();
-    emit(c, "confirm-payment", { method: "cash", amount: "2" });
-    await flush(el);
-    expect(recordSale).toHaveBeenCalledWith(
-      [{ menuItemId: "menu-item-cafe-0", quantity: "1", makeAt: "kitchen" }],
-      { method: "cash", amount: "2" },
-      expect.any(String),
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      null,
-    );
-    expect(order).toEqual(["ask", "pay"]);
+    expect(currentApi.parkOrder).toHaveBeenCalledWith(expect.objectContaining({
+      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1", makeAt: "kitchen" }],
+    }));
+    expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).not.toBeNull();
   });
 
   it("a counter routing question that a second question replaces settles as cancelled, and nothing is sent for it", async () => {
@@ -891,7 +882,7 @@ describe("till-app", () => {
     expect(recordSale).not.toHaveBeenCalled();
   });
 
-  it("holds an integrated card charge until its counter routing question is answered", async () => {
+  it("holds the Counter payment window until its routing question is answered", async () => {
     let answer: (value: DeadEndAnswer) => void = () => undefined;
     const askSaleDeadEnds = vi.fn(
       () => new Promise<DeadEndAnswer>((resolve) => (answer = resolve)),
@@ -909,7 +900,7 @@ describe("till-app", () => {
     const c = await toCounter(el);
     c.store.addProduct(coffee, "1");
     await flush(el);
-    tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+    tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
     await flush(el);
     expect(askSaleDeadEnds).toHaveBeenCalledWith(expect.objectContaining({ step: "pay" }));
     expect(pay).not.toHaveBeenCalled();
@@ -938,8 +929,8 @@ describe("till-app", () => {
     await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
     await flush(el);
-    expect(pay).toHaveBeenCalledOnce();
-    expect(pay.mock.invocationCallOrder[0]!).toBeGreaterThan(
+    expect(currentApi.parkOrder).toHaveBeenCalledOnce();
+    expect(vi.mocked(currentApi.parkOrder).mock.invocationCallOrder[0]!).toBeGreaterThan(
       askSaleDeadEnds.mock.invocationCallOrder[0]!,
     );
   });
@@ -1026,10 +1017,10 @@ describe("till-app", () => {
     const c = await toCounter(el);
     c.store.addProduct(coffee, "1");
     await flush(el);
-    tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+    tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
     await flush(el);
     expect(askSaleDeadEnds).toHaveBeenCalledOnce();
-    expect(tenderPay(el).shadowRoot!.querySelector("till-numeric-pad")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).not.toBeNull();
   });
 
   it.each(["prepay", "ticket_then_pay", "ticket_then_pay"] as const)(
@@ -1057,11 +1048,11 @@ describe("till-app", () => {
       const c = await toCounter(el);
       c.store.addProduct(coffee, "1");
       await flush(el);
-      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+      tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
       await flush(el);
       expect(askSaleDeadEnds).toHaveBeenCalledWith(expect.objectContaining({ step: "pay" }));
       expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).toBeNull();
-      expect(tenderPay(el).shadowRoot!.querySelector("till-numeric-pad")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).not.toBeNull();
     },
   );
 
@@ -1090,11 +1081,11 @@ describe("till-app", () => {
       const c = await toCounter(el);
       c.store.addProduct(coffee, "1");
       await flush(el);
-      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+      tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
       await flush(el);
       expect(askSaleDeadEnds).toHaveBeenCalledWith(expect.objectContaining({ step: "pay" }));
       expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).not.toBeNull();
-      expect(tenderPay(el).shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).toBeNull();
     },
   );
 
@@ -1118,7 +1109,7 @@ describe("till-app", () => {
     c.store.addProduct(coffee, "1");
     c.store.addProduct(ham, "1");
     await flush(el);
-    tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+    tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
     await flush(el);
     const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
     dialog
@@ -1130,7 +1121,7 @@ describe("till-app", () => {
     expect(c.store.lines).toHaveLength(1);
     expect(c.store.lines[0]!.product.id).toBe("jamon");
     expect(c.store.total).toBe("10.00");
-    expect(tenderPay(el).shadowRoot!.querySelector("till-numeric-pad")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).not.toBeNull();
   });
 
   it("cancels a dead-end question and keeps the counter idle without paying", async () => {
@@ -1153,14 +1144,14 @@ describe("till-app", () => {
     const c = await toCounter(el);
     c.store.addProduct(coffee, "1");
     await flush(el);
-    tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+    tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!
       .shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!
       .click();
     await flush(el);
     expect(recordSale).not.toHaveBeenCalled();
-    expect(tenderPay(el).shadowRoot!.querySelector(".pay")).not.toBeNull();
+    expect(tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay")).not.toBeNull();
     expect(c.store.lines).toHaveLength(1);
   });
 
@@ -2481,7 +2472,7 @@ describe("till-app", () => {
       payCard(el, "sale").store.addProduct(coffee, "2");
       await flush(el);
 
-      payCard(el, "sale").shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+      emit(counter(el)!, "collect-card", {});
       await flush(el);
 
       expect(pay).toHaveBeenCalledTimes(1);
@@ -2490,8 +2481,8 @@ describe("till-app", () => {
       await payCard(el, "sale").updateComplete;
       const card = payCard(el, "sale").shadowRoot!;
       expect(card.querySelector(".collecting")).toBeNull();
-      expect(card.querySelector(".pay")).not.toBeNull();
-      expect(card.querySelector(".pay-card")).not.toBeNull();
+      expect(card.querySelector("[data-counter-pay], .pay")).not.toBeNull();
+      expect(card.querySelector("[data-counter-pay], .pay-card")).not.toBeNull();
     });
 
     describe("a list that cannot be read at login", () => {
@@ -3727,7 +3718,7 @@ describe("till-app", () => {
     c.store.loadFrom("large-bill", [{ product: coffee, quantity: "2001" }]);
     await flush(el);
     const pay = () =>
-      tenderPay(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(".pay-card")!;
+      tenderPay(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-counter-pay], .pay-card")!;
     expect(pay().disabled).toBe(false);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
@@ -5972,7 +5963,8 @@ describe("till-app", () => {
 
     const pay = tenderPay(el);
     expect(pay.shadowRoot!.querySelector(".pay")).toBeNull();
-    expect(pay.shadowRoot!.querySelector(".cash-at-till")).not.toBeNull();
+    expect(pay.takesCash).toBe(false);
+    expect(pay.shadowRoot!.querySelector("[data-counter-pay]")).not.toBeNull();
   });
 
   it("too many wrong override PINs keep the dialog open, telling the operator to wait", async () => {
@@ -10953,7 +10945,7 @@ describe("till-app", () => {
         capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
       });
     const tapPayCard = (el: TillApp): void =>
-      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+      emit(counter(el)!, "collect-card", {});
 
     it("forwards the selected simulator outcome to POST /api/pay", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
@@ -10974,54 +10966,13 @@ describe("till-app", () => {
       expect(pay).toHaveBeenCalledWith(expect.objectContaining({ simulationOutcome: "declined" }));
     });
 
-    it("sends no reader payment when the guests turn bad while the kitchen routes are read", async () => {
-      let answer: (value: DeadEndAnswer) => void = () => undefined;
-      const askSaleDeadEnds = vi.fn(
-        () => new Promise<DeadEndAnswer>((resolve) => (answer = resolve)),
-      );
-      const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
-      const { el } = await mountApp({ getTill: withReaderTill(), askSaleDeadEnds, pay });
-      const c = await toCounter(el);
-      c.store.addProduct(coffee, "1");
-      await flush(el);
-      const stepper = tenderPay(el).shadowRoot!.querySelector<
-        HTMLElement & { updateComplete: Promise<unknown>; error: string }
-      >('[name="guests"]')!;
-      await stepper.updateComplete;
-      const input = stepper.shadowRoot!.querySelector("input")!;
-
-      tapPayCard(el);
-      await flush(el);
-      expect(askSaleDeadEnds).toHaveBeenCalledOnce();
-      expect(input.disabled).toBe(false);
-      input.value = "0";
-      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-      await flush(el);
-      answer({ sends: false, deadEnds: [], stations: [] });
-      await flush(el);
-      await tenderPay(el).updateComplete;
-
-      expect(pay).not.toHaveBeenCalled();
-      expect(stepper.isConnected).toBe(true);
-      expect(stepper.error).toBe(t("seat.guest_count_invalid"));
-    });
-
     it("sends the receipt's guests to the reader payment, and again on the retry after a decline", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({ getTill: withReaderTill(), pay });
       const c = await toCounter(el);
       c.store.addProduct(coffee, "1");
       await flush(el);
-      const stepper = tenderPay(el).shadowRoot!.querySelector<
-        HTMLElement & { updateComplete: Promise<unknown> }
-      >('[name="guests"]')!;
-      await stepper.updateComplete;
-      const input = stepper.shadowRoot!.querySelector("input")!;
-      input.value = "3";
-      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-      await flush(el);
-
-      tapPayCard(el);
+      emit(c, "collect-card", { guestCount: 3 });
       await flush(el);
       await tenderPay(el).updateComplete;
       expect(pay).toHaveBeenCalledOnce();
@@ -11350,7 +11301,7 @@ describe("till-app", () => {
         c.store.addProduct(coffee, "2");
         await flush(el);
 
-        tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+        emit(counter(el)!, "collect-card", {});
         await flush(el);
 
         expect(pay).toHaveBeenCalledTimes(1);
@@ -11359,8 +11310,8 @@ describe("till-app", () => {
         await tenderPay(el).updateComplete;
         const card = tenderPay(el).shadowRoot!;
         expect(card.querySelector(".collecting")).toBeNull();
-        expect(card.querySelector(".pay")).not.toBeNull();
-        expect(card.querySelector(".pay-card")).not.toBeNull();
+        expect(card.querySelector("[data-counter-pay], .pay")).not.toBeNull();
+        expect(card.querySelector("[data-counter-pay], .pay-card")).not.toBeNull();
       },
     );
 
@@ -11378,7 +11329,7 @@ describe("till-app", () => {
       c.store.addProduct(coffee, "2");
       await flush(el);
 
-      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+      emit(counter(el)!, "collect-card", {});
       await flush(el);
       expect(ticket(el)).not.toBeNull();
       emit(ticket(el)!, "new-sale");
@@ -11387,7 +11338,7 @@ describe("till-app", () => {
       await tenderPay(el).updateComplete;
       const card = tenderPay(el).shadowRoot!;
       expect(card.querySelector(".collecting")).toBeNull();
-      expect(card.querySelector(".pay-card")).not.toBeNull();
+      expect(card.querySelector("[data-counter-pay], .pay-card")).not.toBeNull();
     });
 
     it("says the operator may not take payments when the server refuses them the reader payment", async () => {
@@ -11491,13 +11442,13 @@ describe("till-app", () => {
       await flush(el);
       await tenderPay(el).updateComplete;
       expect(pay).toHaveBeenCalledOnce();
-      expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).not.toBeNull();
+      expect(tenderPay(el).busy).toBe(true);
 
       refuse({ code: "server.internal", status: 500 });
       await flush(el);
       await tenderPay(el).updateComplete;
-      expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).toBeNull();
-      expect(tenderPay(el).shadowRoot!.querySelector(".pay-card")).not.toBeNull();
+      expect(tenderPay(el).busy).toBe(false);
+      expect(tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card")).not.toBeNull();
     });
 
     it("an earlier reader payment finishing late leaves a newer one's pay card waiting on the reader", async () => {
@@ -11527,12 +11478,12 @@ describe("till-app", () => {
       await flush(el);
       expect(pay).toHaveBeenCalledTimes(2);
       await tenderPay(el).updateComplete;
-      expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).not.toBeNull();
+      expect(tenderPay(el).busy).toBe(true);
 
       heldRead!([]);
       await flush(el);
       await tenderPay(el).updateComplete;
-      expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).not.toBeNull();
+      expect(tenderPay(el).busy).toBe(true);
     });
 
     const deadEnd = {
@@ -11594,14 +11545,14 @@ describe("till-app", () => {
       await tenderPay(el).updateComplete;
       expect(updateWorkingOrder).toHaveBeenCalledOnce();
       expect(lookup.held()).toBe(true);
-      expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).not.toBeNull();
+      expect(tenderPay(el).busy).toBe(true);
 
       lookup.answer(deadEnd);
       await flush(el);
       const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
       expect(dialog).not.toBeNull();
       await tenderPay(el).updateComplete;
-      expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).not.toBeNull();
+      expect(tenderPay(el).busy).toBe(true);
 
       dialog
         .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
@@ -11611,8 +11562,8 @@ describe("till-app", () => {
       await flush(el);
       await tenderPay(el).updateComplete;
       expect(pay).toHaveBeenCalledOnce();
-      expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).toBeNull();
-      expect(tenderPay(el).shadowRoot!.querySelector(".pay-card")).not.toBeNull();
+      expect(tenderPay(el).busy).toBe(false);
+      expect(tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card")).not.toBeNull();
     });
 
     it("puts the pay card back to its choices when an earlier attempt's kitchen-station retry ends after a newer attempt was declined", async () => {
@@ -11655,13 +11606,13 @@ describe("till-app", () => {
       await flush(el);
       await tenderPay(el).updateComplete;
       expect(pay).toHaveBeenCalledTimes(2);
-      expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).not.toBeNull();
+      expect(tenderPay(el).busy).toBe(true);
 
       refuseRetry({ code: "server.internal", status: 500 });
       await flush(el);
       await tenderPay(el).updateComplete;
-      expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).toBeNull();
-      expect(tenderPay(el).shadowRoot!.querySelector(".pay-card")).not.toBeNull();
+      expect(tenderPay(el).busy).toBe(false);
+      expect(tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card")).not.toBeNull();
     });
 
     it("shows the decline again when a retried reader payment is declined again", async () => {
@@ -11700,8 +11651,8 @@ describe("till-app", () => {
 
       expect(updateWorkingOrder).toHaveBeenCalled();
       expect(pay).not.toHaveBeenCalled();
-      expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).toBeNull();
-      expect(tenderPay(el).shadowRoot!.querySelector(".pay-card")).not.toBeNull();
+      expect(tenderPay(el).busy).toBe(false);
+      expect(tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card")).not.toBeNull();
     });
 
     it("resets the busy state after a declined outcome so the counter re-enables for a retry", async () => {
@@ -11839,7 +11790,7 @@ describe("till-app", () => {
       payWidget.shadowRoot!.querySelector<HTMLElement>(".switch-tender")!.click();
       await flush(el);
       await vi.waitFor(() =>
-        expect(tenderPay(el).shadowRoot!.querySelector(".pay")).not.toBeNull(),
+        expect(tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay")).not.toBeNull(),
       );
       expect(c.store.lines).toHaveLength(1);
       expect(ticket(el)).toBeNull();
@@ -21579,7 +21530,7 @@ describe("dead-end unsaved choices in the till shell", () => {
       const c = await toCounter(el);
       c.store.addProduct(coffee, "1");
       await flush(el);
-      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+      tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
       await flush(el);
       const dialog = el.shadowRoot!.querySelector("till-dead-ends-dialog")!;
       const section =

@@ -4083,7 +4083,11 @@ describe("till-app: a partly paid order at the counter", () => {
     el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
   const grid = (el: TillApp) => counter(el);
   const payRest = (el: TillApp) =>
-    grid(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-rest]");
+    grid(el).payRest === null
+      ? null
+      : grid(el)
+          .shadowRoot!.querySelector("till-tender-pay")!
+          .shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]");
 
   /** Signed in at the counter with the held order `wo-1` retrieved into the basket. */
   async function retrieved(overrides: Record<string, unknown>): Promise<TillApp> {
@@ -4101,7 +4105,24 @@ describe("till-app: a partly paid order at the counter", () => {
         orderNumber: 5,
         label: "Ana",
         revision: 3,
-        lines: [],
+        lines: [
+          {
+            workingOrderLineId: "counter-dish",
+            menuItemId: "offer-meal",
+            quantity: "1.000",
+            product: {
+              id: "meal",
+              menuItemId: "offer-meal",
+              catalogueId: "cat-default",
+              name: "Meal",
+              pricingUnit: "each",
+              unitPrice: "120.00",
+              vatClass: "general",
+              category: null,
+              allergens: null,
+            },
+          },
+        ],
       }),
       getBillBalance: vi.fn().mockResolvedValue(counterBalance),
       previewBillPayment: vi.fn().mockResolvedValue(cash("70.00", "0.00")),
@@ -4193,16 +4214,14 @@ describe("till-app: a partly paid order at the counter", () => {
     const el = await retrieved({ takeBillPayment });
     expect(
       grid(el).shadowRoot!.querySelector<HTMLElement & { busy: boolean }>("till-tender-pay")!.busy,
-    ).toBe(true);
-    expect(text(payRest(el))).toBe(t("bill.take_rest"));
+    ).toBe(false);
+    expect(text(payRest(el))).toBe(t("action.pay"));
     const listReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
 
     payRest(el)!.click();
     await flush(el);
     expect(api.getBillBalance).toHaveBeenCalledWith("wo-1");
-    expect(inDialog(el, 'wt-input[name="amount"]') as unknown as { value: string }).toMatchObject({
-      value: "70.00",
-    });
+    expect(dialog(el)!.way).toBe("whole");
     expect(shownBalance(el)).toEqual(balanceShows("120.00", "50.00", "70.00"));
     await type(el, "tendered", "70");
     await press(el, "[data-pay-continue]");
@@ -4724,6 +4743,7 @@ describe("till-app: a partly paid order at the counter", () => {
         .fn()
         .mockResolvedValue({ ...till, formFactor: counterFormFactor, fullInvoices: true }),
       takeBillPayment,
+      setOrderInvoiceChoice: vi.fn().mockResolvedValue({ revision: 4 }),
     });
     emit(counter(el), "choose-invoice");
     await flush(el);
@@ -4749,6 +4769,13 @@ describe("till-app: a partly paid order at the counter", () => {
 
     await press(el, "[data-pay-confirm]");
 
+    expect(api.setOrderInvoiceChoice).toHaveBeenCalledWith(
+      "wo-1",
+      expect.objectContaining({
+        invoiceType: "F1",
+        recipient: expect.objectContaining({ taxId: "12345678Z", legalName: "Ana García" }),
+      }),
+    );
     expect(sent()).toHaveLength(1);
     expect(sent()[0]).not.toHaveProperty("guestCount");
   });

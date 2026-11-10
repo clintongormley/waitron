@@ -286,6 +286,7 @@ export class TillTenderPay extends LitElement {
   @property() mode: OrderFlow = "prepay";
   /** Only a weighed dish's weight entry, for a screen that takes payment elsewhere. */
   @property({ type: Boolean }) weighOnly = false;
+  @property({ type: Boolean }) paymentWindow = false;
   /** Ignored when {@link mode} is `"prepay"`, which has no separate collect stage. */
   @property() stage: "order" | "collect" = "order";
   @property() cardProvider: CardProvider = "none";
@@ -930,7 +931,20 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
+  #opensPaymentWindow(): boolean {
+    return this.paymentWindow && compareDecimal(this.store.total, decimal("0")) > 0;
+  }
+
   #renderTenderButtons(disabled: boolean) {
+    if (this.#opensPaymentWindow())
+      return html`<wt-button
+        data-counter-pay
+        variant=${this.#tenderVariant()}
+        size="md"
+        ?disabled=${disabled}
+        @click=${() => this.#checkBeforeTender(() => this.dispatchEvent(new CustomEvent("counter-bill-pay", { detail: {}, bubbles: true, composed: true })))}
+        >${t("action.pay")}</wt-button
+      >`;
     if (!this.takesCash)
       return html`
         <p class="cash-at-till">${t("tender.cash_at_till")}</p>
@@ -1010,7 +1024,8 @@ export class TillTenderPay extends LitElement {
   /** No Hold: a placed order is not parked again. */
   #renderIdleCollect(disabled: boolean) {
     return html`
-      ${this.#renderCardExtras()} ${this.#renderGuests()} ${this.#renderFormMessage()}
+      ${this.#opensPaymentWindow() ? nothing : html`${this.#renderCardExtras()} ${this.#renderGuests()}`}
+      ${this.#renderFormMessage()}
       <div class="actions">
         ${this.#renderTenderButtons(disabled)} ${this.#renderReceiptLanguageButton(disabled)}
       </div>
@@ -1020,7 +1035,8 @@ export class TillTenderPay extends LitElement {
   /** `withPlace`: a zone that sends to the kitchen without payment can still send it unpaid. */
   #renderIdlePay(disabled: boolean, withPlace: boolean) {
     return html`
-      ${this.#renderCardExtras()} ${this.#renderGuests()} ${this.#renderFormMessage()}
+      ${this.#opensPaymentWindow() ? nothing : html`${this.#renderCardExtras()} ${this.#renderGuests()}`}
+      ${this.#renderFormMessage()}
       <div class="actions idle-actions">
         ${this.#renderTenderButtons(disabled)}
         ${

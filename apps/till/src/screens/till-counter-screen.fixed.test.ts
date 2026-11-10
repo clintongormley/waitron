@@ -80,19 +80,39 @@ it("shows a waiting order when no order is held, and removes the lists when both
   expect(el.shadowRoot!.querySelector("till-held-orders")).toBeNull();
 });
 
-it("keeps the take-rest action amount and blocks it while its request is busy", async () => {
+it("shows the remaining amount and blocks Pay while its request is busy", async () => {
   const { el } = await mount({ payRest: "7.80" });
-  const button = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-rest]");
+  const tender = el.shadowRoot!.querySelector("till-tender-pay")!;
+  await tender.updateComplete;
+  const button = tender.shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]");
+  expect(el.shadowRoot!.querySelector("[data-counter-bill-payments]")!.textContent).toContain(
+    "7,80",
+  );
   expect(button).not.toBeNull();
   const seen = vi.fn();
   el.addEventListener("counter-bill-pay", seen);
   await userEvent.click(page.elementLocator(button!));
   expect(seen).toHaveBeenCalledOnce();
-  expect(seen.mock.calls[0]![0].detail).toEqual({ amount: "7.80" });
+  expect(seen.mock.calls[0]![0].detail).toEqual({});
   expect(seen.mock.calls[0]![0].bubbles).toBe(true);
   expect(seen.mock.calls[0]![0].composed).toBe(true);
   el.busy = true;
   await el.updateComplete;
   await (button as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(button!.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(true);
+});
+
+it("opens one Counter Pay window and keeps Park beside it", async () => {
+  const { el } = await mount();
+  const tender = el.shadowRoot!.querySelector("till-tender-pay")!;
+  await tender.updateComplete;
+  const pay = tender.shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]");
+  expect(pay).not.toBeNull();
+  expect(tender.shadowRoot!.querySelector(".pay-card")).toBeNull();
+  expect(tender.shadowRoot!.querySelector(".pay")).toBeNull();
+  expect(tender.shadowRoot!.querySelector(".hold")).not.toBeNull();
+  const seen = vi.fn();
+  el.addEventListener("counter-bill-pay", seen);
+  await userEvent.click(page.elementLocator(pay!));
+  expect(seen.mock.calls[0]![0].detail).toEqual({});
 });

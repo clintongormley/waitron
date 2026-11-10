@@ -12,6 +12,8 @@ contribution, and confirms. This ends the practice attempt without recording a c
 
 For whole or part payments at a table, open **Pay** and use the [payment window](table-service.md#pay-window).
 
+To split a Counter payment between guests, follow [Share a Counter bill](table-service.md#counter-part-payments).
+
 ## Retry a counter send after a lost reply {#counter-send-retry}
 
 If the till cannot confirm a counter send, retry with the basket unchanged. When the first send

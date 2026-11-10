@@ -7078,11 +7078,6 @@ export class TillApp extends LitElement {
     return held;
   }
 
-  /** The basket's pay controls wait: on a stale line, or on an order the single payment refuses. */
-  #payHeld(): boolean {
-    return this.basketHeld || this.#basketPaidInPart() !== undefined;
-  }
-
   /** The single payment refuses a bill with a payment on it, so the till says to take the rest as a
    * bill payment instead of sending one. */
   #sayBillPayments(outstanding: string): void {
@@ -19114,12 +19109,17 @@ export class TillApp extends LitElement {
     if (offered.length === 1) this.#openBillRefunding(now, offered[0]!, excess);
   }
 
-  /** The pay card's offer on a counter order a payment is already on: the bill payment dialog opens
-   * on it, once an edit made to it in the basket is saved, as a single payment saves it first. */
+  /** Persist the Counter basket before the payment window allocates its stored dishes. */
   async #onCounterBillPay(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
-    const { amount } = (event as CustomEvent<{ amount: string }>).detail;
-    if (this.submitting || this.billPaying !== null || this.#basketPaidInPart() === undefined)
+    const { amount } = (event as CustomEvent<{ amount?: string }>).detail;
+    if (
+      this.submitting ||
+      this.billPaying !== null ||
+      this.basketHeld ||
+      (this.#store.lines.length === 0 && this.#basketPaidInPart() === undefined)
+    )
       return;
+    if (this.#askInvoiceRecipientForLargeBill()) return;
     const retry = (confirmed: LateSend) => this.#onCounterBillPay(event, false, confirmed);
     if (this.#askLateSendAtCounter(lateSend, retry)) return;
     this.#counterSends++;
@@ -19131,7 +19131,20 @@ export class TillApp extends LitElement {
     let deadEnd: string | undefined;
     this.submitting = true;
     try {
-      if (
+      if (!this.#store.persisted) {
+        await this.api.parkOrder({
+          id,
+          lines: this.#currentSaleLines(),
+          label: this.#store.label,
+          ...(this.#store.kitchenNote === null ? {} : { kitchenNote: this.#store.kitchenNote }),
+          ...(lateSend === undefined ? {} : { lateSend }),
+        });
+        if (this.#hasLeftCounterOrder(id, session) || basketVisit !== this.#store.loadGeneration)
+          return;
+        this.#store.markPersisted();
+        await this.#saveUnsavedReceiptLanguage(id);
+        if ((await this.#reloadCounterOrder(id, session)) !== "read") return;
+      } else if (
         !(await this.#syncIfDirty(
           id,
           this.#currentSaleLines(),
@@ -19142,6 +19155,16 @@ export class TillApp extends LitElement {
         basketVisit !== this.#store.loadGeneration
       )
         return;
+      if (this.#hasLeftCounterOrder(id, session)) return;
+      if (this.invoiceChoice?.orderId === id) {
+        const saved = await this.api.setOrderInvoiceChoice(id, {
+          revision: this.#store.revision,
+          ...this.invoiceChoice.invoice,
+          expectedEdit: this.#counterExpectedEdit(id),
+        });
+        if (this.#hasLeftCounterOrder(id, session)) return;
+        this.#store.markSaved(saved.revision);
+      }
     } catch (error) {
       refused = true;
       if (!this.#hasLeftCounterOrder(id, session)) {
@@ -19172,7 +19195,7 @@ export class TillApp extends LitElement {
     }
     if (this.#hasLeftCounterOrder(id, session)) return;
     await this.#openBillPaying(
-      "contribution",
+      amount === undefined ? "whole" : "contribution",
       payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
       amount,
       { surface: "counter", billId: id, visit: session },
@@ -19557,7 +19580,9 @@ export class TillApp extends LitElement {
         return;
       }
       const expectedEdit =
-        open.surface === "counter" ? null : this.#draftSync?.expectedEditFor(open.billId);
+        open.surface === "counter"
+          ? this.#counterExpectedEdit(open.billId)
+          : this.#draftSync?.expectedEditFor(open.billId);
       if (expectedEdit === undefined || (open.surface === "table" && expectedEdit === null))
         throw { code: "draft.out_of_date" };
       const api = this.api;
@@ -20500,8 +20525,9 @@ export class TillApp extends LitElement {
         .invoiceLocale=${this.invoiceLocale}
         .orderFlow=${this.#basketFlow()}
         .stage=${this.stage}
+        .paymentWindow=${this.counterWaiting.some((row) => row.id === this.#store.id && row.invoiceNumber === undefined)}
         .busy=${this.submitting || this.placing || this.invoiceRecipientReading}
-        .payHeld=${this.#payHeld()}
+        .payHeld=${this.basketHeld}
         .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
         .cardProvider=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
