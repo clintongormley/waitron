@@ -17,6 +17,7 @@ import { businessDayBounds } from "@waitron/shared";
 import { installBenchClock } from "./bench-clock.js";
 import { openBenchVenue, type BenchVenue } from "./bench-venue.js";
 import { BENCH_PROFILE } from "./profile.js";
+import { runtime } from "./runtime.js";
 import { tradeDay, type DayResult } from "./trading-day.js";
 
 export const WORKING_DIR = "venue";
@@ -100,8 +101,10 @@ export async function buildYear(options: BuildYearOptions): Promise<void> {
           () => {
             const now = performance.now();
             dayMs = now - started;
+            // `day` stays first: `dropUncountedTimings` reads it from the line's start.
             const line = {
               day,
+              ...runtime(),
               date: dateOf(day),
               bills: result.bills.length,
               dayMs,
@@ -281,6 +284,7 @@ function writeVolume(
     return counts;
   });
   writeAtomically(join(out, VOLUME_FILE), {
+    ...runtime(),
     rows,
     totalRows: Object.values(rows).reduce((sum, n) => sum + n, 0),
     databaseBytes: statSync(join(working, VENUE_FILE)).size,

@@ -837,6 +837,11 @@ passed while proving nothing.
   its change, on one machine, never in CI; `bench compare` exits 0 whenever it can read both files,
   so read what it prints.** Nothing guards it. [How and limits](docs/developers/testing-guide.md#the-protection-list),
   [the bench](docs/developers/testing-guide.md#the-bench).
+- **A claim about how SQLite plans a query, or what it was built with, is measured where
+  `node:sqlite` reports the same SQLite and STAT4 as the box image's base (`node:26-slim`), never
+  with a Mac's Homebrew Node, which links its own SQLite** (watcher, 2026-11-10, A1474). Cost: the
+  Mac's SQLite was taken for the box's, and a wrong correction about A1469's figures reached the
+  owner. Nothing guards it. [Command](docs/developers/testing-guide.md#the-bench).
 - **A fixture no check reads is unverified data, and a green suite resting on it proves nothing.**
   When a fixture describes something an authority will judge, run the real check over it.
 - **Treat “there is a test” as unfinished: name the assertion that fails if behaviour is deleted.**

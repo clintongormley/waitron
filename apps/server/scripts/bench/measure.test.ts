@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { buildYear, COPY_DIR, VOLUME_FILE, WORKING_DIR } from "./build-year.js";
 import { CASE_NAMES, measureVenue, sampleRounds, type MeasureResult } from "./measure.js";
+import { runtime } from "./runtime.js";
 
 // Builds a two-day venue, then measures it: each case's set-up goes through the real routes.
 const CASE_TIMEOUT_MS = 300_000;
@@ -121,11 +122,15 @@ describe("measureVenue", () => {
       rounds: ROUNDS,
       totalRows: volume.totalRows,
       profile: volume.profile,
-      node: process.version,
     });
     expect(result.machine.cpu).not.toBe("");
     expect(result.commit).toMatch(/^[0-9a-f]{40}$/);
     expect(JSON.parse(readFileSync(join(dir, "timings.json"), "utf8"))).toEqual(result);
+  });
+
+  it("names the Node and SQLite that made it at the top of the result", () => {
+    expect(Object.keys(result).slice(0, 3)).toEqual(["node", "sqlite", "sqliteStat4"]);
+    expect(result).toMatchObject(runtime());
   });
 
   it("leaves the built venue as it was", () => {

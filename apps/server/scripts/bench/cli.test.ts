@@ -6,8 +6,26 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { REQUEST_TIMINGS_FILE, VOLUME_FILE } from "./build-year.js";
 import { CASE_NAMES, type MeasureResult } from "./measure.js";
+import { describeRuntime, runtime } from "./runtime.js";
 
 const run = promisify(execFile);
+
+function compareResult(seed: number) {
+  return {
+    node: "v26.13.0",
+    sqlite: "3.54.0",
+    sqliteStat4: false,
+    load: "idle",
+    machine: { hostname: "bench", cpu: "M-test", cores: 8, memoryBytes: 1, platform: "darwin" },
+    commit: "0".repeat(40),
+    seed,
+    profile: { days: 2 },
+    totalRows: 1,
+    samples: 1,
+    rounds: 1,
+    cases: [],
+  };
+}
 
 const BILLS = 2;
 const STEP_TIMEOUT_MS = 90_000;
@@ -65,9 +83,20 @@ describe("the bench command, in a process of its own", () => {
       expect(volume.rows.sales).toBe(BILLS);
 
       const timings = join(dir, "timings.json");
-      await bench("measure", "--venue", dir, "--out", timings, "--samples", "1", "--rounds", "1");
+      const printed = await bench(
+        "measure",
+        "--venue",
+        dir,
+        "--out",
+        timings,
+        "--samples",
+        "1",
+        "--rounds",
+        "1",
+      );
       const result = JSON.parse(readFileSync(timings, "utf8")) as MeasureResult;
       expect(result.cases.map((entry) => entry.name)).toEqual([...CASE_NAMES]);
+      expect(printed.split("\n")[0]).toBe(describeRuntime(runtime()));
     },
     CASE_TIMEOUT_MS,
   );
@@ -154,23 +183,30 @@ describe("the bench command, in a process of its own", () => {
     expect(refused.stderr).toContain(`--out must be outside the repository: ${inside}`);
   });
 
+  it("names the Node and SQLite both results were made by above the table", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "wt-bench-cli-"));
+    made.push(dir);
+    writeFileSync(join(dir, "result.json"), JSON.stringify(compareResult(1)));
+
+    const compared = await bench(
+      "compare",
+      "--before",
+      join(dir, "result.json"),
+      "--after",
+      join(dir, "result.json"),
+    );
+
+    expect(compared.split("\n").slice(0, 2)).toEqual([
+      "Node v26.13.0, SQLite 3.54.0 without STAT4",
+      "case  before (round medians)  after (median)  verdict",
+    ]);
+  });
+
   it("prints why two results were not compared, and still answers 0", async () => {
     const dir = mkdtempSync(join(tmpdir(), "wt-bench-cli-"));
     made.push(dir);
-    const result = (seed: number) => ({
-      load: "idle",
-      machine: { hostname: "bench", cpu: "M-test", cores: 8, memoryBytes: 1, platform: "darwin" },
-      node: "v24.0.0",
-      commit: "0".repeat(40),
-      seed,
-      profile: { days: 2 },
-      totalRows: 1,
-      samples: 1,
-      rounds: 1,
-      cases: [],
-    });
-    writeFileSync(join(dir, "before.json"), JSON.stringify(result(1)));
-    writeFileSync(join(dir, "after.json"), JSON.stringify(result(2)));
+    writeFileSync(join(dir, "before.json"), JSON.stringify(compareResult(1)));
+    writeFileSync(join(dir, "after.json"), JSON.stringify(compareResult(2)));
 
     const compared = await benchExit(
       "compare",

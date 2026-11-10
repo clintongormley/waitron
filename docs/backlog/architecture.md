@@ -1590,7 +1590,39 @@ statistics, 1.63 s with them, and 0.48 s with them plus three partial indexes; e
 waiting records still took 29 s each. Instead of statistics, a read that picks a worse index
 without them names its index with `indexed by`: the two reads of `payments` by working order
 (A1469), and the four filed-record reads of A1471 (#2711). Commands and result files: #2704 (with
-and without statistics) and the A1469 payments PR (the partial indexes).
+and without statistics) and the A1469 payments PR (the partial indexes). Those figures were taken on
+the bench server. On 10 November 2026 it and the box image's base, `node:26-slim` (a floating tag),
+both ran Node v26.13.0 with SQLite 3.54.0 built without `ENABLE_STAT4`, so `ANALYZE` gathers only
+`sqlite_stat1` there and the figures compare like with like (the command is in
+[testing-guide.md](../developers/testing-guide.md#the-bench), under "Which Node and SQLite made a
+result"). On a build with STAT4 (Homebrew's Node on macOS), the watcher's scratch test that day,
+not kept, read a synthetic 360,000-row order-lines table by
+`order_id = ? or parent_line_id in (select id … where order_id = ?)`: with no statistics it used
+both indexes, and with `sqlite_stat1`, alone or with `sqlite_stat4`, it read the whole table.
+Neither the reads named above nor a read filtering on a fixed value was tested.
+
+With all three fixes (the `order_groups` index, the payments reads and A1471's filed-record reads),
+days 361–365 of the year were traded again on 10 November 2026 with no statistics (A1474), at a
+scratch commit: the bench's commit `8456ac2059` with #2715's and #2711's read changes applied and
+the index created on the year copy by hand, since main's schema no longer opens that year. The empty venue's five days ran at the same scratch
+commit; the before column is the run of that morning at `8456ac2059`. Median of the five days'
+medians, in ms:
+
+| Request                                   | Empty venue | Year, before the fixes | Year, with them |
+| ----------------------------------------- | ----------: | ---------------------: | --------------: |
+| `POST /api/pay`                           |        15.8 |                  157.8 |            16.2 |
+| `POST /api/working-orders/:id/payments`   |        16.9 |                   78.6 |            17.2 |
+| `POST /api/working-orders/:id/collect`    |        13.5 |                   74.0 |            13.8 |
+| `PUT /api/parties/:id/allergy`            |         4.5 |                   60.5 |             4.2 |
+| `POST /api/parties/:id/drafts/:id/submit` |        19.5 |                   49.8 |            19.3 |
+| `POST /api/parties/:id/groups/:id/fire`   |        10.0 |                   39.8 |             9.9 |
+
+All six are back to empty-venue speed. A day took 0.188 s a bill empty, 0.489 before the fixes and
+0.249 with them; 0.024 of that is the bench's own end-of-day copy of the database, which a venue
+does not make. Of the remaining 0.037 s a bill, half is in requests, mostly the print agent's job
+claim (0.9 to 1.6 ms, 1.9 s a day) and the kitchen's ticket advance (1.1 s a day, in its slower
+calls, not its median), and half is outside the timed requests; neither was traced to a statement.
+Commands and per-day figures: the A1474 PR (#2729).
 
 - **Official holiday names and English display names (A971, owner 2026-10-23).** Keep the published official name as the annual-rule key; choose the display name by the screen language. The country calendar supplies English names for holidays and area choices. A stored name absent from the supplied English-name inventory stays as recorded. This changes no stored holiday rule or database schema.
 

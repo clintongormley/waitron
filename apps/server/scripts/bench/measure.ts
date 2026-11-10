@@ -25,6 +25,7 @@ import {
   type BenchSession,
 } from "./build-year.js";
 import { BenchRefusal } from "./trading-day.js";
+import { runtime, type Runtime } from "./runtime.js";
 
 export const CASE_NAMES = [
   "payment.partial",
@@ -91,10 +92,9 @@ export interface Machine {
   platform: string;
 }
 
-export interface MeasureResult {
+export interface MeasureResult extends Runtime {
   load: "idle";
   machine: Machine;
-  node: string;
   commit: string | null;
   seed: number;
   profile: unknown;
@@ -229,9 +229,9 @@ export async function measureVenue(options: MeasureOptions): Promise<MeasureResu
       { samples, rounds },
     );
     const result: MeasureResult = {
+      ...runtime(),
       load: "idle",
       machine: machine(),
-      node: process.version,
       commit: gitCommit(),
       seed: session.seed,
       profile: volume.profile,
