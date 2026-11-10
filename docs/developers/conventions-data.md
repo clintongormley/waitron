@@ -3127,14 +3127,15 @@ frees nothing until the file is closed — on the small disk, an unlinked 1 MiB 
 reading left free space at `0` until `close`, then `1048576` (the slice plan's M3) — so deleting a
 dump a run reads frees nothing until the run closes it. It can also fail the run: `runOnce`
 (`backup-sweep.ts`) archives the dump to a path in staging and then reads it back by that path to
-pack the encrypted archive (read, not run). The start's clean-up (`freeSpaceAtStart`) takes no
-turn: it runs while no backup supervisor is running in this process, before boot starts one or,
+pack the encrypted archive (read, not run). The start's sweeps (`freeSpaceAtStart` and boot's `emptyScratch`) take no
+turn: they run while no backup supervisor is running in this process, before boot starts one or,
 for the forced clean-up after a failed start (`node-entry.ts`), after the failed boot's unwind has
 stopped it — stopping the supervisor aborts a run under way and waits for it to settle. Cases:
 `apps/server/src/backup-staging-turn.test.ts`, and the turn shared with the backups in
 `free-space-now.test.ts`, `low-space-backups.test.ts` and `boot.box-health.test.ts`. Guard: `scripts/backup-staging-touchers.test.ts`,
-which allows exactly `start-space.ts`, `backup-supervisor.ts` and `free-space-now.ts` to name
-`BACKUP_STAGING_DIR` or `"backup-staging"`.
+which allows `start-space.ts`, `backup-supervisor.ts`, `free-space-now.ts` and the layout module to name
+`BACKUP_STAGING_DIR` or `"scratch/backup"`. The start sweeps through `SCRATCH_DIR`, which this
+guard does not see.
 A run's deletions of old backups to make room (`makeRoom`, `apps/server/src/backup-room.ts`) are
 steps of `runOnce`, so they happen inside that run's own turn (A1167 slice 1). The free-space
 watch's deletions of old backups (`lowSpaceBackupDeletion`, A1167 slice 2) take the turn through
@@ -3143,23 +3144,20 @@ watch's deletions of old backups (`lowSpaceBackupDeletion`, A1167 slice 2) take 
 turn on its own scratch root; it is outside the guard's `apps/*/src` scan.
 
 **What Box status's Free deletes.** Only what the box can make again: in
-`<stateDir>/backup-staging`, a staged dump (`STAGED_DUMP`, also its `.partial`) and a real folder
+`<stateDir>/scratch/backup`, a staged dump (`STAGED_DUMP`, also its `.partial`) and a real folder
 whose name starts `backup-encrypt-`; in `<logDir>`, rotated logs `waitron.log.<n>` with `n ≥ 2`,
 so the current log and the newest rotated one stay; in `<logDir>/crash-reports`, a
 `holder-frozen-*.json` older than seven days (`CRASH_REPORT_KEEP_MS`). Never the box's spare file
-(see "The box's spare file"). That is the start's forced
-clean-up set (`freeSpaceAtStart`, `apps/server/src/start-space.ts`, whose name rules it reuses)
-minus every restore working folder (`restoreLeftovers`, `apps/server/src/restore-staging-dirs.ts`),
-which it never reads: the running server makes some of them itself while it checks a backup, so only
-a start removes them. Also minus symbolic links: a folder or an entry that is a link is skipped, because `rm` would remove only
-the link and its size is not space freed. Also minus a configured backup folder: a `backup-encrypt-`
+(see "The box's spare file"). The running deletion never touches other scratch working folders: only a start empties scratch.
+It also skips symbolic links: a folder or an entry that is a link is skipped, because `rm` would remove only
+the link and its size is not space freed. It also skips a configured backup folder: a `backup-encrypt-`
 folder that is a `local-fs` backup destination's folder, or holds one, is skipped. The destinations
 are read from the backup supervisor (`current()`) at every survey and every press, and compared both
 as written and by real path (`realpath` of the deepest folder that exists), because a destination,
 or the state folder, can be reached through a link. The path `lstat` judges is the path `rm` removes, and the
 log folder is passed through `resolve()` first, which drops a trailing separator: a trailing
 separator makes `lstat` describe a link's target, and `rm` of `link/` deleted the target's
-files (the slice plan's M4). The staging folder is `join(stateDir, "backup-staging")`, which never
+files (the slice plan's M4). The staging folder is `join(stateDir, BACKUP_STAGING_DIR)`, which never
 ends in a separator. The page's figure is the same set
 summed without deleting (`surveyLeftovers`); a press runs `deleteLeftovers` through
 `createSpaceFreer`, one at a time, and empties the disk-usage walk's cache afterwards
@@ -3372,16 +3370,13 @@ nothing checks that a new entry point names itself. `waitron-break-glass` and `w
 open the folder with `exclusive: false`, so they take no lock and write no holder file. A holder that
 dies leaves its file behind; the next holder overwrites it.
 
-**Every start takes the venue lock before it deletes backup staging; the holder file decides only
-when the lock cannot be taken.** Whatever the free space, a start through the box's entry point
-(`runEntry`, `apps/server/src/node-entry.ts`; a direct `dist/server.js` start runs none of this
-clean-up, except that boot itself removes the restore working folders, `clearRestoreLeftovers` in
-`apps/server/src/boot.ts`) deletes the copies a backup run leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
-`lockVenue` is refused `provisioning.database_in_use`; it deletes under the hold and releases it.
-The same section deletes every restore working folder (`restoreLeftovers`,
-`apps/server/src/restore-staging-dirs.ts`): `<state>/restore-staging/staged-recovery` whole, the
-`stream-restore-` and `restore-entry-` folders in `<state>`, and the `archive-download-`,
-`archive-validate-` and `restore-admission-` folders in `<state>/restore-staging`. The staged-recovery
+**Every start empties scratch under the venue lock; the holder note decides only when taking
+that lock fails for another reason.** `freeSpaceAtStart` in the box's entry and `emptyScratch` in
+`bootServer` delete every entry in `<state>/scratch/`, keeping the root. Backup staging is
+`scratch/backup`; restore staging is `scratch/restore`. Stream restores, staged-restore entries,
+setup holdings copies and node copies also live below scratch. The root is never followed when
+it is a symbolic link. Both sweeps run before this process starts its backup supervisor.
+The staged-recovery
 folder is where the setup wizard's recovery step (`stage` in `createSetupRecoveryPreparation`,
 `apps/server/src/recovery-preparation.ts`) keeps the uploaded backup it is checking as a decrypted
 venue database, with a working copy of it, one backup at a time: staging another deletes the one it
@@ -3397,7 +3392,7 @@ box, only the server runs a backup (`BackupSupervisor`, started in
 `apps/server/src/boot.ts` after its store has taken the lock), so while a backup is writing
 staging, the start is refused. With no venue folder it deletes without the lock, because taking it
 creates the folder. Each maker above creates the venue folder before its first working folder, so
-the start lists the restore folders first and deletes them only if the venue folder is still missing
+the start lists scratch entries first and deletes them only if the venue folder is still missing
 after the listing; the case "keeps the working folder of a restore that makes the venue folder after
 the start found none" in `apps/server/src/start-space.test.ts` holds that order.
 Measured 2026-10-21, Node v26.11.1, macOS, on the 32 MiB HFS+ image `apps/server/src/testing/full-disk.ts`
@@ -3722,7 +3717,7 @@ backlog holds that). (2026-11-04, A1131bc slice 4: the emptying is deleted; the 
 the start's lock.)
 
 **Why no lock is taken to delete or write it.** It is in neither a venue folder nor
-`<state>/backup-staging`, and a lock taken to delete it would need the room it exists to give. A
+`<state>/scratch/backup`, and a lock taken to delete it would need the room it exists to give. A
 release is an `unlink` that treats `ENOENT` as done; a top-up appends only while the file is short of
 the cap and opens with `O_NOFOLLOW`, leaving anything that is not a regular file alone
 (`storage.spare_unusable`). The lock rule itself is unchanged: the start still takes the venue lock; the
@@ -5305,7 +5300,7 @@ is `makeRoom` and `foldersOnDisk` in `apps/server/src/backup-room.ts`, called fr
 the cases are `backup-room.test.ts`, the backup-sweep suites, `low-space-backups.test.ts`,
 `free-space-watch.test.ts` and the real-disk file `backup-room.e2e.test.ts`.
 
-**The need.** "The disk" is the one holding the run's working folder (`<state>/backup-staging`),
+**The need.** "The disk" is the one holding the run's working folder (`<state>/scratch/backup`),
 where the run reads free space. Before the copy the run needs twice the database file's size (the
 working copy and its encrypted file) plus the database file's size once for each local backup
 destination on that disk, because each folder copy writes a whole working copy before its rename
@@ -5433,6 +5428,15 @@ full disk the database may not open: on HFS+ the store's open failed at 0 B and 
 read-only open of a cleanly stopped database failed there and worked at 64 KiB.
 
 ## One state-folder layout
+
+Working copies live below `scratch/`, with `backup/` and `restore/` children. A start deletes
+scratch entries, never the root itself. Each maker holds the venue folder before creating its
+working directory; Box status's Free still touches only backup dumps and `backup-encrypt-*`
+folders, inside the staging turn. Old crash reports are pruned on every start.
+
+The owner ran fl2's disk comparison on the box (watcher, 2026-11-10 17:58): five copies each
+reported `/tmp` 1581, 453, 232, 165, 253 ms and state 1241, 314, 183, 151, 168 ms. Medians were
+232 and 183 ms. Both ran under amd64 emulation on arm64; these are not native box timings.
 
 `packages/store/src/state-layout.ts` declares the box's top-level state names and each entry's
 plain-reset fate. Only `tls/` and `records/` are kept. On a box that joined another, a plain reset keeps the `tls/`
@@ -5594,7 +5598,7 @@ Cost: a full disk read as `cannot rollback`, and a statement after it committed 
 
 Cost: a database refused on a nearly full disk was recorded `unknown`.
 
-### Anything that writes or deletes in `<state>/backup-staging` does it inside the staging turn
+### Anything that writes or deletes in `<state>/scratch/backup` does it inside the staging turn
 
 Cost: deleting a dump a run reads frees nothing until the run closes it (A798-B slice 7 plan, M3).
 

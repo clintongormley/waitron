@@ -293,7 +293,8 @@ import { stageResetRequest } from "./reset-request.js";
 import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { boundObjectStore } from "./bounded-store.js";
 import { validateArtifact } from "./restore.js";
-import { RESTORE_STAGING_DIR, clearRestoreLeftovers } from "./restore-staging-dirs.js";
+import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
+import { emptyScratch } from "./scratch.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
 import { errnoOf } from "./errno.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
@@ -1178,7 +1179,7 @@ async function bootServer(
     }
     // Only once this process holds the venue folder: a second process must not delete a running
     // process's restore working folders.
-    await clearRestoreLeftovers(config.stateDir, log);
+    await emptyScratch(config.stateDir, log);
     await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
     await assertDeploymentMatches(
       stampProbe.venue,

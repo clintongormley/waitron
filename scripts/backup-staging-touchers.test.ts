@@ -1,11 +1,13 @@
 /**
- * Only the files the CLAUDE.md rule names touch `<state>/backup-staging`: the start's clean-up,
+ * Only the files the CLAUDE.md rule names touch `<state>/scratch/backup`: the start's clean-up,
  * which runs before any backup run exists, the backup supervisor, which hands the folder to the
  * sweep whose runs take the staging turn, and the free-space deletion, inside `ifNoBackup`.
  *
  * Weaker than its name: it reads TEXT — a non-test `.ts` file under `apps/<app>/src` or
- * `packages/<package>/src` naming `BACKUP_STAGING_DIR` or the literal `"backup-staging"` — so a
+ * `packages/<package>/src` naming `BACKUP_STAGING_DIR` or the literal `"scratch/backup"` — so a
  * path built another way escapes it, and it never checks that a listed file takes the turn.
+ * The start's sweeps in freeSpaceAtStart and bootServer empty scratch before the supervisor runs;
+ * they reach scratch/backup through SCRATCH_DIR, which this guard does not see.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -50,7 +52,7 @@ function srcRoots(): string[] {
 test("only the allowed files name backup staging", () => {
   const touchers = srcRoots()
     .flatMap(sourceFilesIn)
-    .filter((file) => /\bBACKUP_STAGING_DIR\b|"backup-staging"/.test(readFileSync(file, "utf8")))
+    .filter((file) => /\bBACKUP_STAGING_DIR\b|"scratch\/backup"/.test(readFileSync(file, "utf8")))
     .map((file) => relative(ROOT, file))
     .sort();
   expect(touchers).toEqual(ALLOWED);

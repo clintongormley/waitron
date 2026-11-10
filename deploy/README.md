@@ -332,28 +332,16 @@ Never edit rows in the database to repair it.
 
 #### When the page names `storage.disk_full`
 
-The box's disk is full, so Waitron cannot save anything. Before it opens its database, every start,
-whatever the free space, deletes the database copy and encrypted copy a backup run that was cut off
-left in `backup-staging` in the state folder, found by the names a backup run gives them. It keeps
-them while another process, such as a running server, holds the database folder. When the start
-cannot find that out, as on a disk with no room left for the note it writes while it holds the
-folder, it keeps them while that folder's holder note shows a heartbeat less than 30 seconds old.
-In the same step it deletes `restore-staging/staged-recovery` in the state folder, where the setup
-wizard keeps a backup uploaded for checking, and the working folders a restore that was cut off
-left: `stream-restore-*` and `restore-entry-*` in the state folder, and `archive-download-*`,
-`archive-validate-*` and `restore-admission-*` in `restore-staging`.
+The box's disk is full, so Waitron cannot save anything. Every start empties `scratch/` in the
+state folder, where backups, restores and setup checks keep their working copies. It leaves them
+while another process holds the venue folder. If taking that lock fails for another reason, it
+keeps them while the holder note shows a heartbeat less than 30 seconds old.
 
-Every start also deletes, when the state folder or the database's folder has under 256 MiB free:
-
-- rotated log files except the newest (`waitron.log.2` and later; `waitron.log` and `waitron.log.1`
-  stay);
-- crash reports in the `logs` volume's `crash-reports` folder that are more than a week old.
-
-It deletes nothing else apart from old backups and the spare file, both below: never the database,
-the lock files or `recovery.json`, and no finished backup other than those old ones, even one whose
-local backup folder was set inside `backup-staging`. If `logs`, its `crash-reports`
-folder, `backup-staging` or `restore-staging` is a symbolic link, the start leaves it and what it
-points at alone.
+Every start also deletes crash reports more than a week old from `logs/crash-reports`. When the
+state folder or database folder has under 256 MiB free, it deletes rotated logs except the newest
+(`waitron.log.2` and later; `waitron.log` and `waitron.log.1` stay). It can also remove old backups
+and release the spare file, as described below. It never deletes the database, lock files or
+`recovery.json`. If `logs`, `crash-reports` or `scratch` is a symbolic link, the start skips it.
 
 If that frees enough, the box starts as usual. If the start still cannot write, the page appears at
 once, without counting the start, and says "The box has deleted the temporary copies, old logs and
@@ -686,8 +674,8 @@ command against it treat that entrypoint differently:
   before it downloads, decrypts or changes anything. A restore holds the venue folder from then
   until it ends, so the server cannot start while one runs. On a box with no venue folder yet, a
   restore makes an empty one first, holding only its lock file `venue.lock`, and leaves it there
-  even when it is then refused. A run makes its own working folders (`stream-restore-` at the top
-  of the `state` volume or, inside its `restore-staging` folder, `archive-download-`,
+  even when it is then refused. A run makes its own working folders (`stream-restore-` inside
+  `state/scratch/` or, inside `state/scratch/restore/`, `archive-download-`,
   `archive-validate-` or `restore-admission-`, each followed by six random characters) and removes
   them when it ends. A run that is killed leaves them, holding a full copy of the venue's database
   or the encrypted archive, and the next server start removes them. Beside the secrets in the

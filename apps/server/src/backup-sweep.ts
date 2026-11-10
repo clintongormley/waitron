@@ -1,6 +1,6 @@
+import { SCRATCH_DIR } from "@waitron/store";
 import { chmod, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import type { Database, NodeDatabase } from "@waitron/db";
 import type { ClockStep } from "@waitron/fiscal";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
@@ -70,7 +70,7 @@ export interface BackupSweepDeps {
   backends: StorageBackend[];
   /** Read only for the manifest; the copy goes through {@link BackupSweepDeps.archive}. */
   db: Database;
-  /** Read for the manifest, and copied whole as the archive's `node.dump` through the OS temp folder. */
+  /** Read for the manifest, and copied whole as the archive's `node.dump` through the state folder's scratch root. */
   node: NodeDatabase;
   modules: readonly WaitronModule[];
   environment: DeploymentEnvironment;
@@ -221,7 +221,7 @@ export async function runOnce(
           resolvers: deps.resolvers,
           // Outside staging: tens of KB that staging's space accounting gains nothing from, and
           // nothing under staging may be removed while a transfer still reads it.
-          snapshotNode: snapshotNodeDatabase(deps.node, tmpdir()),
+          snapshotNode: snapshotNodeDatabase(deps.node, join(deps.stateDir, SCRATCH_DIR)),
         },
         budget,
       ),

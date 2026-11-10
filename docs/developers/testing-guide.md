@@ -1648,15 +1648,15 @@ staged-copies case below: `Tests  17 passed (17)`. Rerun 2026-10-25 on the A1042
 the full-disk page's words quoted below are the ones that run asserted.
 
 - A start whose leftovers free enough deletes rotated logs `waitron.log.2` to `.5`, a crash report
-  eight days old and a 2 MiB file in `backup-staging`, keeps `waitron.log.1`, counts itself and
+  eight days old and a 2 MiB file in `scratch/backup`, keeps `waitron.log.1`, counts itself and
   boots. `recovery.lock` and `venue.lock` keep their inodes.
 - A start whose staged recovery copies fill the disk frees them and boots: a 4 MiB `venue.db` and a
-  sidecar file under `restore-staging/staged-recovery/upload-1`, then the filler.
+  sidecar file under `scratch/restore/staged-recovery/upload-1`, then the filler.
   `pnpm --filter @waitron/server exec vitest run src/start-full-disk.e2e.test.ts -t staged`. Before
   `freeSpaceAtStart` deleted that folder the box stuck: `serveRecovery` was called once and
   `startServer` never (`Tests  1 failed | 16 skipped (17)`). Now `startServer` is called once,
-  `staged-recovery` and `restore-staging`'s `archive-download-x` folder are gone, and
-  `restore-staging` stays.
+  `staged-recovery` and `scratch/restore`'s `archive-download-x` folder are gone, and
+  `scratch` stays.
 - A start with nothing to delete and no spare file serves the recovery page at once: over HTTPS, trusting the box's
   own CA, `GET /` answered 200 with the full-disk title, the sentence "The box has deleted the
   temporary copies, old logs and crash reports it can make again, and the disk is still full." and

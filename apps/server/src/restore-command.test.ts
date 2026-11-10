@@ -157,7 +157,7 @@ describe("waitron-restore restore", () => {
     expect(received?.recoveryKey).toBe(RECOVERY_KEY);
     expect(received?.venueDir).toBe(join(DEFAULT_STATE_ROOT, "venue"));
     expect(received?.stateDir).toBe(DEFAULT_STATE_ROOT);
-    expect(received?.stagingDir).toBe(join(DEFAULT_STATE_ROOT, "restore-staging"));
+    expect(received?.stagingDir).toBe(join(DEFAULT_STATE_ROOT, "scratch/restore"));
     expect(received?.migrationsRoot).toBe(DEFAULT_MIGRATIONS_ROOT);
     expect(received?.modules).toBe(ALL_MODULES);
     expect(received?.environment).toBe("preproduction");
@@ -241,7 +241,7 @@ describe("waitron-restore restore", () => {
     expect(code).toBe(0);
     expect(received?.stateDir).toBe(resolve(stateDir));
     expect(received?.venueDir).toBe(join(resolve(stateDir), "venue"));
-    expect(received?.stagingDir).toBe(join(resolve(stateDir), "restore-staging"));
+    expect(received?.stagingDir).toBe(join(resolve(stateDir), "scratch/restore"));
     expect(received?.migrationsRoot).toBe("/custom/migrations");
     expect(received?.environment).toBe("production");
   });
@@ -507,7 +507,7 @@ describe("waitron-restore restore --from-bucket", () => {
       environment: "preproduction",
       stateDir: resolve(dir),
       venueDir: join(resolve(dir), "venue"),
-      stagingDir: join(resolve(dir), "restore-staging"),
+      stagingDir: join(resolve(dir), "scratch/restore"),
       migrationsRoot: DEFAULT_MIGRATIONS_ROOT,
       modules: ALL_MODULES,
       litestreamBin: "/opt/litestream",

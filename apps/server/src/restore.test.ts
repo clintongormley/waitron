@@ -426,7 +426,7 @@ setInterval(() => db, 1000);`;
   it("creates its own destination roots (staging/state/venue) when they do not yet exist", async () => {
     // Both protected roots must exist before their first path guard runs, and the venue directory
     // before the database is placed in it.
-    const newStaging = join(stagingDir, "restore-staging");
+    const newStaging = join(stagingDir, "scratch/restore");
     const newState = join(stateDir, "state-store");
     const newVenue = join(venueDir, "nested", "venue");
     await restoreFromArtifact(

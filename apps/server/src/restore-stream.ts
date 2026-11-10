@@ -7,7 +7,7 @@ import { openVenueDatabase, readVenue, tenants, type VenueDatabase } from "@wait
 import { manifestSets } from "@waitron/migrations";
 import { assertNotAhead } from "@waitron/provisioning";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
-import { VENUE_FILE } from "@waitron/store";
+import { SCRATCH_DIR, VENUE_FILE } from "@waitron/store";
 import {
   PROBE_PREFIX,
   bucketClockOffset,
@@ -199,8 +199,9 @@ export async function refuseIfArchiveSourceLive(args: {
 }
 
 async function scratchFolder(stateDir: string, prefix: string): Promise<string> {
-  await mkdir(stateDir, { recursive: true, mode: 0o700 });
-  return mkdtemp(join(stateDir, prefix));
+  const parent = join(stateDir, SCRATCH_DIR);
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  return mkdtemp(join(parent, prefix));
 }
 
 async function readRestoredVenue(store: VenueDatabase, nodeId: string): Promise<RestoredVenue> {

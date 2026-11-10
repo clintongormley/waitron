@@ -58,7 +58,7 @@ async function runCase(small: SmallDisk, name: string, c: Case) {
     const stateDir = join(root, "state");
     await mkdir(join(stateDir, "tls"), { recursive: true });
     for (const rel of RECOVERY_FILES) await writeFile(join(stateDir, rel), `${rel}-x`);
-    const stagingDir = join(stateDir, "backup-staging");
+    const stagingDir = join(stateDir, "scratch/backup");
     const backupDir = join(root, "backups");
     await mkdir(backupDir);
     for (const [key, size] of c.existing) await writeFile(join(backupDir, key), randomBytes(size));

@@ -16,8 +16,8 @@ export const RESET_REQUEST_FILE = "reset-request.json";
 export const PENDING_ADOPTION_FILE = "pending-adoption.json";
 export const RECOVERY_LOCK_FILE = "recovery.lock";
 export const SCRATCH_DIR = "scratch";
-export const RESTORE_STAGING_DIR = "restore-staging";
-export const BACKUP_STAGING_DIR = "backup-staging";
+export const RESTORE_STAGING_DIR = "scratch/restore";
+export const BACKUP_STAGING_DIR = "scratch/backup";
 export const STREAM_RESTORE_PREFIX = "stream-restore-";
 export const RESTORE_ENTRY_PREFIX = "restore-entry-";
 export const START_AGAIN_GUESSES_FILE = "first-setup-start-again-guesses.json";
@@ -112,25 +112,7 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     reset: "deleted",
     why: "Serialises recovery operations.",
   },
-  {
-    name: RESTORE_STAGING_DIR,
-    kind: "folder",
-    reset: "deleted",
-    why: "Temporary restored database copies.",
-  },
-  { name: BACKUP_STAGING_DIR, kind: "folder", reset: "deleted", why: "Temporary backup copies." },
-  {
-    name: STREAM_RESTORE_PREFIX,
-    kind: "prefix",
-    reset: "deleted",
-    why: "Temporary stream restore copies.",
-  },
-  {
-    name: RESTORE_ENTRY_PREFIX,
-    kind: "prefix",
-    reset: "deleted",
-    why: "Temporary restore entry copies.",
-  },
+  { name: SCRATCH_DIR, kind: "folder", reset: "deleted", why: "Temporary working copies." },
   {
     name: START_AGAIN_GUESSES_FILE,
     kind: "file",

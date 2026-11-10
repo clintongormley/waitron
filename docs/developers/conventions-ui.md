@@ -1203,12 +1203,12 @@ that holds a name: "Missing triggers:" and "Changed triggers:". `/recovery-api/s
 
 **A full disk at start** (A798-B slice 2). Every start through the box's entry point (`runEntry`,
 `apps/server/src/node-entry.ts`; a direct `dist/server.js` start runs none of this, except that
-boot itself removes the restore working folders, `clearRestoreLeftovers` in `apps/server/src/boot.ts`)
-deletes the copies a cut-off backup run left in backup staging, and the working folders a killed restore or backup check left (`restoreLeftovers`, `apps/server/src/restore-staging-dirs.ts`, which names them),
+boot itself empties scratch through `emptyScratch` in `apps/server/src/boot.ts`)
+empties `<state>/scratch/`, including copies left by a killed backup, restore or setup check,
 unless another process holds the venue folder's lock (the heartbeat fallback is in
-conventions-data.md, "Every start takes the venue lock"); one that
-finds under 256 MiB free also deletes rotated logs but the newest and crash reports older than a
-week (`apps/server/src/start-space.ts`). Then, under 8 MiB free (16 MiB after a start that failed on a full disk), it deletes the box's spare file (conventions-data.md, "The box's spare file"). If it is still below the 256 MiB floor, and it cannot write its count back unchanged
+conventions-data.md, "Every start empties scratch"). Every start deletes crash reports older
+than a week; below 256 MiB free it also deletes rotated logs but the newest
+(`apps/server/src/start-space.ts`). Then, under 8 MiB free (16 MiB after a start that failed on a full disk), it deletes the box's spare file (conventions-data.md, "The box's spare file"). If it is still below the 256 MiB floor, and it cannot write its count back unchanged
 because the disk is full, it serves the page AT ONCE under `storage.disk_full`, and writes nothing.
 The count was not raised, so where the page would say "Failed N times." it says "Level: recovery. This start was not counted: the
 disk is full." («Nivel: recovery. Este arranque no se ha contado: el disco está lleno.»). The

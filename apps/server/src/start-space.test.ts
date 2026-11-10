@@ -94,7 +94,7 @@ function deps(over: Partial<StartSpaceDeps> & { free?: number }): {
 }
 
 const rotated = (n: number) => join(logDir, `waitron.log.${n}`);
-const staging = () => join(stateDir, "backup-staging", "waitron-20261020T000000Z.dump");
+const staging = () => join(stateDir, "scratch/backup", "waitron-20261020T000000Z.dump");
 
 /** Another process holds the venue folder's lock until the case ends. */
 async function heldElsewhere(): Promise<void> {
@@ -126,7 +126,6 @@ describe("freeSpaceAtStart", () => {
       join(stateDir, "recovery.json"),
       join(stateDir, "recovery.lock"),
       join(venueDir, "venue.db"),
-      join(stateDir, "restore-staging", "x"),
     ];
     const gone = [
       rotated(2),
@@ -134,7 +133,8 @@ describe("freeSpaceAtStart", () => {
       rotated(12),
       join(logDir, "crash-reports", "holder-frozen-a.json"),
       staging(),
-      join(stateDir, "backup-staging", "backup-encrypt-x", "artifact"),
+      join(stateDir, "scratch/restore", "x"),
+      join(stateDir, "scratch/backup", "backup-encrypt-x", "artifact"),
     ];
     for (const path of [...kept, ...gone]) await touch(path);
     await writeFile(join(venueDir, "venue.lock"), "");
@@ -148,7 +148,7 @@ describe("freeSpaceAtStart", () => {
     const result = await freeSpaceAtStart(d);
 
     for (const path of gone) expect(existsSync(path), path).toBe(false);
-    expect(existsSync(join(stateDir, "backup-staging", "backup-encrypt-x"))).toBe(false);
+    expect(existsSync(join(stateDir, "scratch/backup", "backup-encrypt-x"))).toBe(false);
     for (const path of [...kept, join(venueDir, "venue.lock")])
       expect(existsSync(path), path).toBe(true);
     expect(result).toEqual({ freeBytes: 700, belowFloor: true });
@@ -340,13 +340,14 @@ describe("freeSpaceAtStart", () => {
   });
 
   describe("at or above the floor, or with no free-space reading", () => {
-    const encryptFolder = () => join(stateDir, "backup-staging", "backup-encrypt-x");
+    const encryptFolder = () => join(stateDir, "scratch/backup", "backup-encrypt-x");
 
-    it("deletes backup staging, and keeps rotated logs and old crash reports", async () => {
+    it("deletes scratch and old crash reports, and keeps rotated logs", async () => {
       await touch(staging());
       await touch(join(encryptFolder(), "artifact"));
       await touch(rotated(2));
       await touch(join(logDir, "crash-reports", "holder-frozen-a.json"), 8 * DAY_MS);
+      await touch(join(logDir, "crash-reports", "holder-frozen-recent.json"), 6 * DAY_MS);
       const { deps: d, log } = deps({ free: 5000 });
 
       expect(await freeSpaceAtStart(d)).toEqual({ freeBytes: 5000, belowFloor: false });
@@ -354,7 +355,8 @@ describe("freeSpaceAtStart", () => {
       expect(existsSync(staging())).toBe(false);
       expect(existsSync(encryptFolder())).toBe(false);
       expect(existsSync(rotated(2))).toBe(true);
-      expect(existsSync(join(logDir, "crash-reports", "holder-frozen-a.json"))).toBe(true);
+      expect(existsSync(join(logDir, "crash-reports", "holder-frozen-a.json"))).toBe(false);
+      expect(existsSync(join(logDir, "crash-reports", "holder-frozen-recent.json"))).toBe(true);
       expect(log.mock.calls).toEqual([["info", "storage.start_leftovers_deleted", { deleted: 2 }]]);
     });
 
@@ -396,7 +398,7 @@ describe("freeSpaceAtStart", () => {
   });
 
   describe("staged recovery copies", () => {
-    const restoreStaging = () => join(stateDir, "restore-staging");
+    const restoreStaging = () => join(stateDir, "scratch/restore");
     const stagedCopy = () => join(restoreStaging(), "staged-recovery", "upload-1", "venue.db");
     const download = () => join(restoreStaging(), "archive-download-x", "part");
 
@@ -412,8 +414,8 @@ describe("freeSpaceAtStart", () => {
       await freeSpaceAtStart(d);
       expect(existsSync(join(restoreStaging(), "staged-recovery"))).toBe(false);
       expect(existsSync(dirname(download()))).toBe(false);
-      expect(existsSync(restoreStaging())).toBe(true);
-      expect(log.mock.calls).toEqual([["info", "storage.start_leftovers_deleted", { deleted: 2 }]]);
+      expect(existsSync(restoreStaging())).toBe(false);
+      expect(log.mock.calls).toEqual([["info", "storage.start_leftovers_deleted", { deleted: 1 }]]);
     });
 
     it("deletes the staged folder whole and the restore's other working folders, below the floor", async () => {
@@ -425,13 +427,13 @@ describe("freeSpaceAtStart", () => {
       expect(log).toHaveBeenCalledWith(
         "warn",
         "storage.start_space_low",
-        expect.objectContaining({ deleted: 2 }),
+        expect.objectContaining({ deleted: 1 }),
       );
     });
 
     it("deletes the working folders a restore leaves in the state folder", async () => {
-      const stream = join(stateDir, "stream-restore-a1", "venue.db");
-      const entry = join(stateDir, "restore-entry-b2", "trading.env");
+      const stream = join(stateDir, "scratch", "stream-restore-a1", "venue.db");
+      const entry = join(stateDir, "scratch", "restore-entry-b2", "trading.env");
       await touch(stream);
       await touch(entry);
       const { deps: d, log } = deps({ free: 5000 });
@@ -456,8 +458,8 @@ describe("freeSpaceAtStart", () => {
       const others = [
         join(restoreStaging(), "archive-validate-d4", "venue.db"),
         join(restoreStaging(), "restore-admission-e5", "venue.db"),
-        join(stateDir, "stream-restore-a1", "venue.db"),
-        join(stateDir, "restore-entry-b2", "trading.env"),
+        join(stateDir, "scratch", "stream-restore-a1", "venue.db"),
+        join(stateDir, "scratch", "restore-entry-b2", "trading.env"),
       ];
       for (const path of others) await touch(path);
       await heldElsewhere();
@@ -542,12 +544,12 @@ describe("freeSpaceAtStart", () => {
       const elsewhere = join(root, "elsewhere-restore");
       await touch(join(elsewhere, "staged-recovery", "upload-1", "venue.db"));
       await mkdir(stateDir, { recursive: true });
-      await symlink(elsewhere, restoreStaging());
+      await symlink(elsewhere, join(stateDir, "scratch"));
       const { deps: d, log } = deps({ free: 5000 });
       await freeSpaceAtStart(d);
       expect(existsSync(join(elsewhere, "staged-recovery", "upload-1", "venue.db"))).toBe(true);
       expect(log.mock.calls).toEqual([
-        ["warn", "storage.start_cleanup_skipped", { folder: "restore-staging" }],
+        ["warn", "storage.start_cleanup_skipped", { folder: "scratch" }],
       ]);
     });
   });
@@ -618,15 +620,14 @@ describe("freeSpaceAtStart", () => {
     expect(log).toHaveBeenCalledWith("warn", "storage.start_cleanup_failed", { errno: "ENOTDIR" });
   });
 
-  it("deletes only the names a backup run makes in backup staging", async () => {
-    const stagingDir = join(stateDir, "backup-staging");
+  it("empties scratch including files with unrelated names", async () => {
+    const stagingDir = join(stateDir, "scratch/backup");
     const dump = join(stagingDir, dumpFileName(new Date("2026-10-20T03:04:05Z")));
     await touch(dump);
     await touch(`${dump}.partial`);
     const encrypt = await mkdtemp(join(stagingDir, "backup-encrypt-"));
     await touch(join(encrypt, "artifact"));
-    const kept = [
-      // A local backup folder or a venue folder an operator set inside staging.
+    const otherEntries = [
       join(
         stagingDir,
         "retained",
@@ -638,18 +639,18 @@ describe("freeSpaceAtStart", () => {
       join(stagingDir, "notes.txt"),
       join(stagingDir, `${dumpFileName(NOW)}.bak`),
     ];
-    for (const path of kept) await touch(path);
+    for (const path of otherEntries) await touch(path);
 
     const { deps: d, log } = deps({});
     await freeSpaceAtStart(d);
 
     for (const path of [dump, `${dump}.partial`, encrypt])
       expect(existsSync(path), path).toBe(false);
-    for (const path of kept) expect(existsSync(path), path).toBe(true);
+    for (const path of otherEntries) expect(existsSync(path), path).toBe(false);
     expect(log).toHaveBeenCalledWith(
       "warn",
       "storage.start_space_low",
-      expect.objectContaining({ deleted: 3 }),
+      expect.objectContaining({ deleted: 1 }),
     );
   });
 
@@ -658,7 +659,7 @@ describe("freeSpaceAtStart", () => {
     const dump = dumpFileName(new Date("2026-10-20T00:00:00Z"));
     await touch(join(elsewhere, "staging", dump));
     await touch(join(elsewhere, "crash", "holder-frozen-a.json"), 8 * DAY_MS);
-    await symlink(join(elsewhere, "staging"), join(stateDir, "backup-staging"));
+    await symlink(join(elsewhere, "staging"), join(stateDir, "scratch"));
     await symlink(join(elsewhere, "crash"), join(logDir, "crash-reports"));
     await touch(rotated(2));
 
@@ -669,7 +670,7 @@ describe("freeSpaceAtStart", () => {
     expect(existsSync(join(elsewhere, "crash", "holder-frozen-a.json"))).toBe(true);
     expect(existsSync(rotated(2))).toBe(false);
     expect(log).toHaveBeenCalledWith("warn", "storage.start_cleanup_skipped", {
-      folder: "backup-staging",
+      folder: "scratch",
     });
     expect(log).toHaveBeenCalledWith("warn", "storage.start_cleanup_skipped", {
       folder: "crash-reports",

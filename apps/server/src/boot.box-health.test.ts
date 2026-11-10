@@ -198,7 +198,7 @@ describe("the running server's Box status read and free-space deletion", () => {
     expect((await box.get()).disk.reclaimable.backupRunning).toBe(false);
 
     // The state folder: a press during a backup run must leave that run's dump alone.
-    const stagingDir = join(dirname(box.logDir), "backup-staging");
+    const stagingDir = join(dirname(box.logDir), "scratch/backup");
     await mkdir(stagingDir, { recursive: true });
     const dump = join(stagingDir, "waitron-20261022T100000Z.dump");
     await writeFile(dump, Buffer.alloc(700, 1));
@@ -250,13 +250,9 @@ describe("the running server's Box status read and free-space deletion", () => {
     let archive = "";
     let other = "";
     const box = await start(undefined, async (scratch) => {
-      const destination = join(scratch, "backup-staging", "backup-encrypt-local");
+      const destination = join(scratch, "scratch/backup", "backup-encrypt-local");
       archive = join(destination, backupArchiveKey(new Date()));
-      other = join(scratch, "backup-staging", "backup-encrypt-other");
-      await mkdir(destination, { recursive: true });
-      await writeFile(archive, Buffer.alloc(800, 1));
-      await mkdir(other);
-      await writeFile(join(other, "artifact"), Buffer.alloc(900, 1));
+      other = join(scratch, "scratch/backup", "backup-encrypt-other");
       return { WAITRON_BACKUP_DIR: destination, WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" };
     });
     // The start's first backup run fails at once (this state folder holds no recovery files);
@@ -271,6 +267,10 @@ describe("the running server's Box status read and free-space deletion", () => {
     const turn = holder.supervisorDeps!.stagingTurn!;
     await vi.waitFor(() => expect(turn.backupRunning()).toBe(false));
 
+    await mkdir(dirname(archive), { recursive: true });
+    await writeFile(archive, Buffer.alloc(800, 1));
+    await mkdir(other);
+    await writeFile(join(other, "artifact"), Buffer.alloc(900, 1));
     const freed = await box.free();
     expect(freed.status).toBe(200);
     expect(await freed.json()).toMatchObject({ backupRunning: false });

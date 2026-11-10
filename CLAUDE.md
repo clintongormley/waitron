@@ -535,15 +535,15 @@ called weaker than its name, the topic file lists what it does not see.
   Never unlink `venue.lock`/`recovery.lock`; change `recovery.json` only through `updateRecoveryState`.
   Guards: `packages/store/src/venue-lock.test.ts` and `apps/server/src/recovery-race.test.ts`, weaker
   than their names: prove the locks, not that every caller takes them.
-- **Anything that writes or deletes in `<state>/backup-staging` does it inside the staging turn**
-  (`apps/server/src/backup-staging-turn.ts`), **except the start's clean-up (`freeSpaceAtStart`),
-  which runs while no backup supervisor is running in this process**. Guard:
+- **Anything that writes or deletes in `<state>/scratch/backup` does it inside the staging turn**
+  (`apps/server/src/backup-staging-turn.ts`), **except the start's sweeps (`freeSpaceAtStart` and `bootServer`'s `emptyScratch`),
+  which run while no backup supervisor is running in this process**. Guard:
   `scripts/backup-staging-touchers.test.ts`, weaker than its name. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#backup-staging-is-touched-only-inside-the-staging-turn).
-- **A restore working folder is made only by a process that holds the venue folder from before it
-  makes it, under a top-level name declared in `packages/store/src/state-layout.ts` or a prefix
-  listed in `apps/server/src/restore-staging-dirs.ts`; `bootServer`
-  removes what that list names once it holds the venue folder.** Nothing guards it.
+- **Every temporary working folder lives in `<state>/scratch/`, made only by a process that holds
+  the venue folder from before it makes it; every start empties `scratch/` once it holds the venue
+  folder (`emptyScratch`).** Nothing guards the first half; `scripts/no-tmpdir-scratch.test.ts`
+  guards production calls of `tmpdir`, weaker than its name: reads text.
   [Detail](docs/developers/conventions-data.md#one-process-per-venue-folder).
 - **An open `FileHandle` ends the process when it is collected, so one a route streams also closes
   on `c.req.raw.signal`'s abort: nothing reads or cancels the body of a connection already gone.**

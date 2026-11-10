@@ -746,8 +746,8 @@ describe("a start on a real full disk", () => {
     writeFileSync(crash, "{}");
     const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
     utimesSync(crash, eightDaysAgo, eightDaysAgo);
-    mkdirSync(join(stateDir, "backup-staging"));
-    const dump = join(stateDir, "backup-staging", dumpFileName(new Date("2026-10-20T00:00:00Z")));
+    mkdirSync(join(stateDir, "scratch/backup"), { recursive: true });
+    const dump = join(stateDir, "scratch/backup", dumpFileName(new Date("2026-10-20T00:00:00Z")));
     writeFileSync(dump, Buffer.alloc(2 * 1024 * 1024, 66));
     const recoveryLock = join(stateDir, "recovery.lock");
     const venueLock = join(stateDir, "venue", "venue.lock");
@@ -826,7 +826,7 @@ describe("a start on a real full disk", () => {
   it("a start whose staged recovery copies fill the disk frees them and boots", async (ctx) => {
     const small = needDisk(ctx);
     const stateDir = await startedBefore(small, "staged");
-    const restoreStaging = join(stateDir, "restore-staging");
+    const restoreStaging = join(stateDir, "scratch/restore");
     const staged = join(restoreStaging, "staged-recovery");
     mkdirSync(join(staged, "upload-1"), { recursive: true });
     writeFileSync(join(staged, "upload-1", "venue.db"), Buffer.alloc(4 * 1024 * 1024, 67));
@@ -843,7 +843,7 @@ describe("a start on a real full disk", () => {
     expect(d.serveRecovery).not.toHaveBeenCalled();
     expect(d.startServer).toHaveBeenCalledTimes(1);
     expect(() => statSync(staged)).toThrow();
-    expect(statSync(restoreStaging).isDirectory()).toBe(true);
+    expect(statSync(join(stateDir, "scratch")).isDirectory()).toBe(true);
     expect(() => statSync(download)).toThrow();
   });
 

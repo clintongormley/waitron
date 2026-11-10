@@ -207,7 +207,7 @@ async function restoreDepsFor(
     artifact: await readFile(artifact),
     recoveryKey: RECOVERY_KEY,
     ...dirs,
-    stagingDir: join(dirs.stateDir, "restore-staging"),
+    stagingDir: join(dirs.stateDir, "scratch/restore"),
     // The OLDER artifact is one migration behind ITS root, not behind the shipped one.
     migrationsRoot: artifact === olderArtifactPath ? olderMigrationsRoot : migrationsRoot,
     modules,
@@ -445,7 +445,7 @@ describe("fiscal restore, end to end", () => {
     } finally {
       await store.close();
     }
-    await expect(stat(join(dirs.stateDir, "restore-staging", "db.dump"))).rejects.toMatchObject({
+    await expect(stat(join(dirs.stateDir, "scratch/restore", "db.dump"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   }, 120_000);
