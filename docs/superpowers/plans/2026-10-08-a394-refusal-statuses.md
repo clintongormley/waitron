@@ -228,8 +228,9 @@ pin today's number are in the part named.
   `/stations/:sid/printers` → 400; `watcher.not_found` on `/printers/:id/watcher` → 400;
   `printer.invalid_config` 422 → 400 (moved to A394-20 on 2026-11-10; it waits on question 4).
 - **Payments (A394-15)** — part 3: `payment.provider_unknown` (body, 2 routes), `reader.not_found`
-  (body, 2 routes) → 400; `reader.not_listed` on adopt 422 → 400; `payment.not_stuck` for an unknown
-  payment 409 → 404.
+  (body, 2 routes) → 400; `reader.not_listed` on adopt 422 → 400 (moved to A394-20 on 2026-11-10; it
+  waits on question 4); `payment.not_stuck` for an unknown payment 409 → 404 (answered since
+  2026-11-10 by a new code, `stuck_payment.not_found`).
 - **Setup (A394-16)** — part 1: `provisioning.foreign_tenant` (provision, adopt),
   `provisioning.second_venue` (adopt), `mirror.environment_mismatch` (adopt) default 400 → 409.
 - **Shift swaps (A394-17)** — parts 2 and 3: `shift.not_found` from the body on
@@ -1384,6 +1385,12 @@ STORED provider (`:421,626`), so a reader whose provider module is switched off 
 `payment.provider_unknown` 404 although the path reader exists. And `/unpair` answers
 `management.request_invalid` `{ field: "providerId" }` 400 (`:628-629`) when the provider cannot unpair,
 though the request has no `providerId` field.
+
+**2026-11-10 (A394-15):** the two `payment.provider_unknown` rows and the two `reader.not_found` rows
+now answer 400, each pair under its own boundary; an unknown id on the stuck resolve now answers a new
+code, `stuck_payment.not_found` 404, and a payment that exists but is not stuck keeps
+`payment.not_stuck` 409. The `reader.not_listed` row, the 422 group, the stored-provider
+`payment.provider_unknown` and `/unpair`'s `management.request_invalid` now sit under A394-20.
 
 ### print-api.ts — boundary `print-api.ts:136` (map `:110-134`)
 

@@ -52,12 +52,8 @@ it("words the office-printer refusals in both languages", () => {
 });
 
 it("words an unknown stuck payment in both languages", () => {
-  expect(codeMessage("stuck_payment.not_found", "en")).toBe(
-    "There is no such stuck payment — the list has been refreshed.",
-  );
-  expect(codeMessage("stuck_payment.not_found", "es")).toBe(
-    "No existe ese cobro pendiente; se ha actualizado la lista.",
-  );
+  expect(codeMessage("stuck_payment.not_found", "en")).toBe("There is no such stuck payment.");
+  expect(codeMessage("stuck_payment.not_found", "es")).toBe("No existe ese cobro pendiente.");
 });
 
 it("resolves a known code to its English copy", () => {

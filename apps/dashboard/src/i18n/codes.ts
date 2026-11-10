@@ -1268,12 +1268,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esas credenciales son de un entorno distinto (prueba o real) al de este local",
   },
   "payment.not_stuck": {
-    en: "This payment is no longer stuck — the list has been refreshed.",
-    es: "Este cobro ya no está pendiente; se ha actualizado la lista.",
+    en: "This payment is no longer stuck.",
+    es: "Este cobro ya no está pendiente.",
   },
   "stuck_payment.not_found": {
-    en: "There is no such stuck payment — the list has been refreshed.",
-    es: "No existe ese cobro pendiente; se ha actualizado la lista.",
+    en: "There is no such stuck payment.",
+    es: "No existe ese cobro pendiente.",
   },
   "payment.hold_not_found": {
     en: "That payment is no longer held.",
