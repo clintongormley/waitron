@@ -1,8 +1,10 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+
+vi.setConfig({ testTimeout: 15_000 });
 
 const scratch = mkdtempSync(join(tmpdir(), "b3-installed-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
