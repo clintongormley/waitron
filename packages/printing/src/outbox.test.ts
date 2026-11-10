@@ -14,7 +14,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { createPrinter, deactivatePrinter } from "./printers.js";
+import { createPrinter, updatePrinter } from "./printers.js";
 import { canResendPrintJob, enqueuePrintJob, resendPrintJob } from "./outbox.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
 type PrintConfig = { locationId: string };
@@ -129,7 +129,7 @@ describe("enqueuePrintJob (never-block outbox)", () => {
       const { jobId } = await enqueuePrintJob(tx, p.id, new Uint8Array([1]));
       expect((await jobRow(tx, jobId)).status).toBe("queued");
 
-      await deactivatePrinter(tx, p.id);
+      await updatePrinter(tx, p.id, { active: false });
       try {
         await enqueuePrintJob(tx, p.id, new Uint8Array([2]));
         return undefined;
@@ -357,7 +357,7 @@ describe("resendPrintJob", () => {
       await expect(resendPrintJob(tx, randomUUID())).rejects.toMatchObject({
         code: "print_job.not_found",
       });
-      await deactivatePrinter(tx, printer.id);
+      await updatePrinter(tx, printer.id, { active: false });
       await expect(resendPrintJob(tx, original.jobId)).rejects.toMatchObject({
         code: "printer.not_found",
       });

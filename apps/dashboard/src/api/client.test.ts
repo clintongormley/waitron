@@ -2392,7 +2392,6 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     const patch = {
       name: "Kitchen 2",
       host: "10.0.0.20",
-      active: true,
     };
     await expect(api.updatePrinter("p1", patch)).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1", {
@@ -2400,16 +2399,6 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(patch),
-    });
-  });
-
-  it("deactivatePrinter POSTs the printer's deactivate route and resolves undefined on an empty 204", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.deactivatePrinter("p1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/deactivate", {
-      method: "POST",
-      credentials: "include",
     });
   });
 

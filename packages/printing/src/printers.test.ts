@@ -13,7 +13,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
-import { createPrinter, deactivatePrinter, listPrinters, updatePrinter } from "./printers.js";
+import { createPrinter, listPrinters, updatePrinter } from "./printers.js";
 import type { PaperWidth } from "./layout.js";
 import type { PrintTransport } from "./printers.js";
 
@@ -97,6 +97,69 @@ async function fullRow(printerId: string): Promise<{
 }
 
 describe("createPrinter", () => {
+  it.each([
+    { transport: "usb" as const, localKey: "RESTORE-USB" },
+    { transport: "bluetooth" as const, localKey: "AA:BB:CC:DD:EE:19" },
+    { transport: "network_tcp" as const, host: "10.0.0.19" },
+    { transport: "cloud_poll" as const, pollId: "restore-poll" },
+  ])("Add restores a retained $transport printer with its saved settings", async (endpoint) => {
+    const cfg = await setup();
+    const { id } = await asTx(cfg, (tx) =>
+      createPrinter(tx, {
+        ...endpoint,
+        name: "Saved printer",
+        paperWidth: "58mm",
+        resolution: "203dpi",
+        hasCashDrawer: true,
+        portable: true,
+        pickupRoles: ["receipt"],
+      }),
+    );
+    for (const deletedAt of [null, "2026-11-10T12:00:00.000Z"]) {
+      await asTx(cfg, (tx) =>
+        tx.update(printers).set({ active: false, deletedAt }).where(eq(printers.id, id)),
+      );
+      const added = await asTx(cfg, (tx) =>
+        createPrinter(tx, { ...endpoint, name: "Scanned name" }),
+      );
+      expect(added.id).toBe(id);
+      const [restored] = await suite.db.select().from(printers).where(eq(printers.id, id));
+      expect(restored).toMatchObject({
+        name: "Saved printer",
+        active: true,
+        deletedAt: null,
+        paperWidth: "58mm",
+        resolution: "203dpi",
+        hasCashDrawer: true,
+        portable: true,
+        pickupRoles: ["receipt"],
+      });
+    }
+  });
+
+  it("restores the latest deleted endpoint, but keeps active network Add as an insertion", async () => {
+    const cfg = await setup();
+    const endpoint = { transport: "network_tcp" as const, host: "10.0.0.29", port: 9200 };
+    const older = await asTx(cfg, (tx) => createPrinter(tx, { ...endpoint, name: "Older" }));
+    const newer = await asTx(cfg, (tx) => createPrinter(tx, { ...endpoint, name: "Newer" }));
+    await asTx(cfg, async (tx) => {
+      await tx
+        .update(printers)
+        .set({ active: false, deletedAt: "2026-11-09T12:00:00.000Z" })
+        .where(eq(printers.id, older.id));
+      await tx
+        .update(printers)
+        .set({ active: false, deletedAt: "2026-11-10T12:00:00.000Z" })
+        .where(eq(printers.id, newer.id));
+    });
+    expect((await asTx(cfg, (tx) => createPrinter(tx, { ...endpoint, name: "Scan" }))).id).toBe(
+      newer.id,
+    );
+    const fresh = await asTx(cfg, (tx) => createPrinter(tx, { ...endpoint, name: "Another" }));
+    expect(fresh.id).not.toBe(newer.id);
+    expect(fresh.id).not.toBe(older.id);
+  });
+
   it("lists printers with no watcherId", async () => {
     const cfg = await setup();
     const kitchen = await seedPrinter(cfg, "Kitchen");
@@ -321,18 +384,20 @@ describe("a deleted printer", () => {
     }
     expect(await asTx(cfg, (tx) => listPrinters(tx))).toEqual([]);
     const disabled = await seedPrinter(cfg, "Disabled control");
-    await asTx(cfg, (tx) => deactivatePrinter(tx, disabled));
+    await asTx(cfg, (tx) => updatePrinter(tx, disabled, { active: false }));
     await asTx(cfg, (tx) => updatePrinter(tx, disabled, { active: true }));
     expect((await asTx(cfg, (tx) => listPrinters(tx))).map((p) => p.id)).toEqual([disabled]);
   });
 
-  it("deactivatePrinter refuses a deleted printer and leaves it unchanged", async () => {
+  it("updatePrinter refuses a deleted printer and leaves it unchanged", async () => {
     const cfg = await setup();
     const id = await seedPrinter(cfg);
     await markDeleted(cfg, id);
-    await expect(asTx(cfg, (tx) => deactivatePrinter(tx, id))).rejects.toMatchObject({
-      code: "printer.not_found",
-    });
+    await expect(asTx(cfg, (tx) => updatePrinter(tx, id, { active: false }))).rejects.toMatchObject(
+      {
+        code: "printer.not_found",
+      },
+    );
     expect((await fullRow(id)).active).toBe(true);
   });
 
@@ -345,24 +410,24 @@ describe("a deleted printer", () => {
     const { id: second } = await asTx(cfg, (tx) =>
       createPrinter(tx, { name: "Old", transport: "usb", localKey: "SN-REUSE" }),
     );
-    expect(second).not.toBe(first);
+    expect(second).toBe(first);
     expect((await asTx(cfg, (tx) => listPrinters(tx))).map((p) => p.id)).toEqual([second]);
   });
 });
 
-describe("deactivatePrinter", () => {
+describe("updatePrinter", () => {
   it("flips active=false (never a delete) and 404s an unknown id", async () => {
     const cfg = await setup();
     const id = await seedPrinter(cfg);
-    await asTx(cfg, (tx) => deactivatePrinter(tx, id));
+    await asTx(cfg, (tx) => updatePrinter(tx, id, { active: false }));
     expect((await fullRow(id)).active).toBe(false);
     const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from printers where id = ${id}`,
     );
     expect(rows[0]!.n).toBe(1);
-    expect(await codeOf(() => asTx(cfg, (tx) => deactivatePrinter(tx, randomUUID())))).toBe(
-      "printer.not_found",
-    );
+    expect(
+      await codeOf(() => asTx(cfg, (tx) => updatePrinter(tx, randomUUID(), { active: false }))),
+    ).toBe("printer.not_found");
   });
 });
 
@@ -381,7 +446,7 @@ describe("listPrinters", () => {
     const cfg = await setup();
     const bId = await seedPrinter(cfg, "Bravo");
     const aId = await seedPrinter(cfg, "Alfa");
-    await asTx(cfg, (tx) => deactivatePrinter(tx, bId));
+    await asTx(cfg, (tx) => updatePrinter(tx, bId, { active: false }));
     const rows = await asTx(cfg, (tx) => listPrinters(tx));
     const mine = rows.filter((r) => r.id === aId || r.id === bId);
     expect(mine.map((r) => r.name)).toEqual(["Alfa", "Bravo"]);

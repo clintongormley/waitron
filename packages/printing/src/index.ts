@@ -2,7 +2,7 @@
 import "./errors.js";
 
 export { authenticateAgent } from "./agent.js";
-export { createPrinter, deactivatePrinter, listPrinters, updatePrinter } from "./printers.js";
+export { createPrinter, listPrinters, updatePrinter } from "./printers.js";
 export type {
   CreatePrinterInput,
   PrinterRow,

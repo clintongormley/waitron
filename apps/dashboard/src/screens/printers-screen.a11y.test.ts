@@ -224,7 +224,6 @@ function stubApi(pairingOpen = false, overrides: Partial<DashboardApi> = {}): Da
     acceptPrintAgentJoinRequest: vi.fn().mockResolvedValue(undefined),
     createPrinter: vi.fn().mockResolvedValue({ id: "p9" }),
     updatePrinter: vi.fn().mockResolvedValue(undefined),
-    deactivatePrinter: vi.fn().mockResolvedValue(undefined),
     testPrinterDrawer: vi.fn().mockResolvedValue({ jobId: "drawer-test" }),
     testPrint: vi.fn().mockResolvedValue({ jobId: "j9", calibrationLocale: "es-ES" }),
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
@@ -517,8 +516,8 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await openDiscovery(el);
     expect(q(el, "[data-test=register-SN-1]")).toBeTruthy();
     expect(q(el, "[data-test=discovered-row-SN-2]")).not.toBeNull();
-    expect(q(el, "[data-test=register-SN-2]")!.textContent).toContain("Habilitar");
-    expect(q(el, "[data-test=printer-last-seen-p3]")).toBeNull();
+    expect(q(el, "[data-test=register-SN-2]")!.textContent).toContain(t("action.add"));
+    expect(q(el, "[data-test=printer-last-seen-p3]")).not.toBeNull();
     expect(q(el, "[data-test='page-printer-10.0.0.56:9100']")).not.toBeNull();
     expect(q(el, "[data-test=new-transport]")).toBeNull();
     await expectNoA11yViolations(host);
@@ -1120,11 +1119,6 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       .shadowRoot!.querySelector<HTMLButtonElement>('[data-key="printers"]')!
       .click();
     await flush(el);
-    const filter = q(el, '[data-test="printers-table"]')!.shadowRoot!.querySelector<HTMLElement>(
-      '[name="status-filter"]',
-    )!;
-    await pickOption(filter, "");
-    await flush(el);
     const forget = q(el, "[data-test=forget-pairing-p4]")!;
     forget.closest("dashboard-row-actions")!.shadowRoot!.querySelector("button")!.click();
     await flush(el);
@@ -1466,11 +1460,6 @@ describe.each(["light", "dark"] as const)("A4 printers in the printers table (%s
       await flush(el);
     }
     if (state === "switched off, in its details") {
-      const filter = q(el, '[data-test="printers-table"]')!.shadowRoot!.querySelector<HTMLElement>(
-        '[name="status-filter"]',
-      )!;
-      await pickOption(filter, "");
-      await flush(el);
       q(el, "[data-test=printer-row-pp3]")!.click();
       await flush(el);
       expect(q(el, "[data-test=page-printer-detail-rediscover]")).not.toBeNull();

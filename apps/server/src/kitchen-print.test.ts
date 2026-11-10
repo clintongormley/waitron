@@ -34,12 +34,7 @@ import {
   updateUnit,
 } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  createPrinter,
-  deactivatePrinter,
-  endDeletedPrinterJobs,
-  updatePrinter,
-} from "@waitron/printing";
+import { createPrinter, updatePrinter, endDeletedPrinterJobs } from "@waitron/printing";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
@@ -215,7 +210,7 @@ describe("paper for a move to another station", () => {
           .from(ticketItems)
           .where(eq(ticketItems.workingOrderId, orderId));
         const before = new Set((await printJobsFor(tx)).map((job) => job.id));
-        if (printerOff) await deactivatePrinter(tx, barPrinter);
+        if (printerOff) await updatePrinter(tx, barPrinter, { active: false });
         await enqueueStationMoved(
           tx,
           cfg,
@@ -601,7 +596,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
       });
       // Deactivated after attaching (attach requires a live printer): `enqueuePrintJob` would throw
       // `printer.not_found` for it, so it must never be handed this id.
-      await deactivatePrinter(tx, pDead);
+      await updatePrinter(tx, pDead, { active: false });
       const steak = await makeProduct(tx, catalogueId, "Ribeye", {
         stationId: kitchenStation.id,
       });

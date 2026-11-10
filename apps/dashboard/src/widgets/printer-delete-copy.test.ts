@@ -30,7 +30,7 @@ describe("a printer's delete dialog copy, in English", () => {
       "Delete printer?",
       "Work that ends",
       "Settings that are removed",
-      "This can't be undone.",
+      "History and printer settings are kept. Assignments and ended work are not restored. Add it again to use it.",
       "Delete",
       "Cancel",
     ]);
@@ -95,7 +95,7 @@ describe("a printer's delete dialog copy, in Spanish", () => {
       "¿Eliminar la impresora?",
       "Trabajo que finaliza",
       "Configuración que se elimina",
-      "Esta acción no se puede deshacer.",
+      "Se conservan el historial y los ajustes de la impresora. Las asignaciones y el trabajo finalizado no se restauran. Para usarla, añádela de nuevo.",
       "Eliminar",
       "Cancelar",
     ]);

@@ -25,12 +25,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import {
-  MAX_DELIVERY_ATTEMPTS,
-  PRINTER_DELETED,
-  deactivatePrinter,
-  updatePrinter,
-} from "@waitron/printing";
+import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED, updatePrinter } from "@waitron/printing";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -860,7 +855,7 @@ describe("deleting a printer", () => {
 
     // What the deactivate route runs.
     await withTransaction(suite.db, async (tx) => {
-      await deactivatePrinter(tx, v.P);
+      await updatePrinter(tx, v.P, { active: false });
       await endDeactivatedInvoicePrintDeliveries(tx, v.P, NOW);
     });
     const after = await snapshot();

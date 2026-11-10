@@ -72,10 +72,9 @@ import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
   createPrinter,
-  deactivatePrinter,
+  updatePrinter,
   MAX_DELIVERY_ATTEMPTS,
   resendPrintJob,
-  updatePrinter,
 } from "@waitron/printing";
 import { NetworkTcpTransport, UsbTransport } from "@waitron/print-agent";
 import {
@@ -316,7 +315,7 @@ async function makePrinter({
             hasCashDrawer,
           },
     );
-    if (!active) await deactivatePrinter(tx, id);
+    if (!active) await updatePrinter(tx, id, { active: false });
     return id;
   });
 }
@@ -3398,7 +3397,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
 
   it("queues no delivery for an automatic original without an active receipt printer", async () => {
     const { cfg, printerId, saleId, ticket } = await issued("auto");
-    await withTransaction(suite.db, (tx) => deactivatePrinter(tx, printerId));
+    await withTransaction(suite.db, (tx) => updatePrinter(tx, printerId, { active: false }));
     await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
     expect(await suite.db.select().from(printJobs)).toEqual([]);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);

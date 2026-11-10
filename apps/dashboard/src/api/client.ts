@@ -1290,6 +1290,7 @@ export interface DiscoveredPrinter {
   /** Bluetooth only: the agent reported the device paired within the list's freshness window. */
   paired?: true;
   bluetoothCommand?: BluetoothCommandStatus;
+  retainedName?: string;
   alreadyRegistered: boolean;
   printerId: string | null;
   lastSeenAt: string;
@@ -1356,7 +1357,6 @@ export interface PrinterPatch {
   hasCashDrawer?: boolean;
   portable?: boolean;
   pickupRoles?: ("receipt" | "payment_slip")[];
-  active?: boolean;
 }
 
 export type PrintPreviewBlock =
@@ -4003,10 +4003,6 @@ export class DashboardApi {
 
   updatePrinter(id: string, patch: PrinterPatch): Promise<void> {
     return this.#request<void>(`/management-api/printers/${id}`, "PATCH", patch);
-  }
-
-  deactivatePrinter(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/printers/${id}/deactivate`, "POST");
   }
 
   getPrinterDeleteImpact(id: string): Promise<DeleteImpact> {

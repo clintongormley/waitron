@@ -656,10 +656,6 @@ export class PrintersScreen extends LitElement {
           this.#disposeCalibrationDraft();
           this.editingPrinter = null;
           this.#closeTest();
-          if (this.#readdingId === editing.id) {
-            this.#readdingId = undefined;
-            void this.#deactivatePrinter(editing.id);
-          }
         }
         this.#resetPrinterSections();
       }
@@ -745,6 +741,10 @@ export class PrintersScreen extends LitElement {
     })) === "proceeded";
 
   #namePrinter(device: DiscoveredPrinter): void {
+    if (device.retainedName !== undefined || this.#disabledPrinter(device)) {
+      void this.#registerDiscovered(device);
+      return;
+    }
     this.#disposePrinterNameDraft();
     this.namingPrinter = device;
     this.formAttempted = false;
@@ -752,6 +752,7 @@ export class PrintersScreen extends LitElement {
     const key = this.#deviceKey(device);
     const name =
       this.discoveredNames[key] ??
+      device.retainedName ??
       this.#disabledPrinter(device)?.name ??
       this.#discoveredLabel(device);
     this.discoveredNames = { ...this.discoveredNames, [key]: name };
@@ -853,16 +854,12 @@ export class PrintersScreen extends LitElement {
     this.#calibrationLeave = undefined;
   }
 
-  #finishCalibration(opening: number, id: string): void {
+  #finishCalibration(opening: number): void {
     if (opening !== this.#calibrationOpening) return;
     this.#disposeCalibrationDraft();
     this.editingPrinter = null;
     this.#closeTest();
     this.#restoreEditFocus();
-    if (this.#readdingId === id) {
-      this.#readdingId = undefined;
-      void this.#deactivatePrinter(id);
-    }
   }
   @state() private editingAgent: PrintAgentRow | null = null;
   #agentScope?: DraftScope<string>;
@@ -1016,7 +1013,6 @@ export class PrintersScreen extends LitElement {
   #editTrigger?: HTMLButtonElement;
   /** A retained printer that Enable switched on so its calibration can print; closing the wizard
    * without saving switches it off again. */
-  #readdingId?: string;
 
   @state() private errorKey: string | null = null;
   /** Printers whose test page request has not answered yet. */
@@ -1094,11 +1090,6 @@ export class PrintersScreen extends LitElement {
     this.#disposePrinterNameDraft();
     this.#disposeAddressDraft();
     this.editingAgent = null;
-    const readding = this.#readdingId;
-    this.#readdingId = undefined;
-    // Not #deactivatePrinter, whose reload would read the lists again for a screen that is gone, and
-    // a gone screen has nowhere to show a refusal.
-    if (readding !== undefined) void this.api.deactivatePrinter(readding).catch(() => undefined);
     this.#endScan();
     this.#stopRenewing();
     this.#stopAgentModal();
@@ -1504,7 +1495,8 @@ export class PrintersScreen extends LitElement {
   #officeRow(device: DiscoveredPrinter): OfficeRow | undefined {
     if (device.office === undefined && device.pagePrinter !== true && device.ippOnly !== true)
       return undefined;
-    if (this.#disabledPrinter(device) !== undefined) return undefined;
+    if (device.retainedName !== undefined || this.#disabledPrinter(device) !== undefined)
+      return undefined;
     const report = device.office;
     if (report === undefined || !device.host)
       return { kind: "refused", reason: "printers.page_printer_no_answer" };
@@ -1602,6 +1594,7 @@ export class PrintersScreen extends LitElement {
     const key = this.#deviceKey(device);
     const name = (
       this.discoveredNames[key] ??
+      device.retainedName ??
       this.#disabledPrinter(device)?.name ??
       this.#discoveredLabel(device)
     ).trim();
@@ -1625,13 +1618,7 @@ export class PrintersScreen extends LitElement {
     try {
       const disabled = this.#disabledPrinter(device);
       let createdId: string;
-      if (disabled) {
-        createdId = disabled.id;
-        await this.api.updatePrinter(disabled.id, {
-          active: true,
-          ...(name !== disabled.name ? { name } : {}),
-        });
-      } else if (device.transport === "network_tcp") {
+      if (device.transport === "network_tcp") {
         ({ id: createdId } = await this.api.createPrinter({
           name,
           transport: device.transport,
@@ -1689,31 +1676,30 @@ export class PrintersScreen extends LitElement {
         await this.#closeModal("name-printer-modal");
         await this.#closeModal("new-printer-modal");
       }
-      this.#openPrinter(
-        disabled
-          ? { ...disabled, name, active: true }
-          : {
-              id: createdId,
-              name,
-              transport: device.transport,
-              host: device.host ?? null,
-              port: device.port ?? (device.transport === "network_tcp" ? 9100 : null),
-              localKey: device.localKey ?? null,
-              pollId: null,
-              paperWidth: "80mm",
-              resolution: "180dpi",
-              hasCashDrawer: false,
-              portable: false,
-              pickupRoles: ["receipt", "payment_slip"],
-              holder: null,
-              pendingJobs: 0,
-              lastPrintAt: null,
-              lastPrintAgentId: null,
-              active: true,
-            },
-      );
+      if (disabled || device.retainedName !== undefined) {
+        await this.#load();
+        return;
+      }
+      this.#openPrinter({
+        id: createdId,
+        name,
+        transport: device.transport,
+        host: device.host ?? null,
+        port: device.port ?? (device.transport === "network_tcp" ? 9100 : null),
+        localKey: device.localKey ?? null,
+        pollId: null,
+        paperWidth: "80mm",
+        resolution: "180dpi",
+        hasCashDrawer: false,
+        portable: false,
+        pickupRoles: ["receipt", "payment_slip"],
+        holder: null,
+        pendingJobs: 0,
+        lastPrintAt: null,
+        lastPrintAgentId: null,
+        active: true,
+      });
       this.#calibrationOpenedByAdd = true;
-      if (disabled) this.#readdingId = disabled.id;
       await this.#load();
     } catch (error) {
       if (active()) this.errorKey = codeOf(error);
@@ -2021,16 +2007,12 @@ export class PrintersScreen extends LitElement {
     if (row.portable !== row.saved.portable) patch.portable = row.portable;
     if (!samePickupRoles(row.pickupRoles, row.saved.pickupRoles))
       patch.pickupRoles = row.pickupRoles;
-    const readding = this.#readdingId === id;
-    // An in-flight save owns reactivation; closing its wizard must not disable the printer.
-    if (readding) this.#readdingId = undefined;
     this.submitting = true;
     try {
       try {
         if (Object.keys(patch).length) await this.api.updatePrinter(id, patch);
       } catch (error) {
         if (active()) {
-          if (readding) this.#readdingId = id;
           this.errorKey = codeOf(error);
         }
         return;
@@ -2045,17 +2027,13 @@ export class PrintersScreen extends LitElement {
             modal.closeAfter("saved");
             await modal.updateComplete;
           }
-          this.#finishCalibration(opening, id);
+          this.#finishCalibration(opening);
         }
       }
       if (this.isConnected) await this.#load();
     } finally {
       this.submitting = false;
     }
-  }
-
-  async #deactivatePrinter(id: string): Promise<void> {
-    await this.#mutate(() => this.api.deactivatePrinter(id));
   }
 
   async #printTestPage(p: Printer): Promise<void> {
@@ -2619,18 +2597,7 @@ export class PrintersScreen extends LitElement {
         @click=${() => void this.#printTestPage(p)}
         >${t("printers.print_test_page")}</wt-button
       >
-      ${
-        // A succeeded Unpair can switch the printer off (the job pull, `apps/server/src/print-api.ts`).
-        unpair !== nothing
-          ? unpair
-          : html`<wt-button
-              variant=${p.active ? "danger" : "secondary"}
-              data-test=${`deactivate-printer-${p.id}`}
-              ?disabled=${!p.active}
-              @click=${() => void this.#deactivatePrinter(p.id)}
-              >${t("printers.disable")}</wt-button
-            >`
-      }
+      ${unpair}
       <wt-button
         variant="danger"
         data-test=${`delete-printer-${p.id}`}
@@ -3299,30 +3266,6 @@ export class PrintersScreen extends LitElement {
           id: "printer-details-status",
           heading: t("printers.status"),
           dataTest: "printer-section-status",
-          before: html`<div class="status-actions">
-              <wt-switch
-                name="printer-detail-active"
-                label=${t("printers.status_active")}
-                .checked=${live(p.active)}
-                ?disabled=${this.detailActiveSavingIds.has(p.id)}
-                @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                  event.stopPropagation();
-                  const active = event.detail.checked;
-                  void this.#setDetailActive(p, active, {
-                    switchName: "printer-detail-active",
-                    write: () => this.api.updatePrinter(p.id, { active }),
-                    reload: () => this.#load(),
-                  });
-                }}
-              ></wt-switch>
-            </div>
-            ${
-              this.detailActiveError
-                ? html`<p role="alert" data-test="printer-detail-active-error">
-                    ${codeMessage(this.detailActiveError)}
-                  </p>`
-                : nothing
-            }`,
           rows: [
             {
               label: t("printers.pending_jobs"),
@@ -3534,22 +3477,10 @@ export class PrintersScreen extends LitElement {
             >`;
           const command = this.#printerCommands.get(r.printer.id);
           return command === undefined
-            ? status
-            : html`${status}
-                <div part="bluetooth-actions">
-                  ${this.#renderCommand(command[0], command[1], `printer-command-${r.printer.id}`)}
-                </div>`;
-        },
-        filter: {
-          preserveOrder: true, // Active before disabled.
-          label: t("printers.status"),
-          allLabel: t("printers.filter_all"),
-          initial: "active",
-          value: (r) => (activeOf(r) ? "active" : "disabled"),
-          options: [
-            { value: "active", label: t("printers.status_active") },
-            { value: "disabled", label: t("printers.status_disabled") },
-          ],
+            ? nothing
+            : html`<div part="bluetooth-actions">
+                ${this.#renderCommand(command[0], command[1], `printer-command-${r.printer.id}`)}
+              </div>`;
         },
       },
       {
@@ -3976,7 +3907,7 @@ export class PrintersScreen extends LitElement {
       .opener=${this.#tabAction("open-add-printer")}
       .beforeClose=${this.#calibrationLeave ? this.#beforeCalibrationClose : undefined}
       @wt-close=${() => {
-        this.#finishCalibration(opening, p.id);
+        this.#finishCalibration(opening);
       }}
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep < 3 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
     >
@@ -4291,7 +4222,7 @@ export class PrintersScreen extends LitElement {
           ?loading=${this.submitting}
           ?disabled=${this.submitting || nameError !== ""}
           @click=${() => void this.#registerDiscovered(d)}
-          >${this.#disabledPrinter(d) ? t("printers.enable") : t("action.add")}</wt-button
+          >${t("action.add")}</wt-button
         >
       </wt-form-actions>
     </wt-modal>`;
@@ -4519,7 +4450,6 @@ export class PrintersScreen extends LitElement {
               <div>${transportName(d.transport)}</div>
               <div>${this.#discoveredAddress(d)}</div>
               ${d.agentName ? html`<div>${fill("printers.discovered_seen_on", { agent: d.agentName })}</div>` : nothing}
-              ${this.#disabledPrinter(d) ? html`<div>${t("printers.enable_hint")}</div>` : nothing}
               ${office.get(d)?.kind === "enable" ? html`<div>${t("printers.page_printer_enable_hint")}</div>` : nothing}
               ${this.#repointNote(office.get(d))}
               ${lost.has(d) && !listed.has(this.#commandKeyOf(d)) ? html`<div>${t("printers.bluetooth_not_seen")}</div>` : nothing}
@@ -4540,7 +4470,7 @@ export class PrintersScreen extends LitElement {
               if (this.submitting) return;
               this.#namePrinter(d);
             }}
-            >${this.#disabledPrinter(d) ? t("printers.enable") : t("action.add")}</wt-button
+            >${t("action.add")}</wt-button
           >`;
           if (d.transport !== "bluetooth") return add;
           const key = this.#commandKeyOf(d);
@@ -4834,7 +4764,6 @@ export class PrintersScreen extends LitElement {
     }
     if (this.editingPrinter?.id === id) {
       open = true;
-      if (this.#readdingId === id) this.#readdingId = undefined;
       this.#disposeCalibrationDraft();
       this.editingPrinter = null;
       this.#closeTest();

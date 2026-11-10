@@ -60,7 +60,7 @@ export const printers = table(
     pickupRoles: json<("receipt" | "payment_slip")[]>("pickup_roles")
       .notNull()
       .default(["receipt", "payment_slip"]),
-    // Disable clears `active`; Delete also sets `deleted_at`; print_jobs keep the row either way.
+    // System switch-offs clear `active`; Delete also sets `deleted_at`; jobs keep the row.
     active: flag("active").notNull().default(true),
     deletedAt: tsString("deleted_at"),
   },

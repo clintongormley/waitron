@@ -32,7 +32,6 @@ import {
 import {
   canResendPrintJob,
   createPrinter,
-  deactivatePrinter,
   endUnpairedPrinterJobs,
   enqueuePrintJob,
   listPrinters,
@@ -65,7 +64,6 @@ import {
   claimInvoicePrintJobs,
   reportInvoicePrintJob,
   endInvoicePrintDeliveries,
-  endDeactivatedInvoicePrintDeliveries,
   resendInvoicePrintJob,
 } from "./invoice-print.js";
 import type { InvoicePrintClaim } from "@waitron/print-agent";
@@ -707,7 +705,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           );
         };
         // An unpaired printer is switched off and its waiting jobs ended before the claim, so this
-        // pull hands out none of them and a later Enable does not print them; one another box
+        // pull hands out none of them and a later Add does not print them; one another box
         // can still print to is left alone.
         if (unpaired.length > 0) {
           const elsewhere = printableElsewhere();
@@ -958,25 +956,39 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             localKey: printers.localKey,
             host: printers.host,
             port: printers.port,
+            transport: printers.transport,
+            name: printers.name,
+            active: printers.active,
+            deletedAt: printers.deletedAt,
           })
           .from(printers)
-          .where(isNull(printers.deletedAt)),
+          .orderBy(
+            desc(sql`${printers.deletedAt} is null`),
+            desc(printers.deletedAt),
+            desc(printers.active),
+          ),
         agents: await tx.select({ id: printAgents.id, name: printAgents.name }).from(printAgents),
       }));
       const names = new Map(agents.map((a) => [a.id, a.name]));
-      const byKey = new Map<string, string>();
-      const byHostPort = new Map<string, string>();
-      // A null port prints on the transport's default 9100, so it matches a scan on 9100.
-      for (const r of registered) {
-        if (r.localKey !== null) byKey.set(r.localKey, r.id);
-        if (r.host !== null) byHostPort.set(`${r.host}:${r.port ?? 9100}`, r.id);
+      type Registered = (typeof registered)[number];
+      const byKey = new Map<string, Registered>();
+      const byHostPort = new Map<string, Registered>();
+      for (const row of registered) {
+        if (row.localKey !== null) {
+          const key = `${row.transport}:${row.localKey}`;
+          if (!byKey.has(key)) byKey.set(key, row);
+        }
+        if (row.transport === "network_tcp" && row.host !== null) {
+          const key = `${row.host}:${row.port ?? 9100}`;
+          if (!byHostPort.has(key)) byHostPort.set(key, row);
+        }
       }
-      const printerIdOf = (e: DiscoveredEntry): string | null =>
-        e.ippOnly
-          ? null
-          : ((e.localKey !== undefined ? byKey.get(e.localKey) : undefined) ??
-            (e.host !== undefined ? byHostPort.get(`${e.host}:${e.port ?? 9100}`) : undefined) ??
-            null);
+      const matchOf = (entry: DiscoveredEntry): Registered | undefined =>
+        entry.ippOnly
+          ? undefined
+          : entry.localKey !== undefined
+            ? byKey.get(`${entry.transport}:${entry.localKey}`)
+            : byHostPort.get(`${entry.host}:${entry.port ?? 9100}`);
       const pagePrinterAddresses = new Set<string>();
       const pagePrinterQueues = new Set<string>();
       const reportsByQueue = new Map<string, { agentId: string; office: OfficePrinterReport }[]>();
@@ -1003,7 +1015,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       };
       return c.json(
         [...discovered.values()].map((e) => {
-          const printerId = printerIdOf(e);
+          const match = matchOf(e);
+          const printerId = match?.deletedAt === null ? match.id : null;
           const address = e.transport === "bluetooth" ? e.localKey : undefined;
           const office = officeOf(e);
           const queue = queueKeyOf(e);
@@ -1035,6 +1048,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               address !== undefined && isListed(e.pairedAt, now) ? (true as const) : undefined,
             bluetoothCommand:
               address === undefined ? undefined : bluetoothCommands.latest(e.agentId, address),
+            retainedName:
+              match && (!match.active || match.deletedAt !== null) ? match.name : undefined,
             alreadyRegistered: printerId !== null,
             printerId,
             lastSeenAt: new Date(e.lastSeenAt).toISOString(),
@@ -1204,8 +1219,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const hasCashDrawer = optionalBool(body.hasCashDrawer, "hasCashDrawer");
       if (hasCashDrawer !== undefined) patch.hasCashDrawer = hasCashDrawer;
       if (body.pickupRoles !== undefined) patch.pickupRoles = requirePickupRoles(body.pickupRoles);
-      const active = optionalBool(body.active, "active");
-      if (active !== undefined) patch.active = active;
+      if (body.active !== undefined) {
+        throw new AppError("management.request_invalid", { field: "active" });
+      }
       const portable = optionalBool(body.portable, "portable");
       await gated(sessionId, async (tx) => {
         // Either field can make the stored key a Bluetooth address, so both need the other's value.
@@ -1222,21 +1238,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           }
         }
         await updatePrinter(tx, id, patch);
-        if (patch.active === false)
-          await endDeactivatedInvoicePrintDeliveries(tx, id, deps.now?.());
         if (portable !== undefined) await setPrinterPortable(tx, id, portable);
-      });
-      return c.body(null, 204);
-    }),
-  );
-
-  app.post("/management-api/printers/:id/deactivate", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "PrinterId");
-      await gated(sessionId, async (tx) => {
-        await deactivatePrinter(tx, id);
-        await endDeactivatedInvoicePrintDeliveries(tx, id, deps.now?.());
       });
       return c.body(null, 204);
     }),

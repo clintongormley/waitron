@@ -1664,7 +1664,8 @@ export const en = {
   "printers.delete_refusals": "Why it can't be deleted",
   "printers.delete_ends": "Work that ends",
   "printers.delete_removes": "Settings that are removed",
-  "printers.delete_irreversible": "This can't be undone.",
+  "printers.delete_irreversible":
+    "History and printer settings are kept. Assignments and ended work are not restored. Add it again to use it.",
   "printers.delete_retry": "Try again",
   "printers.delete_loading": "Checking what changes…",
   "printers.delete_jobs": "{count} pending print jobs",
@@ -5512,7 +5513,8 @@ export const es: Record<StringKey, string> = {
   "printers.delete_refusals": "Por qué no se puede eliminar",
   "printers.delete_ends": "Trabajo que finaliza",
   "printers.delete_removes": "Configuración que se elimina",
-  "printers.delete_irreversible": "Esta acción no se puede deshacer.",
+  "printers.delete_irreversible":
+    "Se conservan el historial y los ajustes de la impresora. Las asignaciones y el trabajo finalizado no se restauran. Para usarla, añádela de nuevo.",
   "printers.delete_retry": "Reintentar",
   "printers.delete_loading": "Comprobando qué cambia…",
   "printers.delete_jobs": "{count} trabajos de impresión pendientes",
