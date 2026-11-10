@@ -360,6 +360,7 @@ import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { readBoxCaFingerprint } from "./box-tls-repair.js";
 import {
   ensureBoxSecrets,
+  ensureLeaf,
   mintedBoxLeaf,
   tightenTlsDir,
   writeCredentialsRing,
@@ -1704,6 +1705,23 @@ async function bootServer(
   const ownHostname = boxHostnameFor(config.node.nodeId);
   const ownNameOnly: readonly string[] = [ownHostname];
   const ownAndVenueNames: readonly string[] = [ownHostname, BOX_HOSTNAME];
+  const leafHostnames = [ownHostname, BOX_HOSTNAME, "localhost"];
+  // Logged rather than thrown, as above: the old leaf still serves the tills that trust it.
+  if (config.tls === undefined) {
+    try {
+      await ensureLeaf({
+        stateDir: config.stateDir,
+        hostnames: leafHostnames,
+        listIpv4: boxAddresses,
+        now,
+      });
+    } catch (error: unknown) {
+      log("warn", "tls.leaf_reissue_failed", {
+        errno: errnoOf(error) ?? null,
+        errorCode: codeOf(error),
+      });
+    }
+  }
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
@@ -2019,7 +2037,7 @@ async function bootServer(
         ring,
         nodeId: config.node.nodeId,
         advertisedOrigin: config.advertisedOrigin,
-        hostnames: BOX_LEAF_HOSTNAMES,
+        hostnames: leafHostnames,
         listIpv4: boxAddresses,
         now,
         log,

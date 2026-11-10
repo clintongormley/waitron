@@ -12,6 +12,7 @@ import {
   type FileHandle,
 } from "node:fs/promises";
 import { constants, existsSync } from "node:fs";
+import { X509Certificate } from "node:crypto";
 import { join } from "node:path";
 import { generateKeyRing, readDurableHostJson, type GeneratedKeyRing } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
@@ -289,6 +290,31 @@ async function reissueBoxLeafLocked(deps: {
   }
   await syncFolderHolding(files.keyFile);
   await rm(previousCert, { force: true });
+}
+
+/**
+ * Reissues the box's leaf with {@link reissueBoxLeaf} when it lacks one of `hostnames` or a current
+ * permitted address, or does not verify under the current `tls/ca.crt`; otherwise leaves both files
+ * untouched. A box with no minted leaf is left alone.
+ */
+export async function ensureLeaf(deps: {
+  stateDir: string;
+  hostnames: string[];
+  listIpv4: () => string[];
+  now: () => Date;
+}): Promise<"kept" | "reissued"> {
+  const files = boxTlsPaths(deps.stateDir);
+  if (mintedBoxLeaf(deps.stateDir) === undefined) return "kept";
+  const leaf = new X509Certificate(await readFile(files.certFile, "utf8"));
+  const authority = new X509Certificate(await readFile(files.caCertFile, "utf8"));
+  const names = new Set((leaf.subjectAltName ?? "").split(", "));
+  const fits =
+    leaf.verify(authority.publicKey) &&
+    deps.hostnames.every((host) => names.has(`DNS:${host}`)) &&
+    leafIpv4s(deps.listIpv4).every((ip) => names.has(`IP Address:${ip}`));
+  if (fits) return "kept";
+  await reissueBoxLeaf(deps);
+  return "reissued";
 }
 
 async function assertNoPendingTlsRepair(stateDir: string): Promise<void> {

@@ -17,6 +17,7 @@ import { bookings } from "@waitron/bookings";
 import { absences } from "@waitron/workforce";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { randomUUID, X509Certificate } from "node:crypto";
+import { connect as tlsConnect } from "node:tls";
 import { createServer } from "node:net";
 import {
   chmod,
@@ -966,6 +967,58 @@ describe("startServer, against a migrated venue directory", () => {
       },
       60_000,
     );
+
+    it("reissues, before it serves, a leaf that does not name this box", async () => {
+      const port = await freePort();
+      const stateDir = await tradingStateDir("waitron-boot-tls-leaf-names-");
+      await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
+      const server = await startTrading(stateDir, port);
+      const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+      try {
+        await awaitListening(httpPort());
+        // A device naming this box and pinning its authority completes the handshake only if the
+        // served leaf names it.
+        const served = await new Promise<X509Certificate | undefined>((resolve, reject) => {
+          const socket = tlsConnect(
+            { port: httpPort(), host: "127.0.0.1", ca, servername: "box-3333.waitron.local" },
+            () => {
+              resolve(socket.getPeerX509Certificate());
+              socket.destroy();
+            },
+          );
+          socket.once("error", reject);
+        });
+        expect(served?.subjectAltName).toContain("DNS:waitron.local");
+      } finally {
+        await server.close();
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    }, 60_000);
+
+    it("logs a failed reissue and keeps serving the old leaf", async () => {
+      await withCapturedStdout(async (lines) => {
+        const port = await freePort();
+        const stateDir = await tradingStateDir("waitron-boot-tls-leaf-kept-");
+        await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
+        await rm(join(stateDir, "tls", "ca.key"));
+        const before = await readFile(join(stateDir, "tls", "server.crt"), "utf8");
+        const server = await startTrading(stateDir, port);
+        const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
+        try {
+          expect((await fetchHealthOk(`https://127.0.0.1:${httpPort()}/health`, via)).status).toBe(
+            200,
+          );
+          const line = await waitForEvent(lines, "tls.leaf_reissue_failed");
+          expect(line).toMatchObject({ level: "warn", errno: "ENOENT" });
+          expect(JSON.stringify(line)).not.toContain(stateDir);
+          expect(await readFile(join(stateDir, "tls", "server.crt"), "utf8")).toBe(before);
+        } finally {
+          await server.close();
+          await close();
+          await rm(stateDir, { recursive: true, force: true });
+        }
+      });
+    }, 60_000);
   });
 
   // The only suite that observes boot's own wiring of the advertised addresses
