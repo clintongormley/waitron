@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import { cleanupWidgets, mountWidget as mountBaseWidget } from "./test-helpers.js";
@@ -315,8 +315,8 @@ describe("till-shell", () => {
         await userEvent.keyboard("{Escape}");
       }
     } finally {
-      await page.viewport(width, height);
       setLocale(original);
+      await page.viewport(width, height);
     }
   });
 
@@ -1061,6 +1061,12 @@ function deepActive(): Element | null {
 }
 
 describe("a handheld's table buttons", () => {
+  let languageFound = currentLocale();
+  beforeEach(() => {
+    languageFound = currentLocale();
+    setLocale("en-GB");
+  });
+  afterEach(() => setLocale(languageFound));
   const tables: BarTable[] = [
     { tableId: "t4", name: "T4", unsent: true, current: false, held: false },
     { tableId: "t9", name: "T9", unsent: true, current: false, held: false },
@@ -1072,7 +1078,6 @@ describe("a handheld's table buttons", () => {
     el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-bar-table="${tableId}"]`)!;
 
   it("draws Floor, then one button per table, in the order given", async () => {
-    setLocale("en-GB");
     const { el } = await mountWidget<TillShell>("till-shell", {
       activeScreen: "floor",
       barTables: tables,
@@ -1116,7 +1121,6 @@ describe("a handheld's table buttons", () => {
   );
 
   it("selects the table on screen and not Floor; selects Floor when no table is current", async () => {
-    setLocale("en-GB");
     const { el } = await mountWidget<TillShell>("till-shell", {
       activeScreen: "order",
       barTables: [{ ...tables[0]!, current: true }, tables[1]!],
@@ -1180,7 +1184,6 @@ describe("a handheld's table buttons", () => {
   });
 
   it("the strip scrolls sideways when the buttons do not fit at 360, keeping Help and More on screen", async () => {
-    setLocale("en-GB");
     await atViewport(360, async () => {
       const { el } = await mountWidget<TillShell>("till-shell", {
         formFactor: "phone-portrait",
@@ -1228,7 +1231,6 @@ describe("a handheld's table buttons", () => {
     };
 
     it("when the shell first draws with the last table selected", async () => {
-      setLocale("en-GB");
       await atViewport(390, async () => {
         const { el } = await mountWidget<TillShell>("till-shell", {
           formFactor: "phone-portrait",
@@ -1243,7 +1245,6 @@ describe("a handheld's table buttons", () => {
     });
 
     it("when the selection moves to the last table, and not again on a redraw that keeps it", async () => {
-      setLocale("en-GB");
       await atViewport(390, async () => {
         const { el } = await mountWidget<TillShell>("till-shell", {
           formFactor: "phone-portrait",
@@ -1266,7 +1267,6 @@ describe("a handheld's table buttons", () => {
     });
 
     it("back towards the start when the selection moves from the last table to the first", async () => {
-      setLocale("en-GB");
       await atViewport(390, async () => {
         const { el } = await mountWidget<TillShell>("till-shell", {
           formFactor: "phone-portrait",
@@ -1282,7 +1282,6 @@ describe("a handheld's table buttons", () => {
     });
 
     it("again when buttons are added before the selected table", async () => {
-      setLocale("en-GB");
       await atViewport(390, async () => {
         const { el } = await mountWidget<TillShell>("till-shell", {
           formFactor: "phone-portrait",
@@ -1324,7 +1323,6 @@ describe("a handheld's table buttons", () => {
     });
 
     it("again when the strip narrows under the selected table", async () => {
-      setLocale("en-GB");
       await atViewport(1280, async () => {
         const { el } = await mountWidget<TillShell>("till-shell", {
           formFactor: "tablet-landscape",
@@ -1341,7 +1339,6 @@ describe("a handheld's table buttons", () => {
     });
 
     it("waits through a bar with no header, and reveals the table once the header is drawn", async () => {
-      setLocale("en-GB");
       await atViewport(390, async () => {
         const { el } = await mountWidget<TillShell>("till-shell", {
           formFactor: "phone-portrait",
@@ -1359,7 +1356,6 @@ describe("a handheld's table buttons", () => {
     });
 
     it("lets a table that goes before the bar has settled go, and reveals it when it comes back", async () => {
-      setLocale("en-GB");
       await atViewport(390, async () => {
         const { el } = await mountWidget<TillShell>("till-shell", {
           formFactor: "phone-portrait",
