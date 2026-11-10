@@ -29,7 +29,12 @@ import {
   publishMenu,
 } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedTenant,
+  seedVenue,
+  seedVenueSettings,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import {
   uploadImage,
@@ -70,6 +75,7 @@ describe("image library", () => {
 
   it("stores a prepared photo with required default metadata and reuses it for a repeat upload", async () => {
     await withTransaction(suite.db, async (tx) => {
+      await seedVenueSettings(tx);
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const first = await uploadImage(
         tx,
@@ -126,10 +132,10 @@ describe("unknown images and other refusals", () => {
     // reaches its re-throw. The table is dropped inside the transaction, which rolls it back.
     await expect(
       withTransaction(suite.db, async (tx) => {
-        await tx.execute(sql`drop table content_languages`);
+        await tx.execute(sql`drop table settings`);
         return uploadImage(tx, { image: photo, names: { en: "Bread" } });
       }),
-    ).rejects.toThrow("no such table: content_languages");
+    ).rejects.toThrow("no such table: settings");
   });
 });
 
@@ -438,6 +444,7 @@ describe("search and sorting", () => {
 
   it("sorts by name using the requested translation then site default, date in either direction and stable pages", async () => {
     await withTransaction(suite.db, async (tx) => {
+      await seedVenueSettings(tx);
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const added = [];
       for (let n = 0; n < 3; n++)
@@ -558,6 +565,7 @@ describe("one search rule with every other search", () => {
 
   it("needs one translation to hold every word", async () => {
     await withTransaction(suite.db, async (tx) => {
+      await seedVenueSettings(tx);
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
       const toast = await add(tx, 402, { en: "Toast", es: "Tostada" });
       expect(await ids(tx, { query: "tostada" })).toEqual([toast]);
@@ -705,6 +713,7 @@ it("sorts accented names alphabetically in both directions across pages", async 
 
 it("sorts by the default when the requested language was disabled while retaining its translations", async () => {
   await withTransaction(suite.db, async (tx) => {
+    await seedVenueSettings(tx);
     await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr"] });
     const first = await uploadImage(
       tx,
@@ -1204,6 +1213,7 @@ describe("free default choice with incomplete catalogue and image text", () => {
   it("switches with all nine catalogue kinds and a real image gap without rewriting their rows", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
+      await seedVenueSettings(tx);
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
       const menu = await createCatalogue(tx, {
         name: "Staff menu",
@@ -1286,12 +1296,19 @@ describe("free default choice with incomplete catalogue and image text", () => {
       const snapshot = async () => {
         const tables = (
           await tx.execute<{ name: string }>(
-            sql`select name from sqlite_master where type = 'table' and name <> 'content_languages' order by name`,
+            sql`select name from sqlite_master where type = 'table' order by name`,
           )
         ).rows;
         const rows: Record<string, unknown> = {};
-        for (const { name } of tables)
-          rows[name] = (await tx.execute(sql`select * from ${sql.identifier(name)}`)).rows;
+        for (const { name } of tables) {
+          const query =
+            name === "settings"
+              ? sql`select module, version, case when module = 'venue' then null else revision end as revision, case when module = 'venue' then json_remove(doc, '$.contentLanguages', '$.defaultContentLanguage') else doc end as doc, case when module = 'venue' then null else updated_at end as updated_at, case when module = 'venue' then null else updated_by end as updated_by from settings`
+              : name === "activity_log"
+                ? sql`select * from activity_log where not (kind = 'settings.saved' and subject_id = 'venue')`
+                : sql`select * from ${sql.identifier(name)}`;
+          rows[name] = (await tx.execute(query)).rows;
+        }
         return rows;
       };
       expect((await listContentTranslationGaps(tx, "es")).map(({ kind }) => kind).sort()).toEqual([
@@ -1345,12 +1362,14 @@ describe("free default choice with incomplete catalogue and image text", () => {
 
   it("still refuses an image metadata write missing the newly selected default", async () => {
     const id = await withTransaction(suite.db, async (tx) => {
+      await seedVenueSettings(tx);
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
       const result = await uploadImage(
         tx,
         { image: await prepare(81), names: { en: "Original" } },
         { fallbackLanguage: "en" },
       );
+      await seedVenueSettings(tx);
       await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["en", "es"] });
       return result.image.id;
     });

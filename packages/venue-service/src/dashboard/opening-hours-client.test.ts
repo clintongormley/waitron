@@ -200,7 +200,6 @@ describe("OpeningHoursApi", () => {
           "settings.venue",
           "location_business_day_settings",
           "location_day_cutover_changes",
-          "holiday_geographies",
           "seasons",
           "department_days",
           "department_day_ranges",
@@ -252,7 +251,6 @@ describe("OpeningHoursApi", () => {
           "settings.venue",
           "location_business_day_settings",
           "location_day_cutover_changes",
-          "holiday_geographies",
           "seasons",
           "department_days",
           "department_day_ranges",
@@ -518,7 +516,7 @@ it.each(["sections", "section_members", "catalogues"])(
   },
 );
 
-it.each(["holiday_geographies", "tenants"])(
+it.each(["settings.venue", "tenants"])(
   "re-reads station times when %s changes, as the public holidays a date follows come from it",
   async (type) => {
     const live = new LiveData();

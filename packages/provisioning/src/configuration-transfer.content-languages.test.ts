@@ -35,7 +35,7 @@ function bundleFor(country: string, province: string | null, languages: unknown)
   // Catalogue has no set of its own, so a copy of its tables alone carries no set version.
   bundle.modules = {};
   bundle.tables = Object.fromEntries(tables.map(({ name }) => [name, []]));
-  bundle.tables.content_languages = [{ id: 1, default_language: "en", languages }];
+  bundle.contentLanguages = { defaultLanguage: "en", languages } as typeof bundle.contentLanguages;
   return bundle;
 }
 
@@ -48,7 +48,7 @@ it.each([
   { province: "Madrid", languages: ["en"], missing: "es" },
   { province: null, languages: ["en"], missing: "es" },
 ])("refuses a $province copy without required $missing", ({ province, languages, missing }) => {
-  const bundle = bundleFor("ES", province, JSON.stringify(languages));
+  const bundle = bundleFor("ES", province, languages);
   expect(() => validateConfigurationBundle(bundle, [catalogue], bundle.modules)).toThrowError(
     expect.objectContaining({ code: "content.language_required", params: { language: missing } }),
   );
@@ -102,7 +102,7 @@ describe("required languages before configuration replacement", () => {
     roots.push(root);
     const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 91).toString("base64") });
     const passphrase = "SYNTHETIC language copy passphrase";
-    const valid = bundleFor("ES", "Barcelona", '["en","ca","es"]');
+    const valid = bundleFor("ES", "Barcelona", ["en", "ca", "es"]);
     const validate = async (bundle: typeof valid) => {
       validateConfigurationBundle(bundle, [catalogue], bundle.modules);
     };
@@ -114,7 +114,7 @@ describe("required languages before configuration replacement", () => {
       "configuration-import.json",
     ];
     const before = await Promise.all(files.map((name) => readFile(join(root, name))));
-    const replacement = bundleFor("ES", "Barcelona", '["en","es"]');
+    const replacement = bundleFor("ES", "Barcelona", ["en", "es"]);
     await expect(
       stageConfigurationImport(
         root,
@@ -154,22 +154,25 @@ describe("required languages before configuration replacement", () => {
       ),
       { db: suite.db, modules },
     );
-    const read = () => suite.db.execute(sql`select * from content_languages`);
+    const read = () =>
+      suite.db.execute(
+        sql`select json_extract(doc, '$.defaultContentLanguage') as default_language, json_extract(doc, '$.contentLanguages') as languages from settings where module = 'venue'`,
+      );
     const before = (await read()).rows;
     expect(before).toHaveLength(1);
-    const invalid = bundleFor("ES", "Barcelona", '["en","es"]');
+    const invalid = bundleFor("ES", "Barcelona", ["en", "es"]);
     await expect(
       withTransaction(suite.db, (tx) =>
         importConfigurationTables(tx, invalid, [catalogue], invalid.modules),
       ),
     ).rejects.toMatchObject({ code: "content.language_required", params: { language: "ca" } });
     expect((await read()).rows).toEqual(before);
-    const valid = bundleFor("ES", "Barcelona", '["en","es","ca"]');
+    const valid = bundleFor("ES", "Barcelona", ["en", "es", "ca"]);
     await withTransaction(suite.db, (tx) =>
       importConfigurationTables(tx, valid, [catalogue], valid.modules),
     );
     expect((await read()).rows).toEqual([
-      { id: 1, default_language: "en", languages: '["en","es","ca"]' },
+      { default_language: "en", languages: '["en","es","ca"]' },
     ]);
   });
 
@@ -197,15 +200,18 @@ describe("required languages before configuration replacement", () => {
       { db: suite.db, modules },
     );
     await withTransaction(suite.db, (tx) => tx.execute(sql`update tenants set country = 'ES'`));
-    const before = (await suite.db.execute(sql`select * from content_languages`)).rows;
-    const bundle = bundleFor("ES", "Madrid", '["en","es"]');
+    const before = (await suite.db.execute(sql`select doc from settings where module = 'venue'`))
+      .rows;
+    const bundle = bundleFor("ES", "Madrid", ["en", "es"]);
     validateConfigurationBundle(bundle, [catalogue], bundle.modules);
     await expect(
       withTransaction(suite.db, (tx) =>
         importConfigurationTables(tx, bundle, [catalogue], bundle.modules),
       ),
     ).rejects.toMatchObject({ code: "content.language_required", params: { language: "ca" } });
-    expect((await suite.db.execute(sql`select * from content_languages`)).rows).toEqual(before);
+    expect(
+      (await suite.db.execute(sql`select doc from settings where module = 'venue'`)).rows,
+    ).toEqual(before);
     expect(
       (
         await suite.db.execute(
@@ -213,22 +219,18 @@ describe("required languages before configuration replacement", () => {
         )
       ).rows,
     ).toEqual([{ province: "Barcelona" }]);
-    bundle.tables.content_languages![0]!.languages = '["en","es","ca"]';
+    bundle.contentLanguages!.languages = ["en", "es", "ca"];
     await withTransaction(suite.db, (tx) =>
       importConfigurationTables(tx, bundle, [catalogue], bundle.modules),
     );
-    expect((await suite.db.execute(sql`select languages from content_languages`)).rows).toEqual([
-      { languages: '["en","es","ca"]' },
-    ]);
+    expect(
+      (
+        await suite.db.execute(
+          sql`select json_extract(doc, '$.contentLanguages') as languages from settings where module = 'venue'`,
+        )
+      ).rows,
+    ).toEqual([{ languages: '["en","es","ca"]' }]);
   });
-});
-
-it("refuses a language singleton with another id before staging accepts it", () => {
-  const bundle = bundleFor("ES", "Barcelona", '["en","es","ca"]');
-  bundle.tables.content_languages![0]!.id = 2;
-  expect(() => validateConfigurationBundle(bundle, [catalogue], bundle.modules)).toThrowError(
-    expect.objectContaining({ code: "content.languages_invalid", params: {} }),
-  );
 });
 
 it.each([
@@ -238,34 +240,35 @@ it.each([
   { country: "ES", province: "Madrid", languages: ["en", "es"] },
   { country: "GB", province: "Barcelona", languages: ["en"] },
 ])("accepts $country/$province with required languages and an English default", (input) => {
-  const bundle = bundleFor(input.country, input.province, JSON.stringify(input.languages));
+  const bundle = bundleFor(input.country, input.province, input.languages);
   const before = structuredClone(bundle);
   validateConfigurationBundle(bundle, [catalogue], bundle.modules);
   expect(bundle).toEqual(before);
 });
 
-it("refuses an empty saved-language table that would erase required languages", () => {
-  const bundle = bundleFor("ES", "Barcelona", "[]");
-  bundle.tables.content_languages = [];
+it("refuses an absent saved-language policy that would erase required languages", () => {
+  const bundle = bundleFor("ES", "Barcelona", []);
+  bundle.contentLanguages = null;
   expect(() => validateConfigurationBundle(bundle, [catalogue], bundle.modules)).toThrowError(
     expect.objectContaining({ code: "content.language_required" }),
   );
 });
 
 it.each([
-  { default_language: "en", languages: "{" },
-  { default_language: "en", languages: "null" },
-  { default_language: "en", languages: "{}" },
-  { default_language: "en", languages: '["en",2]' },
-  { default_language: "en", languages: '["en","en"]' },
-  { default_language: "es", languages: '["en"]' },
-  { default_language: null, languages: '["en"]' },
-  { default_language: "en", languages: ["en"] },
-  { default_language: "en", languages: '["en","not_a_language"]' },
-  { default_language: "EN", languages: '["EN"]' },
+  { default_language: "en", languages: null },
+  { default_language: "en", languages: {} },
+  { default_language: "en", languages: ["en", 2] },
+  { default_language: "en", languages: ["en", "en"] },
+  { default_language: "es", languages: ["en"] },
+  { default_language: null, languages: ["en"] },
+  { default_language: "en", languages: ["en", "not_a_language"] },
+  { default_language: "EN", languages: ["EN"] },
 ])("refuses malformed saved language configuration %j", (row) => {
   const bundle = bundleFor("GB", null, row.languages);
-  bundle.tables.content_languages = [{ id: 1, ...row }];
+  bundle.contentLanguages = {
+    defaultLanguage: row.default_language,
+    languages: row.languages,
+  } as typeof bundle.contentLanguages;
   expect(() => validateConfigurationBundle(bundle, [catalogue], bundle.modules)).toThrowError(
     expect.objectContaining({ code: "content.languages_invalid", params: {} }),
   );

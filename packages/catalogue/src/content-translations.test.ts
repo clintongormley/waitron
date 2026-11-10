@@ -48,6 +48,7 @@ const kinds = [
 ] as const;
 async function fixture() {
   await seedTenant(suite.db);
+  await seedVenueSettings(suite.db);
   return app(async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] });
     const menu = await createCatalogue(tx, {
@@ -739,12 +740,27 @@ describe("atomic content translations", () => {
       }));
       await app(async (tx) => {
         const spy = vi.spyOn(tx, "execute");
+        const select = vi.spyOn(tx, "select");
+        const session = (
+          tx as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
+        ).session;
+        const prepared = vi.spyOn(session, "prepareQuery");
         let result;
         try {
           result = await saveContentTranslations(tx, request, context);
-          expect(spy).toHaveBeenCalledTimes(4);
+          expect(spy).toHaveBeenCalledTimes(3);
+          expect(select).toHaveBeenCalledTimes(1);
+          expect(
+            prepared.mock.calls
+              .map(([query]) => (query as { sql: string }).sql)
+              .filter((statement) => /from "settings"/.test(statement)),
+          ).toEqual([
+            'select "module", "version", "revision", "doc", "updated_at", "updated_by" from "settings" where "settings"."module" = ?',
+          ]);
         } finally {
           spy.mockRestore();
+          select.mockRestore();
+          prepared.mockRestore();
         }
         expect(result.saved).toHaveLength(selected.length);
         expect(result.saved.every((row) => row.text === `English ${row.id}`)).toBe(true);

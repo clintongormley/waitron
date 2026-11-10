@@ -56,6 +56,7 @@ export interface Venue {
 }
 
 export interface VenuePlace {
+  holidayArea?: VenueSettings["holidayArea"];
   province: string | null;
   city: string | null;
 }
@@ -149,7 +150,7 @@ export async function readVenueClockAndPlace(
             ],
       ),
     },
-    place: { province: place.province, city: place.city },
+    place: { province: place.province, city: place.city, holidayArea: place.holidayArea },
   };
 }
 

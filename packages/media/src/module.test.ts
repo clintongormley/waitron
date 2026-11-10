@@ -57,7 +57,6 @@ describe("the media module descriptor", () => {
     const validate = transfer?.kind === "tables" ? transfer.validate : undefined;
     const bytes = Buffer.from([0xff, 0xd8, 0xff, 1]);
     const bundle = (filename: string) => ({
-      content_languages: [{ default_language: "en" }],
       media_images: [
         {
           id: "image-a",
@@ -68,10 +67,12 @@ describe("the media module descriptor", () => {
       media_image_data: [{ image_id: "image-a", bytes: `\\x${bytes.toString("hex")}` }],
     });
     const matching = `${createHash("sha256").update(bytes).digest("hex")}.jpg`;
-    expect(() => validate?.(bundle(matching))).not.toThrow();
-    expect(() => validate?.(bundle(`${"0".repeat(64)}.jpg`))).toThrow(
-      expect.objectContaining({ code: "image.invalid_metadata" }),
-    );
+    expect(() =>
+      validate?.(bundle(matching), { contentLanguages: { defaultLanguage: "en" } }),
+    ).not.toThrow();
+    expect(() =>
+      validate?.(bundle(`${"0".repeat(64)}.jpg`), { contentLanguages: { defaultLanguage: "en" } }),
+    ).toThrow(expect.objectContaining({ code: "image.invalid_metadata" }));
   });
 
   it("lets a manager into the image library and keeps staff and supervisors out", async () => {

@@ -124,9 +124,11 @@ it("uses the explicit English working language for module starters while keeping
         "Staff meal",
       ].map((name) => ({ name })),
     );
-  expect(suite.db.all(sql`select invoice_locales from locations`)).toEqual([
-    { invoice_locales: '["es-ES"]' },
-  ]);
+  expect(
+    suite.db.all(
+      sql`select json_extract(doc, '$.invoiceLocales') as invoice_locales from settings where module = 'venue'`,
+    ),
+  ).toEqual([{ invoice_locales: '["es-ES"]' }]);
 });
 
 it("a new venue's first station starts at the default late flags and keeps a station's edit when the plan is retried", async () => {
@@ -297,9 +299,13 @@ it("first setup writes the venue document and an identical reapply keeps its rev
   const expected = [
     {
       version: 1,
-      revision: 1,
+      revision: 2,
       doc: JSON.stringify({
         name: "Mostrador",
+        invoiceLocales: ["es-ES"],
+        contentLanguages: ["es", "en"],
+        defaultContentLanguage: "es",
+        holidayArea: null,
         addressLine1: "Calle Mayor 1",
         addressLine2: null,
         postalCode: "28013",
@@ -758,8 +764,8 @@ describe("applyVenue", () => {
         modules: ALL_MODULES,
       });
       await suite.db.execute(sql`
-        insert into locations (id, invoice_locales, operation_description)
-        values ('00000000-0000-4000-8000-0000000000ff', '["es-ES"]', 'venta')`);
+        insert into locations (id, operation_description)
+        values ('00000000-0000-4000-8000-0000000000ff', 'venta')`);
 
       await expect(
         applyVenue(planVenue(request("B13131313"), ALL_MODULES), {

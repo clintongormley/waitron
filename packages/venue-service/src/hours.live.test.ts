@@ -183,8 +183,8 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
   expect(both(named)).toEqual([["special_days", "special_day_dates"], []]);
   expect(reaches(named, operations)).toEqual(["special_days", "special_day_dates"]);
   const area = await announced((tx) => saveHolidayArea(tx, { areaKey: "aran" }));
-  expect(both(area)).toEqual([["holiday_geographies"], ["holiday_geographies"]]);
-  expect(reaches(area, operations)).toEqual(["holiday_geographies"]);
+  expect(both(area)).toEqual([["settings.venue"], ["settings.venue"]]);
+  expect(reaches(area, operations)).toEqual(["settings.venue"]);
   const moved = await announced((tx) => seedVenueSettings(tx, { city: "Lleida" }));
   expect(both(moved)).toEqual([["settings.venue"], ["settings.venue"]]);
   expect(reaches(moved, operations)).toEqual(["settings.venue"]);

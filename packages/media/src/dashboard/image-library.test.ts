@@ -192,7 +192,7 @@ it("refreshes image ordering passively after content-language settings change", 
     images: [{ ...image, id: "two", names: { es: "First" } }, image],
     total: 2,
   });
-  liveData.invalidate([{ type: "content_languages" }]);
+  liveData.invalidate([{ type: "settings.venue" }]);
   await vi.waitFor(() => expect(background.listImages).toHaveBeenCalledOnce());
   expect(
     [...el.shadowRoot!.querySelectorAll("article")].map((article) =>

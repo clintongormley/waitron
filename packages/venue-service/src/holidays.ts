@@ -83,10 +83,10 @@ function matches(row: GeographyRow, address: Address): boolean {
  * resolving the venue's country through `findPack`.
  */
 export function createHolidayStore(findPack: PackLookup = getCountryPack) {
-  /** `place` is the venue's own province and city when the caller has already read them. */
+  /** Reuse the caller's address and area from the same venue snapshot. */
   async function readAddress(tx: Transaction, place?: VenuePlace): Promise<Address> {
     const tenant = await readTenant(tx);
-    const { doc } = await readVenueSettings(tx);
+    const doc = place?.holidayArea === undefined ? (await readVenueSettings(tx)).doc : place;
     const venue = place ?? doc;
     const pack = tenant === null ? undefined : findPack(tenant.country);
     const country = pack?.countryCode ?? tenant?.country.trim().toUpperCase() ?? "";
@@ -99,7 +99,7 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     const city = rawCity === null || rawCity.trim() === "" ? null : rawCity;
     return {
       country,
-      holidayArea: doc.holidayArea,
+      holidayArea: doc.holidayArea!,
       pack,
       calendar: pack?.holidayCalendar,
       provinceCode,

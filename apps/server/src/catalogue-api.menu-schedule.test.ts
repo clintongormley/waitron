@@ -229,7 +229,6 @@ async function draftSnapshot(): Promise<Record<string, string[]>> {
     "catalogues",
     "categories",
     "category_details",
-    "content_languages",
     "extra_list_items",
     "extra_lists",
     "menu_details",

@@ -1239,7 +1239,7 @@ describe("catalogue operations", () => {
   it("readInvoiceLocales returns the venue's invoice languages in order", async () => {
     await asTenant(async (tx) => {
       await tx.execute(
-        sql`update locations set invoice_locales = '["es-ES","en-GB"]' where id = ${locationId}`,
+        sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["es-ES","en-GB"]')) where module = 'venue'`,
       );
       expect(await readInvoiceLocales(tx)).toEqual(["es-ES", "en-GB"]);
     });
@@ -1247,7 +1247,9 @@ describe("catalogue operations", () => {
 
   it("readReceiptLanguage reads the venue's first saved language", async () => {
     await asTenant(async (tx) => {
-      await tx.execute(sql`update locations set invoice_locales = '["gl-ES","es-ES"]'`);
+      await tx.execute(
+        sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["gl-ES","es-ES"]')) where module = 'venue'`,
+      );
       expect(await readReceiptLanguage(tx)).toEqual({
         locale: "gl-ES",
         invoiceLocales: ["gl-ES", "es-ES"],

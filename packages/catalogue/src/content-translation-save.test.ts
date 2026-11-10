@@ -42,6 +42,7 @@ const kinds = [
 ] as const;
 async function fixture() {
   await seedTenant(suite.db);
+  await seedVenueSettings(suite.db);
   return app(async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "ca"] });
     const menu = await createCatalogue(tx, { name: "STAFF menu", names: { es: "CLIENT menu" } });

@@ -110,13 +110,15 @@ it("refuses an export whose requested node does not belong to the stored venue",
 
 it("refuses a receipt-language list containing a non-string stored value", async () => {
   const target = await seed();
-  const venueId = await venueLocationId(suite.db);
   await withTransaction(suite.db, (tx) =>
-    tx.execute(sql`update locations set invoice_locales = '[1]' where id = ${venueId}`),
+    tx.execute(
+      sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('[1]')) where module = 'venue'`,
+    ),
   );
-  await expect(buildConfigurationBundle(suite.db, target, [], now, {})).rejects.toMatchObject(
-    invalid("venue"),
-  );
+  await expect(buildConfigurationBundle(suite.db, target, [], now, {})).rejects.toMatchObject({
+    code: "settings.invalid",
+    params: { module: "venue", field: "invoiceLocales" },
+  });
 });
 
 it.each(["missing-table", "unknown-column"])(

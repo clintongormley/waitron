@@ -109,7 +109,7 @@ describe("the venue accessor", () => {
     expect(await withTransaction(suite.db, readVenueClock)).toEqual(clock);
     expect(await withTransaction(suite.db, readVenueClockAndPlace)).toEqual({
       clock,
-      place: { province: "Las Palmas", city: "Telde" },
+      place: { province: "Las Palmas", city: "Telde", holidayArea: null },
     });
   });
 
@@ -145,7 +145,7 @@ describe("the venue accessor", () => {
         dayCutover: "05:00",
         cutoverChanges: [{ effectiveBusinessDay: "2026-04-01", dayCutover: "06:00" }],
       },
-      place: { province: "Madrid", city: "Getafe" },
+      place: { province: "Madrid", city: "Getafe", holidayArea: null },
     });
     expect(statements).toHaveLength(1);
   });

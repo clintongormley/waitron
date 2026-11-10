@@ -24,11 +24,9 @@ const absent = useVenueDb({
 });
 beforeEach(() => {
   for (const db of [original.db, restored.db]) {
+    db.run(sql`insert into locations (id, operation_description) values ('venue', 'Hospitality')`);
     db.run(
-      sql`insert into locations (id, invoice_locales, operation_description) values ('venue', '["en"]', 'Hospitality')`,
-    );
-    db.run(
-      sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
+      sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
     );
     db.run(
       sql`insert into nodes (id,location_id,name,created_at) values ('source','venue','Source','2026-10-20T08:00:00.000Z')`,
@@ -198,9 +196,7 @@ describe("service backup evidence", () => {
     ])
       await corrupt(restored.db, `delete from "${table}"`);
     expect(await run({ absent: true, sourceSchema: 0 })).toEqual(passed);
-    restored.db.run(
-      sql`insert into holiday_geographies (id,location_id,country,province_code,city,city_key) values ('invented','venue','ES','46','Valencia','valencia')`,
-    );
+    restored.db.run(sql`insert into special_days (id,name) values ('invented','Invented day')`);
     expect((await run({ absent: true })).status).toBe("invalid");
   });
   it("accepts an absent parent when no row references it", async () => {

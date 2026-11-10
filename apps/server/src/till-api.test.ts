@@ -1709,7 +1709,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     // receipt to `venueLocale` would flip a Catalan receipt to Spanish. Restored in `finally`, as the
     // venue row is shared.
     await suite.db.execute(
-      sql`update locations set invoice_locales = '["ca-ES"]' where id = ${cfg.locationId}`,
+      sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["ca-ES"]')) where module = 'venue'`,
     );
     try {
       const app = new Hono();
@@ -1727,7 +1727,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       });
     } finally {
       await suite.db.execute(
-        sql`update locations set invoice_locales = '["es-ES"]' where id = ${cfg.locationId}`,
+        sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["es-ES"]')) where module = 'venue'`,
       );
     }
   });

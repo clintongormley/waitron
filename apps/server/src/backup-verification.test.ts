@@ -68,10 +68,10 @@ async function seedSource(db: VenueDb["db"]) {
     `insert into tenants (id, country, tax_id, legal_name, created_at) values (1, 'GB', 'private-tax-sentinel', 'Private company sentinel', '2026-10-20T00:00:00Z')`,
   );
   await db.run(
-    sql`insert into locations (id, invoice_locales, operation_description) values (${locationId}, '["en"]', 'Restaurant')`,
+    sql`insert into locations (id, operation_description) values (${locationId}, 'Restaurant')`,
   );
   db.run(
-    sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture location","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
+    sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture location","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
   );
   await db.run(
     sql`insert into nodes (id, location_id, name, created_at) values (${sourceNodeId}, ${locationId}, 'Source node', '2026-10-20T00:00:00Z')`,
@@ -728,7 +728,7 @@ describe("complete backup verification", () => {
     const db = new DatabaseSync(f.databasePath);
     try {
       db.exec(
-        `insert into locations (id, invoice_locales, operation_description) values ('10000000-0000-4000-8000-000000000099', '["en"]', 'Restaurant')`,
+        `insert into locations (id, operation_description) values ('10000000-0000-4000-8000-000000000099', 'Restaurant')`,
       );
     } finally {
       db.close();

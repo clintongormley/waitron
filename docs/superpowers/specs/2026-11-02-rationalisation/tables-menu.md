@@ -870,3 +870,6 @@ go, and the recipe screen's picker with them; replaced photo bytes are pruned; c
 - The size of a published menu document (§8, item 3).
 - Whether the Cloud translation service that `content_suggestion_*` talks to is reachable today. The
   box side is built (`apps/server/src/cloud-translation.ts`); I kept the tables.
+
+**2026-11-10, slice 5c:** the bundle carries `contentLanguages` and `holidayArea` at its top level,
+not inside `venue`, which keeps setup fields including `invoiceLocales` (5c plan, item 7).

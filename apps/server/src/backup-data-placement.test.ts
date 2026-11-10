@@ -432,10 +432,8 @@ it("refuses a copy holding two venue rows before moving the database", async () 
     const copy = new DatabaseSync(validated.databasePath);
     try {
       copy
-        .prepare(
-          "insert into locations (id, operation_description, invoice_locales) values (?, ?, ?)",
-        )
-        .run("10000000-0000-4000-8000-000000000099", "Sale", '["en"]');
+        .prepare("insert into locations (id, operation_description) values (?, ?)")
+        .run("10000000-0000-4000-8000-000000000099", "Sale");
     } finally {
       copy.close();
     }

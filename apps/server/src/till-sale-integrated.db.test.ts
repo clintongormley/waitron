@@ -3754,7 +3754,7 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
       const { cfg: original, coffee } = await setupVenue(issued ? "ticket_then_pay" : "prepay");
       const cfg = { ...original, invoiceLocales: ["ca-ES", "es-ES"] };
       suite.db.run(
-        sql`update locations set invoice_locales = '["ca-ES","es-ES"]' where id = ${cfg.locationId}`,
+        sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["ca-ES","es-ES"]')) where module = 'venue'`,
       );
       const [{ department_id: departmentId }] = suite.db.all<{ department_id: string }>(
         sql`select department_id from zone_service_policies where zone_id = ${coffee.zoneId}`,
@@ -3854,7 +3854,7 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
       );
 
       suite.db.run(
-        sql`update locations set invoice_locales = '["es-ES"]' where id = ${cfg.locationId}`,
+        sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["es-ES"]')) where module = 'venue'`,
       );
       await seedVenueSettings(suite.db, { addressLine1: "Current street" });
       const replay = await payWorkingOrderIntegrated(deps, cfg, req);

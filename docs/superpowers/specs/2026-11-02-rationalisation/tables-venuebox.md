@@ -789,3 +789,6 @@ triggers.
 The owner settled D1 to D7 on 4 November 2026; each is stated in the body. Pack history under the master
 key goes to A1323's design (§1.8). The `box.*` events stay in `node.db` (§3). No question is open in this
 area.
+
+**2026-11-10, slice 5c:** the bundle carries `contentLanguages` and `holidayArea` at its top level,
+not inside `venue`, which keeps setup fields including `invoiceLocales` (5c plan, item 7).

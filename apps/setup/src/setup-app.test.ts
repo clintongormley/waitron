@@ -1405,16 +1405,19 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
 
-  it("maps setup.request_invalid back to review with a banner naming the field", async () => {
-    const provision = vi
-      .fn()
-      .mockRejectedValue({ code: "setup.request_invalid", params: { field: "country" } });
-    const el = await mountSetupApp(stubApi({ provision }));
-    provisionRequest(el);
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
-    expect(await screenText(el, "review", "[data-test=error]")).toContain("country");
-  });
+  it.each(["country", "holidayArea.country", "holidayArea.provinceCode", "holidayArea.areaKey"])(
+    "maps setup.request_invalid %s back to review with a banner naming the field",
+    async (field) => {
+      const provision = vi
+        .fn()
+        .mockRejectedValue({ code: "setup.request_invalid", params: { field } });
+      const el = await mountSetupApp(stubApi({ provision }));
+      provisionRequest(el);
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
+      expect(await screenText(el, "review", "[data-test=error]")).toContain(field);
+    },
+  );
 
   // Asserted on the form's own input, because a path the shell routes on but the form has no entry
   // for would land the operator on a form saying nothing at all.

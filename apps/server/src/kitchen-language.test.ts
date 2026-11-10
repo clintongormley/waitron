@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
@@ -10,7 +11,9 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 describe("A964 venue language", () => {
   it("falls back to English without a saved row", async () => {
     await withTransaction(suite.db, async (tx) => {
-      await tx.execute(sql`delete from content_languages`);
+      await tx.execute(
+        sql`update settings set doc = json_set(doc, '$.contentLanguages', null, '$.defaultContentLanguage', null) where module = 'venue'`,
+      );
       expect(await readKitchenLanguage(tx)).toBe("en");
     });
   });
@@ -21,10 +24,15 @@ describe("A964 venue language", () => {
     ["ca-ES-valencia", "en"],
   ])("uses saved %s as %s without rewriting it", async (defaultLanguage, expected) => {
     await withTransaction(suite.db, async (tx) => {
+      await seedVenueSettings(tx);
       await writeContentLanguages(tx, { defaultLanguage, languages: [defaultLanguage] });
-      const before = await tx.execute(sql`select default_language from content_languages`);
+      const before = await tx.execute(
+        sql`select json_extract(doc, '$.defaultContentLanguage') as default_language from settings where module = 'venue'`,
+      );
       expect(await readKitchenLanguage(tx)).toBe(expected);
-      const { rows } = await tx.execute(sql`select default_language from content_languages`);
+      const { rows } = await tx.execute(
+        sql`select json_extract(doc, '$.defaultContentLanguage') as default_language from settings where module = 'venue'`,
+      );
       expect(rows).toEqual(before.rows);
     });
   });

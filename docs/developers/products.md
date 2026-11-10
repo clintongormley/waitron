@@ -108,7 +108,7 @@ comes from the published menu, and the rate from the day the invoice is issued, 
   line with no variant this is what the basket and a retrieved tab show after the product has been
   renamed or deleted; on a variant line they join it with `variant_name`.
 - `descriptions` — the customer-facing text, resolved through `customerPresentationText`, then
-  stored under exactly the venue's saved receipt languages (`locations.invoice_locales`), every
+  stored under exactly the venue's saved receipt languages (`settings.venue.invoiceLocales`), every
   key holding the venue's default content language's text, or that half's staff name where the
   default has none (`defaultLanguageDescriptions`, `packages/catalogue/src/default-language-text.ts`,
   called by `priceOrderLines`, `apps/server/src/working-order.ts`). A receipt prints the entry for

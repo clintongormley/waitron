@@ -366,7 +366,7 @@ describe("receipt language", () => {
     });
   const stored = async (): Promise<string[]> => {
     const { rows } = await suite.db.execute<{ invoice_locales: string }>(
-      sql`select invoice_locales from locations where id = ${venue.cfg.locationId}`,
+      sql`select json_extract(doc, '$.invoiceLocales') as invoice_locales from settings where module = 'venue'`,
     );
     return JSON.parse(rows[0]!.invoice_locales) as string[];
   };
@@ -374,14 +374,14 @@ describe("receipt language", () => {
   async function at(province: string, invoiceLocales: string[], fn: () => Promise<void>) {
     await seedVenueSettings(suite.db, { province });
     await suite.db.execute(
-      sql`update locations set invoice_locales = ${JSON.stringify(invoiceLocales)} where id = ${venue.cfg.locationId}`,
+      sql`update settings set doc = json_set(doc, '$.invoiceLocales', json(${JSON.stringify(invoiceLocales)})) where module = 'venue'`,
     );
     try {
       await fn();
     } finally {
       await seedVenueSettings(suite.db, { province: "Madrid" });
       await suite.db.execute(
-        sql`update locations set invoice_locales = '["es-ES"]' where id = ${venue.cfg.locationId}`,
+        sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["es-ES"]')) where module = 'venue'`,
       );
     }
   }
@@ -441,7 +441,7 @@ describe("receipt language", () => {
       expect(await stored()).toEqual(["gl-ES"]);
     } finally {
       await suite.db.execute(
-        sql`update locations set invoice_locales = '["es-ES"]' where id = ${venue.cfg.locationId}`,
+        sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["es-ES"]')) where module = 'venue'`,
       );
     }
   });
@@ -570,7 +570,7 @@ describe("venue defaults", () => {
   });
   const stored = async (): Promise<{ languages: string[]; vatClass: string }> => {
     const { rows } = await suite.db.execute<{ invoice_locales: string }>(
-      sql`select invoice_locales from locations where id = ${venue.cfg.locationId}`,
+      sql`select json_extract(doc, '$.invoiceLocales') as invoice_locales from settings where module = 'venue'`,
     );
     const settings = await suite.db.execute<{ default_product_vat_class: string }>(
       sql`select default_product_vat_class from catalogue_settings where id = 1`,
@@ -585,14 +585,14 @@ describe("venue defaults", () => {
   async function at(province: string, invoiceLocales: string[], fn: () => Promise<void>) {
     await seedVenueSettings(suite.db, { province });
     await suite.db.execute(
-      sql`update locations set invoice_locales = ${JSON.stringify(invoiceLocales)} where id = ${venue.cfg.locationId}`,
+      sql`update settings set doc = json_set(doc, '$.invoiceLocales', json(${JSON.stringify(invoiceLocales)})) where module = 'venue'`,
     );
     try {
       await fn();
     } finally {
       await seedVenueSettings(suite.db, { province: "Madrid" });
       await suite.db.execute(
-        sql`update locations set invoice_locales = '["es-ES"]' where id = ${venue.cfg.locationId}`,
+        sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["es-ES"]')) where module = 'venue'`,
       );
       await suite.db.execute(
         sql`update catalogue_settings set default_product_vat_class = ${initialVatClass}`,

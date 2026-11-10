@@ -174,10 +174,10 @@ async function venueWith(
     simplifiedInvoiceLimit: null,
   });
   const { menuItemId, staffId, profileId, printerId } = await withTransaction(db, async (tx) => {
-    await tx.execute(
-      sql`insert into content_languages (id, default_language, languages) values (1, 'es', '["es","ca","gl"]')
-          on conflict (id) do update set default_language = excluded.default_language, languages = excluded.languages`,
-    );
+    await seedVenueSettings(tx, {
+      defaultContentLanguage: "es",
+      contentLanguages: ["es", "ca", "gl"],
+    });
     const menu = await createCatalogue(tx, { name: `Receipt language menu ${cfg.locationId}` });
     const category = await createCategory(tx, { name: "Tapas" });
     // The staff, customer-facing and kitchen names all differ (docs/developers/products.md).
@@ -740,9 +740,7 @@ describe("an issued receipt reprinted in another receipt language", () => {
     await takePrinted(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await seedVenueSettings(tx, { invoiceLocales: ["es-ES"] });
-      await tx.execute(
-        sql`update content_languages set default_language = 'es', languages = '["es","ca"]'`,
-      );
+      await seedVenueSettings(tx, { defaultContentLanguage: "es", contentLanguages: ["es", "ca"] });
     });
     // The control: Galician is no longer offered.
     expect(await tillReceiptLanguages(v)).toEqual(["es-ES", "ca-ES"]);
@@ -797,9 +795,10 @@ describe("a sale prints its goods in the default content language its lines stor
     const wording = (pick: (words: (typeof GOODS)[GoodsLanguage]) => string) =>
       Object.fromEntries(languages.map((language) => [language, pick(GOODS[language])]));
     const goods = await withTransaction(suite.db, async (tx) => {
-      await tx.execute(
-        sql`update content_languages set default_language = ${defaultLanguage}, languages = ${JSON.stringify(languages)}`,
-      );
+      await seedVenueSettings(tx, {
+        defaultContentLanguage: defaultLanguage,
+        contentLanguages: languages,
+      });
       const menu = await createCatalogue(tx, { name: "Racions" });
       const unit = await createUnit(
         tx,
@@ -1154,7 +1153,7 @@ describe("a sale prints its goods in the default content language its lines stor
     await takePrinted(suite.db);
 
     await withTransaction(suite.db, (tx) =>
-      tx.execute(sql`update content_languages set default_language = 'ca'`),
+      seedVenueSettings(tx, { defaultContentLanguage: "ca" }),
     );
     // The control: a dish sold now stores the Catalan goods.
     expect((await sellGoods(v, goods)).status).toBe(200);
@@ -1216,10 +1215,7 @@ describe("the receipt language staff choose is saved on the order", () => {
   async function choosingVenue(): Promise<BillVenue> {
     const venue = await catalanBillVenue();
     await inTx(venue, async (tx) => {
-      await tx.execute(
-        sql`insert into content_languages (id, default_language, languages) values (1, 'es', '["es","ca"]')
-            on conflict (id) do update set default_language = excluded.default_language, languages = excluded.languages`,
-      );
+      await seedVenueSettings(tx, { defaultContentLanguage: "es", contentLanguages: ["es", "ca"] });
     });
     return venue;
   }
@@ -1486,10 +1482,7 @@ describe("a sale files in the receipt language saved on its order", () => {
     await inTx(venue, async (tx) => {
       await seedVenueSettings(tx, { invoiceLocales: locales });
       await seedVenueSettings(tx, { province: "Barcelona", city: "Barcelona" });
-      await tx.execute(
-        sql`insert into content_languages (id, default_language, languages) values (1, 'es', '["es","ca"]')
-            on conflict (id) do update set default_language = excluded.default_language, languages = excluded.languages`,
-      );
+      await seedVenueSettings(tx, { defaultContentLanguage: "es", contentLanguages: ["es", "ca"] });
       await tx.execute(
         sql`update products set customer_name = json_object('es', 'ES ' || name, 'ca', 'CA ' || name)`,
       );
@@ -1819,7 +1812,7 @@ describe("a sale files in the receipt language saved on its order", () => {
     const venue = await barcelonaVenue();
     const billId = await tabWith(venue, "Tarta");
     await choose(venue, billId, "es-ES");
-    venue.db.run(sql`update content_languages set default_language = 'ca', languages = '["ca"]'`);
+    await seedVenueSettings(venue.db, { defaultContentLanguage: "ca", contentLanguages: ["ca"] });
     const logged: { level: string; event: string; fields: unknown }[] = [];
     const app = new Hono();
     mountTillApi(
@@ -1858,7 +1851,7 @@ describe("a sale files in the receipt language saved on its order", () => {
     const venue = await barcelonaVenue();
     const { id } = await parkedTarta(venue);
     await choose(venue, id, "es-ES");
-    venue.db.run(sql`update content_languages set default_language = 'ca', languages = '["ca"]'`);
+    await seedVenueSettings(venue.db, { defaultContentLanguage: "ca", contentLanguages: ["ca"] });
     const deps = {
       db: venue.db,
       backend: venue.backend,
