@@ -3186,27 +3186,28 @@ describe("till-app table ordering: the guests the receipt prints", () => {
           balanceOf({ workingOrderId: "wo-7", total: "3.00", outstanding: "3.00" }),
         ),
       previewBillPayment: vi.fn().mockResolvedValue(cash("3.00", "2.00")),
-      takeBillPayment: vi
-        .fn()
-        .mockResolvedValue(
-          takenOf(
-            { applied: "3.00", tendered: "5.00", change: "2.00" },
-            {
-              workingOrderId: "wo-7",
-              total: "3.00",
-              received: "3.00",
-              outstanding: "0.00",
-              status: "settled",
-            },
-            saleResult,
-          ),
+      takeBillPayment: vi.fn().mockResolvedValue(
+        takenOf(
+          { applied: "3.00", tendered: "5.00", change: "2.00" },
+          {
+            workingOrderId: "wo-7",
+            total: "3.00",
+            received: "3.00",
+            outstanding: "0.00",
+            status: "settled",
+          },
+          saleResult,
         ),
+      ),
     });
     await toTableOrder(el);
     tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
     await flush(el);
     if (pay(el).localName === "till-bill-pay-dialog") {
-      const field = pay(el).shadowRoot!.querySelector("wt-input[name=tendered]")!;
+      const field =
+        pay(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+          "wt-input[name=tendered]",
+        )!;
       await field.updateComplete;
       const input = field.shadowRoot!.querySelector("input")!;
       input.value = "5";
@@ -3230,7 +3231,10 @@ describe("till-app table ordering: the guests the receipt prints", () => {
     if (panel.localName === "till-bill-pay-dialog")
       panel.shadowRoot!.querySelector<HTMLElement>("[data-pay-confirm]")!.click();
     else {
-      const field = panel.shadowRoot!.querySelector("wt-input[name=tendered]")!;
+      const field =
+        panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+          "wt-input[name=tendered]",
+        )!;
       await field.updateComplete;
       const input = field.shadowRoot!.querySelector("input")!;
       input.value = "5";

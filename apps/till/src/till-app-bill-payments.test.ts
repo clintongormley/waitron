@@ -59,7 +59,6 @@ import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
-import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillBillRefundDialog } from "./widgets/bill-refund-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
