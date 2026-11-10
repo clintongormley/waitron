@@ -14,6 +14,7 @@ afterEach(() => {
 });
 async function fixture() {
   vi.stubGlobal("isSecureContext", false);
+  vi.stubGlobal("crypto", { getRandomValues: crypto.getRandomValues.bind(crypto) });
   setLocale("en-GB");
   const { el } = await mountWidget<HTMLElement & { updateComplete: Promise<boolean> }>(
     "setup-problem-report",
@@ -25,6 +26,7 @@ async function fixture() {
   await el.updateComplete;
   const dialog = el.shadowRoot!.querySelector<WtReportDialog>("wt-report-dialog")!;
   await dialog.updateComplete;
+  expect(dialog.open).toBe(true);
   return { el, dialog, trigger: trigger! };
 }
 function preview(dialog: WtReportDialog) {

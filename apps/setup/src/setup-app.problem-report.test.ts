@@ -101,7 +101,7 @@ it("downloading from the real setup shell preserves its unfinished venue details
   );
   await app.updateComplete;
   const report = app.shadowRoot!.querySelector("setup-problem-report")!;
-  const coordinator = leaveCoordinatorFor(report);
+  const coordinator = leaveCoordinatorFor(report)!;
   expect(coordinator.isDirty()).toBe(true);
   await report.updateComplete;
   await userEvent.click(report.shadowRoot!.querySelector<WtButton>("[data-report-problem]")!);
