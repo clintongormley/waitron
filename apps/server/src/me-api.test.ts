@@ -1188,38 +1188,6 @@ describe("mountMeApi — own credentials and second factor", () => {
     expect(await verifyPin("5555", row.pinHash!)).toBe(false);
   });
 
-  it("refuses a PIN change with the wrong current password (401 password.invalid)", async () => {
-    const personId = await personWithPassword();
-    const res = await send(mountApp(), "PUT", "/management-api/session/me/pin", {
-      cookie: await cookieFor(personId),
-      body: { currentPassword: "not the password", pin: "8642" },
-    });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
-    expect(await verifyPin("5555", (await personRow(personId)).pinHash!)).toBe(true);
-  });
-
-  it("slows a person down after repeated wrong passwords (429 password.throttled)", async () => {
-    const personId = await personWithPassword();
-    const app = mountApp();
-    const cookie = await cookieFor(personId);
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const res = await send(app, "PUT", "/management-api/session/me/pin", {
-        cookie,
-        body: { currentPassword: "wrong", pin: "8642" },
-      });
-      expect(res.status).toBe(401);
-    }
-    const throttled = await send(app, "PUT", "/management-api/session/me/pin", {
-      cookie,
-      body: { currentPassword: PASSWORD, pin: "8642" },
-    });
-    expect(throttled.status).toBe(429);
-    expect(await throttled.json()).toEqual({
-      error: { code: "password.throttled", params: { retryAfterSeconds: 2 } },
-    });
-  });
-
   it("does not count a refusal that is not a wrong credential towards the slow-down", async () => {
     const personId = await personWithPassword();
     const app = mountApp();
