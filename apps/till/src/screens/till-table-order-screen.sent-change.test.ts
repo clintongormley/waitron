@@ -1242,7 +1242,6 @@ it("localises the sent dish, extras and served quantity", async () => {
     {
       billBalance: balance([{ lineId: "l-weighed", lineNo: 1, paidQuantity: "0.250" }]),
       currentOrders: current({
-        held: [],
         ungrouped: [
           row("l-weighed", "Fish", "0.750", {
             unitPrecision: 3,
