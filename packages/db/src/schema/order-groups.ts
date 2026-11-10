@@ -67,6 +67,7 @@ export const orderGroups = table(
       name: "order_groups_fired_by_device_fk",
     }),
     index("order_groups_party_idx").on(t.partyId),
+    index("order_groups_number_party_idx").on(t.numberPartyId),
     check("order_groups_state_ck", enumCheck(t.state)),
     check("order_groups_fired_at_ck", sql`(${t.state} = 'fired') = (${t.firedAt} is not null)`),
     check("order_groups_firer_ck", sql`${t.firedBy} is null or ${t.firedByDeviceId} is null`),

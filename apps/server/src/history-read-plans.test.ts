@@ -17,7 +17,7 @@ import { placeGroups } from "./testing/group-submit-fixture.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { setReleaseReminderInEveryDepartment } from "./testing/release-reminder.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
-import { readHeldCounts, readReleaseReminders } from "./order-groups.js";
+import { readHeldCounts, readReleaseReminders, startGroup } from "./order-groups.js";
 import { readStepFacts } from "./service-step-signals.js";
 import { listStationQueues, stationHasWork } from "./working-order.js";
 
@@ -280,6 +280,24 @@ describe("current service reads with collected history", () => {
       expect(
         (await listStationQueues(tx, [venue.stations.grill])).get(venue.stations.grill),
       ).toEqual([]);
+    });
+  });
+
+  it("finds a party's next group number through the party and number-party indexes", async () => {
+    const { venue } = await fixture();
+    await withTransaction(suite.db, async (tx) => {
+      const measured = await capture(() =>
+        startGroup(tx, venue.party.partyId, "hold", OPERATOR, "next_course"),
+      );
+      const numbers = measured.plans.filter(
+        (plan) =>
+          plan.sql.includes('from "order_groups"') && plan.sql.includes('"number_party_id" = ?'),
+      );
+      expect(numbers).toHaveLength(1);
+      const details = numbers[0]!.details.join("\n");
+      expect(details).not.toMatch(/SCAN order_groups/);
+      expect(details).toContain("order_groups_number_party_idx");
+      expect(details).toContain("order_groups_party_idx");
     });
   });
 });

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "63ae565b-a5ca-4045-a62f-6dbafd2f8052",
+  "id": "ae52be8e-f0f5-40bc-9c5b-56ea960d17b5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -3726,6 +3726,13 @@
           "name": "order_groups_party_idx",
           "columns": [
             "party_id"
+          ],
+          "isUnique": false
+        },
+        "order_groups_number_party_idx": {
+          "name": "order_groups_number_party_idx",
+          "columns": [
+            "number_party_id"
           ],
           "isUnique": false
         }
