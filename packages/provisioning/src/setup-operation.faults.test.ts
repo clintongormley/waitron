@@ -57,6 +57,51 @@ afterEach(async () => {
 });
 
 describe("setup operation store under filesystem faults", () => {
+  it("discards an initial record whose folder sync failed before setup ran", async () => {
+    const dir = await stateDir();
+    const store = createSetupOperationStore(dir);
+    hooks.armed.push({
+      op: "open",
+      file: basename(dir),
+      when: "before",
+      run: () => Promise.reject(failure("EIO")),
+    });
+    let ran = false;
+    await expect(
+      store.run("provision", "request-a", async () => {
+        ran = true;
+      }),
+    ).rejects.toMatchObject({ code: "EIO" });
+    expect(ran).toBe(false);
+    expect(await store.read()).toBeNull();
+    await expect(store.run("adopt", "request-b", async () => "corrected")).resolves.toBe(
+      "corrected",
+    );
+  });
+
+  it("keeps committed progress when its replacement failed at folder sync", async () => {
+    const dir = await stateDir();
+    const store = createSetupOperationStore(dir);
+    await expect(
+      store.run("provision", "request-a", async (operation) => {
+        hooks.armed.push({
+          op: "open",
+          file: basename(dir),
+          when: "before",
+          run: () => Promise.reject(failure("EIO")),
+        });
+        await operation.advance("venue_committed", { tenantId: "tenant-1" });
+      }),
+    ).rejects.toMatchObject({ code: "EIO" });
+    expect(await store.read()).toMatchObject({
+      phase: "venue_committed",
+      data: { tenantId: "tenant-1" },
+    });
+    await expect(store.run("adopt", "request-b", async () => {})).rejects.toMatchObject({
+      code: "setup.operation_conflict",
+    });
+  });
+
   it("surfaces a lock that cannot be created for a reason other than an existing holder", async () => {
     const dir = await stateDir();
     hooks.armed.push({

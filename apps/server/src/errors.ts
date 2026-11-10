@@ -1364,8 +1364,8 @@ declare module "@waitron/shared" {
      */
     "mirror.membership_full": { limit: number };
     /** A secret file's path, from a backup archive being restored, would land outside the state
-     * folder or on a first-setup host file; `reason` is `unsafe_path`. */
-    "recovery.bundle_invalid": { reason: string };
+     * folder or on a first-setup host file. */
+    "recovery.archive_path_unsafe": Record<string, never>;
     "recovery.pack_invalid": { reason: string };
     /** A recovery pack was asked for over a connection that is not encrypted. */
     "recovery.pack_connection_insecure": Record<string, never>;

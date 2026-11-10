@@ -9,7 +9,7 @@ import { openBackupQuery } from "@waitron/store";
 import {
   BACKUP_ROOM_NOTE_FILE,
   BACKUP_ROOM_START_DELETED_FILE,
-  backupRoomNoteTemporaryName,
+  stagedPath,
 } from "@waitron/provisioning";
 import type { ArchiveEntry } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
@@ -109,7 +109,7 @@ describe("collectSealedEntries with the backup room's files present", () => {
   it("holds none of them", async () => {
     for (const name of [
       BACKUP_ROOM_NOTE_FILE,
-      backupRoomNoteTemporaryName("0123456789ab"),
+      stagedPath(BACKUP_ROOM_NOTE_FILE),
       BACKUP_ROOM_START_DELETED_FILE,
       `${BACKUP_ROOM_START_DELETED_FILE}.tmp`,
     ])

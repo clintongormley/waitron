@@ -327,7 +327,7 @@ async function seedDemoDevices(
 /**
  * Write the fiscal-slot `modules.json` so boot resolves the slot to one member: with no file, every
  * fiscal-slot member is on and boot refuses `module.fiscal_slot_ambiguous`. `mkdirSync` first because
- * `writeFileAtomic` does not create the parent dir.
+ * `writeFileDurable` does not create the parent dir.
  */
 async function writeFiscalModulesJson(
   stateDir: string,

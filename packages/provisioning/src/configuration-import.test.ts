@@ -1,7 +1,9 @@
+import * as fs from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { configurationBundle } from "../test/configuration-bundle.js";
 import { encodeConfigurationBundle } from "./configuration-transfer.js";
@@ -11,10 +13,13 @@ import {
   stageConfigurationImport,
 } from "./configuration-import.js";
 
+vi.mock("node:fs/promises", { spy: true });
+
 const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 91).toString("base64") });
 const passphrase = "SYNTHETIC export passphrase";
 const roots: string[] = [];
 afterEach(async () => {
+  vi.mocked(fs.open).mockReset();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 async function directory() {
@@ -131,4 +136,19 @@ it("refuses an excluded bundle zone before staging and preserves the earlier art
     stageConfigurationImport(root, ring, encoded, passphrase, async () => {}),
   ).rejects.toMatchObject({ code: "venue.time_zone_invalid", params: { reason: "country" } });
   expect((await readStagedConfigurationImport(root, ring))!.artifact).toEqual(artifact);
+});
+
+it("disarms an import whose publication failed at folder sync", async () => {
+  const root = await directory();
+  const artifact = encodeConfigurationBundle(configurationBundle(), passphrase);
+  const actual = await vi.importActual<typeof fs>("node:fs/promises");
+  vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+    if (String(args[0]) === root && existsSync(join(root, "configuration-import.json")))
+      throw Object.assign(new Error("folder sync failed"), { code: "EIO" });
+    return actual.open(...args);
+  });
+  await expect(
+    stageConfigurationImport(root, ring, artifact, passphrase, async () => {}),
+  ).rejects.toMatchObject({ code: "EIO" });
+  expect(await readStagedConfigurationImport(root, ring)).toBeNull();
 });

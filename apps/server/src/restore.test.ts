@@ -591,6 +591,19 @@ describe("the first-start marker (rebuild-first-start.ts)", () => {
     await noMarker();
   });
 
+  it("disarms the first-start marker when its folder sync fails before placement", async () => {
+    const failure = Object.assign(new Error("folder sync failed"), { code: "EIO" });
+    const thrown = await failingOn(
+      "open",
+      (path) => path === stateDir && existsSync(join(stateDir, REBUILD_MARKER)),
+      failure,
+      () => restoreFromArtifact(makeRestoreDeps()),
+    );
+    expect(thrown).toBe(failure);
+    await noMarker();
+    expect(existsSync(join(venueDir, "venue.db"))).toBe(false);
+  });
+
   it("leaves no marker when the restore fails after it began writing", async () => {
     await expect(
       restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": boom }) })),
@@ -787,7 +800,7 @@ describe("restore steps (R3 composition)", () => {
         stateDir,
         log: noopLog,
       }),
-    ).rejects.toMatchObject({ code: "recovery.bundle_invalid", params: { reason: "unsafe_path" } });
+    ).rejects.toMatchObject({ code: "recovery.archive_path_unsafe", params: {} });
   });
 
   it("restoreSecrets catches a symlinked-parent escape", async () => {
@@ -801,15 +814,15 @@ describe("restore steps (R3 composition)", () => {
           log: noopLog,
         }),
       ).rejects.toMatchObject({
-        code: "recovery.bundle_invalid",
-        params: { reason: "unsafe_path" },
+        code: "recovery.archive_path_unsafe",
+        params: {},
       });
     } finally {
       await rm(outside, { recursive: true, force: true });
     }
   });
 
-  it("restoreSecrets strips the prefix and writes via unpackBundleToDir", async () => {
+  it("restoreSecrets strips the prefix and writes via unpackStateFiles", async () => {
     await restoreSecrets({
       entries: [
         { name: "secrets/secrets.env", bytes: Buffer.from(SECRET) },

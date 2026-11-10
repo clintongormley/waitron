@@ -187,7 +187,7 @@ describe("stageSecrets", () => {
         stateDir,
         log: vi.fn(),
       }),
-    ).rejects.toMatchObject({ code: "recovery.bundle_invalid", params: { reason: "unsafe_path" } });
+    ).rejects.toMatchObject({ code: "recovery.archive_path_unsafe", params: {} });
     expect(await readdir(stateDir)).toEqual([]);
     expect(await readdir(parent)).toEqual(["state"]);
   });

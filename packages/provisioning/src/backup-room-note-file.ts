@@ -16,19 +16,12 @@ export async function deleteBackupRoomNote(stateDir: string): Promise<void> {
   }
 }
 
-/** The temporary name the note is written under before its rename; `hex` is 12 lowercase hex digits. */
-export function backupRoomNoteTemporaryName(hex: string): string {
-  return `${BACKUP_ROOM_NOTE_FILE}.${hex}.tmp`;
-}
-
-const BACKUP_ROOM_NOTE_TEMPORARY = /^backup-room-note\.json\.[0-9a-f]{12}\.tmp$/;
-
 /** The backup room's own files in the state folder: they hold no venue data. */
 export function isBackupRoomFileName(name: string): boolean {
   return (
     name === BACKUP_ROOM_NOTE_FILE ||
     name === BACKUP_ROOM_START_DELETED_FILE ||
     name === stagedPath(BACKUP_ROOM_START_DELETED_FILE) ||
-    BACKUP_ROOM_NOTE_TEMPORARY.test(name)
+    name === stagedPath(BACKUP_ROOM_NOTE_FILE)
   );
 }

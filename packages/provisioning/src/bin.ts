@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { MODULES_FILE } from "@waitron/store";
 import { once } from "node:events";
-import { writeFile } from "node:fs/promises";
+import { writeFileDurable } from "./fs-atomic.js";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
@@ -88,15 +88,13 @@ async function main(): Promise<number> {
   }
 }
 
-/** The envelope and mode match `apps/server/src/module-config.ts`'s `writeModuleConfig`. Not atomic:
- * a one-shot CLI, not a live server. */
 function writeModuleConfigTo(
   stateDir: string | undefined,
 ): ((config: ModuleConfig) => Promise<void>) | undefined {
   if (stateDir === undefined || stateDir === "") return undefined;
   return async (config: ModuleConfig) => {
     const body = JSON.stringify({ modules: serializeModuleConfig(config) }, null, 2) + "\n";
-    await writeFile(join(stateDir, MODULES_FILE), body, { mode: 0o600 });
+    await writeFileDurable(join(stateDir, MODULES_FILE), body, 0o600);
   };
 }
 

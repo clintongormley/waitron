@@ -187,15 +187,15 @@ it.each(["first-setup.json", "first-setup-claim.json", "module-operation-public.
 
 it("does not import host claim or enrolment files through the generic state-secrets writer", async () => {
   const f = await fixture();
-  const { unpackBundleToDir } = await import("./state-secrets.js");
+  const { unpackStateFiles } = await import("./state-secrets.js");
   for (const name of [
     "first-setup.json",
     "first-setup-claim.json",
     "module-operation-public.json",
   ]) {
     await expect(
-      unpackBundleToDir({ "trading.env": "SHOULD-NOT-WRITE", [name]: "{}" }, f.stateDir),
-    ).rejects.toMatchObject({ code: "recovery.bundle_invalid", params: { reason: "unsafe_path" } });
+      unpackStateFiles({ "trading.env": "SHOULD-NOT-WRITE", [name]: "{}" }, f.stateDir),
+    ).rejects.toMatchObject({ code: "recovery.archive_path_unsafe", params: {} });
     await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
       code: "ENOENT",
     });
@@ -448,10 +448,10 @@ it.each([
   "records/choices/x.json",
 ])("cannot import retirement or current setup authority through %s", async (name) => {
   const f = await fixture();
-  const { unpackBundleToDir } = await import("./state-secrets.js");
+  const { unpackStateFiles } = await import("./state-secrets.js");
   await expect(
-    unpackBundleToDir({ "trading.env": "SHOULD-NOT-WRITE", [name]: "{}" }, f.stateDir),
-  ).rejects.toMatchObject({ code: "recovery.bundle_invalid", params: { reason: "unsafe_path" } });
+    unpackStateFiles({ "trading.env": "SHOULD-NOT-WRITE", [name]: "{}" }, f.stateDir),
+  ).rejects.toMatchObject({ code: "recovery.archive_path_unsafe", params: {} });
   await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
   await expect(
     validateDatabaseEntries(

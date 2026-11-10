@@ -62,7 +62,7 @@ import {
 } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import { parseEnvFile } from "./env-file.js";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { writeFileDurable } from "./fs-atomic.js";
 import { isUnset } from "./env-value.js";
 import { errnoOf } from "./errno.js";
 import { type ArchiveEntry, unpackArchive } from "./backup-archive.js";
@@ -78,7 +78,7 @@ import { assertSafeEntryName } from "./restore-entry-guard.js";
 import type { StateSecretFiles } from "./state-secrets.js";
 import { REBUILD_MARKER, type RebuildSource } from "./rebuild-first-start.js";
 import { ARCHIVE_VALIDATE_PREFIX, RESTORE_ADMISSION_PREFIX } from "./restore-staging-dirs.js";
-import { unpackBundleToDir } from "./state-secrets.js";
+import { unpackStateFiles } from "./state-secrets.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { type StagedSecrets, stageSecrets } from "./restore-secrets.js";
 import "./errors.js";
@@ -538,14 +538,14 @@ export async function writeValidated(
     // before anything is placed, so a box that trades after this restore finds it; a restore that
     // throws removes it while the lock is still held.
     const marker = join(deps.stateDir, REBUILD_MARKER);
-    if (!deps.skipSecrets) {
-      await writeFileAtomic(
-        marker,
-        JSON.stringify({ version: 1, source: deps.rebuildSource ?? "archive" }),
-        0o600,
-      );
-    }
     try {
+      if (!deps.skipSecrets) {
+        await writeFileDurable(
+          marker,
+          JSON.stringify({ version: 1, source: deps.rebuildSource ?? "archive" }),
+          0o600,
+        );
+      }
       await placeValidated(admitted, deps);
     } catch (error) {
       if (!deps.skipSecrets) await rm(marker, { force: true });
@@ -842,7 +842,7 @@ export async function clearReplacedDatabases(
 }
 
 /**
- * Restore every `secrets/<path>` entry into `stateDir`, prefix stripped, via `unpackBundleToDir` —
+ * Restore every `secrets/<path>` entry into `stateDir`, prefix stripped, via `unpackStateFiles` —
  * which re-applies the same traversal guard AND writes each file 0600, durably unless `durable` is
  * `false`. Secret contents are utf8 text
  * (`RECOVERY_FILES` are `.env`/PEM), matching the utf8 they were read as into the archive.
@@ -863,7 +863,7 @@ export async function restoreSecrets(args: {
   const identity = args.entries.find((entry) => entry.name === TRADING_ENV_ENTRY);
   if (identity !== undefined)
     files[TRADING_ENV_FILE] = Buffer.from(identity.bytes).toString("utf8");
-  await unpackBundleToDir(files, args.stateDir, { durable: args.durable ?? true });
+  await unpackStateFiles(files, args.stateDir, { durable: args.durable ?? true });
   args.log("info", "restore.secrets.done", { count: args.entries.length });
 }
 

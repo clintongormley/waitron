@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import {
   BACKUP_ROOM_NOTE_FILE,
   BACKUP_ROOM_START_DELETED_FILE,
-  backupRoomNoteTemporaryName,
+  stagedPath,
 } from "@waitron/provisioning";
 import { afterEach, expect, it } from "vitest";
 import { assembleArchiveEntries, collectStateParts } from "./archive-entries.js";
@@ -36,7 +36,7 @@ it("an archive built with the backup room's files in the state folder holds none
   await writeFile(join(stateDir, "modules.json"), '{"modules":{}}\n');
   for (const name of [
     BACKUP_ROOM_NOTE_FILE,
-    backupRoomNoteTemporaryName("0123456789ab"),
+    stagedPath(BACKUP_ROOM_NOTE_FILE),
     BACKUP_ROOM_START_DELETED_FILE,
     `${BACKUP_ROOM_START_DELETED_FILE}.tmp`,
   ])

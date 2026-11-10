@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
-import { RECOVERY_FILES, collectStateSecrets, unpackBundleToDir } from "./state-secrets.js";
+import { RECOVERY_FILES, collectStateSecrets, unpackStateFiles } from "./state-secrets.js";
 import { syncsAndRenames as recordSyncsAndRenames } from "./testing/durable-writes.js";
 
 vi.mock("node:fs/promises", { spy: true });
@@ -76,8 +76,8 @@ describe("state-secrets", () => {
 
   it("rejects a bundle key that would escape destDir (traversal guard), writing nothing outside", async () => {
     const dest = mkdtempSync(join(tmpdir(), "state-secrets-escape-"));
-    await expect(unpackBundleToDir({ "../escape": "pwned\n" }, dest)).rejects.toThrow(
-      new AppError("recovery.bundle_invalid", { reason: "unsafe_path" }),
+    await expect(unpackStateFiles({ "../escape": "pwned\n" }, dest)).rejects.toThrow(
+      new AppError("recovery.archive_path_unsafe", {}),
     );
     // The sibling path the traversal would have written to must not exist.
     await expect(readFile(join(dest, "..", "escape"), "utf8")).rejects.toThrow();
@@ -90,8 +90,8 @@ describe("state-secrets", () => {
     // Pre-existing `destDir/tls -> outside`: the key `tls/server.key` is lexically fine, but writing
     // it would follow the symlink and land in `outside`. The symlink-aware guard must reject it.
     await symlink(outside, join(dest, "tls"));
-    await expect(unpackBundleToDir({ "tls/server.key": "pwned\n" }, dest)).rejects.toThrow(
-      new AppError("recovery.bundle_invalid", { reason: "unsafe_path" }),
+    await expect(unpackStateFiles({ "tls/server.key": "pwned\n" }, dest)).rejects.toThrow(
+      new AppError("recovery.archive_path_unsafe", {}),
     );
     // Nothing was written into the outside dir the symlink pointed at, and its mode is untouched.
     expect(await readdir(outside)).toEqual([]);
@@ -104,13 +104,13 @@ describe("state-secrets", () => {
     await symlink(outside, join(dest, "tls"));
     let refusal: unknown;
     const events = await syncsAndRenames(() =>
-      unpackBundleToDir({ "tls/sub/server.key": "pwned\n" }, dest).catch((err: unknown) => {
+      unpackStateFiles({ "tls/sub/server.key": "pwned\n" }, dest).catch((err: unknown) => {
         refusal = err;
       }),
     );
     expect(refusal).toMatchObject({
-      code: "recovery.bundle_invalid",
-      params: { reason: "unsafe_path" },
+      code: "recovery.archive_path_unsafe",
+      params: {},
     });
     expect(await readdir(outside)).toEqual([]);
     expect(events).toEqual([]);
@@ -125,9 +125,9 @@ describe("state-secrets", () => {
       return real.mkdir(path, options);
     }) as typeof fs.mkdir);
     try {
-      await expect(unpackBundleToDir({ "tls/server.key": "pwned\n" }, dest)).rejects.toMatchObject({
-        code: "recovery.bundle_invalid",
-        params: { reason: "unsafe_path" },
+      await expect(unpackStateFiles({ "tls/server.key": "pwned\n" }, dest)).rejects.toMatchObject({
+        code: "recovery.archive_path_unsafe",
+        params: {},
       });
     } finally {
       vi.mocked(fs.mkdir).mockReset();
@@ -137,7 +137,7 @@ describe("state-secrets", () => {
 
   it("creates the missing folders between an existing one and an entry", async () => {
     const dest = mkdtempSync(join(tmpdir(), "state-secrets-deep-"));
-    await unpackBundleToDir({ "a/b/c/k": "k\n" }, dest);
+    await unpackStateFiles({ "a/b/c/k": "k\n" }, dest);
     expect(await readFile(join(dest, "a", "b", "c", "k"), "utf8")).toBe("k\n");
   });
 
@@ -145,13 +145,13 @@ describe("state-secrets", () => {
     const dest = mkdtempSync(join(tmpdir(), "state-secrets-lstat-eio-"));
     const failure = Object.assign(new Error("injected lstat failure"), { code: "EIO" });
     vi.mocked(fs.lstat).mockRejectedValueOnce(failure);
-    await expect(unpackBundleToDir({ "a/k": "k\n" }, dest)).rejects.toBe(failure);
+    await expect(unpackStateFiles({ "a/k": "k\n" }, dest)).rejects.toBe(failure);
   });
 
   it("syncs each unpacked file before renaming it into place, and its folder after", async () => {
     const files = await collectStateSecrets(await seedStateDir());
     const dest = mkdtempSync(join(tmpdir(), "state-secrets-durable-"));
-    const events = await syncsAndRenames(() => unpackBundleToDir(files, dest));
+    const events = await syncsAndRenames(() => unpackStateFiles(files, dest));
     for (const rel of RECOVERY_FILES) {
       const target = join(dest, rel);
       const renamed = events.indexOf(`rename ${target}.tmp ${target}`);
@@ -166,7 +166,7 @@ describe("state-secrets", () => {
   it("syncs the destination after creating a tls folder in it", async () => {
     const files = await collectStateSecrets(await seedStateDir());
     const dest = mkdtempSync(join(tmpdir(), "state-secrets-new-tls-"));
-    const events = await syncsAndRenames(() => unpackBundleToDir(files, dest));
+    const events = await syncsAndRenames(() => unpackStateFiles(files, dest));
     const created = events.indexOf(`mkdir ${join(dest, "tls")}`);
     expect(created).not.toBe(-1);
     expect(events.indexOf(`sync ${dest}`, created)).toBeGreaterThan(created);
@@ -175,7 +175,7 @@ describe("state-secrets", () => {
   it("syncs the folder above each folder it creates for a missing destination", async () => {
     const above = mkdtempSync(join(tmpdir(), "state-secrets-new-dest-"));
     const dest = join(above, "a", "state");
-    const events = await syncsAndRenames(() => unpackBundleToDir({ "secrets.env": "x\n" }, dest));
+    const events = await syncsAndRenames(() => unpackStateFiles({ "secrets.env": "x\n" }, dest));
     const created = events.indexOf(`mkdir ${dest}`);
     expect(created).not.toBe(-1);
     expect(events.indexOf(`sync ${above}`, created)).toBeGreaterThan(created);
@@ -186,12 +186,10 @@ describe("state-secrets", () => {
     const files = await collectStateSecrets(await seedStateDir());
     const above = mkdtempSync(join(tmpdir(), "state-secrets-not-durable-"));
     const dest = join(above, "a", "state");
-    const events = await syncsAndRenames(() => unpackBundleToDir(files, dest, { durable: false }));
+    const events = await syncsAndRenames(() => unpackStateFiles(files, dest, { durable: false }));
     expect(events).toContain(`mkdir ${dest}`);
     expect(events).toContain(`mkdir ${join(dest, "tls")}`);
-    expect(events).toContain(
-      `rename ${join(dest, "trading.env")}.tmp ${join(dest, "trading.env")}`,
-    );
+    expect(events.filter((event) => event.startsWith("rename "))).toEqual([]);
     expect(events.filter((event) => event.startsWith("sync "))).toEqual([]);
     for (const rel of RECOVERY_FILES) {
       expect(await readFile(join(dest, rel), "utf8")).toBe(files[rel]);
@@ -205,7 +203,7 @@ describe("state-secrets", () => {
     const dest = mkdtempSync(join(tmpdir(), "state-secrets-linked-"));
     await mkdir(join(dest, "real-tls"));
     await symlink(join(dest, "real-tls"), join(dest, "tls"));
-    await unpackBundleToDir({ "tls/server.key": "key\n" }, dest);
+    await unpackStateFiles({ "tls/server.key": "key\n" }, dest);
     expect(await readFile(join(dest, "real-tls", "server.key"), "utf8")).toBe("key\n");
   });
 
@@ -213,7 +211,7 @@ describe("state-secrets", () => {
     const src = await seedStateDir();
     const files = await collectStateSecrets(src);
     const dest = mkdtempSync(join(tmpdir(), "state-secrets-out-"));
-    await unpackBundleToDir(files, dest);
+    await unpackStateFiles(files, dest);
     for (const rel of RECOVERY_FILES) {
       expect(await readFile(join(dest, rel), "utf8")).toBe(files[rel]);
       expect((await stat(join(dest, rel))).mode & 0o777).toBe(0o600);
@@ -226,7 +224,7 @@ describe("state-secrets", () => {
     await mkdir(join(dest, "tls"));
     await chmod(dest, 0o755);
     await chmod(join(dest, "tls"), 0o755);
-    await unpackBundleToDir(files, dest);
+    await unpackStateFiles(files, dest);
     expect((await stat(dest)).mode & 0o777).toBe(0o700);
     expect((await stat(join(dest, "tls"))).mode & 0o777).toBe(0o700);
   });
@@ -237,7 +235,7 @@ describe("state-secrets", () => {
     await chmod(dest, 0o755);
     await chmod(join(dest, "a"), 0o755);
     await chmod(join(dest, "a", "b"), 0o755);
-    await unpackBundleToDir({ "a/b/key": "x\n" }, dest);
+    await unpackStateFiles({ "a/b/key": "x\n" }, dest);
     expect((await stat(join(dest, "a"))).mode & 0o777).toBe(0o700);
     expect((await stat(join(dest, "a", "b"))).mode & 0o777).toBe(0o700);
   });
@@ -245,14 +243,14 @@ describe("state-secrets", () => {
   it("creates a missing destination and entry folder owner-only", async () => {
     const files = await collectStateSecrets(await seedStateDir());
     const dest = join(mkdtempSync(join(tmpdir(), "state-secrets-fresh-")), "state");
-    await unpackBundleToDir(files, dest);
+    await unpackStateFiles(files, dest);
     expect((await stat(dest)).mode & 0o777).toBe(0o700);
     expect((await stat(join(dest, "tls"))).mode & 0o777).toBe(0o700);
   });
 
   it("writes each file under its name plus the suffix, and not under its own name", async () => {
     const dest = mkdtempSync(join(tmpdir(), "state-secrets-suffix-"));
-    await unpackBundleToDir({ "a.env": "a\n" }, dest, { suffix: ".incoming" });
+    await unpackStateFiles({ "a.env": "a\n" }, dest, { suffix: ".incoming" });
     expect(await readFile(join(dest, "a.env.incoming"), "utf8")).toBe("a\n");
     expect(await readdir(dest)).toEqual(["a.env.incoming"]);
   });
@@ -263,7 +261,7 @@ describe("state-secrets", () => {
     await chmod(above, 0o755);
     const dest = join(above, "state");
     await mkdir(dest, { mode: 0o755 });
-    await unpackBundleToDir(files, dest);
+    await unpackStateFiles(files, dest);
     expect((await stat(above)).mode & 0o777).toBe(0o755);
   });
 });

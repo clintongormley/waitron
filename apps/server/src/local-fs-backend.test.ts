@@ -81,6 +81,21 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     ...actual,
     open: async (...args: Parameters<typeof actual.open>) => {
       const handle = await actual.open(...args);
+      const sync = handle.sync.bind(handle);
+      handle.sync = async () => {
+        await sync();
+        hooks.during?.("sync", String(args[0]));
+      };
+      const write = handle.writeFile.bind(handle);
+      handle.writeFile = async (...writeArgs: Parameters<typeof handle.writeFile>) => {
+        await write(...writeArgs);
+        hooks.during?.("writeFile", String(args[0]));
+      };
+      const close = handle.close.bind(handle);
+      handle.close = async () => {
+        await close();
+        hooks.during?.("close", String(args[0]));
+      };
       if (!String(args[0]).endsWith(GROWING_KEY)) return handle;
       return new Proxy(handle, {
         get(target, prop) {
@@ -98,6 +113,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
       });
     },
     chmod: during("chmod", actual.chmod),
+    rename: during("rename", actual.rename),
     readdir: during("readdir", actual.readdir as (path: string) => Promise<string[]>),
     rm: during("rm", actual.rm),
     writeFile: during("writeFile", actual.writeFile),
@@ -132,6 +148,41 @@ describe("LocalFsBackend", () => {
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
+  });
+
+  it.each(["put", "putFile", "getFile"] as const)(
+    "%s flushes bytes before replacement and the folder afterward",
+    async (method) => {
+      const backend = new LocalFsBackend("d1", dir);
+      await writeFile(join(dir, "input"), "new bytes");
+      const events: string[] = [];
+      hooks.during = (name, path) => {
+        if (name === "sync") events.push(path === dir ? "sync folder" : "sync file");
+        if (name === "rename") events.push("rename");
+      };
+      if (method === "put") await backend.put("output", Buffer.from("new bytes"), call);
+      else if (method === "putFile") await backend.putFile("output", join(dir, "input"), call);
+      else await backend.getFile("input", join(dir, "output"), call);
+      expect(events).toEqual(["sync file", "rename", "sync folder"]);
+      expect(await readFile(join(dir, "output"), "utf8")).toBe("new bytes");
+    },
+  );
+
+  it("closes the copied-file handle when its flush fails", async () => {
+    await writeFile(join(dir, "input"), "new");
+    await writeFile(join(dir, "output"), "old");
+    let closes = 0;
+    hooks.during = (name, path) => {
+      if (!path.endsWith("/payload")) return;
+      if (name === "sync") throw Object.assign(new Error("flush failed"), { code: "EIO" });
+      if (name === "close") closes += 1;
+    };
+    const backend = new LocalFsBackend("d1", dir);
+    await expect(backend.putFile("output", join(dir, "input"), call)).rejects.toMatchObject({
+      code: "EIO",
+    });
+    expect(closes).toBe(1);
+    expect(await readFile(join(dir, "output"), "utf8")).toBe("old");
   });
 
   it("puts then gets the same bytes", async () => {
@@ -186,7 +237,7 @@ describe("LocalFsBackend", () => {
   it("put leaves no .tmp behind, and list never returns a leftover temp as a backup", async () => {
     const be = new LocalFsBackend("d1", dir);
     await be.put("waitron-a.dump.enc", Buffer.from("x"), call);
-    // `put` stages `<key>.tmp` with `stageFile`, then renames; a crash between the two can leave that
+    // `put` stages `<key>.tmp` with the file writer, then renames; a crash between the two can leave that
     // temp behind. It starts with `waitron-` too, so `list()` MUST exclude it — otherwise a
     // half-written temp would read as a finished backup.
     await writeFile(join(dir, "waitron-b.dump.enc.tmp"), Buffer.from("leftover"));
@@ -218,7 +269,7 @@ describe("LocalFsBackend", () => {
 
   it("put surfaces a write failure rather than reporting success", async () => {
     const be = new LocalFsBackend("d1", dir);
-    // Pre-create `stageFile`'s temp path (`<key>.tmp`) as a directory: the helper's pre-write
+    // Pre-create the file writer's temp path (`<key>.tmp`) as a directory: the helper's pre-write
     // `rm(tmp, { force: true })` — without `recursive` — then fails on that directory
     // (ERR_FS_EISDIR), so the write never lands. `put` must PROPAGATE that, never swallow it and
     // report a backup that isn't there.
@@ -459,16 +510,19 @@ describe("LocalFsBackend keys and cancellation", () => {
     expect(await readdir(join(dir, "out"))).toEqual(["output"]);
   });
 
-  it("a put cancelled while its bytes are written does not replace the object", async () => {
-    const backend = new LocalFsBackend("d", store);
-    await backend.put("waitron-a.backup.enc", Buffer.from("old"), call);
-    await expect(
-      backend.put("waitron-a.backup.enc", Buffer.from("new"), cancelledDuring("writeFile")),
-    ).rejects.toMatchObject({ name: "AbortError" });
-    hooks.during = undefined;
-    expect(await readFile(join(store, "waitron-a.backup.enc"), "utf8")).toBe("old");
-    expect(await readdir(store)).toEqual(["waitron-a.backup.enc"]);
-  });
+  it.each(["writeFile", "sync"])(
+    "a put cancelled during %s does not replace the object",
+    async (step) => {
+      const backend = new LocalFsBackend("d", store);
+      await backend.put("waitron-a.backup.enc", Buffer.from("old"), call);
+      await expect(
+        backend.put("waitron-a.backup.enc", Buffer.from("new"), cancelledDuring(step)),
+      ).rejects.toMatchObject({ name: "AbortError" });
+      hooks.during = undefined;
+      expect(await readFile(join(store, "waitron-a.backup.enc"), "utf8")).toBe("old");
+      expect(await readdir(store)).toEqual(["waitron-a.backup.enc"]);
+    },
+  );
 
   it("a listing cancelled while the directory is read reports the cancellation", async () => {
     const backend = new LocalFsBackend("d", store);

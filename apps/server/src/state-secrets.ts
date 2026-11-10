@@ -1,10 +1,10 @@
 import { isFirstSetupHostPath } from "@waitron/provisioning";
 import { readArchiveStateFile, type ArchiveReadBudget } from "./archive-read-budget.js";
-import { chmod, lstat, mkdir, readFile, realpath } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, posix, resolve, sep } from "node:path";
 import { AppError } from "@waitron/shared";
 export type StateSecretFiles = Record<string, string>;
-import { mkdirDurable, syncNewFolders, writeFileAtomic, writeFileDurable } from "./fs-atomic.js";
+import { mkdirDurable, syncNewFolders, writeFileDurable } from "./fs-atomic.js";
 import "./errors.js";
 
 /**
@@ -101,7 +101,7 @@ async function entryExists(path: string): Promise<boolean> {
  * during the unpack: a folder inside the destination replaced by a symlink mid-run is followed,
  * wherever it points.
  */
-export async function unpackBundleToDir(
+export async function unpackStateFiles(
   files: StateSecretFiles,
   destDir: string,
   // `false` for a copy that is thrown away: the backup verifier's runs under Node's permission
@@ -110,7 +110,7 @@ export async function unpackBundleToDir(
   { durable = true, suffix = "" }: { durable?: boolean; suffix?: string } = {},
 ): Promise<void> {
   if (Object.keys(files).some((name) => isFirstSetupHostPath(posix.normalize(name)))) {
-    throw new AppError("recovery.bundle_invalid", { reason: "unsafe_path" });
+    throw new AppError("recovery.archive_path_unsafe", {});
   }
   // Created before the guard's `realpath`, which fails on a missing path.
   if (durable) await mkdirDurable(destDir, 0o700);
@@ -123,7 +123,7 @@ export async function unpackBundleToDir(
       destDir,
       realDestRoot,
       () => {
-        throw new AppError("recovery.bundle_invalid", { reason: "unsafe_path" });
+        throw new AppError("recovery.archive_path_unsafe", {});
       },
       { durable },
     );
@@ -137,6 +137,6 @@ export async function unpackBundleToDir(
       await chmod(dir, 0o700);
     }
     if (durable) await writeFileDurable(`${target}${suffix}`, contents, 0o600);
-    else await writeFileAtomic(`${target}${suffix}`, contents, 0o600);
+    else await writeFile(`${target}${suffix}`, contents, { mode: 0o600 });
   }
 }

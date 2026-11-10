@@ -1,7 +1,7 @@
 import { TRADING_ENV_FILE } from "@waitron/store";
 import { join } from "node:path";
 import { rm } from "node:fs/promises";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { writeFileDurable } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
 
 /** Why this fresh primary was created. Demo and Prepare share the preproduction fiscal environment,
@@ -38,7 +38,7 @@ export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Pro
       : { WAITRON_ONBOARDING_INTENT: cfg.onboardingIntent }),
     ...(cfg.accountKey === undefined ? {} : { WAITRON_ACCOUNT_KEY: cfg.accountKey }),
   });
-  await writeFileAtomic(path, body, 0o600);
+  await writeFileDurable(path, body, 0o600);
   return path;
 }
 

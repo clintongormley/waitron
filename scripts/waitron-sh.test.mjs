@@ -208,7 +208,10 @@ esac
 exit 0
 `,
 );
-stub("mv", `[ "\${WT_MV_FAIL}" = "1" ] && exit 1\nexec "${REAL_MV}" "$@"`);
+stub(
+  "mv",
+  `[ "\${WT_MV_FAIL}" = "1" ] && [ "\${@: -1}" = "\${WT_MV_FAIL_TARGET}" ] && exit 1\nexec "${REAL_MV}" "$@"`,
+);
 stub(
   "curl",
   `
@@ -220,6 +223,8 @@ case "$url" in
   */deploy/waitron.sh)
     [ "\${WT_SELF_FETCH_FAIL}" = "1" ] && exit 22
     cp "\${WT_SELF_SCRIPT}" "$out"; exit 0 ;;
+  */deploy/compose.yml)
+    if [ "\${WT_COMPOSE_FETCH_FAIL}" = 1 ]; then printf 'partial' > "$out"; exit 22; fi ;;
 esac
 [ -n "$out" ] && printf 'stub\\n' > "$out"
 exit 0
@@ -453,6 +458,7 @@ function sandbox({
       WT_READ_ERROR: readError ? "1" : "0",
       WT_RM_FAIL: rmFail,
       WT_MV_FAIL: envWriteFail || selfReplaceFail ? "1" : "0",
+      WT_MV_FAIL_TARGET: selfReplaceFail ? script : join(boxDir, ".env"),
       WT_PULL_FAIL: pullFail ? "1" : "0",
       WT_HANG: hang,
       WT_AA_ENABLED: apparmor ? "1" : "0",
@@ -741,6 +747,25 @@ describe("waitron.sh image provenance", () => {
 });
 
 describe("waitron.sh install (published main)", () => {
+  it("a cut compose.yml download leaves the old file", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, "compose.yml"), "old complete compose\n");
+    const r = run(sb, ["install"], { WT_COMPOSE_FETCH_FAIL: "1" });
+    expect(r.status).not.toBe(0);
+    expect(readFileSync(join(sb.boxDir, "compose.yml"), "utf8")).toBe("old complete compose\n");
+    expect(existsSync(join(sb.boxDir, "compose.yml.tmp"))).toBe(false);
+  });
+
+  it("install removes an old .env.example and keeps .env", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, ".env.example"), "old example\n");
+    writeFileSync(join(sb.boxDir, ".env"), "WAITRON_LOG_LEVEL=debug\n");
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(existsSync(join(sb.boxDir, ".env.example"))).toBe(false);
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toBe("WAITRON_LOG_LEVEL=debug\n");
+  });
+
   it("pulls, starts, records no image override, and prints the links", () => {
     const sb = sandbox();
     const r = run(sb, ["install"]);
@@ -1026,7 +1051,6 @@ describe("waitron.sh install keeps the box's own copy of waitron.sh current", ()
     expect(ups(sb)).toHaveLength(1);
   });
 
-  // The published-main install with no .env reaches no other `mv`, so WT_MV_FAIL fails this one alone.
   it("carries on with the running copy, and says so, when the rename over it fails", () => {
     const sb = sandbox({ refScript: "marked", selfReplaceFail: true });
     const before = readFileSync(sb.script, "utf8");

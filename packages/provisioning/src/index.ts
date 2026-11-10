@@ -108,11 +108,9 @@ export {
   failedAtFolderSync,
   mkdirDurable,
   stagedPath,
-  stageFile,
   stageFileDurable,
   syncFolderHolding,
   syncNewFolders,
-  writeFileAtomic,
   writeFileDurable,
 } from "./fs-atomic.js";
 
@@ -200,7 +198,7 @@ export {
   SPARE_SPACE_FILE,
   SPARE_SPACE_RELEASED_FILE,
 } from "@waitron/store";
-export { backupRoomNoteTemporaryName, isBackupRoomFileName } from "./backup-room-note-file.js";
+export { isBackupRoomFileName } from "./backup-room-note-file.js";
 export { deleteBackupRoomNote } from "./backup-room-note-file.js";
 export {
   START_AGAIN_CHOICES_DIR,

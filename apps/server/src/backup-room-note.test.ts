@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import * as fs from "node:fs/promises";
 import {
   appendFile,
   lstat,
@@ -27,6 +28,12 @@ import {
   writeBackupRoomNote,
   type BackupRoomNote,
 } from "./backup-room-note.js";
+
+vi.mock("node:fs/promises", { spy: true });
+afterEach(() => {
+  vi.mocked(fs.open).mockReset();
+  vi.mocked(fs.rename).mockReset();
+});
 
 let root: string;
 let stateDir: string;
@@ -73,6 +80,27 @@ describe("file names", () => {
 });
 
 describe("writeBackupRoomNote", () => {
+  it("flushes the note before replacement and its state folder afterward", async () => {
+    const actual = await vi.importActual<typeof fs>("node:fs/promises");
+    const events: string[] = [];
+    vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+      const handle = await actual.open(...args);
+      const sync = handle.sync.bind(handle);
+      handle.sync = async () => {
+        events.push(`sync ${String(args[0])}`);
+        await sync();
+      };
+      return handle;
+    });
+    vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+      events.push("rename");
+      await actual.rename(from, to);
+    });
+    await write();
+    expect(events).toEqual([`sync ${notePath()}.tmp`, "rename", `sync ${stateDir}`]);
+    expect(await read()).toMatchObject({ note: { nodeId: "node-1" } });
+  });
+
   it("writes the installation start, venue.db's identity, the folders and the time", async () => {
     const log = await write({ managedByEnvironment: true });
     const stored = JSON.parse(await readFile(notePath(), "utf8")) as BackupRoomNote;
@@ -123,7 +151,8 @@ describe("writeBackupRoomNote", () => {
     const failing = vi.fn(async () => {
       throw Object.assign(new Error("no room"), { code: "ENOSPC" });
     });
-    const log = await write({ rename: failing });
+    vi.mocked(fs.rename).mockImplementationOnce(failing);
+    const log = await write();
     expect(failing).toHaveBeenCalledOnce();
     expect(existsSync(notePath())).toBe(false);
     expect(await readdir(stateDir)).toEqual([]);
@@ -132,14 +161,14 @@ describe("writeBackupRoomNote", () => {
     ]);
   });
 
-  it("writes under a temporary name the recovery's originals walk leaves out", async () => {
+  it("writes under the backup room's temporary name", async () => {
     const seen: string[] = [];
-    await write({
-      rename: async (from, to) => {
-        seen.push(basename(from));
-        await rename(from, to);
-      },
+    const actual = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.rename).mockImplementationOnce(async (from, to) => {
+      seen.push(basename(String(from)));
+      await actual.rename(from, to);
     });
+    await write();
     expect(seen).toHaveLength(1);
     expect(isBackupRoomFileName(seen[0]!)).toBe(true);
     expect(seen[0]).not.toBe(BACKUP_ROOM_NOTE_FILE);
@@ -147,11 +176,8 @@ describe("writeBackupRoomNote", () => {
 
   it("never throws, and logs a failure that carries no errno as null", async () => {
     await write();
-    const log = await write({
-      rename: async () => {
-        throw new Error("odd");
-      },
-    });
+    vi.mocked(fs.rename).mockRejectedValueOnce(new Error("odd"));
+    const log = await write();
     expect(existsSync(notePath())).toBe(false);
     expect(log.mock.calls).toEqual([["warn", "backup.room_note_write_failed", { errno: null }]]);
   });

@@ -6,7 +6,7 @@ import "@waitron/module";
 import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { writeFileDurable } from "./fs-atomic.js";
 import {
   establishReservedStandbyIdentity,
   type StandbyPublicIdentity,
@@ -43,7 +43,7 @@ function pendingPath(stateDir: string): string {
 
 /** Atomically write `<stateDir>/pending-adoption.json` (0600, tmp+rename). */
 export async function writePendingAdoption(stateDir: string, p: PendingAdoption): Promise<void> {
-  await writeFileAtomic(pendingPath(stateDir), JSON.stringify(p), 0o600);
+  await writeFileDurable(pendingPath(stateDir), JSON.stringify(p), 0o600);
 }
 
 /** Read the pending-adoption record, or `null` when the file is absent (established, or never

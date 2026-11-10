@@ -6,7 +6,7 @@ import type { ArchiveEntry } from "./backup-archive.js";
 import { errnoOf } from "./errno.js";
 import { stagedPath, syncFolderHolding } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
-import { unpackBundleToDir } from "./state-secrets.js";
+import { unpackStateFiles } from "./state-secrets.js";
 import "./errors.js";
 
 const SECRETS_PREFIX = "secrets/";
@@ -88,7 +88,7 @@ export async function stageSecrets(args: {
   const written: Secret[] = [];
   for (const secret of secrets) {
     try {
-      await unpackBundleToDir({ [secret.rel]: secret.contents }, stateDir, {
+      await unpackStateFiles({ [secret.rel]: secret.contents }, stateDir, {
         durable: true,
         suffix: STAGED_SECRET_SUFFIX,
       });
