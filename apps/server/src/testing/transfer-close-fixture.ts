@@ -26,6 +26,14 @@ import { offerProducts } from "./zone-offers.js";
 
 export const MINUTE = 60_000;
 
+/** The fiscal records and their outbox rows, by id: a refused close adds to neither. */
+export function fiscalWrites(db: Database) {
+  return {
+    records: db.all(sql`select id from registros_facturacion order by id`),
+    outbox: db.all(sql`select registro_id from envios order by registro_id`),
+  };
+}
+
 export const RECIPIENT = {
   taxId: "B12345674",
   legalName: "Cliente SL",

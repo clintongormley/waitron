@@ -24,7 +24,11 @@ import { moveGuests } from "./testing/table-action-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 import { noteSessionPerson } from "./testing/tab-person.js";
-import { transferCloseVenue, type TransferCloseKit } from "./testing/transfer-close-fixture.js";
+import {
+  fiscalWrites,
+  transferCloseVenue,
+  type TransferCloseKit,
+} from "./testing/transfer-close-fixture.js";
 import type { CloseByTransferRequest } from "./transfer-close-types.js";
 import "./errors.js";
 
@@ -96,8 +100,7 @@ function written(billId: string) {
   return {
     sales: db.all(sql`select id from sales where working_order_id = ${billId}`),
     series: db.all(sql`select id, next_number from invoice_series order by id`),
-    records: db.all(sql`select id from registros_facturacion order by id`),
-    outbox: db.all(sql`select registro_id from envios order by registro_id`),
+    ...fiscalWrites(db),
     closures: db.all(sql`select id from transfer_closures where working_order_id = ${billId}`),
     tenders: db.all(
       sql`select t.id from tenders t join sales s on s.id = t.sale_id where s.working_order_id = ${billId}`,
