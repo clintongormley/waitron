@@ -1,13 +1,18 @@
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
+import { Hono } from "hono";
+import { mountTillApi } from "./till-api.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
+import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { workingOrders } from "@waitron/db";
 import { seedPaymentPolicy } from "@waitron/payments/test/seed.js";
-import { insertAcceptedOffline, payments } from "@waitron/payments";
+import { SimulatorPaymentProvider, insertAcceptedOffline, payments } from "@waitron/payments";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import {
   inTx,
@@ -340,6 +345,89 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
     expect(venue.card.collectCalls).toHaveLength(calls);
     expect(await paymentRows(venue, billId)).toEqual([]);
   });
+
+  it.each([
+    ["declined", "declined", "failed"],
+    ["attempting", "timeout", "attempting"],
+  ] as const)(
+    "keeps the whole-order practice %s result on its own order",
+    async (simulationOutcome, outcome, state) => {
+      const billId = await tabWithDishes("Paella");
+      const app = new Hono();
+      mountTillApi(
+        app,
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+          cfg: venue.cfg,
+          secureCookies: false,
+          venueLocale: "es-ES",
+          cardProvider: new SimulatorPaymentProvider(venue.db),
+        },
+        () => {},
+      );
+      const paid = await send(app, venue.cookie, "POST", "/api/pay", {
+        id: billId,
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
+        lines: [],
+        simulationOutcome,
+      });
+      expect(paid).toEqual({ status: 200, json: { outcome } });
+      expect(
+        await inTx(venue, (tx) =>
+          tx.select().from(payments).where(eq(payments.workingOrderId, billId)),
+        ),
+      ).toMatchObject([{ state, saleId: null }]);
+      const [order] = await inTx(venue, (tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      expect(order!.paymentAttemptAt === null).toBe(simulationOutcome === "declined");
+    },
+  );
+
+  it.each([
+    ["captured", "received", "received", "0.00"],
+    ["declined", "declined", "failed", "0.00"],
+    ["attempting", "timeout", "pending", "1.00"],
+  ] as const)(
+    "answers a practice %s contribution and reserves only uncertain money",
+    async (simulationOutcome, outcome, state, reserved) => {
+      const billId = await tabWithDishes("Paella");
+      const app = new Hono();
+      mountTillApi(
+        app,
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+          cfg: venue.cfg,
+          secureCookies: false,
+          venueLocale: "es-ES",
+          cardProvider: new SimulatorPaymentProvider(venue.db),
+        },
+        () => {},
+      );
+      const path = `/api/working-orders/${billId}/payments`;
+      const body = await observedPaymentBody(venue.db, path, {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "1.00",
+        method: "card",
+        entry: "reader",
+        simulationOutcome,
+        applied: "1.00",
+        tip: "0.00",
+      });
+      const paid = await send(app, venue.cookie, "POST", path, body);
+      expect(paid).toMatchObject({
+        status: 200,
+        json: { outcome, payment: { state }, balance: { reserved } },
+      });
+    },
+  );
 
   it("refuses a practice outcome outside practice mode", async () => {
     const billId = await tabWithDishes("Paella");

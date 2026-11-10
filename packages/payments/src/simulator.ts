@@ -3,6 +3,8 @@ import { AppError, decimal, type Decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
+  AbandonedAttemptAudit,
+  AbandonedAttemptOutcome,
   CollectParams,
   ForwardResult,
   PaymentProvider,
@@ -14,9 +16,12 @@ import type {
   RefundSend,
 } from "./provider.js";
 import { refundLookupOf } from "./provider.js";
+import { recordAttemptResolution } from "./resolutions.js";
 import type { PaymentRow } from "./store.js";
 import {
+  failAttempting,
   findPaymentByRef,
+  insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
   recordRefund,
@@ -91,7 +96,7 @@ export class SimulatorPaymentProvider implements PaymentProvider {
       cancelled?.workingOrderId === params.workingOrderId &&
       cancelled.deviceId === params.origin.deviceId;
     const simulationOutcome =
-      params.readerRef === DEMO_READER_REF
+      params.readerRef === DEMO_READER_REF && params.simulationOutcome === undefined
         ? cancelledHere
           ? "declined"
           : await new Promise<"captured" | "declined">((resolve) => {
@@ -113,7 +118,8 @@ export class SimulatorPaymentProvider implements PaymentProvider {
         : params.simulationOutcome;
     const paymentRef = `sim-${randomUUID()}`;
     const declined = simulationOutcome === "declined";
-    const settledAt = declined ? null : new Date();
+    const unanswered = simulationOutcome === "attempting";
+    const settledAt = declined || unanswered ? null : new Date();
     const common = {
       origin: params.origin,
       workingOrderId: params.workingOrderId,
@@ -124,13 +130,14 @@ export class SimulatorPaymentProvider implements PaymentProvider {
       billPaymentId: params.billPaymentId,
     };
     await withTransaction(this.db, async (tx) => {
-      if (declined) await insertFailedPayment(tx, common);
+      if (unanswered) await insertAttempting(tx, common);
+      else if (declined) await insertFailedPayment(tx, common);
       else await insertCapturedPayment(tx, { ...common, settledAt: settledAt as Date });
     });
     return {
       provider: this.provider,
       paymentRef,
-      state: declined ? "failed" : "captured",
+      state: unanswered ? "attempting" : declined ? "failed" : "captured",
       amount: params.amount,
       settledAt,
     };
@@ -182,6 +189,25 @@ export class SimulatorPaymentProvider implements PaymentProvider {
   resolvePending(now: Date): Promise<ForwardResult> {
     void now;
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
+  }
+
+  async resolveAbandonedAttempt(
+    paymentRef: string,
+    now: Date,
+    audit: AbandonedAttemptAudit,
+  ): Promise<AbandonedAttemptOutcome> {
+    return withTransaction(this.db, async (tx) => {
+      const key = { provider: this.provider, paymentRef };
+      await failAttempting(tx, key);
+      await recordAttemptResolution(tx, key, {
+        personId: audit.personId,
+        outcome: "failed",
+        cancelledAtProvider: false,
+        providerStatus: null,
+        resolvedAt: now,
+      });
+      return { outcome: "failed", cancelledAtProvider: false };
+    });
   }
 
   async void(ref: string): Promise<PaymentResult> {

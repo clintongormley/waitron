@@ -2899,7 +2899,7 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
     });
   });
 
-  it("the practice simulator takes a captured or declined outcome and refuses any other", async () => {
+  it("the practice simulator takes its three outcomes and refuses any other", async () => {
     const app = new Hono();
     mountTillApi(
       app,
@@ -2923,7 +2923,7 @@ describe("malformed zone ids and simulation outcomes on the sale routes", () => 
         }),
       });
 
-    for (const accepted of ["captured", "declined"]) {
+    for (const accepted of ["captured", "declined", "attempting"]) {
       expect(await (await pay(accepted)).json()).toMatchObject({
         error: { code: "shared.invalid_id", params: { kind: "ServiceZoneId" } },
       });

@@ -5,6 +5,13 @@ evitar. Registra a la persona y asígnale sus platos en la
 [ventana de alergias](products.md#table-allergies) de la mesa. Cocina recibe esas instrucciones
 junto con su trabajo.
 
+En Demostración o Preparación, elige **Simulador inmediato** y selecciona **Aprobar**, **Rechazar**
+o **Sin respuesta** antes de pulsar **Tarjeta**. No se cobra ninguna tarjeta real. **Sin respuesta**
+mantiene el pago bloqueado para que puedas practicar su recuperación. En **Pagos** del panel,
+un encargado elige **Consultar con el proveedor de pagos** para un pago del pedido completo,
+o **Consultar al proveedor** para un pago parcial de una cuenta, y confirma. Así termina el intento
+de práctica sin registrar un cobro.
+
 ## Reintenta un envío de mostrador si se pierde la respuesta {#counter-send-retry}
 
 Si el terminal no puede confirmar un envío de mostrador, reinténtalo sin cambiar la cesta. Si el

@@ -325,6 +325,8 @@ function screenStringMap(body: Record<string, unknown>): Record<string, string> 
  * runs first, in its own transaction, so an unauthorised caller never reaches the provider.
  */
 export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger): void {
+  const practiceProvider = (providerId: string): boolean =>
+    providerId === "simulator" && deps.simulator?.provider === "simulator";
   const collectionScope = async (tx: Transaction) => {
     const takenOverFrom = await readTakenOverFrom(tx, deps.cfg.nodeId);
     const held = deps.isPrimary() ? await readNodeMembership(tx) : null;
@@ -440,7 +442,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     personId: string,
     notStuck: () => AppError,
   ): Promise<{ provider: PaymentProvider; resolved: AbandonedAttemptOutcome; now: Date }> => {
-    const provider = await deps.pool.get(attempt.provider);
+    const provider = practiceProvider(attempt.provider)
+      ? deps.simulator!
+      : await deps.pool.get(attempt.provider);
     if (provider.resolveAbandonedAttempt === undefined) {
       throw new AppError("payment.resolve_unsupported", { providerId: attempt.provider });
     }
@@ -1137,7 +1141,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         }
         // The sale is filed under the device that started the payment, never the dashboard.
         const origin = storedDeviceOrigin(row);
-        await requireConnected(tx, cardProviderById(deps.providers, row.provider));
+        if (!practiceProvider(row.provider))
+          await requireConnected(tx, cardProviderById(deps.providers, row.provider));
         const attendanceKey = await pendingIntegratedAttendanceKey(
           tx,
           deps.attendance,
@@ -1276,7 +1281,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await refuseWhileClockBehind(tx);
         await requireStuckBillPayment(tx, id);
         const provided = await findPaymentByBillPayment(tx, id);
-        if (provided?.state === "attempting") {
+        if (provided?.state === "attempting" && !practiceProvider(provided.provider)) {
           await requireConnected(tx, cardProviderById(deps.providers, provided.provider));
         }
         return { provided, personId };

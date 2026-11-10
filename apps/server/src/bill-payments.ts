@@ -155,7 +155,7 @@ export interface BillPaymentRequest extends BillPaymentAsk {
   /** A hand-keyed card's terminal operation number. */
   externalRef?: string;
   /** A reader card only, passed to the provider's `collect`. */
-  simulationOutcome?: "captured" | "declined";
+  simulationOutcome?: "captured" | "declined" | "attempting";
   applied: string;
   tip: string;
   /** What the receipt prints if this payment completes the bill; absent stores the default then. */
