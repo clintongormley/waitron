@@ -115,7 +115,7 @@ async function sell(lines: [base: string, gross: string | null][], split: [strin
 
 function preview(saleId: SaleId, gross: string) {
   return withTransaction(suite.db, (tx) =>
-    previewCorrectionAmounts(tx, backend, { saleId, nodeId }, { gross: decimal(gross) }),
+    previewCorrectionAmounts(tx, backend, saleId, nodeId, { gross: decimal(gross) }),
   );
 }
 

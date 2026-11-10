@@ -22,41 +22,39 @@ import {
 import type { RecordSaleLine } from "./record-sale.js";
 import "./errors.js";
 
+type InvoiceLine = typeof saleLines.$inferSelect;
+
 export type CorrectionPreview = CorrectionAmountPreview &
   Omit<Extract<CorrectionAdmission, { eligible: true }>, "eligible"> & { lines: RecordSaleLine[] };
 
 /**
- * What a correction of `selection.gross` from the invoice would file, as the lines and split
- * `recordCorrection` takes. Refused with `sale.correction_not_admitted` when the invoice was
- * replaced by a full invoice or its regime does not admit a correction of it.
+ * What a correction of `selection.gross` from the invoice `saleId`, issued by `issuingNodeId`, would
+ * file, as the lines and split `recordCorrection` takes. Refused with
+ * `sale.correction_not_admitted` when the invoice was replaced by a full invoice or its regime does
+ * not admit a correction of it.
  */
 export async function previewCorrectionAmounts(
   tx: Transaction,
   backend: FiscalBackend,
-  invoice: { saleId: SaleId; nodeId: NodeId },
+  saleId: SaleId,
+  issuingNodeId: NodeId,
   selection: { gross: Decimal; lineIds?: readonly string[] },
 ): Promise<CorrectionPreview> {
   const [substituted] = await tx
     .select({ id: saleSubstitutions.id })
     .from(saleSubstitutions)
-    .where(eq(saleSubstitutions.substitutedSaleId, invoice.saleId));
+    .where(eq(saleSubstitutions.substitutedSaleId, saleId));
   if (substituted !== undefined) {
     throw new AppError("sale.correction_not_admitted", { reason: "replaced" });
   }
   const admission: CorrectionAdmission = backend.correctionAdmissionFor
-    ? await backend.correctionAdmissionFor(tx, invoice.saleId, invoice.nodeId)
+    ? await backend.correctionAdmissionFor(tx, saleId, issuingNodeId)
     : { eligible: false, reason: "unsupported" };
   if (!admission.eligible) {
     throw new AppError("sale.correction_not_admitted", { reason: admission.reason });
   }
-  const preview = allocateCorrectionAmounts(
-    await readCorrectionAmountHistory(tx, invoice.saleId),
-    selection,
-  );
-  const invoiceLines = await tx
-    .select()
-    .from(saleLines)
-    .where(eq(saleLines.saleId, invoice.saleId));
+  const { history, invoiceLines } = await readHistory(tx, saleId);
+  const preview = allocateCorrectionAmounts(history, selection);
   return {
     ...preview,
     filing: admission.filing,
@@ -77,6 +75,13 @@ export async function readCorrectionAmountHistory(
   tx: Transaction,
   saleId: SaleId,
 ): Promise<CorrectionAmountHistory> {
+  return (await readHistory(tx, saleId)).history;
+}
+
+async function readHistory(
+  tx: Transaction,
+  saleId: SaleId,
+): Promise<{ history: CorrectionAmountHistory; invoiceLines: InvoiceLine[] }> {
   const [sale] = await tx
     .select({ correctsSaleId: sales.correctsSaleId, vatBreakdown: sales.vatBreakdown })
     .from(sales)
@@ -85,13 +90,7 @@ export async function readCorrectionAmountHistory(
   if (sale.correctsSaleId !== null) unusable();
 
   const lines = await tx
-    .select({
-      id: saleLines.id,
-      lineNo: saleLines.lineNo,
-      vatRate: saleLines.vatRate,
-      lineTotal: saleLines.lineTotal,
-      lineGross: saleLines.lineGross,
-    })
+    .select()
     .from(saleLines)
     .where(eq(saleLines.saleId, saleId))
     .orderBy(saleLines.lineNo);
@@ -141,7 +140,7 @@ export async function readCorrectionAmountHistory(
     if (groups.size > 0) unusable();
   }
 
-  return {
+  const history: CorrectionAmountHistory = {
     lines: lines.map((line) => ({
       id: line.id,
       lineNo: line.lineNo,
@@ -162,6 +161,7 @@ export async function readCorrectionAmountHistory(
       tax: centsToDecimal(line.lineTotal - line.lineGross!),
     })),
   };
+  return { history, invoiceLines: lines };
 }
 
 /**
@@ -172,7 +172,7 @@ export async function readCorrectionAmountHistory(
  * too.
  */
 export function correctionLinesFor(
-  invoiceLines: readonly (typeof saleLines.$inferSelect)[],
+  invoiceLines: readonly InvoiceLine[],
   allocations: readonly CorrectionAmountAllocation[],
 ): RecordSaleLine[] {
   const byId = new Map(invoiceLines.map((line) => [line.id, line]));

@@ -432,9 +432,9 @@ export class VerifactuBackend implements FiscalBackend {
   correctionAdmissionFor(
     tx: Transaction,
     saleId: SaleId,
-    nodeId: NodeId,
+    issuingNodeId: NodeId,
   ): Promise<CorrectionAdmission> {
-    return correctionAdmissionFor(tx, saleId, nodeId);
+    return correctionAdmissionFor(tx, saleId, issuingNodeId);
   }
 
   /** Voids a previously recorded sale by appending an anulación referencing its identity. */

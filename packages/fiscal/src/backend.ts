@@ -57,7 +57,7 @@ export type CorrectionAdmission =
         | "voided"
         | "not_simplified"
         | "filing_refused"
-        | "history_unusable";
+        | "filing_versions_unusable";
     };
 
 /** The words a regime prints above and under its verification QR, in the regime's own wording. */
@@ -520,11 +520,14 @@ export interface FiscalBackend {
   /** Optional receipt observation, independent of allocation and the original receipt result. */
   invoiceEvidenceFor?(tx: Transaction, saleId: SaleId): Promise<FiledInvoiceEvidence | undefined>;
 
-  /** Optional: a backend without it admits no correction (`unsupported`). */
+  /**
+   * Whether `issuingNodeId`, the box that would issue the correction, may correct the sale.
+   * Optional: a backend without it admits no correction (`unsupported`).
+   */
   correctionAdmissionFor?(
     tx: Transaction,
     saleId: SaleId,
-    nodeId: NodeId,
+    issuingNodeId: NodeId,
   ): Promise<CorrectionAdmission>;
 
   /**

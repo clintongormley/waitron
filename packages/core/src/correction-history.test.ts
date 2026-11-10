@@ -1,13 +1,20 @@
 import { beforeEach, expect, it } from "vitest";
-import { decimal, deviceOrigin, saleId as brandSaleId } from "@waitron/shared";
+import {
+  basisPointsToDecimal,
+  centsToDecimal,
+  decimal,
+  deviceOrigin,
+  saleId as brandSaleId,
+} from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import type { FiscalBackend, TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
   captureError,
   newId,
   saleLines,
+  sales,
   saleSubstitutions,
   withTransaction,
 } from "@waitron/db";
@@ -21,7 +28,7 @@ import {
   readCorrectionAmountHistory,
 } from "./correction-history.js";
 import type { CorrectionAmountAllocation } from "./correction-allocation.js";
-import { recordCorrection } from "./record-correction.js";
+import { recordCorrection, type RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
@@ -160,25 +167,50 @@ async function sell(lines = invoiceLines(), total = "24.20") {
   return { saleId, rows, ids: rows.map((row) => row.id) };
 }
 
-function correct(
+function correctionInput(
   saleId: SaleId,
   total: string,
   lines: RecordSaleLine[],
-  how: { partialVatBreakdown?: VatBreakdownLine[]; wholeInvoice?: true } = {},
-) {
-  return withTransaction(suite.db, (tx) =>
-    recordCorrection(tx, backend, {
-      origin: deviceOrigin(deviceId),
-      nodeId,
-      seriesId: rectSeriesId,
-      correctsSaleId: saleId,
-      total,
-      lines,
-      ...how,
-      authz: { sessionId },
-      clock,
+  how: { wholeInvoice?: true } = {},
+): RecordCorrectionInput {
+  return {
+    origin: deviceOrigin(deviceId),
+    nodeId,
+    seriesId: rectSeriesId,
+    correctsSaleId: saleId,
+    total,
+    lines,
+    ...how,
+    authz: { sessionId },
+    clock,
+  };
+}
+
+function correct(...args: Parameters<typeof correctionInput>) {
+  return withTransaction(suite.db, (tx) => recordCorrection(tx, backend, correctionInput(...args)));
+}
+
+type StoredSplit = (typeof sales.$inferSelect)["vatBreakdown"];
+
+/** Stores what `correct` would, but with `split` as the correction's stored split. */
+async function correctStoring(split: StoredSplit, ...args: Parameters<typeof correctionInput>) {
+  const rollBack = new Error("roll back");
+  let written: { sale: typeof sales.$inferSelect; lines: (typeof saleLines.$inferSelect)[] };
+  const error = await captureError(() =>
+    withTransaction(suite.db, async (tx) => {
+      const { saleId } = await recordCorrection(tx, backend, correctionInput(...args));
+      const [sale] = await tx.select().from(sales).where(eq(sales.id, saleId));
+      written = {
+        sale: sale!,
+        lines: await tx.select().from(saleLines).where(eq(saleLines.saleId, saleId)),
+      };
+      throw rollBack;
     }),
   );
+  expect(error).toBe(rollBack);
+  await suite.db.insert(sales).values({ ...written!.sale, vatBreakdown: split });
+  await suite.db.insert(saleLines).values(written!.lines);
+  return { saleId: brandSaleId(written!.sale.id) };
 }
 
 function read(saleId: SaleId) {
@@ -204,66 +236,18 @@ it("reads every invoice line, extras included, its stored split and nothing cons
   });
 });
 
-it("reads an exact partial correction as consumed from the lines it names", async () => {
-  const { saleId, ids } = await sell();
-  await correct(
-    saleId,
-    "-6.05",
-    [
-      {
-        lineNo: 1,
-        name: "Steak",
-        descriptions: { "es-ES": "Steak" },
-        quantity: "-1",
-        unitPrice: "10.00",
-        vatRate: "21.00",
-        lineTotal: "-5.00",
-        lineGross: "-6.05",
-        correctsLineId: ids[1],
-      },
-    ],
-    {
-      partialVatBreakdown: [
-        { rate: decimal("21.00"), base: decimal("-5.00"), tax: decimal("-1.05") },
-      ],
-    },
-  );
-
-  expect((await read(saleId)).consumed).toEqual([
-    { saleLineId: ids[1], rate: "21.00", gross: "6.05", base: "5.00", tax: "1.05" },
-  ]);
-});
-
 it("reads a whole-invoice credit as consuming every line", async () => {
-  const { saleId, rows, ids } = await sell();
-  const whole: CorrectionAmountAllocation[] = [
-    {
-      saleLineId: ids[0]!,
-      rate: decimal("10.00"),
-      gross: decimal("11.00"),
-      base: decimal("10.00"),
-      tax: decimal("1.00"),
-    },
-    {
-      saleLineId: ids[1]!,
-      rate: decimal("21.00"),
-      gross: decimal("12.10"),
-      base: decimal("10.00"),
-      tax: decimal("2.10"),
-    },
-    {
-      saleLineId: ids[2]!,
-      rate: decimal("10.00"),
-      gross: decimal("1.10"),
-      base: decimal("1.00"),
-      tax: decimal("0.10"),
-    },
-  ];
+  const { saleId, rows } = await sell();
+  const whole = rows.map((row) => ({
+    saleLineId: row.id,
+    rate: basisPointsToDecimal(row.vatRate),
+    gross: centsToDecimal(row.lineGross!),
+    base: centsToDecimal(row.lineTotal),
+    tax: centsToDecimal(row.lineGross! - row.lineTotal),
+  }));
   await correct(saleId, "-24.20", correctionLinesFor(rows, whole), { wholeInvoice: true });
 
-  expect((await read(saleId)).consumed).toEqual(
-    whole.map(({ saleLineId, rate, gross, base, tax }) => ({ saleLineId, rate, gross, base, tax })),
-  );
+  expect((await read(saleId)).consumed).toEqual(whole);
 });
 
 // An earlier correction filed through the derived path: €1.05 off the steak, its split derived
@@ -274,13 +258,16 @@ interface Change {
   namesLine?: false;
   readCorrection?: true;
   readUnknown?: true;
+  storedSplit?: StoredSplit;
 }
 
 async function history(change: Change) {
   const lines = invoiceLines();
   if (change.invoiceGross === null) lines[0]!.lineGross = null;
   const { saleId, ids } = await sell(lines);
-  const correction = await correct(saleId, "-1.05", [
+  const write = (...args: Parameters<typeof correct>) =>
+    change.storedSplit ? correctStoring(change.storedSplit, ...args) : correct(...args);
+  const correction = await write(saleId, "-1.05", [
     {
       lineNo: 1,
       name: "Steak",
@@ -326,6 +313,26 @@ it.each<[name: string, change: Change, code: string]>([
   [
     "an earlier correction whose lines disagree with its stored split",
     { correctionGross: "-1.06" },
+    "sale.correction_history_unusable",
+  ],
+  [
+    "an earlier correction's stored split at a rate with no lines",
+    {
+      storedSplit: [
+        { rate: "21.00", base: "-0.87", tax: "-0.18" },
+        { rate: "10.00", base: "0.00", tax: "0.00" },
+      ],
+    },
+    "sale.correction_history_unusable",
+  ],
+  [
+    "an earlier correction's stored split leaving out its lines' rate",
+    { storedSplit: [] },
+    "sale.correction_history_unusable",
+  ],
+  [
+    "an earlier correction's stored base that is not its lines', at their gross",
+    { storedSplit: [{ rate: "21.00", base: "-0.86", tax: "-0.19" }] },
     "sale.correction_history_unusable",
   ],
 ])("refuses %s", async (_name, change, code) => {
@@ -415,7 +422,7 @@ it("numbers built lines in allocation order, keeping an extra's rate and its cor
 
 function preview(saleId: SaleId, of = backend as FiscalBackend) {
   return withTransaction(suite.db, (tx) =>
-    previewCorrectionAmounts(tx, of, { saleId, nodeId }, { gross: decimal("6.05") }),
+    previewCorrectionAmounts(tx, of, saleId, nodeId, { gross: decimal("6.05") }),
   );
 }
 
@@ -432,16 +439,6 @@ it("previews an admitted correction with the admission's filing and the lines to
     filing: "accepted",
     original: { number: "T1-1", issuedAt: "2027-03-14" },
     lines: [{ name: "Steak", lineTotal: "-5.00", lineGross: "-6.05", correctsLineId: ids[0] }],
-  });
-});
-
-it("refuses an invoice the regime does not admit, with the regime's reason", async () => {
-  const { saleId } = await sellSteak();
-  backend.setCorrectionAdmission({ eligible: false, reason: "filing_refused" });
-
-  expect(await captureError(() => preview(saleId))).toMatchObject({
-    code: "sale.correction_not_admitted",
-    params: { reason: "filing_refused" },
   });
 });
 

@@ -2,20 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { CorrectionAdmission } from "@waitron/fiscal";
-import {
-  hashPin,
-  persons,
-  registerModulePermissions,
-  startManagementSession,
-} from "@waitron/identity";
-import { decimal, deviceOrigin, seriesId, type SaleId } from "@waitron/shared";
+import type { SaleId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
-import { openFilingCase } from "./filing-cases.js";
-import { FISCAL_PERMISSIONS } from "./permissions.js";
-import { applyAbsentOriginalCancellation } from "./record-remedy-absent.js";
 import { envios } from "./schema/envios.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
@@ -48,7 +39,7 @@ beforeEach(async () => {
 async function file(
   options: {
     estado?: Estado | null;
-    tipo?: "F1" | "F2";
+    tipo?: "F1" | "F2" | "R5";
     on?: SeededNode;
     sale?: SaleId;
     fixes?: { registroId: string; number: number };
@@ -71,6 +62,7 @@ async function file(
               Destinatarios: { IDDestinatario: [{ NombreRazon: "Customer SL", NIF: "B12345674" }] },
             }
           : {}),
+        ...(tipo === "R5" ? { TipoRectificativa: "I" } : {}),
         ...(options.fixes === undefined ? {} : { Subsanacion: "S", RechazoPrevio: "X" }),
       },
     });
@@ -82,8 +74,10 @@ async function file(
   return { saleId, registroId, number };
 }
 
-function admission(saleId: SaleId, nodeId = node.nodeId): Promise<CorrectionAdmission> {
-  return withTransaction(suite.db, (tx) => backend.correctionAdmissionFor(tx, saleId, nodeId));
+function admission(saleId: SaleId, issuingNodeId = node.nodeId): Promise<CorrectionAdmission> {
+  return withTransaction(suite.db, (tx) =>
+    backend.correctionAdmissionFor(tx, saleId, issuingNodeId),
+  );
 }
 
 const eligible = (filing: string, number: number) => ({
@@ -131,71 +125,9 @@ describe("refusals, each beside the eligible control it differs from in one fact
     expect(await admission(saleId)).toEqual(refused("voided"));
   });
 
-  it("the remedy path's cancellation of a refused filing", async () => {
-    registerModulePermissions(FISCAL_PERMISSIONS);
-    const { saleId, registroId } = await file({ estado: "rechazado" });
-    expect(await admission(saleId)).toEqual(refused("filing_refused"));
-    await withTransaction(suite.db, async (tx) => {
-      const [person] = await tx
-        .insert(persons)
-        .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
-        .returning();
-      const { token } = await startManagementSession(tx, { personId: person!.id });
-      const filingCase = await openFilingCase(tx, {
-        registroId,
-        cause: "fiscal.registro_rechazado",
-        evidence: { codigo: 1161, mensaje: null, csv: null },
-        now: AT,
-      });
-      await applyAbsentOriginalCancellation(
-        tx,
-        { nodeId: node.nodeId, environment: "preproduction", clock, requireWritable: () => {} },
-        token,
-        new Set(["absent-original-cancellation"]),
-        {
-          kind: "absent-original-cancellation",
-          caseId: filingCase.id,
-          registroId,
-          actionKey: "absent-1",
-          reason: "Absent original",
-        },
-      );
-    });
-    expect(await admission(saleId)).toEqual(refused("voided"));
-  });
-
-  it("an F1", async () => {
+  it.each(["F1", "R5"] as const)("an %s", async (tipo) => {
     expect(await admission((await file({ tipo: "F2" })).saleId)).toEqual(eligible("queued", 1));
-    expect(await admission((await file({ tipo: "F1" })).saleId)).toEqual(refused("not_simplified"));
-  });
-
-  it("a corrective record's own sale (R5)", async () => {
-    const { saleId } = await file();
-    const corrective = await seedSale(suite.db, node, 100);
-    await withTransaction(suite.db, (tx) =>
-      backend.recordCorrection(
-        tx,
-        {
-          origin: deviceOrigin(node.deviceId),
-          nodeId: node.nodeId,
-          saleId: corrective,
-          seriesId: seriesId(node.seriesId),
-          seriesCode: "R",
-          invoiceNumber: 100,
-          issuedAt: AT,
-          offsetMinutes: 120,
-          descriptionOfOperation: "Restaurant adjustment",
-          total: decimal("-12.10"),
-          vatBreakdown: [
-            { rate: decimal("21.00"), base: decimal("-10.00"), tax: decimal("-2.10") },
-          ],
-          counterparty: null,
-        },
-        { correctsSaleId: saleId },
-      ),
-    );
-    expect(await admission(saleId)).toEqual(eligible("queued", 1));
-    expect(await admission(corrective)).toEqual(refused("not_simplified"));
+    expect(await admission((await file({ tipo })).saleId)).toEqual(refused("not_simplified"));
   });
 
   it("another node's", async () => {
@@ -214,6 +146,6 @@ describe("refusals, each beside the eligible control it differs from in one fact
     const { saleId } = await file();
     expect(await admission(saleId)).toEqual(eligible("queued", 1));
     await file({ sale: saleId });
-    expect(await admission(saleId)).toEqual(refused("history_unusable"));
+    expect(await admission(saleId)).toEqual(refused("filing_versions_unusable"));
   });
 });

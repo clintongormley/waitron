@@ -17,12 +17,13 @@ const FILING: Record<string, Filing | undefined> = {
 /**
  * Judges the sale's newest alta version, the one a correction is filed against
  * (`VerifactuBackend.recordCorrection`), and that version's submission. Any other submission
- * state, including one this code does not know, refuses.
+ * state, including one this code does not know, refuses. `issuingNodeId` is the box that would
+ * issue the correction.
  */
 export async function correctionAdmissionFor(
   tx: Transaction,
   saleId: SaleId,
-  nodeId: NodeId,
+  issuingNodeId: NodeId,
 ): Promise<CorrectionAdmission> {
   const rows = await tx
     .select({
@@ -43,16 +44,13 @@ export async function correctionAdmissionFor(
     return { eligible: false, reason: "voided" };
   }
   if (rows.length === 0) return { eligible: false, reason: "missing" };
-  // One first version, and each fix naming a distinct earlier one (`registros_corrects_registro_uq`),
-  // leaves exactly one version unfixed only when the versions form a single line.
+  // Each fix names a distinct earlier alta of the same sale (`registros_corrects_registro_uq`,
+  // `appendToChain`), so each line of fixes ends in one unfixed version: one means one line.
   const fixed = new Set(rows.map((row) => row.correctsRegistroId));
-  const firsts = rows.filter((row) => row.correctsRegistroId === null);
   const latest = rows.filter((row) => !fixed.has(row.id));
-  if (firsts.length !== 1 || latest.length !== 1) {
-    return { eligible: false, reason: "history_unusable" };
-  }
+  if (latest.length !== 1) return { eligible: false, reason: "filing_versions_unusable" };
   const alta = latest[0]!;
-  if (alta.nodeId !== nodeId) return { eligible: false, reason: "wrong_node" };
+  if (alta.nodeId !== issuingNodeId) return { eligible: false, reason: "wrong_node" };
   if (alta.tipoFactura !== "F2") return { eligible: false, reason: "not_simplified" };
   if (alta.estado === null) return { eligible: false, reason: "missing" };
   const filing = FILING[alta.estado];

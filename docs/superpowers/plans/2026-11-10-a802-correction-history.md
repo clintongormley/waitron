@@ -1,6 +1,6 @@
 # A802 slice 3: read an invoice's correction history and whether it may be corrected
 
-**Status: for the watcher's approval (lane L, 2026-11-10).** Slice 1 (the amount calculator,
+**Status: Approved by the owner 2026-11-10 14:33 ("approve all, no old invoices exist"), all four choices below.** Slice 1 (the amount calculator,
 `packages/core/src/correction-allocation.ts`) landed as #2653; slice 2 (the writer files the exact
 split it is given, `packages/core/src/partial-correction-breakdown.ts`) landed as #2671
 (`8f6ba75dca`).
@@ -74,8 +74,14 @@ construction; corrections filed by the legacy derived path may not.
 for an absent line gross to be rebuilt from the rate remainder. Every till filing path stores one:
 `bill-payments.ts:749`, `till-sale.ts:1011`, `:1744`, `:1899` and `working-order.ts:7388` file
 `withReceiptListPrices(priced.lines, …)`, whose `lineGross` is set at
-`packages/catalogue/src/pricing.ts:162` (read 2026-11-10; confirmed by the plan review; the only other
-callers are fixtures under `apps/server/test/`). The one filing without it is the setup
+`packages/catalogue/src/pricing.ts:162` (read 2026-11-10; confirmed by the plan review). The other
+callers `git grep -n "recordSale(" -- ':!*.test.ts'` finds set no `lineGross`, and none is a
+production path: the demo seeder (`apps/server/scripts/demo-seed/seed-sales.ts:300`, which refuses
+production at `seed-sales.ts:173`), `apps/server/scripts/testing/sale.ts`, the fixtures in
+`apps/server/src/testing/` (`backup-verification-fixture.ts`, `invoice-customer-fixture.ts`,
+`order-venue.ts`, `staged-hour-crash.ts`, `synthetic-invoice.ts`) and `apps/server/test/`
+(`held-setup-database.ts`, `hour-recovery-host.ts`), and
+`packages/fiscal-verifactu/test/live-conflict-fixture.ts`. The one filing without it is the setup
 readiness test sale (`packages/provisioning/src/fiscal-readiness-runner.ts:112`), which no one
 corrects. Until go-live no data is carried forward (root CLAUDE.md §3), so such history is refused,
 not rebuilt. Step 1 re-runs this search on the build base before relying on it.
@@ -89,10 +95,11 @@ As the old plan's [Task 4](2026-10-22-a802-partial-paid-invoice-correction.md#ta
 the approved interface:
 
 - `packages/fiscal/src/backend.ts`: optional
-  `correctionAdmissionFor?(tx: Transaction, saleId: SaleId, nodeId: NodeId): Promise<CorrectionAdmission>`,
+  `correctionAdmissionFor?(tx: Transaction, saleId: SaleId, issuingNodeId: NodeId): Promise<CorrectionAdmission>`
+  (`issuingNodeId`: the box that would issue the correction),
   with `CorrectionAdmission` =
   `{ eligible: true; filing: "queued" | "sending" | "accepted" | "accepted_with_issues"; original: { number: string; issuedAt: string } }`
-  or `{ eligible: false; reason: "unsupported" | "missing" | "wrong_node" | "voided" | "not_simplified" | "filing_refused" | "history_unusable" }`.
+  or `{ eligible: false; reason: "unsupported" | "missing" | "wrong_node" | "voided" | "not_simplified" | "filing_refused" | "filing_versions_unusable" }`.
   A backend without the member counts as `unsupported`. Exported from the fiscal barrel.
 - Create `packages/fiscal-verifactu/src/correction-admission.ts`, delegated from `VerifactuBackend`.
   It reads the sale's records in `registros_facturacion` by `sale_id`. A refused filing that was fixed
@@ -107,7 +114,7 @@ the approved interface:
   (it covers core voids, written in the same transaction, `record-void.ts:88,103`, and the remedy
   path's cancellation, which writes no `sale_voids` row, `record-remedy-absent.ts:134`;
   `recordCorrection`'s `sale_voids` check, `record-correction.ts:150`, stays the writer's backstop);
-  versions that do not form one line of fixes → `history_unusable`. A zero-total invoice is not
+  versions that do not form one line of fixes → `filing_versions_unusable`. A zero-total invoice is not
   admission's concern: the calculator refuses an amount when nothing has value.
 - **Substitution is read in core, not the regime.** The regime stores it only inside the F3's
   `facturas_sustituidas`, which no index covers (the plan review's EXPLAIN: a scan of every record),
@@ -122,7 +129,7 @@ the approved interface:
 
 ## Part C — one entry point, and the proof the slices fit
 
-In `correction-history.ts`, `previewCorrectionAmounts(tx, backend, { saleId, nodeId }, selection)`:
+In `correction-history.ts`, `previewCorrectionAmounts(tx, backend, saleId, issuingNodeId, selection)`:
 the substitution check, then admission (an ineligible result, or a substituted invoice, throws
 `sale.correction_not_admitted` with `{ reason }`, a new code beside slice 1's), then the reader, then
 slice 1's `allocateCorrectionAmounts`. It returns the calculator's `CorrectionAmountPreview`, the
@@ -132,7 +139,8 @@ admission's `filing` and `original`, and the correction's `lines: RecordSaleLine
 line's quantity (an amount correction's quantity is the scope shown, never units returned, as
 slice 2's plan says); `lineTotal` −base, `lineGross` −gross, `correctsLineId` the invoice line. The
 end-to-end test and slice 4 both file exactly these, so neither invents its own. Export it and
-the admission type from `packages/core/src/index.ts`: slice 4's server service is its production
+`CorrectionPreview` from `packages/core/src/index.ts` (the admission type is exported by
+`@waitron/fiscal`): slice 4's server service is its production
 consumer and the end-to-end test in `fiscal-verifactu` needs it (slice 1 kept the index unchanged
 until a consumer existed; this is the point where one does).
 
@@ -168,7 +176,10 @@ it into its own PR at the `CorrectionAdmission` interface and say so in question
    migrations): an F2 in each of the seven submission states (four eligible with their `filing`, three
    `filing_refused`); a refused F2 fixed by a subsanación whose new version is queued (judged on the
    new version); cancelled by a core void and by the remedy path's cancellation; F1; an R5; another
-   node's; no record. In core, a substituted invoice refused before the regime is asked. Each
+   node's; no record. In core, a substituted invoice refused before the regime is asked. (As built,
+   the remedy-path cancellation case was cut under the owner's 2026-11-09 test rule: the core-void
+   case covers the branch, and `record-remedy-absent.test.ts` asserts the sale's id on that
+   cancellation.) Each
    refusal beside an eligible control that differs in one fact. fiscal-none and the fake: one case
    each. Guards: `scripts/module-seams.test.ts`, `packages/fiscal/src/no-regime-vocabulary.test.ts`.
 4. **End to end, failing first** (`correction-history.e2e.test.ts`, real core writers, real Verifactu
@@ -195,6 +206,12 @@ No route, screen, paper, refund, drawer, replay record or permission check (slic
 reservation of capacity: cash acceptance files and refunds in one transaction, so nothing waits
 between preview and filing. No Items mode, A758 link, card refund or historical gross rebuild. No
 change to slice 2's writer or slice 1's calculator.
+
+Demo-seeded sales and the server test fixtures above store no line gross, so the reader refuses
+them. Slice 4 gives the fixtures its tests use a line gross (a fixture gaining a missing field). The
+demo seeder also splits VAT per rate from summed bases, and its golden file
+(`seed-sales.golden.test.ts`) forbids re-recording, so making demo sales correctable is a question
+for the owner when slice 5's screen is planned.
 
 ## For the watcher
 
