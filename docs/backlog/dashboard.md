@@ -592,8 +592,10 @@ probes do not settle it. This stays inside the existing bundle rather than becom
 
 ## Bundle: Contrast pass
 
-The off-switch and Products badge entries are delivered. The prep stations screen's contrast
-remains unmeasured, left open by A319 (hover contrast after A306, #1347).
+1 entry remains, size S.
+
+- The prep stations screen's contrast remains unmeasured, left open by A319
+  (hover contrast after A306, #1347).
 
 ## Bundle: Quantity display
 

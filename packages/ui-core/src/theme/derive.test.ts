@@ -390,3 +390,14 @@ describe("the tint gives way", () => {
     expect(deriveThemeFrom(WAITRON_DEFAULTS, DARK_GREEN).tintStrength?.light).toBe(1);
   });
 });
+
+test("fits the off-switch field line to a venue's dark dialog colour", () => {
+  const theme = deriveTheme({
+    ...WAITRON_CHOICES,
+    handSet: { light: {}, dark: { "surface-raised": "#3a3f4a" } },
+  });
+  expect(theme.dark[P("surface-raised")]).toBe("#3a3f4a");
+  expect(
+    contrastRatio(theme.dark[P("field-line")]!, theme.dark[P("surface-raised")]!),
+  ).toBeGreaterThanOrEqual(3);
+});

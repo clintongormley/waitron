@@ -8,9 +8,9 @@
 - `packages/ui/src/components/wt-switch.ts`: paint only the off track with existing `--wt-color-field-line`.
 - **Watcher choice:** `apps/dashboard/src/widgets/product-list.ts` is the sole bordered-badge owner. Keep its whole border declaration together and use existing `--wt-color-text-muted`. Approve that owner instead of adding a shared-table badge contract solely to move one colour declaration. No `wt-data-table` edit.
 - `packages/ui-core/src/theme/contrast-rules.ts`: include `surface-raised` among the existing field-line group's 3:1 backgrounds, so the token's new dialog use is covered by theme validation. Existing text-muted rules already cover page/surface/raised/lifted backgrounds above the badge product target of 3:1.
-- Tests changed: `packages/ui/src/components/wt-switch.test.ts` owns off-track token wiring; `apps/dashboard/src/widgets/product-list.test.ts` owns its actual badge border wiring. `packages/ui-core/src/theme/load.test.ts` and `packages/ui-core/src/theme/contrast-rules.test.ts` retain behavioral assertions and updates existing rule-count expectations. No duplicate per-screen contrast calculator or shared-table tests.
+- Tests changed: `packages/ui/src/components/wt-switch.test.ts` owns off-track token wiring; `apps/dashboard/src/widgets/product-list.test.ts` owns its actual badge border wiring. `packages/ui-core/src/theme/derive.test.ts` owns the custom dark dialog contrast case; `packages/ui-core/src/theme/load.test.ts` and `packages/ui-core/src/theme/contrast-rules.test.ts` retain behavioral assertions and updates existing rule-count expectations. No duplicate per-screen contrast calculator or shared-table tests.
 - Docs: `docs/developers/design-system.md` adds the off switch to field-line's Paints row. `docs/backlog.md` and `docs/backlog/dashboard.md` remove only delivered contrast entries. No guide workflow changes.
-- Forecast added/removed: production +3/−2, tests +12/−3, support 0/0, docs +3/−20, excluding this plan. Under three active hours to open; stop for watcher direction at 1.5× growth or an unlisted mechanism/file.
+- Forecast added/removed: production about +7/−3, tests about +27/−7, support 0/0, docs +3/−20, excluding this plan. Under three active hours to open; stop for watcher direction at 1.5× growth or an unlisted mechanism/file.
 
 ## Build and prove
 
@@ -23,3 +23,5 @@
 **Finish:** actual off-track and hovered-badge readings meet the target, inspected visuals and focused checks pass, backlog matches delivered behavior, normal finish-branch/push hook/current-head CI and applicable shared-UI publication checks complete. The watcher’s 04:13 approval above covers the sole-owner exception and build.
 
 Watcher 05:25: “Counts that pin the number of theme rules follow an approved added rule. Update load.test.ts:8-9 and carry on; no need to ask for that kind again.” Run its two load cases with the focused core files.
+
+Watcher 05:39 approves the one review correction pass: the dark #3a3f4a custom-theme assertion in derive.test.ts, the raised background folded into the existing list, and the remaining prep-stations bundle’s usual form. The unverified dark lifted-row switch use stays a PR-thread note, outside this dialog cut.
