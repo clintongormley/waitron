@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Buffer } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -88,6 +89,14 @@ describe("recipe boot evidence", () => {
       expect(readFileSync(join(root, "qemu-args"), "utf8")).toContain(
         "systemd.unit=setup-smoke.service",
       );
+      const args = readFileSync(join(root, "qemu-args"), "utf8");
+      for (const name of ["waitron-disk-start", "waitron-disk-ready"]) {
+        const encoded = args.match(
+          new RegExp(`systemd.extra-unit.${name}\\.service=([^\\n]+)`),
+        )?.[1];
+        expect(encoded).toBeTruthy();
+        expect(Buffer.from(encoded, "base64").toString()).toContain("ExecStart=/usr/bin/true");
+      }
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

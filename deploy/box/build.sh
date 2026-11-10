@@ -34,6 +34,19 @@ install -d -m 0755 "$root/opt/waitron" "$root/etc/dracut.conf.d"
 install -D -m 0755 "$repo/deploy/box/start-dev.sh" "$root/usr/local/sbin/waitron-dev-start"
 install -D -m 0644 "$repo/deploy/box/waitron-dev.service" "$root/etc/systemd/system/waitron-dev.service"
 systemctl --root="$root" enable waitron-dev.service
+install -d -m 0755 "$root/opt/waitron-host/box"
+for module in disk-start disk-key disk-recovery-key preboot disk-state; do
+  install -m 0644 "$repo/scripts/box/$module.mjs" "$root/opt/waitron-host/box/"
+done
+install -D -m 0644 "$repo/scripts/box/upgrades/contracts.mjs" "$root/opt/waitron-host/box/upgrades/contracts.mjs"
+for unit in waitron-disk-start waitron-disk-ready; do
+  install -m 0644 "$repo/deploy/box/$unit.service" "$root/etc/systemd/system/"
+done
+for unit in docker.service docker.socket; do
+  install -D -m 0644 "$repo/deploy/box/docker-waitron-disk.conf" "$root/etc/systemd/system/$unit.d/waitron-disk.conf"
+done
+install -d -m 0755 "$root/usr/lib/dracut/modules.d/95waitron"
+install -m 0755 "$repo/deploy/box/dracut/95waitron/"*.sh "$root/usr/lib/dracut/modules.d/95waitron/"
 cp "$repo/deploy/compose.yml" "$root/opt/waitron/compose.yml"
 mkdir "$output/input-stage"
 for kind in app agent mailpit; do
@@ -56,7 +69,7 @@ mkdir -p "$root/etc/systemd/system/bluetooth.service.d"
 bluez="$(sed -n 's/^ExecStart=//p' "$root/usr/lib/systemd/system/bluetooth.service")"
 printf '[Service]\nExecStart=\nExecStart=%s --noplugin=autopair\n' "$bluez" \
   > "$root/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf"
-printf 'hostonly="no"\nadd_drivers+=" virtio_pci virtio_blk ext4 btrfs dm_crypt "\nadd_dracutmodules+=" crypt "\n' > "$root/etc/dracut.conf.d/waitron.conf"
+printf 'hostonly="no"\nadd_drivers+=" virtio_pci virtio_blk ext4 btrfs dm_crypt tpm_crb tpm_tis "\nadd_dracutmodules+=" crypt waitron "\n' > "$root/etc/dracut.conf.d/waitron.conf"
 printf '{"features":{"containerd-snapshotter":true}}\n' > "$root/etc/docker/daemon.json"
 systemctl --root="$root" enable docker.service NetworkManager.service
 mkdir -p "$root/etc/systemd/system-preset"

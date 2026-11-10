@@ -1,0 +1,14 @@
+[Unit]
+Description=Check the installed Waitron disk key
+Requires=waitron-disk-start.service
+After=waitron-disk-start.service
+FailureAction=reboot-force
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/node /opt/waitron-host/box/disk-start.mjs check
+RemainAfterExit=yes
+LimitCORE=0
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/console

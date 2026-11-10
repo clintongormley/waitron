@@ -121,6 +121,15 @@ const args = [
   "-smbios",
   `type=11,value=io.systemd.credential.binary:systemd.extra-unit.setup-smoke.service=${credential}`,
 ];
+for (const name of ["waitron-disk-start", "waitron-disk-ready"]) {
+  const bypass = Buffer.from(
+    "[Service]\nType=oneshot\nExecStart=/usr/bin/true\nRemainAfterExit=yes\n",
+  ).toString("base64");
+  args.push(
+    "-smbios",
+    `type=11,value=io.systemd.credential.binary:systemd.extra-unit.${name}.service=${bypass}`,
+  );
+}
 if (populate)
   args.push(
     "-nic",

@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -51,6 +51,9 @@ case "$name" in
   if [[ "$*" == *http_code* ]]; then printf '%s' "$code"; fi
   if [[ "$1" == *f* && "$code" != 200 ]]; then exit 22; fi ;;
  cmp) exit "\${OCCUPIED:-0}" ;;
+ systemd-cryptsetup) echo chip >> "$WRITES"; exit "\${CHIP_EXIT:-0}" ;;
+ tpm2_pcrextend) echo "extend:$(/bin/cat "$B3_OPEN_MARKER")" >> "$WRITES"; exit "\${EXTEND_EXIT:-0}" ;;
+ reboot) echo reboot >> "$WRITES" ;;
  apparmor_parser) echo apparmor >> "$WRITES"; exit "\${APPARMOR_EXIT:-0}" ;;
  node)
   [ "$1" = /opt/waitron-host/box/disk-start.mjs ] || exit 99
@@ -107,6 +110,9 @@ for (const name of [
   "apparmor_parser",
   "docker",
   "node",
+  "systemd-cryptsetup",
+  "tpm2_pcrextend",
+  "reboot",
   "ls",
   "mktemp",
   "mkfs.vfat",
@@ -377,4 +383,45 @@ describe("installed startup", () => {
       partitionBytes: [536870912, 1073741824, 11272192000],
     });
   });
+});
+
+describe("the startup-image unlock", () => {
+  it.each([0, 1])(
+    "records the chip result and extends once before fallback (chip exit %s)",
+    (chipExit) => {
+      const folder = mkdtempSync(join(scratch, "unlock-"));
+      mkdirSync(join(folder, "devices"));
+      writeFileSync(join(folder, "devices", "test-luks"), "");
+      const marker = join(folder, "waitron-disk-opened");
+      const script = join(folder, "unlock.sh");
+      writeFileSync(
+        script,
+        readFileSync(resolve("deploy/box/dracut/95waitron/unlock.sh"), "utf8")
+          .replaceAll("/run/waitron-", `${folder}/waitron-`)
+          .replaceAll("/dev/disk/by-uuid/", `${folder}/devices/`),
+      );
+      const bashEnv = join(folder, "env");
+      writeFileSync(bashEnv, 'getarg() { echo "test-luks"; }\n');
+      const writes = join(folder, "writes");
+      writeFileSync(writes, "");
+      const result = spawnSync("bash", ["-c", '. "$1"; . "$1"', "hook", script], {
+        env: {
+          ...process.env,
+          PATH: `${scratch}:${process.env.PATH}`,
+          BASH_ENV: bashEnv,
+          WRITES: writes,
+          CHIP_EXIT: String(chipExit),
+          B3_OPEN_MARKER: marker,
+        },
+        encoding: "utf8",
+        timeout: 5000,
+      });
+      expect(result.status).toBe(0);
+      const calls = readFileSync(writes, "utf8").trim().split("\n");
+      expect(calls.slice(0, 2)).toEqual(["chip", `extend:${chipExit === 0 ? "chip" : "failed"}`]);
+      expect(calls.filter((line) => line.startsWith("extend:"))).toHaveLength(1);
+      expect(calls.filter((line) => line.startsWith("cryptsetup open"))).toHaveLength(chipExit);
+      expect(readFileSync(marker, "utf8")).toBe(chipExit === 0 ? "chip\n" : "bootstrap\n");
+    },
+  );
 });
