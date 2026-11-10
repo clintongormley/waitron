@@ -486,7 +486,7 @@ describe("the brand colour's fix beside colours set by hand", () => {
       {
         field: "handSet.dark.field-line",
         mode: "dark",
-        against: ["field-fill", "surface", "bg", "table-calm"],
+        against: ["field-fill", "surface", "surface-raised", "bg", "table-calm"],
         fix: "#747a87",
         blockedBy: [],
       },
