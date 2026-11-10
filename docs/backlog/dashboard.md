@@ -842,18 +842,14 @@ The per-form classifications remain in the [A331 plan](../superpowers/plans/2026
 
 ## Loose ends left by signing a dashboard tab out when its box has been reset (A485, #1545).
 
-- After a box reset, the reset page's own banner still shows the old venue's name. By reading,
-    not run: `#returnToLogin` (`apps/dashboard/src/dashboard-app.ts`) never clears the `venueName`
-    that `getMe` set, and the locale read meant to replace it repeats the old name once made, since
-    it is kept for the page's life (`#localesPromise`, `apps/dashboard/src/api/client.ts`).
-  - A dashboard tab that never meets the box in setup mode gets plain sign-in, not the "box was
-    reset" notice — for example one asleep through the reset and the new venue's setup; there is
-    no venue identity to compare.
-  - A sign-in screen already showing when a box reset is found may already have started its passkey
-    autofill, and has started its Google settings read; the switch to the reset notice stops
-    neither. By reading, not run: a tab already on sign-in (sent by the shared session deadline, or
-    by a failed check on coming back into view) switches to the reset notice only when a later
-    request is answered `node.reset`.
+- A dashboard tab that never meets the box in setup mode gets plain sign-in, not the "box was
+  reset" notice — for example one asleep through the reset and the new venue's setup; there is
+  no venue identity to compare.
+- A sign-in screen already showing when a box reset is found may already have started its passkey
+  autofill, and has started its Google settings read; the switch to the reset notice stops
+  neither. By reading, not run: a tab already on sign-in (sent by the shared session deadline, or
+  by a failed check on coming back into view) switches to the reset notice only when a later
+  request is answered `node.reset`.
 
 
 ## Loose ends left by A501 (#1552).
@@ -865,9 +861,6 @@ The per-form classifications remain in the [A331 plan](../superpowers/plans/2026
     notice only at its next management request. Measured by A501's Codex review against setup mode.
     Options: answer those dashboard `/api` paths with `node.reset` too (the boot test pins
     `/api/staff` answering the placeholder), or move the reads under `/management-api`.
-  - `reportError`'s HTTP status is now unread. `apps/dashboard/src/session-signals.ts` no longer
-    uses it, and the status hand-off in `packages/dashboard-kit/src/request.ts` was added only for
-    the check A501 removed; a small cleanup across both packages.
 
 
 ## A398 — device-profile editor heading remains to align with the sub-page pattern.
