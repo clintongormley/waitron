@@ -995,7 +995,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       headers: { ...JSON_HEADERS, cookie: managerCookie },
       body: JSON.stringify({ ...base, name, paymentSlipPrinterIds: [ghost] }),
     });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
       error: { code: "printer.not_found", params: { id: ghost } },
     });
@@ -1016,8 +1016,10 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       headers: { ...JSON_HEADERS, cookie: managerCookie },
       body: JSON.stringify({ ...base, name: existingName, receiptPrinterIds: [ghost] }),
     });
-    expect(update.status).toBe(404);
-    expect(await update.json()).toMatchObject({ error: { code: "printer.not_found" } });
+    expect(update.status).toBe(400);
+    expect(await update.json()).toMatchObject({
+      error: { code: "printer.not_found", params: { id: ghost } },
+    });
   });
 
   it("refuses an office printer's id on every printer list and default, creating or changing nothing", async () => {
@@ -1055,7 +1057,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         headers: { ...JSON_HEADERS, cookie: managerCookie },
         body: JSON.stringify({ ...base, name, ...lists }),
       });
-      expect(created.status, JSON.stringify(lists)).toBe(404);
+      expect(created.status, JSON.stringify(lists)).toBe(400);
       expect(await created.json()).toEqual({
         error: { code: "printer.not_found", params: { id: officeId } },
       });
@@ -1064,7 +1066,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         headers: { ...JSON_HEADERS, cookie: managerCookie },
         body: JSON.stringify({ ...base, name: existingName, ...lists }),
       });
-      expect(updated.status, JSON.stringify(lists)).toBe(404);
+      expect(updated.status, JSON.stringify(lists)).toBe(400);
       expect(await updated.json()).toEqual({
         error: { code: "printer.not_found", params: { id: officeId } },
       });
@@ -1174,7 +1176,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         headers: { ...JSON_HEADERS, cookie: managerCookie },
         body: JSON.stringify({ ...base, name, ...lists }),
       });
-      expect(res.status, JSON.stringify(lists)).toBe(404);
+      expect(res.status, JSON.stringify(lists)).toBe(400);
       expect(await res.json()).toEqual({
         error: { code: "printer.not_found", params: { id: ghost } },
       });
@@ -1262,7 +1264,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     ]);
 
     it.each(cases)(
-      "refuses creating a profile naming it on %s with 404 printer.not_found, storing nothing",
+      "refuses creating a profile naming it on %s with 400 printer.not_found, storing nothing",
       async (_field, role, asDefault) => {
         const app = mountApp();
         const p = await seedDrawerPrinter(uniqueName("Gone"));
@@ -1283,7 +1285,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
           }),
         });
 
-        expect(res.status).toBe(404);
+        expect(res.status).toBe(400);
         expect(await res.json()).toEqual({
           error: { code: "printer.not_found", params: { id: p } },
         });
@@ -1296,7 +1298,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     );
 
     it.each(cases)(
-      "refuses a stale save still naming it on %s with 404 printer.not_found, changing nothing",
+      "refuses a stale save still naming it on %s with 400 printer.not_found, changing nothing",
       async (_field, role, asDefault) => {
         const app = mountApp();
         const p = await seedDrawerPrinter(uniqueName("Gone"));
@@ -1361,7 +1363,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
           }),
         });
 
-        expect(res.status).toBe(404);
+        expect(res.status).toBe(400);
         expect(await res.json()).toEqual({
           error: { code: "printer.not_found", params: { id: p } },
         });
@@ -1371,7 +1373,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       },
     );
 
-    it("refuses a save naming it only as a default, with 404 printer.not_found", async () => {
+    it("refuses a save naming it only as a default, with 400 printer.not_found", async () => {
       const app = mountApp();
       const p = await seedDrawerPrinter(uniqueName("Gone"));
       const q = await seedDrawerPrinter(uniqueName("Kept"));
@@ -1406,7 +1408,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         }),
       });
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
         error: { code: "printer.not_found", params: { id: p } },
       });
@@ -1824,6 +1826,43 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
           .from(deviceProfileKitchenScreenZones)
           .where(eq(deviceProfileKitchenScreenZones.deviceProfileId, copy.id)),
       ).toEqual([]);
+    });
+
+    it("profile copy refuses a printer only its body names with 400, and a missing source with 404", async () => {
+      const app = mountApp();
+      const base = { formFactor: "till", capabilities: [], ...ordering };
+      const created = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({ ...base, name: uniqueName("Copy printer source") }),
+      });
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as ProfileRow;
+      const ghost = randomUUID();
+      const name = uniqueName("Copy naming ghost");
+      const refused = await app.request(`/management-api/device-profiles/${id}/copy`, {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({ ...base, name, receiptPrinterIds: [ghost] }),
+      });
+      expect({ status: refused.status, body: await refused.json() }).toEqual({
+        status: 400,
+        body: { error: { code: "printer.not_found", params: { id: ghost } } },
+      });
+      const stored = await suite.db
+        .select({ id: deviceProfiles.id })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.name, name));
+      expect(stored).toEqual([]);
+      const unknown = await app.request(`/management-api/device-profiles/${randomUUID()}/copy`, {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({ ...base, name, receiptPrinterIds: [ghost] }),
+      });
+      expect({ status: unknown.status, body: await unknown.json() }).toEqual({
+        status: 404,
+        body: { error: { code: "device_profile.not_found", params: {} } },
+      });
     });
 
     it("profile copy validates the live source and keeps nonempty zone and station bounds", async () => {

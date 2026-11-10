@@ -491,6 +491,25 @@ Status changes:
   `zone.department_inactive` per question 9. Tests to change:
   `management-api.device-profiles.test.ts:1098,1119`, `management-api.test.ts` zone, station and
   course pins listed in part 2. Size M. Depends on: A394-3 (same file).
+  **2026-11-10 (A394-12):** done — on the management API a printer that a device profile's create,
+  copy or save names in its printer lists, or that a station's create or save (`POST /stations`,
+  `PATCH /stations/:id`) names in its body `printerIds`, now answers `printer.not_found` 400; a
+  course that `PUT /products/:id/course` names in its body (malformed, unknown or switched off)
+  answers `course.not_found` 400; and a table id that a floor-plan save
+  (`PUT /floor-plan-sets/:setId/zones/:zoneId/floor-plan`) names in its body but the zone does not
+  hold answers `table.not_found` 400. Each of the three codes has its own boundary built by
+  `runBodyIds` (the profile and station routes share the printer one); the shared `STATUS` still
+  maps them to 404. The path ids keep 404: the profile in `/device-profiles/:id` and
+  `/device-profiles/:id/copy` (`device_profile.not_found`), the station in `/stations/:id`
+  (`station.not_found`), the product in `/products/:id/course` (`product.not_found`), and the set
+  and zone in the floor-plan path. The profile routes' other body checks (department, zones,
+  kitchen-screen stations and zones, person exceptions) refuse as `device_profile.access_invalid`
+  or `device_profile.admission_invalid`, already 400, and are unchanged. The table and watcher rows
+  no longer exist: the table create, change and placement routes were removed by #1528 (the
+  floor-plan save took over table writes) and the watcher routes by #1502. `table.zone_inactive`
+  and `zone.department_inactive` (question 9) were left alone; `git grep` finds neither code under
+  `apps/` or `packages/` now. The client grep above, re-run on 2026-11-10, finds no status
+  comparison on these routes.
 - **A394-13 — Devices and joining: body ids answer 400, unknown ticket items 404.** Files:
   `apps/server/src/device-api.ts`, `join-api.ts`, `working-order.ts:6026-6050`. Changes the three
   binding codes → 400 on both files; splits `ticket.invalid_transition` (unknown item → a new

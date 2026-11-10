@@ -259,6 +259,20 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "management.failed");
+/** For a route where these codes can only name an id the request body sent, never its path
+ * (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong"). */
+const runBodyIds = (...codes: string[]) =>
+  createErrorBoundary(
+    { ...STATUS, ...Object.fromEntries(codes.map((code) => [code, 400] as const)) },
+    "management.failed",
+  );
+// A device profile's create, copy and save, and a station's create and save, name their printers
+// only in the body.
+const runBodyPrinters = runBodyIds("printer.not_found");
+// A product's course is named by the body's `courseId`.
+const runProductCourse = runBodyIds("course.not_found");
+// A floor-plan save names its existing tables by the body's `tables[].id`.
+const runFloorPlanSave = runBodyIds("table.not_found");
 
 /**
  * The `require*Id` screens below refuse a malformed path id as the resource's own not-found code. Id
@@ -1307,7 +1321,7 @@ export function mountManagementApi(
   );
 
   const createProfile = (c: Context, sourcePathId?: string) =>
-    run(c, log, async () => {
+    runBodyPrinters(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const sourceId =
         sourcePathId === undefined ? undefined : requireDeviceProfileId(sourcePathId);
@@ -1354,7 +1368,7 @@ export function mountManagementApi(
   // they were when omitted: the starting screen, a printer list, the kitchen screens, the role
   // set, the person exceptions, and each of the department, the zones and the starting zone.
   app.put("/management-api/device-profiles/:id", (c) =>
-    run(c, log, async () => {
+    runBodyPrinters(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireDeviceProfileId(c.req.param("id"));
       const body = await readJsonBody<ProfileBody>(c);
@@ -1488,7 +1502,7 @@ export function mountManagementApi(
   );
 
   app.put("/management-api/floor-plan-sets/:setId/zones/:zoneId/floor-plan", (c) =>
-    run(c, log, async () => {
+    runFloorPlanSave(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const at = {
         setId: requireSetId(c.req.param("setId")),
@@ -1517,7 +1531,7 @@ export function mountManagementApi(
 
   // ── Kitchen stations and routing ──
   app.post("/management-api/stations", (c) =>
-    run(c, log, async () => {
+    runBodyPrinters(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<{
         name?: unknown;
@@ -1598,7 +1612,7 @@ export function mountManagementApi(
   );
 
   app.patch("/management-api/stations/:id", (c) =>
-    run(c, log, async () => {
+    runBodyPrinters(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireStationId(c.req.param("id"));
       const body = await readJsonBody<{
@@ -1815,7 +1829,7 @@ export function mountManagementApi(
 
   // `null` clears the product's course.
   app.put("/management-api/products/:id/course", (c) =>
-    run(c, log, async () => {
+    runProductCourse(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireProductId(c.req.param("id"));
       const body = await readJsonBody<{ courseId?: unknown }>(c);
