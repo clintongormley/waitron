@@ -365,6 +365,15 @@ together.
 
 **2026-11-10 (A947 3b-3):** row 4 is gone. A joining spare installs the main box's authority as its own `tls/ca.*` (`apps/server/src/box-tls-install.ts`), which adds `tls/joined.json` (kept until a reset empties `tls/`) and `tls/install.json` with `tls/<name>.tmp` working files (an install in progress, finished or discarded at the next start).
 
+**2026-11-10, fl3:** Row 71 needs no Compose change: the pinned Mailpit v1.33.0
+defaults to 500 retained messages. These are source checks, not a running-mailbox measurement.
+Row 84's build-cache deletion was dropped by the owner on 2026-11-09 (fl3 plan, Q1).
+
+| Source checked 2026-11-10 | Source's words | What they establish |
+| --- | --- | --- |
+| [Mailpit v1.33.0 config](https://github.com/axllent/mailpit/blob/v1.33.0/config/config.go#L62-L63) | `MaxMessages = 500` | The initial message-count setting is 500. |
+| [Mailpit v1.33.0 flags and environment](https://github.com/axllent/mailpit/blob/v1.33.0/cmd/root.go) | `"max"`, `config.MaxMessages`, `MP_MAX_MESSAGES` | The flag uses that setting; an environment override can change it. Compose sets no override. |
+
 *2026-11-07 (A1390): a start now also removes `archive-download-*`, `archive-validate-*` and
 `restore-admission-*` inside `restore-staging/`, and `restore-entry-*` and `stream-restore-*` in the
 state folder (`restoreLeftovers` in `restore-staging-dirs.ts`, called from `freeSpaceAtStart` and

@@ -12,6 +12,27 @@ Node v26.7.0, in one transaction: a duplicate primary key is 1555, a null in a `
 
 **Naming and error codes**
 
+## State-file replacements flush the file before replacement and its folder afterward
+
+Use `writeFileDurable` when replacing a state file. It flushes the temporary file,
+renames it into place, then flushes the containing folder. The recovery-state and
+trading-config tests observe that order through real file handles. A successful
+write and rename alone do not exercise either flush.
+
+The local backup backend uses `stageFileDurable`, checks cancellation, renames,
+then calls `syncFolderHolding`. This preserves the old object when cancellation
+arrives during staging. Its write, upload and download cases observe both flushes;
+the cancellation cases retain the old bytes. The watcher cleared this exception
+to fl3's direct-helper wording on 2026-11-10 at 21:27.
+
+`scripts/durable-writes.test.ts` reads text in non-test source files importing
+`fs` or `fs/promises`, with or without `node:`. It sees plain `rename(`,
+`renameSync(` and object `.rename(` calls after comments are blanked. Its named
+exceptions come from the fl3 inventory; it does not verify their flushes.
+Plain writes, aliases, re-exports and indirect file-system access escape it.
+The venue-holder heartbeat deliberately stays unflushed. `writeDurableHostJson`
+keeps its exclusive temporary names and linked-parent refusal.
+
 ## Error codes name the DOMAIN CONCEPT, never the throwing package
 
 `series.not_found`, not `db.series_not_found` (design note atop `packages/shared/src/errors.ts`).

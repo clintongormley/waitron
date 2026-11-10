@@ -195,12 +195,15 @@ env_unset() {
   _env_rewrite "$1"
 }
 
-# 2. compose.yml + .env.example always from the INSTALLED ref, so compose and the image share a
-#    commit. Overwrites an operator's compose edits (rare); the choice is stated aloud.
+# 2. Compose follows the installed ref and replaces the old file only after the download succeeds.
 fetch_box_files() {
   local ref="$1"
-  fetch "${RAW_BASE}/${ref}/deploy/compose.yml" "$WAITRON_DIR/compose.yml"
-  fetch "${RAW_BASE}/${ref}/deploy/.env.example" "$WAITRON_DIR/.env.example"
+  if ! fetch "${RAW_BASE}/${ref}/deploy/compose.yml" "$WAITRON_DIR/compose.yml.tmp"; then
+    rm -f "$WAITRON_DIR/compose.yml.tmp"
+    die "could not download compose.yml — the installed file is unchanged; re-run install"
+  fi
+  mv -f "$WAITRON_DIR/compose.yml.tmp" "$WAITRON_DIR/compose.yml"
+  rm -f "$WAITRON_DIR/.env.example"
   echo "waitron.sh: wrote compose.yml from ${ref} (any local compose.yml edits were overwritten)"
 }
 

@@ -6,7 +6,7 @@ import { afterEach, expect, it } from "vitest";
 import { lockVenueDatabase } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { BACKUP_ROOM_NOTE_FILE, BACKUP_ROOM_START_DELETED_FILE } from "@waitron/store";
-import { backupRoomNoteTemporaryName } from "./backup-room-note-file.js";
+import { stagedPath } from "./fs-atomic.js";
 import {
   START_AGAIN_MARKER_FILE,
   assertStartAgainAllowedOnDisk,
@@ -240,7 +240,7 @@ it("deleting the marked attempt deletes the backup room note first", async () =>
 it("the backup room's files written after the marker are no finding, and Start again finishes", async () => {
   const roots = await box();
   await writeStartAgainMarker(roots, await startAgainMarkerFor(roots, attempt));
-  const temporary = backupRoomNoteTemporaryName("0123456789ab");
+  const temporary = stagedPath(BACKUP_ROOM_NOTE_FILE);
   const recordTemporary = `${BACKUP_ROOM_START_DELETED_FILE}.tmp`;
   for (const name of [
     BACKUP_ROOM_NOTE_FILE,

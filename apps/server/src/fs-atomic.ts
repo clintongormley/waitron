@@ -2,7 +2,6 @@ export {
   failedAtFolderSync,
   mkdirDurable,
   stagedPath,
-  stageFile,
   stageFileDurable,
   syncFolderHolding,
   syncNewFolders,

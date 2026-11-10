@@ -1,29 +1,11 @@
 import "./errors.js";
-import { mkdir, open, realpath, writeFile, rename, rm } from "node:fs/promises";
+import { mkdir, open, realpath, rename, rm } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { syncFolder } from "./folder-sync.js";
 
-/** Where {@link stageFile} and {@link stageFileDurable} write `path`'s working copy. */
+/** Where {@link stageFileDurable} writes `path`'s working copy. */
 export function stagedPath(path: string): string {
   return `${path}.tmp`;
-}
-
-/**
- * Write `data` to `${path}.tmp` (same directory, so a later `rename` onto `path` is atomic on POSIX)
- * and return that working path; `path` itself is untouched.
- *
- * Any stale `${path}.tmp` is REMOVED first, because `writeFile` applies `mode` only when it CREATES
- * the file: a reused stale tmp would carry its old, possibly broader permissions onto a secret.
- */
-export async function stageFile(
-  path: string,
-  data: string | Uint8Array,
-  mode: number,
-): Promise<string> {
-  const tmp = stagedPath(path);
-  await rm(tmp, { force: true });
-  await writeFile(tmp, data, { mode, flag: "w" });
-  return tmp;
 }
 
 const folderSyncFailures = new WeakSet<object>();
@@ -64,7 +46,7 @@ export function failedAtFolderSync(error: unknown): boolean {
   return typeof error === "object" && error !== null && folderSyncFailures.has(error);
 }
 
-/** {@link stageFile}, also syncing the working copy to disk before returning its path. A failure
+/** Writes and syncs the working copy before returning its path. A failure
  * at any step removes the working copy and is thrown. */
 export async function stageFileDurable(
   path: string,

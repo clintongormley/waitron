@@ -529,6 +529,8 @@ called weaker than its name, the topic file lists what it does not see.
   `waitron.sh reset --all`** (A1042, A1098). Guard: `scripts/start-again-records-writers.test.ts`,
   weaker than its name: reads text, never what a listed file does.
   [Cost and detail](docs/developers/conventions-data.md#root-receipts-moved-on-2026-10-31).
+- **A state file is replaced through `writeFileDurable`; the writers the guard names keep their own flushes, and the venue-holder heartbeat stays unflushed on purpose.** Guard: `scripts/durable-writes.test.ts`, weaker than its name: it reads text, finds only three rename spellings in files importing fs, and never proves a listed writer flushes.
+
 - **One process owns a venue folder at a time.** Tools documented to run beside the server use
   `exclusive: false`; file-changing commands take `lockVenueDatabase` before changing anything.
   Never unlink `venue.lock`/`recovery.lock`; change `recovery.json` only through `updateRecoveryState`.

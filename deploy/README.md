@@ -60,8 +60,9 @@ sudo bash waitron.sh install
 
 `install` installs Docker Engine and the compose plugin if they are missing (Debian and Ubuntu only;
 on anything else it says so and exits 2) and enables the daemon at boot. It then fetches `compose.yml`
-and `.env.example` from the ref you are installing, overwriting any local copy of those two files and
-printing a line to say so. These files follow the requested ref; the running image
+from the ref you are installing, replacing your local copy only after the download succeeds and
+printing a line to say so. It removes an old `.env.example` from the box and keeps `.env`.
+Read `deploy/.env.example` in the repository at the installed ref. The running image
 reports its own commit below. Finally it pulls the box's images, the two Waitron ones from GHCR and the
 mail catcher from Docker Hub, stopping with an error if any of them fails to download, and starts the
 containers.
@@ -712,7 +713,8 @@ command against it treat that entrypoint differently:
 
 ## The box's environment — `deploy/.env`
 
-`.env.example` documents every line. A box reached at `waitron.local` needs none of them set by
+The repository's `deploy/.env.example` at your installed ref documents every line.
+A box reached at `waitron.local` needs none of them set by
 hand: with neither AppArmor nor systemd a plain `install` leaves it with no `.env` at all. Where AppArmor is on,
 listing, pairing, forgetting and printing to Bluetooth printers needs the `WAITRON_PRINT_AGENT_APPARMOR` line `waitron.sh install` writes
 there once it has loaded the profile. Where systemd runs, setting the box's clock needs the

@@ -7,7 +7,6 @@ import {
   readFile,
   readdir,
   realpath,
-  rename,
   rm,
   stat,
   symlink,
@@ -15,9 +14,10 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   openVenueDatabase,
   runMigrations,
@@ -43,6 +43,9 @@ import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
+
+vi.mock("node:fs/promises", { spy: true });
+afterEach(() => vi.mocked(fs.rename).mockReset());
 
 // Migrated once and COPIED per test: the sweep only reads the database and copies the file.
 let templateDir: string;
@@ -1589,6 +1592,11 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
     const released = new Promise<void>((r) => (release = r));
     const reached = new Promise<void>((r) => (entered = r));
     const renames: string[] = [];
+    const actual = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+      if (String(to).endsWith(BACKUP_ROOM_NOTE_FILE)) renames.push(String(to));
+      await actual.rename(from, to);
+    });
     const refs: Refs = {
       config: localFsConfig([await makeDestDir()], STRONG_KEY_1),
       role: "primary",
@@ -1602,10 +1610,6 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
         entered();
         await released;
         return (await stat(path)).dev;
-      },
-      renameNote: async (from, to) => {
-        renames.push(to);
-        await rename(from, to);
       },
     });
     const reloading = sup.reload();
@@ -1631,14 +1635,16 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
       managed: false,
     };
     const stateDir = await stateWithNote();
-    const sup = supervisorFor(refs, stateDir, {
-      renameNote: async (from, to) => {
+    const actual = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+      if (String(to) === notePath(stateDir)) {
         entered();
         await released;
-        await rename(from, to);
+        await actual.rename(from, to);
         renamed = true;
-      },
+      } else await actual.rename(from, to);
     });
+    const sup = supervisorFor(refs, stateDir);
     const reloading = sup.reload();
     await reached;
     await sup.stop();

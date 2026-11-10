@@ -25,7 +25,11 @@ export interface StagedResetDeps {
 
 /** Stage the reset of the adopt `operationId`, for the next start to carry out. */
 export async function stageResetRequest(stateDir: string, operationId: string): Promise<void> {
-  await writeFileDurable(join(stateDir, MARKER), JSON.stringify({ version: 1, operationId }), 0o600);
+  await writeFileDurable(
+    join(stateDir, MARKER),
+    JSON.stringify({ version: 1, operationId }),
+    0o600,
+  );
 }
 
 function stagedOperationId(raw: string): string | null {

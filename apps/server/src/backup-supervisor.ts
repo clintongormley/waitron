@@ -176,8 +176,6 @@ export interface BackupSupervisorDeps {
   nodeId?: string;
   /** DI for tests; decides which folders the note names as on the venue's disk. */
   deviceOf?: DeviceOf;
-  /** DI for tests; moves the written note into place. */
-  renameNote?: (from: string, to: string) => Promise<void>;
 }
 
 /** The size of the venue database file, without its write-ahead file; a missing file counts as
@@ -381,7 +379,6 @@ export class BackupSupervisor {
       folders: folders.map((f) => ({ ...f, configuredDir: configured.get(f.destination)! })),
       now: () => this.#now(),
       log: this.#deps.log,
-      rename: this.#deps.renameNote,
     });
     if (this.#stopped) await this.#deleteNote();
   }

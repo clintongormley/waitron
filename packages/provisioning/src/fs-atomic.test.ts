@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   failedAtFolderSync,
   mkdirDurable,
-  stageFile,
   stageFileDurable,
   writeFileDurable,
 } from "./fs-atomic.js";
@@ -22,26 +21,6 @@ const newDir = async () => {
   dirs.push(d);
   return d;
 };
-
-describe("stageFile", () => {
-  it("writes a working copy beside the target at the given mode, leaving the target alone", async () => {
-    const d = await newDir();
-    const target = join(d, "server.key");
-    await writeFile(target, "old");
-    const staged = await stageFile(target, "new", 0o600);
-    expect(staged).toBe(`${target}.tmp`);
-    expect(await readFile(staged, "utf8")).toBe("new");
-    expect(await readFile(target, "utf8")).toBe("old");
-  });
-
-  it("does not inherit a stale working copy's broader permissions", async () => {
-    const d = await newDir();
-    const target = join(d, "server.key");
-    await writeFile(`${target}.tmp`, "stale", { mode: 0o644 });
-    const staged = await stageFile(target, "fresh-secret", 0o600);
-    expect((await stat(staged)).mode & 0o777).toBe(0o600);
-  });
-});
 
 /** Each sync of an opened file or folder and each rename, in order, while `run` runs. */
 async function syncsAndRenames(run: () => Promise<void>): Promise<string[]> {

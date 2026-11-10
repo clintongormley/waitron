@@ -2,7 +2,7 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { chmod, mkdir, mkdtemp, open, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
-import { stageFile } from "./fs-atomic.js";
+import { stageFileDurable, syncFolderHolding } from "./fs-atomic.js";
 import {
   checkedKey,
   objectTooLarge,
@@ -34,10 +34,11 @@ export class LocalFsBackend implements StorageBackend {
     const target = this.#path(key);
     signal.throwIfAborted();
     await mkdir(this.dir, { recursive: true });
-    const staged = await stageFile(target, bytes, 0o600);
+    const staged = await stageFileDurable(target, bytes, 0o600);
     try {
       signal.throwIfAborted();
       await rename(staged, target);
+      await syncFolderHolding(target);
     } catch (err) {
       await rm(staged, { force: true });
       throw err;
@@ -91,7 +92,7 @@ export class LocalFsBackend implements StorageBackend {
     signal.throwIfAborted();
     const out: StoredObject[] = [];
     for (const name of names) {
-      // Exclude `stageFile`'s in-progress temp (`<target>.tmp`): it starts with `waitron-` too,
+      // Exclude the in-progress temp (`<target>.tmp`): it starts with `waitron-` too,
       // so a leftover from a crash between write and rename would otherwise read as a finished backup.
       if (!name.startsWith(prefix) || name.endsWith(".tmp")) continue;
       let info;
@@ -136,8 +137,15 @@ async function copyAtomic(source: string, target: string, signal: AbortSignal): 
       signal,
     });
     await chmod(copied, 0o600);
+    const handle = await open(copied, "r");
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
     signal.throwIfAborted();
     await rename(copied, target);
+    await syncFolderHolding(target);
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }

@@ -1,10 +1,10 @@
-import { randomBytes } from "node:crypto";
-import { lstat, readFile, rename as renameFile, unlink, writeFile } from "node:fs/promises";
+import { lstat, readFile, unlink } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
 import {
   BACKUP_ROOM_NOTE_FILE,
-  backupRoomNoteTemporaryName,
   deleteBackupRoomNote,
+  stagedPath,
+  writeFileDurable,
 } from "@waitron/provisioning";
 import type { BackupFolder } from "./backup-room.js";
 import { errnoOf } from "./errno.js";
@@ -51,8 +51,6 @@ export type BackupRoomNoteSkip =
 
 export { deleteBackupRoomNote };
 
-type Rename = (from: string, to: string) => Promise<void>;
-
 const notePath = (stateDir: string) => join(stateDir, BACKUP_ROOM_NOTE_FILE);
 
 const MAX_NOTE_BYTES = 64 * 1024;
@@ -79,10 +77,9 @@ export async function writeBackupRoomNote(options: {
   folders: readonly BackupRoomNoteFolder[];
   now: () => Date;
   log: Logger;
-  rename?: Rename;
 }): Promise<void> {
-  const { stateDir, log, rename = renameFile } = options;
-  const temporary = join(stateDir, backupRoomNoteTemporaryName(randomBytes(6).toString("hex")));
+  const { stateDir, log } = options;
+  const temporary = stagedPath(notePath(stateDir));
   try {
     let venueDb: VenueDbIdentity;
     try {
@@ -105,8 +102,7 @@ export async function writeBackupRoomNote(options: {
       })),
       writtenAt: options.now().toISOString(),
     };
-    await writeFile(temporary, JSON.stringify(note), { mode: 0o600, flag: "wx" });
-    await rename(temporary, notePath(stateDir));
+    await writeFileDurable(notePath(stateDir), JSON.stringify(note), 0o600);
   } catch (error) {
     await unlink(temporary).catch(() => undefined);
     await deleteBackupRoomNote(stateDir).catch(() => undefined);
