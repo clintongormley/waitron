@@ -7,10 +7,11 @@ import type { ThemeLogoPrintFigure } from "./theme-logo-print.js";
 import "./theme-logo-print.js";
 
 const drawn = (image: string, data: string, blackDots: number): ThemeLogoPrint => ({
-  paperDots: 504,
   address: mediaTestRendition(image, "display"),
-  picture: { widthDots: 16, heightDots: 1, data },
-  blackDots,
+  papers: {
+    "80mm": { paperDots: 504, picture: { widthDots: 16, heightDots: 1, data }, blackDots },
+    "58mm": { paperDots: 360, picture: { widthDots: 16, heightDots: 1, data }, blackDots },
+  },
 });
 
 const states: Record<
@@ -58,5 +59,6 @@ it.each(cases)("How it prints: $state, $locale / $mode", async ({ mode, state, l
     mode,
   );
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector(ready)).not.toBeNull());
+  if (state !== "failed") expect(el.shadowRoot!.querySelectorAll("figure").length).toBe(2);
   await expectNoA11yViolations(host);
 });

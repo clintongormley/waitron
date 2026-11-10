@@ -549,10 +549,19 @@ describe("DashboardApi routes", () => {
 
   it("asks how a theme logo prints, passively", async () => {
     const answer: ThemeLogoPrint = {
-      paperDots: 576,
       address: "/media/renditions/v1/a.webp/display/5000-5000-100.webp",
-      picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
-      blackDots: 8,
+      papers: {
+        "80mm": {
+          paperDots: 576,
+          picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
+          blackDots: 8,
+        },
+        "58mm": {
+          paperDots: 360,
+          picture: { widthDots: 8, heightDots: 1, data: "8A==" },
+          blackDots: 4,
+        },
+      },
     };
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(answer));
     const api = new DashboardApi("", fetchImpl);

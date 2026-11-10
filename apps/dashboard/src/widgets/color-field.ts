@@ -309,7 +309,7 @@ function codeInput(code: NonNullable<ColorFieldOptions["code"]>, busy: boolean):
 export const colourValueStyles = css`
   .colour-value {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: var(--wt-space-2);
     min-width: 0;
   }
@@ -327,6 +327,8 @@ export const colourValueStyles = css`
   }
   .colour-value input[type="color"] {
     flex: none;
+    align-self: flex-start;
+    margin-block-start: calc((var(--wt-tap-min) - var(--wt-space-6)) / 2);
     width: var(--wt-space-6);
     height: var(--wt-space-6);
     padding: 0;

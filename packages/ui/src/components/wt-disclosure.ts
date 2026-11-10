@@ -183,6 +183,28 @@ export class WtDisclosure extends LitElement {
   private animationFrame = 0;
   private animationGeneration = 0;
   private motionQuery?: MediaQueryList;
+  private contentObserver?: ResizeObserver;
+  private readonly settlement = new Set<() => void>();
+
+  async whenSettled(): Promise<void> {
+    await this.updateComplete;
+    if (this.isConnected && this.shadowRoot?.querySelector(".body.animating"))
+      await new Promise<void>((resolve) => this.settlement.add(resolve));
+  }
+
+  private finishAnimation(body?: HTMLElement): void {
+    cancelAnimationFrame(this.animationFrame);
+    this.contentObserver?.disconnect();
+    this.contentObserver = undefined;
+    if (body) {
+      body.style.height = "";
+      body.classList.remove("animating");
+      this.bodyHidden = !this.open;
+      body.hidden = this.bodyHidden;
+    }
+    for (const resolve of this.settlement) resolve();
+    this.settlement.clear();
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -192,7 +214,8 @@ export class WtDisclosure extends LitElement {
 
   override disconnectedCallback(): void {
     this.motionQuery?.removeEventListener?.("change", this.onMotionChange);
-    cancelAnimationFrame(this.animationFrame);
+    ++this.animationGeneration;
+    this.finishAnimation(this.shadowRoot?.querySelector<HTMLElement>(".body") ?? undefined);
     super.disconnectedCallback();
   }
 
@@ -201,11 +224,7 @@ export class WtDisclosure extends LitElement {
     const body = this.shadowRoot?.querySelector<HTMLElement>(".body");
     if (!body?.classList.contains("animating")) return;
     ++this.animationGeneration;
-    cancelAnimationFrame(this.animationFrame);
-    body.style.height = "";
-    body.classList.remove("animating");
-    this.bodyHidden = !this.open;
-    body.hidden = this.bodyHidden;
+    this.finishAnimation(body);
   };
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -228,13 +247,12 @@ export class WtDisclosure extends LitElement {
     body.hidden = false;
     const generation = ++this.animationGeneration;
     cancelAnimationFrame(this.animationFrame);
+    this.contentObserver?.disconnect();
+    this.contentObserver = undefined;
     const height = this.openingFromHidden ? 0 : body.getBoundingClientRect().height;
-    const targetHeight = this.open ? body.scrollHeight : 0;
+    let targetHeight = this.open ? body.scrollHeight : 0;
     if (this.hasError || this.motionQuery?.matches || height === targetHeight) {
-      body.style.height = "";
-      body.classList.remove("animating");
-      this.bodyHidden = !this.open;
-      body.hidden = this.bodyHidden;
+      this.finishAnimation(body);
       return;
     }
     body.classList.add("animating");
@@ -244,17 +262,24 @@ export class WtDisclosure extends LitElement {
       if (generation !== this.animationGeneration) return;
       body.style.height = `${targetHeight}px`;
     });
+    if (this.open) {
+      this.contentObserver = new ResizeObserver(() => {
+        if (generation !== this.animationGeneration || !body.classList.contains("animating"))
+          return;
+        const nextHeight = body.scrollHeight;
+        if (nextHeight === targetHeight) return;
+        targetHeight = nextHeight;
+        body.style.height = `${targetHeight}px`;
+      });
+      // The body has a fixed animation height; its assigned content reports nested growth.
+      for (const content of body.querySelector("slot")!.assignedElements())
+        this.contentObserver.observe(content);
+    }
   }
 
   private onBodyTransitionEnd(event: TransitionEvent): void {
     if (event.propertyName !== "height" || event.target !== event.currentTarget) return;
-    const body = event.currentTarget as HTMLElement;
-    body.style.height = "";
-    body.classList.remove("animating");
-    if (!this.open) {
-      this.bodyHidden = true;
-      body.hidden = true;
-    }
+    this.finishAnimation(event.currentTarget as HTMLElement);
   }
 
   private onToggle(event: Event): void {

@@ -411,6 +411,7 @@ export class LookCard extends LitElement {
     this.scrollIntoView({ block: "start" });
   }
   #begin(editing: Editing, choices: ThemeChoices | null): void {
+    this.renderRoot.querySelector<ThemeAdvanced>("dashboard-theme-advanced")?.discardPending();
     this.#nameDialog()?.dismiss();
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -477,7 +478,12 @@ export class LookCard extends LitElement {
     if (!this.isConnected || !this.draft || !this.#expected || this.#scope) return;
     const { coordinator, scope } = draftScopeFor<LookDraft>(this, {
       id: this,
-      current: () => this.draft!,
+      current: () => {
+        const pick = this.renderRoot.querySelector<ThemeAdvanced>(
+          "dashboard-theme-advanced",
+        )?.pendingPick;
+        return pick ? setHand(this.draft!, pick.mode, pick.key, pick.colour) : this.draft!;
+      },
       snapshot: (value) => value,
       equal: sameDraft,
       restore: () => this.#cancel(),
@@ -528,7 +534,11 @@ export class LookCard extends LitElement {
    */
   #change(
     next: (draft: LookDraft) => LookDraft,
-    { code = false, hand = false }: { code?: boolean; hand?: boolean } = {},
+    {
+      code = false,
+      hand = false,
+      notifyScope = true,
+    }: { code?: boolean; hand?: boolean; notifyScope?: boolean } = {},
   ): void {
     if (!this.draft || this.submitting) return;
     this.#advanced().flush();
@@ -553,7 +563,7 @@ export class LookCard extends LitElement {
       this.showKeptNote = true;
     }
     this.actionError = "";
-    this.#scope?.changed();
+    if (notifyScope) this.#scope?.changed();
   }
   #shown(draft: LookDraft, mode: Mode, key: ThemeColour): string {
     return draft.choices.handSet[mode][key]!;
@@ -598,7 +608,9 @@ export class LookCard extends LitElement {
         this.handFixed = fixes;
         return next;
       },
-      { hand: true },
+      // A frame only materialises the pick already counted by hand-pending; another changed()
+      // would cancel a leave question that already includes it.
+      { hand: true, notifyScope: action.kind !== "pick" },
     );
   }
   #textNext(draft: LookDraft, action: TextAction): LookDraft {
@@ -1076,6 +1088,7 @@ export class LookCard extends LitElement {
             .textErrors=${textErrors}
             .fixed=${this.handFixed}
             ?busy=${busy}
+            @hand-pending=${() => this.#scope?.changed()}
             @hand-change=${(event: CustomEvent<HandAction>) => {
               event.stopPropagation();
               this.#hand(event.detail);

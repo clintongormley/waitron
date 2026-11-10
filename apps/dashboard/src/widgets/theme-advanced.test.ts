@@ -394,7 +394,9 @@ describe("what opens a section", () => {
   it("reveal opens the section before Advanced, so Advanced animates once to its full height", async () => {
     await commands.emulateReducedMotion(null);
     const el = await mount(CREAM);
-    await el.reveal("dark", "primary");
+    const revealed = el.reveal("dark", "primary");
+    await sectionAt(el, "buttons").updateComplete;
+    await disclosure(el).updateComplete;
     const buttons = sectionAt(el, "buttons").shadowRoot!.querySelector<HTMLElement>(".body")!;
     expect(buttons.classList.contains("animating")).toBe(false);
     expect(buttons.style.height).toBe("");
@@ -404,10 +406,35 @@ describe("what opens a section", () => {
     expect(body.classList.contains("animating")).toBe(true);
     const target = parseFloat(body.style.height);
     expect(target).toBeGreaterThanOrEqual(body.scrollHeight - 1);
-    await vi.waitFor(() => expect(body.classList.contains("animating")).toBe(false), {
-      timeout: 5000,
-    });
+    await revealed;
+    expect(body.classList.contains("animating")).toBe(false);
     expect(target).toBeGreaterThanOrEqual(body.getBoundingClientRect().height - 1);
+  });
+  it("reveal retargets Advanced when Buttons opens during its collapse", async () => {
+    await commands.emulateReducedMotion("no-preference");
+    const el = await mount(CREAM);
+    el.style.setProperty("--wt-duration-disclosure", "900ms");
+    await open(el);
+    const outer = disclosure(el);
+    const body = outer.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    await expect.poll(() => body.classList.contains("animating")).toBe(false);
+    outer.open = false;
+    await outer.updateComplete;
+    await expect.poll(() => body.getAnimations().length).toBeGreaterThan(0);
+    const closing = body.getAnimations()[0]!;
+    closing.pause();
+    closing.currentTime = 450;
+    const revealed = el.reveal("dark", "primary");
+    await sectionAt(el, "buttons").updateComplete;
+    await outer.updateComplete;
+    await sectionAt(el, "buttons").whenSettled();
+    await nextFrame();
+    const target = parseFloat(body.style.height);
+    expect(target).toBeGreaterThan(800);
+    await revealed;
+    expect(Math.abs(body.getBoundingClientRect().height - target)).toBeLessThan(2);
+    expect(body.classList.contains("animating")).toBe(false);
+    expect(focusedInner()).toBe(innerInput(el, "dark", "primary"));
   });
 });
 
@@ -437,6 +464,25 @@ describe("layout", () => {
   const restore = { width: innerWidth, height: innerHeight };
   afterEach(async () => {
     await page.viewport(restore.width, restore.height);
+  });
+
+  it("a code error keeps the picker and tag beside the native code box", async () => {
+    const { el } = await rowAt(1280, "primary");
+    el.draft = setHand(el.draft, "light", "primary", "#225588");
+    el.derived = deriveTheme(el.draft.choices);
+    await el.updateComplete;
+    const input = codeField(el, "light", "primary").shadowRoot!.querySelector("input")!;
+    const tag = q(el, "[data-test=hand-status-light-primary]");
+    const before = box(tag);
+    el.errors = { "handSet.light.primary": t("appearance.bad_code") };
+    await el.updateComplete;
+    await codeField(el, "light", "primary").updateComplete;
+    expect(codeField(el, "light", "primary").error).not.toBe("");
+    expect(Math.abs(centre(box(picker(el, "light", "primary"))) - centre(box(input)))).toBeLessThan(
+      2,
+    );
+    expect(Math.abs(box(tag).left - before.left)).toBeLessThan(2);
+    expect(Math.abs(box(tag).top - before.top)).toBeLessThan(2);
   });
 
   it("stacks name, Light and Dark at phone width", async () => {
@@ -755,14 +801,27 @@ describe("one pick per frame", () => {
     const el = await mount(CREAM);
     await open(el);
     const seen = actions(el);
+    const pending: unknown[] = [];
+    el.addEventListener("hand-pending", (event) =>
+      pending.push([el.pendingPick, event.bubbles, event.composed]),
+    );
     const before = frames.length;
     pick(el, "#111111");
     pick(el, "#222222");
     pick(el, "#333333");
+    expect(pending).toEqual(
+      ["#111111", "#222222", "#333333"].map((colour) => [
+        { mode: "light", key: "bg", colour },
+        false,
+        false,
+      ]),
+    );
     expect(seen).toEqual([]);
     expect(frames.length).toBe(before + 1);
     runFrame(frames.length);
     expect(seen).toEqual([{ kind: "pick", mode: "light", key: "bg", colour: "#333333" }]);
+    expect(el.pendingPick).toBeUndefined();
+    expect(pending).toHaveLength(3);
     pick(el, "#444444");
     expect(frames.length).toBe(before + 2);
   });
@@ -804,6 +863,21 @@ describe("one pick per frame", () => {
       { kind: "pick", mode: "light", key: "bg", colour: "#111111" },
       { kind: "pick", mode: "dark", key: "surface", colour: "#223344" },
     ]);
+  });
+
+  it("discards a pending pick without another notification or a later delivery", async () => {
+    const el = await mount(CREAM);
+    await open(el);
+    const seen = actions(el);
+    const pending = vi.fn();
+    el.addEventListener("hand-pending", pending);
+    pick(el, "#111111");
+    const id = frames.length;
+    el.discardPending();
+    runFrame(id);
+    expect(el.pendingPick).toBeUndefined();
+    expect(seen).toEqual([]);
+    expect(pending).toHaveBeenCalledTimes(1);
   });
 
   it("cancels a waiting frame when removed", async () => {

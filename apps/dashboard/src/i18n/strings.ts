@@ -3432,8 +3432,8 @@ export const en = {
   "appearance.logo_dark_own": "Dark screens: own version",
   "appearance.logo_dark_plate": "Dark screens: on a light plate",
   "appearance.logo_print":
-    "How it prints on receipts of departments with no receipt logo of their own.",
-  "appearance.logo_print_blank": "This logo prints blank on receipts.",
+    "How it prints on {width} mm receipts of departments with no receipt logo of their own.",
+  "appearance.logo_print_blank": "This logo prints blank on {width} mm receipts.",
   "appearance.logo_print_failed": "Could not show how this logo prints.",
   "appearance.logo_print_retry": "Try again",
   "appearance.theme_in_use": "Theme in use",
@@ -7311,8 +7311,8 @@ export const es: Record<StringKey, string> = {
   "appearance.logo_dark_own": "Pantallas oscuras: versión propia",
   "appearance.logo_dark_plate": "Pantallas oscuras: sobre una placa clara",
   "appearance.logo_print":
-    "Así se imprime en los recibos de los departamentos sin logotipo de recibo propio.",
-  "appearance.logo_print_blank": "Este logotipo se imprime en blanco en los recibos.",
+    "Así se imprime en los recibos de {width} mm de los departamentos sin logotipo de recibo propio.",
+  "appearance.logo_print_blank": "Este logotipo se imprime en blanco en los recibos de {width} mm.",
   "appearance.logo_print_failed": "No se ha podido mostrar cómo se imprime este logotipo.",
   "appearance.logo_print_retry": "Reintentar",
   "appearance.theme_in_use": "Tema en uso",

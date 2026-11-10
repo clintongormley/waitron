@@ -1180,7 +1180,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   - `apps/dashboard/src/screens/device-profiles-screen.ts` is over 1,600 lines; "Where it serves"
     and "Who can sign in" could become widgets of their own.
 
-- **The Look card's small faults, including a lost colour** (bundle of 6, 1 important, size S). [Detail](backlog/till.md#bundle-the-look-cards-small-faults-including-a-lost-colour)
 
 - **WebKit in CI for A841's start-up checks (lane A ruling, 2026-10-21).** Whether WebKit's Linux
   libraries are missing from `ubuntu-latest` is an assumption to check first.

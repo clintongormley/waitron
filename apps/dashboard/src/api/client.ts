@@ -2433,18 +2433,23 @@ export interface ThemeList {
 }
 
 export interface ThemeLogoPrint {
-  /** The paper's printable dots across. */
-  readonly paperDots: number;
-  /** The `display` address `picture` was drawn from; `null` when the library has no such image. */
+  /** The library's display rendition; null when the image is gone. */
   readonly address: string | null;
-  /** The 80 mm picture; `null` when the image is gone or will not decode. */
-  readonly picture: {
-    readonly widthDots: number;
-    readonly heightDots: number;
-    readonly data: string;
-  } | null;
-  /** Set dots in `picture`; 0 means the logo prints blank. */
-  readonly blackDots: number;
+  readonly papers: Readonly<
+    Record<
+      "80mm" | "58mm",
+      {
+        readonly paperDots: number;
+        /** Null when the image is gone or will not decode. */
+        readonly picture: {
+          readonly widthDots: number;
+          readonly heightDots: number;
+          readonly data: string;
+        } | null;
+        readonly blackDots: number;
+      }
+    >
+  >;
 }
 
 export class DashboardApi {

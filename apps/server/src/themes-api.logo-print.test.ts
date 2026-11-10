@@ -143,24 +143,27 @@ async function rows(): Promise<unknown[]> {
 }
 
 describe("GET /management-api/theme-logo-print", () => {
-  it("draws the image as an 80 mm receipt draws it", async () => {
+  it("draws both receipt widths with their own pictures and dot counts", async () => {
     const current = await withTransaction(suite.db, (tx) => readCurrentImage(tx, A));
-    const expected = (
-      await drawLogoRasters(await renderRendition(current!.bytes, "display", current!.framing))
-    )["80mm"];
+    const expected = await drawLogoRasters(
+      await renderRendition(current!.bytes, "display", current!.framing),
+    );
     const res = await ask(`image=${A}`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as ThemeLogoPrint;
-    expect(body.paperDots).toBe(504);
-    expect(body.picture).toEqual(expected);
-    expect(body.blackDots).toBe(
-      countBlackDots({
-        widthDots: expected.widthDots,
-        heightDots: expected.heightDots,
-        bits: Buffer.from(expected.data, "base64"),
-      }),
-    );
-    expect(body.blackDots).toBeGreaterThan(0);
+    for (const [paper, dots] of [
+      ["80mm", 504],
+      ["58mm", 360],
+    ] as const) {
+      const printed = body.papers[paper];
+      expect(printed.paperDots).toBe(dots);
+      expect(printed.picture).toEqual(expected[paper]);
+      expect(printed.blackDots).toBe(
+        countBlackDots({ ...expected[paper], bits: Buffer.from(expected[paper].data, "base64") }),
+      );
+      expect(printed.blackDots).toBeGreaterThan(0);
+    }
+    expect(body.papers["80mm"].picture!.widthDots).not.toBe(body.papers["58mm"].picture!.widthDots);
   });
 
   it("names the address it drew from as the library's presentation names it, before and after a reframe", async () => {
@@ -175,14 +178,14 @@ describe("GET /management-api/theme-logo-print", () => {
 
   it("a white logo on a see-through background prints blank", async () => {
     const body = (await (await ask(`image=${CIRCLE}`)).json()) as ThemeLogoPrint;
-    expect(body.picture).not.toBeNull();
-    expect(body.blackDots).toBe(0);
+    expect(body.papers["80mm"].picture).not.toBeNull();
+    expect(body.papers["80mm"].blackDots).toBe(0);
   });
 
   it("one dot is not blank", async () => {
     const body = (await (await ask(`image=${SPECK}`)).json()) as ThemeLogoPrint;
-    expect(body.picture).not.toBeNull();
-    expect(body.blackDots).toBeGreaterThan(0);
+    expect(body.papers["80mm"].picture).not.toBeNull();
+    expect(body.papers["80mm"].blackDots).toBeGreaterThan(0);
   });
 
   it("a supervisor may read; staff are refused", async () => {
@@ -213,10 +216,11 @@ describe("GET /management-api/theme-logo-print", () => {
     const res = await ask(`image=${"c".repeat(64)}.png`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      paperDots: 504,
       address: null,
-      picture: null,
-      blackDots: 0,
+      papers: {
+        "80mm": { paperDots: 504, picture: null, blackDots: 0 },
+        "58mm": { paperDots: 360, picture: null, blackDots: 0 },
+      },
     });
   });
 
@@ -226,10 +230,11 @@ describe("GET /management-api/theme-logo-print", () => {
     const res = await ask(`image=${A}`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      paperDots: 504,
       address: await displayAddress(A),
-      picture: null,
-      blackDots: 0,
+      papers: {
+        "80mm": { paperDots: 504, picture: null, blackDots: 0 },
+        "58mm": { paperDots: 360, picture: null, blackDots: 0 },
+      },
     });
   });
 
@@ -239,10 +244,11 @@ describe("GET /management-api/theme-logo-print", () => {
     const res = await ask(`image=${A}`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      paperDots: 504,
       address: await displayAddress(A),
-      picture: null,
-      blackDots: 0,
+      papers: {
+        "80mm": { paperDots: 504, picture: null, blackDots: 0 },
+        "58mm": { paperDots: 360, picture: null, blackDots: 0 },
+      },
     });
   });
 
@@ -251,12 +257,12 @@ describe("GET /management-api/theme-logo-print", () => {
     const hono = app();
     const first = (await (await askOn(hono, `image=${A}`)).json()) as ThemeLogoPrint;
     await askOn(hono, `image=${A}`);
-    expect(decode).toHaveBeenCalledTimes(1);
+    expect(decode).toHaveBeenCalledTimes(2);
 
     await reframe(A);
     const again = (await (await askOn(hono, `image=${A}`)).json()) as ThemeLogoPrint;
-    expect(decode).toHaveBeenCalledTimes(2);
-    expect(again.picture!.data).not.toBe(first.picture!.data);
+    expect(decode).toHaveBeenCalledTimes(4);
+    expect(again.papers["80mm"].picture!.data).not.toBe(first.papers["80mm"].picture!.data);
   });
 
   it("asking again encodes and counts nothing more", async () => {

@@ -477,7 +477,7 @@ describe("colourValueField", () => {
     expect(outerChange).not.toHaveBeenCalled();
   });
 
-  it("keeps the code field compact, and an error under it on one line where there is room", async () => {
+  it("keeps the code field compact and wraps its error within that width", async () => {
     const error = "Type a colour code such as #1e5b3a.";
     const { el, host } = await mountValue(options({ code: "#F8F1E", error }));
     host.style.width = "600px";
@@ -489,7 +489,9 @@ describe("colourValueField", () => {
     expect(message.textContent).toBe(error);
     const range = document.createRange();
     range.selectNodeContents(message);
-    expect(range.getClientRects()).toHaveLength(1);
+    expect(range.getClientRects().length).toBeGreaterThan(1);
+    for (const line of range.getClientRects())
+      expect(line.right).toBeLessThanOrEqual(box.right + 1);
   });
 
   it("sets the code in the fixed-width font, and its error in the ordinary one", async () => {

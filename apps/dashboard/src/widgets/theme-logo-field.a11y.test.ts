@@ -11,10 +11,19 @@ const LIGHT = mediaTestReference("lucia.png");
 const DARK = mediaTestReference("lucia-dark.png");
 
 const BLACK: ThemeLogoPrint = {
-  paperDots: 504,
   address: mediaTestRendition(LIGHT, "display"),
-  picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
-  blackDots: 8,
+  papers: {
+    "80mm": {
+      paperDots: 504,
+      picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
+      blackDots: 8,
+    },
+    "58mm": {
+      paperDots: 360,
+      picture: { widthDots: 8, heightDots: 1, data: "8A==" },
+      blackDots: 4,
+    },
+  },
 };
 
 const states: Record<string, { logo: ThemeLogo | null; errors?: () => ThemeLogoField["errors"] }> =

@@ -72,13 +72,17 @@ export function themeAnswerOf(stored: StoredTheme): ThemeAnswer {
 }
 
 export interface ThemeLogoPrint {
-  readonly paperDots: number;
-  /** The display rendition `picture` was drawn from; `null` when the library has no such image. */
   readonly address: string | null;
-  /** The 80 mm picture; `null` when the image is gone or will not decode. */
-  readonly picture: StoredLogoRaster | null;
-  /** Set dots in `picture`; 0 means the logo prints blank. */
-  readonly blackDots: number;
+  readonly papers: Readonly<
+    Record<
+      "80mm" | "58mm",
+      {
+        readonly paperDots: number;
+        readonly picture: StoredLogoRaster | null;
+        readonly blackDots: number;
+      }
+    >
+  >;
 }
 
 function requireImageQuery(queries: Record<string, string[]>): string {
@@ -137,7 +141,10 @@ async function saveWithLogo<T>(
 export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): void {
   const logoCache = createLogoCache();
   // Keyed on the cache's own raster objects, so a cached picture is encoded and counted once.
-  const printed = new WeakMap<MonoRaster, Pick<ThemeLogoPrint, "picture" | "blackDots">>();
+  const printed = new WeakMap<
+    MonoRaster,
+    Pick<ThemeLogoPrint["papers"]["80mm"], "picture" | "blackDots">
+  >();
   const printedOf = (raster: MonoRaster) => {
     let known = printed.get(raster);
     if (known === undefined) {
@@ -176,12 +183,19 @@ export function mountThemesApi(app: Hono, deps: { db: Database }, log: Logger): 
         return readCurrentImageMetadata(tx, image);
       });
       // Drawn outside the transaction: sharp must not run holding the write lock.
-      const raster =
-        current === null ? null : await drawLibraryLogo(deps.db, logoCache, image, current, "80mm");
+      const paper = async (width: "80mm" | "58mm") => {
+        const raster =
+          current === null
+            ? null
+            : await drawLibraryLogo(deps.db, logoCache, image, current, width);
+        return {
+          paperDots: safeWidthDots(width),
+          ...(raster === null ? { picture: null, blackDots: 0 } : printedOf(raster)),
+        };
+      };
       const answer: ThemeLogoPrint = {
-        paperDots: safeWidthDots("80mm"),
         address: current === null ? null : previewLogoAddress(current),
-        ...(raster === null ? { picture: null, blackDots: 0 } : printedOf(raster)),
+        papers: { "80mm": await paper("80mm"), "58mm": await paper("58mm") },
       };
       return c.json(answer, 200);
     }),

@@ -127,13 +127,13 @@ second picture, such as a light drawing of your logo, which dark screens show in
 one. Until you add one, the hint reads "Without one, dark screens show your logo on a light plate."
 The version for dark screens has its own Replace and Remove.
 
-Below **For dark screens (optional)**, a small picture shows how the main logo prints on receipts of
-departments with no receipt logo of their own: in the black dots of an 80 mm receipt printer. See
-[On receipts and invoices](appearance.md#logo-receipts). When the logo would print no dots at all,
-as a white logo on a see-through background does, "This logo prints blank on receipts." shows
-underneath the picture: pick a darker picture, or give the departments a receipt logo of their own.
-If asking for the picture fails, "Could not show how this logo prints." appears instead, with **Try
-again**.
+Check the two pictures below **For dark screens (optional)** before you save your logo. They show
+how the main logo prints on 80 mm and 58 mm receipts in departments with no receipt logo of their
+own. A warning under either picture names the paper width on which the logo prints blank. If you
+use that width, pick a darker picture or give the departments a receipt logo of their own. See
+[On receipts and invoices](appearance.md#logo-receipts).
+
+If the pictures cannot be loaded, choose **Try again**.
 
 The preview shows the logo in the strip at the top of each version, followed by the venue's legal
 name: the main logo on the light version, and on the dark version the version for dark screens, or

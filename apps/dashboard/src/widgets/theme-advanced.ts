@@ -100,7 +100,7 @@ export class ThemeAdvanced extends LitElement {
       .line {
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
+        align-items: baseline;
         gap: var(--wt-space-2);
         min-width: 0;
       }
@@ -189,17 +189,19 @@ export class ThemeAdvanced extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.discardPending();
+  }
+
+  get pendingPick(): Readonly<{ mode: Mode; key: ThemeColour; colour: string }> | undefined {
+    return this.#waitingPick;
+  }
+
+  discardPending(): void {
     if (this.#frame !== undefined) cancelAnimationFrame(this.#frame);
     this.#frame = undefined;
     this.#waitingPick = undefined;
   }
 
-  /**
-   * Opens the section holding `key`, then Advanced, and moves focus to that value's code field. While
-   * Advanced's body is hidden (closed, and not mid closing animation), the section opens at once and,
-   * with motion on, Advanced animates once to its full height; the other way round, Advanced would
-   * animate to the height of closed sections while the section grew inside it.
-   */
   async reveal(mode: Mode, key: ThemeColour): Promise<void> {
     type Disclosure = HTMLElementTagNameMap["wt-disclosure"];
     const section = this.renderRoot.querySelector<Disclosure>(
@@ -210,7 +212,11 @@ export class ThemeAdvanced extends LitElement {
     const advanced = this.renderRoot.querySelector<Disclosure>("[data-test=advanced]")!;
     advanced.open = true;
     await advanced.updateComplete;
-    this.renderRoot.querySelector<HTMLElement>(`wt-input[name="handSet.${mode}.${key}"]`)!.focus();
+    await Promise.all([section.whenSettled(), advanced.whenSettled()]);
+    const field = this.renderRoot.querySelector<HTMLElement>(
+      `wt-input[name="handSet.${mode}.${key}"]`,
+    )!;
+    field.focus();
   }
 
   /** Sends a picked colour still waiting for its animation frame. */
@@ -223,6 +229,7 @@ export class ThemeAdvanced extends LitElement {
     const waiting = this.#waitingPick;
     if (waiting !== undefined && (waiting.mode !== mode || waiting.key !== key)) this.#flushPick();
     this.#waitingPick = { mode, key, colour };
+    this.dispatchEvent(new CustomEvent("hand-pending", { detail: this.pendingPick }));
     this.#frame ??= requestAnimationFrame(() => {
       this.#frame = undefined;
       this.#sendPick();

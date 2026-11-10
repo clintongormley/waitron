@@ -257,6 +257,24 @@ async function pressInAdvanced(card: Card, name: string) {
   await userEvent.click(inAdvanced(card, `[data-test=${name}]`)!);
   await settle(card);
 }
+function queuedPick(card: Card, colour: string) {
+  const frames: FrameRequestCallback[] = [];
+  const hold = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    frames.push(callback);
+    return 400_000 + frames.length;
+  });
+  try {
+    const picker = inAdvanced(
+      card,
+      'input[type=color][name="handSetPicker.light.bg"]',
+    ) as HTMLInputElement;
+    picker.value = colour;
+    picker.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  } finally {
+    hold.mockRestore();
+  }
+  return () => frames.splice(0).forEach((frame) => frame(performance.now()));
+}
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
 const CREAM = theme("t-cream", "Cream", {
   ...LUCIA,
@@ -278,6 +296,47 @@ function theme(id: string, name: string, choices: ThemeChoices): ThemeView {
 describe("leaving with Advanced", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it.each(["keep", "discard"] as const)(
+    "a pending pick survives its frame while the leave question awaits %s",
+    async (decision) => {
+      const { app, card, saveTheme } = await mount();
+      await openAdvanced(card);
+      const release = queuedPick(card, "#f8f1e1");
+      expect(unload()).toBe(true);
+      const request = leave(app);
+      const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+      await expect.poll(() => question.open).toBe(true);
+      release();
+      await settle(card);
+      await question.updateComplete;
+      expect(question.open).toBe(true);
+      expect(advanced(card).draft.choices.handSet.light).toEqual({ bg: "#f8f1e1" });
+      await choose(app, decision);
+      expect(await request).toBe(decision === "keep" ? "kept" : "proceeded");
+      expect(unload()).toBe(decision === "keep");
+      expect(editing(card)).toBe(decision === "keep");
+      expect(saveTheme).not.toHaveBeenCalled();
+    },
+  );
+
+  it("a pending baseline colour leaves a newly edited theme clean", async () => {
+    const { app, card } = await mount(CREAM);
+    const other = theme("t-other", "Another theme", LUCIA);
+    app.list = { themes: [CREAM, other], inUse: CREAM.id };
+    app.requestUpdate();
+    await app.updateComplete;
+    await openAdvanced(card);
+    const release = queuedPick(card, "#f8f1e1");
+    expect(unload()).toBe(false);
+    card.edit({ id: other.id });
+    await expect.poll(() => advanced(card).draft.choices.handSet.light).toEqual({});
+    release();
+    await settle(card);
+    expect(advanced(card).draft.choices.handSet.light).toEqual({});
+    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(unload()).toBe(false);
   });
 
   it("a value set by its picker asks, and Discard returns to the saved rows without a write", async () => {
