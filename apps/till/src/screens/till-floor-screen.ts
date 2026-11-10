@@ -46,7 +46,7 @@ import {
   partyTablesName,
   type ServiceStepDue,
 } from "@waitron/shared";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
@@ -1815,9 +1815,7 @@ export class TillFloorScreen extends LitElement {
         const standing = nameOf(refused.standingId);
         const joined = nameOf(refused.tableId);
         if (standing === undefined || joined === undefined) return undefined;
-        return t("floor.place_taken")
-          .replaceAll("{table}", () => standing)
-          .replace("{joined}", () => joined);
+        return fill(t("floor.place_taken"), { table: standing, joined });
       }
       case "joined_table.tables_in_group": {
         const ids = Array.isArray(refused.partIds) ? (refused.partIds as unknown[]) : [];
@@ -1829,13 +1827,12 @@ export class TillFloorScreen extends LitElement {
         const group = this.#mergeName(parts[0]!);
         if (group === null) return undefined;
         const labels = parts.map((each) => shownName(each!));
-        const sentence =
-          labels.length === 1
-            ? t("floor.table_in_group").replace("{table}", () => labels[0]!)
-            : t("floor.tables_in_group").replace("{tables}", () =>
-                conjunctionList(labels, currentLocale()),
-              );
-        return sentence.replace("{group}", () => group);
+        return labels.length === 1
+          ? fill(t("floor.table_in_group"), { table: labels[0]!, group })
+          : fill(t("floor.tables_in_group"), {
+              tables: conjunctionList(labels, currentLocale()),
+              group,
+            });
       }
       case "table.needs_moving": {
         const table = tableOf(refused.tableId);
@@ -1853,9 +1850,7 @@ export class TillFloorScreen extends LitElement {
         const other = nameOf(refused.standingId);
         const table = nameOf(refused.tableId);
         if (other === undefined || table === undefined) return undefined;
-        return t("floor.new_place_taken")
-          .replaceAll("{other}", () => other)
-          .replace("{table}", () => table);
+        return fill(t("floor.new_place_taken"), { other, table });
       }
       case "table.split_off": {
         const from = tableOf(refused.tableId)?.today?.splitOffFrom ?? null;
@@ -2507,9 +2502,10 @@ export class TillFloorScreen extends LitElement {
           return zone?.closesAt
             ? html`<div class="service-period" data-zone-control>
                 <p role="status">
-                  ${t(zone.closed ? "keep_open.zone_closed" : "keep_open.zone_closes")
-                    .replace("{zone}", () => zone.name)
-                    .replace("{time}", () => zone.closesAt!)}
+                  ${fill(t(zone.closed ? "keep_open.zone_closed" : "keep_open.zone_closes"), {
+                    zone: zone.name,
+                    time: zone.closesAt,
+                  })}
                 </p>
                 ${zoneKeepOpen({ zoneId: zone.id, zoneName: zone.name, closesAt: zone.closesAt, running: !zone.closed, extendedUntil: null }, this.api, zone.id)}
               </div>`
@@ -3160,9 +3156,7 @@ export class TillFloorScreen extends LitElement {
       data-ready-table=${entry.tableId}
       ?data-warning=${entry.warning}
       @click=${() => this.#openReady(entry)}
-      >${t("floor.ready_bar_table")
-        .replace("{table}", () => entry.name)
-        .replace("{n}", String(entry.count))}</wt-button
+      >${fill(t("floor.ready_bar_table"), { table: entry.name, n: String(entry.count) })}</wt-button
     >`;
   }
 
@@ -3173,17 +3167,11 @@ export class TillFloorScreen extends LitElement {
 
   #stationRow(station: StationReady): TemplateResult {
     const tables = station.parties
-      .map(({ name, count }) =>
-        t("floor.station_table")
-          .replace("{table}", () => name)
-          .replace("{n}", String(count)),
-      )
+      .map(({ name, count }) => fill(t("floor.station_table"), { table: name, n: String(count) }))
       .join(", ");
     return html`<li class="station-ready" data-station-ready=${station.stationId}>
       <span class="station-tables" data-station-tables
-        >${t("floor.station_tables")
-          .replace("{station}", () => station.stationName)
-          .replace("{tables}", () => tables)}</span
+        >${fill(t("floor.station_tables"), { station: station.stationName, tables })}</span
       >
       ${
         this.canOpenStation

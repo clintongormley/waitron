@@ -61,6 +61,12 @@ it("shows the ended sentence and removes an extension without selecting a new en
   el.shadowRoot!.querySelector<HTMLElement>("[data-stop]")!.click();
   expect(heard).toEqual([{ zoneId: "terrace", until: null }]);
 });
+it("names the zone exactly as typed when its name spells the time's slot", async () => {
+  const el = await mount({ zone: { ...zone, name: "Terrace {time}" } });
+  expect(el.shadowRoot!.querySelector("[data-ends]")!.textContent!.trim()).toBe(
+    "Terrace {time} closes at 14:00 today.",
+  );
+});
 it("cannot remove an extension that does not exist", async () => {
   expect((await mount()).shadowRoot!.querySelector("[data-stop]")).toBeNull();
 });

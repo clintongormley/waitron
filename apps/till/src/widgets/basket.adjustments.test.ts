@@ -386,6 +386,17 @@ describe("till-basket: a stored counter order", () => {
     expect(heard).toEqual([{ kind: "comp", combined: true, counter: true, target }]);
   });
 
+  it("names an extra exactly as typed when its name spells the dish's slot", async () => {
+    const store = new WorkingOrderStore();
+    const lines = basketLines();
+    lines[2]!.extras![0]!.name = "Tea {dish} $&";
+    store.loadFrom("wo-9", lines, undefined, 4);
+    const el = await mount(store);
+    expect(within(el, "2-0", "data-comp-extra")!.getAttribute("aria-label")).toBe(
+      `${t("comp.title")} · Tea {dish} $& (with Hamburguesa)`,
+    );
+  });
+
   it("cancels an extra on its own and whole once its dish is with the kitchen", async () => {
     const sentBurger: StoredLines = {
       ...stored,

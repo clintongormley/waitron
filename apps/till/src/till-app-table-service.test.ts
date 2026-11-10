@@ -2153,6 +2153,20 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       );
     });
 
+    it("names the old table exactly as typed when its name spells the reason's slot", async () => {
+      const { el, settle } = await changeThenOpenTable3({
+        ...terrace,
+        today: { ...terrace.today!, name: "Terraza {reason}" },
+      });
+
+      settle.reject(new Error("unexpected"));
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(
+        "Tu cambio en Burger de Terraza {reason} no se ha guardado. Algo salió mal, inténtalo de nuevo",
+      );
+    });
+
     it("names the old table by its name for today when the server did not answer", async () => {
       const { el, settle } = await changeThenOpenTable3(terrace);
 

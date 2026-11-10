@@ -49,4 +49,10 @@ describe("partyScope", () => {
 
     expect(partyScope(unnamed, [{ ...tables[0]!, party: unnamed }, tables[2]!])).toBe("Mesa 7");
   });
+
+  it("names a party exactly as typed when its name spells the tables' slot", () => {
+    const typed = { ...luis, name: "Ana {tables} $&" };
+
+    expect(partyScope(typed, [{ ...tables[0]!, party: typed }])).toBe("Ana {tables} $& (Mesa 7)");
+  });
 });

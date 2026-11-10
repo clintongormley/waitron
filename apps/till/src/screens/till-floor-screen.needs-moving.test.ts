@@ -470,6 +470,18 @@ describe("till-floor-screen: a table that needs moving", () => {
     expect(refusal(el)).toBe("4 ocupa el nuevo sitio de 3. Mueve 4 primero.");
   });
 
+  it("names a standing table exactly as typed when its name spells the moving table's slot", async () => {
+    const api = stubApi();
+    api.markMovedToday.mockRejectedValue(newPlaceTaken);
+    const standing = { ...planned("t4", 30), label: "Patio {table}", shortName: "Patio {table}" };
+    const el = await mount([moving("t3", 12), standing], api);
+    await refuseMarkMoved(el);
+
+    expect(refusal(el)).toBe(
+      "Patio {table} is standing in 3's new place. Move Patio {table} first.",
+    );
+  });
+
   it("says the code's own words when the new place's table is not on this read", async () => {
     const api = stubApi();
     api.markMovedToday.mockRejectedValue({

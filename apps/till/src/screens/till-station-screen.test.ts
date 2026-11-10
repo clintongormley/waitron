@@ -1430,6 +1430,19 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     expect(second!.querySelectorAll("[data-printer-down]")).toHaveLength(0);
   });
 
+  it("names a stuck printer exactly as typed when its name spells the time's slot", async () => {
+    const printer = {
+      printerId: "p-1",
+      printerName: "Epson {time}",
+      since: "2026-08-17T18:14:00Z",
+    };
+    const { el } = await mountDevice({
+      stations: [{ ...available("st-1", "Cocina", kitchenQueue), printersDown: [printer] }],
+    });
+    const line = el.shadowRoot!.querySelector("[data-printer-down]")!.textContent!;
+    expect(line).toContain("Printer Epson {time} has printed nothing");
+  });
+
   it("one station renders without a section, its name in its board's header row", async () => {
     const { el } = await mountDevice({ stations: [available("st-1", "Cocina", kitchenQueue)] });
     expect(sections(el)).toHaveLength(0);

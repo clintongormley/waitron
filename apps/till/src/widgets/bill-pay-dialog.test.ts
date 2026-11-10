@@ -633,6 +633,13 @@ describe("till-bill-pay-dialog: moving between steps", () => {
     );
   });
 
+  it("names an item exactly as typed when its name spells the amount's slot", async () => {
+    const el = await mount({ lines: [{ ...beers, name: "Beer {amount}" }] });
+    await pick(el, "line", "2");
+
+    expect(scope(el)).toBe(`Paying for Beer {amount} ×3: ${money("9.00")}`);
+  });
+
   it("goes back to cash after choosing a card", async () => {
     const el = await mount({ way: "contribution" });
     await pick(el, "method", "card");

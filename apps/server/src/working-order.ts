@@ -8142,7 +8142,7 @@ async function readQueueSubItems(
     .orderBy(workingOrderLines.lineNo);
   const counted = await VENUE_SERVICE.readLinesSoldInEach(
     tx,
-    childRows.map((child) => child.id),
+    childRows.flatMap((child) => (child.unitName == null ? [] : [child.id])),
   );
   for (const child of childRows) {
     const quantity = thousandthsToDecimal(child.quantity);

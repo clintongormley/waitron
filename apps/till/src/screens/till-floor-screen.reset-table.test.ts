@@ -621,6 +621,41 @@ describe("till-floor-screen: Reset table's refusals name the tables", () => {
     expect(floorRefusal(el)).toBe(words);
   });
 
+  it("names a standing table exactly as typed when its name spells the joined table's slot", async () => {
+    const api = stubApi();
+    api.resetTableToday.mockRejectedValueOnce({
+      code: "table.place_taken",
+      status: 409,
+      tableId: "long",
+      standingId: "t9",
+    });
+    const el = await mount([...oneFree(), table("t9", "Terrace {joined}", 10)], api);
+
+    await pressResetTable(el);
+    expect(floorRefusal(el)).toBe(
+      "Terrace {joined} is standing in Long table's place. Move Terrace {joined}, then Reset table again.",
+    );
+  });
+
+  it("names a table in a group exactly as typed when its name spells the group's slot", async () => {
+    const api = stubApi();
+    api.resetTableToday.mockRejectedValueOnce({
+      code: "joined_table.tables_in_group",
+      status: 409,
+      tableId: "long",
+      partIds: ["c4"],
+    });
+    const tables = inBarGroup().map((each) =>
+      each.id === "c4" ? { ...each, label: "Counter {group}" } : each,
+    );
+    const el = await mount(tables, api);
+
+    await pressResetTable(el, "c5");
+    expect(floorRefusal(el)).toBe(
+      "Counter {group} is in Bar+Counter {group}+Counter 3. Split it off first, then Reset table.",
+    );
+  });
+
   it("names neither the tables nor a group when the tables in the refusal are in different groups", async () => {
     const api = stubApi();
     api.resetTableToday.mockRejectedValueOnce({
