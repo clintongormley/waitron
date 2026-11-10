@@ -74,6 +74,15 @@ it.each([-60000, 60000])("accepts the inclusive %i ms clock allowance", (delta) 
 it.each([-60001, 60001])("refuses a request %i ms from the clock", (delta) =>
   expect(() => check(proof(), now + delta)).toThrow(InstallationError),
 );
+it("enforces the 12000-character encoded payload limit on valid signed claims", () => {
+  const value = { ...claims, lease: "x".repeat(4096), body: '"'.repeat(2366) + "a" };
+  const boundary = proof(value);
+  expect(boundary.payload).toHaveLength(12000);
+  expect(check(boundary)).toEqual(value);
+  const oversized = proof({ ...value, body: value.body + "aa" });
+  expect(oversized.payload).toHaveLength(12003);
+  expect(() => check(oversized)).toThrow(InstallationError);
+});
 it.each([
   "billing-display",
   "renew",

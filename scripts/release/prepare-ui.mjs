@@ -326,7 +326,7 @@ export async function main(args) {
   const [checkout, output, ...flags] = args;
   assert(
     checkout && output && (flags.length === 4 || flags.length === 6),
-    "Usage: prepare-ui.mjs <clean checkout> <empty output> --release-version <version> --source-commit <full SHA>",
+    "Usage: prepare-ui.mjs <clean checkout> <empty output> --release-version <version> --source-commit <full SHA> [--package ui-core|contract]",
   );
   const options = Object.fromEntries(
     Array.from({ length: flags.length / 2 }, (_, index) => flags.slice(index * 2, index * 2 + 2)),

@@ -19,7 +19,8 @@ locally.
 
 The signing contract runs in `test-light-a`. When selected, it also runs an independent
 Node consumer against its workspace and locally prepared tarballs. Changes to the shared
-`scripts/release/prepare-ui.mjs` select both UI and contract consumers. UI retains its browser
+`scripts/release/prepare-ui.mjs` or the shared `packages/ui-core/test/package-consumer.test.mjs`
+select both UI and contract consumers. UI retains its browser
 checks; contract has no peer dependencies. Registry publication is separate from these checks.
 
 Check the event and `changes` outputs before treating a green run as evidence about the workspace.

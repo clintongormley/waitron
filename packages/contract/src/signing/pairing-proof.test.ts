@@ -58,6 +58,16 @@ it.each([-60000, 60000])("accepts the inclusive %i ms clock allowance", (delta) 
     issuedAt: now + delta,
   }),
 );
+it("enforces the 4096-character encoded payload limit with a matching origin", () => {
+  const value = { ...claims, origin: `https://${"a".repeat(2845)}.test` };
+  const boundary = proof(value);
+  expect(boundary.payload).toHaveLength(4096);
+  expect(check(boundary, value.origin)).toEqual(value);
+  const oversized = { ...value, origin: value.origin + "a" };
+  const envelope = proof(oversized);
+  expect(envelope.payload).toHaveLength(4098);
+  expect(() => check(envelope, oversized.origin)).toThrow(PairingError);
+});
 it.each([
   { issuedAt: now - 60001 },
   { issuedAt: now + 60001 },

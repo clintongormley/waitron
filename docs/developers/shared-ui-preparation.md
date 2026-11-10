@@ -78,5 +78,6 @@ CONTRACT_PACKAGE_TARBALL=/tmp/waitron-contract-inspection/waitron-io-contract-0.
 The contract has no runtime or peer dependencies. Its installed consumer checks
 declarations and the three signing formats in Node, using the shared archive,
 source-commit and licence checks. UI keeps its Lit peer and browser checks.
+Changes to that shared installed-package checker select both packages in pull-request CI.
 The publishing workflow still selects only UI; this local route does not publish
 the contract or establish that Cloud can install it from the registry.
