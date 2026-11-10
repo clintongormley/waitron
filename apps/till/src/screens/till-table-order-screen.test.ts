@@ -5798,6 +5798,7 @@ describe("closed department ordering", () => {
         draftStore: draft,
         lines: [pendingLine],
         orderId: "wo-closed-zone",
+        bills: [{ ...tabBill, workingOrderId: "wo-closed-zone" }],
         zoneName: "Terrace",
         service: {
           open: true,
@@ -5814,7 +5815,7 @@ describe("closed department ordering", () => {
       expect(el.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
       expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
       expect(draft.lines.map((line) => [line.product.id, line.quantity])).toEqual([["cafe", "2"]]);
-      const payment = el.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!;
+      const payment = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!;
       expect(payment).not.toBeNull();
       const paid = vi.fn();
       el.addEventListener("bill-pay", paid);
@@ -5826,7 +5827,7 @@ describe("closed department ordering", () => {
       );
       draft.clear();
       await el.updateComplete;
-      el.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!.click();
+      el.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
       expect(paid).toHaveBeenCalledOnce();
       el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
       await el.updateComplete;

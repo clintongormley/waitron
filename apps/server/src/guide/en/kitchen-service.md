@@ -10,6 +10,8 @@ blocked so you can practise recovery. In the dashboard's **Payments**, a manager
 **Check with the card provider** for a whole-order payment, or **Check with provider** for a bill
 contribution, and confirms. This ends the practice attempt without recording a charge.
 
+For whole or part payments at a table, open **Pay** and use the [payment window](table-service.md#pay-window).
+
 ## Retry a counter send after a lost reply {#counter-send-retry}
 
 If the till cannot confirm a counter send, retry with the basket unchanged. When the first send

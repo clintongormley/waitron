@@ -6487,6 +6487,16 @@ The payment card still offers Cash and Card and retains its existing full-invoic
 post-payment receipt behavior. In practice, Approve, Decline and No answer are offered before Card; No answer leaves recovery to a manager. The bill-payment dialog offers the same three results, including on phones. Practice phones use the simulator without selecting a hardware reader. A739 owns the remaining replacement. Cash, Card and Park use
 the shared medium button size; Send fills its own row when the zone offers sending before payment.
 
+### Shared bill payment window
+
+Table bills open one Pay window from the foot. Its amount choices are An amount, Split equally,
+Items and Whole bill, in that order; Whole bill starts selected at the right. Keep all four choices
+in one row at phone width, allowing their labels to wrap within equal columns. The amount choices
+carry one help-mode badge linked to the payment guide. Existing cash, card, equipment, recovery and
+unsaved-input handling stays in the payment window. Presented bills keep whole-only collection;
+retained whole-payment confirmations and zero-total completion keep their existing paths.
+Counter's first part payment remains with A739's next cut.
+
 ### Departments and zones
 
 You open one list, with each department followed by its indented zones. The columns show name,

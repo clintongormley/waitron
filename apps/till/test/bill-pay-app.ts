@@ -398,9 +398,13 @@ export async function openTable(el: TillApp): Promise<TillTableOrderScreen> {
 
 export async function openDialog(el: TillApp, way: "items" | "contribution" | "share" | "rest") {
   const order = tableOrder(el);
-  const selector = way === "rest" ? "[data-pay-rest]" : `[data-open-bill-pay="${way}"]`;
-  order.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
+  order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
   await flush(el);
+  if (way !== "rest") {
+    const pay = dialog(el);
+    pay?.shadowRoot?.querySelector<HTMLInputElement>(`input[name="way"][value="${way}"]`)?.click();
+    await flush(el);
+  }
 }
 
 export async function showBillFooter(order: TillTableOrderScreen): Promise<void> {

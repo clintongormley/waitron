@@ -3,7 +3,6 @@ import { page, userEvent } from "vitest/browser";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations } from "../widgets/test-helpers.js";
-import type { TillTenderPay } from "../widgets/tender-pay.js";
 import { beer, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import {
   footerBalance,
@@ -55,16 +54,7 @@ describe.each(["en", "es"] as const)("the bill footer in %s", (locale) => {
           expect(summary.getBoundingClientRect().bottom).toBeLessThanOrEqual(
             footer.getBoundingClientRect().top,
           );
-          const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay");
-          const controls = partial
-            ? [q("[data-pay-rest]")!, q("[data-open-bill-pay]")!]
-            : await (async () => {
-                await tender!.updateComplete;
-                return [
-                  tender!.shadowRoot!.querySelector<HTMLElement>(".pay")!,
-                  tender!.shadowRoot!.querySelector<HTMLElement>(".pay-card")!,
-                ];
-              })();
+          const controls = [q("[data-pay-sheet]")!];
           for (const control of [
             ...controls,
             q("[data-choose-bill-invoice]:not([data-table-menu] *)")!,
@@ -98,9 +88,7 @@ describe.each(["en", "es"] as const)("the bill footer in %s", (locale) => {
           await userEvent.click(partial ? controls[0]! : discount);
           expect(events).toHaveLength(1);
           expect(events[0]!.detail).toMatchObject(
-            partial
-              ? { way: "contribution", amount: "8.00" }
-              : { kind: "discount", target: { total: "10.00" } },
+            partial ? { way: "whole" } : { kind: "discount", target: { total: "10.00" } },
           );
           expect(events[0]!.bubbles && events[0]!.composed).toBe(true);
         },

@@ -19061,8 +19061,6 @@ export class TillApp extends LitElement {
     if (paidMeanwhile && this.activeTabId === billId) await this.#loadPartyBills();
   }
 
-  /** Pay items, Contribute or Split equally pressed on the bill on screen: the dialog opens on the
-   * balance last read and reads it again. */
   async #onBillPay(event: Event): Promise<void> {
     const { way, lines, amount } = (event as CustomEvent<BillPayDetail>).detail;
     const visit = this.#orderVisit;

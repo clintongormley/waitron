@@ -143,19 +143,17 @@ describe("till-table-order-screen: the ways to pay part of a bill", () => {
   it("a bill offers no Full invoice while full invoices are off", async () => {
     const el = await mountScreen();
 
-    expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).toBeNull();
     expect(el.shadowRoot!.querySelector(".bill-choices")).toBeNull();
   });
 
-  it("hands the bill's pay panel whether full invoices are on", async () => {
+  it("offers the bill's Full invoice choice only when full invoices are on", async () => {
     const off = await mountScreen();
-    expect(off.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!.fullInvoices).toBe(
-      false,
-    );
+    expect(off.shadowRoot!.querySelector("[data-choose-bill-invoice]")).toBeNull();
     cleanupWidgets();
     const on = await mountScreen({ fullInvoices: true });
-    expect(on.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!.fullInvoices).toBe(true);
+    expect(on.shadowRoot!.querySelector("[data-choose-bill-invoice]")).not.toBeNull();
   });
 
   it("offers a full invoice for a partly paid bill and identifies the bill to change", async () => {
@@ -174,24 +172,6 @@ describe("till-table-order-screen: the ways to pay part of a bill", () => {
 
     expect(asked).toEqual([{ workingOrderId: "wo-4", revision: 0 }]);
   });
-
-  it.each([
-    ["items", "bill_pay.way_items"],
-    ["contribution", "bill_pay.way_contribution"],
-    ["share", "bill_pay.way_share"],
-  ] as const)(
-    "offers %s beside the plain charge of an untouched bill, with the bill's dishes",
-    async (way, label) => {
-      const el = await mountScreen();
-      const asked = capture<BillPayDetail>(el, "bill-pay");
-
-      expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
-      expect(text(el.shadowRoot!.querySelector(`[data-open-bill-pay="${way}"]`))).toBe(t(label));
-      await press(el, `[data-open-bill-pay="${way}"]`);
-
-      expect(asked).toEqual([{ way, lines: offeredLines }]);
-    },
-  );
 
   it("shows a saved full-invoice customer under the foot's Full invoice button", async () => {
     const el = await mountScreen({ bills: [chosen], billBalance: balance(), fullInvoices: true });
@@ -256,19 +236,21 @@ describe("till-table-order-screen: the ways to pay part of a bill", () => {
     expect(el.shadowRoot!.querySelector("[data-invoice-choice]")).toBeNull();
   });
 
-  it("opens a contribution of what a partly paid bill still owes from the sentence saying to take the rest", async () => {
+  it("opens Whole bill for the remainder of a partly paid bill", async () => {
     const el = await mountScreen({ bills: [partlyPaid], billBalance: balance() });
     const asked = capture<BillPayDetail>(el, "bill-pay");
 
-    const rest = el.shadowRoot!.querySelector<HTMLElement>("[data-bill-payments] [data-pay-rest]")!;
-    expect(text(rest)).toBe(t("bill.pay_with_bill_payments"));
-    await press(el, "[data-pay-rest]");
+    const rest = el.shadowRoot!.querySelector<HTMLElement>(
+      "[data-bill-payments] [data-pay-sheet]",
+    )!;
+    expect(text(rest)).toBe(t("action.pay"));
+    await press(el, "[data-pay-sheet]");
 
-    expect(asked).toEqual([{ way: "contribution", amount: "39.00", lines: offeredLines }]);
+    expect(asked).toEqual([{ way: "whole", lines: offeredLines }]);
     expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
     expect(
       el.shadowRoot!.querySelector('[data-bill-payments] [data-open-bill-pay="items"]'),
-    ).not.toBeNull();
+    ).toBeNull();
   });
 
   it("says what a partly paid bill has received so far", async () => {
@@ -382,12 +364,11 @@ describe("till-table-order-screen: Pay on a handheld (A796 default 2)", () => {
     expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).toBeNull();
   });
 
-  it("draws no Pay without a handheld", async () => {
+  it("draws the same Pay entry without a handheld", async () => {
     const el = await mountScreen();
-
-    expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-open-bill-pay]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-open-bill-pay]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).not.toBeNull();
   });
 });
 

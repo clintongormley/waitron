@@ -193,8 +193,8 @@ describe.each(["light", "dark"] as const)(
         theme,
       );
       await openTableMenu(el);
-      if (el.shadowRoot!.querySelector("[data-open-bill-pay]") === null)
-        throw new Error("the scan must include the ways to pay");
+      if (el.shadowRoot!.querySelector("[data-pay-sheet]") === null)
+        throw new Error("the scan must include Pay");
       await expectNoA11yViolations(host);
     });
   },

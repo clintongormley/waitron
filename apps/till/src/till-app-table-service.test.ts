@@ -1,3 +1,4 @@
+import { balanceOf, cash, takenOf } from "../test/bill-pay-app.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -3165,8 +3166,8 @@ describe("till-app table ordering: the guests the receipt prints", () => {
     ...overrides,
   });
   const pay = (el: TillApp) =>
-    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
-      "till-tender-pay",
+    el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "till-bill-pay-dialog, till-presented-pay-dialog",
     )!;
   const guests = (el: TillApp) => pay(el).shadowRoot!.querySelector<Stepper>('[name="guests"]');
 
@@ -3179,8 +3180,41 @@ describe("till-app table ordering: the guests the receipt prints", () => {
       getTablesState: vi.fn().mockResolvedValue([table]),
       getPartyBills: vi.fn().mockResolvedValue(bills),
       collectOrder: vi.fn().mockResolvedValue(saleResult),
+      getBillBalance: vi
+        .fn()
+        .mockResolvedValue(
+          balanceOf({ workingOrderId: "wo-7", total: "3.00", outstanding: "3.00" }),
+        ),
+      previewBillPayment: vi.fn().mockResolvedValue(cash("3.00", "2.00")),
+      takeBillPayment: vi
+        .fn()
+        .mockResolvedValue(
+          takenOf(
+            { applied: "3.00", tendered: "5.00", change: "2.00" },
+            {
+              workingOrderId: "wo-7",
+              total: "3.00",
+              received: "3.00",
+              outstanding: "0.00",
+              status: "settled",
+            },
+            saleResult,
+          ),
+        ),
     });
     await toTableOrder(el);
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
+    await flush(el);
+    if (pay(el).localName === "till-bill-pay-dialog") {
+      const field = pay(el).shadowRoot!.querySelector("wt-input[name=tendered]")!;
+      await field.updateComplete;
+      const input = field.shadowRoot!.querySelector("input")!;
+      input.value = "5";
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await flush(el);
+      pay(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-continue]")!.click();
+      await flush(el);
+    }
     return el;
   }
 
@@ -3193,15 +3227,17 @@ describe("till-app table ordering: the guests the receipt prints", () => {
 
   async function payCash(el: TillApp): Promise<void> {
     const panel = pay(el);
-    panel.shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
-    await flush(el);
-    const pad = panel.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
-      "till-numeric-pad",
-    )!;
-    await pad.updateComplete;
-    pad.shadowRoot!.querySelector<HTMLElement>('[data-key="5"]')!.click();
-    await panel.updateComplete;
-    panel.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+    if (panel.localName === "till-bill-pay-dialog")
+      panel.shadowRoot!.querySelector<HTMLElement>("[data-pay-confirm]")!.click();
+    else {
+      const field = panel.shadowRoot!.querySelector("wt-input[name=tendered]")!;
+      await field.updateComplete;
+      const input = field.shadowRoot!.querySelector("input")!;
+      input.value = "5";
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await flush(el);
+      panel.shadowRoot!.querySelector<HTMLElement>("[data-presented-pay-take]")!.click();
+    }
     await flush(el);
   }
 
@@ -3212,12 +3248,22 @@ describe("till-app table ordering: the guests the receipt prints", () => {
 
     await payCash(el);
 
-    expect(api.recordSale).toHaveBeenCalledOnce();
-    const call = vi.mocked(api.recordSale).mock.calls[0]!;
-    expect(call[0]).toEqual([]);
-    expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
-    expect(call[2]).toBe("wo-7");
-    expect(call[7]).toBe(5);
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(api.takeBillPayment).toHaveBeenCalledExactlyOnceWith(
+      "wo-7",
+      {
+        kind: "contribution",
+        amount: "3.00",
+        method: "cash",
+        tendered: "5",
+        applied: "3.00",
+        tip: "0.00",
+        guestCount: 5,
+        submissionId: expect.any(String),
+        expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      },
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it("a placed bill of a table of 4 is collected with the count changed to 5 beside a bare tender", async () => {
@@ -3243,16 +3289,21 @@ describe("till-app table ordering: the guests the receipt prints", () => {
 
     await payCash(el);
 
-    const call = vi.mocked(api.recordSale).mock.calls[0]!;
-    expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
-    expect(call).toHaveLength(9);
-    expect(call[7]).toBeNull();
-    expect(call[8]).toEqual({
-      billId: "wo-7",
-      editorVersion: 0,
-      draftId: null,
-      draftRevision: null,
-    });
+    expect(api.takeBillPayment).toHaveBeenCalledExactlyOnceWith(
+      "wo-7",
+      {
+        kind: "contribution",
+        amount: "3.00",
+        method: "cash",
+        tendered: "5",
+        applied: "3.00",
+        tip: "0.00",
+        guestCount: null,
+        submissionId: expect.any(String),
+        expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      },
+      { signal: expect.any(AbortSignal) },
+    );
   });
 
   it("a bill with a full invoice shows no field and sends no guests", async () => {
@@ -3271,16 +3322,19 @@ describe("till-app table ordering: the guests the receipt prints", () => {
 
     await payCash(el);
 
-    expect(api.recordSale).toHaveBeenCalledWith(
-      [],
-      { method: "cash", amount: "5" },
+    expect(api.takeBillPayment).toHaveBeenCalledExactlyOnceWith(
       "wo-7",
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      {
+        kind: "contribution",
+        amount: "3.00",
+        method: "cash",
+        tendered: "5",
+        applied: "3.00",
+        tip: "0.00",
+        submissionId: expect.any(String),
+        expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+      },
+      { signal: expect.any(AbortSignal) },
     );
   });
 });

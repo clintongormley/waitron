@@ -1,3 +1,4 @@
+import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { recoveryLink } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -48,9 +49,8 @@ import type {
   TillActiveReader,
 } from "../api/client.js";
 import {
-  HANDHELD_PAY_WAYS,
+  BILL_PAY_WAYS,
   PAYMENT_STATES,
-  PAY_WAYS,
   moneyPlus,
   paidQuantities,
   refundOffered,
@@ -189,6 +189,7 @@ const PEOPLE = /^[1-9]\d{0,2}$/;
 export class TillBillPayDialog extends LitElement {
   static override styles = [
     baseStyles,
+    helpAnchorStyles,
     guestsStepperStyles,
     payNoticeStyles,
     css`
@@ -251,6 +252,20 @@ export class TillBillPayDialog extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-1) var(--wt-space-4);
+      }
+
+      [data-pay-way] .options {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: var(--wt-space-2);
+      }
+
+      [data-pay-way] .option {
+        min-width: 0;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        text-align: center;
+        overflow-wrap: normal;
       }
 
       .lines {
@@ -447,7 +462,7 @@ export class TillBillPayDialog extends LitElement {
   @property({ attribute: false }) checkTimeOffered = false;
   /** The bill's dishes; those already paid for in full are not offered. */
   @property({ attribute: false }) lines: PayLine[] = [];
-  /** The way the dialog opens on; unset, Whole bill on a handheld and Pay items on a till. */
+  /** The way the dialog opens on; unset, Whole bill. */
   @property() way?: PayWay;
   /** A contribution's starting amount. */
   @property() amount = "";
@@ -504,7 +519,7 @@ export class TillBillPayDialog extends LitElement {
    * until that pick has answered. */
   @property({ type: Boolean }) autoPicking = false;
 
-  @state() private chosenWay: PayWay = "items";
+  @state() private chosenWay: PayWay = "whole";
   @state() private picks = new Map<number, number>();
   @state() private typedAmountValue = "";
   @state() private people = "";
@@ -713,8 +728,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("way") || changed.has("handheld"))
-      this.chosenWay = this.way ?? (this.handheld ? "whole" : "items");
+    if (changed.has("way") || changed.has("handheld")) this.chosenWay = this.way ?? "whole";
     if (this.handheld) {
       const offered = this.#methods();
       if (changed.has("handheld") || !offered.includes(this.method))
@@ -943,10 +957,9 @@ export class TillBillPayDialog extends LitElement {
     ];
   }
 
-  /** Whether Continue can ask: a handheld offers a method, and Whole bill has something to pay. */
   #canAsk(): boolean {
-    if (!this.handheld) return true;
-    return this.#methods().length > 0 && (this.chosenWay !== "whole" || this.#owing());
+    if (this.chosenWay === "whole" && !this.#owing()) return false;
+    return !this.handheld || this.#methods().length > 0;
   }
 
   #readyReader(): FixedReader | null {
@@ -1126,8 +1139,6 @@ export class TillBillPayDialog extends LitElement {
     </wt-dialog>`;
   }
 
-  /** A handheld's window offers the whole bill as well as part of it, so its heading names no part;
-   * a till's offers only part of it. */
   #heading(): string {
     if (!this.handheld) return t("bill_pay.title");
     return this.tableName === ""
@@ -1511,9 +1522,11 @@ export class TillBillPayDialog extends LitElement {
     const errors = this.#fieldErrors(own);
     const bottom = this.#bottomMessage(errors);
     const body = html`<fieldset class="choice" data-pay-way ?disabled=${this.busy}>
-        <legend>${t("bill_pay.way")}</legend>
+        <legend class="help-anchor">
+          ${t("bill_pay.way")}${helpBadge("help.payment", t("action.pay"), { guide: "table-service.pay-window" })}
+        </legend>
         <div class="options">
-          ${(this.handheld ? HANDHELD_PAY_WAYS : PAY_WAYS).map(({ way, label }) =>
+          ${BILL_PAY_WAYS.map(({ way, label }) =>
             this.#radio(
               "way",
               way,
