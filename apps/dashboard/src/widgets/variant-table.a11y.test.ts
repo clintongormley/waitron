@@ -12,7 +12,7 @@ afterEach(() => setLocale("es-ES"));
 const variants: ProductEditorVariant[] = [
   {
     id: "1f1f1f1f-1f1f-4f1f-8f1f-1f1f1f1f1f1f",
-    name: "Media",
+    name: "Half",
     customerName: { es: "Media ración" },
     kitchenName: "1/2",
     image: null,
@@ -21,9 +21,9 @@ const variants: ProductEditorVariant[] = [
     active: true,
   },
   {
-    name: "Entera",
+    name: "Whole",
     customerName: { es: "Ración entera" },
-    kitchenName: "ENT",
+    kitchenName: "WHL",
     image: null,
     unitPrice: "12.00",
     available: false,
@@ -50,8 +50,8 @@ async function mount(
 
 describe.each(["light", "dark"] as const)("variant table (%s)", (theme) => {
   it.each([
-    ["en-GB", ["Media", "Entera"]],
-    ["es-ES", ["Media", "Entera"]],
+    ["en-GB", ["Half", "Whole"]],
+    ["es-ES", ["Half", "Whole"]],
   ])("names each available switch for its variant in %s", async (locale, labels) => {
     setLocale(locale as "en-GB" | "es-ES");
     const { el, host } = await mount(false, theme);

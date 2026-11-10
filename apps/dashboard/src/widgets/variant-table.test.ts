@@ -18,7 +18,7 @@ afterEach(cleanupWidgets);
 const threeVariants = (): ProductEditorVariant[] => [
   {
     id: "1f1f1f1f-1f1f-4f1f-8f1f-1f1f1f1f1f1f",
-    name: "Media",
+    name: "Half",
     customerName: { es: "Media ración" },
     kitchenName: "1/2",
     image: null,
@@ -28,18 +28,18 @@ const threeVariants = (): ProductEditorVariant[] => [
   },
   {
     id: "2f2f2f2f-2f2f-4f2f-8f2f-2f2f2f2f2f2f",
-    name: "Entera",
+    name: "Whole",
     customerName: { es: "Ración entera" },
-    kitchenName: "ENT",
+    kitchenName: "WHL",
     image: null,
     unitPrice: "12.00",
     available: false,
     active: true,
   },
   {
-    name: "Doble",
+    name: "Double",
     customerName: { es: "Ración doble" },
-    kitchenName: "DOB",
+    kitchenName: "DBL",
     image: null,
     unitPrice: "20.00",
     available: true,
@@ -110,13 +110,13 @@ it("draws no status dropdown or show/hide toggle for archived variants", async (
   });
   expect(el.shadowRoot!.querySelector("wt-combobox[name=variant-status]")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=show-inactive]")).toBeNull();
-  expect(cells(el, 1)).toEqual(["Media", "Doble"]);
+  expect(cells(el, 1)).toEqual(["Half", "Double"]);
 });
 
 it("names a pricing unit holding a replacement pattern in the chooser's label as written", async () => {
-  const el = await mountTable({ unitLabel: "caja $&" });
+  const el = await mountTable({ unitLabel: "box $&" });
   expect(unitButton(el).getAttribute("aria-label")).toBe(
-    t("editor.change_pricing_unit").split("{unit}").join("caja $&"),
+    t("editor.change_pricing_unit").split("{unit}").join("box $&"),
   );
 });
 
@@ -141,7 +141,7 @@ it("asks for the pricing unit chooser from a button in the price heading that na
 it("lists one row per variant with its staff name and price, and names the unit in the header", async () => {
   const el = await mountTable();
   expect(rows(el)).toHaveLength(3);
-  expect(cells(el, 1)).toEqual(["Media", "Entera", "Doble"]);
+  expect(cells(el, 1)).toEqual(["Half", "Whole", "Double"]);
   expect(cells(el, 2)).toEqual([euros("6,50"), euros("12,00"), euros("20,00")]);
   el.unitLabel = "kg";
   await el.updateComplete;
@@ -282,18 +282,15 @@ it("moves a row on ArrowDown, tells the host where it went, and announces the ne
   first.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
   await el.updateComplete;
   expect(reordered.mock.calls[0]![0].detail).toEqual({ from: 0, to: 1 });
-  expect(cells(el, 1)).toEqual(["Entera", "Media", "Doble"]);
+  expect(cells(el, 1)).toEqual(["Whole", "Half", "Double"]);
   expect(announcement(el)).toBe(
-    t("action.reordered")
-      .replace("{item}", "Media")
-      .replace("{index}", "2")
-      .replace("{total}", "3"),
+    t("action.reordered").replace("{item}", "Half").replace("{index}", "2").replace("{total}", "3"),
   );
   // The host applies the move and hands the array back. The row keeps its identity, so the handle a
   // keyboard user is holding stays under their focus and a second press moves the same row again.
   el.variants = reorder(el.variants, 0, 1);
   await el.updateComplete;
-  expect(cells(el, 1)).toEqual(["Entera", "Media", "Doble"]);
+  expect(cells(el, 1)).toEqual(["Whole", "Half", "Double"]);
   // Named first: a handle that no longer exists would make `activeElement` and the query BOTH null,
   // and the comparison would pass while proving nothing.
   const moved = el.shadowRoot!.querySelector(`[data-test="${key}"]`);
@@ -307,7 +304,7 @@ it("moves nothing when the top row is asked to go up", async () => {
   handles(el)[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
   await el.updateComplete;
   expect(reordered).not.toHaveBeenCalled();
-  expect(cells(el, 1)).toEqual(["Media", "Entera", "Doble"]);
+  expect(cells(el, 1)).toEqual(["Half", "Whole", "Double"]);
 });
 
 it("changes nothing while the product is being saved", async () => {
@@ -341,7 +338,7 @@ it("gives a variant with no name yet a spoken name, so its handle and menu are n
         active: true,
       },
       {
-        name: "Entera",
+        name: "Whole",
         customerName: null,
         kitchenName: null,
         image: null,
@@ -372,7 +369,7 @@ it("takes a variant the host adds without renaming the rows already there", asyn
     },
   ];
   await el.updateComplete;
-  expect(cells(el, 1)).toEqual(["Media", "Entera", "Doble", "Triple"]);
+  expect(cells(el, 1)).toEqual(["Half", "Whole", "Double", "Triple"]);
   expect(
     handles(el)
       .map((handle) => handle.dataset.test)
@@ -461,10 +458,10 @@ it("never draws a row whose id was archived before this draft, even with a row e
     variants: threeVariants(),
     archivedIds: new Set([threeVariants()[1]!.id!]),
   });
-  expect(cells(el, 1)).toEqual(["Media", "Doble"]);
+  expect(cells(el, 1)).toEqual(["Half", "Double"]);
   el.errors = { 1: "Introduce un nombre" };
   await el.updateComplete;
-  expect(cells(el, 1)).toEqual(["Media", "Doble"]);
+  expect(cells(el, 1)).toEqual(["Half", "Double"]);
   expect(el.shadowRoot!.querySelector('[data-test="actions-1"]')).toBeNull();
 });
 
@@ -491,7 +488,7 @@ it("names each row by its place in the whole list, hidden rows included", async 
   const edit = listen(el, "wt-edit");
   const remove = listen(el, "wt-remove");
   expect(rows(el).map((row) => row.getAttribute("data-test"))).toEqual(["row-0", "row-2"]);
-  // Doble is the second row on screen and the THIRD variant the host holds.
+  // Double is the second row on screen and the THIRD variant the host holds.
   await click(el, "edit-2");
   await click(el, "remove-2");
   expect(edit.mock.calls[0]![0].detail).toEqual({ index: 2, via: "menu" });
@@ -547,7 +544,7 @@ it("opens a saved variant's own page, and offers nothing to open for one never s
   await click(el, "open-1");
   expect(open.mock.calls[0]![0].detail).toEqual({ index: 1 });
   expect(open.mock.calls[0]![0].composed).toBe(true);
-  // Doble has no id yet, so there is no page to open until the product is saved.
+  // Double has no id yet, so there is no page to open until the product is saved.
   expect(el.shadowRoot!.querySelector('[data-test="open-2"]')).toBeNull();
 });
 
@@ -559,26 +556,23 @@ it("moves a row among the rows on screen and reports the move in the whole list"
   const reordered = listen(el, "wt-reorder");
   handles(el)[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
   await el.updateComplete;
-  expect(cells(el, 1)).toEqual(["Doble", "Media"]);
-  // Media lands where Doble was, past the hidden Entera, so the host's list reads Entera, Doble,
-  // Media — the same order among the visible rows as the screen shows.
+  expect(cells(el, 1)).toEqual(["Double", "Half"]);
+  // Half lands where Double was, past the hidden Whole, so the host's list reads Whole, Double,
+  // Half — the same order among the visible rows as the screen shows.
   expect(reordered.mock.calls[0]![0].detail).toEqual({ from: 0, to: 2 });
   expect(reorder(withRemoved(), 0, 2).map((variant) => variant.name)).toEqual([
-    "Entera",
-    "Doble",
-    "Media",
+    "Whole",
+    "Double",
+    "Half",
   ]);
   expect(announcement(el)).toBe(
-    t("action.reordered")
-      .replace("{item}", "Media")
-      .replace("{index}", "2")
-      .replace("{total}", "2"),
+    t("action.reordered").replace("{item}", "Half").replace("{index}", "2").replace("{total}", "2"),
   );
 });
 
 it("shows a problem beside a variant archived in this draft", async () => {
   const el = await mountTable({ variants: withRemoved(), errors: { 1: "Introduce un nombre" } });
-  expect(cells(el, 1)[1]).toContain("Entera");
+  expect(cells(el, 1)[1]).toContain("Whole");
   expect(el.shadowRoot!.querySelector('[data-test="error-1"]')).not.toBeNull();
 });
 
@@ -595,7 +589,7 @@ it("shows every row when a variant is added that the hidden rows would hide", as
   expect(cells(el, 1)).toHaveLength(2);
   el.variants = [...el.variants, { ...threeVariants()[2]!, active: false }];
   await el.updateComplete;
-  expect(cells(el, 1).map((text) => text.split(/\s/)[0])).toEqual(["Media", "Entera", "Doble"]);
+  expect(cells(el, 1).map((text) => text.split(/\s/)[0])).toEqual(["Half", "Whole", "Double"]);
   expect(el.shadowRoot!.querySelector("[data-test=show-inactive]")).toBeNull();
 });
 
@@ -704,7 +698,7 @@ it("moves focus to the next unsaved row when Remove drops a row, and leaves it t
   applyRemoveAndRestore(el);
   await chooseFromMenu(el, "remove", 0);
   await expect.poll(() => focused(el)).toBe("actions-0");
-  expect(el.variants.map((variant) => variant.name)).toEqual(["Entera", "Doble"]);
+  expect(el.variants.map((variant) => variant.name)).toEqual(["Whole", "Double"]);
   await chooseFromMenu(el, "remove", 1);
   await expect.poll(() => focused(el)).toBe("actions-0");
   await chooseFromMenu(el, "remove", 0);
@@ -815,7 +809,7 @@ it("opens a variant's edit window from Enter on its row, named for a screen read
   const edit = listen(el, "wt-edit");
   const row = activator(el, 1)!;
   expect(row).not.toBeNull();
-  expect(row.getAttribute("aria-label")).toBe(`${t("action.edit")}: Entera`);
+  expect(row.getAttribute("aria-label")).toBe(`${t("action.edit")}: Whole`);
   row.focus();
   await userEvent.keyboard("{Enter}");
   expect(edit.mock.calls.map(([event]) => event.detail)).toEqual([{ index: 1, via: "row" }]);
@@ -906,7 +900,7 @@ it("draws a dragged row over the controls of the rows it passes", async () => {
       // Not far enough to swap the rows: the dragged one now overlaps the top of the next.
       pointer(document, "pointermove", centre + 0.4 * start.height);
       await el.updateComplete;
-      expect(cells(el, 1)).toEqual(["Media", "Entera", "Doble"]);
+      expect(cells(el, 1)).toEqual(["Half", "Whole", "Double"]);
       const toggle = passed!.querySelector('[data-test="available-1"]')!.getBoundingClientRect();
       const y = toggle.top + 2;
       expect(y).toBeLessThan(dragged!.getBoundingClientRect().bottom);

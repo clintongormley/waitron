@@ -10,9 +10,9 @@ afterEach(cleanupWidgets);
 /** Staff name, customer name and kitchen name are three different strings, as they are in the app. */
 const halfPortion: ProductEditorVariant = {
   id: "8f1f2f3f-4f5f-4f6f-8f7f-9f8f7f6f5f4f",
-  name: "Media",
+  name: "Half",
   customerName: { es: "Media ración", en: "Half portion" },
-  kitchenName: "1/2 RAC",
+  kitchenName: "1/2 PRT",
   image: "half.png",
   unitPrice: "6.50",
   available: true,
@@ -71,7 +71,7 @@ describe.each(["light", "dark"] as const)("variant form (%s)", (theme) => {
 
   it("is accessible changed, with Save ready", async () => {
     const { el, host } = await mount(halfPortion, theme);
-    await change(el, "name", "Entera");
+    await change(el, "name", "Whole");
     expect(await saveOf(el)).toEqual(["primary", false]);
     await expectNoA11yViolations(host);
   });

@@ -13,9 +13,9 @@ afterEach(cleanupWidgets);
 // field that rewrites its value on first draw would show as a change.
 const halfPortion: ProductEditorVariant = {
   id: "8f1f2f3f-4f5f-4f6f-8f7f-9f8f7f6f5f4f",
-  name: "Media",
+  name: "Half",
   customerName: { es: "Media ración", en: "Half portion" },
-  kitchenName: "1/2 RAC",
+  kitchenName: "1/2 PRT",
   image: "half.png",
   unitPrice: "6.50",
   available: false,
@@ -101,15 +101,15 @@ it("Add variant with nothing typed opens with Save quiet and disabled", async ()
 
 it("one edit makes Save primary and enabled, and typing the original back makes it quiet again", async () => {
   const el = await mount(halfPortion);
-  await type(el, "name", "Entera");
+  await type(el, "name", "Whole");
   expect(await saveState(el)).toEqual(ready);
-  await type(el, "name", "Media");
+  await type(el, "name", "Half");
   expect(await saveState(el)).toEqual(quiet);
 });
 
 it("a new variant's first typed name enables Save, and clearing it makes Save quiet again", async () => {
   const el = await mount(null);
-  await type(el, "name", "Copa");
+  await type(el, "name", "Glass");
   expect(await saveState(el)).toEqual(ready);
   await type(el, "name", "");
   expect(await saveState(el)).toEqual(quiet);
@@ -136,7 +136,7 @@ it("a changed form that fails its own checks shows its errors after a press and 
   expect(submit).not.toHaveBeenCalled();
   expect(nameError(el)).toBe(t("editor.variant_name_required"));
   expect(await saveState(el)).toEqual(blocked);
-  await type(el, "name", "Entera");
+  await type(el, "name", "Whole");
   expect(await saveState(el)).toEqual(ready);
   await press(el);
   expect(submit).toHaveBeenCalledOnce();
