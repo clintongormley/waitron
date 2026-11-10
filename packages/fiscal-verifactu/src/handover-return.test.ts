@@ -127,7 +127,8 @@ it("re-enumerates late payment facts even when the original inventory has no new
   const afterTender = await withTransaction(suite.db, (tx) =>
     readReturnedOriginals(tx, source.nodeId),
   );
-  expect(afterTender.inventory).not.toBe(before.inventory);
+  expect(makeReturnedBatches(afterTender).flatMap((batch) => batch.tenders)).toHaveLength(1);
+  expect(makeReturnedBatches(before).flatMap((batch) => batch.tenders)).toEqual([]);
   await suite.db.insert(saleSettlements).values({
     id: "late-settlement",
     saleId: source.saleId,
@@ -152,11 +153,13 @@ it("re-enumerates late payment facts even when the original inventory has no new
   expect(after.settlements).toEqual([
     { id: "late-settlement", sale_id: source.saleId, settled_at: "2026-07-20T17:21:00.000Z" },
   ]);
-  expect(after.inventory).not.toBe(before.inventory);
-  expect(after.inventory).not.toBe(afterTender.inventory);
+  expect(makeReturnedBatches(after).flatMap((batch) => batch.settlements)).toEqual(
+    after.settlements,
+  );
+  expect(makeReturnedBatches(afterTender).flatMap((batch) => batch.settlements)).toEqual([]);
 });
 
-it("does not use mutable delivery outcomes as the original inventory fingerprint", async () => {
+it("reads a later delivery verdict without changing the original bytes", async () => {
   const source = await original("Source", 1);
   const before = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId));
   await suite.db.execute(sql`insert into envios
@@ -166,66 +169,79 @@ it("does not use mutable delivery outcomes as the original inventory fingerprint
 
   const after = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId));
 
-  expect(after.inventory).toBe(before.inventory);
+  expect(after.records).toEqual(before.records);
   expect(after.deliveries).toEqual([
     expect.objectContaining({ registro_id: source.recordId, estado: "aceptado", csv: "kept-csv" }),
   ]);
 });
 
-it("includes the cancellation fact alongside the original and its cancellation record", async () => {
-  const source = await original("Source", 1, copyBase);
-  const before = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId));
-  await withTransaction(suite.db, async (tx) => {
-    await tx.insert(saleVoids).values({
-      id: "returned-void",
-      saleId: source.saleId,
-      reason: "Incorrect invoice",
-      voidedAt: "2026-07-20T17:20:03.000Z",
+it.each([false, true])(
+  "includes the cancellation and its filing case when retained=%s",
+  async (retained) => {
+    const source = await original("Source", 1, copyBase);
+    const before = await withTransaction(suite.db, (tx) =>
+      readReturnedOriginals(tx, source.nodeId),
+    );
+    await withTransaction(suite.db, async (tx) => {
+      await tx.insert(saleVoids).values({
+        id: "returned-void",
+        saleId: source.saleId,
+        reason: "Incorrect invoice",
+        voidedAt: "2026-07-20T17:20:03.000Z",
+      });
+      const pending = anulacionFor(source, source.saleId, 1, 3);
+      pending.input.IDEmisorFacturaAnulada = source.issuerTaxId;
+      pending.input.SistemaInformatico.NumeroInstalacion = source.installation;
+      pending.input.NumSerieFacturaAnulada = "Source/1";
+      await appendToChain(tx, source.nodeId, pending);
     });
-    const pending = anulacionFor(source, source.saleId, 1, 3);
-    pending.input.IDEmisorFacturaAnulada = source.issuerTaxId;
-    pending.input.SistemaInformatico.NumeroInstalacion = source.installation;
-    pending.input.NumSerieFacturaAnulada = "Source/1";
-    await appendToChain(tx, source.nodeId, pending);
-  });
-  await checkFixture();
+    await checkFixture();
+    if (retained)
+      await suite.db.execute(sql`insert into envios (registro_id, estado, proximo_intento_en)
+    select id, case when tipo_registro = 'alta' then 'rechazado' else 'retenido' end,
+      '2026-07-20T17:21:00.000Z' from registros_facturacion where node_id = ${source.nodeId}`);
 
-  const returned = await withTransaction(suite.db, (tx) =>
-    readReturnedOriginals(tx, source.nodeId),
-  );
+    const returned = await withTransaction(suite.db, (tx) =>
+      readReturnedOriginals(tx, source.nodeId),
+    );
 
-  expect(returned.records.map((row) => row.tipo_registro)).toEqual(["alta", "anulacion"]);
-  expect(returned.voids).toEqual([
-    {
-      id: "returned-void",
-      sale_id: source.saleId,
-      reason: "Incorrect invoice",
-      voided_at: "2026-07-20T17:20:03.000Z",
-      voided_by: null,
-    },
-  ]);
-  expect(returned.inventory).not.toBe(before.inventory);
-  expect(
-    await withTransaction(receiver.db, (tx) =>
-      receiveReturnedOriginals(tx, source.nodeId, returned, new Date("2026-07-20T17:22:00.000Z")),
-    ),
-  ).toEqual({ complete: true });
-  expect(receiver.db.all<ReturnRow>(sql`select * from sale_voids`)).toEqual(returned.voids);
-  const conflicting = structuredClone(returned);
-  conflicting.voids[0]!.id = "conflicting-fact";
-  expect(
-    await withTransaction(receiver.db, (tx) =>
-      receiveReturnedOriginals(
-        tx,
-        source.nodeId,
-        conflicting,
-        new Date("2026-07-20T17:22:00.000Z"),
+    expect(returned.records.map((row) => row.tipo_registro)).toEqual(["alta", "anulacion"]);
+    expect(returned.voids).toEqual([
+      {
+        id: "returned-void",
+        sale_id: source.saleId,
+        reason: "Incorrect invoice",
+        voided_at: "2026-07-20T17:20:03.000Z",
+        voided_by: null,
+      },
+    ]);
+    expect(returned.records).toHaveLength(before.records.length + 1);
+    expect(
+      await withTransaction(receiver.db, (tx) =>
+        receiveReturnedOriginals(tx, source.nodeId, returned, new Date("2026-07-20T17:22:00.000Z")),
       ),
-    ),
-  ).toEqual({ complete: false });
-  expect(receiver.db.all<ReturnRow>(sql`select * from sale_voids`)).toEqual(returned.voids);
-  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
-});
+    ).toEqual({ complete: true });
+    expect(receiver.db.all<ReturnRow>(sql`select * from sale_voids`)).toEqual(returned.voids);
+    const cases = await withTransaction(receiver.db, listFilingCases);
+    expect(cases.map((row) => row.cause).sort()).toEqual(
+      retained ? ["fiscal.anulacion_retenida", "fiscal.registro_rechazado"] : [],
+    );
+    const conflicting = structuredClone(returned);
+    conflicting.voids[0]!.id = "conflicting-fact";
+    expect(
+      await withTransaction(receiver.db, (tx) =>
+        receiveReturnedOriginals(
+          tx,
+          source.nodeId,
+          conflicting,
+          new Date("2026-07-20T17:22:00.000Z"),
+        ),
+      ),
+    ).toEqual({ complete: false });
+    expect(receiver.db.all<ReturnRow>(sql`select * from sale_voids`)).toEqual(returned.voids);
+    expect(await withTransaction(receiver.db, listFilingCases)).toEqual(cases);
+  },
+);
 
 it("includes the replacement-invoice fact with both commercial originals", async () => {
   const source = await original("Source", 1, copyBase);
@@ -673,6 +689,48 @@ it("rolls back both incoming payment facts on a named payment clash without open
   expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
 });
 
+it("stops when both boxes independently settled the same sale", async () => {
+  const source = await original("Source", 1, copyBase);
+  const now = new Date("2026-07-20T17:22:00.000Z");
+  const first = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId));
+  await withTransaction(receiver.db, (tx) =>
+    receiveReturnedOriginals(tx, source.nodeId, first, now),
+  );
+  for (const [db, label] of [
+    [suite.db, "source"],
+    [receiver.db, "receiver"],
+  ] as const) {
+    await db.insert(tenders).values({
+      id: `${label}-tender`,
+      saleId: source.saleId,
+      method: "cash",
+      amount: 200,
+      tipAmount: 200,
+      settledAt: now.toISOString(),
+    });
+    await db.insert(saleSettlements).values({
+      id: `${label}-settlement`,
+      saleId: source.saleId,
+      settledAt: now.toISOString(),
+    });
+  }
+  const returned = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, source.nodeId),
+  );
+  expect(
+    await withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, returned, now),
+    ),
+  ).toEqual({ complete: false });
+  expect(receiver.db.all<{ id: string }>(sql`select id from tenders`)).toEqual([
+    { id: "receiver-tender" },
+  ]);
+  expect(receiver.db.all<{ id: string }>(sql`select id from sale_settlements`)).toEqual([
+    { id: "receiver-settlement" },
+  ]);
+  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
+});
+
 it("preflights a different-id record clash before importing its orphan sale", async () => {
   const source = await original("Source", 1, copyBase);
   const returned = await withTransaction(suite.db, (tx) =>
@@ -688,9 +746,18 @@ it("preflights a different-id record clash before importing its orphan sale", as
     receiveReturnedOriginals(tx, source.nodeId, existing, now),
   );
 
+  const later = await appendOriginal(source, "Source", 2);
+  await suite.db.insert(saleVoids).values({
+    id: "later-void",
+    saleId: later.saleId,
+    reason: "Incorrect invoice",
+    voidedAt: now.toISOString(),
+  });
+  const suffix = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId));
+
   expect(
     await withTransaction(receiver.db, (tx) =>
-      receiveReturnedOriginals(tx, source.nodeId, returned, now),
+      receiveReturnedOriginals(tx, source.nodeId, suffix, now),
     ),
   ).toEqual({ complete: false });
   expect(receiver.db.all<{ id: string }>(sql`select id from sales`)).toEqual([
@@ -700,6 +767,10 @@ it("preflights a different-id record clash before importing its orphan sale", as
     existing.records,
   );
   expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
+  expect(receiver.db.all<ReturnRow>(sql`select * from sale_voids`)).toEqual([]);
+  expect(receiver.db.all<ReturnRow>(sql`select * from envios`)).toEqual([
+    expect.objectContaining({ registro_id: "receiver-original" }),
+  ]);
 });
 
 it("rolls back every imported fact when an original's hash does not verify", async () => {

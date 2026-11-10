@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { refusalOn, triggerRaised, UNIQUE_VIOLATION, type Transaction } from "@waitron/db";
 import type { BackupQuery } from "@waitron/store";
@@ -19,7 +18,6 @@ export interface ReturnedOriginals {
   settlements: ReturnRow[];
   voids: ReturnRow[];
   substitutions: ReturnRow[];
-  inventory: string;
 }
 
 export async function readReturnedOriginals(
@@ -55,10 +53,6 @@ export async function readReturnedOriginals(
   );
   const substitutions = tx.all<ReturnRow>(sql`select * from sale_substitutions
     where substitution_sale_id in ${saleIds} order by id`);
-  // Delivery verdicts and device registrations may change independently of the originals.
-  const inventory = createHash("sha256")
-    .update(canonicalize({ records, sales, tenders, settlements, voids, substitutions }))
-    .digest("hex");
   return {
     records,
     sales,
@@ -69,7 +63,6 @@ export async function readReturnedOriginals(
     settlements,
     voids,
     substitutions,
-    inventory,
   };
 }
 
@@ -191,15 +184,18 @@ export async function receiveReturnedOriginals(
       if (
         !refusalOn(error, UNIQUE_VIOLATION, { table: "tenders", columns: ["bill_payment_id"] }) &&
         !refusalOn(error, UNIQUE_VIOLATION, { table: "sale_settlements", columns: ["sale_id"] }) &&
-        !triggerRaised(error, "tenders do not cover the sale")
+        !triggerRaised(error, "tenders do not cover the sale") &&
+        !triggerRaised(error, "tender rejected: the sale is already settled")
       )
         throw error;
       missing = true;
     }
   }
+  let inserted = false;
   for (const record of allowed) {
     if (held(tx, "registros_facturacion", record.id)) continue;
     await insertRow(tx, "registros_facturacion", record);
+    inserted = true;
     const delivery = returned.deliveries.find((row) => row.registro_id === record.id);
     await insertRow(
       tx,
@@ -229,12 +225,20 @@ export async function receiveReturnedOriginals(
         csv: delivery.csv as string | null,
         now,
       });
+    if (delivery?.estado === "retenido")
+      await openFilingCase(tx, {
+        registroId: String(record.id),
+        cause: "fiscal.anulacion_retenida",
+        evidence: { codigo: null, mensaje: null, csv: null },
+        now,
+      });
   }
   for (const [table, rows] of [
     ["sale_voids", returned.voids],
     ["sale_substitutions", returned.substitutions],
   ] as const) {
     for (const row of rows) {
+      if (!needed.has(table === "sale_voids" ? row.sale_id : row.substitution_sale_id)) continue;
       const own = held(tx, table, row.id);
       let conflict = own !== undefined && canonicalize(own) !== canonicalize(row);
       if (!own) {
@@ -258,7 +262,7 @@ export async function receiveReturnedOriginals(
       actualizado_en = ${returned.heads[0]?.actualizado_en ?? now.toISOString()}
       where node_id = ${sourceNodeId}`);
   }
-  if ((await checkFiscalChains(transactionQuery(tx))) !== "ok")
+  if (inserted && (await checkFiscalChains(transactionQuery(tx))) !== "ok")
     throw new AppError("fiscal.return_invalid", { reason: "chain verification failed" });
   for (const [table, rows] of [
     ["registros_facturacion", returned.records],
@@ -335,40 +339,54 @@ export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOrigin
     settlements: [],
     voids: [],
     substitutions: [],
-    inventory: snapshot.inventory,
   });
+  const sales = new Map(snapshot.sales.map((row) => [row.id, row]));
+  const devices = new Map(snapshot.devices.map((row) => [row.id, row]));
+  function indexed(rows: ReturnRow[], key: string) {
+    const groups = new Map<ReturnRow[string], ReturnRow[]>();
+    for (const row of rows) {
+      const group = groups.get(row[key]) ?? [];
+      group.push(row);
+      groups.set(row[key], group);
+    }
+    return groups;
+  }
+  const tenders = indexed(snapshot.tenders, "sale_id");
+  const settlements = indexed(snapshot.settlements, "sale_id");
+  const voids = indexed(snapshot.voids, "sale_id");
+  const substitutions = indexed(snapshot.substitutions, "substitution_sale_id");
+  const deliveries = indexed(snapshot.deliveries, "registro_id");
   const batches: ReturnedOriginals[] = [];
   const sent = new Set<ReturnRow[string]>();
   let current = empty();
   for (const record of snapshot.records) {
     const ids = new Set([record.sale_id]);
     for (const id of ids) {
-      const sale = snapshot.sales.find((row) => row.id === id);
+      const sale = sales.get(id);
       if (sale?.corrects_sale_id) ids.add(sale.corrects_sale_id);
-      for (const substitution of snapshot.substitutions)
-        if (substitution.substitution_sale_id === id) ids.add(substitution.substituted_sale_id);
+      for (const substitution of substitutions.get(id) ?? [])
+        ids.add(substitution.substituted_sale_id);
     }
     const unit = empty();
     unit.records = [record];
-    unit.sales = snapshot.sales.filter((row) => ids.has(row.id) && !sent.has(row.id));
+    unit.sales = [...ids]
+      .filter((id) => !sent.has(id) && sales.has(id))
+      .map((id) => sales.get(id)!);
     const newIds = new Set(unit.sales.map((row) => row.id));
-    unit.tenders = snapshot.tenders.filter((row) => newIds.has(row.sale_id));
-    unit.settlements = snapshot.settlements.filter((row) => newIds.has(row.sale_id));
-    unit.voids = snapshot.voids.filter((row) => newIds.has(row.sale_id));
-    unit.substitutions = snapshot.substitutions.filter((row) =>
-      newIds.has(row.substitution_sale_id),
-    );
+    unit.tenders = [...newIds].flatMap((id) => tenders.get(id) ?? []);
+    unit.settlements = [...newIds].flatMap((id) => settlements.get(id) ?? []);
+    unit.voids = [...newIds].flatMap((id) => voids.get(id) ?? []);
+    unit.substitutions = [...newIds].flatMap((id) => substitutions.get(id) ?? []);
     const deviceIds = new Set([record.device_id, ...unit.sales.map((row) => row.device_id)]);
-    unit.devices = snapshot.devices.filter((row) => deviceIds.has(row.id));
+    unit.devices = [...deviceIds].filter((id) => devices.has(id)).map((id) => devices.get(id)!);
     unit.heads = snapshot.heads;
-    unit.deliveries = snapshot.deliveries.filter((row) => row.registro_id === record.id);
+    unit.deliveries = deliveries.get(record.id) ?? [];
     if (!returnBatchFits(unit))
       throw new AppError("fiscal.return_invalid", {
         reason: "sale/payment unit exceeds batch bounds",
       });
     const merged = empty();
     for (const key of Object.keys(merged) as (keyof ReturnedOriginals)[]) {
-      if (key === "inventory") continue;
       merged[key] = [
         ...new Map(
           [...current[key], ...unit[key]].map((row) => [
@@ -413,8 +431,7 @@ export function readReturnedBatch(raw: CanonicalValue): ReturnedOriginals {
     "substitutions",
   ];
   if (
-    typeof data.inventory !== "string" ||
-    Object.keys(data).some((key) => key !== "inventory" && !keys.includes(key)) ||
+    Object.keys(data).some((key) => !keys.includes(key)) ||
     keys.some((key) => {
       const rows = data[key];
       return (

@@ -9,6 +9,8 @@ import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
   tenders,
+  sales,
+  saleSettlements,
   invoiceSeries,
   stampDeployment,
   withTransaction,
@@ -27,10 +29,15 @@ import { appendToChain } from "@waitron/fiscal-verifactu/src/chain.js";
 import { drain, DEFAULT_SKIP_RETRY_MS } from "@waitron/fiscal-verifactu/src/drain.js";
 import {
   readReturnedOriginals,
+  makeReturnedBatches,
+  receiveReturnedOriginals,
   type ReturnRow,
 } from "@waitron/fiscal-verifactu/src/handover-return.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+import { computeDailyClose, computeVatReturn, mapModelo303 } from "@waitron/reporting";
+import { saleId as brandSaleId } from "@waitron/shared";
+import { readRefundableTenders } from "./tender-refund-balance.js";
 import { formerMainForReturn, runReturnRecordsPass } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
 
@@ -62,33 +69,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   );
   await stampDeployment(old.db, "preproduction");
   await establishNodeIdentity({ ownerDb: old.db, node: old.node, ring }, source.nodeId);
-  await withTransaction(current.db, async (tx) => {
-    for (const table of [
-      "tenants",
-      "locations",
-      "settings",
-      "device_profiles",
-      "nodes",
-      "invoice_series",
-      "registro_sif",
-      "cadenas",
-      "devices",
-      "deployment",
-    ]) {
-      for (const row of old.db.all<ReturnRow>(sql`select * from ${sql.identifier(table)}`)) {
-        const entries = Object.entries(row);
-        await tx.execute(sql`insert into ${sql.identifier(table)}
-          (${sql.join(
-            entries.map(([key]) => sql.identifier(key)),
-            sql`, `,
-          )})
-          values (${sql.join(
-            entries.map(([, value]) => sql`${value}`),
-            sql`, `,
-          )})`);
-      }
-    }
-  });
+  await copyBase();
   await establishNodeIdentity({ ownerDb: current.db, node: current.node, ring }, receiverId);
   const sourceKey = await readNodeIdentityKey(old.node, ring, source.nodeId);
   const receiverKey = await readNodeIdentityKey(current.node, ring, receiverId);
@@ -158,26 +139,22 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
     originals.records,
   );
   expect(wakes).toBe(1);
-  await old.db
-    .insert(tenders)
-    .values({
-      id: "late-payment",
-      saleId,
-      method: "cash",
-      amount: 200,
-      tipAmount: 0,
-      settledAt: now.toISOString(),
-    });
-  await current.db
-    .insert(tenders)
-    .values({
-      id: "late-payment",
-      saleId,
-      method: "cash",
-      amount: 300,
-      tipAmount: 0,
-      settledAt: now.toISOString(),
-    });
+  await old.db.insert(tenders).values({
+    id: "late-payment",
+    saleId,
+    method: "cash",
+    amount: 200,
+    tipAmount: 0,
+    settledAt: now.toISOString(),
+  });
+  await current.db.insert(tenders).values({
+    id: "late-payment",
+    saleId,
+    method: "cash",
+    amount: 300,
+    tipAmount: 0,
+    settledAt: now.toISOString(),
+  });
   expect(await send()).toBe("clash");
   expect(await withTransaction(current.db, listFilingCases)).toEqual([]);
   const aeat = createFakeAeat({ serverNow: now, tiempoEsperaInicial: 60 });
@@ -276,4 +253,134 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
       sql`select estado, csv from envios where registro_id = ${corrected.registroId}`,
     ),
   ).toEqual([{ estado: "aceptado", csv: expect.any(String) }]);
+});
+
+async function copyBase() {
+  await withTransaction(current.db, async (tx) => {
+    for (const table of [
+      "tenants",
+      "locations",
+      "settings",
+      "device_profiles",
+      "nodes",
+      "invoice_series",
+      "registro_sif",
+      "cadenas",
+      "devices",
+      "deployment",
+    ]) {
+      for (const row of old.db.all<ReturnRow>(sql`select * from ${sql.identifier(table)}`)) {
+        const entries = Object.entries(row);
+        await tx.execute(sql`insert into ${sql.identifier(table)}
+          (${sql.join(
+            entries.map(([key]) => sql.identifier(key)),
+            sql`, `,
+          )})
+          values (${sql.join(
+            entries.map(([, value]) => sql`${value}`),
+            sql`, `,
+          )})`);
+      }
+    }
+  });
+}
+
+it("counts returned VAT and settled payments without changing the new main's own day-close", async () => {
+  const source = await seedNode(old.db, "Source");
+  const receiverId = await bareNode(old.db);
+  await copyBase();
+  const clock = {
+    businessDay: "2026-07-20",
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+    cutoverChanges: [],
+  };
+  const ownBefore = await withTransaction(current.db, (tx) =>
+    computeDailyClose(tx, { ...clock, nodeIds: [receiverId] }),
+  );
+  const [sale] = await old.db
+    .insert(sales)
+    .values({
+      source: "device",
+      deviceId: source.deviceId,
+      nodeId: source.nodeId,
+      seriesId: source.seriesId,
+      invoiceNumber: 1,
+      issuedAt: "2026-07-20T17:20:30.000Z",
+      issuedOffsetMinutes: 120,
+      total: 12345,
+      vatBreakdown: [{ rate: "21.00", base: "102.02", tax: "21.43" }],
+      locale: "es",
+      invoiceLocales: ["es"],
+      fiscalBackend: "verifactu",
+      fiscalState: "recorded",
+    })
+    .returning();
+  const [identity] = old.db.all<{ nif: string; numero_instalacion: string }>(
+    sql`select nif,numero_instalacion from registro_sif where id=${source.sifId}`,
+  );
+  const pending = altaFor(source, brandSaleId(sale!.id), 1, 1);
+  pending.input.IDEmisorFactura = identity!.nif;
+  pending.input.SistemaInformatico.NumeroInstalacion = identity!.numero_instalacion;
+  await withTransaction(old.db, async (tx) => {
+    await appendToChain(tx, source.nodeId, pending);
+    await tx
+      .insert(tenders)
+      .values({
+        id: "returned-tender",
+        saleId: sale!.id,
+        method: "cash",
+        amount: 12345,
+        tipAmount: 0,
+        settledAt: "2026-07-20T17:21:00.000Z",
+      });
+    await tx
+      .insert(saleSettlements)
+      .values({
+        id: "returned-settlement",
+        saleId: sale!.id,
+        settledAt: "2026-07-20T17:21:00.000Z",
+      });
+  });
+  const snapshot = await withTransaction(old.db, (tx) => readReturnedOriginals(tx, source.nodeId));
+  for (const batch of makeReturnedBatches(snapshot))
+    expect(
+      await withTransaction(current.db, (tx) =>
+        receiveReturnedOriginals(tx, source.nodeId, batch, now),
+      ),
+    ).toEqual({ complete: true });
+  const vat = await withTransaction(current.db, (tx) =>
+    computeVatReturn(tx, { year: 2026, period: { kind: "month", month: 7 } }),
+  );
+  expect(vat.byRate).toEqual([{ rate: "21.00", base: "102.02", tax: "21.43" }]);
+  expect(mapModelo303(vat).boxes).toMatchObject({
+    "07": "102.02",
+    "09": "21.43",
+    "27": "21.43",
+    "46": "21.43",
+  });
+  expect(
+    await withTransaction(current.db, (tx) =>
+      computeDailyClose(tx, { ...clock, nodeIds: [receiverId] }),
+    ),
+  ).toEqual(ownBefore);
+  expect(
+    await withTransaction(current.db, (tx) =>
+      computeDailyClose(tx, { ...clock, nodeIds: [source.nodeId] }),
+    ),
+  ).toMatchObject({
+    counts: { sales: 1, corrections: 0, voids: 0 },
+    cash: { tenderTotal: "123.45", tipTotal: "0.00" },
+  });
+  expect(await withTransaction(current.db, (tx) => readRefundableTenders(tx, sale!.id))).toEqual([
+    {
+      tenderId: "returned-tender",
+      method: "cash",
+      last4: null,
+      appliedRemaining: "123.45",
+      tipRemaining: "0.00",
+      pendingRefundId: null,
+      manual: false,
+    },
+  ]);
 });

@@ -1,4 +1,5 @@
 import * as loop from "./loop.js";
+import * as database from "@waitron/db";
 import { Hono } from "hono";
 import { beforeEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, stampDeployment, writeNodeMembership } from "@waitron/db";
@@ -12,6 +13,8 @@ import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { startReturnRecordsDuty, runReturnRecordsPass } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
+import { signAsThisBox } from "./handover-signing.js";
+import { AppError } from "@waitron/shared";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const ring = loadKeyRing({
@@ -74,7 +77,7 @@ beforeEach(async () => {
   });
 });
 
-function destination() {
+function destination(requireWritable = () => {}) {
   const app = new Hono();
   mountReturnRecordsApi(
     app,
@@ -84,7 +87,7 @@ function destination() {
       ring,
       nodeId: receiver,
       modules,
-      requireWritable: () => {},
+      requireWritable,
       wake: () => {},
     },
     () => {},
@@ -151,6 +154,77 @@ it.each(["environment", "venue", "destination", "signature", "payload"])(
     expect(status).toBe(409);
     expect(result).toBe("needs-attention");
     expect(received).toEqual([]);
+  },
+);
+
+it.each([
+  "pinned source",
+  "primary receiver",
+  "revoked source",
+  "changed chart",
+  "read-only receiver",
+])("refuses a trusted return for a %s before importing facts", async (field) => {
+  const chart = (await database.readNodeMembership(suite.db))!;
+  const receiverKey = await readNodeIdentityKey(suite.node, ring, receiver);
+  const sourceKey = await readNodeIdentityKey(suite.node, ring, source);
+  const app = destination(() => {
+    if (field === "read-only receiver") throw new AppError("node.read_only", {});
+  });
+  const result = await send(async (url, init) => {
+    const changed = structuredClone(chart);
+    if (field === "pinned source") {
+      await pinMainBoxKey(suite.node, receiver, {
+        nodeId: receiver,
+        publicKey: nodeSigningPublicKey(receiverKey),
+      });
+      changed.endorsements.push(
+        endorseKey(source, nodeSigningPublicKey(sourceKey), receiver, receiverKey),
+      );
+    }
+    if (field === "primary receiver") changed.body.nodes[0]!.standing = "sell-only";
+    if (field === "revoked source") changed.body.revoked = [source];
+    changed.signature = signDocumentBody(changed.body, receiverKey);
+    if (field === "changed chart") {
+      changed.body.term++;
+      changed.signature = signDocumentBody(changed.body, receiverKey);
+      const read = database.readNodeMembership;
+      let reads = 0;
+      const spy = vi.spyOn(database, "readNodeMembership").mockImplementation(async (db) => {
+        if (++reads === 2) await database.writeNodeMembershipTx(db, changed);
+        return read(db);
+      });
+      try {
+        return await app.request(String(url), init);
+      } finally {
+        spy.mockRestore();
+      }
+    }
+    await writeNodeMembership(suite.db, changed);
+    return app.request(String(url), init);
+  });
+  expect(result).toBe("needs-attention");
+  expect(received).toEqual([]);
+});
+
+it.each(["digest", "nonce"])(
+  "refuses a validly signed receipt with the wrong %s",
+  async (field) => {
+    const app = destination();
+    expect(
+      await send(async (url, init) => {
+        const answer = await app.request(String(url), init);
+        const receipt = (await answer.json()) as { body: Record<string, CanonicalValue> };
+        receipt.body[field] = "different";
+        return Response.json(
+          await signAsThisBox(
+            { node: suite.node, ring, nodeId: receiver },
+            "return-receipt",
+            receipt.body,
+          ),
+        );
+      }),
+    ).toBe("needs-attention");
+    expect(received).toEqual(["first"]);
   },
 );
 

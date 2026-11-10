@@ -58,3 +58,21 @@ signed clashes from refused or lost answers and observe that a stopped clash sch
 The page, EN/ES guides, backlog and dated historical pointers describe this result. Estimate
 2,250–2,450 lines; the combined outside-opinion stop remains about 3,100. Both PRs are owner-landed.
 PR2’s exact acceptance and remaining refusals wait for the owner’s case-coexistence decision.
+
+
+## Finish corrections cleared 2026-11-10 at 20:36
+
+The watcher cleared maps for selected batch facts and skipping the full-chain check when a batch
+inserts no fiscal original. Keep full signed inventory and late-fact enumeration, with no new
+exchange, table or high-water mark. The allowance is about 2,950 lines plus accepted review fixes,
+with another outside opinion past 3,150; PR2 gets its own budget after the owner's case decision.
+The correction gate remains the trusted pinned former main supplied as history. It covers that
+node's originals already inherited in the copy as well as originals received later; no import-only
+marker or wider gate is introduced.
+
+The two Claude run-it reads took 464 and 377 seconds. Corrections cover independent settlement,
+voids after a blocked prefix, admission and receipt deletion proofs, retained-cancellation cases,
+and the plan's reporting and settlement readers. The unused fiscal fingerprint is removed; the
+server signs the complete batch inventory, including late payment and delivery facts. The small
+text receipts and matching-image before/after measurement live in Lane J's
+`receipts/a1342-finish-20261110/`. The owner or watcher lands both fiscal PRs.
