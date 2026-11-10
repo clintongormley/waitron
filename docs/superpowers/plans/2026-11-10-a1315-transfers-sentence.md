@@ -2,27 +2,30 @@
 
 Owner decision, recorded by watcher 2026-11-10 17:19 in
 `/Users/clintongormley/waitron-campaign-k/questions.md:733`: "Drop the third sentence (Rec.)".
-Finish line: opening Transfers help shows exactly its existing first two sentences in English
-and Spanish. Reuse the bubble, button and link wiring in `apps/till/src/widgets/till-shell.ts:1084`.
+Finish line: opening Transfers help in the handheld form shows its existing first two sentences
+in English and Spanish. Reuse the bubble, button and link wiring in `apps/till/src/widgets/till-shell.ts:1084`.
 
-1. In `apps/till/src/i18n/help-strings.test.ts:82`, remove only `help.more.transfers` from the
-   count-word matrix; retain the Parked and Waiting assertions. Replace the Transfers assertion
-   at line 99 with exact EN/ES equality against each translation's existing first two sentences,
-   copied verbatim from `help-strings.ts:46,109`. This checks both preservation and removal without
-   a new sentence parser. Quote the owner in the PR's Changed test checks section, with the
-   changed assertion's file and line; put no history comment in the test.
+1. In `apps/till/src/i18n/help-strings.test.ts:87-91`, remove only `help.more.transfers` from
+   the count-word matrix; retain the Parked and Waiting assertions. Replace the Transfers check
+   at `:99-106` with a two-sentence count for EN and ES using its existing `sentences` split,
+   plus absence of the old English third sentence. Preserve the first two sentences through
+   the copy diff and PR before/after listing, without new permanent exact-word pins. Name the
+   owner decision in the test title: `drops its third sentence (owner, 2026-11-10: "Drop the third
+   sentence (Rec.)")`, and quote it with the changed check's file/line in the PR too.
    Run `pnpm --filter @waitron/till exec vitest run src/i18n/help-strings.test.ts` before editing
-   production copy: require a failure showing the old third sentence as unexpected text.
+   production copy: require the old three-sentence copy to fail the new two-sentence count.
 2. In `apps/till/src/i18n/help-strings.ts:45,108`, delete only sentence three of
    `help.more.transfers` in EN/ES. Preserve sentences one and two exactly. Rerun that command;
    require the whole changed test file to pass, with a reported test count.
 3. In `docs/backlog.md:1429`, remove only the resolved Transfers wording/status from A1315.
    In `docs/backlog/dashboard.md:973`, delete only its resolved Transfers bullet. Retain the
-   missing-guide work and A1247. No guides, helpers, frameworks, harnesses, history or CLAUDE.md edits.
-4. Run the existing `till-shell.menu-help.test.ts` behavior harness. For visual inspection,
-   reuse its mounting/opening support and `till-shell.help.a11y.test.ts:161` theme/locale setup
-   to open Transfers help in EN/ES, light/dark, phone/desktop. Inspect the two sentences and
-   existing controls; keep screenshots local and uncommitted. Add no permanent harness changes.
+   missing-guide work, its existing A1315 heading/anchor and A1247. The item-count fact is dropped
+   by the owner's choice; it is not moved to a guide because that destination remains open.
+   No guides, helpers, frameworks, harnesses, history or CLAUDE.md edits.
+4. Run the existing `till-shell.menu-help.test.ts` behavior harness. Reuse its badge-tap pattern
+   at `:196-219` to inspect Transfers help in the handheld form at 320 and 1280 pixels, EN/ES
+   and light/dark. The till form has no Transfers bubble. Keep screenshots local and uncommitted;
+   add no permanent harness changes.
 5. In the PR, show every changed copy before/after in EN/ES with source receipts, quote the owner
    for the changed assertions, and state that missing guide destinations remain outside this slice.
 
