@@ -467,6 +467,63 @@ describe("folder selection routes", () => {
     expect(await empty.json()).toEqual([]);
   });
 
+  it("answers 400 when a move or delete body names a product or folder that does not exist", async () => {
+    const app = mountApp();
+    const real = await folder(app, "Drinks");
+    const unknown = crypto.randomUUID();
+    const shown = [
+      { id: unknown, folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
+    ];
+    for (const [action, body, code, params] of [
+      [
+        "move",
+        { productIds: [unknown], categoryIds: [], to: null },
+        "product.not_found",
+        { productId: unknown },
+      ],
+      [
+        "move",
+        { productIds: [], categoryIds: [unknown], to: null },
+        "category.not_found",
+        { categoryId: unknown },
+      ],
+      [
+        "move",
+        { productIds: [], categoryIds: [real], to: unknown },
+        "category.not_found",
+        { categoryId: unknown },
+      ],
+      [
+        "delete",
+        { productIds: [unknown], categoryIds: [], contents: "delete" },
+        "product.not_found",
+        { productId: unknown },
+      ],
+      [
+        "delete",
+        { productIds: [], categoryIds: [unknown], contents: "delete", shown },
+        "category.not_found",
+        { categoryId: unknown },
+      ],
+    ] as const) {
+      const response = await send(app, "POST", `/management-api/folders/${action}`, { body });
+      expect(response.status, `${action} ${JSON.stringify(body)}`).toBe(400);
+      expect(await response.json()).toEqual({ error: { code, params } });
+    }
+    expect(
+      await (await send(app, "GET", `/management-api/categories/${real}`)).json(),
+    ).toMatchObject({ id: real, parentId: null });
+  });
+
+  it("answers 404 for a summary's unknown folder id", async () => {
+    const unknown = crypto.randomUUID();
+    const response = await send(mountApp(), "GET", `/management-api/folders/summary?id=${unknown}`);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: { code: "category.not_found", params: { categoryId: unknown } },
+    });
+  });
+
   it.each(["move", "delete", "summary"] as const)(
     "protects folder %s with manager authorization",
     async (action) => {
@@ -1452,21 +1509,21 @@ describe("mountCatalogueApi — the venue's menus", () => {
     });
   });
 
-  it("POST with a valid-but-nonexistent catalogueId → catalogue.not_found 404", async () => {
+  it("POST with a valid-but-nonexistent catalogueId → catalogue.not_found 400", async () => {
     const app = mountApp();
     const res = await send(app, "POST", cataloguesPath(), {
       body: { catalogueId: "00000000-0000-0000-0000-000000000000" },
     });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "catalogue.not_found" } });
   });
 
-  it("PUT default-catalogue with a valid-but-nonexistent catalogueId → catalogue.not_found 404", async () => {
+  it("PUT default-catalogue with a valid-but-nonexistent catalogueId → catalogue.not_found 400", async () => {
     const app = mountApp();
     const res = await send(app, "PUT", defaultPath(), {
       body: { catalogueId: "00000000-0000-0000-0000-000000000000" },
     });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "catalogue.not_found" } });
   });
 
@@ -1491,6 +1548,17 @@ describe("mountCatalogueApi — categories", () => {
     };
     expect(body).toMatchObject({ name: "ES drinks", parentId: null });
     expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("POST /management-api/categories under a parent that does not exist → 400 category.not_found", async () => {
+    const missing = crypto.randomUUID();
+    const res = await send(mountApp(), "POST", "/management-api/categories", {
+      body: { name: `Orphan ${crypto.randomUUID()}`, parentId: missing },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "category.not_found", params: { categoryId: missing } },
+    });
   });
 
   it("refuses a translated-object category name", async () => {
@@ -1901,6 +1969,26 @@ describe("mountCatalogueApi — products", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
       error: { code: "catalogue.not_found", params: { catalogueId: missing } },
+    });
+  });
+
+  it("POST /management-api/products naming a category that does not exist → 400 category.not_found", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Stray category menu");
+    const missing = crypto.randomUUID();
+    const res = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: missing,
+        name: "Stray",
+        pricingUnit: "each",
+        unitPrice: "3",
+        vatClass: "general",
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "category.not_found", params: { categoryId: missing } },
     });
   });
 
@@ -3102,10 +3190,84 @@ describe("mountCatalogueApi — products", () => {
     const rejected = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
       body: await editorBody(app, { name: "Unsaved", unitPrice: "9.99", courseId: missing }),
     });
-    expect(rejected.status).toBe(404);
+    expect(rejected.status).toBe(400);
     expect(await rejected.json()).toMatchObject({ error: { code: "course.not_found" } });
     const after = await send(app, "GET", `/management-api/products/${productId}/editor`);
     expect(await after.json()).toEqual(beforeValue);
+  });
+
+  it("answers 400 when an editor body names a folder or course that does not exist, and 404 when the path names a missing menu or product", async () => {
+    const app = mountApp("es-ES");
+    const catalogueId = await createCatalogueVia(app, "Editor ids");
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      { body: await editorBody(app) },
+    );
+    expect(created.status).toBe(201);
+    const productId = ((await created.json()) as { id: string }).id;
+    const create = `/management-api/catalogues/${catalogueId}/product-editor`;
+    const update = `/management-api/products/${productId}/editor`;
+    const folder = crypto.randomUUID();
+    const course = crypto.randomUUID();
+    for (const [method, path, extra, status, code, params] of [
+      [
+        "POST",
+        create,
+        { primaryCategoryId: folder },
+        400,
+        "category.not_found",
+        { categoryId: folder },
+      ],
+      [
+        "PUT",
+        update,
+        { primaryCategoryId: folder },
+        400,
+        "category.not_found",
+        { categoryId: folder },
+      ],
+      ["POST", create, { courseId: course }, 400, "course.not_found", { courseId: course }],
+      [
+        "POST",
+        create,
+        { courseId: "not-a-course" },
+        400,
+        "course.not_found",
+        { courseId: "not-a-course" },
+      ],
+      [
+        "PUT",
+        update,
+        { courseId: "not-a-course" },
+        400,
+        "course.not_found",
+        { courseId: "not-a-course" },
+      ],
+      [
+        "POST",
+        `/management-api/catalogues/${course}/product-editor`,
+        {},
+        404,
+        "catalogue.not_found",
+        { catalogueId: course },
+      ],
+      [
+        "PUT",
+        `/management-api/products/${course}/editor`,
+        {},
+        404,
+        "product.not_found",
+        { productId: course },
+      ],
+    ] as const) {
+      const response = await send(app, method, path, {
+        body: await editorBody(app, { name: `Dish ${crypto.randomUUID()}`, ...extra }),
+      });
+      expect(response.status, `${method} ${path} ${JSON.stringify(extra)}`).toBe(status);
+      expect(await response.json()).toEqual({ error: { code, params } });
+    }
   });
 
   it("POST /management-api/products with active:false → 201 and the created product is inactive", async () => {
@@ -5603,7 +5765,7 @@ describe("mountCatalogueApi — sections", () => {
     const a = await ownedSectionVia(app, root);
     const unknown = crypto.randomUUID();
     for (const [sectionIds, status, code, params] of [
-      [[a, unknown], 404, "menu_section.not_found", { sectionId: unknown }],
+      [[a, unknown], 400, "menu_section.not_found", { sectionId: unknown }],
       [[a, root], 409, "menu_section.wrong_role", { sectionId: root, role: "menu_root" }],
     ] as const) {
       const response = await send(app, "POST", "/management-api/sections/delete", {
@@ -5674,7 +5836,13 @@ describe("mountCatalogueApi — sections", () => {
       [
         remove,
         { members: [{ listId: root, memberId: crypto.randomUUID() }] },
-        404,
+        400,
+        "menu_section.not_found",
+      ],
+      [
+        remove,
+        { members: [{ listId: crypto.randomUUID(), memberId: juiceInRoot.id }] },
+        400,
         "menu_section.not_found",
       ],
     ] as const) {
@@ -6164,6 +6332,19 @@ describe("mountCatalogueApi — Device Home Page", () => {
         error: { code: "menu_section.not_found", params: { memberId: member } },
       });
     }
+  });
+
+  it("answers 400 when a shortcut add names a section that does not exist", async () => {
+    const app = mountApp();
+    const m = await menuWithTargets(app);
+    const unknown = crypto.randomUUID();
+    const response = await send(app, "POST", shortcutsOf(m.menuId), {
+      body: { ref: section(unknown) },
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "menu_section.not_found", params: { sectionId: unknown } },
+    });
   });
 
   it("screens every body's shape and ids", async () => {

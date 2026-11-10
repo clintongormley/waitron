@@ -354,7 +354,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu.shortcut_unreachable": 409,
   "menu.home_display_invalid": 400,
   // The product editor refuses a course this venue does not have.
-  "course.not_found": 404,
+  "course.not_found": 400,
   "allergen.invalid_code": 400,
   "allergen.kinds_required": 400,
   "allergen.invalid_kind": 400,
@@ -380,16 +380,20 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "catalogue.failed");
-const runFolder = createErrorBoundary(
-  { ...STATUS, "category.parent_cycle": 409 },
-  "catalogue.failed",
-);
-// A product create names its catalogue in the body, so an unknown one is a 400
-// (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong").
-const runCreateProduct = createErrorBoundary(
-  { ...STATUS, "catalogue.not_found": 400 },
-  "catalogue.failed",
-);
+/** For a route where these codes can only name an id the request body sent, never its path
+ * (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong"). */
+const runBodyIds = (...codes: string[]) =>
+  createErrorBoundary(
+    { ...STATUS, ...Object.fromEntries(codes.map((code) => [code, 400] as const)) },
+    "catalogue.failed",
+  );
+// A product create names its catalogue and its category in the body.
+const runCreateProduct = runBodyIds("catalogue.not_found", "category.not_found");
+const runBodyMenu = runBodyIds("catalogue.not_found");
+const runBodyCategory = runBodyIds("category.not_found");
+// A folder move or delete names its products and folders in the body.
+const runFolder = runBodyIds("category.not_found", "product.not_found");
+const runBodySection = runBodyIds("menu_section.not_found");
 // The single-variant route names its variant in the path, so an unknown one is a 404; the whole-list
 // PUT names variants in its body, and an unknown one there stays a 400.
 const runVariant = createErrorBoundary(
@@ -675,7 +679,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
     }),
   );
   app.post("/management-api/section-members/remove", (c) =>
-    run(c, log, async () => {
+    runBodySection(c, log, async () => {
       const session = requireManagementSession(c);
       const removed = membersBody((await readJsonBody<{ members?: unknown }>(c)).members);
       await gated(c, session, (tx) => removeMembers(tx, removed));
@@ -683,7 +687,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
     }),
   );
   app.post(`${collection}/delete`, (c) =>
-    run(c, log, async () => {
+    runBodySection(c, log, async () => {
       const session = requireManagementSession(c);
       const ids = sectionIdsBody((await readJsonBody<{ sectionIds?: unknown }>(c)).sectionIds);
       await gated(c, session, (tx) => deleteSections(tx, ids));
@@ -755,7 +759,7 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
     }),
   );
   app.post(shortcuts, (c) =>
-    run(c, log, async () => {
+    runBodySection(c, log, async () => {
       const session = requireManagementSession(c);
       const menu = menuId(c);
       const body = await readJsonBody<{ ref?: unknown; position?: unknown }>(c);
@@ -1285,7 +1289,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   );
 
   app.post("/management-api/venue/catalogues", (c) =>
-    run(c, log, async () => {
+    runBodyMenu(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const catalogueId = await requireCatalogueIdBody(c);
       await gated(c, sessionId, (tx) => addCatalogueToVenue(tx, catalogueId));
@@ -1303,7 +1307,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   );
 
   app.put("/management-api/venue/default-catalogue", (c) =>
-    run(c, log, async () => {
+    runBodyMenu(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const catalogueId = await requireCatalogueIdBody(c);
       await gated(c, sessionId, (tx) => setVenueDefaultCatalogue(tx, catalogueId));
@@ -1320,7 +1324,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   );
 
   app.post("/management-api/categories", (c) =>
-    run(c, log, async () => {
+    runBodyCategory(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const input = categoryInput(body, true) as CategoryInput;
@@ -1355,7 +1359,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
   app.get("/management-api/folders/summary", (c) =>
-    runFolder(c, log, async () => {
+    run(c, log, async () => {
       const session = requireManagementSession(c);
       const ids = (c.req.queries("id") ?? []).map((id) => requireUuidParam(id, "CategoryId"));
       return c.json(await gated(c, session, (tx) => summariseFolders(tx, ids)));
@@ -1453,7 +1457,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   );
 
   app.post("/management-api/catalogues/:id/product-editor", (c) =>
-    run(c, log, async () => {
+    runBodyCategory(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -1494,7 +1498,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   );
 
   app.put("/management-api/products/:id/editor", (c) =>
-    run(c, log, async () => {
+    runBodyCategory(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const productId = requireUuidParam(c.req.param("id"), "ProductId");
       const body = await readJsonBody<Record<string, unknown>>(c);

@@ -330,7 +330,7 @@ On `node:sqlite` only `db.run` wraps (as `DrizzleError`, message `Failed to run 
   identity-owned `management_sessions` to revoke an old viewer token. Probe real startup with identity and its dependants
   disabled before changing that path; the runtime outcome remains unverified.
 
-## A394-5, A394-9 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule
+## A394-5, A394-9, A394-10, A394-12 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule
 
 OPEN,
 low priority, not queued — owner 2026-10-08: take them from here when a lane has room. (A394-1 to
@@ -695,7 +695,6 @@ reset and operator gates; this entry does not start that job.
 
 - A malformed menu path id still answers 400 `shared.invalid_id` until A394-22, while the course
   route answers 404.
-- The two venue menu routes' body menu id keeps 404 until A394-11.
 
 ## Loose ends left by A483 (#1544)
 

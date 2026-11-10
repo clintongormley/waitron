@@ -475,6 +475,10 @@ Status changes:
   for `menu_section.wrong_role`, `menu.shortcut_unreachable`, `extras.product_has_variants`. Tests
   to change: `catalogue-api.test.ts:1123-1138,2651-2655` (and the question-9 pins listed in part 1).
   Size M. Depends on: A394-3 (same file).
+  **2026-11-10 (A394-11):** done — a menu, folder, product, section or course that only a request
+  body names now answers 400; path ids keep 404, as do the routes where the path and the body raise
+  the same code. The folder summary's query ids keep 404 (question 8), and question 9's codes are
+  unchanged.
 - **A394-12 — Management API: body ids answer 400.** Files: `apps/server/src/management-api.ts`
   (`STATUS` `:222-317`), `apps/server/src/tables.ts` for the `table.zone_inactive` split. Changes
   `printer.not_found`, `zone.not_found`, `station.not_found`, `course.not_found` → 400 where a body

@@ -118,8 +118,9 @@ structure graph's `children` gives none of its members. Read it through the Devi
 below.
 
 Malformed ids answer `shared.invalid_id` (400); a malformed body answers
-`management.request_invalid` (400), naming its field. `menu_section.not_found` (404) names an
-unknown section (`sectionId`) or a member not held by that list (`sectionId`, `memberId`).
+`management.request_invalid` (400), naming its field. `menu_section.not_found` names an unknown
+section (`sectionId`) or a member not held by that list (`sectionId`, `memberId`): 400 on
+`sections/delete` and `section-members/remove`, whose ids are all in the body, and 404 elsewhere.
 `menu_section.wrong_role` (409, `sectionId`, `role`) refuses presentation edits or deletes of roots
 and Device Home Page sections, structure writes into a Device Home Page section, and a member ref to
 anything other than a menu root.
@@ -538,7 +539,7 @@ Content-Type: application/json
 ```
 
 The successful response is `204 No Content`. A missing product or variant ID is `product.not_found`
-(404); a missing category is `category.not_found` (404); a category move into itself or its descendants
+(400); a missing category is `category.not_found` (400); a category move into itself or its descendants
 is `category.parent_cycle` (409). A category name that would match a sibling's is
 `category.name_taken` (409, `{ field, name }`), from the category create and update routes, from
 `folders/move`, and from `folders/delete` when `contents` is `move_up`. A `folders/delete` whose
