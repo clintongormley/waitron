@@ -1,4 +1,4 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import QRCode from "qrcode";
 import { buildReachInfo } from "./box-reach.js";
 import type { ReachInfo } from "./box-reach.js";
@@ -21,6 +21,8 @@ export interface DiscoveryDeps {
   discoveryEnabled?: boolean;
   /** False when the listener presents operator TLS, even if a fallback CA exists on disk. */
   serveBoxCa?: boolean;
+  /** Asked for each connection write; never asked when `serveBoxCa` is false, which refuses them. */
+  repairAllowed?: (c: Context) => boolean;
   /** Injected for tests. */
   listIpv4?: () => string[];
   /** Injected for tests; default `QRCode.toString(text, { type: "svg", margin: 1 })`. */
@@ -66,7 +68,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       reachUrls: [reach.hostnameUrl, ...reach.ipUrls],
       onRepaired: deps.onConnectionRepaired ?? (async () => {}),
       log,
-      repairAllowed: deps.serveBoxCa !== false,
+      repairAllowed: deps.serveBoxCa === false ? false : (deps.repairAllowed ?? true),
     },
     false,
   );
