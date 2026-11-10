@@ -212,13 +212,6 @@ no holiday name, unless another holiday shares that day, and repeats on its mont
 a later year a name with two dates is followed to the first of them, a rule nobody chose.
 Re-check when a new year's list is added.
 
-## A855. The till's zones read builds date formatters on every call
-
-**A855 (2026-10-18).** About 0.75 ms of each `GET /api/zones` goes on `new Intl.DateTimeFormat`
-inside `serviceMomentAt` and `serviceDayContext` (`packages/venue-service`), through the
-business-day helpers in `@waitron/reporting` and `@waitron/shared`. Re-measure
-before acting. Next: keep one formatter per time zone. Left open by A504.
-
 ## Loose ends left by A788
 
 Found while building A788 (the business-day start changes at the next changeover). Unless an entry
@@ -534,10 +527,8 @@ The owner decided the rule on 2026-11-06: a closure outside its department's hou
 
 ## Bundle: Service moment cost
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **A855. The till's zones read builds date formatters on every call (2026-10-18).**
-  [Detail](service-periods.md#a855-the-tills-zones-read-builds-date-formatters-on-every-call)
 - **Once a stored holiday date's year has passed, each order's service-state read
   (`readServiceDayPlan`) also reads the tenant, the venue and the holiday area** to find that year's
   holiday: about 100 µs of roughly 860 µs per call, measured over 2000 calls on a Madrid test venue.
