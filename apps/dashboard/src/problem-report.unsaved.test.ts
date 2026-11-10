@@ -75,17 +75,17 @@ function underlyingDraft(app: ReportLeaveApp) {
   return { scope, value: () => value };
 }
 
-it("Keep retains the report, while Discard closes only its draft and preserves another edit", async () => {
+it("Escape Keep retains the report, while Discard closes only its draft and preserves another edit", async () => {
   const { app, dialog, input } = await fixture();
   const underlying = underlyingDraft(app);
   await edit(dialog, input, "The bill is hard to read.");
-  await cancel(dialog);
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => question(app).open).toBe(true);
   await choose(app, "keep");
   await expect.poll(() => question(app).open).toBe(false);
   expect(dialog.open).toBe(true);
   expect(input.value).toBe("The bill is hard to read.");
-  await cancel(dialog);
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => question(app).open).toBe(true);
   const didClose = closed(dialog);
   await choose(app, "discard");
@@ -111,6 +111,19 @@ it.each([false, true])(
     expect(app.leave.coordinator.isDirty()).toBe(false);
   },
 );
+
+it("Cancel discards an edited report without asking and preserves another edit", async () => {
+  const { app, dialog, input } = await fixture();
+  const underlying = underlyingDraft(app);
+  await edit(dialog, input, "The bill is hard to read.");
+  const didClose = closed(dialog);
+  await cancel(dialog);
+  await didClose;
+  expect(dialog.open).toBe(false);
+  expect(question(app).open).toBe(false);
+  expect(underlying.scope.isDirty()).toBe(true);
+  expect(underlying.value()).toBe("Unfinished menu title");
+});
 
 it("Download closes only the report and reopening captures a fresh report", async () => {
   const { app, report, dialog, input } = await fixture();
