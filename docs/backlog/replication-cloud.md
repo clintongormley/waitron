@@ -1153,6 +1153,15 @@ singleton role as primary. Guard: the case "reads as a sole primary once its nod
 server, so what boot then does is not run. A start-up refusal for a missing `node.db` was not taken
 in slice 3a because it needs a new recovery-page code with English and Spanish title and action.
 
+- **Not closed by A947 3b-G's refusal (Task G.3, found by the 2026-11-10 Fable review, read, not
+  run): a box that handed over and then loses its `node.db`.** Its proof that it handed over lives
+  in `node.db` only, and stepping down mints no chart, so if it was off before it heard the new
+  chart, its chart still names it the main box: Task G.3 does not fire, and Carry on's check for a
+  known handover reads the lost file (`apps/server/src/carry-on.ts`). With the new main box silent,
+  an administrator who carries on gets two boxes selling and filing, which could cost a filing.
+  Closing it needs a record of the handover outside `node.db`, which changes A1018 Slice 5's
+  handover code ([plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md), Task G.3).
+
 ## A1275: a Cloud peer's chart is refused on the checked paths
 
 Left open by A947 slice 3a. Promotion (both functions), retiring and the spare-adding route check
