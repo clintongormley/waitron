@@ -34,6 +34,7 @@ import type {
 import { firstReadThenPassive } from "./first-read.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { perLocale } from "./per-locale.js";
+import { MAX_REASON_NAME_LENGTH } from "../reason-limits.js";
 import { reasonDeleteCopy } from "./reason-delete-copy.js";
 import { actionChoice, kindName, roleName, t, tf, type StringKey } from "./strings.js";
 
@@ -711,7 +712,13 @@ export class AdjustmentReasonsScreen extends LitElement {
   #check(): FieldErrors {
     const draft = this.draft!;
     const errors: FieldErrors = {};
-    if (draft.name.trim() === "") errors.name = t("adjustments.error.name");
+    const tooLong = tf("adjustments.error.name_too_long", { max: String(MAX_REASON_NAME_LENGTH) });
+    const name = draft.name.trim();
+    if (name === "") errors.name = t("adjustments.error.name");
+    else if (name.length > MAX_REASON_NAME_LENGTH) errors.name = tooLong;
+    if (Object.values(draft.names).some((text) => text.trim().length > MAX_REASON_NAME_LENGTH)) {
+      errors.names = tooLong;
+    }
     if (draft.kind === "void") return errors;
     if (draft.applyRoles.length === 0) errors.applyRoles = t("adjustments.error.applyRoles");
     if (draft.approverRoles.length === 0) {
@@ -761,7 +768,9 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   #refused(error: unknown): void {
     const code = codeOf(error);
-    const params = (error as { params?: { field?: unknown; withNote?: unknown } }).params;
+    const params = (
+      error as { params?: { field?: unknown; withNote?: unknown; maxLength?: unknown } }
+    ).params;
     const field = params?.field;
     if (code === "adjustment_reason.void_required") {
       const withNote = params?.withNote === true;
@@ -775,7 +784,13 @@ export class AdjustmentReasonsScreen extends LitElement {
       Object.hasOwn(SERVER_FIELDS, field)
     ) {
       const target = SERVER_FIELDS[field]!;
-      this.refusedFields = { [target]: t(`adjustments.error.${target}` as StringKey) };
+      const maxLength = params?.maxLength;
+      this.refusedFields = {
+        [target]:
+          typeof maxLength === "number"
+            ? tf("adjustments.error.name_too_long", { max: String(maxLength) })
+            : t(`adjustments.error.${target}` as StringKey),
+      };
     } else if (code === "adjustment_reason.name_taken") {
       this.refusedFields = { name: codeMessage(code) };
     } else {
@@ -1081,7 +1096,6 @@ export class AdjustmentReasonsScreen extends LitElement {
           locale=${currentLocale()}
           label=${t("adjustments.limit.field")}
           placeholder=${t("adjustments.no_limit")}
-          hint=${t("adjustments.limit.hint")}
           .value=${value.amount}
           .error=${errors.maxBillComp ?? ""}
           .disabled=${this.limitSaving}
@@ -1091,7 +1105,14 @@ export class AdjustmentReasonsScreen extends LitElement {
           }}
           @keydown=${(event: KeyboardEvent) =>
             submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-limit"]'))}
-        ></wt-price-input>
+          ><wt-help-tooltip
+            slot="help"
+            mode="help-mode"
+            data-test="maxBillComp-help"
+            aria-label=${t("adjustments.limit.help_label")}
+            >${t("adjustments.limit.hint")}</wt-help-tooltip
+          ></wt-price-input
+        >
         ${this.#roleList({
           name: "billApproverRoles",
           label: t("adjustments.limit.approvers"),
@@ -1347,24 +1368,36 @@ export class AdjustmentReasonsScreen extends LitElement {
         fixed-unit
         label=${t("adjustments.field.max_percent")}
         placeholder=${t("adjustments.no_limit")}
-        hint=${t("adjustments.field.max_percent_hint")}
         .value=${percent.value}
         .error=${percent.error}
         .disabled=${this.busy}
         @wt-change=${percent.change}
-      ></wt-price-input>
+        ><wt-help-tooltip
+          slot="help"
+          mode="help-mode"
+          data-test="maxPercent-help"
+          aria-label=${t("adjustments.field.max_percent_help_label")}
+          >${t("adjustments.field.max_percent_hint")}</wt-help-tooltip
+        ></wt-price-input
+      >
       <wt-price-input
         name="maxAmount"
         fixed-unit
         locale=${currentLocale()}
         label=${t("adjustments.field.max_amount")}
         placeholder=${t("adjustments.no_limit")}
-        hint=${t("adjustments.field.max_amount_hint")}
         .value=${money.value}
         .error=${money.error}
         .disabled=${this.busy}
         @wt-change=${money.change}
-      ></wt-price-input>`;
+        ><wt-help-tooltip
+          slot="help"
+          mode="help-mode"
+          data-test="maxAmount-help"
+          aria-label=${t("adjustments.field.max_amount_help_label")}
+          >${t("adjustments.field.max_amount_hint")}</wt-help-tooltip
+        ></wt-price-input
+      >`;
   }
 
   #reasonForm(errors: FieldErrors) {

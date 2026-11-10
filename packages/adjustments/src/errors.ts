@@ -6,7 +6,7 @@ declare module "@waitron/shared" {
     "adjustment_reason.not_found": { reasonId: string };
     "adjustment_reason.name_taken": { name: string };
     /** `field` names the input the policy refuses, or `ids` for a reorder list. */
-    "adjustment_reason.invalid": { field: string };
+    "adjustment_reason.invalid": { field: string; maxLength?: number };
     /** The change would leave the venue no Void reason, or, with `withNote`, none that asks for a
      * note. */
     "adjustment_reason.void_required": { withNote: boolean };

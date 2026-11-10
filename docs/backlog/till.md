@@ -1328,14 +1328,6 @@ someone who can give refunds (`evaluateCancel`, `packages/adjustments/src/policy
 than design D12. Decide whether Discard should ask the question too.
 
 
-## A919. Three reason-form limits show "No limit" as a placeholder and also carry a hint (left open by A758-1).
-
-The voids-and-comps form's limit fields use `adjustments.no_limit` as the
-placeholder beside a hint (`packages/adjustments/src/dashboard/reasons-screen.ts`). By
-[design-system.md](../developers/design-system.md) → Forms a field's hint is its placeholder, so the
-hint may only reach screen readers. Nobody has looked at the screen to confirm; look, then pick one.
-
-
 ## A785. A kitchen screen in device mode keeps the theme it started with until reload (left open by A768, 2026-10-17).
 
 Nobody signs in on it, so it runs no menu-state poll and never sees the
@@ -2647,19 +2639,6 @@ Printer identity is separate from the till route inventory.
   test helpers call it (`apps/server/src/testing/party-venue.ts`,
   `testing/order-writer-fixture.ts`), as a writer of the old shape. Expand it or retire it with
   A1196.
-
-## Bundle: Reason form limits
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1021. Cap Void and Comp reason names at the reasons route (left open by A758-6).** The reasons
-  page and its route (`packages/adjustments/src/routes.ts`) take a name of any length, while a
-  receipt's refund refuses a reason over 500 characters (`tender-refund-reservation.ts`), which the
-  till marks `bill_refund.reason_long`.
-- **A919. Three reason-form limits show "No limit" as a placeholder and also carry a hint (left open
-  by A758-1).** The voids-and-comps form's limit fields use `adjustments.no_limit` as the
-  placeholder beside a hint (`packages/adjustments/src/dashboard/reasons-screen.ts`).
-  [Detail](till.md#a919-three-reason-form-limits-show-no-limit-as-a-placeholder-and-also-carry-a-hint-left-open-by-a758-1)
 
 ## Bundle: Do not offer a closed area as a destination
 

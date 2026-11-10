@@ -55,9 +55,11 @@ const en = {
     "They enter their PIN when anyone else asks, or above a limit.",
   "adjustments.field.actions": "How it can be taken off",
   "adjustments.field.max_percent": "Most off one item",
+  "adjustments.field.max_percent_help_label": "About most off one item",
   "adjustments.field.max_percent_hint":
     "Counts every discount on the item, from any reason or on the whole bill.",
   "adjustments.field.max_amount": "Most off one bill",
+  "adjustments.field.max_amount_help_label": "About most off one bill",
   "adjustments.field.max_amount_hint":
     "The venue's own amount. Above it, someone who can approve it is asked.",
   "adjustments.field.note_required": "Note required",
@@ -79,6 +81,7 @@ const en = {
   "adjustments.fix_fields": "Correct the highlighted fields to continue.",
   "adjustments.error.name": "Enter a name.",
   "adjustments.error.names": "Check the names in each language.",
+  "adjustments.error.name_too_long": "Use at most {max} characters.",
   "adjustments.error.actions": "Choose at least one action.",
   "adjustments.error.maxPercent":
     "Enter a percentage above 0 and up to 100, with at most two decimals.",
@@ -98,6 +101,7 @@ const en = {
   "adjustments.reorder_error": "The new order could not be saved.",
   "adjustments.limit.heading": "Limit on a bill's comps",
   "adjustments.limit.field": "Most comped on one bill",
+  "adjustments.limit.help_label": "About most comped on one bill",
   "adjustments.limit.hint":
     "Every comp on the bill counts, whatever its reason. Above it, someone on the next list who may also approve the reason enters their PIN.",
   "adjustments.limit.approvers": "Who can approve past it",
@@ -226,9 +230,11 @@ const es: Record<keyof typeof en, string> = {
     "Introducen su PIN cuando lo pide otra persona o se pasa un límite.",
   "adjustments.field.actions": "Cómo se descuenta",
   "adjustments.field.max_percent": "Máximo por artículo",
+  "adjustments.field.max_percent_help_label": "Acerca del máximo por artículo",
   "adjustments.field.max_percent_hint":
     "Cuenta todos los descuentos del artículo, sea cual sea su motivo, también los de toda la cuenta.",
   "adjustments.field.max_amount": "Máximo por cuenta",
+  "adjustments.field.max_amount_help_label": "Acerca del máximo por cuenta",
   "adjustments.field.max_amount_hint":
     "Lo fija el local. Por encima, se pide a alguien que pueda autorizarlo.",
   "adjustments.field.note_required": "Pide una nota",
@@ -251,6 +257,7 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.fix_fields": "Corrige los campos marcados para continuar.",
   "adjustments.error.name": "Escribe un nombre.",
   "adjustments.error.names": "Revisa los nombres en cada idioma.",
+  "adjustments.error.name_too_long": "Usa como máximo {max} caracteres.",
   "adjustments.error.actions": "Elige al menos una acción.",
   "adjustments.error.maxPercent":
     "Escribe un porcentaje mayor que 0 y hasta 100, con dos decimales como máximo.",
@@ -270,6 +277,7 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.reorder_error": "No se pudo guardar el nuevo orden.",
   "adjustments.limit.heading": "Límite de descuentos por cuenta",
   "adjustments.limit.field": "Máximo descontado en una cuenta",
+  "adjustments.limit.help_label": "Acerca del máximo descontado en una cuenta",
   "adjustments.limit.hint":
     "Cuenta cada descuento de la cuenta, sea cual sea su motivo. Por encima, introduce su PIN alguien de la lista siguiente que también pueda autorizar el motivo.",
   "adjustments.limit.approvers": "Quién puede autorizar más",

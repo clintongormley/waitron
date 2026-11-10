@@ -392,6 +392,37 @@ describe("adjustment reason management routes", () => {
     expect(await reasonCount()).toBe(0);
   });
 
+  it("takes a name and a name in a language of 500 characters", async () => {
+    const fx = await fixture();
+    const long = "a".repeat(500);
+    const response = await send(fx.app, "POST", REASONS, fx.cookie.manager, {
+      ...COMPLAINT,
+      name: long,
+      names: { en: long, es: long },
+    });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ name: long, names: { en: long, es: long } });
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ["name", { name: "a".repeat(501) }],
+    ["names", { names: { en: "Complaint", es: "a".repeat(501) } }],
+  ])(
+    "refuses a %s of 501 characters, saying the limit and writing nothing",
+    async (field, overrides) => {
+      const fx = await fixture();
+      const response = await send(fx.app, "POST", REASONS, fx.cookie.manager, {
+        ...COMPLAINT,
+        ...overrides,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "adjustment_reason.invalid", params: { field, maxLength: 500 } },
+      });
+      expect(await reasonCount()).toBe(0);
+    },
+  );
+
   it.each<[string, Record<string, unknown>, unknown]>([
     [
       "a name key that is not a language",
