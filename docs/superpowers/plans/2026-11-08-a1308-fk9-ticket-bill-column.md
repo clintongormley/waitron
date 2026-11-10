@@ -4,6 +4,14 @@
 > (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. Every step also
 > follows [the A1308 slice rules](2026-11-08-a1308-slice-rules.md) ("rules").
 
+> **2026-11-10 (watcher decision, from the owner's "make these tests periodic rather than
+> automatic"):** this slice no longer builds or times a bench venue inside its own steps, and the
+> stop points that read a `bench compare` result no longer apply. Instead its pull request says
+> `Sale-path read changed:` and names the measurement this plan's bench steps describe, for the next
+> periodic run to report. Where the slice's own correctness turns on how SQLite plans a query (an
+> index choice), check that plan with `EXPLAIN QUERY PLAN` on the box image's SQLite (CLAUDE.md §4).
+> See [when the bench runs](../../developers/testing-guide.md#when-the-bench-runs).
+
 **Goal:** settle appendix §8 item 1. `ticket_items.working_order_id` is a copy of its line's bill
 (`working_order_lines.working_order_id`) with no key ("Denormalised grouping key",
 `packages/db/src/schema/ticket-items.ts:42-45`), rewritten on every line move

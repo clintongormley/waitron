@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-11-10 (watcher decision, from the owner's "make these tests periodic rather than
+> automatic"):** this slice no longer builds or times a bench venue inside its own steps, and the
+> stop points that read a `bench compare` result no longer apply. Instead its pull request says
+> `Sale-path read changed:` and names the measurement this plan's bench steps describe, for the next
+> periodic run to report. Where the slice's own correctness turns on how SQLite plans a query (an
+> index choice), check that plan with `EXPLAIN QUERY PLAN` on the box image's SQLite (CLAUDE.md §4).
+> See [when the bench runs](../../developers/testing-guide.md#when-the-bench-runs).
+
 **Goal:** Drop `invoice_series.next_number`, the stored counter, and allocate each invoice number as
 the series' largest issued number plus one, read from `sales`; settle the A805 follow-up for
 `invoice_series` with a database guard that lets only `retired_at` change, once. Measure first, with

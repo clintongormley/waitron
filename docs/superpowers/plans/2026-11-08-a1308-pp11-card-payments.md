@@ -6,6 +6,14 @@
 > [the A1308 slice rules](2026-11-08-a1308-slice-rules.md) ("rules" below), which this plan cites
 > and does not repeat.
 
+> **2026-11-10 (watcher decision, from the owner's "make these tests periodic rather than
+> automatic"):** this slice no longer builds or times a bench venue inside its own steps, and the
+> stop points that read a `bench compare` result no longer apply. Instead its pull request says
+> `Sale-path read changed:` and names the measurement this plan's bench steps describe, for the next
+> periodic run to report. Where the slice's own correctness turns on how SQLite plans a query (an
+> index choice), check that plan with `EXPLAIN QUERY PLAN` on the box image's SQLite (CLAUDE.md §4).
+> See [when the bench runs](../../developers/testing-guide.md#when-the-bench-runs).
+
 **Goal:** a whole-order card payment counts as attendance evidence from its `payments` row, through
 `requested_by` (pa3), instead of through an in-flight snapshot the poller
 `apps/server/src/attendance-integrated.ts` watches every 30 seconds; the poller goes. With it gone,

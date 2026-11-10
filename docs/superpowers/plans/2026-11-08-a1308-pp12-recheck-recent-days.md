@@ -6,6 +6,14 @@
 > [the A1308 slice rules](2026-11-08-a1308-slice-rules.md) ("rules" below), which this plan cites
 > and does not repeat.
 
+> **2026-11-10 (watcher decision, from the owner's "make these tests periodic rather than
+> automatic"):** this slice no longer builds or times a bench venue inside its own steps, and the
+> stop points that read a `bench compare` result no longer apply. Instead its pull request says
+> `Sale-path read changed:` and names the measurement this plan's bench steps describe, for the next
+> periodic run to report. Where the slice's own correctness turns on how SQLite plans a query (an
+> index choice), check that plan with `EXPLAIN QUERY PLAN` on the box image's SQLite (CLAUDE.md §4).
+> See [when the bench runs](../../developers/testing-guide.md#when-the-bench-runs).
+
 **Goal:** `attendance_source_state` (one remembered fingerprint per source row ever seen, about a
 million rows a year) and the discovery scan that writes it are deleted. Change is detected by pp9's
 marks at every write. As the safety net the scan was, a start re-checks the last 62 days when the

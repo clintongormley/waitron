@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-11-10 (watcher decision, from the owner's "make these tests periodic rather than
+> automatic"):** this slice no longer builds or times a bench venue inside its own steps, and the
+> stop points that read a `bench compare` result no longer apply. Instead its pull request says
+> `Sale-path read changed:` and names the measurement this plan's bench steps describe, for the next
+> periodic run to report. Where the slice's own correctness turns on how SQLite plans a query (an
+> index choice), check that plan with `EXPLAIN QUERY PLAN` on the box image's SQLite (CLAUDE.md §4).
+> See [when the bench runs](../../developers/testing-guide.md#when-the-bench-runs).
+
 **Goal:** Delete `cadenas`, the stored copy of each node's chain head, and read the head from
 `verifactu_records` itself; drop the plain index that duplicates the records' unique position index.
 Measure first, on a year of trading grown to 100,000 and 500,000 records, with the fallback (keep
