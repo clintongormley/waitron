@@ -43,6 +43,16 @@ async function show(answer: FilingOverviewAnswer, theme: Theme): Promise<FiscalF
   return screen;
 }
 
+async function openDetails(screen: FiscalFilingScreen): Promise<HTMLElement> {
+  const table = screen.shadowRoot!.querySelector("wt-data-table")!;
+  const view = (table.shadowRoot!.querySelector("[data-test=view-rec-1]") ??
+    table.querySelector("[data-test=view-rec-1]")) as HTMLElement;
+  view.click();
+  const details = screen.shadowRoot!.querySelector("wt-modal[data-test=case-details]")!;
+  await vi.waitFor(() => expect(details).toHaveProperty("open", true));
+  return details as HTMLElement;
+}
+
 describe.each(["light", "dark"] as const)("fiscal filing accessibility %s", (theme) => {
   it.each([
     ["with cases and an identity conflict", overview()],
@@ -50,6 +60,17 @@ describe.each(["light", "dark"] as const)("fiscal filing accessibility %s", (the
   ] as const)("draws the page %s at desktop width", async (_name, answer) => {
     await page.viewport(1280, 1000);
     await show(answer, theme);
+    await expectNoA11yViolations(host);
+  });
+
+  it("draws a case's details with the technical details closed and open", async () => {
+    await page.viewport(1280, 1000);
+    const screen = await show(overview(), theme);
+    const details = await openDetails(screen);
+    await expectNoA11yViolations(host);
+    const fold = details.querySelector("wt-disclosure")!;
+    fold.open = true;
+    await fold.whenSettled();
     await expectNoA11yViolations(host);
   });
 });
@@ -60,15 +81,6 @@ it("draws the full page and a case's details at phone width", async () => {
   await expectNoA11yViolations(host);
   expect(screen.scrollWidth).toBeLessThanOrEqual(screen.clientWidth);
 
-  const table = screen.shadowRoot!.querySelector("wt-data-table")!;
-  const view = (table.shadowRoot!.querySelector("[data-test=view-rec-1]") ??
-    table.querySelector("[data-test=view-rec-1]")) as HTMLElement;
-  view.click();
-  await vi.waitFor(() =>
-    expect(screen.shadowRoot!.querySelector("wt-modal[data-test=case-details]")).toHaveProperty(
-      "open",
-      true,
-    ),
-  );
+  await openDetails(screen);
   await expectNoA11yViolations(host);
 });

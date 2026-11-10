@@ -31,8 +31,9 @@ If the page says nothing can be sent until the tax agency's certificate is insta
 ## Filing cases {#cases}
 
 Each row is a record that still needs a decision; **Reason** says why. **Held behind it** counts
-the records waiting behind that one. Open the row's menu and choose **View** to see the record,
-AEAT's answers and fingerprints, and **What happens now**.
+the records waiting behind that one. Open the row's menu and choose **View** to see what the
+record is, where it stands, AEAT's reply in its own words (in Spanish), and **What happens now**.
+The codes and fingerprints your tax adviser may ask for are under **Technical details**.
 
 The table lists the newest 200 cases. When there are more, it says how many; export them to see
 every one.

@@ -34,7 +34,9 @@ instálalo en **Ajustes del local**.
 
 Cada fila es un registro que aún necesita una decisión; **Motivo** dice por qué. **Detenidos
 detrás** cuenta los registros que esperan detrás de él. Abre el menú de la fila y elige **Ver**
-para ver el registro, las respuestas y huellas de la AEAT y **Qué pasa ahora**.
+para ver qué es el registro, en qué punto está, la respuesta de la AEAT con sus propias palabras y
+**Qué pasa ahora**. Los códigos y las huellas que puede pedirte tu asesor fiscal están en
+**Detalles técnicos**.
 
 La tabla muestra los 200 casos más recientes. Si hay más, indica cuántos; expórtalos para verlos
 todos.

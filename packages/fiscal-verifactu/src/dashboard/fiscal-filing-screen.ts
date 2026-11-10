@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
+import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-notice.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -40,17 +41,18 @@ const count = (value: number): string => value.toLocaleString(currentLocale());
 const when = (iso: string | null): string =>
   iso === null ? t("fiscal_filing.none") : formatIsoMinute(iso);
 
-function aeatSaid(state: string | null, code: string | number | null, description: string | null) {
-  return [state, code, description].filter((part) => part !== null && part !== "").join(" ");
-}
-
-function field(label: string, value: string | TemplateResult | null) {
+function field(label: string, value: string | TemplateResult | null, test?: string) {
   return value === null || value === ""
     ? nothing
-    : html`<div>
+    : html`<div data-test=${test ?? nothing}>
         <dt>${label}</dt>
         <dd>${value}</dd>
       </div>`;
+}
+
+/** AEAT's own words, quoted and left in Spanish whatever the page's language. */
+function aeatWords(words: string | null): TemplateResult | null {
+  return words === null || words === "" ? null : html`<q lang="es">${words}</q>`;
 }
 
 function fingerprints(theirs: string | null, ours: string): TemplateResult {
@@ -63,7 +65,20 @@ function fingerprints(theirs: string | null, ours: string): TemplateResult {
     } <span class="fingerprint">${t("fiscal_filing.detail.ours", { fingerprint: ours })}</span>`;
 }
 
-function caseDetails(found: FilingCaseView): TemplateResult {
+function recordKind(record: FilingCaseView["record"]): string {
+  if (record.tipoRegistro === "anulacion") return t("fiscal_filing.kind.anulacion");
+  const type = record.tipoFactura ?? "";
+  if (type === "F1" || type === "F2" || type === "F3") return t(`fiscal_filing.kind.${type}`);
+  if (/^R[1-5]$/.test(type)) return t("fiscal_filing.kind.corrective");
+  return t("fiscal_filing.kind.other");
+}
+
+function recordState(submission: FilingCaseView["submission"]): string | null {
+  const state = STATES.find((known) => known === submission?.estado);
+  return state === undefined ? null : t(`fiscal_filing.record_state.${state}`);
+}
+
+function technicalDetails(found: FilingCaseView): TemplateResult {
   const { record, submission, evidence } = found;
   const observations = [
     ...found.conflicts.map(
@@ -94,56 +109,64 @@ function caseDetails(found: FilingCaseView): TemplateResult {
         </li>`,
     ),
   ];
+  return html`<wt-disclosure data-test="technical" heading=${t("fiscal_filing.technical")}>
+    <dl>
+      ${field(t("fiscal_filing.detail.issuer"), record.idEmisorFactura)}
+      ${field(t("fiscal_filing.detail.record_code"), record.tipoRegistro)}
+      ${field(t("fiscal_filing.detail.invoice_code"), record.tipoFactura)}
+      ${field(t("fiscal_filing.detail.generated"), record.fechaHoraHusoGenRegistro)}
+      ${field(t("fiscal_filing.detail.installation"), record.numeroInstalacion)}
+      ${field(
+        t("fiscal_filing.detail.fingerprint"),
+        html`<span class="fingerprint">${record.huella}</span>`,
+      )}
+      ${field(
+        t("fiscal_filing.detail.previous"),
+        record.anteriorHuella === null
+          ? null
+          : html`<span class="fingerprint">${record.anteriorHuella}</span>`,
+      )}
+      ${field(t("fiscal_filing.detail.then_code"), evidence.codigo?.toString() ?? null)}
+      ${field(t("fiscal_filing.detail.latest_code"), submission?.codigoError ?? null)}
+      ${field(
+        t("fiscal_filing.detail.observations"),
+        observations.length === 0
+          ? null
+          : html`<ul>
+              ${observations}
+            </ul>`,
+      )}
+    </dl>
+  </wt-disclosure>`;
+}
+
+function caseDetails(found: FilingCaseView): TemplateResult {
+  const { record, submission, evidence } = found;
+  const latest = aeatWords(submission?.mensajeError ?? null);
+  const sentAt = submission?.enviadoEn ?? null;
   return html`<dl>
-    ${field(
-      t("fiscal_filing.detail.invoice"),
-      `${record.numSerieFactura} · ${record.fechaExpedicionFactura}`,
-    )}
-    ${field(t("fiscal_filing.detail.issuer"), record.idEmisorFactura)}
-    ${field(
-      t("fiscal_filing.detail.type"),
-      [record.tipoRegistro, record.tipoFactura].filter((part) => part !== null).join(" · "),
-    )}
-    ${field(
-      t("fiscal_filing.detail.total"),
-      [record.importeTotal, record.cuotaTotal].filter((part) => part !== null).join(" · "),
-    )}
-    ${field(t("fiscal_filing.detail.generated"), record.fechaHoraHusoGenRegistro)}
-    ${field(t("fiscal_filing.detail.installation"), record.numeroInstalacion)}
-    ${field(
-      t("fiscal_filing.detail.fingerprint"),
-      html`<span class="fingerprint">${record.huella}</span>`,
-    )}
-    ${field(
-      t("fiscal_filing.detail.previous"),
-      record.anteriorHuella === null
-        ? null
-        : html`<span class="fingerprint">${record.anteriorHuella}</span>`,
-    )}
-    ${field(t("fiscal_filing.detail.then"), aeatSaid(null, evidence.codigo, evidence.mensaje))}
-    ${field(
-      t("fiscal_filing.detail.latest"),
-      submission === null
-        ? null
-        : [
-            aeatSaid(submission.estado, submission.codigoError, submission.mensajeError),
-            submission.enviadoEn === null
-              ? ""
-              : t("fiscal_filing.detail.sent", { time: formatIsoMinute(submission.enviadoEn) }),
-          ]
-            .filter((part) => part !== "")
-            .join(" · "),
-    )}
-    ${field(
-      t("fiscal_filing.detail.observations"),
-      observations.length === 0
-        ? null
-        : html`<ul>
-            ${observations}
-          </ul>`,
-    )}
-    ${field(t("fiscal_filing.detail.now"), t(`fiscal_filing.now.${found.cause}`))}
-  </dl>`;
+      ${field(
+        t("fiscal_filing.detail.invoice"),
+        `${record.numSerieFactura} · ${record.fechaExpedicionFactura}`,
+      )}
+      ${field(t("fiscal_filing.detail.kind"), recordKind(record), "kind")}
+      ${field(t("fiscal_filing.detail.state"), recordState(submission), "state")}
+      ${field(
+        t("fiscal_filing.detail.total"),
+        [record.importeTotal, record.cuotaTotal].filter((part) => part !== null).join(" · "),
+      )}
+      ${field(t("fiscal_filing.detail.recorded"), formatIsoMinute(record.fechaHoraHusoGenRegistro))}
+      ${field(t("fiscal_filing.detail.issued_by"), t("fiscal_filing.issued_by"), "issued-by")}
+      ${field(t("fiscal_filing.detail.then"), aeatWords(evidence.mensaje), "reply-then")}
+      ${field(
+        t("fiscal_filing.detail.latest"),
+        latest === null || sentAt === null
+          ? latest
+          : html`${latest} · ${t("fiscal_filing.detail.sent", { time: formatIsoMinute(sentAt) })}`,
+      )}
+      ${field(t("fiscal_filing.detail.now"), t(`fiscal_filing.now.${found.cause}`))}
+    </dl>
+    ${technicalDetails(found)}`;
 }
 
 function conflictLine(conflict: ActiveConflictView): TemplateResult {

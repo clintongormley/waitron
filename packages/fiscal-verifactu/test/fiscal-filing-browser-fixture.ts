@@ -24,7 +24,7 @@ export function conflictCase(registroId: string, openedAt: string): FilingCaseVi
       numeroInstalacion: "BOX-01",
     },
     submission: {
-      estado: "Incorrecto",
+      estado: "rechazado",
       codigoError: "3000",
       mensajeError: "Registro de facturación duplicado.",
       enviadoEn: "2026-11-03T11:01:00.000Z",

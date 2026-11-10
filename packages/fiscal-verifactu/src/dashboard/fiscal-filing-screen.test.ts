@@ -63,6 +63,20 @@ function counts(screen: FiscalFilingScreen): Record<string, string> {
   return out;
 }
 
+function flat(el: Element | null): string {
+  return (el?.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+
+async function openDetails(screen: FiscalFilingScreen): Promise<HTMLElement> {
+  const table = screen.shadowRoot!.querySelector("wt-data-table[data-test=case-table]")!;
+  await vi.waitFor(() => expect(table.shadowRoot?.querySelector("tbody tr")).not.toBeNull());
+  const view = table.shadowRoot!.querySelector("[data-test=view-rec-1]") as HTMLElement | null;
+  (view ?? (table.querySelector("[data-test=view-rec-1]") as HTMLElement)).click();
+  const details = screen.shadowRoot!.querySelector("wt-modal[data-test=case-details]")!;
+  await vi.waitFor(() => expect(details).toHaveProperty("open", true));
+  return details as HTMLElement;
+}
+
 function button(screen: FiscalFilingScreen, name: string): HTMLElement {
   return screen.shadowRoot!.querySelector(`wt-button[data-test=${name}]`) as HTMLElement;
 }
@@ -218,6 +232,54 @@ describe("vf-fiscal-filing-screen", () => {
     expect(details).toContain(PREVIOUS);
     expect(details).toContain(THEIRS);
     expect(details).toContain("Registro de facturación duplicado.");
+  });
+
+  it("explains a case in plain words and folds the raw evidence under Technical details", async () => {
+    const { screen } = await mount(vi.fn(async () => overview()));
+    const details = await openDetails(screen);
+    const fold = details.querySelector("wt-disclosure[data-test=technical]") as HTMLElement & {
+      open: boolean;
+    };
+    expect(fold.getAttribute("heading")).toBe("Technical details");
+    expect(fold.open).toBe(false);
+    const plain = (selector: string) => flat(details.querySelector(selector));
+    expect(plain("[data-test=kind] dd")).toBe(
+      "A new simplified invoice: a till receipt that names no customer.",
+    );
+    expect(plain("[data-test=state] dd")).toBe("AEAT refused it.");
+    expect(plain("[data-test=issued-by] dd")).toBe("This venue's box.");
+    const reply = details.querySelector("[data-test=reply-then] q")!;
+    expect(reply.getAttribute("lang")).toBe("es");
+    expect(flat(reply)).toBe("Registro de facturación duplicado.");
+
+    const outside = flat(details.querySelector("dl"));
+    const inside = flat(fold);
+    for (const raw of [OURS, PREVIOUS, THEIRS, "BOX-01", "B12345678", "alta", "F2", "3000"]) {
+      expect(outside).not.toContain(raw);
+      expect(inside).toContain(raw);
+    }
+
+    setLocale("es");
+    const spanish = await openDetails((await mount(vi.fn(async () => overview()))).screen);
+    expect(spanish.querySelector("wt-disclosure")!.getAttribute("heading")).toBe(
+      "Detalles técnicos",
+    );
+    expect(flat(spanish.querySelector("[data-test=kind] dd"))).toBe(
+      "Una factura simplificada nueva: un tique que no identifica al cliente.",
+    );
+  });
+
+  it.each([
+    ["alta", "F1", "A new full invoice that names the customer."],
+    ["alta", "F3", "A full invoice that replaces earlier simplified invoices."],
+    ["alta", "R5", "A corrective invoice that corrects an earlier invoice."],
+    ["anulacion", null, "A cancellation of an earlier invoice."],
+    ["alta", "X9", "An invoice record."],
+  ] as const)("names the record %s %s in plain words", async (tipoRegistro, tipoFactura, line) => {
+    const base = conflictCase("rec-1", "2026-11-03T11:02:00.000Z");
+    const found = { ...base, record: { ...base.record, tipoRegistro, tipoFactura } };
+    const { screen } = await mount(vi.fn(async () => overview({ cases: [found] })));
+    expect(flat((await openDetails(screen)).querySelector("[data-test=kind] dd"))).toBe(line);
   });
 
   it("says once that Waitron cannot correct the records while there are cases, and not without", async () => {
