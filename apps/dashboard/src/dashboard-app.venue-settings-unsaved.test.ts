@@ -631,10 +631,10 @@ it("a legal-name change on Venue details re-reads the banner's name", async () =
   const dialog = host.shadowRoot!.querySelector("wt-dialog")!;
   const input = dialog.querySelector<WtInput>("wt-input[name=legalName]")!;
   await input.updateComplete;
-  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), "Nuevo SL");
+  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), "New SL");
   const calls = getMe.mock.calls.length;
   dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
-  await expect.poll(banner).toBe("Nuevo SL");
+  await expect.poll(banner).toBe("New SL");
   expect(getMe.mock.calls.length).toBe(calls + 1);
   expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
 });
@@ -712,7 +712,7 @@ it("a rename answered after Back and Discard closed its dialog still updates the
   } as Partial<DashboardApi>);
   const banner = () => app.shadowRoot!.querySelector("[data-test=venue-name]")!.textContent!.trim();
   await expect.poll(banner).toBe("Venue");
-  const { host, dialog, native } = await openLegalName(app, "Nuevo SL");
+  const { host, dialog, native } = await openLegalName(app, "New SL");
   dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
   await expect.poll(() => answer).toBeTypeOf("function");
   history.back();
@@ -722,7 +722,7 @@ it("a rename answered after Back and Discard closed its dialog still updates the
   expect(dialog.open).toBe(false);
   expect(native.matches(":modal")).toBe(false);
   answer();
-  await expect.poll(banner).toBe("Nuevo SL");
+  await expect.poll(banner).toBe("New SL");
   expect(app.shadowRoot!.querySelector('[data-test="save-refusal"]')).toBeNull();
   await host.updateComplete;
   expect(dialog.open).toBe(false);
@@ -753,7 +753,7 @@ it.each([
             reject(Object.assign(new Error("changed"), { code: "venue.detail_changed" }));
         }),
     } as Partial<DashboardApi>);
-    const { host, dialog, native } = await openLegalName(app, "Nuevo SL");
+    const { host, dialog, native } = await openLegalName(app, "New SL");
     dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
     await expect.poll(() => refuse).toBeTypeOf("function");
     history.back();

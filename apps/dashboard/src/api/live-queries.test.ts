@@ -20,7 +20,7 @@ it("counts the initial screen read as activity and subsequent refreshes as passi
 });
 
 it("reads a printer's delete impact passively after the first read, and sends its delete as activity", async () => {
-  const impact = { target: { id: "p1", name: "Cocina" }, refusals: [], ends: [], removes: [] };
+  const impact = { target: { id: "p1", name: "Kitchen" }, refusals: [], ends: [], removes: [] };
   const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
     async () => new Response(JSON.stringify(impact), { status: 200 }),
   );
@@ -64,7 +64,7 @@ it("reads a device's delete impact passively after the first read, and sends its
 });
 
 it("reads a card reader's delete impact passively after the first read, and sends its delete as activity", async () => {
-  const impact = { target: { id: "r1", name: "Barra" }, refusals: [], ends: [], removes: [] };
+  const impact = { target: { id: "r1", name: "Bar" }, refusals: [], ends: [], removes: [] };
   const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
     async () => new Response(JSON.stringify(impact), { status: 200 }),
   );

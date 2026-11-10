@@ -549,17 +549,17 @@ describe("the box's clock was stepped", () => {
       source: "staff",
       person: "Ana",
       deviceId: "till-1",
-      device: "Barra 1",
+      device: "Bar 1",
       byStaff: true,
       stepMs: -5 * 60_000,
       direction: "back",
     };
     const { english, spanish } = both(params);
     expect(english).toBe(
-      `The box's clock was set from till Barra 1, confirmed by Ana: moved back 5 minutes, from ${from} to ${to}.`,
+      `The box's clock was set from till Bar 1, confirmed by Ana: moved back 5 minutes, from ${from} to ${to}.`,
     );
     expect(spanish).toBe(
-      `El reloj del equipo se puso con la hora de la caja Barra 1, confirmada por Ana: atrasado 5 minutos, de ${from} a ${to}.`,
+      `El reloj del equipo se puso con la hora de la caja Bar 1, confirmada por Ana: atrasado 5 minutos, de ${from} a ${to}.`,
     );
   });
 
@@ -574,7 +574,7 @@ describe("the box's clock was stepped", () => {
   });
 
   it("says a change it could not confirm was tried, and only what the clock read, whoever asked", () => {
-    for (const who of [{}, { source: "staff", person: "Ana", device: "Barra 1", byStaff: true }]) {
+    for (const who of [{}, { source: "staff", person: "Ana", device: "Bar 1", byStaff: true }]) {
       const params = { ...base, ...who, confirmationId: null, verified: false, unverified: true };
       const { english, spanish } = both(params);
       expect(english).toBe(
