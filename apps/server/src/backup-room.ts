@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { join, relative, resolve } from "node:path";
+import { join, relative } from "node:path";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { parseBackupArchiveKey } from "./backup-keys.js";
