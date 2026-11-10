@@ -423,8 +423,8 @@ it("refuses an invoice with a named customer, as the writer does", async () => {
   );
   const { saleId } = await sell([{ ...invoiceLines()[1]!, lineNo: 1 }], "12.10", {
     seriesId: brandSeriesId(full!.id),
-    counterparty: { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" },
-    recipientAddress: "Calle Mayor 2, 28013 Madrid, España",
+    counterparty: { taxId: "12345678Z", legalName: "Ana Garcia", countryCode: "ES" },
+    recipientAddress: "Calle Mayor 2, 28013 Madrid, Spain",
   });
   backend.setFiledFigures(saleId, { readable: false });
 
