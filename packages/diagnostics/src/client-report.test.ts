@@ -83,7 +83,7 @@ describe("local browser report", () => {
         {
           phase: "end",
           method: "GET",
-          path: "/api/persons/:id",
+          path: "/api/:id/:id",
           status: 500,
           code: "password.invalid",
         },
@@ -165,6 +165,55 @@ describe("local browser report", () => {
     expect(base.truncated).toBe(true);
     expect(base.trail.at(-1)!.at).toBe(new Date(+NOW - 1).toISOString());
   });
+  it("accepts exactly 65,536 trail bytes and truncates a one-byte overflow", () => {
+    const large = {
+      phase: "end",
+      method: "OPTIONS",
+      path: "/api" + "/:id".repeat(74),
+      requestId: ID,
+      status: 599,
+      code: "management_session.required",
+      error: "network",
+    };
+    const trail = [
+      ...Array.from({ length: 121 }, () => event(large)),
+      event({ method: "POST", path: "/api" + "/:id".repeat(43) }),
+      event({ method: "OPTIONS", path: "/api" + "/:id".repeat(74) }),
+    ];
+    const bytes = (value: readonly TrailEvent[]) =>
+      new TextEncoder().encode(JSON.stringify(value)).byteLength;
+    expect(bytes(trail)).toBe(65536);
+    expect(capture(trail).trail).toEqual(trail);
+    expect(capture(trail).truncated).toBe(false);
+    trail[121]!.fields.method = "PATCH";
+    expect(bytes(trail)).toBe(65537);
+    const overflow = capture(trail);
+    expect(bytes(overflow.trail)).toBeLessThanOrEqual(65536);
+    expect(overflow.truncated).toBe(true);
+  });
+  it("keeps canonical lowercase UUIDs and drops their uppercase spelling", () => {
+    const lower = "abcdefab-cdef-4abc-8def-abcdefabcdef";
+    const base = capture([event({ requestId: lower }), event({ requestId: lower.toUpperCase() })]);
+    expect(base.trail.map((row) => row.fields.requestId)).toEqual([lower, undefined]);
+  });
+  it("stops at the request-ID limit without filling its newest window with an older event", () => {
+    const base = capture([
+      event({}, "nav", 200),
+      ...Array.from({ length: 101 }, (_, i) =>
+        event(
+          {
+            requestId: `00000000-0000-4000-8000-${i.toString(16).padStart(12, "0")}`,
+          },
+          "api",
+          101 - i,
+        ),
+      ),
+      event({}, "nav"),
+    ]);
+    expect(base.trail.map((row) => row.event)).toEqual([...Array<string>(100).fill("api"), "nav"]);
+    expect(base.trail[0]!.fields.requestId).toBe("00000000-0000-4000-8000-000000000001");
+    expect(base.truncated).toBe(true);
+  });
   it.each(["2001-01-01T00:00:00.000Z", "2099-01-01T00:00:00.000Z"])(
     "allows a download made with clock %s",
     (time) => {
@@ -200,6 +249,15 @@ describe("local browser report", () => {
     expect(file!.text).not.toContain("\u202e");
     expect(parsed(file!.text).description).toBe(description);
   });
+  it.each(["\u061c", "\u200e", "\u200f"])(
+    "escapes the direction mark %# without changing its decoded description",
+    (mark) => {
+      const description = "before" + mark + "after";
+      const file = diagnostics.renderClientReport!(capture(), description)!;
+      expect(file.text).not.toContain(mark);
+      expect(parsed(file.text).description).toBe(description);
+    },
+  );
   it.each(["a".repeat(2001), "before\u0000after"])(
     "does not render an invalid description %#",
     (description) => {

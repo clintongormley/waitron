@@ -113,7 +113,6 @@ export class DashboardProblemReport extends LitElement {
       anchor.download = `problem-report-${this.snapshot.id}.md`;
       document.body.append(anchor);
       anchor.click();
-      this.scope?.commit(this.description);
       this.close();
     } catch {
       this.downloadError = t("problem_report.download_failed");
@@ -124,8 +123,9 @@ export class DashboardProblemReport extends LitElement {
   }
   override render() {
     if (
-      location.protocol !== "https:" &&
-      !["localhost", "127.0.0.1", "[::1]"].includes(location.hostname)
+      !isSecureContext ||
+      (location.protocol !== "https:" &&
+        !["localhost", "127.0.0.1", "[::1]"].includes(location.hostname))
     )
       return nothing;
     const file = this.snapshot ? renderClientReport(this.snapshot, this.description) : undefined;

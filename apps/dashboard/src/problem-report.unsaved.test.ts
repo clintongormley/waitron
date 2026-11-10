@@ -112,7 +112,7 @@ it.each([false, true])(
   },
 );
 
-it("Download commits only the report and reopening captures a fresh report", async () => {
+it("Download closes only the report and reopening captures a fresh report", async () => {
   const { app, report, dialog, input } = await fixture();
   const underlying = underlyingDraft(app);
   const original = dialog.preview;

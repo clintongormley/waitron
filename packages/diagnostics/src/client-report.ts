@@ -143,7 +143,7 @@ export function captureClientReport({
       (typeof id === "string" && !ids.has(id) && ids.size === 100)
     ) {
       truncated = true;
-      continue;
+      break;
     }
     if (typeof id === "string") ids.add(id);
     size += bytes;
@@ -165,7 +165,7 @@ export function renderClientReport(
 ): { name: string; text: string } | undefined {
   if (!reportDescriptionValid(description)) return;
   const json = JSON.stringify({ ...base, description }, null, 2).replace(
-    /[<>&`\u202a-\u202e\u2066-\u2069]/gu,
+    /[<>&`\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu,
     (character) => "\\u" + character.charCodeAt(0).toString(16).padStart(4, "0"),
   );
   return {

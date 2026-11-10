@@ -4,7 +4,7 @@ import { createInstrumentedFetch, maskPath } from "./instrument-fetch.js";
 
 describe("maskPath", () => {
   it.each([
-    ["/api/persons/john.smith", "/api/persons/:id"],
+    ["/api/persons/john.smith", "/api/:id/:id"],
     [
       "/management-api/products/jane%40example.test/editor?token=secret#note",
       "/management-api/products/:id/editor",
@@ -20,9 +20,18 @@ describe("maskPath", () => {
   it("masks uuid and numeric segments", () => {
     expect(maskPath("/api/sales/123")).toBe("/api/sales/:id");
     expect(maskPath("/management-api/persons/2f1c8e2a-0000-4000-8000-000000000000")).toBe(
-      "/management-api/persons/:id",
+      "/management-api/:id/:id",
     );
-    expect(maskPath("/management-api/layout")).toBe("/management-api/layout");
+    expect(maskPath("/management-api/layout")).toBe("/management-api/:id");
+  });
+  it.each([
+    "/management-api/session/me",
+    "/management-api/locales",
+    "/management-api/alerts",
+    "/management-api/disk-stop",
+    "/management-api/session/me/profile",
+  ])("names the fixed dashboard request %s without its query", (path) => {
+    expect(maskPath(path + "?email=private@example.test#note")).toBe(path);
   });
 });
 
@@ -82,7 +91,7 @@ describe("createInstrumentedFetch", () => {
     await f(new URL("http://box/api/items/7"));
     expect(seenHeader).toMatch(/^[0-9a-f-]{36}$/i); // a crypto.randomUUID
     const end = log.snapshot().at(-1)!;
-    expect(end.fields).toMatchObject({ method: "GET", path: "/api/items/:id", status: 200 });
+    expect(end.fields).toMatchObject({ method: "GET", path: "/api/:id/:id", status: 200 });
     expect(end.fields.requestId).toBe(seenHeader);
   });
 
@@ -94,7 +103,7 @@ describe("createInstrumentedFetch", () => {
       makeId: () => "rid-3",
     });
     await f("/api/users/5");
-    expect(log.snapshot().at(-1)!.fields.path).toBe("/api/users/:id");
+    expect(log.snapshot().at(-1)!.fields.path).toBe("/api/:id/:id");
   });
 
   it("does not record an unparseable URL", async () => {
@@ -122,7 +131,7 @@ describe("createInstrumentedFetch", () => {
       toString: () => "http://box/api/persons/2f1c8e2a-0000-4000-8000-000000000000",
     };
     await f(urlish as unknown as URL);
-    expect(log.snapshot().at(-1)!.fields.path).toBe("/api/persons/:id");
+    expect(log.snapshot().at(-1)!.fields.path).toBe("/api/:id/:id");
   });
 
   it("preserves a pre-existing content-type header while adding x-request-id", async () => {
@@ -205,7 +214,7 @@ describe("createInstrumentedFetch", () => {
     const end = log.snapshot().at(-1)!;
     expect(end.fields).toMatchObject({
       method: "DELETE",
-      path: "/api/persons/:id",
+      path: "/api/:id/:id",
       requestId: "rid-req",
     });
   });
