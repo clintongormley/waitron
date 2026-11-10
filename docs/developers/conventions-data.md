@@ -4589,11 +4589,13 @@ the after reading is still more than a minute behind it. A `clock.unusable` step
 no record. Every verified step, and every unverified one that moved the clock by more than a second,
 records `clock.corrected` (a warning, `system.manage`): who, which till, both readings with their
 offsets, the step, and whether it verified; recording it first marks any open `clock.corrected`
-handled. An unverified step writes no row and lifts nothing. The managers' email duty emails each
-`clock.corrected` once, even after a later step has marked it handled (`remember`,
-`apps/server/src/box-alert-email.ts`). Limits: a restart before it is sent loses the email of an
-alert already handled, and once it is handled an address the mail server refused outright is not
-tried again.
+handled. An unverified step writes no row and lifts nothing. The managers' email duty queues one
+`outgoing_mail` row per manager for each `clock.corrected`, even after a later step has marked it
+handled (`remember`, `apps/server/src/box-alert-email.ts`; the `box_alert` owner,
+`apps/server/src/box-alert-mail.ts`). Limits: a restart in the minute before it is queued loses the
+email of an alert already handled; once it is handled, an address the mail server refuses outright
+is not tried again; and a send cut off after the email was handed over is never tried again
+(3a-ii's rule).
 
 **A step whose row cannot be written** (a full disk, or an anchor whose `reanchor` failed) is kept in
 memory and written by `writePending()` on the watch's next look, only after that look has recorded
