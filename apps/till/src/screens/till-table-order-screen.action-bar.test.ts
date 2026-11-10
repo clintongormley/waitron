@@ -19,8 +19,10 @@ import {
   mount,
   resized,
   showView,
+  shownView,
   tap,
 } from "./till-table-order-screen.test-helpers.js";
+import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import {
   footerBalance,
   footerBill,
@@ -375,6 +377,52 @@ async function longBill(over: Partial<TillTableOrderScreen>) {
   return { el, host };
 }
 
+/** The scroll area a 390 × 600 phone leaves under the till's bar, as measured on the running app. */
+const shortPhoneArea = 467;
+
+const shortPhoneBill: Partial<TillTableOrderScreen> = {
+  currentOrders: longSent,
+  party: footerParty,
+  bills: [footerBill],
+  billBalance: footerBalance,
+};
+
+/** As Order opens: the switch and the Sent box show above the bar. Then, at the top, the middle
+ * and the end of the scroll: Move to…, Fire and Send all lie wholly in the window, above the foot. */
+async function expectBarWholeAboveFoot(el: TillTableOrderScreen, host: HTMLElement) {
+  const root = el.shadowRoot!;
+  const area = host.getBoundingClientRect();
+  const box = (selector: string) => root.querySelector(selector)!.getBoundingClientRect();
+  const expectBarAboveFoot = (at: string) => {
+    const foot = box("[data-order-foot]");
+    expect(foot.bottom, at).toBeLessThanOrEqual(area.bottom + 1);
+    for (const part of [
+      "[data-draft-move]",
+      '[data-draft-action="fire-selected"]',
+      '[data-draft-action="send-all"]',
+    ]) {
+      const button = box(part);
+      expect(button.height, `${part} ${at}`).toBeGreaterThan(0);
+      expect(button.top, `${part} ${at}`).toBeGreaterThanOrEqual(area.top);
+      expect(button.bottom, `${part} ${at}`).toBeLessThanOrEqual(foot.top + 1);
+    }
+  };
+
+  expectBarAboveFoot("on opening");
+  for (const above of ["[data-view-switch]", "[data-sent-orders]"]) {
+    expect(box(above).top, above).toBeGreaterThanOrEqual(area.top);
+    expect(box(above).bottom, above).toBeLessThanOrEqual(box(".draft-bar").top + 1);
+  }
+
+  expect(host.scrollHeight).toBeGreaterThan(host.clientHeight);
+  const end = host.scrollHeight - host.clientHeight;
+  for (const top of [0, Math.round(end / 2), end]) {
+    host.scrollTop = top;
+    await resized(el);
+    expectBarAboveFoot(`scrolled to ${top}`);
+  }
+}
+
 describe("till-table-order-screen: the fixed foot on a handheld", () => {
   it("a handheld's Order foot: only Total, Still to pay and Pay stay in the window over a long Order", async () => {
     const { el, host } = await longBill({ handheld: true });
@@ -466,6 +514,63 @@ describe("till-table-order-screen: the fixed foot on a handheld", () => {
     const actions = [...till.shadowRoot!.querySelectorAll("[data-draft-action]")];
     expect(actions).toHaveLength(2);
     for (const action of actions) expect(action.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("on a short phone, Move to…, Fire and Send all stay whole above the foot, on opening Order and wherever it is scrolled", async () => {
+    const { el, host } = await orderedInWindow(
+      390,
+      shortPhoneArea,
+      { handheld: true, ...shortPhoneBill },
+      dishes.slice(0, 3),
+    );
+    await showView(el, "order");
+    await linesRendered(el);
+
+    await expectBarWholeAboveFoot(el, host);
+  });
+
+  it("on a short phone, a table that opens on Order with unsent dishes keeps the bar whole above the foot", async () => {
+    const { el, host } = await mount({
+      products: dishes,
+      menus: menuOf(dishes),
+      handheld: true,
+      loading: true,
+      ...shortPhoneBill,
+    });
+    host.style.width = "390px";
+    host.style.height = `${shortPhoneArea}px`;
+    host.style.overflowY = "auto";
+    await resized(el);
+    // A New order saved earlier and read back as the table opens, so no dish is newly added.
+    const store = el.draftStore!;
+    for (const dish of dishes.slice(0, 3)) store.addProduct(dish, "1");
+    store.loadFrom("saved-draft", [...store.lines]);
+    expect(store.lastAdded).toBeUndefined();
+    el.lines = [storedDish];
+    el.loading = false;
+    await linesRendered(el);
+    expect(shownView(el)).toBe("order");
+
+    await expectBarWholeAboveFoot(el, host);
+  });
+
+  it("on a phone, the bar beside the foot is shut and faded while a round is being sent", async () => {
+    const { el } = await orderedInWindow(390, 700, { handheld: true }, dishes.slice(0, 2));
+    await showView(el, "order");
+    const bar = el.shadowRoot!.querySelector(".draft-bar")!;
+    expect(bar.closest("[data-order-dock]")).not.toBeNull();
+    const parts = () => [
+      bar.querySelector("[data-draft-move]")!,
+      bar.querySelector(".draft-actions")!,
+    ];
+    expect(parts().map(drawnFaded)).toEqual([false, false]);
+    expect(bar.closest("[inert]")).toBeNull();
+
+    el.draftStore!.sending = true;
+    await el.updateComplete;
+
+    expect(bar.closest("[inert]")).not.toBeNull();
+    expect(parts().map(drawnFaded)).toEqual([true, true]);
   });
 
   it("the newest line is not hidden behind the bar or the foot", async () => {

@@ -449,8 +449,8 @@ function barSize(bar: HTMLElement, height: number): void {
   bar.parentElement!.style.setProperty("--draft-bar-size", `${Math.ceil(height)}px`);
 }
 
-function footSize(foot: HTMLElement, height: number): void {
-  foot.parentElement!.style.setProperty("--order-foot-size", `${Math.ceil(height)}px`);
+function dockSize(dock: HTMLElement, height: number): void {
+  dock.parentElement!.style.setProperty("--order-dock-size", `${Math.ceil(height)}px`);
 }
 
 /** `fire-group`: a held group the waiter confirmed firing. */
@@ -1303,31 +1303,52 @@ export class TillTableOrderScreen extends LitElement {
         overflow-wrap: anywhere;
       }
 
-      .handheld-foot .order-foot {
+      /* A child of the screen, not of the order pane: a sticky box cannot rise above the top of
+         its parent, and on a short phone the pane starts too low for the bar and the foot to fit
+         under it. */
+      .order-dock {
         display: flex;
         flex-direction: column;
-        gap: var(--wt-space-2);
         position: sticky;
         bottom: 0;
         z-index: 1;
-        padding-block: var(--wt-space-2);
-        border-block-start: 1px solid var(--wt-color-border);
         background: var(--wt-color-bg);
       }
 
-      .handheld-foot .order-foot > .total-row {
-        border-top: none;
-        padding-top: 0;
+      .order-dock[hidden] {
+        display: none;
       }
 
-      .handheld-foot .draft-bar {
-        bottom: var(--order-foot-size);
+      .order-dock .draft-bar {
+        position: static;
+      }
+
+      .order-dock .draft-bar[inert] > * {
+        opacity: var(--wt-opacity-disabled);
+      }
+
+      .order-foot {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        padding-block: var(--wt-space-2);
+        border-block-start: 1px solid var(--wt-color-border);
+      }
+
+      .order-foot > .total-row {
+        border-top: none;
+        padding-top: 0;
       }
 
       /* A line revealed at the scroll area's foot stops above the stuck bar rather than under it.
          The bar's height depends on how its buttons lay out, so the screen measures it. */
       .round-bar till-basket::part(entry) {
-        scroll-margin-block-end: calc(var(--draft-bar-size) + var(--order-foot-size, 0px));
+        scroll-margin-block-end: calc(var(--draft-bar-size, 0px) + var(--order-dock-size, 0px));
+      }
+
+      .action-panel,
+      .action-panel wt-form-actions {
+        scroll-margin-block-end: var(--order-dock-size, 0px);
       }
     `,
     segmentedOptionStyles,
@@ -1479,10 +1500,9 @@ export class TillTableOrderScreen extends LitElement {
   #barSizing?: ResizeObserver;
   #sizedBar?: HTMLElement;
   #sizedBarShown = false;
-  #footSizing?: ResizeObserver;
-  #sizedFoot?: HTMLElement;
-  #sizedFootPane?: HTMLElement;
-  #sizedFootShown = false;
+  #dockSizing?: ResizeObserver;
+  #sizedDock?: HTMLElement;
+  #sizedDockShown = false;
   /** Where browsing was scrolled when Order was shown, put back on Menu. */
   #browsingScroll?: { scroller: Element; top: number };
 
@@ -1883,10 +1903,9 @@ export class TillTableOrderScreen extends LitElement {
     this.#barSizing?.disconnect();
     this.#barSizing = undefined;
     this.#sizedBar = undefined;
-    this.#footSizing?.disconnect();
-    this.#footSizing = undefined;
-    this.#sizedFoot = undefined;
-    this.#sizedFootPane = undefined;
+    this.#dockSizing?.disconnect();
+    this.#dockSizing = undefined;
+    this.#sizedDock = undefined;
   }
 
   /** Side by side has no views, so Order left shown goes back to Menu rather than being kept for a
@@ -2325,7 +2344,10 @@ export class TillTableOrderScreen extends LitElement {
     }
     // A bill switch is left on Menu: the app moves `orderId` before it reads the new bill's lines.
     const opened = this.hasUpdated ? changed.get("loading") === true : true;
-    if (opened && !this.loading && !this.wide) this.view = this.lines.length > 0 ? "order" : "menu";
+    if (opened && !this.loading && !this.wide) {
+      this.view = this.lines.length > 0 ? "order" : "menu";
+      this.#clearTopDue = this.view === "order";
+    }
     // The app re-points this screen at whichever party holds the table, so a window opened for the
     // old party would otherwise save to the new one. A screen drawn afresh counts its first party as
     // a switch, which keeps a refusal the app still holds from reopening its window.
@@ -2409,7 +2431,11 @@ export class TillTableOrderScreen extends LitElement {
     if (changed.has("splitRead")) this.#returnToSplitFoot();
     this.#watchAutomaticRouting();
     this.#sizeDraftBar();
-    this.#sizeOrderFoot();
+    this.#sizeOrderDock();
+    if (this.#clearTopDue) {
+      this.#clearTopDue = false;
+      void this.#clearOrderTopOnceDrawn();
+    }
     this.#observeSplit();
     this.#tellSplitDeclined();
   }
@@ -2537,25 +2563,25 @@ export class TillTableOrderScreen extends LitElement {
     if (bar !== undefined) barSize(bar, bar.getBoundingClientRect().height);
   }
 
-  /** Copies the fixed foot's height to `--order-foot-size` on the order pane, so the draft bar
-   * sticks above it; measured at once when drawn or shown, as `#sizeDraftBar` does. */
-  #sizeOrderFoot(): void {
-    const foot = this.renderRoot.querySelector<HTMLElement>("[data-order-foot]") ?? undefined;
+  /** Copies the dock's height to `--order-dock-size` on the screen, so the order's lines and the
+   * action panel are scrolled clear of it; measured at once when drawn or shown, as
+   * `#sizeDraftBar` does. */
+  #sizeOrderDock(): void {
+    const dock = this.renderRoot.querySelector<HTMLElement>("[data-order-dock]") ?? undefined;
     const shown = this.wide || this.view === "order";
-    if (foot === this.#sizedFoot && shown === this.#sizedFootShown) return;
-    this.#sizedFootShown = shown;
-    this.#footSizing ??= new ResizeObserver((entries) => {
+    if (dock === this.#sizedDock && shown === this.#sizedDockShown) return;
+    this.#sizedDockShown = shown;
+    this.#dockSizing ??= new ResizeObserver((entries) => {
       const entry = entries.at(-1)!;
-      footSize(entry.target as HTMLElement, entry.borderBoxSize[0]!.blockSize);
+      dockSize(entry.target as HTMLElement, entry.borderBoxSize[0]!.blockSize);
     });
-    if (foot !== this.#sizedFoot) {
-      if (this.#sizedFoot !== undefined) this.#footSizing.unobserve(this.#sizedFoot);
-      this.#sizedFootPane?.style.removeProperty("--order-foot-size");
-      this.#sizedFoot = foot;
-      this.#sizedFootPane = foot?.parentElement ?? undefined;
-      if (foot !== undefined) this.#footSizing.observe(foot);
+    if (dock !== this.#sizedDock) {
+      if (this.#sizedDock !== undefined) this.#dockSizing.unobserve(this.#sizedDock);
+      this.#sizedDock?.parentElement?.style.removeProperty("--order-dock-size");
+      this.#sizedDock = dock;
+      if (dock !== undefined) this.#dockSizing.observe(dock);
     }
-    if (foot !== undefined) footSize(foot, foot.getBoundingClientRect().height);
+    if (dock !== undefined) dockSize(dock, dock.getBoundingClientRect().height);
   }
 
   #lineGross(line: TabLine): Decimal {
@@ -3010,19 +3036,16 @@ export class TillTableOrderScreen extends LitElement {
         <div class="layout">
           ${
             draft === null
-              ? html`<section
-                  class=${this.#footFixed() ? "draft-pane handheld-foot" : "draft-pane"}
-                  data-draft-pane
-                >
+              ? html`<section class="draft-pane" data-draft-pane>
                   ${this.#sentOrders()} ${this.#orderSummary(null)}
                 </section>`
               : this.#ordering(draft)
           }
           ${this.#actionPanel()}
         </div>
-        ${this.#sentLineDialog()} ${this.#fireGroupDialog()} ${this.#serveDialog()}
-        ${this.#takeOverDialog()} ${this.#nameDialog()} ${this.#billNameDialog()}
-        ${this.#guestsDialog()}
+        ${this.#orderDock(draft)} ${this.#sentLineDialog()} ${this.#fireGroupDialog()}
+        ${this.#serveDialog()} ${this.#takeOverDialog()} ${this.#nameDialog()}
+        ${this.#billNameDialog()} ${this.#guestsDialog()}
       </section>
     `;
   }
@@ -3068,7 +3091,7 @@ export class TillTableOrderScreen extends LitElement {
         ${this.#gridRegion(draft)} ${this.#bottomBar(draft, separate)}
       </div>
       <section
-        class=${this.#footFixed() ? "draft-pane handheld-foot" : "draft-pane"}
+        class="draft-pane"
         data-draft-pane
         aria-labelledby="draft-title"
         ?hidden=${separate && !onOrder}
@@ -3124,19 +3147,32 @@ export class TillTableOrderScreen extends LitElement {
           ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
         </div>`;
     const pays = this.canSettle && this.#chargeable();
-    const shown = this.#shownBill;
     return html`${this.#finishRefusal()}
-      <div data-bill-actions>${pays ? this.#payHeadSection(shown) : nothing}</div>
+      <div data-bill-actions>${pays ? this.#payHeadSection(this.#shownBill) : nothing}</div>`;
+  }
+
+  /** Where the foot is fixed: the draft bar, while the New order has a dish, over Total, Still to
+   * pay and Pay, held together at the window's foot while Order shows. */
+  #orderDock(draft: WorkingOrderStore | null): TemplateResult | typeof nothing {
+    if (!this.#footFixed()) return nothing;
+    const pays = this.canSettle && this.#chargeable();
+    return html`<div
+      class="order-dock"
+      data-order-dock
+      ?hidden=${draft !== null && this.view !== "order"}
+    >
+      ${draft === null || draft.lineCount === 0 ? nothing : this.#draftBar(draft)}
       <div class="order-foot" data-order-foot>
         ${this.#totals(draft)}
         ${
           pays
             ? html`<div class="pay foot-pay">
-                ${this.#payUnsent()} ${this.#paySheetButton(shown)}
+                ${this.#payUnsent()} ${this.#paySheetButton(this.#shownBill)}
               </div>`
             : nothing
         }
-      </div>`;
+      </div>
+    </div>`;
   }
 
   /** The pay section's parts kept in the flow above a handheld's fixed foot. */
@@ -4190,6 +4226,31 @@ export class TillTableOrderScreen extends LitElement {
     this.view = "order";
     scroller.scrollTop = 0;
     await this.updateComplete;
+    this.#clearOrderTopOfDock();
+  }
+
+  #clearTopDue = false;
+
+  /** The Sent box draws after the screen does, and only then has its height. */
+  async #clearOrderTopOnceDrawn(): Promise<void> {
+    await this.renderRoot.querySelector<LitElement>("till-sent-orders")?.updateComplete;
+    if (this.view === "order") this.#clearOrderTopOfDock();
+  }
+
+  /** Where the dock would cover the order's first row, Order opens with the switch at the top of
+   * the scroll area rather than at the screen's top. */
+  #clearOrderTopOfDock(): void {
+    const dock = this.renderRoot.querySelector("[data-order-dock]");
+    const first = this.renderRoot.querySelector("[data-draft-pane]")?.firstElementChild;
+    const toggle = this.renderRoot.querySelector("[data-view-switch]");
+    if (dock === null || first == null || toggle === null) return;
+    if (first.getBoundingClientRect().bottom <= dock.getBoundingClientRect().top) return;
+    const scroller = this.#scroller();
+    const areaTop =
+      scroller === document.scrollingElement
+        ? 0
+        : scroller.getBoundingClientRect().top + scroller.clientTop;
+    scroller.scrollTop += toggle.getBoundingClientRect().top - areaTop;
   }
 
   async #showMenu(): Promise<void> {
@@ -4268,7 +4329,11 @@ export class TillTableOrderScreen extends LitElement {
                 ></till-basket>`
               : this.#draftSections(draft),
           )}
-          ${this.handheld && !this.wide && draft.lineCount === 0 ? nothing : this.#draftBar(draft)}
+          ${
+            this.#footFixed() || (this.handheld && !this.wide && draft.lineCount === 0)
+              ? nothing
+              : this.#draftBar(draft)
+          }
           ${this.#draftMoveDialog(draft)}
           <wt-button
             data-discard-draft
@@ -4815,7 +4880,7 @@ export class TillTableOrderScreen extends LitElement {
         >${t(key)}</wt-button
       >`;
     };
-    return html`<div class="draft-bar">
+    return html`<div class="draft-bar" ?inert=${store.sending}>
       ${this.#draftMoveButton(store)}
       <div class="draft-actions help-anchor" role="group" aria-label=${t("table.draft_actions")}>
         ${button(true, "table.group_fire", "fire-selected")}

@@ -1084,16 +1084,23 @@ computed opacity, not what is painted, on the menu, the order's lines, Move toâ€
 all group only, and the "newly added line" cases cover a line added after the bar is drawn and the
 phone's Order view being shown, not a line revealed as the screen first draws.
 
-On a handheld below the width, whose pay section is one Pay or none, the order pane carries
-`handheld-foot` and its foot, `[data-order-foot]`, is `position: sticky` with `bottom: 0`: the
-bill's Total, Still to pay at this table and Pay, with the rest of the pay section (its heading and
-choices) in the flow above it. The whole tender is not fixed there, since it would cover the order.
-The screen measures the foot's height into `--order-foot-size` on the pane; the draft bar sticks at
-that height above the foot, and the basket's lines keep both clear (`scroll-margin-block-end`). On a
-handheld below the width the draft bar is not drawn while the New order is empty. A till below the
-width, and a handheld drawing the whole tender, keep the foot in the flow. Guards: the "fixed foot
-on a handheld" cases in `till-table-order-screen.action-bar.test.ts`, weaker than the paragraph:
-they use that file's stand-in for the shell's scroll area, not the real `till-shell`.
+On a handheld below the width, whose pay section is one Pay or none, the foot, `[data-order-foot]`,
+holds the bill's Total, Still to pay at this table and Pay, with the rest of the pay section (its
+heading and choices) in the flow above it. The whole tender is not fixed there, since it would cover
+the order. The foot and, while the New order has a dish, the draft bar are drawn together in one
+box, `[data-order-dock]`, which is `position: sticky` with `bottom: 0` and hidden on Menu. It is a
+child of the screen, not of the order pane: a sticky box cannot rise above its parent's top, and on
+a 390 Ã— 600 phone the pane starts too low for the bar and the foot to fit under it. So it comes
+after the action panel too. The screen measures its height into `--order-dock-size` on the screen,
+and the basket's lines and the action panel keep it clear (`scroll-margin-block-end`). When Order
+is shown, or a table opens on it, and the box would cover the pane's first row, the scroll area is
+moved to put the switch at its top. Out of the order's wrappers, the bar is made `inert` itself
+while a round is being sent. On a handheld below the width the draft bar is not drawn while the New
+order is empty. A till below the width, and a handheld drawing the whole tender, keep the foot in
+the flow. Guards: the "fixed foot on a handheld" cases in
+`till-table-order-screen.action-bar.test.ts`, weaker than the paragraph: they use that file's
+stand-in for the shell's scroll area, not the real `till-shell`, and none checks the action panel's
+margin.
 
 **Table screen below the width: Menu / Order, the Menu bar and tile numbers (A797 slice 10).**
 Below `DRAFT_SIDE_BY_SIDE_MIN_WIDTH` (720 px of the screen's own width) the table screen shows a
