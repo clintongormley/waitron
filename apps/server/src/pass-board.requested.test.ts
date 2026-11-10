@@ -163,6 +163,7 @@ describe("A773 pass board: reads", () => {
             orderNumber: 1,
             kitchenNote: null,
             tableLabel: "Split extras",
+            tableShortNames: ["Split extras"],
           },
         ],
         group: { displayNumber: 1, position: 1 },

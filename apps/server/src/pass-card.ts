@@ -53,6 +53,8 @@ export interface PassRow {
   order: {
     orderNumber: number;
     tableLabel?: string;
+    /** Read for a board only: {@link PassCard.orders}' `tableShortNames`. */
+    tableShortNames?: string[];
     kitchenNote: string | null;
     formerNumbers?: number[];
     openedAt: string;
@@ -88,6 +90,8 @@ export interface PassCard {
     orderId: string;
     orderNumber: number;
     tableLabel?: string;
+    /** Each of the bill's tables by its short name, else its label; absent at no table. */
+    tableShortNames?: string[];
     kitchenNote: string | null;
     formerNumbers?: number[];
   }[];
