@@ -5429,7 +5429,8 @@ read-only open of a cleanly stopped database failed there and worked at 64 KiB.
 
 ## One state-folder layout
 
-Working copies live below `scratch/`, with `backup/` and `restore/` children. A start deletes
+Backup, restore and setup working copies live below `scratch/`, with `backup/` and `restore/` children.
+Cloud snapshots keep their own staging until the one backup service lands (fl2's explicit exception). A start deletes
 scratch entries, never the root itself. Each maker holds the venue folder before creating its
 working directory; Box status's Free still touches only backup dumps and `backup-encrypt-*`
 folders, inside the staging turn. Old crash reports are pruned on every start.

@@ -543,7 +543,8 @@ called weaker than its name, the topic file lists what it does not see.
 - **Every temporary working folder lives in `<state>/scratch/`, made only by a process that holds
   the venue folder from before it makes it; every start empties `scratch/` once it holds the venue
   folder (`emptyScratch`).** Nothing guards the first half; `scripts/no-tmpdir-scratch.test.ts`
-  guards production calls of `tmpdir`, weaker than its name: reads text.
+  guards production calls of `tmpdir`, weaker than its name: reads text. Cloud snapshots keep
+  their own staging until the one backup service lands (fl2's explicit exception).
   [Detail](docs/developers/conventions-data.md#one-process-per-venue-folder).
 - **An open `FileHandle` ends the process when it is collected, so one a route streams also closes
   on `c.req.raw.signal`'s abort: nothing reads or cancels the body of a connection already gone.**
