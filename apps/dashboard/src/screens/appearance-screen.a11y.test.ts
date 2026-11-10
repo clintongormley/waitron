@@ -22,7 +22,7 @@ function theme(id: string, name: string, choices: ThemeChoices): ThemeView {
   };
 }
 
-const lucia = theme("t-lucia", "Bar Lucía", {
+const lucia = theme("t-lucia", "Bar Lucy", {
   brandColor: "#1e5b3a",
   brandFix: { dark: true },
   background: "tinted",
@@ -32,7 +32,7 @@ const lucia = theme("t-lucia", "Bar Lucía", {
   textScale: 100,
   text: {},
 });
-const lemon = theme("t-lemon", "Lemon Café", { ...WAITRON_CHOICES, brandColor: "#f2d300" });
+const lemon = theme("t-lemon", "Lemon Cafe", { ...WAITRON_CHOICES, brandColor: "#f2d300" });
 const hand = theme("t-hand", "By hand", {
   ...WAITRON_CHOICES,
   handSet: { dark: { bg: "#101010" }, light: { text: "#6a6a6a", bg: "#f8f1e1" } },

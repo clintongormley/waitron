@@ -84,10 +84,10 @@ async function loaded(el: Preview, mode: "light" | "dark"): Promise<HTMLElement>
   return logo;
 }
 
-async function mountWithLogo(logo: ThemeLogo | null, legalName = "BAR LUCÍA S.L.") {
+async function mountWithLogo(logo: ThemeLogo | null, legalName = "BAR LUCY LTD.") {
   return mountWidget<Preview>("dashboard-theme-preview", {
     theme: deriveTheme(LUCIA_DARK_FIX),
-    name: "Bar Lucía",
+    name: "Bar Lucy",
     logo,
     legalName,
   });
@@ -129,7 +129,7 @@ async function mountOutside(theme: ThemeChoices): Promise<Preview> {
   document.body.appendChild(outside);
   const el = document.createElement("dashboard-theme-preview");
   el.theme = deriveTheme(theme);
-  el.name = "Bar Lucía";
+  el.name = "Bar Lucy";
   outside.appendChild(el);
   await el.updateComplete;
   return el;
@@ -138,7 +138,7 @@ async function mountOutside(theme: ThemeChoices): Promise<Preview> {
 it("each panel paints its own version of the draft", async () => {
   const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
     theme: deriveTheme(LUCIA_DARK_FIX),
-    name: "Bar Lucía",
+    name: "Bar Lucy",
   });
   const light = panel(el, "light");
   const dark = panel(el, "dark");
@@ -168,7 +168,7 @@ it("the panels follow their own mode whatever the device says", async () => {
     for (const mode of ["light", "dark", undefined] as const) {
       const { el } = await mountWidget<Preview>(
         "dashboard-theme-preview",
-        { theme: deriveTheme(LUCIA_DARK_FIX), name: "Bar Lucía" },
+        { theme: deriveTheme(LUCIA_DARK_FIX), name: "Bar Lucy" },
         mode,
       );
       expect([scheme, mode, primary(panel(el, "light")), primary(panel(el, "dark"))]).toEqual([
@@ -185,7 +185,7 @@ it("the panels follow their own mode whatever the device says", async () => {
 it("a new draft repaints", async () => {
   const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
     theme: deriveTheme(LUCIA_DARK_FIX),
-    name: "Bar Lucía",
+    name: "Bar Lucy",
   });
   expect(primary(panel(el, "light"))).toBe("#1e5b3a");
   el.theme = deriveTheme(LEMON);
@@ -204,13 +204,13 @@ it("control: Waitron's draft paints Waitron's colours while the page's root keep
 it("shows the theme's name in the focused field, and a new name keeps the draft's colours", async () => {
   const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
     theme: deriveTheme(LUCIA_DARK_FIX),
-    name: "Bar Lucía",
+    name: "Bar Lucy",
   });
   const field = () => panel(el, "light").querySelector(".field-value")!.textContent;
-  expect(field()).toBe("Bar Lucía");
-  el.name = "Lemon Café";
+  expect(field()).toBe("Bar Lucy");
+  el.name = "Lemon Cafe";
   await el.updateComplete;
-  expect(field()).toBe("Lemon Café");
+  expect(field()).toBe("Lemon Cafe");
   expect(primary(panel(el, "light"))).toBe("#1e5b3a");
 });
 
@@ -259,13 +259,13 @@ const SWEEPS = (["en-GB", "es-ES"] as const).flatMap((locale) => [
     locale,
     label: "no logo and a long legal name",
     logo: null,
-    legalName: "THE CORNER OF GRANDMOTHER LUCÍA'S RESTAURANT LTD",
+    legalName: "THE CORNER OF GRANDMOTHER LUCY'S RESTAURANT LTD",
   },
   {
     locale,
     label: "a 4:1 logo and a long legal name",
     logo: { light: L },
-    legalName: "THE CORNER OF GRANDMOTHER LUCÍA'S RESTAURANT LTD",
+    legalName: "THE CORNER OF GRANDMOTHER LUCY'S RESTAURANT LTD",
   },
   // Words this name's spaces split fit a phone's panel; one word longer than the panel has to
   // break inside itself.
@@ -338,7 +338,7 @@ it("each panel starts with a banner strip: the logo, then the legal name", async
     const [first, second] = [...strip(el, mode).children];
     expect(first!.localName).toBe("wt-venue-logo");
     expect(second!.className).toBe("legal-name");
-    expect(second!.textContent).toBe("BAR LUCÍA S.L.");
+    expect(second!.textContent).toBe("BAR LUCY LTD.");
     expect(first!.getAttribute("size")).toBe("bar");
   }
   const light = await loaded(el, "light");
@@ -400,7 +400,7 @@ it("with no logo, Waitron's lockup in each panel's colours", async () => {
   expect(await inks("dark")).toEqual(tokens("dark"));
   expect(await inks("dark")).not.toEqual(await inks("light"));
   expect(lockup("light").getAttribute("label")).toBe("");
-  expect(strip(el, "dark").querySelector(".legal-name")!.textContent).toBe("BAR LUCÍA S.L.");
+  expect(strip(el, "dark").querySelector(".legal-name")!.textContent).toBe("BAR LUCY LTD.");
   strip(el, "light").style.setProperty("--wt-space-5", "21px");
   expect(lockup("light").getBoundingClientRect().height).toBe(21);
 });
@@ -416,9 +416,9 @@ it("the page's own setting does not move a panel's version", async () => {
     const el = document.createElement("dashboard-theme-preview");
     Object.assign(el, {
       theme: deriveTheme(LUCIA_DARK_FIX),
-      name: "Bar Lucía",
+      name: "Bar Lucy",
       logo: { light: L },
-      legalName: "BAR LUCÍA S.L.",
+      legalName: "BAR LUCY LTD.",
     });
     outside.appendChild(el);
     await el.updateComplete;
@@ -451,7 +451,7 @@ it("each panel draws its text at the theme's sizes", async () => {
   ] as const) {
     const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
       theme: deriveTheme({ ...LUCIA_DARK_FIX, textScale }),
-      name: "Bar Lucía",
+      name: "Bar Lucy",
     });
     for (const mode of ["light", "dark"] as const) {
       const box = panel(el, mode);
@@ -470,7 +470,7 @@ it("each panel draws its text at the theme's sizes", async () => {
 it("each panel draws its ordinary text at the draft's Normal weight", async () => {
   const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
     theme: deriveTheme({ ...LUCIA_DARK_FIX, text: { weight: { normal: 800 } } }),
-    name: "Bar Lucía",
+    name: "Bar Lucy",
   });
   for (const mode of ["light", "dark"] as const) {
     const box = panel(el, mode);
@@ -485,7 +485,7 @@ it("each panel draws its ordinary text at the draft's Normal weight", async () =
 it("a mounted preview's till button and bill line follow a change of text size", async () => {
   const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
     theme: deriveTheme(LUCIA_DARK_FIX),
-    name: "Bar Lucía",
+    name: "Bar Lucy",
   });
   for (const [textScale, md, sm] of [
     [100, "14px", "12px"],
@@ -511,7 +511,7 @@ it("each panel shows a till button and a bill line", async () => {
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
     theme: deriveTheme(WAITRON_CHOICES),
-    name: "Bar Lucía",
+    name: "Bar Lucy",
   });
   await document.fonts.ready;
   const name = en["appearance.preview_product"];
@@ -548,7 +548,7 @@ it("an English screen in a Spanish venue shows the Spanish sample, as the tills 
   setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
   const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
     theme: deriveTheme(WAITRON_CHOICES),
-    name: "Bar Lucía",
+    name: "Bar Lucy",
   });
   for (const name of names(el)) {
     expect([name.getAttribute("lang"), name.textContent, getComputedStyle(name).hyphens]).toEqual([
@@ -576,7 +576,7 @@ it("the preview's names leave a word under 8 letters whole, as the tills do", as
   setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
   const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
     theme: deriveTheme({ ...WAITRON_CHOICES, textScale: 130 }),
-    name: "Bar Lucía",
+    name: "Bar Lucy",
   });
   await document.fonts.ready;
   for (const name of names(el)) {
@@ -610,7 +610,7 @@ it("the sample follows a change of the venue's content language", async () => {
   setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
   const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
     theme: deriveTheme(WAITRON_CHOICES),
-    name: "Bar Lucía",
+    name: "Bar Lucy",
   });
   expect(names(el)[0]!.getAttribute("lang")).toBe("es");
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
@@ -626,7 +626,7 @@ it("the sample follows a change of the venue's content language", async () => {
 it("the sample text follows the panel's own colours", async () => {
   const { el } = await mountWidget<Preview>("dashboard-theme-preview", {
     theme: deriveTheme(LUCIA_DARK_FIX),
-    name: "Bar Lucía",
+    name: "Bar Lucy",
   });
   const drawn = (mode: "light" | "dark") => {
     const box = panel(el, mode);

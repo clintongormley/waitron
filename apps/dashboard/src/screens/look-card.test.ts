@@ -62,8 +62,8 @@ const LUCIA: ThemeChoices = {
   textScale: 100,
   text: {},
 };
-const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
-const DARK_OWN = theme("t-lucia", "Bar Lucía", {
+const lucia = theme("t-lucia", "Bar Lucy", LUCIA);
+const DARK_OWN = theme("t-lucia", "Bar Lucy", {
   ...LUCIA,
   brandFix: {},
   handSet: { light: {}, dark: { primary: "#5fa77a" } },
@@ -160,10 +160,10 @@ describe("the read-only Look card", () => {
     expect(size(await mount(inUse(larger)))).toBe("120\u00a0%");
   });
 
-  it("shows Bar Lucía in use, its brand row naming the dark screens' shade with two chips", async () => {
+  it("shows Bar Lucy in use, its brand row naming the dark screens' shade with two chips", async () => {
     setLocale("en-GB");
     const el = await mount(inUse(lucia), true);
-    expect(row(el, "theme")).toBe("Bar Lucía");
+    expect(row(el, "theme")).toBe("Bar Lucy");
     expect(row(el, "brand")).toBe("Custom · #1e5b3a · dark screens #437e5b");
     const chips = [...el.shadowRoot!.querySelectorAll("[data-test=saved-brand] .chip")];
     expect(chips.map((chip) => chip.getAttribute("style"))).toEqual([
@@ -205,13 +205,13 @@ describe("the read-only Look card", () => {
 
   it("offers no Edit to a session that cannot change the look", async () => {
     const el = await mount(inUse(lucia), false);
-    expect(row(el, "theme")).toBe("Bar Lucía");
+    expect(row(el, "theme")).toBe("Bar Lucy");
     expect(q(el, "[data-test=edit]")).toBeNull();
   });
 
   it("names the light screens' shade when the light fix is taken", async () => {
     setLocale("en-GB");
-    const lemon = theme("t-lemon", "Lemon Café", {
+    const lemon = theme("t-lemon", "Lemon Cafe", {
       ...WAITRON_CHOICES,
       brandColor: "#f2d300",
       brandFix: { light: true },
@@ -231,7 +231,7 @@ describe("the read-only Look card", () => {
 
   it("shows a warning saved anyway as a line beside a warning icon", async () => {
     setLocale("en-GB");
-    const lemon = theme("t-lemon", "Lemon Café", { ...WAITRON_CHOICES, brandColor: "#f2d300" });
+    const lemon = theme("t-lemon", "Lemon Cafe", { ...WAITRON_CHOICES, brandColor: "#f2d300" });
     expect(lemon.warnings.length).toBeGreaterThan(0);
     const el = await mount(inUse(lemon));
     const lines = [...el.shadowRoot!.querySelectorAll("[data-test=saved-warning]")];
@@ -243,13 +243,13 @@ describe("the read-only Look card", () => {
 
   it("words a saved warning in Spanish", async () => {
     setLocale("es-ES");
-    const lemon = theme("t-lemon", "Lemon Café", { ...WAITRON_CHOICES, brandColor: "#f2d300" });
+    const lemon = theme("t-lemon", "Lemon Cafe", { ...WAITRON_CHOICES, brandColor: "#f2d300" });
     const el = await mount(inUse(lemon));
     expect(text(q(el, "[data-test=saved-warning]"))).toBe(es["appearance.saved_brand_light"]);
   });
 
   it("shows no warning line for a theme saved with none", async () => {
-    const lemon = theme("t-lemon", "Lemon Café", { ...WAITRON_CHOICES, brandColor: "#f2d300" });
+    const lemon = theme("t-lemon", "Lemon Cafe", { ...WAITRON_CHOICES, brandColor: "#f2d300" });
     const el = await mount(inUse({ ...lemon, warnings: [] }));
     expect(q(el, "[data-test=saved-warning]")).toBeNull();
   });
@@ -296,7 +296,7 @@ describe("the saved card's Logo row", () => {
   const display = (reference: string) =>
     `/media/renditions/v1/${reference}/display/7500-2500-200.webp`;
   const withLogo = (logo: ThemeChoices["logo"]) =>
-    inUse(theme("t-lucia", "Bar Lucía", { ...LUCIA, logo }));
+    inUse(theme("t-lucia", "Bar Lucy", { ...LUCIA, logo }));
   const logoOf = (el: Card) =>
     q(el, "[data-test=saved-logo] wt-venue-logo") as HTMLElementTagNameMap["wt-venue-logo"] | null;
   const label = (el: Card) => text(q(el, "[data-test=saved-logo]")?.previousElementSibling);
@@ -516,7 +516,7 @@ describe("editing the Look card in place", () => {
     expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(true);
     expect(q(el, "[data-test=edit]")).toBeNull();
     expect(text(q(el, "[data-test=editing-line]"))).toBe(
-      "Theme in use: Bar Lucía. Saving changes every screen.",
+      "Theme in use: Bar Lucy. Saving changes every screen.",
     );
     expect(button(el, "save").variant).toBe("secondary");
     expect(button(el, "save").disabled).toBe(true);
@@ -577,7 +577,7 @@ describe("editing the Look card in place", () => {
   it("a hand-set colour stored through the API is sent back unchanged", async () => {
     setLocale("en-GB");
     const handSet = { light: { bg: "#f8f1e1" }, dark: {} };
-    const stored = theme("t-lucia", "Bar Lucía", { ...LUCIA, handSet });
+    const stored = theme("t-lucia", "Bar Lucy", { ...LUCIA, handSet });
     const { el, saveTheme } = await mountEditing(inUse(stored));
     await chooseSegment(el, "corners", "Square");
     await userEvent.click(button(el, "save"));
@@ -680,7 +680,7 @@ describe("editing the Look card in place", () => {
     await el.updateComplete;
     expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(false);
     expect(saveTheme).not.toHaveBeenCalled();
-    expect(row(el, "theme")).toBe("Bar Lucía");
+    expect(row(el, "theme")).toBe("Bar Lucy");
     expect(row(el, "brand")).toBe("Custom · #1e5b3a · dark screens #437e5b");
     expect(row(el, "background")).toBe("Tinted");
     expect(row(el, "corners")).toBe("Round");
@@ -752,7 +752,7 @@ describe("the logo in the editor", () => {
   const D = mediaTestReference("lucia-dark.png");
   const NEW = mediaTestReference("new.png");
   const withLogo = (logo: ThemeChoices["logo"], choices: ThemeChoices = LUCIA) =>
-    theme("t-lucia", "Bar Lucía", { ...choices, logo });
+    theme("t-lucia", "Bar Lucy", { ...choices, logo });
   const field = (el: Card) =>
     q(el, "dashboard-theme-logo-field") as HTMLElementTagNameMap["dashboard-theme-logo-field"];
   const upload = (el: Card, which: "light" | "dark") =>
@@ -783,12 +783,12 @@ describe("the logo in the editor", () => {
       api: rig.api,
       list: inUse(lucia),
       canEdit: true,
-      legalName: "BAR LUCÍA S.L.",
+      legalName: "BAR LUCY LTD.",
     });
     await userEvent.click(q(el, "[data-test=edit]")!);
     await el.updateComplete;
     expect(preview(el).logo).toBeNull();
-    expect(preview(el).legalName).toBe("BAR LUCÍA S.L.");
+    expect(preview(el).legalName).toBe("BAR LUCY LTD.");
     await pick(el, "light", L);
     expect(preview(el).logo).toEqual({ light: L });
     expect(preview(el).logo).toBe(field(el).logo);
@@ -866,7 +866,7 @@ describe("the logo in the editor", () => {
     saveTheme.mockImplementationOnce(
       (id, choices) =>
         new Promise((resolve) => {
-          answer = () => resolve(saved(id, "Bar Lucía", choices));
+          answer = () => resolve(saved(id, "Bar Lucy", choices));
         }),
     );
     expect(field(el).busy).toBe(false);
@@ -1083,7 +1083,7 @@ describe("the logo in the editor", () => {
 });
 
 describe("another dashboard changes the themes while this one edits", () => {
-  const OTHER = theme("t-other", "Terraza", { ...WAITRON_CHOICES, brandColor: "#b12525" });
+  const OTHER = theme("t-other", "Terrace", { ...WAITRON_CHOICES, brandColor: "#b12525" });
 
   async function newList(el: Card, list: ThemeList) {
     el.list = list;
@@ -1092,7 +1092,7 @@ describe("another dashboard changes the themes while this one edits", () => {
 
   it("an unchanged draft follows a newer read", async () => {
     const { el } = await mountEditing(inUse(lucia));
-    await newList(el, inUse(theme("t-lucia", "Bar Lucía", { ...LUCIA, corners: "square" })));
+    await newList(el, inUse(theme("t-lucia", "Bar Lucy", { ...LUCIA, corners: "square" })));
     expect(segmented(el, "corners").value).toBe("square");
     expect(preview(el).theme.light["--wt-radius-md"]).toBe(
       deriveTheme({ ...LUCIA, corners: "square" }).light["--wt-radius-md"],
@@ -1104,7 +1104,7 @@ describe("another dashboard changes the themes while this one edits", () => {
   it("a changed draft is kept over a newer read", async () => {
     const { el, saveTheme } = await mountEditing(inUse(lucia));
     await chooseSegment(el, "background", "Neutral");
-    await newList(el, inUse(theme("t-lucia", "Bar Lucía", { ...LUCIA, corners: "square" })));
+    await newList(el, inUse(theme("t-lucia", "Bar Lucy", { ...LUCIA, corners: "square" })));
     expect(segmented(el, "background").value).toBe("neutral");
     expect(segmented(el, "corners").value).toBe("round");
     expect(button(el, "save").variant).toBe("primary");
@@ -1122,7 +1122,7 @@ describe("another dashboard changes the themes while this one edits", () => {
     expect(q(el, "section.settings-card")!.hasAttribute("data-editing")).toBe(true);
     await newList(el, { themes: [lucia, OTHER], inUse: "t-lucia" });
     expect(text(q(el, "[data-test=editing-line]"))).toBe(
-      "Theme in use: Bar Lucía. Saving changes every screen.",
+      "Theme in use: Bar Lucy. Saving changes every screen.",
     );
   });
 
@@ -1619,7 +1619,7 @@ describe("a save answer that arrives after the card was taken out and put back",
 
   it("an old success neither announces a save nor closes or replaces the new draft", async () => {
     const { el, settle, heard } = await detachedWhileSaving();
-    settle.resolve(saved("t-lucia", "Bar Lucía", { ...LUCIA, corners: "square" }));
+    settle.resolve(saved("t-lucia", "Bar Lucy", { ...LUCIA, corners: "square" }));
     await frame();
     await el.updateComplete;
     expect(heard).not.toHaveBeenCalled();
@@ -1777,7 +1777,7 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
     });
   }
 
-  /** Bar Lucía opens with its dark fix taken; the lemon's light fix is taken here. */
+  /** Bar Lucy opens with its dark fix taken; the lemon's light fix is taken here. */
   async function fixedLine(mode: "light" | "dark") {
     const opened = await mountEditing(inUse(lucia));
     if (mode === "light") {
@@ -1836,7 +1836,7 @@ describe("the editor's spacing and wrapping at phone and desk widths", () => {
   it("keeps the saved warning's icon its full size when the line wraps", async () => {
     await onDesk(async () => {
       setLocale("es-ES");
-      const lemon = theme("t-lemon", "Lemon Café", { ...WAITRON_CHOICES, brandColor: "#f2d300" });
+      const lemon = theme("t-lemon", "Lemon Cafe", { ...WAITRON_CHOICES, brandColor: "#f2d300" });
       const el = await mount(inUse(lemon));
       const line = q(el, "[data-test=saved-warning]")!;
       const icon = line.querySelector("wt-icon")!;
@@ -2009,7 +2009,7 @@ describe("the Text size slider", () => {
     saveTheme.mockImplementationOnce(
       (id, choices) =>
         new Promise((resolve) => {
-          answer = () => resolve(saved(id, "Bar Lucía", choices));
+          answer = () => resolve(saved(id, "Bar Lucy", choices));
         }),
     );
     expect(slider(el).disabled).toBe(false);
@@ -2065,7 +2065,7 @@ describe("the Text size slider", () => {
     saveTheme.mockImplementationOnce(
       (id, choices) =>
         new Promise((resolve) => {
-          answer = () => resolve(saved(id, "Bar Lucía", choices));
+          answer = () => resolve(saved(id, "Bar Lucy", choices));
         }),
     );
     await userEvent.click(button(el, "save"));

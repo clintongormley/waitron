@@ -23,7 +23,7 @@ function theme(id: string, name: string, choices: ThemeChoices): ThemeView {
   };
 }
 
-const lucia = theme("t-lucia", "Bar Lucía", {
+const lucia = theme("t-lucia", "Bar Lucy", {
   ...WAITRON_CHOICES,
   brandColor: "#1e5b3a",
   brandFix: { dark: true },

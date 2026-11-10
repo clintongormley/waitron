@@ -32,7 +32,7 @@ function theme(choices: ThemeChoices): ThemeView {
   const derived = deriveTheme(choices);
   return {
     id: "t-lucia",
-    name: "Bar Lucía",
+    name: "Bar Lucy",
     updatedAt: "2026-10-21T10:00:00.000Z",
     choices,
     light: derived.light,
@@ -85,13 +85,13 @@ it("hands the Look card the tenant's legal name, and a new one", async () => {
   const { el } = await mountWidget<Screen>("dashboard-appearance-screen", {
     api,
     canEdit: true,
-    legalName: "BAR LUCÍA S.L.",
+    legalName: "BAR LUCY LTD.",
   });
   await flush(el);
-  await expect.poll(() => card(el)?.legalName).toBe("BAR LUCÍA S.L.");
-  el.legalName = "LUCÍA'S RESTAURANT LTD";
+  await expect.poll(() => card(el)?.legalName).toBe("BAR LUCY LTD.");
+  el.legalName = "LUCY'S RESTAURANT LTD";
   await flush(el);
-  expect(card(el)!.legalName).toBe("LUCÍA'S RESTAURANT LTD");
+  expect(card(el)!.legalName).toBe("LUCY'S RESTAURANT LTD");
 });
 
 it("sends its first read as activity and a live re-read passively", async () => {
