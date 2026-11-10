@@ -13,7 +13,7 @@ const invoices: PurchaseInvoice[] = [
   {
     id: "pi-1",
     supplierTaxId: "B12345678",
-    supplierName: "Distribuciones García SL",
+    supplierName: "Westfield Distribution Ltd",
     supplierInvoiceNumber: "F-2026/001",
     issuedOn: "2026-08-10",
     receivedOn: "2026-08-12",
@@ -29,7 +29,7 @@ function createDetail(overrides: Record<string, unknown> = {}) {
   return {
     header: {
       supplierTaxId: "B1",
-      supplierName: "Nuevo Proveedor",
+      supplierName: "New Supplier",
       supplierInvoiceNumber: "N-1",
       issuedOn: "2026-08-01",
       receivedOn: "2026-08-02",
@@ -174,7 +174,7 @@ describe("purchases-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
     await flush(el);
-    const patch = { header: { note: "corregido" }, lines: createDetail().lines };
+    const patch = { header: { note: "corrected" }, lines: createDetail().lines };
     emitFromChild(form(el), "update-purchase", { id: "pi-1", patch });
     await flush(el);
     expect(api.updatePurchaseInvoice).toHaveBeenCalledWith("pi-1", patch);
@@ -380,7 +380,7 @@ describe("purchases-screen — single-flight and dismissal", () => {
     const api = stubApi();
     const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
     await flush(el);
-    const patch = { header: { note: "corregido" }, lines: createDetail().lines };
+    const patch = { header: { note: "corrected" }, lines: createDetail().lines };
     emitFromChild(form(el), "update-purchase", { id: "pi-1", patch });
     emitFromChild(form(el), "update-purchase", { id: "pi-1", patch });
     await flush(el);
