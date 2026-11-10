@@ -1120,13 +1120,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   HTTP probe. Validate the missing fields and assert the domain refusal.
   [Detail](backlog/till.md#malformed-sale-and-cancellation-bodies)
 
-- **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).** Counter
-  custom items (A738 residual) and the payment window (A739) remain. What is left of A797:
-  slice 12b: [build
-  plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
-  [design](superpowers/specs/2026-10-18-a797-device-screens-design.md).
-  [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
-
 - **A1102. The till's tests name tables in Spanish.** `apps/till/src/till-app.test.ts`'s counter
   move cases use "Mesa 9" and "Mesa 7", and many other till test files use "Mesa …" labels (`git
   grep -l '"Mesa ' -- 'apps/till/src/*.test.ts'`), against the English-only rule (CLAUDE.md §3).

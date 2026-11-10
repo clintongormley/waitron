@@ -289,7 +289,8 @@ al otro.
 
 Un móvil o una tableta muestra el nombre corto de una mesa en los botones de mesa de la barra y en
 la barra Listo, donde hay poco espacio, y las tarjetas de la [pantalla de
-cocina](kitchen-service.md#kitchen-screen) nombran su mesa por él. En el **Plano de sala** del
+cocina](kitchen-service.md#kitchen-screen) y del [pase](kitchen-service.md#pass-screen) nombran su
+mesa por él. En el **Plano de sala** del
 panel, cada mesa tiene un **Nombre corto** debajo de su **Nombre**, que se rellena a partir del
 nombre: «T1» para «Terraza 1», «Ven» para «Ventana», y un nombre de cuatro caracteres o menos tal
 cual. Sigue al nombre hasta que escribes uno propio, de hasta cinco caracteres, que no puede llevar

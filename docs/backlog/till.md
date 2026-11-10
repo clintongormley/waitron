@@ -799,47 +799,10 @@ may predate that branch:
 
 ## Build good screens for each kind of device, and retire canvases (A182, owner 2026-10-01)
 
-- **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).**
-  Start from the screens in `apps/till/src/screens/` and [the fixed-screen contract](../developers/design-system.md#fixed-device-screens).
-  Decide how each workflow fits narrow and wide screens and what a venue may choose per device.
-  Counter's custom-item residual (A738) and payment window (A739) remain. The handheld, kitchen
-  screen and pass are A797: designed 2026-10-18, revised 2026-10-21 for the owner's answer to Q42
-  (approved with changes). **Q51** (lane C's questions file), which asked what the notes left open,
-  was answered 2026-10-24: all recommended, with the Ready bar's warning time set in each prep
-  station's editor, so nothing waits for Q51. Slice 4 (zones on a handheld) landed in #2041, built from the
-  [build plan](../superpowers/plans/2026-10-24-a797-device-screens-build.md), as is slice 5 (the
-  Ready bar on a handheld's Floor and List/Map kept per zone on the device), landed in #2063.
-  Slice 1 (table short names, data) landed in #2076; slice 2 (the dashboard's short-name field,
-  which refuses a "+") landed in #2083, both built from the same plan. Slice 3 (the handheld's bar:
-  Floor, a ✎ button per table with this person's unsent dishes, then "?" and ☰, everything else in
-  ☰) landed in #2097, built from the plan's slice 3. Slice 6 (each prep station's Ready warning
-  time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from the plan's
-  slice 6. Slice 7 (the Ready bar's warning: once a ready dish has waited its station's Ready
-  warning time the bar turns amber, pulses slowly, shows the minutes and puts those tables first)
-  landed in #2113, from the plan's slice 7. Slice 8 (the kitchen screen's group cards: one card per
-  group in Waiting, Preparing and Ready, a heading tap, the age band and the header line, and no
-  Tickets view) landed in #2123, from the plan's slice 8. Slice 8b (short names on the cards, and
-  "Counter #12" for a counter order at no table) landed in #2126, from the plan's slice 8b. Slice 9
-  (a kitchen screen's columns collapse by a tap on their heading, which shows the column's count,
-  and are remembered on the device; the one Columns store A773-2 reuses,
-  `apps/till/src/state/kitchen-columns.ts`) landed in #2129, from the plan's slice 9. Slice 9b (each
-  kitchen board's header row with Columns, whose window moves columns up or down and hides or shows
-  them, kept on the device; every column may be hidden and Columns stays) landed in #2135, from the
-  plan's slice 9b. Slice 9c (Overview, the first kitchen column, counting each dish to make with
-  the held after a +; below the width its columns need, a kitchen board shows them as tabs; a late
-  card's tab, and its collapsed column, carry a red bar) landed in #2144, from the plan's slice 9c; it
-  builds `overviewRows` (`apps/till/src/state/kitchen-overview.ts`), the one counting function
-  A773-2's pass reuses. Slice 10 (on a phone, the table screen's Menu / Order switch in place of
-  Review, a number on each tile for the New order, a bar fixed at the bottom of Menu with Send all,
-  Order's total, Still to pay and Pay fixed at the bottom of a handheld, a table opening on Order
-  once anything is sent, and a handheld staying on its table after its last send) landed in #2700. What is left of A797: slice 12b (slice 12 is A773-2's own). Build slices (design §8), in the owner's
-  order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
-  kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
-  A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits
-  the work):
-  [design](../superpowers/specs/2026-10-18-a797-device-screens-design.md).
-  Menu Device Home Page, receipt configuration and the floor-plan editor stay
-  separate. The owner's screen-designer decision is retained under Decisions and deliberate limits.
+A182 part 1's handheld, kitchen screen and pass (A797) finished with slice 12b (2026-11-10); the
+Counter's custom item and the payment window have entries of their own,
+[A738 residual](#custom-item-on-the-counter-a738-residual) and
+[A739](#a739-paying-hold--pay-and-one-payment-window).
 
 A737 Part 2 adds the separate durable post-invoice payment-refund path. The screen designer was
 retired in [#1800](https://github.com/clintongormley/waitron/pull/1800) without redesigning those workflows.

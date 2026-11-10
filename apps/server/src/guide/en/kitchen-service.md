@@ -221,7 +221,9 @@ It leaves out dimmed dishes and counts the rest as the kitchen screen's does, wi
 waiting for the pass after the **+**.
 
 A card's heading says what the waiter sent, **New order**, **Next course** or **Added** (a held
-card says none of them), then its order number, table and group. Its minutes count from when the
+card says none of them), then its order number, table and group. It names a table by its
+[short name](table-service.md#short-names), such as **T4**, or **T4+T5** for tables joined
+together. Its minutes count from when the
 waiter sent it; a **Ready** card shows **Ready 3 min**, counted from when its last dish was ready,
 and a held card shows none. The card's left edge takes the brand colour, then turns red, as time
 passes since its dishes were sent, by their stations' late flags. A ready dish keeps counting, so a
