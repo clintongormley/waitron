@@ -547,3 +547,81 @@ describe("POST /api/working-orders/:id/close-by-transfer, the party", () => {
     ]);
   });
 });
+
+function closure(cookie: string, billId: string) {
+  return send(t.venue.app, cookie, "GET", `/api/working-orders/${billId}/transfer-closure`);
+}
+
+describe("GET /api/working-orders/:id/transfer-closure", () => {
+  it("answers what the close answered, to another device without the action, null while open and not found for no bill", async () => {
+    const closer = await till();
+    const reader = await till(BASIC_ACTIONS, t.venue.adminId);
+    const party = await seatedWith(t.venue, "Ensalada");
+    const closed = await expectClosed(
+      closer.cookie,
+      party.tabId,
+      bodyOf(await t.requestFor(party.tabId, "12.00", party.partyId)),
+    );
+    const open = await t.counterOrder("open");
+
+    expect(await closure(closer.cookie, party.tabId)).toMatchObject({
+      status: 200,
+      json: { closure: closed.json },
+    });
+    expect(await closure(reader.cookie, party.tabId)).toMatchObject({
+      status: 200,
+      json: { closure: closed.json },
+    });
+    expect(await closure(reader.cookie, open)).toMatchObject({
+      status: 200,
+      json: { closure: null },
+    });
+    const none = randomUUID();
+    expect(await closure(reader.cookie, none)).toMatchObject({
+      status: 404,
+      json: { code: "working_order.not_found", params: { workingOrderId: none } },
+    });
+  });
+
+  it("refuses with no session and out of zone as the bill's own read does", async () => {
+    const zoned = await till(BASIC_ACTIONS);
+    const billId = await t.counterOrder("open");
+    const own = (cookie: string) =>
+      send(t.venue.app, cookie, "GET", `/api/working-orders/${billId}`);
+    const deviceOnly = zoned.cookie.split("; ")[1]!;
+    const [policy] = await suite.db
+      .select({ departmentId: zoneServicePolicies.departmentId })
+      .from(zoneServicePolicies)
+      .where(eq(zoneServicePolicies.zoneId, t.counterZone));
+    await inTx(t.venue, (tx) =>
+      setProfileServiceAccess(tx, zoned.profileId, {
+        departmentId: policy!.departmentId,
+        allowedZoneIds: [t.venue.zoneId],
+        startingZoneId: t.venue.zoneId,
+      }),
+    );
+
+    for (const cookie of [deviceOnly, zoned.cookie]) {
+      const read = await closure(cookie, billId);
+      expect(read.json.code).toBe((await own(cookie)).json.code);
+      expect(read.json.code).toBe(
+        cookie === deviceOnly ? "session.required" : "service_zone.not_allowed",
+      );
+    }
+  });
+
+  it("writes nothing and stamps no sighting of the device", async () => {
+    const reader = await till(BASIC_ACTIONS);
+    const { billId, body } = await counterBill();
+    await expectClosed((await till()).cookie, billId, body);
+    const seen = "2020-01-01T00:00:00.000Z";
+    await suite.db.update(devices).set({ lastSeenAt: seen }).where(eq(devices.id, reader.deviceId));
+    const before = written(billId);
+
+    expect((await closure(reader.cookie, billId)).status).toBe(200);
+    expect(written(billId)).toEqual(before);
+    expect(
+      t.venue.db.all(sql`select last_seen_at from devices where id = ${reader.deviceId}`),
+    ).toEqual([{ last_seen_at: seen }]);
+  });
+});

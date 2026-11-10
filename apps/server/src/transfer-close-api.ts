@@ -1,7 +1,13 @@
 import { withIssuanceTransaction } from "@waitron/core";
 import type { Hono } from "hono";
 import { and, eq, isNull } from "drizzle-orm";
-import { devices, deviceProfiles, type Transaction } from "@waitron/db";
+import {
+  devices,
+  deviceProfiles,
+  withTransaction,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
 import { authorize, canUseDeviceProfile } from "@waitron/identity";
 import { profileAllows } from "@waitron/layouts";
 import { readRawJsonBody } from "@waitron/server-kit";
@@ -24,7 +30,7 @@ import type { BillInvoiceDelivery } from "./parties.js";
 import { requestCfg } from "./request-config.js";
 import { requireRevision, type Run, type TillApiDeps } from "./till-api.js";
 import { assertStillSignedIn, requireSession } from "./till-session.js";
-import { closeBillByTransferTx } from "./transfer-close.js";
+import { closeBillByTransferTx, readTransferClosure } from "./transfer-close.js";
 import type { CloseByTransferRequest } from "./transfer-close-types.js";
 import { checkZones, inScope, readZoneScope } from "./zone-access.js";
 import "./errors.js";
@@ -191,6 +197,27 @@ export function mountTransferCloseApi(app: Hono, deps: TillApiDeps, log: Logger,
         log,
       );
       return c.json(result);
+    }),
+  );
+
+  app.get("/api/working-orders/:id/transfer-closure", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { passive: true });
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("working_order.not_found", { workingOrderId: id });
+      const closure = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, session, [{ orderId: id }]);
+        const found = await readTransferClosure(tx, id);
+        if (found !== null) return found;
+        const [bill] = await tx
+          .select({ id: workingOrders.id })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, id));
+        if (bill === undefined)
+          throw new AppError("working_order.not_found", { workingOrderId: id });
+        return null;
+      });
+      return c.json({ closure });
     }),
   );
 }

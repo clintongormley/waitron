@@ -29,6 +29,7 @@ import type {
   TenderRefundView,
   TenderRefundAcknowledgment,
 } from "./tender-refund-types.js";
+import type { CloseByTransferRequest, CloseByTransferResult } from "./transfer-close-types.js";
 import type {
   ProductAllergens,
   BumpMode,
@@ -3822,6 +3823,27 @@ export class TillApi {
   /** Who may approve an unpaid departure → `GET /api/unpaid-departure-authorizers`. */
   listUnpaidDepartureAuthorizers(): Promise<StaffMember[]> {
     return this.#request<StaffMember[]>("/api/unpaid-departure-authorizers", "GET");
+  }
+
+  closeByTransfer(billId: string, request: CloseByTransferRequest): Promise<CloseByTransferResult> {
+    return this.#request(
+      `/api/working-orders/${encodeURIComponent(billId)}/close-by-transfer`,
+      "POST",
+      request,
+    );
+  }
+
+  /** The answer the bill's close by transfer gave; `null` while the bill is not closed that way. */
+  getTransferClosure(
+    billId: string,
+    options: ReadOptions = {},
+  ): Promise<{ closure: CloseByTransferResult | null }> {
+    return this.#request(
+      `/api/working-orders/${encodeURIComponent(billId)}/transfer-closure`,
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   lookUpInvoices(q: string, options: ReadOptions = {}): Promise<{ invoices: InvoiceLookupRow[] }> {
