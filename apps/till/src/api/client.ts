@@ -1995,6 +1995,8 @@ export interface PassCard {
     orderId: string;
     orderNumber: number;
     tableLabel?: string;
+    /** Each of the bill's tables by its short name, else its label; absent at no table. */
+    tableShortNames?: string[];
     kitchenNote: string | null;
     formerNumbers?: number[];
   }[];

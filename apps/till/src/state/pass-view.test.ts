@@ -18,6 +18,7 @@ import {
   passItemBand,
   passOverdueCount,
   passOverviewDishes,
+  passOrderPlace,
 } from "./pass-view.js";
 
 const COLUMNS = ["held", "toFire", "inProgress", "ready"] as const;
@@ -438,5 +439,28 @@ describe("A773 pass view", () => {
       { name: "Wine", making: 1000, held: 0 },
       { name: "Salad", making: 0, held: 1000 },
     ]);
+  });
+});
+
+describe("A797 a pass card names a bill's place", () => {
+  const order = (overrides: Partial<PassCard["orders"][number]>): PassCard["orders"][number] => ({
+    orderId: "order-1",
+    orderNumber: 12,
+    kitchenNote: null,
+    ...overrides,
+  });
+
+  it("names a bill's tables by their short names, joined in number order, over its label", () => {
+    expect(
+      passOrderPlace(order({ tableLabel: "Terrace 5 + Terrace 4", tableShortNames: ["T5", "T4"] })),
+    ).toBe("T4+T5");
+  });
+
+  it("names a bill with no short names by its label", () => {
+    expect(passOrderPlace(order({ tableLabel: "Window" }))).toBe("Window");
+  });
+
+  it("names nothing for a bill at no table and with no label", () => {
+    expect(passOrderPlace(order({}))).toBeUndefined();
   });
 });
