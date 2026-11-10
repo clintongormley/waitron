@@ -2693,6 +2693,10 @@ describe("optional receipt source failures within one transaction", () => {
             logo: null,
             ...(failDepartment ? { unreadable: true } : {}),
           });
+          await tx
+            .update(departmentReceipts)
+            .set({ updatedAt: "2026-10-10T02:00:00Z" })
+            .where(eq(departmentReceipts.departmentId, id));
         });
         expect(events).toEqual([
           ...(failDepartment
@@ -2705,6 +2709,11 @@ describe("optional receipt source failures within one transaction", () => {
               ]
             : []),
         ]);
+        const [committed] = await suite.db
+          .select({ updatedAt: departmentReceipts.updatedAt })
+          .from(departmentReceipts)
+          .where(eq(departmentReceipts.departmentId, id));
+        expect(committed!.updatedAt).toBe("2026-10-10T02:00:00Z");
       } finally {
         select.mockRestore();
       }

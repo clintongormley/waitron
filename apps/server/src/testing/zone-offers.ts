@@ -31,7 +31,6 @@ export interface OfferProductsOptions {
   zone?: "counter" | "tables" | { zoneId: string };
   orderStart?: "table" | "counter";
   paidWhen?: "prepay" | "ticket_then_pay";
-  /** Defaults to every top-level product of the venue's accessible catalogues. */
   productIds?: readonly string[];
 }
 

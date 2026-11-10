@@ -37,7 +37,6 @@ export {
   updateProduct,
 } from "./operations.js";
 export type {
-  AccessibleCatalogue,
   AvailableProduct,
   Catalogue,
   CreateProductInput,

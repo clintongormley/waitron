@@ -2947,9 +2947,6 @@ describe("per-answer receipt presentation", () => {
         .update(departmentReceipts)
         .set({ receipt: { footerMessage: { "es-ES": "New department footer" } } })
         .where(eq(departmentReceipts.departmentId, department!.id));
-      await suite.db.set({
-        receipt: { headerSubtitle: "New venue subtitle", printAddress: false },
-      });
       await seedVenueSettings(suite.db, { addressLine1: "Current street" });
       const replay = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, req);
       expect(replay).toMatchObject({

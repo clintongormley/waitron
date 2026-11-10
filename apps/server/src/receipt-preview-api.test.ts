@@ -304,7 +304,19 @@ describe("POST /management-api/receipt-preview", () => {
     });
   });
 
-  it("saves nothing and enqueues no print job, even with a receipt printer registered", async () => {});
+  it("saves nothing and enqueues no print job, even with a receipt printer registered", async () => {
+    await withPrinters(
+      [{ device: "Till 1", paperWidth: "80mm", resolution: "203dpi" }],
+      async () => {
+        const countJobs = async () =>
+          (await suite.db.execute<{ n: number }>(sql`select count(*) as n from print_jobs`))
+            .rows[0]!.n;
+        const jobs = await countJobs();
+        await rendered({ headerSubtitle: "Sin guardar", footerMessage: "Tampoco" });
+        expect(await countJobs()).toBe(jobs);
+      },
+    );
+  });
 
   it("marks exactly the lines each trim field adds, a wrapped one included", async () => {
     const header = "Una dirección bastante larga que no cabe en una sola línea del papel";

@@ -88,7 +88,6 @@ import {
   unitOwnerJoin,
 } from "./variant-fallback.js";
 export type {
-  AccessibleCatalogue,
   AvailableProduct,
   MenuItem,
   MenuOffer,
