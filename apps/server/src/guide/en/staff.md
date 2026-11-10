@@ -106,3 +106,14 @@ In the staff roles list, choose **Delete** from the role's row menu. The window 
 ## Hours and breaks {#hours}
 
 Use **Start break** and **End break** for a pause during your shift. Use **Clock out** when your work ends.
+
+When a recorded time is wrong or missing, choose **Fix my hours** from your name's menu. On a
+handheld, open **More** if your name is there. The option appears when clocking is available.
+Choose the **Date**, then **Fix time** beside an entry, or **Clock in**, **Clock out**, **Start
+break** or **End break** to add a missing entry. You can also add a missing clock-in and clock-out
+or both ends of a break together.
+
+Enter the actual dates and times and a **Reason**, then choose **Save** to record your request.
+Ask another supervisor, manager or administrator to choose **Approve with a PIN**, select their
+name and enter their PIN. As an administrator, you can approve your own request. Check **My hours**
+for the request's progress.

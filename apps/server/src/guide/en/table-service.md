@@ -420,6 +420,19 @@ A bill with dishes on hold can go to another table with **Move this bill** or **
 The dishes stay on hold there. Each table then fires its own group: firing one sends none of the
 other table's dishes.
 
+## Transfer a Counter bill to another department {#department-transfers}
+
+Open a saved bill on **Counter**, then choose **Transfers** in the top bar on a till, or under
+**More** on a handheld. Choose **Request transfer**, select the **Destination department** and
+choose **Save**. Your department remains
+responsible until the receiving desk accepts. While the request is pending, you can choose
+**Withdraw request**.
+
+To receive a bill, open **Transfers** and choose **View current tab** beside the incoming request.
+Check **Ordered items** and **Outstanding kitchen work** before choosing **Accept transfer**.
+Choose the **Destination zone** and, if needed, a **Destination table**, then **Save**. To refuse
+it, choose **Decline transfer**, enter the **Reason for declining** and choose **Save**.
+
 ## Name a bill {#bill-names}
 
 A party's bills are numbered, and the till shows each one with its number and any name you give it,
@@ -468,6 +481,16 @@ Tap **List** or **Map** to switch how the zone on screen draws its tables. On a 
 in the zone's ⋮ menu. The device keeps your choice for each zone, so the zone opens the same way
 next time, and switching one zone leaves the others as they were. A zone you have not switched
 opens as a map when it has tables placed on its plan, and as a list when it has none.
+
+## Choose this device's equipment {#equipment}
+
+On a till, choose **More**, **Settings**, then **Equipment**. On a handheld, choose **More**,
+then **Equipment**. In each available list, choose the equipment you want this device to use,
+or **Use default** to follow its profile's choice.
+
+Where **Scan** is offered for a receipt printer, payment slip printer or card reader, use its
+Waitron label instead of the list. Choosing equipment carried by another device from a list asks
+you to confirm **Take it**; scanning takes it over without asking, so check which item you scan.
 
 ## Switch this device's profile {#device-profile}
 

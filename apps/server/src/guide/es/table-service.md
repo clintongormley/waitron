@@ -443,6 +443,20 @@ Una cuenta con platos en espera puede pasar a otra mesa con **Mover esta cuenta*
 mesa**. Allí los platos siguen en espera. Después cada mesa marcha su propio grupo: marchar uno no envía
 ningún plato de la otra mesa.
 
+## Traspasar una cuenta de Mostrador a otro departamento {#department-transfers}
+
+Abre una cuenta guardada en **Mostrador** y elige **Traspasos** en la barra superior del TPV, o en
+**Más** en un dispositivo de mano. Elige **Solicitar traspaso**, selecciona el **Departamento de
+destino** y pulsa **Guardar**. Tu departamento sigue
+siendo responsable hasta que el mostrador receptor acepte. Mientras la solicitud esté pendiente,
+puedes elegir **Retirar solicitud**.
+
+Para recibir una cuenta, abre **Traspasos** y elige **Ver cuenta actual** junto a la solicitud
+entrante. Revisa **Productos pedidos** y **Trabajo pendiente en cocina** antes de elegir **Aceptar
+traspaso**. Elige la **Zona de destino** y, si hace falta, una **Mesa de destino**, y pulsa
+**Guardar**. Para rechazarla, elige **Rechazar traspaso**, introduce el **Motivo del rechazo**
+y pulsa **Guardar**.
+
 ## Poner nombre a una cuenta {#bill-names}
 
 Las cuentas de unos clientes van numeradas, y la caja muestra cada una con su número y el nombre que
@@ -496,6 +510,17 @@ móvil, el cambio está en el menú ⋮ de la zona. El dispositivo guarda tu ele
 que la zona se abre igual la próxima vez, y cambiar una zona no cambia las demás. Una zona que no
 has cambiado se abre como mapa cuando tiene mesas colocadas en su plano, y como lista cuando no
 tiene ninguna.
+
+## Elegir el equipo de este dispositivo {#equipment}
+
+En un TPV, elige **Más**, **Ajustes** y **Equipo**. En un dispositivo de mano, elige **Más**
+y **Equipo**. En cada lista disponible, elige el equipo que quieres usar en este dispositivo,
+o **Usar el predeterminado** para seguir la elección de su perfil.
+
+Cuando aparezca **Escanear** para una impresora de tickets, una impresora de justificantes de pago
+o un lector de tarjetas, usa su etiqueta de Waitron en lugar de la lista. Si eliges de la lista un
+equipo que lleva otro dispositivo, confirma **Quitárselo**; al escanear lo tomas sin confirmación,
+así que comprueba qué equipo estás escaneando.
 
 ## Cambiar el perfil de este dispositivo {#device-profile}
 
