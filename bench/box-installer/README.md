@@ -89,17 +89,21 @@ The first case checks that an occupied virtual target stays byte-for-byte unchan
 The second creates a blank 12 GiB virtual disk, firmware-boots the installer, installs,
 then detaches the source image and boots the target twice. It checks setup choices,
 opens Prepare, compares the installed images and services, and checks that the machine
-identity and certificate authority survive the second boot. Serial logs and QEMU
+identity and certificate authority survive the second boot. A successful install must also
+report its systemd unit as successful. Serial logs and QEMU
 arguments show each phase; screenshots and observed JSON sit beside them.
 Copy the small evidence files you need, leaving target.img and firmware-variable copies
 inside the disposable container.
 
-The writer takes no device argument. It requires the rig’s machine name, exactly one
+The source is attached read-only. Its installer runs with a temporary overlay, so boot-time
+writes stay in memory. The writer takes no device argument. It requires the rig’s machine name, exactly one
 non-source disk, the target’s virtio serial, no mounts or holders and an all-zero disk.
 It writes EFI and boot partitions, then unencrypted btrfs with separate root, images,
 volumes, logs and host-state areas. The disk starts the shipped development service;
 no kernel, initrd, boot arguments or app-start unit is injected on disk-only boots.
-The installed payload contains no installer writer or installer unit.
+The installed payload contains no installer writer or installer unit. Startup uses `/health`
+after you complete setup; the setup-only evidence is emitted only while that route exists.
+Guest package notices are kept under `/app/third-party`.
 
 Both routes are development rehearsals in QEMU with Secure Boot off. The original
 `recipe-setup` still supplies a temporary startup unit and boots its kernel directly.
