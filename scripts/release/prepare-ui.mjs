@@ -52,7 +52,8 @@ const outside = (parent, child) => {
   return path.startsWith("../") || path === ".." || isAbsolute(path);
 };
 
-export function releaseManifest(packed, source, releaseVersion) {
+export function releaseManifest(packed, source, releaseVersion, packageName = "ui-core") {
+  assert(["ui-core", "contract"].includes(packageName), "unexpected package selection");
   assert.equal(source.repository, "clintongormley/waitron", "unexpected source repository");
   assert.match(source.commit, /^[a-f0-9]{40}$/, "source commit must be a full SHA");
   assert.match(
@@ -60,7 +61,7 @@ export function releaseManifest(packed, source, releaseVersion) {
     /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/,
     "invalid release version",
   );
-  assert.equal(packed.name, "@waitron/ui-core", "unexpected source package name");
+  assert.equal(packed.name, `@waitron/${packageName}`, "unexpected source package name");
   assert.equal(packed.version, source.version, "unexpected source version");
   assert.deepEqual(packed.dependencies ?? {}, {}, "runtime dependencies must remain external");
   assert.deepEqual(
@@ -78,7 +79,13 @@ export function releaseManifest(packed, source, releaseVersion) {
     [],
     "runtime dependencies must remain external",
   );
-  assert.deepEqual(packed.peerDependencies, { lit: "^3.2.0" }, "Lit must remain a peer");
+  assert.deepEqual(
+    packed.peerDependencies ?? {},
+    packageName === "contract" ? {} : { lit: "^3.2.0" },
+    packageName === "contract" ? "contract must have no peers" : "Lit must remain a peer",
+  );
+  if (packageName === "contract")
+    assert.equal(packed.sideEffects, false, "contract must have no side effects");
   assert.equal(packed.license, "SEE LICENSE IN dist/LICENSE", "unexpected licence");
   assert(packed.exports?.["."]?.import && packed.exports["."].types, "built exports required");
   for (const value of Object.values(packed.exports)) {
@@ -96,16 +103,23 @@ export function releaseManifest(packed, source, releaseVersion) {
     delete manifest[key];
   return {
     ...manifest,
-    name: "@waitron-io/ui-core",
+    name: `@waitron-io/${packageName}`,
     version: releaseVersion,
     repository: { type: "git", url: "https://github.com/waitron-io/waitron-cloud.git" },
-    homepage: `https://github.com/${source.repository}/tree/${source.commit}/packages/ui-core`,
+    homepage: `https://github.com/${source.repository}/tree/${source.commit}/packages/${packageName}`,
     waitronSource: { ...source },
     publishConfig: { registry: "https://npm.pkg.github.com", access: "restricted" },
   };
 }
 
-export async function prepareUi({ checkout, output, releaseVersion, sourceCommit }) {
+export async function prepareUi({
+  checkout,
+  output,
+  releaseVersion,
+  sourceCommit,
+  packageName = "ui-core",
+}) {
+  assert(["ui-core", "contract"].includes(packageName), "unexpected package selection");
   assert.match(sourceCommit, /^[a-f0-9]{40}$/, "source commit must be a full SHA");
   assert.match(
     releaseVersion,
@@ -140,14 +154,14 @@ export async function prepareUi({ checkout, output, releaseVersion, sourceCommit
     );
   clean();
   const original = JSON.parse(
-    await readFile(join(checkout, "packages/ui-core/package.json"), "utf8"),
+    await readFile(join(checkout, `packages/${packageName}/package.json`), "utf8"),
   );
   const source = {
     repository: "clintongormley/waitron",
     commit: sourceCommit,
     version: original.version,
   };
-  assert.equal(original.name, "@waitron/ui-core", "unexpected source package name");
+  assert.equal(original.name, `@waitron/${packageName}`, "unexpected source package name");
   assert.match(
     original.version,
     /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/,
@@ -158,8 +172,8 @@ export async function prepareUi({ checkout, output, releaseVersion, sourceCommit
   let temp;
   try {
     temp = await realpath(await mkdtemp(join(tmpdir(), "waitron-ui-stage-")));
-    run("pnpm", ["run", "build"], join(checkout, "packages/ui-core"));
-    run("pnpm", ["pack", "--pack-destination", temp], join(checkout, "packages/ui-core"), {
+    run("pnpm", ["run", "build"], join(checkout, `packages/${packageName}`));
+    run("pnpm", ["pack", "--pack-destination", temp], join(checkout, `packages/${packageName}`), {
       npm_config_ignore_scripts: "true",
     });
     clean();
@@ -174,7 +188,7 @@ export async function prepareUi({ checkout, output, releaseVersion, sourceCommit
       "tar",
       [
         "-xzf",
-        join(temp, `waitron-ui-core-${source.version}.tgz`),
+        join(temp, `waitron-${packageName}-${source.version}.tgz`),
         "--strip-components=1",
         "-C",
         staged,
@@ -182,7 +196,7 @@ export async function prepareUi({ checkout, output, releaseVersion, sourceCommit
       checkout,
     );
     const packed = JSON.parse(await readFile(join(staged, "package.json"), "utf8"));
-    const manifest = releaseManifest(packed, source, releaseVersion);
+    const manifest = releaseManifest(packed, source, releaseVersion, packageName);
     for (const value of Object.values(manifest.exports)) {
       for (const target of typeof value === "string" ? [value] : Object.values(value)) {
         const file = await realpath(join(staged, target));
@@ -205,7 +219,14 @@ export async function prepareUi({ checkout, output, releaseVersion, sourceCommit
     await writeFile(join(staged, "package.json"), JSON.stringify(manifest, null, 2) + "\n");
     await writeFile(
       join(staged, "README.md"),
-      `# @waitron-io/ui-core
+      packageName === "contract"
+        ? `# @waitron-io/contract
+
+Use these Node signing formats in a registry consumer. Release ${releaseVersion} comes from @waitron/contract@${source.version} at ${source.commit}.
+Supply trusted issuer keys to verifyLease; authenticate readMachineClaims results with verifyMachine before use.
+See the [source guide](https://github.com/${source.repository}/tree/${source.commit}/packages/contract/README.md).
+`
+        : `# @waitron-io/ui-core
 
 Use these shared account controls in a registry consumer. Release ${releaseVersion} comes from @waitron/ui-core@${source.version} at ${source.commit}. Waitron itself keeps its workspace imports.
 
@@ -234,7 +255,7 @@ The package carries Elastic License 2.0 in dist/LICENSE and its grants in dist/L
     };
     await normalize(staged);
     run("npm", ["pack", "--ignore-scripts", "--pack-destination", temp], staged);
-    const filename = `waitron-io-ui-core-${releaseVersion}.tgz`;
+    const filename = `waitron-io-${packageName}-${releaseVersion}.tgz`;
     const bytes = await readFile(join(temp, filename));
     const inputs = {};
     for (const path of run(
@@ -243,7 +264,7 @@ The package carries Elastic License 2.0 in dist/LICENSE and its grants in dist/L
         "ls-files",
         "-z",
         "--",
-        "packages/ui-core",
+        `packages/${packageName}`,
         "package.json",
         "pnpm-lock.yaml",
         "pnpm-workspace.yaml",
@@ -259,7 +280,9 @@ The package carries Elastic License 2.0 in dist/LICENSE and its grants in dist/L
       inputs[path] = hash(await readFile(join(checkout, path)));
     }
     assert(
-      inputs["packages/ui-core/package.json"] && inputs.LICENSE && inputs["LICENSE-GRANTS.md"],
+      inputs[`packages/${packageName}/package.json`] &&
+        inputs.LICENSE &&
+        inputs["LICENSE-GRANTS.md"],
       "required source inputs missing",
     );
     const recipeSha512 = hash(await readFile(new URL(import.meta.url)));
@@ -302,12 +325,17 @@ The package carries Elastic License 2.0 in dist/LICENSE and its grants in dist/L
 export async function main(args) {
   const [checkout, output, ...flags] = args;
   assert(
-    checkout && output && flags.length === 4,
-    "Usage: prepare-ui.mjs <clean checkout> <empty output> --release-version <version> --source-commit <full SHA>",
+    checkout && output && (flags.length === 4 || flags.length === 6),
+    "Usage: prepare-ui.mjs <clean checkout> <empty output> --release-version <version> --source-commit <full SHA> [--package ui-core|contract]",
   );
-  const options = Object.fromEntries([flags.slice(0, 2), flags.slice(2, 4)]);
+  const options = Object.fromEntries(
+    Array.from({ length: flags.length / 2 }, (_, index) => flags.slice(index * 2, index * 2 + 2)),
+  );
   assert(
-    Object.keys(options).length === 2 &&
+    Object.keys(options).length === flags.length / 2 &&
+      Object.keys(options).every((key) =>
+        ["--release-version", "--source-commit", "--package"].includes(key),
+      ) &&
       Object.hasOwn(options, "--release-version") &&
       Object.hasOwn(options, "--source-commit"),
     "release version and source commit are required",
@@ -317,6 +345,7 @@ export async function main(args) {
     output,
     releaseVersion: options["--release-version"],
     sourceCommit: options["--source-commit"],
+    packageName: options["--package"] ?? "ui-core",
   });
 }
 

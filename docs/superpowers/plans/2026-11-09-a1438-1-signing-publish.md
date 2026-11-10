@@ -1,5 +1,11 @@
 # A1438-1: shared signing formats and private publication
 
+**2026-11-10 status:** A1437-1's initial proof check landed as `049ddd9`; this plan's build condition is met. The watcher
+cleared the as-built core and box use at about 1,550 changed lines, with a stop at 2,325, followed
+by the publisher at about 500, with a stop at 750 (Lane K questions.md, 12:48).
+The core is under review; publication and authenticated registry qualification remain open.
+The forecast and waiting state below are the original planning record.
+
 **Authority:** Implements [parent §§3a,4,6a,6e](2026-11-09-a1438-code-shared-with-cloud.md). Watcher22:04 approved signing-first, private publication, one fixed matrix and no peers now. Owner22:22 asks to reuse UI's setup; this bounded amendment needs no new Claude plan read. The driver submits the revised forecast below before building. **Build waits for A1437-1 to land.**
 
 **Build:** `@waitron/contract`, privately published as `@waitron-io/contract`, owns the existing `waitron-cloud-{pair,machine,access}-v1` formats. Preserve bytes, signatures, caps and clock rules; changed formats need a new name accepted by Cloud first. Leave Cloud edits/adoption, sign-in, messages, extra protocols, storage, roles, routes and keys out. No runtime or Waitron dependencies and no peers now; sign-in adds its peers when needed. UI keeps its Lit policy.

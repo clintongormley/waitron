@@ -1,3 +1,4 @@
+import { encodeMachine } from "@waitron/contract";
 import { createPrivateKey, sign } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import type { SavedCloudState } from "./cloud-client.js";
@@ -54,18 +55,15 @@ async function exchange(
     if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(id)) unavailable();
     const encoded = JSON.stringify(body);
     if (encoded.length > 4096) unavailable();
-    const payload = Buffer.from(
-      JSON.stringify([
-        "waitron-cloud-machine-v1",
-        state.origin,
-        action,
-        registration.installationId,
-        id,
-        Date.now(),
-        JSON.stringify(state.lifecycle.lease),
-        encoded,
-      ]),
-    );
+    const payload = encodeMachine({
+      origin: state.origin,
+      action,
+      installationId: registration.installationId,
+      operationId: id,
+      issuedAt: Date.now(),
+      lease: JSON.stringify(state.lifecycle.lease),
+      body: encoded,
+    });
     const key = createPrivateKey({
       key: Buffer.from(state.privateKey, "base64url"),
       type: "pkcs8",

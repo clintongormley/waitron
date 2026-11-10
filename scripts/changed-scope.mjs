@@ -46,7 +46,7 @@ const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/"];
  * script fed from a pipe in ci.yml, is invisible to it.
  */
 export const ROOT_SCOPE_CONSUMERS = new Map([
-  ["scripts/release/prepare-ui.mjs", ["packages/ui-core"]],
+  ["scripts/release/prepare-ui.mjs", ["packages/ui-core", "packages/contract"]],
   [
     "scripts/run-with-deadline.mjs",
     [
@@ -208,6 +208,7 @@ export const HEAVY_PACKAGE = "@waitron/db";
  */
 export const UI_PACKAGE = "@waitron/ui";
 export const UI_CORE_PACKAGE = "@waitron/ui-core";
+export const CONTRACT_PACKAGE = "@waitron/contract";
 
 /**
  * The `test-till` shard's package, a Chromium browser-mode app. Its own shard is a PREEMPTIVE
@@ -294,6 +295,7 @@ export const OWN_SHARD_PACKAGES = [
  * test package is selected exactly once. Add each new package to one bin or its own shard.
  */
 export const LIGHT_A_PACKAGES = [
+  CONTRACT_PACKAGE,
   "@waitron/country",
   "@waitron/country-es",
   "@waitron/core",
@@ -375,6 +377,7 @@ export const SCOPE_GATES = [
   { output: "heavy", covers: membership(HEAVY_PACKAGE) },
   { output: "ui", covers: membership(UI_PACKAGE) },
   { output: "ui_core", covers: membership(UI_CORE_PACKAGE) },
+  { output: "contract", covers: membership(CONTRACT_PACKAGE) },
   { output: "till", covers: membership(TILL_PACKAGE) },
   { output: "dashboard", covers: membership(DASHBOARD_PACKAGE) },
   { output: "setup", covers: membership(SETUP_PACKAGE) },

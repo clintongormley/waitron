@@ -59,3 +59,25 @@ UI_PACKAGE_TARBALL=/tmp/waitron-ui-inspection/waitron-io-ui-core-0.2.742.tgz \
 Without these variables, `test:package` checks both the workspace tarball and a
 locally staged `0.2.0` artifact. It checks declarations, bundling, browser behavior
 and accessibility. A local pass does not establish registry access.
+
+## Inspect the signing package locally
+
+You can use the same preparation and installed-package checks for the Node signing
+package. Select `contract` explicitly; omitting the selector still prepares UI:
+
+```sh
+mkdir /tmp/waitron-contract-inspection
+node scripts/release/prepare-ui.mjs /path/to/clean/waitron /tmp/waitron-contract-inspection \
+  --release-version 0.2.742 --source-commit "$(git rev-parse HEAD)" --package contract
+CONTRACT_PACKAGE_TARBALL=/tmp/waitron-contract-inspection/waitron-io-contract-0.2.742.tgz \
+  CONTRACT_PACKAGE_RELEASE_VERSION=0.2.742 \
+  CONTRACT_PACKAGE_SOURCE_COMMIT="$(git rev-parse HEAD)" \
+  pnpm --filter @waitron/contract test:package
+```
+
+The contract has no runtime or peer dependencies. Its installed consumer checks
+declarations and the three signing formats in Node, using the shared archive,
+source-commit and licence checks. UI keeps its Lit peer and browser checks.
+Changes to that shared installed-package checker select both packages in pull-request CI.
+The publishing workflow still selects only UI; this local route does not publish
+the contract or establish that Cloud can install it from the registry.

@@ -23,7 +23,20 @@ function grant(values: unknown[], saved: Record<string, unknown>) {
   };
 }
 it("uses current installation proof and renews the same capture without saving upload secrets", async () => {
-  const f = await installationFixture(async (v, s, _req, res) => {
+  const f = await installationFixture(async (v, s, _req, res, sent) => {
+    const state = s as unknown as SavedCloudState;
+    expect(Buffer.from(String(sent.payload), "base64url").toString()).toBe(
+      JSON.stringify([
+        "waitron-cloud-machine-v1",
+        state.origin,
+        "backup-reserve",
+        state.view!.registration!.installationId,
+        v[4],
+        v[5],
+        JSON.stringify(state.lifecycle!.lease),
+        "{}",
+      ]),
+    );
     res.end(JSON.stringify(grant(v, s)));
   });
   try {

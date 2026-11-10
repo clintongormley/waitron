@@ -1,3 +1,4 @@
+import { encodeMachine } from "@waitron/contract";
 import { createPrivateKey, randomUUID, sign } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import type { CloudRegistration, SavedCloudState } from "./cloud-client.js";
@@ -237,18 +238,15 @@ export function machinePayload(
   pending: { action: string; operationId: string; lease: string; body: string },
   now = Date.now(),
 ): Buffer {
-  return Buffer.from(
-    JSON.stringify([
-      "waitron-cloud-machine-v1",
-      state.origin,
-      pending.action,
-      state.view?.registration?.installationId,
-      pending.operationId,
-      now,
-      pending.lease,
-      pending.body,
-    ]),
-  );
+  return encodeMachine({
+    origin: state.origin,
+    action: pending.action,
+    installationId: state.view?.registration?.installationId,
+    operationId: pending.operationId,
+    issuedAt: now,
+    lease: pending.lease,
+    body: pending.body,
+  });
 }
 export function pendingRequest(
   action: Action,

@@ -68,6 +68,27 @@ export default tseslint.config(
   },
 
   {
+    files: ["packages/contract/src/**/*.ts"],
+    plugins: { "import-x": importX },
+    settings: { "import-x/resolver": { typescript: true } },
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        {
+          basePath: import.meta.dirname,
+          zones: [
+            {
+              target: "./packages/contract/src/**/*",
+              from: ["./packages/**", "./apps/**"],
+              except: [`${import.meta.dirname}/packages/contract/**`],
+              message: "The published contract has no dependencies on other Waitron packages.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // packages/print-agent is the db-free half of the printing subsystem: it becomes a standalone
     // process on a restaurant's LAN that reaches the server over HTTP only, so it must never import
     // @waitron/db (or anything that drags it in). An empty `dependencies` block does NOT enforce

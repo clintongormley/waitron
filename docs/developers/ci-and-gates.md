@@ -17,6 +17,12 @@ export fails the pull request, but a behaviour break in a dependent shows up onl
 nightly or manual full run. To catch it before merging, run the affected dependents' tests
 locally.
 
+The signing contract runs in `test-light-a`. When selected, it also runs an independent
+Node consumer against its workspace and locally prepared tarballs. Changes to the shared
+`scripts/release/prepare-ui.mjs` or the shared `packages/ui-core/test/package-consumer.test.mjs`
+select both UI and contract consumers. UI retains its browser
+checks; contract has no peer dependencies. Registry publication is separate from these checks.
+
 Check the event and `changes` outputs before treating a green run as evidence about the workspace.
 On ordinary main pushes, `code`, `scope` and `packages` still describe changed code, but every named
 package gate is false. PRs keep their package gates and mutation floors. Till changes also select

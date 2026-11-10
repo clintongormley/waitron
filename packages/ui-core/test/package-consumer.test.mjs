@@ -19,15 +19,17 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 import { URL, fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { test } from "node:test";
+import { test as nodeTest } from "node:test";
 import { build } from "esbuild";
 import { chromium } from "playwright";
 import axe from "axe-core";
 
 const run = promisify(execFile);
-const root = dirname(import.meta.dirname);
-const command = (args, cwd = root) =>
-  run("pnpm", args, { cwd, timeout: 90000, maxBuffer: 4 * 1024 * 1024 });
+const uiRoot = dirname(import.meta.dirname);
+const test =
+  process.argv[1] && (await realpath(process.argv[1])) === fileURLToPath(import.meta.url)
+    ? nodeTest
+    : () => {};
 
 const variants = process.env.UI_PACKAGE_TARBALL ? ["registry"] : ["workspace", "registry"];
 for (const variant of variants)
@@ -35,7 +37,20 @@ for (const variant of variants)
     verifyPackage(variant),
   );
 
-async function verifyPackage(variant) {
+export async function verifyPackage(
+  variant,
+  {
+    root = uiRoot,
+    packageNameSuffix = "ui-core",
+    prepareScript = fileURLToPath(
+      new URL("../../../scripts/release/prepare-ui.mjs", import.meta.url),
+    ),
+  } = {},
+) {
+  const node = packageNameSuffix === "contract";
+  const configured = (name) => process.env[`${node ? "CONTRACT" : "UI"}_PACKAGE_${name}`];
+  const command = (args, cwd = root) =>
+    run("pnpm", args, { cwd, timeout: 90000, maxBuffer: 4 * 1024 * 1024 });
   const dir = await mkdtemp(join(tmpdir(), "waitron-ui-consumer-"));
   let browser;
   let server;
@@ -50,15 +65,14 @@ async function verifyPackage(variant) {
       env: gitEnv,
       timeout: 10000,
     });
-    const expectedCommit = process.env.UI_PACKAGE_SOURCE_COMMIT || currentCommit.trim();
-    const packageName = variant === "registry" ? "@waitron-io/ui-core" : source.name;
+    const expectedCommit = configured("SOURCE_COMMIT") || currentCommit.trim();
+    const packageName = variant === "registry" ? `@waitron-io/${packageNameSuffix}` : source.name;
     const tarball =
       variant === "registry"
-        ? "waitron-io-ui-core-0.2.0.tgz"
-        : `waitron-ui-core-${source.version}.tgz`;
+        ? `waitron-io-${packageNameSuffix}-0.2.0.tgz`
+        : `waitron-${packageNameSuffix}-${source.version}.tgz`;
     if (variant === "workspace") await command(["pack", "--pack-destination", dir]);
-    else if (process.env.UI_PACKAGE_TARBALL)
-      await cp(process.env.UI_PACKAGE_TARBALL, join(dir, tarball));
+    else if (configured("TARBALL")) await cp(configured("TARBALL"), join(dir, tarball));
     else {
       const checkout = join(root, "../..");
       const env = Object.fromEntries(
@@ -74,13 +88,14 @@ async function verifyPackage(variant) {
       await run(
         process.execPath,
         [
-          fileURLToPath(new URL("../../../scripts/release/prepare-ui.mjs", import.meta.url)),
+          prepareScript,
           checkout,
           stage,
           "--release-version",
           "0.2.0",
           "--source-commit",
           commit.trim(),
+          ...(node ? ["--package", "contract"] : []),
         ],
         { env, timeout: 120000, maxBuffer: 4 * 1024 * 1024 },
       );
@@ -93,8 +108,8 @@ async function verifyPackage(variant) {
     assert.equal(packed.name, packageName);
     if (variant === "registry") {
       assert.match(packed.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
-      if (process.env.UI_PACKAGE_RELEASE_VERSION)
-        assert.equal(packed.version, process.env.UI_PACKAGE_RELEASE_VERSION);
+      if (configured("RELEASE_VERSION"))
+        assert.equal(packed.version, configured("RELEASE_VERSION"));
       assert.equal(packed.waitronSource.commit, expectedCommit);
       assert.deepEqual(packed.repository, {
         type: "git",
@@ -102,7 +117,7 @@ async function verifyPackage(variant) {
       });
       assert.equal(
         packed.homepage,
-        `https://github.com/clintongormley/waitron/tree/${expectedCommit}/packages/ui-core`,
+        `https://github.com/clintongormley/waitron/tree/${expectedCommit}/packages/${packageNameSuffix}`,
       );
       assert.deepEqual(packed.publishConfig, {
         registry: "https://npm.pkg.github.com",
@@ -118,13 +133,15 @@ async function verifyPackage(variant) {
       "./dist/index.js",
       "tarball must expose built JavaScript",
     );
-    assert.equal(packed.exports["."].types, "./dist/types/index.d.ts");
-    assert.deepEqual(packed.exports["./unsaved-changes"], {
-      types: "./dist/types/unsaved-changes.d.ts",
-      import: "./dist/unsaved-changes.js",
-    });
+    assert.equal(packed.exports["."].types, node ? "./dist/index.d.ts" : "./dist/types/index.d.ts");
+    if (!node)
+      assert.deepEqual(packed.exports["./unsaved-changes"], {
+        types: "./dist/types/unsaved-changes.d.ts",
+        import: "./dist/unsaved-changes.js",
+      });
     assert.deepEqual(packed.dependencies ?? {}, {});
-    assert.deepEqual(packed.peerDependencies, { lit: "^3.2.0" });
+    assert.deepEqual(packed.peerDependencies ?? {}, node ? {} : { lit: "^3.2.0" });
+    assert.equal(packed.sideEffects, !node);
     const files = (await run("tar", ["-tf", join(dir, tarball)], { timeout: 10000 })).stdout
       .split("\n")
       .filter(Boolean);
@@ -146,21 +163,25 @@ async function verifyPackage(variant) {
     }
     await cp(join(root, "test/consumer"), dir, { recursive: true });
     if (variant === "registry") {
-      for (const file of ["main.ts", "input-only.ts"]) {
+      for (const file of node ? ["main.ts"] : ["main.ts", "input-only.ts"]) {
         const path = join(dir, file);
-        await writeFile(
-          path,
-          (await readFile(path, "utf8")).replaceAll("@waitron/ui-core", packageName),
-        );
+        await writeFile(path, (await readFile(path, "utf8")).replaceAll(source.name, packageName));
       }
     }
-    const lit = JSON.parse(await readFile(join(root, "node_modules/lit/package.json"), "utf8"));
+    const dependency = node ? "@types/node" : "lit";
+    const installedTool = JSON.parse(
+      await readFile(join(root, "node_modules", dependency, "package.json"), "utf8"),
+    );
     await writeFile(
       join(dir, "package.json"),
       JSON.stringify({
         private: true,
         type: "module",
-        dependencies: { [packageName]: `file:./${tarball}`, lit: lit.version },
+        dependencies: {
+          [packageName]: `file:./${tarball}`,
+          ...(node ? {} : { lit: installedTool.version }),
+        },
+        ...(node ? { devDependencies: { "@types/node": installedTool.version } } : {}),
       }),
     );
     await command(
@@ -178,13 +199,17 @@ async function verifyPackage(variant) {
         await readFile(join(root, "../..", notice), "utf8"),
       );
     }
-    for (const name of ["colors", "structure"]) {
+    for (const name of node ? [] : ["colors", "structure"]) {
       assert.equal(
         await readFile(join(installed, `dist/tokens/${name}.css`), "utf8"),
         await readFile(join(root, `src/tokens/${name}.css`), "utf8"),
       );
     }
     await command(["exec", "tsc", "-p", join(dir, "tsconfig.json")]);
+    if (node) {
+      await run(process.execPath, [join(dir, "out/main.js")], { cwd: dir, timeout: 10000 });
+      return;
+    }
     const options = {
       absWorkingDir: dir,
       entryPoints: ["main.ts", "input-only.ts"],
@@ -336,11 +361,11 @@ test(
         const destination = join(checkout, "packages/ui-core");
         await mkdir(join(destination, "scripts"), { recursive: true });
         for (const file of ["package.json", "tsconfig.json", "scripts/build.mjs"])
-          await cp(join(root, file), join(destination, file));
-        await cp(join(root, "src"), join(destination, "src"), { recursive: true });
+          await cp(join(uiRoot, file), join(destination, file));
+        await cp(join(uiRoot, "src"), join(destination, "src"), { recursive: true });
         for (const file of ["tsconfig.base.json", "LICENSE", "LICENSE-GRANTS.md"])
-          await cp(join(root, "../..", file), join(checkout, file));
-        await symlink(join(root, "node_modules"), join(destination, "node_modules"), "dir");
+          await cp(join(uiRoot, "../..", file), join(checkout, file));
+        await symlink(join(uiRoot, "node_modules"), join(destination, "node_modules"), "dir");
         await run(process.execPath, ["scripts/build.mjs"], {
           cwd: destination,
           timeout: 20000,

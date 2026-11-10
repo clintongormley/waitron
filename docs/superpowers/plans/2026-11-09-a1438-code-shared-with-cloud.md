@@ -1,5 +1,9 @@
 # A1438: code Waitron and Cloud should share, published like ui-core
 
+**2026-11-10 status:** the signing package and box adapters are built and under review.
+The watcher cleared the core and publishing as separate pull requests; registry publication and
+Cloud adoption remain open. The planning state below records 2026-11-09.
+
 **Plan only, nothing built. The owner answered every choice on 2026-11-09 (§6); step 1 is queued in a Codex lane.** The owner asked on 2026-11-08
 whether the sign-in code copied from Waitron into Cloud should be shared instead, and how: "let's not
 publish it like verifactu. instead treat it like waitron-ui". Waitron Cloud is the separate,

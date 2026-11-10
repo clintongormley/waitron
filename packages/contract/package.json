@@ -1,0 +1,38 @@
+{
+  "name": "@waitron/contract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && cp ../../LICENSE ../../LICENSE-GRANTS.md dist/",
+    "prepack": "pnpm build",
+    "test:package": "node --test --test-timeout=180000 test/package-consumer.test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@vitest/coverage-v8": "^4.1.12",
+    "typescript": "^7.0.0",
+    "vitest": "^4.1.12"
+  },
+  "license": "SEE LICENSE IN dist/LICENSE",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  }
+}

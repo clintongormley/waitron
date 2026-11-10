@@ -40,6 +40,7 @@
     "@waitron/bookings": "workspace:*",
     "@waitron/catalogue": "workspace:*",
     "@waitron/composition": "workspace:*",
+    "@waitron/contract": "workspace:*",
     "@waitron/core": "workspace:*",
     "@waitron/country": "workspace:*",
     "@waitron/country-packs": "workspace:*",

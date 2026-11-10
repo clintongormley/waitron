@@ -222,6 +222,20 @@ export function scopeForPaths(changedPaths, loadPackages) {
       };
     }
     attributed.add(owner.name);
+    // The contract's installed check imports this UI harness outside the manifest graph.
+    if (path === "packages/ui-core/test/package-consumer.test.mjs") {
+      const reader = packages.find((pkg) => pkg.dir === "packages/contract");
+      if (reader === undefined)
+        return {
+          kind: "global",
+          packages: [],
+          root,
+          deploy,
+          reason:
+            "the UI package's contract test reader is not a workspace member — running everything",
+        };
+      attributed.add(reader.name);
+    }
     // The handover suite loads the till router by path, outside pnpm's dependency graph.
     if (owner.dir === "apps/till") {
       const reader = packages.find((pkg) => pkg.dir === "apps/server");

@@ -66,6 +66,7 @@ jobs:
       heavy: ${{ steps.gates.outputs.heavy }}
       ui: ${{ steps.gates.outputs.ui }}
       ui_core: ${{ steps.gates.outputs.ui_core }}
+      contract: ${{ steps.gates.outputs.contract }}
       till: ${{ steps.gates.outputs.till }}
       dashboard: ${{ steps.gates.outputs.dashboard }}
       setup: ${{ steps.gates.outputs.setup }}
@@ -3547,6 +3548,10 @@ jobs:
           pnpm "$@" --no-sort --workspace-concurrency=2 test:coverage --coverage.enabled=${{ needs.changes.outputs.full }} \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
+      - name: Check the contract package
+        run: pnpm --filter @waitron/contract test:package
+        if: needs.changes.outputs.contract == 'true'
+
   # The second bin subtracts OWN_SHARD_PACKAGES and LIGHT_A_PACKAGES.
   test-light-b:
     timeout-minutes: 10
@@ -3639,6 +3644,7 @@ jobs:
           set -- "$@" --filter "!@waitron/identity"
           set -- "$@" --filter "!@waitron/workforce"
           # LIGHT_A_PACKAGES — the other bin, subtracted so what remains is bin B.
+          set -- "$@" --filter "!@waitron/contract"
           set -- "$@" --filter "!@waitron/country"
           set -- "$@" --filter "!@waitron/country-es"
           set -- "$@" --filter "!@waitron/core"
