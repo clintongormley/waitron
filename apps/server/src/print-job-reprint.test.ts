@@ -138,8 +138,8 @@ async function paidSale(setting: EscSetting) {
     tx.update(printers).set(setting).where(eq(printers.id, venue.printerId)),
   );
   try {
-    const billId = await placedIssuedBill(venue, "Caña");
-    expect((await collect(venue, billId, "3.00")).status).toBe(200);
+    const billId = await placedIssuedBill(venue, "Paella");
+    expect((await collect(venue, billId, "35.00")).status).toBe(200);
     const [sale] = await inTx(venue, (tx) =>
       tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
     );
@@ -215,7 +215,7 @@ async function refundReceipt(payload: Uint8Array): Promise<string> {
 }
 
 const ticketAt = (setting: EscSetting) =>
-  esc(setting).init().printArea(dots(setting)).line("Devolución").feedAndCut().bytes();
+  esc(setting).init().printArea(dots(setting)).line("Refund").feedAndCut().bytes();
 
 describe("reprintJobOn", () => {
   it("lays a receipt out again for a printer of the same setting as the bytes it first printed", async () => {
