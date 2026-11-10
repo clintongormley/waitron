@@ -167,7 +167,6 @@ export type ReaderInfo = {
   holderDeviceId: string | null;
 };
 
-/** A reader a profile lists, enabled or not; the demo reader included. */
 export type ListedReader = { profileId: string; id: string; isDefault: boolean };
 
 /** What {@link readReaderEquipment} reads; `listed`, empty without `lists`, is in list order. */

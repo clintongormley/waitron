@@ -19563,10 +19563,9 @@ export class TillApp extends LitElement {
         : asked.card,
     );
     // Named now: a tap while the card is out may change the phone's reader before the answer.
-    const ready =
-      this.handheldMode && readerId !== undefined
-        ? readyPayReader(this.deviceEquipment, this.#fixedPayReader())
-        : null;
+    const ready = this.handheldMode
+      ? readyPayReader(this.deviceEquipment, this.#fixedPayReader())
+      : null;
     const readerName = ready?.id === readerId ? ready?.name : undefined;
     const key = open.billId;
     const previous = this.#unansweredPayments.get(key);

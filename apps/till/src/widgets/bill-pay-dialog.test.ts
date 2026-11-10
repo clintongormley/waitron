@@ -2075,7 +2075,9 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     expect(root(el).querySelector("[data-pay-reader]")).toBeNull();
     expect(root(el).querySelector("[data-pay-simulation]")).not.toBeNull();
 
-    await previewed(el, cardPreview);
+    await pick(el, "simulation", "declined");
+    const asked = await previewed(el, cardPreview);
+    expect(asked.card).toEqual({ entry: "reader", simulationOutcome: "declined" });
     await click(el, "[data-pay-confirm]");
     expect(confirmed).toStrictEqual([{}]);
 

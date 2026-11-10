@@ -195,8 +195,6 @@ const DASHBOARD_PIN_SLOT = "management";
 
 const run = createErrorBoundary(STATUS, "payments.failed");
 
-/** Refuses an id naming no reader, a deleted reader, or the demo reader, which no device or
- * profile ever lists. */
 async function requireKnownReader(tx: Transaction, readerId: string): Promise<void> {
   const [reader] = await tx
     .select({ id: cardReaders.id })

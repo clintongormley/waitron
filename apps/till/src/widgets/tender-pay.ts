@@ -712,8 +712,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #onReaderChosen(event: Event): void {
-    this.chosenReaderId =
-      (event as CustomEvent<{ readerId: string | null }>).detail.readerId ?? undefined;
+    this.chosenReaderId = (event as CustomEvent<{ readerId: string }>).detail.readerId;
     this.pickingReader = false;
     this.#extrasScope?.changed();
   }
@@ -888,7 +887,6 @@ export class TillTenderPay extends LitElement {
     return html`<till-reader-picker
       .readers=${this.#pickableReaders}
       .selectedReaderId=${this.chosenReaderId ?? this.defaultReaderId}
-      .plainSimulator=${this.cardProvider === "simulator"}
       @reader-chosen=${(event: Event) => this.#onReaderChosen(event)}
       @reader-picker-cancel=${() => this.#onReaderPickerCancel()}
     ></till-reader-picker>`;

@@ -4,8 +4,8 @@ When a guest needs special care, you need to know which dish is theirs and what 
 Record the guest and assign their dishes through the table's
 [allergy window](products.md#table-allergies). The kitchen receives those instructions with its work.
 
-In Demo or Preparation, select **Approve**, **Decline** or
-**No answer** before pressing **Card**. No real card is charged. **No answer** keeps the payment
+In Demo or Preparation, the counter payment controls and bill-payment window offer
+**Approve**, **Decline** or **No answer** before you press **Card**. No real card is charged. **No answer** keeps the payment
 blocked so you can practise recovery. In the dashboard's **Payments**, a manager chooses
 **Check with the card provider** for a whole-order payment, or **Check with provider** for a bill
 contribution, and confirms. This ends the practice attempt without recording a charge.

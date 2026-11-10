@@ -3882,11 +3882,6 @@ Board 3 is the target. The order's bottom row becomes **Hold · Pay**.
   offline choice by order id. Moving the panel into the payment window must preserve that link:
   switching orders hides it, returning restores it, and a Retry control from the previous order
   cannot start a payment on the replacement. Browser cases: `till-app.test.ts`, “A767 card outcome”.
-- **Remove the Demo card reader** (owner: not needed for the demo; it is missing from the Santet
-  data and nothing on the till says the decision is made on the dashboard). It came from A247
-  (#1172): the reader, `apps/dashboard/src/screens/demo-reader-screen.ts`, its reader-picker entry
-  and the simulator's ten-minute wait. Its open follow-up in `docs/backlog.md` (a till label on
-  each pending amount) goes with it.
 - **No receipt screen after paying** (owner). The counter goes straight to a new order; a strip
   "✓ Paid €30.00 · receipt printed · Reprint" stays until the next product goes in, with the change
   in large type after cash.
