@@ -58,7 +58,7 @@ it.each(cases)(
     if (state !== "open") {
       input.dispatchEvent(
         new CustomEvent("wt-change", {
-          detail: { value: "Nuevo SL" },
+          detail: { value: "New SL" },
           bubbles: true,
           composed: true,
         }),

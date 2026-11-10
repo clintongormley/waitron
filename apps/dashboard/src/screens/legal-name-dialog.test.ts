@@ -95,7 +95,7 @@ it("opens prefilled, with the note, and keeps Save quiet until the name changes 
   expect(dialog(panel).textContent).toContain(t("venue_details.legal_name_note"));
   expect(save(panel).variant).toBe("secondary");
   expect(save(panel).disabled).toBe(true);
-  await type(panel, "Nuevo SL");
+  await type(panel, "New SL");
   expect(save(panel).variant).toBe("primary");
   expect(save(panel).disabled).toBe(false);
   await type(panel, "Issuer SL");
@@ -122,7 +122,7 @@ it("an emptied name is marked under the field and at the bottom, and blocks Save
   expect(input(panel).error).toBe(t("venue_details.required"));
   expect(actions(panel).error).toBe(t("form.fix_fields"));
   expect(save(panel).disabled).toBe(true);
-  await type(panel, "Nuevo SL");
+  await type(panel, "New SL");
   expect(input(panel).error).toBe("");
   expect(actions(panel).error).toBe("");
   expect(save(panel).disabled).toBe(false);
@@ -144,17 +144,17 @@ for (const [reason, key] of [
       });
       const panel = await mount(api);
       await open(panel);
-      await type(panel, "Nuevo SL");
+      await type(panel, "New SL");
       await press(panel);
       expect(api.renameTaxpayer).toHaveBeenCalledWith({
-        legalName: "Nuevo SL",
+        legalName: "New SL",
         expected: "Issuer SL",
       });
       expect(input(panel).error).toBe(t(key));
       expect(actions(panel).error).toBe(t("form.fix_fields"));
       expect(save(panel).disabled).toBe(false);
       expect(dialog(panel).open).toBe(true);
-      await type(panel, "Nuevo SL 2");
+      await type(panel, "New SL 2");
       expect(input(panel).error).toBe("");
       expect(actions(panel).error).toBe("");
       cleanupWidgets();
@@ -170,7 +170,7 @@ it("a name changed in another session is the bottom message, and Save stays enab
   });
   const panel = await mount(api);
   await open(panel);
-  await type(panel, "Nuevo SL");
+  await type(panel, "New SL");
   await press(panel);
   expect(actions(panel).error).toBe(t("venue_details.legal_name_changed"));
   expect(input(panel).error).toBe("");
@@ -186,13 +186,13 @@ it("a successful rename closes the dialog, shows the new name and tells the page
   document.body.addEventListener("venue-identity-changed", listen);
   onTestFinished(() => document.body.removeEventListener("venue-identity-changed", listen));
   await open(panel);
-  await type(panel, "Nuevo SL");
+  await type(panel, "New SL");
   const closed = dialogClosed(dialog(panel));
   await press(panel);
   await closed;
   expect(dialog(panel).open).toBe(false);
   await panel.updateComplete;
-  expect(panel.shadowRoot!.querySelector("[data-test=issuer]")!.textContent).toContain("Nuevo SL");
+  expect(panel.shadowRoot!.querySelector("[data-test=issuer]")!.textContent).toContain("New SL");
   expect(told).toHaveLength(1);
   expect(told[0]!.bubbles && told[0]!.composed).toBe(true);
 });

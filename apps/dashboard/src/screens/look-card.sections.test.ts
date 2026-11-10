@@ -56,7 +56,7 @@ const TWO_FIXES: ThemeChoices = {
   ...WAITRON_CHOICES,
   handSet: { light: { text: "#6a6a6a", "surface-sunken": "#bbbbbb" }, dark: {} },
 };
-const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
+const lucia = theme("t-lucia", "River Bar", LUCIA);
 const christmas = theme("t-xmas", "Christmas", CHRISTMAS);
 const LIST: ThemeList = { themes: [lucia, christmas], inUse: lucia.id };
 
@@ -310,7 +310,7 @@ describe("sections stay as they are while the draft changes under them", () => {
   it("a newer read of the theme in use", async () => {
     const { el } = await mountEditing();
     await openSection(el, "surfaces");
-    const newer = theme("t-lucia", "Bar Lucía", {
+    const newer = theme("t-lucia", "River Bar", {
       ...LUCIA,
       handSet: { light: { bg: "#f8f1e1" }, dark: {} },
     });

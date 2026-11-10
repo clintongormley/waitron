@@ -887,7 +887,7 @@ describe("units-screen", () => {
 
   it("opens the delete-unit screen when a unit row is clicked", async () => {
     setLocale("es-ES");
-    const listUnitProducts = vi.fn().mockResolvedValue([{ id: "p1", name: "Sopa", active: true }]);
+    const listUnitProducts = vi.fn().mockResolvedValue([{ id: "p1", name: "Soup", active: true }]);
     const el = await mount(stubApi({ listUnitProducts }));
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
@@ -902,7 +902,7 @@ describe("units-screen", () => {
     )!;
     expect(dialog.open).toBe(true);
     expect(dialog.getAttribute("heading")).toBe(t("units.delete_unit"));
-    expect(dialog.querySelector("wt-data-table")!.shadowRoot!.textContent).toContain("Sopa");
+    expect(dialog.querySelector("wt-data-table")!.shadowRoot!.textContent).toContain("Soup");
   });
 
   it("paints the in-use explanation with the danger colour", async () => {
@@ -999,7 +999,7 @@ describe("units-screen", () => {
 
   it("offers Each (no unit) as a reassign target and reassigns to it", async () => {
     setLocale("es-ES");
-    const listUnitProducts = vi.fn().mockResolvedValue([{ id: "p1", name: "Sopa", active: true }]);
+    const listUnitProducts = vi.fn().mockResolvedValue([{ id: "p1", name: "Soup", active: true }]);
     const reassignProductsUnit = vi.fn().mockResolvedValue([]);
     const el = await mount(stubApi({ listUnitProducts, reassignProductsUnit }));
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -1420,7 +1420,7 @@ describe("at phone width", () => {
     units[1]!,
   ];
   const longProducts: ProductUsingUnit[] = [
-    { id: "p1", name: "Tostada-de-pan-de-masa-madre-con-tomate-rallado-y-aceite", active: true },
+    { id: "p1", name: "Sourdough-bread-toast-with-grated-tomatoes-and-olive-oil", active: true },
     inUseProducts[1]!,
   ];
   async function atPhoneWidth(locale: string, body: () => Promise<void>): Promise<void> {

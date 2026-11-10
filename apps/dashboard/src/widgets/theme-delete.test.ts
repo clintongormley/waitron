@@ -5,7 +5,7 @@ import { themeDeleteCopy, themeDeleteImpact } from "./theme-delete.js";
 
 afterEach(() => setLocale("en-GB"));
 
-const row = { id: "t", name: "Bar Lucía" };
+const row = { id: "t", name: "River Bar" };
 
 describe("a theme's delete impact", () => {
   it("names the theme, and a theme in use is the one thing that changes", () => {
@@ -39,7 +39,7 @@ describe("a theme's delete dialog copy", () => {
     expect(copy.irreversible).toBe("This can't be undone.");
     const [item] = themeDeleteImpact(row, true).ends;
     expect(copy.item(item!)).toBe(
-      "Bar Lucía is in use on every screen. Deleting it puts Waitron's theme on every screen.",
+      "River Bar is in use on every screen. Deleting it puts Waitron's theme on every screen.",
     );
   });
 
@@ -57,6 +57,6 @@ describe("a theme's delete dialog copy", () => {
     expect(copy.ends).toBe(es["appearance.delete_changes"]);
     expect(copy.confirm).toBe(es["action.delete"]);
     const [item] = themeDeleteImpact(row, true).ends;
-    expect(copy.item(item!)).toBe(es["appearance.delete_in_use"].replace("{name}", "Bar Lucía"));
+    expect(copy.item(item!)).toBe(es["appearance.delete_in_use"].replace("{name}", "River Bar"));
   });
 });

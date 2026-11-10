@@ -51,7 +51,7 @@ const LUCIA: ThemeChoices = {
 const derived = deriveTheme(LUCIA);
 const lucia: ThemeView = {
   id: "t-lucia",
-  name: "Bar Lucía",
+  name: "River Bar",
   updatedAt: "2026-10-21T10:00:00.000Z",
   choices: LUCIA,
   light: derived.light,
