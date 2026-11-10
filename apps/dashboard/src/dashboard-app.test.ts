@@ -466,9 +466,11 @@ function emit(source: Element, type: string, detail?: unknown): void {
 }
 
 const initialUrl = location.href;
+const initialPageLanguage = document.documentElement.lang;
 afterEach(() => {
   cleanupWidgets();
   setLocale(previousLocale);
+  document.documentElement.lang = initialPageLanguage;
   history.replaceState(null, "", initialUrl);
   sessionStorage.clear();
   localStorage.clear();
@@ -9731,6 +9733,7 @@ it("switches repair language locally without requesting a forbidden profile writ
   await expect
     .poll(() => el.shadowRoot!.querySelector("dashboard-venue-zone-repair"))
     .not.toBeNull();
+  expect(document.documentElement.lang).toBe("en-GB");
   el.shadowRoot!.querySelector("wt-language-chooser")!.dispatchEvent(
     new CustomEvent("wt-locale-selected", {
       detail: { code: "es-ES" },
@@ -9739,6 +9742,7 @@ it("switches repair language locally without requesting a forbidden profile writ
     }),
   );
   await expect.poll(() => currentLocale()).toBe("es-ES");
+  expect(document.documentElement.lang).toBe("es-ES");
   expect(api.putLocale).not.toHaveBeenCalled();
 });
 it("expires a dirty repair session without retaining its draft or leave question", async () => {

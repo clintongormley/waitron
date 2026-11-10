@@ -770,8 +770,10 @@ beforeEach(() => {
   drafts.bills.add("wo-new");
 });
 const initialUrl = location.href;
+const initialPageLanguage = document.documentElement.lang;
 afterEach(() => {
   cleanupWidgets();
+  document.documentElement.lang = initialPageLanguage;
   if (vi.isMockFunction(history.pushState)) vi.mocked(history.pushState).mockRestore();
   sessionStorage.removeItem("waitron.lastMenu");
   sessionStorage.removeItem("waitron.dietFilter");
@@ -1595,9 +1597,11 @@ describe("till-app", () => {
     pad.shadowRoot!.querySelector<HTMLElement>("[data-key='0']")!.click();
     await screen.updateComplete;
     const original = currentLocale();
+    expect(document.documentElement.lang).toBe(original);
     const next = original === "en" ? "es" : "en";
     emit(screen, "wt-locale-selected", { code: next });
     await expect.poll(() => currentLocale()).toBe(next);
+    expect(document.documentElement.lang).toBe(next);
     await flush(el);
     const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await question.updateComplete;
