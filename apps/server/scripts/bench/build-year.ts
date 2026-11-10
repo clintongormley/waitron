@@ -34,6 +34,8 @@ export interface BuildYearOptions {
   seed?: number;
   /** Called before each bill is seated, with the day's number from 1; a throw stops the build. */
   beforeBill?: (day: number, index: number) => void | Promise<void>;
+  /** Called once a day's copy is in place, before the session counts it; a throw stops the build. */
+  beforeSession?: (day: number) => void;
   /** Called after each day is finished and copied, with the day's time including the copy. */
   onDay?: (day: number, result: DayResult, ms: number) => void;
 }
@@ -64,7 +66,7 @@ export async function buildYear(options: BuildYearOptions): Promise<void> {
 
   dropUncountedTimings(options.out, session?.day ?? 0);
   rmSync(working, { recursive: true, force: true });
-  if (session !== undefined) copyFolder(copyFor(options.out, session), working);
+  if (session !== undefined) copyFolder(sessionCopy(options.out, session), working);
 
   const clock = installBenchClock(
     session === undefined ? new Date(dayBounds(dateOf(1)).startAt) : new Date(session.clockAt),
@@ -104,6 +106,7 @@ export async function buildYear(options: BuildYearOptions): Promise<void> {
               routes: result.requestTimings,
             };
             appendFileSync(join(options.out, REQUEST_TIMINGS_FILE), `${JSON.stringify(line)}\n`);
+            options.beforeSession?.(day);
           },
         );
         options.onDay?.(day, result, dayMs);
@@ -155,9 +158,22 @@ function readSession(out: string): BenchSession | undefined {
 }
 
 /**
- * The copy that holds the session's day. A stop while `checkpoint` swaps the copies can leave the
- * session naming the copy now at `last-day.old`, so the venue's last close decides, not the name.
+ * `last-day/`, once it holds the session's day. A stop after `checkpoint` swaps the copies and
+ * before it writes the session leaves the session's day in `last-day.old/` and an uncounted day in
+ * `last-day/`; that copy is moved back, since the next checkpoint starts by removing
+ * `last-day.old/`.
  */
+function sessionCopy(out: string, session: BenchSession): string {
+  const copy = join(out, COPY_DIR);
+  const found = copyFor(out, session);
+  if (found !== copy) {
+    rmSync(copy, { recursive: true, force: true });
+    renameSync(found, copy);
+  }
+  return copy;
+}
+
+/** The copy whose venue's last close is the session's day, whichever name it is under. */
 function copyFor(out: string, session: BenchSession): string {
   const copy = join(out, COPY_DIR);
   const found: string[] = [];
@@ -193,9 +209,9 @@ export function copyFolder(from: string, to: string): void {
 }
 
 /**
- * Replaces `last-day/` with a copy of the open working folder, then the session. A stop at any
- * point leaves either the old pair or the new one: the copy is made under another name first, and
- * the session names the day the copy holds only once the copy is in place.
+ * Replaces `last-day/` with a copy of the open working folder, then the session. Once a session
+ * exists, expects `last-day/` to hold its day. A stop at any point leaves a copy of the day the
+ * session names: at `last-day/`, or, after the swap and before the session, at `last-day.old/`.
  */
 async function checkpoint(
   out: string,

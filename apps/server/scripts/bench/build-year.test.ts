@@ -110,6 +110,35 @@ describe("buildYear", () => {
   );
 
   it(
+    "resumes after two stops in a row between the copies' swap and the session",
+    async () => {
+      const out = mkdtempSync(join(tmpdir(), "wt-bench-build-"));
+      made.push(out);
+      const options = { out, days: 2, billsPerDay: 1, seed: 1 };
+      const stopBeforeDay2Session = {
+        ...options,
+        beforeSession: (day: number) => {
+          if (day === 2) throw new Error("stopped before the session");
+        },
+      };
+
+      await expect(buildYear(stopBeforeDay2Session)).rejects.toThrow("stopped before the session");
+      await expect(buildYear(stopBeforeDay2Session)).rejects.toThrow("stopped before the session");
+      const session = JSON.parse(readFileSync(join(out, SESSION_FILE), "utf8")) as { day: number };
+      expect(session.day).toBe(1);
+
+      await buildYear(options);
+
+      const volume = JSON.parse(readFileSync(join(out, VOLUME_FILE), "utf8")) as {
+        rows: Record<string, number>;
+      };
+      expect(volume.rows.sales).toBe(2);
+      expect(volume.rows.daily_closes).toBe(2);
+    },
+    CASE_TIMEOUT_MS,
+  );
+
+  it(
     "writes each finished day's request timings once and in order, across a stop and a resume",
     async () => {
       const out = mkdtempSync(join(tmpdir(), "wt-bench-build-"));
