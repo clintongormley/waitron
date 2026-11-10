@@ -3673,8 +3673,8 @@ per-repository budget, evicted least-recently-used" above). Both installers down
 `scripts/download-release.mjs`: a 5xx answer or a network error is retried, up to three attempts
 with a growing wait between them, a 4xx answer fails at once, and in CI the step passes the job's
 `GITHUB_TOKEN`, which the download sends as a bearer token. The last failure fails the job with a
-message naming the URL and the number of attempts. `deploy/Dockerfile`'s `litestream` stage gives
-its `curl` `--retry 2` and per-attempt time limits, guarded by `scripts/deploy-image-env.test.ts`,
+message naming the URL and the number of attempts. `deploy/Dockerfile`'s `litestream` and `versitygw`
+stages give their `curl` `--retry 2` and per-attempt time limits, guarded by `scripts/deploy-image-env.test.ts`,
 which reads text. Since A399 (2026-10-08) no workflow exports Docker layers; the layers already
 stored stay until GitHub evicts them (see "Neither image build uses the remote layer cache").
 

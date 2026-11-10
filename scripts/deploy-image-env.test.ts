@@ -1180,10 +1180,10 @@ describe("the box image carries Litestream's licence and a notice naming the pin
     expect(section).toContain("`licenses/Apache-2.0.txt`");
   });
 
-  it("names no version in the notice but libvips's, Litestream's and Iosevka's", () => {
+  it("names no version in the notice but libvips's, Litestream's, versitygw's and Iosevka's", () => {
     const { packageVersion, libvips } = libvipsRelease();
     expect(new Set(NOTICES.match(/\b\d+\.\d+\.\d+\b/g))).toEqual(
-      new Set([libvips, packageVersion, pinned, fontRelease()]),
+      new Set([libvips, packageVersion, pinned, versitygwPin(), fontRelease()]),
     );
   });
 
@@ -1216,6 +1216,58 @@ describe("the box image carries Litestream's licence and a notice naming the pin
     expect(IMAGE_SMOKE).toContain('reported=$(docker exec "$app" litestream version)');
     expect(IMAGE_SMOKE).toContain('[ "$reported" = "$pinned" ]');
     expect(IMAGE_SMOKE).toContain("test -s /app/third-party/licenses/Apache-2.0.txt");
+  });
+});
+
+/** The versitygw version `scripts/setup-s3-test-server.mjs` pins, which the image's stage matches. */
+function versitygwPin(): string {
+  const pin = read("scripts/setup-s3-test-server.mjs").match(
+    /^export const VERSITYGW_VERSION = "([0-9.]+)";$/m,
+  )?.[1];
+  if (pin === undefined) throw new Error("scripts/setup-s3-test-server.mjs pins no versitygw");
+  return pin;
+}
+
+/**
+ * versitygw ships in the image as its own program, under Apache-2.0. Reads TEXT, like the
+ * Litestream block: it ties the notice's version to the pin and proves the files and the
+ * image-smoke step exist, not that `versitygw/NOTICE` is the one in the release tarball or that
+ * `versitygw/NOTICES.txt` lists the modules the binary was built from.
+ */
+describe("the box image carries versitygw's licence and a notice naming the pinned version", () => {
+  const pinned = versitygwPin();
+
+  it("names the pinned versitygw, and only that version, in its section of the notice", () => {
+    expect(pinned).toMatch(/^\d+\.\d+\.\d+$/);
+    const section = noticeSection("versitygw");
+    expect(section).toContain(`versitygw ${pinned}`);
+    expect(section).toContain(`\`v${pinned}\``);
+    expect(new Set(section.match(/\b\d+\.\d+\.\d+\b/g))).toEqual(new Set([pinned]));
+    expect(section).toMatch(/Apache License,\s+Version 2\.0/);
+    expect(section).toContain("`licenses/Apache-2.0.txt`");
+  });
+
+  it("ships versitygw's NOTICE and the notices of what the binary bundles, generated for the pinned version", () => {
+    const notice = read("deploy/third-party/versitygw/NOTICE");
+    expect(notice).toContain("versitygw - Versity S3 Gateway");
+    expect(notice).toContain("Copyright 2023 Versity Software");
+    const bundled = read("deploy/third-party/versitygw/NOTICES.txt");
+    expect(bundled.match(/^versitygw version: ([0-9.]+)$/gm)).toEqual([
+      `versitygw version: ${pinned}`,
+    ]);
+    const section = noticeSection("versitygw");
+    expect(section).toContain("`versitygw/NOTICE`");
+    expect(section).toContain("`versitygw/NOTICES.txt`");
+    expect(section).toContain("node scripts/go-binary-notices.mjs versitygw");
+  });
+
+  it("image-smoke checks the shipped notice", () => {
+    expect(DOCKERFILE).toContain("/src/deploy/third-party/ /app/third-party/");
+    expect(IMAGE_SMOKE).toContain(
+      'grep -qx "versitygw version: $pinned" /app/third-party/versitygw/NOTICES.txt',
+    );
+    expect(IMAGE_SMOKE).toContain("test -s /app/third-party/versitygw/NOTICE");
+    expect(IMAGE_SMOKE).toContain('grep -q "^## versitygw" /app/third-party/README.md');
   });
 });
 

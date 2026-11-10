@@ -775,14 +775,17 @@ describe("the CLI", () => {
     );
   });
 
-  it.each(["scripts/setup-litestream.mjs", "scripts/setup-s3-test-server.mjs"])(
-    "selects the server, whose CI test job runs %s",
-    (path) => {
-      expect(run(`${path}\n`).stdout).toBe(
-        "code=true\nscope=packages\npackages=@waitron/server\nroot=true\ndeploy=false\n",
-      );
-    },
-  );
+  it("selects the server, whose CI test job runs scripts/setup-litestream.mjs", () => {
+    expect(run("scripts/setup-litestream.mjs\n").stdout).toBe(
+      "code=true\nscope=packages\npackages=@waitron/server\nroot=true\ndeploy=false\n",
+    );
+  });
+
+  it("selects the server, whose CI test job runs scripts/setup-s3-test-server.mjs, and the image smoke, which reads its versitygw pin", () => {
+    expect(run("scripts/setup-s3-test-server.mjs\n").stdout).toBe(
+      "code=true\nscope=packages\npackages=@waitron/server\nroot=true\ndeploy=true\n",
+    );
+  });
 
   it("selects the server, whose Vitest config loads scripts/vitest-duration-sequencer.mjs", () => {
     expect(run("scripts/vitest-duration-sequencer.mjs\n").stdout).toBe(

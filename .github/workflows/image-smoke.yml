@@ -303,6 +303,22 @@ jobs:
             && grep -q "^## Litestream" /app/third-party/README.md'
           docker exec "$app" grep -qx "Litestream version: $pinned" /app/third-party/litestream/NOTICES.txt
 
+      # The build's own `versitygw --version` ran in the full node:26 stage as root. This runs the copy
+      # the slim runtime carries, as the user the server runs as.
+      - name: The image carries the pinned versitygw, runnable by the app user
+        run: |
+          set -euo pipefail
+          app=$(docker compose ps -q app)
+          pinned=$(sed -nE 's/^export const VERSITYGW_VERSION = "([0-9.]+)";$/\1/p' scripts/setup-s3-test-server.mjs)
+          [ -n "$pinned" ]
+          [ "$(docker exec "$app" id -u)" = "10001" ]
+          reported=$(docker exec "$app" versitygw --version | sed -nE 's/^Version *: ([0-9.]+)$/\1/p')
+          echo "versitygw in the image: $reported; pinned: $pinned"
+          [ "$reported" = "$pinned" ]
+          docker exec "$app" sh -c 'test -s /app/third-party/versitygw/NOTICE \
+            && grep -q "^## versitygw" /app/third-party/README.md'
+          docker exec "$app" grep -qx "versitygw version: $pinned" /app/third-party/versitygw/NOTICES.txt
+
       - name: The image carries the licence of the font printed text is drawn in
         run: |
           set -euo pipefail
