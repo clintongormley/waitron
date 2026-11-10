@@ -749,6 +749,7 @@ describe("startServer, against a migrated venue directory", () => {
       // roster's JSON.
       const staff = await fetch(`https://127.0.0.1:${httpPort()}/api/staff`, via);
       expect(staff.status).toBe(404);
+      expect(staff.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect(await staff.json()).toEqual({ error: { code: "node.reset", params: {} } });
 
       const management = await fetch(
