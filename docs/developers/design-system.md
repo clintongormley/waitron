@@ -1118,8 +1118,8 @@ words beside it are cut first. The menu's tiles take `inOrder`, a map
 from product id to items, every variant and choice of a product counted together, and draw the
 number at the tile's corner with the words for screen readers; side by side the map is not passed.
 The number takes no room of its own: on a photo it covers the photo's corner, and a tile without a
-photo keeps room for it beside the name whenever the map is passed, so adding a dish changes no
-tile's size.
+photo keeps a band for it above the name whenever the map is passed, so adding a dish changes no
+tile's size and the name stays centred and wraps as it would with no number drawn.
 Every count comes from `apps/till/src/state/new-order-count.ts`: `newOrderItems` (the switch and
 the bar), `newOrderDishes` (the bar's list, one entry per shown name in first-appearance order) and
 `newOrderByProduct` (the tiles), where a whole-unit line counts by quantity and a weighed or

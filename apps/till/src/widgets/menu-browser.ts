@@ -247,10 +247,11 @@ export class TillMenuBrowser extends LitElement {
         line-height: var(--wt-space-5);
         text-align: center;
       }
-      /* Room for the badge is kept whether or not the dish is counted, so a tile never changes size
-         when its first dish is added. On a photo the badge covers the photo's corner instead. */
-      .tile[data-counted]:not(:has(.thumb)) .name {
-        padding-inline-start: var(--wt-space-5);
+      /* Room for the badge is kept above the name whether or not the dish is counted, so a tile
+         never changes size when its first dish is added and its name stays centred. On a photo the
+         badge covers the photo's corner instead. */
+      .tile[data-counted]:not(:has(.thumb))::part(button) {
+        padding-block-start: calc(var(--wt-space-1) + var(--wt-space-5));
       }
       .in-order-words {
         ${visuallyHiddenStyles}

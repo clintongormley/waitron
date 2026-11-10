@@ -2823,6 +2823,60 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
       await page.viewport(viewport.width, viewport.height);
     }
   });
+  it("a colour tile's name is as wide, on as many lines and as centred as with no numbers drawn, before and after its dish is added", async () => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    try {
+      const painted = [
+        product("croq", "Croquettes", { image: null, color: "#256bb1" }),
+        product("toast", "Tomato toast", { image: null, color: "#256bb1" }),
+        product("bravas", "Bravas", { image: null, color: "#256bb1" }),
+      ];
+      // The words' own box, not the name's, which carries any room kept beside them.
+      const layout = async (inOrder?: Map<string, number>) => {
+        const { el } = await mount({
+          menu: display(
+            "handheld",
+            { tiles: "thumbnails" },
+            lunch({
+              structure: { members: painted.map((dish) => member(dish.id.slice(2))) },
+              ...withShortcuts([]),
+            }),
+          ),
+          handheld: true,
+          products: painted,
+          inOrder,
+        });
+        const read = () =>
+          painted.map((dish) => {
+            const tile = entry(el, "structure", dish.name);
+            expect(tile.querySelector(".thumb"), dish.name).toBeNull();
+            const words = document.createRange();
+            words.selectNodeContents(tile.querySelector(".name")!);
+            const box = words.getBoundingClientRect();
+            const outer = tile.getBoundingClientRect();
+            return {
+              name: dish.name,
+              width: Math.round(box.width),
+              lines: new Set([...words.getClientRects()].map((line) => Math.round(line.top))).size,
+              fromCentre: Math.round((box.left + box.right - outer.left - outer.right) / 2) + 0,
+            };
+          });
+        return { el, read };
+      };
+      const uncounted = (await layout()).read();
+      cleanupWidgets();
+
+      const { el, read } = await layout(new Map());
+      expect(read()).toEqual(uncounted);
+      el.inOrder = new Map(painted.map((dish) => [dish.id, 1]));
+      await el.updateComplete;
+      expect(read()).toEqual(uncounted);
+      cleanupWidgets();
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
 });
 
 describe("Spanish pricing-unit labels", () => {
