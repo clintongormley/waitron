@@ -1164,6 +1164,7 @@ export class ProductEditor extends LitElement {
       this.inherited?.courseId,
     );
     return html`<wt-combobox
+      ?preserve-order=${true /* Preserve configured course position. */}
       name="product-course"
       label=${t("product.course")}
       search="auto"
@@ -1465,7 +1466,7 @@ export class ProductEditor extends LitElement {
         noResultsLabel=${t("categories.combobox_no_results")}
         placeholder=${each}
         .options=${[
-          { value: EACH_CHOICE, label: each },
+          { value: EACH_CHOICE, fixed: true, label: each },
           ...[...this.units]
             .sort(
               (a, b) =>
@@ -1815,8 +1816,8 @@ export class ProductEditor extends LitElement {
       const group = t(KIND_TITLE[kind]);
       const create =
         kind === "extras"
-          ? { value: CREATE_EXTRA_LIST, label: t("editor.create_extra_list") }
-          : { value: CREATE_OPTION_LIST, label: t("editor.create_option_list") };
+          ? { value: CREATE_EXTRA_LIST, fixed: true, label: t("editor.create_extra_list") }
+          : { value: CREATE_OPTION_LIST, fixed: true, label: t("editor.create_option_list") };
       return [
         ...(kind === "extras" ? this.extraLists : this.optionLists)
           .filter((list) => !held.has(modifierKey({ kind, id: list.id })))

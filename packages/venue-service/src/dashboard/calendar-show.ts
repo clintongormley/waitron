@@ -23,7 +23,7 @@ export function showPicker(options: {
   const value = stationId ? STATION + stationId : chosen || ALL;
   const grouped = (group: string) => (stations.length ? { group } : {});
   const choices = [
-    { value: ALL, label: t("opening.all_departments") },
+    { value: ALL, fixed: true, label: t("opening.all_departments") },
     ...model.days[0]!.departments.map((d) => ({
       value: d.departmentId,
       label: names.name(d.departmentId),

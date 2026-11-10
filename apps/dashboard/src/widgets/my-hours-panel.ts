@@ -537,6 +537,7 @@ export class MyHoursPanel extends LitElement {
     return html`<div class="content">
       <div class="selectors">
         <wt-combobox
+          ?preserve-order=${true /* Preserve week/month span. */}
           name="hoursWindow"
           label=${t("hours.window")}
           .value=${this.selection.kind}

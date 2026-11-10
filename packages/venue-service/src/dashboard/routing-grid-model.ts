@@ -1,3 +1,4 @@
+import { currentLocale } from "@waitron/dashboard-kit";
 import { createLabelComparator, foldForSearch, textSearch } from "@waitron/shared";
 import {
   cellKey,
@@ -60,7 +61,7 @@ export function visibleRoutingRows(model: RoutingModel, expanded: ReadonlySet<st
       append(productsIn, product.categoryId, product);
     }
   }
-  const compare = createLabelComparator();
+  const compare = createLabelComparator(currentLocale());
   const byName = (a: { name: string }, b: { name: string }): number => compare(a.name, b.name);
   roots.sort(byName);
   uncategorised.sort(byName);
@@ -556,6 +557,7 @@ export function routingSearch(
   model: RoutingModel,
 ): (query: string, open?: ReadonlySet<string>) => RoutingSearch | undefined {
   let index: { tree: GridRow[]; parentOf: number[]; folded: (string | null)[] } | undefined;
+  let language: string | undefined;
   const indexed = () => {
     const tree = visibleRoutingRows(model, expandAll(model));
     // With every category expanded, a row's parent is the nearest row above it one level up.
@@ -574,6 +576,10 @@ export function routingSearch(
   return (query, open) => {
     const search = textSearch(query);
     if (search === undefined) return undefined;
+    if (language !== currentLocale()) {
+      language = currentLocale();
+      index = undefined;
+    }
     const { tree, parentOf, folded } = (index ??= indexed());
     const match = folded.map((name) => name !== null && search.rank(name) !== undefined);
     const leads = new Set<number>([0]);

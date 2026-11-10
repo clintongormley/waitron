@@ -489,6 +489,7 @@ export class UnitsScreen extends LitElement {
         cell: (unit) => this.#precisionLabel(unit.precision),
         sortValue: (unit) => unit.precision,
         filter: {
+          preserveOrder: true, // Increasing decimal precision.
           label: t("units.precision"),
           allLabel: t("units.filter_precision_all"),
           multiple: {
@@ -665,7 +666,7 @@ export class UnitsScreen extends LitElement {
                       noResultsLabel=${t("categories.combobox_no_results")}
                       .options=${[
                         { value: "", label: t("units.change_unit_placeholder") },
-                        { value: REASSIGN_EACH, label: t("units.change_unit_each") },
+                        { value: REASSIGN_EACH, fixed: true, label: t("units.change_unit_each") },
                         ...otherUnits.map((unit) => ({
                           value: unit.id,
                           label: this.#unitText(unit).name,

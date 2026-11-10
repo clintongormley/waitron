@@ -2,9 +2,9 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
-import { currentLocale } from "@waitron/dashboard-kit";
+import { currentLocale, subscribeLocale } from "@waitron/dashboard-kit";
 import { isStationColour, type StationColour } from "@waitron/shared";
-import { baseStyles, visuallyHiddenStyles } from "@waitron/ui";
+import { ChangeObserver, baseStyles, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -105,6 +105,11 @@ type ComboboxOption = HTMLElementTagNameMap["wt-combobox"]["options"][number];
 
 @customElement("venue-routing-grid")
 export class RoutingGrid extends LitElement {
+  constructor() {
+    super();
+    new ChangeObserver(this, subscribeLocale);
+  }
+
   static override styles = [
     baseStyles,
     stationColourStyles,
@@ -403,8 +408,8 @@ export class RoutingGrid extends LitElement {
   #allRows: ReadonlyMap<string, GridRow> | null = null;
   #blank: ReturnType<typeof blankZoneCell> | null = null;
   #searchOf: ReturnType<typeof routingSearch> | null = null;
-  /** The last search, kept while the model, the query and the search's open set stay the same. */
   #searched: {
+    locale: string;
     query: string;
     open: ReadonlySet<string> | null;
     result: RoutingSearch | undefined;
@@ -888,9 +893,10 @@ export class RoutingGrid extends LitElement {
   #search(): RoutingSearch | undefined {
     const { query, searchOpen: open } = this;
     const memo = this.#searched;
-    if (memo?.query === query && memo.open === open) return memo.result;
+    const locale = currentLocale();
+    if (memo?.query === query && memo.open === open && memo.locale === locale) return memo.result;
     const result = this.#searchOf!(query, open ?? undefined);
-    this.#searched = { query, open, result };
+    this.#searched = { locale, query, open, result };
     return result;
   }
 

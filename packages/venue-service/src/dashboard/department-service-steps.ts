@@ -207,6 +207,7 @@ export class DepartmentServiceSteps extends LitElement {
             }}
           ></wt-input>
           <wt-combobox
+            ?preserve-order=${true /* Preserve predecessor step sequence. */}
             class="start"
             name="serviceStepStart"
             label=${t("venue.service_step_starts")}

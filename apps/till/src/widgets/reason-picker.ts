@@ -29,6 +29,7 @@ export function reasonPicker(picker: ReasonPicker) {
   const offered = voidReasons(picker.reasons);
   const chosen = offered.find((reason) => reason.id === picker.reasonId);
   return html`<wt-combobox
+      ?preserve-order=${true /* Preserve configured reason position. */}
       name="reason"
       required
       .label=${t("adjust.reason")}

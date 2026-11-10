@@ -941,7 +941,7 @@ export class RotaView extends LitElement {
                   label=${t("staffing.month.area")}
                   search="never"
                   .value=${show!.kind === "area" ? show!.key : EVERYONE}
-                  .options=${[{ value: EVERYONE, label: t("staffing.rota.everyone") }, ...read.areas.map((a) => ({ value: areaKey(a.area), label: a.name }))]}
+                  .options=${[{ value: EVERYONE, fixed: true, label: t("staffing.rota.everyone") }, ...read.areas.map((a) => ({ value: areaKey(a.area), label: a.name }))]}
                   @wt-change=${(e: CustomEvent<{ value: string }>) => this.#go(this.week, e.detail.value)}
                 ></wt-combobox>
                 <div class="end">

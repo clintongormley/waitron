@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { setLocale } from "@waitron/dashboard-kit";
+import { currentLocale, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { RoutingView } from "../routing-types.js";
 import type { RoutingGrid } from "./routing-grid.js";
@@ -23,8 +23,10 @@ vi.mock("./routing-grid-model.js", async (importOriginal) => {
 await import("./routing-grid.js");
 
 const hosts: HTMLElement[] = [];
+const previousLocale = currentLocale();
 beforeEach(() => setLocale("en"));
 afterEach(() => {
+  setLocale(previousLocale);
   for (const host of hosts.splice(0)) host.remove();
 });
 
@@ -80,4 +82,33 @@ it("does not search again when an editor opens or a choice is waiting, and does 
   root.querySelector<HTMLButtonElement>('button[data-category="cocktails"]')!.click();
   await el.updateComplete;
   expect(searches.count).toBe(afterQuery + 1);
+});
+
+it("refreshes the shown search order on a live language change", async () => {
+  const el = document.createElement("venue-routing-grid") as RoutingGrid;
+  hosts.push(el);
+  el.model = {
+    ...model,
+    categories: [],
+    products: [
+      { id: "gnocchi", name: "Ñoquis", categoryId: null },
+      { id: "nut", name: "Nuez", categoryId: null },
+    ],
+  };
+  document.body.append(el);
+  await el.updateComplete;
+  const root = el.shadowRoot!;
+  const field = root.querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="search"]')!;
+  await field.updateComplete;
+  await userEvent.fill(field.shadowRoot!.querySelector("input")!, "n");
+  await el.updateComplete;
+  const rows = () =>
+    [...root.querySelectorAll('tbody td[data-row^="p:"][data-zone="every"]')].map((row) =>
+      row.getAttribute("data-row"),
+    );
+  expect(rows()).toEqual(["p:gnocchi", "p:nut"]);
+  setLocale("es-ES");
+  await el.updateComplete;
+  expect(rows()).toEqual(["p:nut", "p:gnocchi"]);
+  setLocale("en");
 });

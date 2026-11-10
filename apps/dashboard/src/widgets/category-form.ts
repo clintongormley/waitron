@@ -1,7 +1,11 @@
 import type { CategorySummary } from "../api/client.js";
-export { compareLabels as byLabel } from "@waitron/shared";
+import { compareLabels } from "@waitron/shared";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+
+export function byLabel(a: string, b: string): number {
+  return compareLabels(a, b, currentLocale());
+}
 
 export const PATH_SEPARATOR = " › ";
 

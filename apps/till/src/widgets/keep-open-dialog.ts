@@ -134,6 +134,7 @@ export class TillKeepOpenDialog extends LitElement {
           })}
         </p>
         <wt-combobox
+          ?preserve-order=${true /* Preserve chronological closing choices. */}
           name="until"
           required
           search="never"

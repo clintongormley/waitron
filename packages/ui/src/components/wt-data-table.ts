@@ -1195,7 +1195,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
   }
 
-  readonly #language = new ChangeObserver(this, subscribePageLanguage);
+  constructor() {
+    super();
+    new ChangeObserver(this, subscribePageLanguage);
+  }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();

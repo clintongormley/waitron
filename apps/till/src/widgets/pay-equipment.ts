@@ -353,7 +353,7 @@ export class TillPayEquipment extends LitElement {
       ...(choice.busy ? { disabled: true } : {}),
     }));
     if (ready !== null && !choices.some((choice) => choice.id === ready.id))
-      options.unshift({ value: ready.id, label: ready.name });
+      options.unshift({ value: ready.id, fixed: true, label: ready.name });
     const hint =
       saving !== null
         ? t("pay_equipment.saving")

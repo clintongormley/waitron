@@ -833,3 +833,27 @@ beforeEach(() => {
   setLocale("es-ES");
 });
 afterEach(() => setLocale(previousLocale));
+
+it("updates the default seating table after the page language changes", async () => {
+  const previous = currentLocale();
+  try {
+    setLocale("en-GB");
+    const api = stubApi({
+      listTables: vi.fn().mockResolvedValue([
+        { ...TABLES[0], id: "gnocchi", label: "Ñoquis" },
+        { ...TABLES[1], id: "nut", label: "Nuez" },
+      ]),
+    });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    setLocale("es-ES");
+    await el.updateComplete;
+    await click(el, "seat-bk-late");
+    const field = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+      "[data-test=seat-table-bk-late]",
+    );
+    expect(field?.value).toBe("nut");
+  } finally {
+    setLocale(previous);
+  }
+});

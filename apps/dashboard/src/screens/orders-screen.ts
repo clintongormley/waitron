@@ -326,6 +326,7 @@ export class OrdersScreen extends LitElement {
       </div>
       <div class="filters">
         <wt-combobox
+          ?preserve-order=${true /* Preserve order lifecycle. */}
           name="status"
           label=${t("orders.status")}
           .error=${errorFor("status")}

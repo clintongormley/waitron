@@ -444,7 +444,10 @@ export class WtCombobox extends LitElement {
   private readonly listboxId = uniqueId("wt-combobox-listbox");
   private readonly errorId = uniqueId("wt-combobox-error");
   private readonly hintId = uniqueId("wt-combobox-hint");
-  private readonly language = new ChangeObserver(this, subscribePageLanguage);
+  constructor() {
+    super();
+    new ChangeObserver(this, subscribePageLanguage);
+  }
   private order?: {
     options: ComboboxOption[];
     language: string;

@@ -4,7 +4,10 @@ import { ChangeObserver } from "./change-observer.js";
 import { subscribePageLanguage } from "./page-language.js";
 
 class LanguageProbe extends LitElement {
-  private readonly language = new ChangeObserver(this, subscribePageLanguage);
+  constructor() {
+    super();
+    new ChangeObserver(this, subscribePageLanguage);
+  }
   override render() {
     return html`${document.documentElement.lang}`;
   }

@@ -403,6 +403,7 @@ export class UnitForm extends LitElement {
           `,
         )}
         <wt-combobox
+          ?preserve-order=${true /* Preserve precision sequence. */}
           class="field"
           data-test="precision"
           name="precision"

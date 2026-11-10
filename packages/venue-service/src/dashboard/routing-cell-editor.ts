@@ -372,11 +372,12 @@ export class RoutingCellEditor extends LitElement {
   }
 
   private stationOptions() {
-    const options: { value: string; label: string; disabled?: boolean }[] = this.stations
-      .filter((station) => station.active)
-      .map((station) => ({ value: stationKey(station.id), label: station.name }));
+    const options: { value: string; label: string; disabled?: boolean; fixed?: boolean }[] =
+      this.stations
+        .filter((station) => station.active)
+        .map((station) => ({ value: stationKey(station.id), label: station.name }));
     if (!this.isDefaultCell)
-      options.push({ value: NO_PREPARATION, label: t("prep.no_preparation") });
+      options.push({ value: NO_PREPARATION, fixed: true, label: t("prep.no_preparation") });
     return options;
   }
 
@@ -387,7 +388,7 @@ export class RoutingCellEditor extends LitElement {
     const station = this.stations.find((candidate) => stationKey(candidate.id) === value);
     const label =
       station === undefined ? value : format("routing.disabled_station", { station: station.name });
-    return [...options, { value, label, disabled: true }];
+    return [...options, { value, label, disabled: true, fixed: true }];
   }
 
   private storedTargets(): Map<string, string> {

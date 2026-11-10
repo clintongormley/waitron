@@ -318,6 +318,7 @@ export class TillFindBillScreen extends LitElement {
       allLabel: label(`any_${key}`),
       value: () => "",
       options: values,
+      preserveOrder: key === "state", // Bill lifecycle; other filters use labels.
     });
     const money = (value: string) => formatMoney(value, currentLocale());
     const column = (
@@ -460,6 +461,7 @@ export class TillFindBillScreen extends LitElement {
   #dateControls() {
     return html`<div slot="filters-start" class="dates">
       <wt-combobox
+        ?preserve-order=${true /* Preserve date-preset progression. */}
         name="dates"
         label=${label("dates")}
         .value=${this.dates.preset}

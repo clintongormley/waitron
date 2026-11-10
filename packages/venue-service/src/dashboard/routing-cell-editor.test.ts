@@ -162,7 +162,7 @@ it("offers the station choices beside each line and for any other time", async (
   const expected = [
     { value: "station:up", label: "Upstairs" },
     { value: "station:down", label: "Downstairs" },
-    { value: "no_preparation", label: "No preparation" },
+    { value: "no_preparation", fixed: true, label: "No preparation" },
   ];
   expect(lineTargets(el)[0]!.options).toEqual(expected);
   expect(one<Combobox>(el, "[name=target]")!.options).toEqual(expected);
@@ -349,6 +349,7 @@ it("shows a stored switched-off or unknown station as a disabled choice", async 
     value: "station:off",
     label: "Off (Disabled)",
     disabled: true,
+    fixed: true,
   });
   const gone = await mount({
     periods: [{ periodId: "lunch", target: { kind: "station", stationId: "gone" } }],
@@ -357,6 +358,7 @@ it("shows a stored switched-off or unknown station as a disabled choice", async 
     value: "station:gone",
     label: "station:gone",
     disabled: true,
+    fixed: true,
   });
 });
 

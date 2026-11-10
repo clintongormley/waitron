@@ -614,6 +614,7 @@ export class SeasonPainter extends LitElement {
   private picker(department: Department) {
     const zone = this.zone(department);
     return html`<wt-combobox
+      ?preserve-order=${true /* Preserve department/zone tree. */}
       slot="picker"
       name="department"
       label=${t("painter.department")}

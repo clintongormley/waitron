@@ -7,7 +7,7 @@ import {
 } from "@waitron/shared";
 import { NEW_TABLE_SIZE, clampToGrid, firstFreeSpot } from "@waitron/ui";
 import type { FloorPlan, FloorPlanSave, PlanPlacement } from "../api/client.js";
-import { fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 
 /** The most seats a table may hold. */
 export const MAX_SEATS = 999;
@@ -413,7 +413,7 @@ export function setParts(
 /** Tables a joined table may be made of: off the plan, not joined tables, and in no joined table
  *  but `joinedKey`. */
 export function freeTables(draft: FloorPlanDraft, joinedKey?: string): DraftTable[] {
-  const compare = createLabelComparator();
+  const compare = createLabelComparator(currentLocale());
   return draft.tables
     .filter((t) => {
       if (t.placement !== null || t.parts !== null) return false;
@@ -428,7 +428,7 @@ const NUMBERED = /^(.*\S)\s+(\d+)$/;
 /** The names in number order: "Counter 3, 4, 5" when every name is one prefix and a number, else
  *  the names joined. */
 export function madeOfText(names: readonly string[]): string {
-  const sorted = [...names].sort(createLabelComparator());
+  const sorted = [...names].sort(createLabelComparator(currentLocale()));
   const numbered = sorted.map((name) => NUMBERED.exec(name));
   const prefix = numbered[0]?.[1];
   if (prefix === undefined || numbered.some((match) => match?.[1] !== prefix))

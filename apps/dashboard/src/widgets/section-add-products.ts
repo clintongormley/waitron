@@ -8,8 +8,9 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { byLabel, categoryPath, categoryWithDescendants } from "./category-form.js";
 import { searchBy } from "@waitron/shared";
+import { LocaleChangeController } from "../state/locale-controller.js";
 import type { CategorySummary } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 
 export interface AddableProduct {
   id: string;
@@ -155,6 +156,12 @@ export class SectionAddProducts extends LitElement {
   @state() private error = false;
   /** Every product the section does not already hold, by name. */
   #offered: AddableProduct[] = [];
+  #offeredLocale = "";
+
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
   #options: { id: string; path: string }[] = [];
   /** Null when no category is chosen. */
   #within: ReadonlySet<string> | null = null;
@@ -221,7 +228,12 @@ export class SectionAddProducts extends LitElement {
       this.#baseline ??= [...this.selected].sort();
       this.#scope.commit(this.#baseline);
     }
-    if (changed.has("products") || changed.has("inSection")) {
+    if (
+      changed.has("products") ||
+      changed.has("inSection") ||
+      this.#offeredLocale !== currentLocale()
+    ) {
+      this.#offeredLocale = currentLocale();
       const held = new Set(this.inSection);
       this.#offered = this.products
         .filter((product) => !held.has(product.id))
@@ -235,9 +247,10 @@ export class SectionAddProducts extends LitElement {
     )
       this.categoryId = "";
     if (changed.has("categories")) {
-      this.#options = this.categories
-        .map((category) => ({ id: category.id, path: categoryPath(category, this.categories) }))
-        .sort((a, b) => byLabel(a.path, b.path));
+      this.#options = this.categories.map((category) => ({
+        id: category.id,
+        path: categoryPath(category, this.categories),
+      }));
     }
     if (changed.has("categories") || changed.has("categoryId"))
       this.#within = this.categoryId

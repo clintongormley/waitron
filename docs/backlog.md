@@ -1468,10 +1468,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   writer/mail sender and the owner's `fiscal.remedy` assignability decision.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
-- **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
-  says so**
-  [Detail](backlog/dashboard.md#dropdowns-sort-by-the-label-the-person-reads-with-intlcollator-a-list-in-a-lifecycle-order-says-so)
-
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
   first). 50 per page with a server-enforced maximum; search and sort over the whole dataset;
   debounce, reset on filter change, ignore superseded responses, keep passive live refreshes.

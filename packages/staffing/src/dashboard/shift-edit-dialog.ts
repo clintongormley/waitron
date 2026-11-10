@@ -304,11 +304,13 @@ export class ShiftEditDialog extends LitElement {
           @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector("[data-test=save]"))}
         >
           <div class="form">
+            <!-- Staff roles keep their configured position. -->
             ${(["personId", "area", "staffRoleId"] as const).map(
               (f) =>
                 html`<wt-combobox
                   required
                   name=${f}
+                  ?preserve-order=${f === "staffRoleId"}
                   label=${t(`staffing.shift.${f}`)}
                   .value=${this.draft[f]}
                   .options=${choices[f]}

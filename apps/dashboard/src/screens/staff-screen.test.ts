@@ -1606,7 +1606,7 @@ describe("staff-screen filter fields", () => {
     expect(role.label).toBe(t("staff.filter_role"));
     expect(role.search).toBe("auto");
     expect(role.options).toEqual([
-      { value: "all", label: t("staff.filter_all_roles") },
+      { value: "all", fixed: true, label: t("staff.filter_all_roles") },
       ...rolesByName().map((value) => ({ value, label: roleName(value) })),
     ]);
     expect(role.value).toBe("all");

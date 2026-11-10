@@ -73,11 +73,15 @@ it.each(["en-GB", "es-ES"])(
       ],
     });
     expect(listed(el)).toEqual(["quarter", "half", "two"]);
-    expect(categoryBox(el).options.map(({ label }) => label)).toEqual([
-      t("add_products.all_categories"),
-      `0${separator}25 kg`,
-      `0${separator}5 kg`,
-    ]);
+    const field = categoryBox(el);
+    await field.updateComplete;
+    field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+    await field.updateComplete;
+    expect(
+      [...field.shadowRoot!.querySelectorAll('[role="option"]')].map((row) =>
+        row.textContent!.trim(),
+      ),
+    ).toEqual([t("add_products.all_categories"), `0${separator}25 kg`, `0${separator}5 kg`]);
   },
 );
 
@@ -542,4 +546,18 @@ it("keeps a request refusal above Add and permits retry with the same selection"
   const adds = capture(el);
   q(el, '[data-test="add"]').click();
   expect(adds).toEqual([{ productIds: ["p-ipa"] }]);
+});
+
+it("reorders the offered products after a live language switch without new data", async () => {
+  setLocale("en-GB");
+  const el = await mount({
+    products: [
+      { id: "gnocchi", name: "Ñoquis", categoryId: null },
+      { id: "nut", name: "Nuez", categoryId: null },
+    ],
+  });
+  expect(listed(el)).toEqual(["gnocchi", "nut"]);
+  setLocale("es-ES");
+  await el.updateComplete;
+  expect(listed(el)).toEqual(["nut", "gnocchi"]);
 });

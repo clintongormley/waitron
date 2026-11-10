@@ -1,3 +1,5 @@
+import { render } from "lit";
+import { showPicker } from "./calendar-show.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -610,4 +612,31 @@ describe.each(["en", "es"] as const)("A725 Calendar station accessibility (%s)",
       },
     );
   });
+});
+
+it("keeps All above named departments when there are no station groups", async () => {
+  const host = document.createElement("div");
+  hosts.push(host);
+  document.body.append(host);
+  render(
+    showPicker({
+      model: { days: [{ departments: [{ departmentId: "bar" }] }] } as unknown as OpeningHoursMonth,
+      chosen: "",
+      names: { name: () => "A bar" } as never,
+      stations: [],
+      stationId: "",
+      onDepartment: () => {},
+      onStation: () => {},
+    }),
+    host,
+  );
+  const field = host.querySelector("wt-combobox")!;
+  await field.updateComplete;
+  field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+  await field.updateComplete;
+  expect(
+    [...field.shadowRoot!.querySelectorAll('[role="option"]')].map((row) =>
+      row.textContent!.trim(),
+    ),
+  ).toEqual(["All departments", "A bar"]);
 });

@@ -112,8 +112,17 @@ describe("booking-form", () => {
       createdAt: "2026-01-01",
     }));
     const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps({ tables }));
-    const { options } = el.shadowRoot!.querySelector<TableField>("[data-test=booking-table]")!;
-    expect(options.map((o) => o.value)).toEqual(["", "t-1", "t-2", "t-10"]);
+    const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[data-test=booking-table]",
+    )!;
+    await field.updateComplete;
+    field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+    await field.updateComplete;
+    expect(
+      [...field.shadowRoot!.querySelectorAll('[role="option"]')].map((row) =>
+        row.textContent!.trim(),
+      ),
+    ).toEqual([BOOKINGS_STRINGS.es["booking.table_none"], "Table 1", "Table 2", "Table 10"]);
     expect(tables.map((table) => table.id)).toEqual(["t-10", "t-2", "t-1"]);
   });
 

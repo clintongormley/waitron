@@ -572,7 +572,7 @@ export class AdjustmentReportScreen extends LitElement {
     }
     reasons.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
     return [
-      { value: ALL_REASONS, label: t("adjustment_report.entries.all_reasons") },
+      { value: ALL_REASONS, fixed: true, label: t("adjustment_report.entries.all_reasons") },
       ...reasons.map((reason) => ({ value: reason.id, label: reason.name })),
     ];
   }

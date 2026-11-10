@@ -1,3 +1,4 @@
+import type { ComboboxOption } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
@@ -418,7 +419,7 @@ export class TillEquipmentDialog extends LitElement {
     const useDefault = fill(t("equipment.use_default"), {
       name: equipment.default?.name ?? t("equipment.none"),
     });
-    const options = [
+    const options: ComboboxOption[] = [
       { value: "", label: useDefault },
       ...equipment.choices.map((choice) => ({ value: choice.id, label: optionLabel(choice) })),
     ];
@@ -429,7 +430,7 @@ export class TillEquipmentDialog extends LitElement {
       chosen !== null &&
       !equipment.choices.some((choice) => choice.id === chosen.id)
     )
-      options.push({ value: chosen.id, label: optionLabel(chosen) });
+      options.push({ value: chosen.id, fixed: true, label: optionLabel(chosen) });
     const error = this.#refusedField() === row.field ? codeMessage(this.error!.code) : "";
     return html`<div class="row" data-equipment-row=${row.role}>
       <span class="label" data-equipment-label>${label}</span>

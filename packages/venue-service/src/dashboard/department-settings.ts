@@ -517,6 +517,7 @@ export class DepartmentSettings extends LitElement {
       ...new Set([...REMINDER_MINUTES, ...[saved, minutes].filter((m) => m !== null)]),
     ].sort((a, b) => a - b);
     return html`<wt-combobox
+      ?preserve-order=${true /* Preserve off/at once/minute sequence. */}
       name="releaseReminderMinutes"
       label=${t("venue.release_reminder")}
       hint=${t("venue.release_reminder_hint")}
@@ -1003,7 +1004,7 @@ export class DepartmentSettings extends LitElement {
                               name="receivingProfileId"
                               label=${t("venue.receiving_profile")}
                               search="never"
-                              .options=${[{ value: "", label: t("venue.none") }, ...this.profiles.map((p) => ({ value: p.id, label: p.name })), ...(draft.transfers.receivingProfileId && !this.profiles.some((p) => p.id === draft.transfers!.receivingProfileId) ? [{ value: draft.transfers.receivingProfileId, label: t("venue.transfer_profile_unavailable") }] : [])]}
+                              .options=${[{ value: "", label: t("venue.none") }, ...this.profiles.map((p) => ({ value: p.id, label: p.name })), ...(draft.transfers.receivingProfileId && !this.profiles.some((p) => p.id === draft.transfers!.receivingProfileId) ? [{ value: draft.transfers.receivingProfileId, fixed: true, label: t("venue.transfer_profile_unavailable") }] : [])]}
                               .value=${draft.transfers.receivingProfileId ?? ""}
                               error=${errors.receivingProfileId ?? ""}
                               ?disabled=${disabled}

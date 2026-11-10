@@ -773,7 +773,11 @@ it("None clears the receiving desk while an unavailable stored profile stays vis
   expect(box.options).toEqual([
     { value: "", label: "None" },
     { value: "p2", label: "Handheld desk" },
-    { value: "gone", label: "Unavailable profile — choose another or no receiving desk" },
+    {
+      value: "gone",
+      fixed: true,
+      label: "Unavailable profile — choose another or no receiving desk",
+    },
   ]);
   await chooseOption(box, "");
   await el.updateComplete;

@@ -1,8 +1,8 @@
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
-import { QueryController } from "@waitron/dashboard-kit";
+import { subscribeLocale, QueryController } from "@waitron/dashboard-kit";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { ChangeObserver, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -91,6 +91,13 @@ export class BookingsScreen extends LitElement {
       }
     `,
   ];
+
+  constructor() {
+    super();
+    new ChangeObserver(this, subscribeLocale, () => {
+      this.tables = tablesInNumberOrder(this.tables);
+    });
+  }
 
   @property({ attribute: false }) api!: BookingApi;
   readonly #queries = new QueryController(

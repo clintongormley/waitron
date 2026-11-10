@@ -1506,7 +1506,7 @@ export class DevicesScreen extends LitElement {
     role: (typeof PRINTER_ROLES)[number],
     profile: DeviceProfile | undefined,
     held: string | null,
-  ): { value: string; label: string }[] {
+  ): { value: string; label: string; fixed?: boolean }[] {
     const ids = profile?.[role.list] ?? [];
     const drawer = role.field === "drawer" || role.field === "invoice";
     const keep = this.editForm.profileId === this.editing?.deviceProfileId ? held : null;
@@ -1530,6 +1530,7 @@ export class DevicesScreen extends LitElement {
         : [
             {
               value: unlisted.id,
+              fixed: true,
               label: `${printerLabel(unlisted)} (${t("devices.printer_not_on_profile_mark")})`,
             },
           ]),
@@ -1558,7 +1559,6 @@ export class DevicesScreen extends LitElement {
     return this.#readerLabel(reader);
   }
 
-  /** Use default first, then the chosen profile's switched-on readers in its order. */
   #readerOptions(): { value: string; label: string }[] {
     const list = this.profileReaders.get(this.editForm.profileId);
     const listed = (list?.readerIds ?? []).flatMap((id) => {
@@ -1887,8 +1887,8 @@ export class DevicesScreen extends LitElement {
           value: (d) => (d.profileRetired ? "retired" : (d.deviceProfileId ?? "none")),
           options: [
             ...this.deviceProfiles.map((profile) => ({ value: profile.id, label: profile.name })),
-            { value: "none", label: t("equipment.none") },
-            { value: "retired", label: t("devices.profile_deleted") },
+            { value: "none", fixed: true, label: t("equipment.none") },
+            { value: "retired", fixed: true, label: t("devices.profile_deleted") },
           ],
         },
         choosable: "shown",
@@ -1933,6 +1933,7 @@ export class DevicesScreen extends LitElement {
         key: "status",
         sortValue: (d) => (d.active ? t("devices.status_active") : t("devices.status_disabled")),
         filter: {
+          preserveOrder: true, // Active before disabled.
           label: t("devices.column_status"),
           allLabel: t("devices.filter_status_all"),
           value: (d) => (d.active ? "active" : "disabled"),
@@ -2628,7 +2629,7 @@ export class DevicesScreen extends LitElement {
       name="showNonPassStations"
       label=${t("device_profiles.show_other_stations")}
       .options=${[
-        { value: "profile", label: t("devices.use_profile_setting") },
+        { value: "profile", fixed: true, label: t("devices.use_profile_setting") },
         { value: "show", label: t("devices.other_stations_show") },
         { value: "hide", label: t("devices.other_stations_hide") },
       ]}
