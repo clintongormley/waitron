@@ -1,6 +1,6 @@
-// Reads the Dockerfile, the setup script, the test server and the image-smoke workflow as TEXT, which
-// makes it weaker than its name: it proves the copies of the pin agree, not that any of them downloads
-// or runs. What runs the binary is the image build's own `versitygw --version` check
+// Reads the Dockerfile, the test server and the image-smoke workflow as TEXT, and imports the setup
+// script's pin, which makes it weaker than its name: it proves the copies of the pin agree, not that any
+// of them downloads or runs. What runs the binary is the image build's own `versitygw --version` check
 // (deploy/Dockerfile, the `versitygw` stage), the image-smoke step that runs it in the shipped image,
 // and the setup script's.
 import { readFileSync } from "node:fs";
@@ -34,7 +34,7 @@ describe("the pinned versitygw", () => {
     expect(
       one(TEST_SERVER, /export const VERSITYGW_VERSION = "([0-9.]+)";/g, "test server pin"),
     ).toBe(VERSITYGW_VERSION);
-    expect(one(versitygwStage(), /release=([0-9.]+);/g, "Dockerfile pin")).toBe(VERSITYGW_VERSION);
+    expect(one(versitygwStage(), /version=([0-9.]+);/g, "Dockerfile pin")).toBe(VERSITYGW_VERSION);
     expect(
       DOCKERFILE.split("\n").filter((line) =>
         line.startsWith("COPY --from=versitygw /usr/local/bin/versitygw /usr/local/bin/versitygw"),
@@ -51,7 +51,7 @@ describe("the pinned versitygw", () => {
       const inImage = one(
         versitygwStage(),
         new RegExp(
-          `${arch}\\) name="versitygw_v\\$\\{release\\}_${assetArch}"; sum="([0-9a-f]{64})"`,
+          `${arch}\\) name="versitygw_v\\$\\{version\\}_${assetArch}"; sum="([0-9a-f]{64})"`,
           "g",
         ),
         `${arch} → ${platform} sum in the Dockerfile`,

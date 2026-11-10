@@ -79,8 +79,7 @@ describe("renderNotices", () => {
     expect(text).not.toContain("Litestream");
   });
 
-  // The committed notice was written before the generator took a program's name; everything above
-  // its module list is fixed text, so a change to the shared template shows here.
+  // Everything above the module list is fixed text, so a change to the shared template shows here.
   it("writes Litestream's notice unchanged", () => {
     const committed = readFileSync("deploy/third-party/litestream/NOTICES.txt", "utf8");
     const head = committed.slice(0, committed.indexOf("Modules ("));

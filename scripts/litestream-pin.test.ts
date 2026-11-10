@@ -1,7 +1,8 @@
-// Reads the Dockerfile, the package's pin and the bench's as TEXT, which makes it weaker than its
-// name: it proves the copies of the pin agree, not that any of them downloads or runs. What runs the binary is
-// the image build's own `litestream version` check (deploy/Dockerfile, the `litestream` stage), the
-// image-smoke step that runs it in the shipped image, and the setup script's.
+// Reads the Dockerfile's `litestream` stage, the package's pin and the bench's as TEXT, and imports
+// the setup script's pin, which makes it weaker than its name: it proves the copies of the pin agree,
+// not that any of them downloads or runs. What runs the binary is the image build's own `litestream
+// version` check (deploy/Dockerfile, the `litestream` stage), the image-smoke step that runs it in the
+// shipped image, and the setup script's.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -20,6 +21,14 @@ function one(text: string, pattern: RegExp, what: string): string {
   return matches[0]![1]!;
 }
 
+/** The `litestream` stage alone, so no other stage's line is read as this pin. */
+function litestreamStage(): string {
+  const start = DOCKERFILE.indexOf("FROM node:26 AS litestream");
+  if (start < 0) throw new Error("no litestream stage in deploy/Dockerfile");
+  const end = DOCKERFILE.indexOf("\nFROM ", start + 1);
+  return DOCKERFILE.slice(start, end < 0 ? undefined : end);
+}
+
 describe("the pinned Litestream", () => {
   const version = one(PACKAGE, /export const LITESTREAM_VERSION = "([0-9.]+)";/g, "package pin");
 
@@ -28,7 +37,7 @@ describe("the pinned Litestream", () => {
     expect(one(BENCH, /export const LITESTREAM_VERSION = "([0-9.]+)";/g, "bench pin")).toBe(
       version,
     );
-    expect(one(DOCKERFILE, /version=([0-9.]+);/g, "Dockerfile pin")).toBe(version);
+    expect(one(litestreamStage(), /version=([0-9.]+);/g, "Dockerfile pin")).toBe(version);
   });
 
   it("checks the same Linux checksums in the box image and the setup script", () => {
@@ -38,7 +47,7 @@ describe("the pinned Litestream", () => {
       ["arm64", "linux-arm64"],
     ] as const) {
       const inImage = one(
-        DOCKERFILE,
+        litestreamStage(),
         new RegExp(
           `${arch}\\) asset="litestream-\\$\\{version\\}-${platform}\\.tar\\.gz"; sum="([0-9a-f]{64})"`,
           "g",
