@@ -3008,6 +3008,7 @@ export class TillTableOrderScreen extends LitElement {
             party: this.party,
             bills: this.bills,
             billId: this.orderId,
+            personId: this.personId,
             newBillBusy: this.newBillBusy,
             onSwitch: (workingOrderId) =>
               this.#leavingActions(() => this.#dispatch("switch-bill", { workingOrderId })),
