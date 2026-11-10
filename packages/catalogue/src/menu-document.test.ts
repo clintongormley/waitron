@@ -1226,6 +1226,19 @@ describe("diffMenuDocuments", () => {
     ]);
   });
 
+  it("reports a declarations-only product edit as a diet change", async () => {
+    const f = await menusFixture(fx.db);
+    const live = await build(f.dinner);
+    await app((tx) => updateProduct(tx, f.lemonade, { dietaryDeclarations: ["vegan"] }));
+    expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toContainEqual({
+      kind: "product_changed",
+      productId: f.lemonade,
+      name: "Lemonade",
+      fields: ["diet"],
+      source: "shared_product",
+    });
+  });
+
   it("names the list and extra when its saved portion takes a new product unit", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.dinner);

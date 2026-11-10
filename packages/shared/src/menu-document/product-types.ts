@@ -207,7 +207,8 @@ export interface InheritedValues {
   /** The parent's category, which is always the variant's. */
   primaryCategoryId: string | null;
   courseId: string | null;
-
+  /** A blank variant reads the parent's published value; its editable allergens hold its own manual
+   * declaration. This inherited value is not the parent's manual declaration. */
   allergens: ProductAllergens | null;
   dietaryDeclarations: DietaryLabel[];
 }

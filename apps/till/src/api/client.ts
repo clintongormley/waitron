@@ -170,7 +170,7 @@ export interface TillInfo {
   locale: string;
   clockingAvailable: boolean;
   onboardingIntent?: "demo" | "prepare" | "live";
-
+  /** The receipt locale is independent of the UI {@link locale}. */
   invoiceLocale: string;
   /**
    * The receipt languages staff may choose for a sale or a copy, the venue's own first
