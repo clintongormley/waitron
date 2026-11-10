@@ -45,8 +45,7 @@ export interface BenchSession {
   day: number;
   date: string;
   seed: number;
-  /** Absent from a session written before it was recorded. */
-  billsPerDay?: number;
+  billsPerDay: number;
   /** The bench clock when the day finished; a resume starts its clock here. */
   clockAt: string;
   deviceCookies: Record<string, string>;
@@ -70,7 +69,6 @@ export async function buildYear(options: BuildYearOptions): Promise<void> {
   if (session !== undefined) copyFolder(sessionCopy(options.out, session), working);
   // A folder holding fewer days than its volume.json describes must not pass for a finished build.
   if ((session?.day ?? 0) < days) rmSync(join(options.out, VOLUME_FILE), { force: true });
-  let built = session?.day ?? 0;
 
   const clock = installBenchClock(
     session === undefined ? new Date(dayBounds(dateOf(1)).startAt) : new Date(session.clockAt),
@@ -114,13 +112,12 @@ export async function buildYear(options: BuildYearOptions): Promise<void> {
             options.beforeSession?.(day);
           },
         );
-        built = day;
         options.onDay?.(day, result, dayMs);
       }
     } finally {
       await venue.close();
     }
-    writeVolume(options.out, { seed, days: built, billsPerDay });
+    writeVolume(options.out, { seed, days, billsPerDay });
   } finally {
     clock.uninstall();
   }
@@ -133,7 +130,7 @@ function refuseOtherSettings(
 ): void {
   if (session.seed !== wanted.seed)
     throw new Error(`bench: ${out} was built with seed ${session.seed}, not ${wanted.seed}`);
-  if (session.billsPerDay !== undefined && session.billsPerDay !== wanted.billsPerDay)
+  if (session.billsPerDay !== wanted.billsPerDay)
     throw new Error(
       `bench: ${out} was built with ${session.billsPerDay} bills a day, not ${wanted.billsPerDay}`,
     );
@@ -181,10 +178,9 @@ function readSession(out: string): BenchSession | undefined {
 }
 
 /**
- * `last-day/`, once it holds the session's day. A stop after `checkpoint` swaps the copies and
- * before it writes the session leaves the session's day in `last-day.old/` and an uncounted day in
- * `last-day/`; that copy is moved back, since the next checkpoint starts by removing
- * `last-day.old/`.
+ * `last-day/`, once it holds the session's day. A stop after `checkpoint` moves `last-day/` aside
+ * and before it writes the session leaves the session's day only in `last-day.old/`, which the next
+ * checkpoint would delete, so it is moved back.
  */
 function sessionCopy(out: string, session: BenchSession): string {
   const copy = join(out, COPY_DIR);

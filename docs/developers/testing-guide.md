@@ -3413,11 +3413,12 @@ determinism case.
 
 ## The bench
 
-A1308 changes most of the tables, and a slice that changes a path staff wait on has to show it did
-not make that path slower. Slice 0 built a bench for that, beside the [protection list](#the-protection-list). It lives
+A1308 changes most of the tables, and every slice has to show it did not make a path staff wait on
+slower. Slice 0 built a bench for that, beside the [protection list](#the-protection-list). It lives
 in `apps/server/scripts/bench/` and runs from `apps/server` as `pnpm bench <command>`. It does not
 run in CI: only its unit tests do, in `apps/server`'s suite. It refuses a relative path, and a
-`--venue` or `--out` inside the repository; a refused command exits 2. `bench compare`, which only
+`--venue` or `--out` inside the repository; a refused command exits 2 through `pnpm bench`
+or `tsx`, and exited 1 through `pnpm -s` (pnpm 9.15.0). `bench compare`, which only
 reads its two files, takes any path.
 
 The bench builds a venue that trades through the real routes (`app.request`, with no network and a
@@ -3548,7 +3549,7 @@ not compared: bench: the two results differ in seed: 1 against 2
 - **The timings are taken on an idle database.** The cases run one at a time and nothing else uses
   the venue meanwhile. A slice that needs timings under load measures them itself.
 - **The dataset is synthetic.** Its volumes and payment mix are the profile's, not a real venue's.
-- **No middleware.** The routes are mounted without the middleware boot puts in front of them, so
+- **Not behind boot's middleware.** The routes are mounted without the middleware boot puts in front of them, so
   the timings leave it out.
 - **The bench venue stays open across days.** A real box restarts sometimes; a resumed build
   reopens it, and carries on the attendance scan saved in the folder.

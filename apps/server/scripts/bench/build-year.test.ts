@@ -1,12 +1,4 @@
-import {
-  appendFileSync,
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -226,7 +218,7 @@ describe("buildYear", () => {
   );
 
   describe("a folder built before", () => {
-    let out: string;
+    let out = "";
     const sessionPath = () => join(out, SESSION_FILE);
     const volume = () =>
       JSON.parse(readFileSync(join(out, VOLUME_FILE), "utf8")) as {
@@ -238,7 +230,9 @@ describe("buildYear", () => {
       out = mkdtempSync(join(tmpdir(), "wt-bench-build-"));
       await buildYear({ out, days: 2, billsPerDay: 2, seed: 1 });
     }, CASE_TIMEOUT_MS);
-    afterAll(() => rmSync(out, { recursive: true, force: true }));
+    afterAll(() => {
+      if (out !== "") rmSync(out, { recursive: true, force: true });
+    });
 
     it("records the bills a day in the session", () => {
       expect(JSON.parse(readFileSync(sessionPath(), "utf8"))).toMatchObject({
@@ -267,20 +261,6 @@ describe("buildYear", () => {
       );
       expect(readFileSync(join(out, VOLUME_FILE), "utf8")).toBe(before);
     });
-
-    it(
-      "accepts a session from before the bills a day were recorded",
-      async () => {
-        const session = JSON.parse(readFileSync(sessionPath(), "utf8")) as Record<string, unknown>;
-        delete session.billsPerDay;
-        writeFileSync(sessionPath(), JSON.stringify(session));
-
-        await buildYear({ out, days: 2, billsPerDay: 2, seed: 1 });
-
-        expect(volume().profile).toMatchObject({ days: 2, billsPerDay: 2 });
-      },
-      CASE_TIMEOUT_MS,
-    );
 
     it(
       "removes volume.json before an extension trades, and writes it again once it finishes",
