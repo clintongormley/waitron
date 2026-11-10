@@ -38,6 +38,44 @@ afterEach(() => {
 });
 
 describe("setup-mode-screen", () => {
+  it("USB offers Prepare, Live and existing venue, with Prepare and Live sharing rounded edges", async () => {
+    const { el, host } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+      installationOrigin: "usb",
+      environment: "preproduction",
+    });
+    expect(q(el, "[data-test=choose-demo]")).toBeNull();
+    const rows = [...el.shadowRoot!.querySelectorAll(".choices > wt-choice-row")];
+    expect(rows.map((row) => row.getAttribute("data-test"))).toEqual([
+      "choose-prepare",
+      "choose-live",
+    ]);
+    const [prepare, live] = rows.map(rowBox);
+    expect(prepare!.top).not.toEqual(["0px", "0px"]);
+    expect(prepare!.bottom).toEqual(["0px", "0px"]);
+    expect(live!.top).toEqual(["0px", "0px"]);
+    expect(live!.bottom).toEqual(prepare!.top);
+    expect(live!.rect.top).toBe(prepare!.rect.bottom);
+    const events = collect(host);
+    q(el, "[data-test=choose-prepare]")!.click();
+    expect(events).toEqual([
+      { kind: "patch", detail: { patch: { mode: "prepare" } } },
+      { kind: "goto", detail: { screen: "admin" } },
+    ]);
+    events.length = 0;
+    q(el, "[data-test=choose-existing]")!.click();
+    expect(events).toEqual([{ kind: "goto", detail: { screen: "role" } }]);
+  });
+
+  it("USB production still hides Prepare", async () => {
+    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+      installationOrigin: "usb",
+      environment: "production",
+    });
+    expect(q(el, "[data-test=choose-demo]")).toBeNull();
+    expect(q(el, "[data-test=choose-prepare]")).toBeNull();
+    expect(q(el, "[data-test=choose-live]")).not.toBeNull();
+  });
+
   it("offers Demo, Prepare and Live as three equal rows, each a whole-row choice", async () => {
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
     const rows = [...el.shadowRoot!.querySelectorAll(".choices > wt-choice-row")];

@@ -683,6 +683,7 @@ export class SetupApp extends LitElement {
   @state() private connectionAnswered = false;
   #connectionGeneration = 0;
 
+  @state() private installationOrigin?: "usb";
   @state() private environment?: "production" | "preproduction";
   @state() private developmentMode = false;
 
@@ -832,6 +833,7 @@ export class SetupApp extends LitElement {
         this.api.getDiscovery(),
       ]);
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
+      this.installationOrigin = status.installationOrigin;
       this.environment = status.environment;
       this.developmentMode = status.developmentMode === true;
       const first = await this.api.firstSetupStatus();
@@ -872,6 +874,7 @@ export class SetupApp extends LitElement {
     try {
       const status = await this.api.getStatus();
       if (!this.isConnected || generation !== this.#connectionGeneration) return;
+      this.installationOrigin = status.installationOrigin;
       this.environment = status.environment;
       this.developmentMode = status.developmentMode === true;
       const first = await this.api.firstSetupStatus();
@@ -1661,7 +1664,11 @@ export class SetupApp extends LitElement {
         return;
       case "setup.mode_not_allowed":
       case "sif.throwaway_allocation_refused":
-        this.provisionMessage = say("shell.provision.throwaway_refused");
+        this.provisionMessage = say(
+          error.params?.installationOrigin === "usb"
+            ? "shell.provision.usb_demo_refused"
+            : "shell.provision.throwaway_refused",
+        );
         this.provisionCanRetry = false;
         this.provisionReloadLabel = say("shell.reload");
         return;
@@ -2567,6 +2574,7 @@ export class SetupApp extends LitElement {
       case "mode":
         return html`<setup-mode-screen
           data-test="screen-mode"
+          .installationOrigin=${this.installationOrigin}
           .environment=${this.environment}
           .certificateNote=${!this.connectionAnswered}
           .beforeChoice=${(
@@ -2643,6 +2651,7 @@ export class SetupApp extends LitElement {
       default:
         return html`<setup-mode-screen
           data-test="screen-mode"
+          .installationOrigin=${this.installationOrigin}
           .environment=${this.environment}
           .certificateNote=${!this.connectionAnswered}
         ></setup-mode-screen>`;

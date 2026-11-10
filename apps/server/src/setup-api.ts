@@ -109,6 +109,7 @@ function recoveryCredentials(
  * `/health`, because no venue is bound yet.
  */
 export interface SetupDeps {
+  installationOrigin?: "usb";
   environment: DeploymentEnvironment;
   sendEmailTest?: typeof sendSmtpTestMessage;
   /** Keeps a developer Live walkthrough on preproduction transports after restart. */
@@ -759,6 +760,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       {
         provisioned: false,
         environment: deps.environment,
+        ...(deps.installationOrigin === undefined
+          ? {}
+          : { installationOrigin: deps.installationOrigin }),
         ...(deps.devMode === true ? { developmentMode: true } : {}),
         needs: ["venue"],
         ...(operationBlocked ? { operationBlocked: true } : {}),
@@ -881,6 +885,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       );
       if (deps.environment === "production" && payload.mode !== "live") {
         throw new AppError("setup.mode_not_allowed", { environment: "production" });
+      }
+      if (deps.installationOrigin === "usb" && payload.mode === "demo") {
+        throw new AppError("setup.mode_not_allowed", { installationOrigin: "usb" });
       }
       const { mode, request, contribution, secret, secretExpected: expected, rawSecret } = payload;
       if (

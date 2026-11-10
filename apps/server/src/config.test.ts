@@ -28,6 +28,28 @@ function codeOf(error: unknown): string {
 }
 
 describe("loadConfig", () => {
+  it("reads USB installation origin and rejects other nonempty values", () => {
+    expect(
+      loadConfig({ ...MIN_ENV, WAITRON_INSTALLATION_ORIGIN: "usb" }, ROOT, STATE_ROOT),
+    ).toHaveProperty("installationOrigin", "usb");
+    for (const value of [undefined, ""])
+      expect(
+        loadConfig({ ...MIN_ENV, WAITRON_INSTALLATION_ORIGIN: value }, ROOT, STATE_ROOT),
+      ).not.toHaveProperty("installationOrigin");
+  });
+  it.each(["USB", "manual", " usb "])("refuses invalid installation origin %s", async (value) => {
+    const error = await captureError(() =>
+      loadConfig({ ...MIN_ENV, WAITRON_INSTALLATION_ORIGIN: value }, ROOT, STATE_ROOT),
+    );
+    expect(error).toMatchObject({
+      code: "server.config_invalid",
+      params: {
+        variable: "WAITRON_INSTALLATION_ORIGIN",
+        reason: "not_an_installation_origin",
+      },
+    });
+  });
+
   it("enables the optional staff tunnel writer only with an explicit control directory", () => {
     for (const value of [undefined, ""])
       expect(

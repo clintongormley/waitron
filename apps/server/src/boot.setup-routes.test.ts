@@ -766,6 +766,28 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 120_000);
 
+  it("reports the process USB origin in fresh setup status", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    try {
+      await withSetupBoot(
+        venue.directory,
+        { WAITRON_INSTALLATION_ORIGIN: "usb" },
+        async ({ get }) => {
+          const status = await get("/setup-api/status");
+          expect(status.status).toBe(200);
+          expect(await status.json()).toMatchObject({
+            provisioned: false,
+            installationOrigin: "usb",
+          });
+        },
+      );
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it("refuses Demo with no supplied allocation on a WAITRON_ENV=production box, writing nothing and staying in setup", async () => {
     beforeServerStarts();
     const venue = await freshVenue();

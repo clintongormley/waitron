@@ -146,6 +146,10 @@ describe("image source labels", () => {
 });
 
 describe("the container image's environment", () => {
+  it("passes the recipe-owned USB origin from compose to the app", () => {
+    expect(COMPOSE).toContain("WAITRON_INSTALLATION_ORIGIN: ${WAITRON_INSTALLATION_ORIGIN:-}");
+  });
+
   it("passes the app's tunnel control directory through the server configuration", () => {
     const app = only(COMPOSE, /\n {2}app:\n([\s\S]*?)(?=\n {2}[a-z])/, "app service");
     const directory = only(

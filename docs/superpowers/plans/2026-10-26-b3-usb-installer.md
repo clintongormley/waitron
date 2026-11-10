@@ -20,6 +20,12 @@
 
 # B3 USB Installer Implementation Plan
 
+**2026-11-10 PR B:** the [image-origin slice](2026-11-10-b3-12-image-origin.md)
+connects the development recipe’s USB origin to setup choices and the server’s
+Demo refusal, using `setup.mode_not_allowed`. Physical installation and same-box
+production re-setup remain open.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task, after separate build authority. Steps use checkbox (`- [ ]`) syntax for tracking. A separate documentation author supplies this plan; a fresh reviewer must review it before execution. This document author neither builds nor dispatches that reviewer.
 
 **Goal:** Deliver the six approved go-live slices, 1, 2, 3, 5, 6 and 8, with an unattended USB install, encrypted disk, managed screen, qualified release assets and safe same-box Prepare-to-fresh-Live configuration handoff.

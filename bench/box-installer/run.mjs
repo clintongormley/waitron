@@ -183,6 +183,12 @@ try {
         await writeFile(join(runDir, "page.html"), await page.content());
         await writeFile(join(runDir, "page-url.txt"), page.url());
       }
+      const choices = await page
+        .locator("setup-mode-screen wt-choice-row")
+        .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-test")));
+      await writeFile(join(runDir, "choices.json"), JSON.stringify(choices));
+      if (JSON.stringify(choices) !== '["choose-prepare","choose-live","choose-existing"]')
+        throw new Error(`Unexpected USB setup choices: ${JSON.stringify(choices)}`);
       await page.getByText("Prepare your restaurant", { exact: true }).click();
       await page.locator("setup-admin-screen").waitFor();
       await page.screenshot({ path: join(runDir, "prepare.png") });

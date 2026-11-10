@@ -35,6 +35,12 @@ A box installed before the box ran its own database server was retired also carr
 volume holding that old database. Nothing reads it and nothing on the box removes it, including
 `reset`. Once such a box has been upgraded, `docker volume rm waitron_db` reclaims the space.
 
+The development USB recipe writes `WAITRON_INSTALLATION_ORIGIN=usb` into its
+`/opt/waitron/.env`. Compose passes it to setup, which offers Prepare, Live and
+Join or recover. Hand-installed deployments leave it unset and also offer Demo.
+A production setup offers Live and Join or recover. See the
+[recipe rehearsal](../bench/box-installer/README.md) for the emulator check.
+
 ## Development image rehearsal
 
 You can [build a development root and open setup in an emulator](../bench/box-installer/README.md).
