@@ -1424,8 +1424,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Theme logo** (bundle of 2, size M). [Detail](backlog/dashboard.md#bundle-theme-logo)
 
-- **A1315. Help bubbles: the Transfers wording and missing guide destinations.** The Transfers
-  help's last sentence awaits the owner's choice; some help still has no guide section to link.
+- **A1315. Help bubbles: missing guide destinations.** Some help still has no guide section to link.
   The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients).
   [Detail](backlog/dashboard.md#a1315-bring-every-help-bubble-down-to-orientation-one-area-per-pr)
 

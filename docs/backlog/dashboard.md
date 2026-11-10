@@ -977,8 +977,5 @@ The remaining help work is in English and Spanish. The rule is in
 describes first, move each dropped fact into its linked guide section, and list every changed text
 before and after.
 
-- **The till's Transfers help** (`help.more.transfers`): its last sentence, on the order counts, is
-  more than orientation, but `apps/till/src/i18n/help-strings.test.ts` (A757 slice 6) pins it word
-  for word, so shortening it is a choice for the owner.
 - **No guide section to link yet:** the guide has no section on a device's profile, equipment,
   department transfers or Fix my hours, nor on a zone's Reset.
