@@ -14,7 +14,7 @@ que lo corriges.
 
 ## Elige la clase de IVA {#vat}
 
-Su IVA empieza en la clase elegida en **Clase de IVA para productos nuevos**, en
+El IVA de un producto empieza en la clase elegida en **Clase de IVA para productos nuevos**, en
 la pestaña **Datos del local** de **Ajustes del local**; cámbiala aquí si este producto tributa de otra
 forma. Para un producto sin IVA, elige **Sin impuestos (0%)**. Un cambio de clase de IVA llega a las
 cajas cuando vuelves a publicar la carta; hasta entonces venden el producto con la clase con la que se

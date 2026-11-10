@@ -1,15 +1,15 @@
 # A1315 dashboard help implementation plan
 
-**Status:** Corrected after one Claude read; watcher approval required before build. Owner’s unattended instruction, 2026-11-10: “The owner authorises finish-branch and land-branch.” Queue owner2026-11-03: “The info text should just orientate the user.” Watcher2026-11-10 00:47: “Start with the dashboard area. Read the code each bubble describes before rewriting it.”
+**Status:** Approved by the watcher on 2026-11-10 at 01:06; final data-copy wording approved at 01:24. Owner’s unattended instruction, 2026-11-10: “The owner authorises finish-branch and land-branch.” Queue owner2026-11-03: “The info text should just orientate the user.” Watcher2026-11-10 00:47: “Start with the dashboard area. Read the code each bubble describes before rewriting it.”
 
-**Outcome:** Short dashboard help in English and Spanish, with useful details in the guide. One LIGHT-path PR within one active hour from item start, excluding manager waits. No business-rule, fiscal, authentication or money changes; no wording framework. Base `ccb480fa8a`. The 21-body source audit in Lane K’s `receipts/a1315-dashboard-20261110/source-audit.md` holds code summaries and file:line receipts, not runtime proof. Recheck changed sources after rebasing.
+**Outcome:** Short dashboard help in English and Spanish, with useful details in the guide. One LIGHT-path PR within one active hour from item start, excluding manager waits. Copy and links only; no business-rule changes. Base `ccb480fa8a`. The 21-body source audit in Lane K’s `receipts/a1315-dashboard-20261110/source-audit.md` holds source receipts, not runtime proof. Recheck sources after rebasing.
 
 - [ ] **Shorten only these five bodies**, in `apps/dashboard/src/i18n/strings.ts`. Other help stays. Cuts remove inventories, batching/button mechanics, retention thresholds and automatic invoice-date rate selection.
 
 | Key | English | Spanish |
 | --- | --- | --- |
 | `help.account.settings` | Change your personal details and how you sign in. | Cambia tus datos personales y cómo inicias sesión. |
-| `profile.data_copy_holds` | Your profile, sign-in details and actions recorded in Waitron, plus any work records kept here. A README.txt explains the files and your rights. | Tus datos de perfil y de acceso, y tus acciones registradas en Waitron, además de los datos de trabajo que se guarden aquí. Un README.txt explica los archivos y tus derechos. |
+| `profile.data_copy_holds` | Your profile and sign-in details, plus any work records kept here and some actions you took or approved. A README.txt explains the files and your rights. | Tus datos de perfil y de acceso, además de los datos de trabajo que se guarden aquí y algunas acciones que realizaste o autorizaste. Un README.txt explica los archivos y tus derechos. |
 | `box_status.retry_help` | Tries the waiting records again after a failed send. They may still have to wait before sending. It does not release stopped records. | Vuelve a intentar los registros pendientes tras un envío fallido. Puede que aún tengan que esperar para enviarse. No libera los registros parados. |
 | `box_status.free_help` | Deletes old crash reports and logs, and files left by an interrupted backup. Your sales, settings and backups are kept. | Borra informes de fallos y registros de actividad antiguos, y archivos que dejó una copia interrumpida. Conserva tus ventas, ajustes y copias de seguridad. |
 | `help.products.vat` | The VAT class. Publish the menu again to use a changed class at the tills. | La clase de IVA. Vuelve a publicar la carta para usar la nueva clase en las cajas. |
@@ -19,4 +19,4 @@
 
 **Remaining files:** `docs/backlog.md` and `docs/backlog/dashboard.md`: remove dashboard from A1315’s remainder and VAT from A1247’s missing links; retain server pages and the Transfers decision. Forecast: source 25–45 changed lines, tests 10–25, documentation 45–70, generated zero.
 
-**Finish:** Attach all changed EN/ES before/after text and source receipts to the PR. Codex finish-branch includes one Claude run-it whole-branch review, normal hook and current-head scoped CI. Land through land-branch under the shared lock using the recorded campaign authorisation; verify merge CI and clean up owned runtime state.
+**Finish:** Attach EN/ES before/after text and source receipts to the PR. Codex finish-branch includes one Claude run-it whole-branch review, normal hook and current-head scoped CI. Land through land-branch under the shared lock using the recorded campaign authorisation; verify merge CI and clean up owned runtime state.

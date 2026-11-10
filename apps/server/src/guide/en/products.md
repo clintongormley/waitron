@@ -14,7 +14,7 @@ open until you have fixed it.
 
 ## Choose the VAT class {#vat}
 
-Its VAT starts on the class chosen as **VAT class for new products**, on the
+A product's VAT starts on the class chosen as **VAT class for new products**, on the
 **Venue details** tab of **Venue settings**; change it here when this product is taxed differently.
 For a product with no VAT, choose **No tax (0%)**. A change of VAT class reaches the tills when the
 menu is published again; until then they sell the product at the class the menu was published with.

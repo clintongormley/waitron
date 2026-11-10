@@ -1318,7 +1318,7 @@ export const en = {
   "profile.data_copy_busy": "Preparing…",
   "profile.data_copy_help_label": "What the copy holds",
   "profile.data_copy_holds":
-    "Your profile, sign-in details and actions recorded in Waitron, plus any work records kept here. A README.txt explains the files and your rights.",
+    "Your profile and sign-in details, plus any work records kept here and some actions you took or approved. A README.txt explains the files and your rights.",
   "profile.data_copy_help_guide": "More about your data",
   "account.offer_passkey": "Set up a passkey?",
   "account.passkey_optional":
@@ -5181,7 +5181,7 @@ export const es: Record<StringKey, string> = {
   "profile.data_copy_busy": "Preparando…",
   "profile.data_copy_help_label": "Qué contiene la copia",
   "profile.data_copy_holds":
-    "Tus datos de perfil y de acceso, y tus acciones registradas en Waitron, además de los datos de trabajo que se guarden aquí. Un README.txt explica los archivos y tus derechos.",
+    "Tus datos de perfil y de acceso, además de los datos de trabajo que se guarden aquí y algunas acciones que realizaste o autorizaste. Un README.txt explica los archivos y tus derechos.",
   "profile.data_copy_help_guide": "Más sobre tus datos",
   "account.offer_passkey": "¿Configurar una passkey?",
   "account.passkey_optional":
