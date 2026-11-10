@@ -576,6 +576,25 @@ const FIXED: FixedCase[] = [
     { code: "sale.correction_not_admitted", params: { reason: "filed_figures_unanswered" } },
   ],
   [
+    "was refiled without an empty 10% group it was answered with, refuses until answered",
+    (invoice) => [
+      [
+        invoice,
+        {
+          readable: true,
+          newest: version("12.10", [["21.00", "10.00", "2.10"]]),
+          newestAnswered: version("12.10", [
+            ["21.00", "10.00", "2.10"],
+            ["10.00", "0.00", "0.00"],
+          ]),
+        },
+      ],
+    ],
+    undefined,
+    steakDraft("-6.05", "-5.00", "-6.05", [["21.00", "-5.00", "-1.05"]]),
+    { code: "sale.correction_not_admitted", params: { reason: "filed_figures_unanswered" } },
+  ],
+  [
     "cannot be read, refuses",
     (invoice) => [[invoice, { readable: false }]],
     undefined,
@@ -608,6 +627,20 @@ const FIXED: FixedCase[] = [
     (invoice) => [[invoice, AT_21_RAISED]],
     undefined,
     steakDraft("-6.05", "-5.00", "-6.05", [["21.00", "-5.00", "-1.05"]]),
+    "sale.correction_breakdown_invalid",
+  ],
+  [
+    "was fixed to a €13.31 total, refuses lines taking all of it under a split taking part",
+    (invoice) => [[invoice, AT_21_RAISED]],
+    undefined,
+    steakDraft("-6.05", "-10.00", "-12.10", [["21.00", "-5.00", "-1.05"]]),
+    "sale.correction_breakdown_invalid",
+  ],
+  [
+    "was fixed to a €13.31 total, refuses a split taking all of it under lines taking part",
+    (invoice) => [[invoice, AT_21_RAISED]],
+    undefined,
+    steakDraft("-13.31", "-5.00", "-6.05", [["21.00", "-11.00", "-2.31"]]),
     "sale.correction_breakdown_invalid",
   ],
   [
@@ -663,3 +696,34 @@ it.each(FIXED)(
     );
   },
 );
+
+it("refuses the rest of an invoice whose fix left a rate below what earlier refunds took there", async () => {
+  const meal = await sell("23.10", [
+    ["10.00", "1", "10.00", "11.00"],
+    ["21.00", "1", "10.00", "12.10"],
+  ]);
+  await file(
+    {
+      total: "-12.10",
+      lines: [line(1, 1, "21.00", "-10.00", "-12.10")],
+      split: [["21.00", "-10.00", "-2.10"]],
+    },
+    { to: meal },
+  );
+  backend.setFiledFigures(
+    meal.saleId,
+    answered("23.10", [
+      ["10.00", "15.50", "1.55"],
+      ["21.00", "5.00", "1.05"],
+    ]),
+  );
+  await expectRefused(
+    UNUSABLE,
+    {
+      total: "-11.00",
+      lines: [line(1, 0, "10.00", "-10.00", "-11.00")],
+      split: [["10.00", "-10.00", "-1.00"]],
+    },
+    { to: meal },
+  );
+});

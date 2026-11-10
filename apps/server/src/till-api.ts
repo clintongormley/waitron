@@ -510,6 +510,9 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "sale.correction_line_not_reversed": 409,
   "sale.total_mismatch": 409,
   "sale.correction_exceeds_total": 409,
+  // The invoice's filing is unreadable for a correction, or a fix of it awaits its answer.
+  "sale.correction_history_unusable": 409,
+  "sale.correction_not_admitted": 409,
   // Permanent for the same basket or bill until it is made smaller.
   "sale.total_exceeds_simplified_limit": 409,
   "sale.full_invoice_unavailable": 409,

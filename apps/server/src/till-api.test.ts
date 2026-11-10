@@ -1081,6 +1081,22 @@ describe("the run wrapper (the shared error boundary Tasks 5 & 6 reuse)", () => 
     },
   );
 
+  // Cancelling an issued order refuses while its invoice's filed figures cannot be credited: the
+  // filing's state, not the request.
+  it.each([
+    ["sale.correction_history_unusable", new AppError("sale.correction_history_unusable", {})],
+    [
+      "sale.correction_not_admitted",
+      new AppError("sale.correction_not_admitted", { reason: "filed_figures_unanswered" }),
+    ],
+  ])("answers %s with 409, keeping its code", async (_code, error) => {
+    const app = new Hono();
+    app.get("/refused", (c) => run(c, collect([]), () => Promise.reject(error)));
+    const res = await app.request("/refused");
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: error.code } });
+  });
+
   it("answers sale.number_reused with 409, keeping its code", async () => {
     const app = new Hono();
     app.get("/refused", (c) =>

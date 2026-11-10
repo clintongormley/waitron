@@ -567,6 +567,12 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
     total: decimal("0.50"),
     vatBreakdown: [{ rate: decimal("10.00"), base: decimal("0.45"), tax: decimal("0.05") }],
   };
+  /** 0.55 refiled at 10%, the total kept. */
+  const AT_10 = {
+    total: decimal("0.55"),
+    vatBreakdown: [{ rate: decimal("10.00"), base: decimal("0.50"), tax: decimal("0.05") }],
+  };
+  const UNUSABLE = { code: "sale.correction_history_unusable" };
 
   /** Keeps the VAT breakdown each correction hands the backend. */
   class FilesBreakdownsBackend extends FakeFiscalBackend {
@@ -894,12 +900,18 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
     });
   });
   it.each([
-    ["figures it cannot read", { readable: false as const }],
+    ["figures it cannot read", { readable: false as const }, UNUSABLE],
     [
       "a fix that changed its total",
       { readable: true as const, newest: FIXED, newestAnswered: FIXED },
+      UNUSABLE,
     ],
-  ])("refuses to credit a whole invoice whose filing holds %s", async (_, figures) => {
+    [
+      "a fix the agency has not answered",
+      { readable: true as const, newest: AT_10, newestAnswered: null },
+      { code: "sale.correction_not_admitted", params: { reason: "filed_figures_unanswered" } },
+    ],
+  ])("refuses to credit a whole invoice whose filing holds %s", async (_, figures, refusal) => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sellMosto(backend);
     backend.setFiledFigures(originalId, figures);
@@ -910,7 +922,7 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
       backend,
       originalId,
       wholeCredit({ lines: [{ ...reversed!, correctsLineId }] }),
-      { code: "sale.correction_history_unusable" },
+      refusal,
     );
   });
 });

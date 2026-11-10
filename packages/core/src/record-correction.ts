@@ -64,12 +64,16 @@ export interface RecordCorrectionInput {
   /** The already-signed delta lines (negative for a reversal). Same shape as an ordinary sale's. */
   lines: RecordSaleLine[];
   /**
-   * Credits the whole invoice: the corrective's VAT breakdown is the original's stored one,
-   * negated, instead of one derived from `lines`, whose per-rate tax can differ from the invoice's
-   * by a cent. Refused with `sale.correction_not_whole` unless `total` is minus the original's and
-   * nothing corrects the original yet; with `sale.total_mismatch` unless the copy sums to `total`;
-   * and with `sale.correction_lines_mismatch` unless, rate by rate, the lines' totals are the
-   * copy's base and the gross amounts they state are its base plus tax. Its lines must also
+   * Credits the whole invoice: the corrective's VAT breakdown is the original's, negated, instead of
+   * one derived from `lines`, whose per-rate tax can differ from the invoice's by a cent: the
+   * stored one, or the one the regime accepted in a fix of it. Refused with
+   * `sale.correction_not_whole` unless `total` is minus the original's and nothing corrects the
+   * original yet; with `sale.total_mismatch` unless the copy sums to `total`; with
+   * `sale.correction_lines_mismatch` unless, rate by rate, the lines' totals are the stored copy's
+   * base and the gross amounts they state are its base plus tax; with
+   * `sale.correction_history_unusable` when the regime's figures cannot be read or a fix changed
+   * the total; and with `sale.correction_not_admitted` while a filed fix waits for its answer
+   * (`filed_figures_unanswered`). Its lines must also
    * reverse the invoice line for line (`sale.correction_line_not_reversed`): each names, in
    * `correctsLineId`, a different invoice line, with that line's product, minus its quantity and
    * minus its line total, and every invoice line is named.
@@ -411,7 +415,8 @@ async function measuredHistory(
  * For a whole-invoice credit, the split the regime accepted negated, when the invoice's filed
  * figures moved from the stored ones; else none, and a backend reading no filed figures keeps the
  * stored split. Refused with `sale.correction_history_unusable` when they cannot be read, or when
- * the move changed the total the credit's lines reverse. A fix not yet answered does not refuse it.
+ * the move changed the total the credit's lines reverse; with `sale.correction_not_admitted` while
+ * a filed fix waits for its answer.
  */
 async function movedSplit(
   tx: Transaction,
@@ -422,7 +427,11 @@ async function movedSplit(
 ): Promise<VatBreakdownLine[] | undefined> {
   if (!backend.filedFiguresFor) return undefined;
   const measured = await measuredFigures(tx, backend, [{ id: input.correctsSaleId, ...original }]);
-  if (!measured.readable || measured.sales[0]!.measured.total !== original.total) {
+  if (!measured.readable) throw new AppError("sale.correction_history_unusable", {});
+  if (measured.sales[0]!.differs) {
+    throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_unanswered" });
+  }
+  if (measured.sales[0]!.measured.total !== original.total) {
     throw new AppError("sale.correction_history_unusable", {});
   }
   if (!measured.moved) return undefined;

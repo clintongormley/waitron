@@ -814,11 +814,12 @@ describe("computeTopSellers", () => {
       { name: coffeeName, quantity: "1.000", total: "0.03", variants: [] },
     ]);
 
-    await correct(4, "03", "0.03", "0.03");
+    // The money is back in gross, not in net: 10.99 of 11.00.
+    await correct(4, "03", "0.02", "0.03");
 
     // Today's count would be 1 − 3 = −2.000.
     expect(await run()).toEqual([
-      { name: coffeeName, quantity: "0.000", total: "0.00", variants: [] },
+      { name: coffeeName, quantity: "0.000", total: "0.01", variants: [] },
     ]);
   });
 

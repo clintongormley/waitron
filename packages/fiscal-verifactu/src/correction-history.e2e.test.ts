@@ -329,24 +329,10 @@ it("refunds a dish whose fix at 10% the agency accepted in full, leaving every r
   });
 });
 
-it("refunds the fixed dish in two halves at 10%, refusing a refund that names the dish", async () => {
+it("refunds the fixed dish in two halves at 10%", async () => {
   const saleId = await soldThenFixedAt10();
-  const [line] = await suite.db.select().from(saleLines).where(eq(saleLines.saleId, saleId));
-
-  const named = await captureError(() =>
-    withTransaction(suite.db, (tx) =>
-      previewCorrectionAmounts(tx, backend, saleId, nodeId, {
-        gross: decimal("6.05"),
-        lineIds: [line!.id],
-      }),
-    ),
-  );
   const halves = [await correct(saleId, "6.05"), await correct(saleId, "6.05")];
 
-  expect(named).toMatchObject({
-    code: "sale.correction_scope_invalid",
-    params: { reason: "filed_split_changed" },
-  });
   expect(halves.map(([, split, lines]) => [split, lines])).toEqual([
     [[["10.00", "-5.50", "-0.55"]], [[-500, -605]]],
     [[["10.00", "-5.50", "-0.55"]], [[-500, -605]]],

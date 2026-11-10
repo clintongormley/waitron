@@ -112,9 +112,10 @@ export function checkPartialCorrectionBreakdown(
  * measured remaining is not what the invoice's lines have left, the correction must empty both.
  * Refused with `sale.correction_history_unusable` instead when what is stored cannot be checked: an
  * invoice line or an earlier correction of it with no gross, an earlier correction line naming no
- * invoice line (unmoved, only at one of the split's rates), or a measured invoice breakdown without
- * exactly one group at a rate of the split or of an earlier correction. Every line is known to name
- * a line of the invoice.
+ * invoice line (unmoved, only at one of the split's rates), a measured invoice breakdown without
+ * exactly one group at a rate of the split or of an earlier correction, or such a rate at which
+ * earlier corrections already took more base or gross than that group holds. Every line is known to
+ * name a line of the invoice.
  */
 export function checkPartialCorrectionHistory(
   lines: readonly RecordSaleLine[],
@@ -183,9 +184,10 @@ export function checkPartialCorrectionHistory(
     const group = byRate.get(rate);
     if ((group !== undefined && !history.moved && unlinkedRates.has(rate)) || atRate?.length !== 1)
       unusable();
-    if (group === undefined) continue;
     const original = atRate[0]!;
     const before = prior.get(rate) ?? { base: 0, gross: 0 };
+    if (before.base > original.base || before.gross > original.base + original.tax) unusable();
+    if (group === undefined) continue;
     const gross = -(group.base + group.tax);
     const expected = correctionBaseAtRate(
       basisPointsToDecimal(rate),
