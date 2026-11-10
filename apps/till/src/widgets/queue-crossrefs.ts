@@ -1,19 +1,20 @@
 import { html, nothing } from "lit";
 import type { TemplateResult } from "lit";
+import { formatDecimalInput } from "@waitron/ui";
 import type { QueueCrossRef } from "../api/client.js";
-import { fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { extraNutrition } from "./diet-badges.js";
 import { snapshotDescriptionFor } from "./dish-format.js";
 
-/** An extra's amount per dish as the kitchen ticket prints it: " 150 g", " 0.250 kg", " x2", or
- *  nothing for one. */
+/** An extra's amount per dish with the kitchen ticket's digits in the screen's decimal mark:
+ *  " 150 g", " 0.250 kg" (" 0,250 kg" in Spanish), " x2", or nothing for one. */
 export function extraAmount(extra: {
   perDish?: number;
   amount?: string;
   unitName?: Record<string, string>;
 }): string {
   if (extra.amount !== undefined && extra.unitName !== undefined)
-    return ` ${extra.amount.replace(/\.0+$/, "")} ${snapshotDescriptionFor(extra.unitName, "")}`;
+    return ` ${formatDecimalInput(extra.amount.replace(/\.0+$/, ""), currentLocale())} ${snapshotDescriptionFor(extra.unitName, "")}`;
   return extra.perDish !== undefined && extra.perDish > 1 ? ` x${extra.perDish}` : "";
 }
 
