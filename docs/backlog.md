@@ -1569,7 +1569,8 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 
 - **A982. Logging Slice 2 — one-touch bug report.** Dashboard browser-only preview/download
   is implemented by the [download-first plan](superpowers/plans/2026-11-08-a982-client-only-report-first.md).
-  Till/setup buttons, richer trail privacy and stored capture with manager read/download remain;
+  The [setup-button slice](superpowers/plans/2026-11-10-a982-setup-report.md) is being planned;
+  till/setup buttons, richer trail privacy and stored capture with manager read/download remain;
   stored capture needs its own plan. Cloud forwarding and automatic crash/freeze reporting are separate.
   [Detail](backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192).
 
