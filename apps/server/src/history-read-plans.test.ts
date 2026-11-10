@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import { eq, inArray, type Query } from "drizzle-orm";
+import { eq, inArray, sql, type Query } from "drizzle-orm";
 import { SQLiteSelectBase } from "drizzle-orm/sqlite-core";
 import { describe, expect, it, vi } from "vitest";
 import {
   insertInChunks,
+  orderGroups,
+  parties,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -283,21 +285,89 @@ describe("current service reads with collected history", () => {
     });
   });
 
-  it("finds a party's next group number through the party and number-party indexes", async () => {
-    const { venue } = await fixture();
-    await withTransaction(suite.db, async (tx) => {
-      const measured = await capture(() =>
-        startGroup(tx, venue.party.partyId, "hold", OPERATOR, "next_course"),
-      );
-      const numbers = measured.plans.filter(
-        (plan) =>
-          plan.sql.includes('from "order_groups"') && plan.sql.includes('"number_party_id" = ?'),
-      );
-      expect(numbers).toHaveLength(1);
-      const details = numbers[0]!.details.join("\n");
-      expect(details).not.toMatch(/SCAN order_groups/);
-      expect(details).toContain("order_groups_number_party_idx");
-      expect(details).toContain("order_groups_party_idx");
-    });
-  });
+  it.each([{ statistics: false }, { statistics: true }])(
+    "finds a party's next group number through the party and number-party indexes (statistics: $statistics)",
+    async ({ statistics }) => {
+      const { venue } = await fixture();
+      const partyId = venue.party.partyId;
+      await withTransaction(suite.db, async (tx) => {
+        const own = await tx
+          .select({ displayNumber: orderGroups.displayNumber })
+          .from(orderGroups)
+          .where(eq(orderGroups.partyId, partyId));
+        expect(own.map((group) => group.displayNumber).sort()).toEqual([1, 2]);
+        const others = Array.from({ length: 256 }, () => randomUUID());
+        await insertInChunks(
+          tx,
+          parties,
+          others.map((id) => ({
+            id,
+            state: "closed" as const,
+            openedAt: "2025-01-01T12:00:00.000Z",
+            openedBy: OPERATOR,
+            closedAt: "2025-01-01T14:00:00.000Z",
+            closedBy: OPERATOR,
+          })),
+        );
+        await insertInChunks(
+          tx,
+          orderGroups,
+          others.flatMap((other) =>
+            [1, 2, 3, 4, 5, 6].map((n) => ({
+              partyId: other,
+              position: n,
+              displayNumber: n,
+              numberPartyId: other,
+              state: "fired" as const,
+              firedAt: "2025-01-01T12:30:00.000Z",
+              firedBy: OPERATOR,
+              submittedBy: OPERATOR,
+            })),
+          ),
+        );
+        // The shape moveGroupsToParty gives a group: held by another party, numbered in this one's sequence.
+        await tx.insert(orderGroups).values({
+          partyId: others[0]!,
+          position: 7,
+          displayNumber: 3,
+          numberPartyId: partyId,
+          state: "fired",
+          firedAt: "2025-01-01T12:30:00.000Z",
+          firedBy: OPERATOR,
+          submittedBy: OPERATOR,
+        });
+        if (statistics) tx.execute(sql`analyze`);
+        const statTables = tx.execute<{ name: string }>(
+          sql`select name from sqlite_master where name = 'sqlite_stat1'`,
+        ).rows;
+        if (statistics)
+          expect(
+            tx.execute<{ stat: string }>(
+              sql`select stat from sqlite_stat1 where idx = 'order_groups_number_party_idx'`,
+            ).rows,
+          ).toEqual([{ stat: expect.stringMatching(/^1539 /) }]);
+        else expect(statTables).toEqual([]);
+        const measured = await capture(() =>
+          startGroup(tx, partyId, "hold", OPERATOR, "next_course"),
+        );
+        const [started] = await tx
+          .select({
+            displayNumber: orderGroups.displayNumber,
+            numberPartyId: orderGroups.numberPartyId,
+          })
+          .from(orderGroups)
+          .where(eq(orderGroups.id, measured.result));
+        expect(started).toEqual({ displayNumber: 4, numberPartyId: partyId });
+        const numbers = measured.plans.filter(
+          (plan) =>
+            plan.sql.includes('from "order_groups"') && plan.sql.includes('"number_party_id" = ?'),
+        );
+        expect(numbers).toHaveLength(1);
+        const details = numbers[0]!.details.join("\n");
+        expect(details).not.toMatch(/SCAN order_groups/);
+        expect(details).toContain("order_groups_number_party_idx");
+        expect(details).toContain("order_groups_party_idx");
+      });
+    },
+  );
 });
