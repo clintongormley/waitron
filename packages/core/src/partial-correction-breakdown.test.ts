@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { decimal, deviceOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import type { TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
+import type { FiledFigures, TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
   captureError,
@@ -219,11 +219,15 @@ function file(draft: Draft, target: Target = {}) {
 }
 
 /** Refused with `code`, with nothing handed to the backend and no number taken. */
-async function expectRefused(code: string, draft: Draft, target?: Target) {
+async function expectRefused(
+  code: string | { code: string; params: object },
+  draft: Draft,
+  target?: Target,
+) {
   const spy = vi.spyOn(backend, "recordCorrection");
   const next = await rectSeriesNext();
   const error = await captureError(() => file(draft, target));
-  expect(error).toMatchObject({ code });
+  expect(error).toMatchObject(typeof code === "string" ? { code } : code);
   expect(spy).not.toHaveBeenCalled();
   expect(await rectSeriesNext()).toBe(next);
 }
@@ -512,3 +516,150 @@ it("refuses a split that disagrees with its own lines before looking for the sal
     correctsSaleId: "00000000-0000-4000-8000-000000000000" as SaleId,
   });
 });
+
+type Split = [rate: string, base: string, tax: string][];
+
+function version(total: string, split: Split) {
+  return {
+    total: decimal(total),
+    vatBreakdown: split.map(([rate, base, tax]) => ({
+      rate: decimal(rate),
+      base: decimal(base),
+      tax: decimal(tax),
+    })),
+  };
+}
+
+function answered(total: string, split: Split): FiledFigures {
+  return { readable: true, newest: version(total, split), newestAnswered: version(total, split) };
+}
+
+/** A correction of the sold €12.10 steak at 21%: one line taking `base`/`gross` from it. */
+function steakDraft(total: string, base: string, gross: string, split: Split): Draft {
+  return { total, lines: [line(1, 0, "21.00", base, gross)], split };
+}
+
+const HALF_AT_10 = steakDraft("-6.05", "-5.00", "-6.05", [["10.00", "-5.50", "-0.55"]]);
+const AT_10 = answered("12.10", [["10.00", "11.00", "1.10"]]);
+const AT_21_RAISED = answered("13.31", [["21.00", "11.00", "2.31"]]);
+
+type FixedCase = [
+  name: string,
+  figures: (invoice: SaleId, earlier: SaleId | undefined) => [SaleId, FiledFigures][],
+  earlier: Draft | undefined,
+  draft: Draft,
+  expected: Split | string | { code: string; params: object },
+];
+
+const FIXED: FixedCase[] = [
+  [
+    "was fixed to 10% and answered, files the split at 10%",
+    (invoice) => [[invoice, AT_10]],
+    undefined,
+    HALF_AT_10,
+    [["10.00", "-5.50", "-0.55"]],
+  ],
+  [
+    "was fixed to 10% and not answered, refuses",
+    (invoice) => [
+      [
+        invoice,
+        {
+          readable: true,
+          newest: version("12.10", [["10.00", "11.00", "1.10"]]),
+          newestAnswered: null,
+        },
+      ],
+    ],
+    undefined,
+    HALF_AT_10,
+    { code: "sale.correction_not_admitted", params: { reason: "filed_figures_unanswered" } },
+  ],
+  [
+    "cannot be read, refuses",
+    (invoice) => [[invoice, { readable: false }]],
+    undefined,
+    HALF_AT_10,
+    UNUSABLE,
+  ],
+  [
+    "was fixed to 10% after a correction at 21%, refuses",
+    (invoice) => [[invoice, AT_10]],
+    steakDraft("-6.05", "-5.00", "-6.05", [["21.00", "-5.00", "-1.05"]]),
+    HALF_AT_10,
+    UNUSABLE,
+  ],
+  [
+    "was fixed to 10%, refuses lines whose gross is not the split's",
+    (invoice) => [[invoice, AT_10]],
+    undefined,
+    steakDraft("-6.05", "-5.00", "-6.04", [["10.00", "-5.50", "-0.55"]]),
+    "sale.correction_breakdown_invalid",
+  ],
+  [
+    "was fixed to a €13.31 total, files the whole of it",
+    (invoice) => [[invoice, AT_21_RAISED]],
+    undefined,
+    steakDraft("-13.31", "-10.00", "-12.10", [["21.00", "-11.00", "-2.31"]]),
+    [["21.00", "-11.00", "-2.31"]],
+  ],
+  [
+    "was fixed to a €13.31 total, refuses a part of it",
+    (invoice) => [[invoice, AT_21_RAISED]],
+    undefined,
+    steakDraft("-6.05", "-5.00", "-6.05", [["21.00", "-5.00", "-1.05"]]),
+    "sale.correction_breakdown_invalid",
+  ],
+  [
+    "was fixed to 10%, refuses a rate given twice",
+    (invoice) => [[invoice, AT_10]],
+    undefined,
+    steakDraft("-5.50", "-4.55", "-5.50", [
+      ["10.00", "-2.50", "-0.25"],
+      ["10.00", "-2.50", "-0.25"],
+    ]),
+    "sale.correction_breakdown_invalid",
+  ],
+  [
+    "was fixed to 10% and 21%, refuses a group of zero",
+    (invoice) => [
+      [
+        invoice,
+        answered("12.10", [
+          ["10.00", "5.50", "0.55"],
+          ["21.00", "5.00", "1.05"],
+        ]),
+      ],
+    ],
+    undefined,
+    steakDraft("-1.10", "-0.91", "-1.10", [
+      ["10.00", "-1.00", "-0.10"],
+      ["21.00", "0.00", "0.00"],
+    ]),
+    "sale.correction_breakdown_invalid",
+  ],
+  [
+    "kept its figures while an earlier correction's were fixed, counts the fixed ones",
+    (_invoice, earlier) => [[earlier!, answered("-6.05", [["21.00", "-5.01", "-1.04"]])]],
+    steakDraft("-6.05", "-5.00", "-6.05", [["21.00", "-5.00", "-1.05"]]),
+    steakDraft("-6.05", "-5.00", "-6.05", [["21.00", "-4.99", "-1.06"]]),
+    [["21.00", "-4.99", "-1.06"]],
+  ],
+];
+
+it.each(FIXED)(
+  "a sold €12.10 steak whose filing %s",
+  async (_name, figures, earlier, draft, expected) => {
+    const steak = await sell("12.10", [["21.00", "1", "10.00", "12.10"]]);
+    const earlierId = earlier && (await file(earlier, { to: steak })).saleId;
+    for (const [saleId, filed] of figures(steak.saleId, earlierId)) {
+      backend.setFiledFigures(saleId, filed);
+    }
+    if (!Array.isArray(expected)) return expectRefused(expected, draft, { to: steak });
+    const spy = vi.spyOn(backend, "recordCorrection");
+    await file(draft, { to: steak });
+    expect(spy.mock.calls[0]![1].vatBreakdown).toEqual(
+      expected.map(([rate, base, tax]) => ({ rate, base, tax })),
+    );
+  },
+);

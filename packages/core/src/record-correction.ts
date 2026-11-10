@@ -32,6 +32,7 @@ import {
   checkPartialCorrectionBreakdown,
   checkPartialCorrectionHistory,
 } from "./partial-correction-breakdown.js";
+import { measuredFigures } from "./filed-figures.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
 const ZERO = decimal("0");
@@ -76,8 +77,9 @@ export interface RecordCorrectionInput {
   wholeInvoice?: boolean;
   /**
    * The exact VAT split of a partial correction, signed as filed, stored and filed in place of
-   * one derived from `lines`. Each line must then name a different invoice line it takes from and
-   * state its gross. Refused together with `wholeInvoice`.
+   * one derived from `lines`, and checked against the figures the regime holds for the invoice and
+   * its earlier corrections rather than the stored ones. Each line must then name a different
+   * invoice line it takes from and state its gross. Refused together with `wholeInvoice`.
    */
   partialVatBreakdown?: readonly VatBreakdownLine[];
   /** Checked by `recordCorrection` itself against permission `sale.rectify`; the authorizer is
@@ -100,14 +102,14 @@ export interface RecordCorrectionInput {
  * invoice being corrected is refused with `sale.correction_line_not_on_invoice` after all of those
  * and before the number; then a whole-invoice credit whose lines do not reverse the invoice line
  * for line is refused with `sale.correction_line_not_reversed`, also before the number. A
- * `partialVatBreakdown` is refused with `sale.correction_breakdown_invalid` first when it disagrees
- * with the correction's own total or lines, and after `sale.correction_line_not_on_invoice`, before
- * the number, with the same code when it disagrees with the invoice or the corrections already
- * recorded against it, or with `sale.correction_history_unusable` when what is stored about them
- * cannot be checked (`checkPartialCorrectionHistory`). Without `partialVatBreakdown`, a partial
- * correction's lines may name a line or not, and may name the same one; with it, each names a
- * different invoice line. A failed integrity check records an incident and the correction proceeds
- * anyway.
+ * `partialVatBreakdown` that disagrees with its own total is refused with
+ * `sale.correction_breakdown_invalid` first. Its measured figures are read after the permission
+ * and named-customer checks and before `sale.correction_exceeds_total`. A split whose lines
+ * disagree with it at a rate is refused after `sale.correction_line_not_on_invoice`, and not at all
+ * when the history is moved (`checkPartialCorrectionHistory`). Without `partialVatBreakdown`, a
+ * partial correction's lines may name a line or not, and may name the same one; with it, each names
+ * a different invoice line. A failed integrity check records an incident and the correction
+ * proceeds anyway.
  */
 export async function recordCorrection(
   tx: Transaction,
@@ -206,14 +208,17 @@ export async function recordCorrection(
 
   requireSupportedCorrection(original.counterpartyTaxId, input.correctsSaleId);
 
+  const measured =
+    partial === undefined ? undefined : await measuredHistory(tx, backend, input, original);
+
   // After the gate, so a session that may not correct is not told what is left on the invoice.
   // Compared, stored and filed at the cent amount the row stores, not the unrounded input.
   const totalCents = stringToCents(input.total);
   const correction = centsToDecimal(totalCents);
-  const remaining = sumDecimals([
-    centsToDecimal(original.total),
-    rawCentsToDecimal(original.corrections),
-  ]);
+  const remaining =
+    measured === undefined
+      ? sumDecimals([centsToDecimal(original.total), rawCentsToDecimal(original.corrections)])
+      : centsToDecimal(measured.measuredRemaining);
   if (
     compareDecimal(correction, ZERO) < 0 &&
     compareDecimal(sumDecimals([remaining, correction]), ZERO) < 0
@@ -268,16 +273,14 @@ export async function recordCorrection(
     }
   }
   if (partial !== undefined) {
+    const [invoiceFigures, ...earlierFigures] = measured!.sales;
     checkPartialCorrectionHistory(input.lines, partial, {
-      invoiceBreakdown: original.vatBreakdown,
+      invoiceBreakdown: invoiceFigures!.measured.vatBreakdown,
       // Read above: every line of a checked split names an invoice line.
       invoiceLines: onInvoice!,
-      earlierBreakdowns: (
-        await tx
-          .select({ vatBreakdown: sales.vatBreakdown })
-          .from(sales)
-          .where(eq(sales.correctsSaleId, input.correctsSaleId))
-      ).map((row) => row.vatBreakdown),
+      earlierBreakdowns: earlierFigures.map((sale) => sale.measured.vatBreakdown),
+      moved: measured!.moved,
+      measuredRemaining: measured!.measuredRemaining,
       earlierLines: await tx
         .select({
           correctsLineId: saleLines.correctsLineId,
@@ -374,6 +377,32 @@ export async function recordCorrection(
   );
 
   return { saleId, fiscal };
+}
+
+/**
+ * The invoice's and its earlier corrections' figures as the regime holds them. Refused with
+ * `sale.correction_history_unusable` when they cannot be read, a backend reading none included, and
+ * with `sale.correction_not_admitted` while a filed fix of any of them waits for its answer.
+ */
+async function measuredHistory(
+  tx: Transaction,
+  backend: FiscalBackend,
+  input: RecordCorrectionInput,
+  original: { total: number; vatBreakdown: { rate: string; base: string; tax: string }[] },
+) {
+  const earlier = await tx
+    .select({ id: sales.id, total: sales.total, vatBreakdown: sales.vatBreakdown })
+    .from(sales)
+    .where(eq(sales.correctsSaleId, input.correctsSaleId));
+  const measured = await measuredFigures(tx, backend, [
+    { id: input.correctsSaleId, ...original },
+    ...earlier,
+  ]);
+  if (!measured.readable) throw new AppError("sale.correction_history_unusable", {});
+  if (measured.sales.some((sale) => sale.differs)) {
+    throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_unanswered" });
+  }
+  return measured;
 }
 
 /**

@@ -11,7 +11,15 @@ import type { CorrectionAdmission } from "@waitron/fiscal";
 declare module "@waitron/shared" {
   interface ErrorParams {
     "sale.correction_amount_invalid": Record<string, never>;
-    "sale.correction_scope_invalid": { reason: "empty" | "missing" | "duplicate" | "required" };
+    "sale.correction_scope_invalid": {
+      reason:
+        | "empty"
+        | "missing"
+        | "duplicate"
+        | "required"
+        | "filed_split_changed"
+        | "filed_total_changed";
+    };
     "sale.correction_history_unusable": Record<string, never>;
     "sale.correction_breakdown_invalid": Record<string, never>;
     "sale.correction_not_admitted": {
@@ -19,7 +27,8 @@ declare module "@waitron/shared" {
         | Extract<CorrectionAdmission, { eligible: false }>["reason"]
         | "replaced"
         | "filed_figures_unreadable"
-        | "filed_figures_changed";
+        | "filed_figures_changed"
+        | "filed_figures_unanswered";
     };
     /** A tender still has `settledAt: null`, so `settleSale` settles nothing and the sale stays
      * retryable. `recordSale`'s immediate settlement runs the same `settleSale`. */

@@ -28,6 +28,10 @@ export interface PartialCorrectionHistory {
     vatRate: number;
     lineGross: number | null;
   }[];
+  /** Whether the invoice's or an earlier correction's measured figures differ from the stored. */
+  moved: boolean;
+  /** The measured totals' sum, in cents. */
+  measuredRemaining: number;
 }
 
 interface Group {
@@ -37,9 +41,10 @@ interface Group {
 }
 
 /**
- * The supplied split, checked against the correction's own total and lines, at the cent and
- * sorted by rate. Every amount is signed as filed: the total and each gross below zero, bases and
- * taxes at or below it.
+ * The supplied split, checked against the correction's own total and its lines' fields, at the
+ * cent and sorted by rate. Every amount is signed as filed: the total and each gross below zero,
+ * bases and taxes at or below it, and no group both zero. Whether the lines agree with the split
+ * rate by rate is the history's check, `linesMatchSplit`.
  */
 export function checkPartialCorrectionBreakdown(
   total: string,
@@ -50,7 +55,6 @@ export function checkPartialCorrectionBreakdown(
   if (wholeInvoice || cents(total) >= 0 || lines.length === 0) refuse();
   const sources = new Set<string>();
   const numbers = new Set<number>();
-  const lineGroups = new Map<number, { base: number; gross: number }>();
   for (const line of lines) {
     if (
       !line.correctsLineId ||
@@ -74,33 +78,22 @@ export function checkPartialCorrectionBreakdown(
       (line.priceQuantity !== undefined && thousandths(line.priceQuantity) <= 0)
     )
       refuse();
-    const rate = basisPoints(line.vatRate);
-    const group = lineGroups.get(rate) ?? { base: 0, gross: 0 };
-    lineGroups.set(rate, { base: group.base + base, gross: group.gross + gross });
+    basisPoints(line.vatRate);
   }
+  const rates = new Set<number>();
   const groups = breakdown.map((group): Group => {
-    const checked = {
-      rate: basisPoints(group.rate),
-      base: cents(group.base),
-      tax: cents(group.tax),
-    };
-    const atRate = lineGroups.get(checked.rate);
+    const checked = storedGroup(group);
     if (
-      atRate === undefined ||
+      rates.has(checked.rate) ||
       checked.base > 0 ||
       checked.tax > 0 ||
-      atRate.base !== checked.base ||
-      atRate.gross !== checked.base + checked.tax
+      (checked.base === 0 && checked.tax === 0)
     )
       refuse();
-    lineGroups.delete(checked.rate);
+    rates.add(checked.rate);
     return checked;
   });
-  if (
-    lineGroups.size > 0 ||
-    groups.reduce((sum, group) => sum + group.base + group.tax, 0) !== cents(total)
-  )
-    refuse();
+  if (groups.reduce((sum, group) => sum + group.base + group.tax, 0) !== cents(total)) refuse();
   return groups
     .sort((left, right) => left.rate - right.rate)
     .map((group) => ({
@@ -112,19 +105,23 @@ export function checkPartialCorrectionBreakdown(
 
 /**
  * Refuses a checked split unless each line takes from an invoice line at its own rate, with a
- * stored gross nothing has yet exhausted, and no more than its quantity; and unless, at each
- * rate, the base is the one `correctionBaseAtRate` gives after every earlier correction and the
- * running gross stays within the invoice's. Refused with `sale.correction_history_unusable` instead
- * when what is stored cannot be checked: an invoice line or an earlier correction of it with no
- * gross, an earlier correction line at one of the split's rates naming no invoice line, or an
- * invoice breakdown without exactly one group at one of them. Every line is known to name a line
- * of the invoice.
+ * stored gross nothing has yet exhausted, and no more than its quantity; and unless, at each rate,
+ * the base is the one `correctionBaseAtRate` gives after every earlier correction and the running
+ * gross stays within the invoice's, all at the measured figures. While no figures are moved, the
+ * lines must agree with the split at each rate; once moved, only in their gross, and when the
+ * measured remaining is not what the invoice's lines have left, the correction must empty both.
+ * Refused with `sale.correction_history_unusable` instead when what is stored cannot be checked: an
+ * invoice line or an earlier correction of it with no gross, an earlier correction line naming no
+ * invoice line (unmoved, only at one of the split's rates), or a measured invoice breakdown without
+ * exactly one group at a rate of the split or of an earlier correction. Every line is known to name
+ * a line of the invoice.
  */
 export function checkPartialCorrectionHistory(
   lines: readonly RecordSaleLine[],
   breakdown: readonly VatBreakdownLine[],
   history: PartialCorrectionHistory,
 ): void {
+  if (!history.moved) linesMatchSplit(lines, breakdown);
   // Per invoice line, the gross earlier corrections took; null when one stored none.
   const taken = new Map<string, number | null>();
   const unlinkedRates = new Set<number>();
@@ -138,6 +135,26 @@ export function checkPartialCorrectionHistory(
       row.correctsLineId,
       sum === null || row.lineGross === null ? null : (sum ?? 0) - row.lineGross,
     );
+  }
+  const given = breakdown.map(storedGroup);
+  let movedInTotal = false;
+  if (history.moved) {
+    if (
+      [...history.invoiceLines.values()].some((source) => source.lineGross === null) ||
+      history.earlierLines.some((row) => row.lineGross === null || row.correctsLineId === null)
+    )
+      unusable();
+    const linesLeft = [
+      ...[...history.invoiceLines.values()].map((source) => source.lineGross!),
+      ...history.earlierLines.map((row) => row.lineGross!),
+    ].reduce((sum, gross) => sum + gross, 0);
+    movedInTotal = history.measuredRemaining !== linesLeft;
+    if (
+      !movedInTotal &&
+      lines.reduce((sum, line) => sum + cents(line.lineGross!), 0) !==
+        given.reduce((sum, group) => sum + group.base + group.tax, 0)
+    )
+      refuse();
   }
   for (const line of lines) {
     const source = history.invoiceLines.get(line.correctsLineId!)!;
@@ -160,13 +177,16 @@ export function checkPartialCorrectionHistory(
       gross: sum.gross - group.base - group.tax,
     });
   }
-  for (const group of breakdown) {
-    const rate = basisPoints(group.rate);
+  const byRate = new Map(given.map((group) => [group.rate, group]));
+  for (const rate of new Set([...byRate.keys(), ...prior.keys()])) {
     const atRate = invoice.get(rate);
-    if (unlinkedRates.has(rate) || atRate?.length !== 1) unusable();
+    const group = byRate.get(rate);
+    if ((group !== undefined && !history.moved && unlinkedRates.has(rate)) || atRate?.length !== 1)
+      unusable();
+    if (group === undefined) continue;
     const original = atRate[0]!;
     const before = prior.get(rate) ?? { base: 0, gross: 0 };
-    const gross = -(cents(group.base) + cents(group.tax));
+    const gross = -(group.base + group.tax);
     const expected = correctionBaseAtRate(
       basisPointsToDecimal(rate),
       { base: centsToDecimal(original.base), tax: centsToDecimal(original.tax) },
@@ -174,11 +194,52 @@ export function checkPartialCorrectionHistory(
       centsToDecimal(gross),
     );
     if (
-      compareDecimal(expected, centsToDecimal(-cents(group.base))) !== 0 ||
+      compareDecimal(expected, centsToDecimal(-group.base)) !== 0 ||
       before.gross + gross > original.base + original.tax
     )
       refuse();
   }
+  if (!movedInTotal) return;
+  for (const [rate, groups] of invoice) {
+    const group = byRate.get(rate);
+    const gross = group === undefined ? 0 : -(group.base + group.tax);
+    if (
+      (prior.get(rate)?.gross ?? 0) + gross !==
+      groups.reduce((sum, each) => sum + each.base + each.tax, 0)
+    )
+      refuse();
+  }
+  const takes = new Map(lines.map((line) => [line.correctsLineId!, -cents(line.lineGross!)]));
+  for (const [id, source] of history.invoiceLines) {
+    if ((taken.get(id) ?? 0) + (takes.get(id) ?? 0) !== source.lineGross) refuse();
+  }
+}
+
+/** Refuses unless, at each rate, the lines' base is the split's base and their gross its gross. */
+function linesMatchSplit(
+  lines: readonly RecordSaleLine[],
+  breakdown: readonly VatBreakdownLine[],
+): void {
+  const lineGroups = new Map<number, { base: number; gross: number }>();
+  for (const line of lines) {
+    const rate = basisPoints(line.vatRate);
+    const group = lineGroups.get(rate) ?? { base: 0, gross: 0 };
+    lineGroups.set(rate, {
+      base: group.base + cents(line.lineTotal),
+      gross: group.gross + cents(line.lineGross!),
+    });
+  }
+  for (const group of breakdown.map(storedGroup)) {
+    const atRate = lineGroups.get(group.rate);
+    if (
+      atRate === undefined ||
+      atRate.base !== group.base ||
+      atRate.gross !== group.base + group.tax
+    )
+      refuse();
+    lineGroups.delete(group.rate);
+  }
+  if (lineGroups.size > 0) refuse();
 }
 
 function storedGroup(group: { rate: string; base: string; tax: string }): Group {
