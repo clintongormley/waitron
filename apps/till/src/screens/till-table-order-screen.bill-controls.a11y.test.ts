@@ -31,7 +31,7 @@ const withEditor: TableParty = {
   ],
 };
 
-const states: [string, PartyBill[], string | undefined, TableParty, boolean][] = [
+const states: [string, PartyBill[], string | undefined, TableParty, boolean, string?][] = [
   ["one bill", [partyBill("wo-1", 1, "38.50")], "wo-1", switcherParty, false],
   ["one bill, + New bill out", [partyBill("wo-1", 1, "38.50")], "wo-1", switcherParty, true],
   [
@@ -46,17 +46,26 @@ const states: [string, PartyBill[], string | undefined, TableParty, boolean][] =
     false,
   ],
   ["no bill shown", [], undefined, switcherParty, false],
+  [
+    "Bill 2 marked as holding the signed-in person's unsent dishes",
+    [partyBill("wo-1", 1, "67.00"), partyBill("wo-2", 2, "54.00", { billName: "Clint" })],
+    "wo-1",
+    withEditor,
+    false,
+    "p-ana",
+  ],
 ];
 
 describe.each(["light", "dark"] as const)("the bill switcher in the %s theme", (theme) => {
-  describe.each(states)("%s", (_name, bills, orderId, party, newBillBusy) => {
+  describe.each(states)("%s", (_name, bills, orderId, party, newBillBusy, personId = "") => {
     it.each(["closed", "open"] as const)("is accessible %s", async (state) => {
       const { el } = await mountWidget<TillTableOrderScreen>(
         "till-table-order-screen",
-        { products: [], lines: [], orderId, party, bills, newBillBusy },
+        { products: [], lines: [], orderId, party, bills, newBillBusy, personId },
         theme,
       );
       const switcher = el.shadowRoot!.querySelector<WtRowActions>("[data-bill-switcher]")!;
+      expect(switcher.querySelector("[data-unsent-mark]") !== null).toBe(personId !== "");
       if (state === "open") {
         switcher.show();
         await switcher.updateComplete;

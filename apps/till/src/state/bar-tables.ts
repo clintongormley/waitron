@@ -129,3 +129,38 @@ export function barTables(
     return unsent || current ? [{ tableId, name, unsent, current, held: goesBack(tableId) }] : [];
   });
 }
+
+/**
+ * Slice 11, D5: the bill a bar button opens — of the party's bills holding `personId`'s unsent
+ * dishes, the one saved last; a tie goes to the lower bill number, an unnumbered bill last. Each
+ * `local` record of the party, oldest first, replaces its bill's read answer and counts as saved
+ * after every read. `undefined` when no bill counts.
+ */
+export function barBillToOpen(
+  party: TableParty,
+  personId: string,
+  local: readonly LocalBill[],
+): string | undefined {
+  // [tier, order]: a read's save time ranks below every local record, later records higher.
+  const saved = new Map<string, readonly [number, number]>();
+  const numbers = new Map<string, number>();
+  for (const draft of party.unsentDrafts) {
+    numbers.set(draft.billId, draft.billNumber ?? Number.POSITIVE_INFINITY);
+    if (draft.ownerId === personId && draft.lineCount > 0) {
+      saved.set(draft.billId, [0, Date.parse(draft.savedAt)]);
+    }
+  }
+  local.forEach((bill, index) => {
+    if (bill.partyId !== party.id || bill.billId === null) return;
+    if (localUnsent(bill)) saved.set(bill.billId, [1, index]);
+    else saved.delete(bill.billId);
+  });
+  const ranked = [...saved].map(([billId, [tier, order]]) => ({
+    billId,
+    tier,
+    order,
+    number: numbers.get(billId) ?? Number.POSITIVE_INFINITY,
+  }));
+  ranked.sort((a, b) => b.tier - a.tier || b.order - a.order || a.number - b.number);
+  return ranked[0]?.billId;
+}

@@ -296,7 +296,9 @@ At the counter, use **Parked orders** to retrieve or discard a table's bill.
 
 Tap the switcher to list the table's bills in number order. Each row shows the bill's number and
 name, what it still owes or **Paid ✓**, and a line such as **Ana has an unsent order: 3 items** for
-each person with dishes on that bill not yet sent. Choose a row to put that bill on screen. A paid
+each person with dishes on that bill not yet sent. When another bill holds dishes you have not
+sent, the switcher says so, such as **✎ Bill 2 unsent**, and the list marks that bill **✎ Unsent**.
+Choose a row to put that bill on screen. A paid
 bill opens too, so you can name it or, when it has a receipt, print a copy, but it takes no new
 dishes. **+ New bill** is always last in the list: it starts a new, empty bill at the table and puts
 it on screen.

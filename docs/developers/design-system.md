@@ -1146,7 +1146,12 @@ Tab button and no side drawer.
   `menuitemradio` rows in number order, `aria-checked` on the bill on screen, whose background
   differs from the open list's and an unchecked row's in both themes. Each row holds the bill's
   short label, what it owes or "Paid ✓", and one line per person with unsent dishes on it ("Ana has
-  an unsent order: 3 items"). **+ New bill** is always the last item, with one bill, several or
+  an unsent order: 3 items"). When another shown bill than the one on screen holds the signed-in
+  person's unsent dishes (A797 slice 11), the closed trigger adds, after its ▾, the `floor-unsent`
+  icon (`aria-hidden`) and "Bill 2 unsent", or "2 bills unsent" for two or more, which may wrap
+  below while the label and ▾ stay on one line; the `label` gains " · Bill 2 unsent"; and each such
+  row's head shows the icon and "Unsent" after its label. The till's floor read keeps them
+  current: it carries the party's unsent drafts, and showing another bill reads the floor again. **+ New bill** is always the last item, with one bill, several or
   none; while one is being made it is `aria-disabled` and a tap sends nothing. Choosing the bill on
   screen sends nothing; choosing another sends `switch-bill` with its id.
 - **A vanished bill.** When a bills read no longer holds the bill on screen, the screen shows the

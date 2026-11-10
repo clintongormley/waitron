@@ -832,7 +832,7 @@ may predate that branch:
   A773-2's pass reuses. Slice 10 (on a phone, the table screen's Menu / Order switch in place of
   Review, a number on each tile for the New order, a bar fixed at the bottom of Menu with Send all,
   Order's total, Still to pay and Pay fixed at the bottom of a handheld, a table opening on Order
-  once anything is sent, and a handheld staying on its table after its last send) landed in #2700. What is left of A797: slices 11 and 12b (slice 12 is A773-2's own). Build slices (design §8), in the owner's
+  once anything is sent, and a handheld staying on its table after its last send) landed in #2700. What is left of A797: slice 12b (slice 12 is A773-2's own). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits

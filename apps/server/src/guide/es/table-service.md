@@ -315,8 +315,9 @@ En el mostrador, usa **Pedidos aparcados** para recuperar o descartar la cuenta 
 
 Toca el selector para ver las cuentas de la mesa por orden de número. Cada fila muestra el número y
 el nombre de la cuenta, lo que queda por pagar o **Pagada ✓**, y una línea como **Ana tiene un
-pedido sin enviar: 3 artículos** por cada persona con platos sin enviar en esa cuenta. Elige una
-fila para poner esa cuenta en pantalla. Una cuenta pagada también se abre, para que puedas ponerle
+pedido sin enviar: 3 artículos** por cada persona con platos sin enviar en esa cuenta. Cuando otra
+cuenta tiene platos tuyos sin enviar, el selector lo indica, como **✎ Cuenta 2 sin enviar**, y la
+lista marca esa cuenta con **✎ Sin enviar**. Elige una fila para poner esa cuenta en pantalla. Una cuenta pagada también se abre, para que puedas ponerle
 nombre o, si tiene ticket, imprimir una copia, pero no admite platos nuevos. **+ Cuenta nueva** está
 siempre al final de la lista: abre una cuenta nueva y vacía en la mesa y la pone en pantalla.
 

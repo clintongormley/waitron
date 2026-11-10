@@ -1,4 +1,5 @@
 import { type TemplateResult, css, html, nothing } from "lit";
+import "@waitron/ui/src/components/wt-icon.js";
 import { decimal, formatMoney } from "@waitron/shared";
 import type { PartyBill, TableParty } from "../api/client.js";
 import { countText, currentLocale, fill, named, t } from "../i18n/t.js";
@@ -20,11 +21,46 @@ function paidMark(bill: PartyBill | undefined): TemplateResult | typeof nothing 
 
 const chevron = html`<span aria-hidden="true"> ▾</span>`;
 
-/** One bill's row in the switcher: its short label, what it owes, and who has unsent dishes on it. */
-export function billRowContent(bill: PartyBill, party: TableParty): TemplateResult {
+const unsentIcon = html`<wt-icon name="floor-unsent" aria-hidden="true"></wt-icon>`;
+
+/** Slice 11, D2: the shown bills other than the one on screen holding this person's unsent dishes. */
+function othersUnsent(
+  bills: readonly PartyBill[],
+  party: TableParty,
+  billId: string | undefined,
+  personId: string,
+): PartyBill[] {
+  return bills.filter(
+    (bill) =>
+      bill.workingOrderId !== billId &&
+      party.unsentDrafts.some(
+        (draft) =>
+          draft.billId === bill.workingOrderId && draft.ownerId === personId && draft.lineCount > 0,
+      ),
+  );
+}
+
+/** "Bill 2 unsent", or "2 bills unsent" with several. */
+function unsentWords(marked: readonly PartyBill[]): string {
+  return marked.length === 1
+    ? fill(t("table.unsent_bill"), { bill: billNumberLabel(marked[0]!) })
+    : fill(t("table.unsent_bills"), { n: String(marked.length) });
+}
+
+/** One bill's row in the switcher: its short label, what it owes, and who has unsent dishes on it.
+ * `marked` adds the Unsent mark after the label. */
+export function billRowContent(bill: PartyBill, party: TableParty, marked = false): TemplateResult {
   const unsent = party.unsentDrafts.filter((draft) => draft.billId === bill.workingOrderId);
   return html`<span class="bill-row-head"
-      ><span class="bill-row-label">${billLabel(bill)}</span>
+      ><span class="bill-row-label"
+        >${billLabel(bill)}${
+          marked
+            ? html` <span class="bill-unsent-mark" data-bill-row-unsent-mark
+                >${unsentIcon}${t("floor.unsent_mark")}</span
+              >`
+            : nothing
+        }</span
+      >
       <span class="bill-row-owes">${owes(bill)}${paidMark(bill)}</span></span
     >
     ${unsent.map(
@@ -57,6 +93,8 @@ export interface BillSwitcherOptions {
   bills: readonly PartyBill[];
   /** The bill on screen. */
   billId: string | undefined;
+  /** Who is signed in: another bill holding their unsent dishes is marked. */
+  personId: string;
   /** + New bill is out, so it is drawn quiet and a tap on it does nothing. */
   newBillBusy: boolean;
   onSwitch(workingOrderId: string): void;
@@ -73,14 +111,23 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
   const bills = shownBills(options.bills);
   const shown = bills.find((bill) => bill.workingOrderId === billId);
   const closed = closedLabel(bills, shown);
+  const marked = othersUnsent(bills, party, billId, options.personId);
+  const words = marked.length === 0 ? undefined : unsentWords(marked);
+  const label = shown === undefined ? closed : `${t("table.bills_title")}: ${closed}`;
   return html`<wt-row-actions
     class="bill-switcher"
     data-bill-switcher
     opens-below
-    label=${shown === undefined ? closed : `${t("table.bills_title")}: ${closed}`}
+    label=${words === undefined ? label : `${label} · ${words}`}
   >
-    <span slot="trigger"
-      ><span data-bill-switcher-label>${closed}</span>${paidMark(shown)}${chevron}</span
+    <span slot="trigger" class="bill-switcher-trigger"
+      ><span class="bill-switcher-closed"
+        ><span data-bill-switcher-label>${closed}</span>${paidMark(shown)}${chevron}</span
+      >${
+        words === undefined
+          ? nothing
+          : html` <span class="bill-unsent-mark" data-unsent-mark>${unsentIcon}${words}</span>`
+      }</span
     >
     <div role="menu" class="bill-switcher-menu">
       ${bills.map(
@@ -95,7 +142,7 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
               if (bill.workingOrderId !== billId) options.onSwitch(bill.workingOrderId);
             }}
           >
-            ${billRowContent(bill, party)}
+            ${billRowContent(bill, party, marked.includes(bill))}
           </button>`,
       )}
       <button
@@ -228,5 +275,22 @@ export const billControlStyles = css`
   .bill-row-unsent {
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
+  }
+  .bill-switcher-trigger {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: var(--wt-space-2);
+  }
+  .bill-switcher-closed {
+    white-space: nowrap;
+  }
+  .bill-unsent-mark {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--wt-space-1);
+    color: var(--wt-color-text-muted);
+    font-size: var(--wt-font-size-sm);
+    font-weight: var(--wt-font-weight-normal);
   }
 `;

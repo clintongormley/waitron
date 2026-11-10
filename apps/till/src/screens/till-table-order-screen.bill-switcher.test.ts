@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { registerIcons } from "@waitron/ui";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -322,4 +323,161 @@ it("switches the mounted bill by keyboard, updates its label and returns focus t
   expect(el.shadowRoot!.activeElement).toBe(host.querySelector('[data-switch-bill="wo-1"]'));
   await userEvent.keyboard("{Escape}");
   await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
+});
+
+describe("A797 slice 11: the switcher marks another bill holding this person's unsent dishes", () => {
+  const draft = (billId: string, billNumber: number, ownerId: string, lineCount = 2) => ({
+    billId,
+    billNumber,
+    ownerId,
+    ownerName: ownerId === "p-ana" ? "Ana" : "Clint",
+    lineCount,
+    savedAt: "2026-10-31T10:00:00.000Z",
+  });
+
+  async function mountFor(unsentDrafts: TableParty["unsentDrafts"], orderId = "wo-1") {
+    const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
+      products: [],
+      lines: [],
+      orderId,
+      party: { ...switcherParty, unsentDrafts },
+      bills: three,
+      personId: "p-ana",
+    });
+    return el;
+  }
+
+  const trigger = (el: TillTableOrderScreen) =>
+    switcher(el)!.querySelector<HTMLElement>('[slot="trigger"]')!;
+  const triggerText = (el: TillTableOrderScreen) =>
+    trigger(el).textContent!.replace(/\s+/g, " ").trim();
+  /** The ids of the rows carrying the Unsent mark. */
+  const markedRows = (el: TillTableOrderScreen) =>
+    [...switcher(el)!.querySelectorAll<HTMLElement>("[data-switch-bill]")]
+      .filter((row) => row.querySelector("[data-bill-row-unsent-mark]") !== null)
+      .map((row) => row.dataset.switchBill);
+
+  it("another bill: the closed switcher and its label say Bill 2 unsent, the icon is hidden, and only Bill 2's row says Unsent", async () => {
+    const el = await mountFor([draft("wo-2", 2, "p-ana")]);
+
+    expect(closedLabel(el)).toBe("Bill 1 · 3 bills · €67.00");
+    expect(triggerText(el)).toBe("Bill 1 · 3 bills · €67.00 ▾ Bill 2 unsent");
+    expect(switcher(el)!.getAttribute("label")).toBe(
+      "Bills: Bill 1 · 3 bills · €67.00 · Bill 2 unsent",
+    );
+    const icon = trigger(el).querySelector("[data-unsent-mark] wt-icon")!;
+    expect([icon.getAttribute("name"), icon.getAttribute("aria-hidden")]).toEqual([
+      "floor-unsent",
+      "true",
+    ]);
+    expect(markedRows(el)).toEqual(["wo-2"]);
+    const rowMark = switcher(el)!.querySelector(
+      '[data-switch-bill="wo-2"] [data-bill-row-unsent-mark]',
+    )!;
+    expect(rowMark.textContent!.trim()).toBe("Unsent");
+    expect(rowMark.querySelector("wt-icon")!.getAttribute("aria-hidden")).toBe("true");
+    expect(items(el)[1]).toBe("Bill 2 · Clint Unsent €54.00 Ana has an unsent order: 2 items");
+  });
+
+  it("another person's draft on Bill 2 draws no mark", async () => {
+    const el = await mountFor([draft("wo-2", 2, "p-clint")]);
+
+    expect(triggerText(el)).toBe("Bill 1 · 3 bills · €67.00 ▾");
+    expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 1 · 3 bills · €67.00");
+    expect(markedRows(el)).toEqual([]);
+  });
+
+  it("this person's draft on the bill on screen only draws no mark", async () => {
+    const el = await mountFor([draft("wo-1", 1, "p-ana")]);
+
+    expect(triggerText(el)).toBe("Bill 1 · 3 bills · €67.00 ▾");
+    expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 1 · 3 bills · €67.00");
+    expect(markedRows(el)).toEqual([]);
+  });
+
+  it("a draft of this person's with no lines draws no mark", async () => {
+    const el = await mountFor([draft("wo-2", 2, "p-ana", 0)]);
+
+    expect(triggerText(el)).toBe("Bill 1 · 3 bills · €67.00 ▾");
+    expect(markedRows(el)).toEqual([]);
+  });
+
+  it("two other bills: the closed switcher says 2 bills unsent and both rows are marked", async () => {
+    const el = await mountFor([draft("wo-3", 3, "p-ana"), draft("wo-2", 2, "p-ana")], "wo-1");
+
+    expect(triggerText(el)).toBe("Bill 1 · 3 bills · €67.00 ▾ 2 bills unsent");
+    expect(switcher(el)!.getAttribute("label")).toBe(
+      "Bills: Bill 1 · 3 bills · €67.00 · 2 bills unsent",
+    );
+    expect(markedRows(el)).toEqual(["wo-2", "wo-3"]);
+  });
+
+  it("says it in Spanish", async () => {
+    setLocale("es");
+    const one = await mountFor([draft("wo-2", 2, "p-ana")]);
+
+    expect(triggerText(one)).toBe("Cuenta 1 · 3 cuentas · 67,00 € ▾ Cuenta 2 sin enviar");
+    expect(
+      switcher(one)!
+        .querySelector('[data-switch-bill="wo-2"] [data-bill-row-unsent-mark]')!
+        .textContent!.trim(),
+    ).toBe("Sin enviar");
+    cleanupWidgets();
+
+    const two = await mountFor([draft("wo-2", 2, "p-ana"), draft("wo-3", 3, "p-ana")]);
+    expect(triggerText(two)).toBe("Cuenta 1 · 3 cuentas · 67,00 € ▾ 2 cuentas sin enviar");
+  });
+
+  describe("on a phone, embedded in the till", () => {
+    // The ⋮ icon is registered by till-app.ts; without it the ⋮ is drawn empty.
+    registerIcons({
+      kebab:
+        "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
+    });
+
+    afterEach(() => resetPage());
+
+    async function mountPhone(width: number) {
+      await pageAt(width, 740);
+      const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
+        products: [],
+        lines: [],
+        orderId: "wo-1",
+        party: { ...switcherParty, unsentDrafts: [draft("wo-2", 2, "p-ana")] },
+        bills: three,
+        personId: "p-ana",
+        embedded: true,
+        handheld: true,
+      });
+      await document.fonts.ready;
+      return el;
+    }
+    const box = (node: Element) => node.getBoundingClientRect();
+    const middle = (rect: DOMRect) => rect.top + rect.height / 2;
+
+    it("360 wide, in Spanish the mark wraps inside the switcher and the ⋮ stays on its row, inside the screen", async () => {
+      setLocale("es");
+      const el = await mountPhone(360);
+      const sw = box(switcher(el)!);
+      const menu = box(el.shadowRoot!.querySelector("[data-table-menu]")!);
+
+      expect(triggerText(el)).toBe("Cuenta 1 · 3 cuentas · 67,00 € ▾ Cuenta 2 sin enviar");
+      expect(Math.abs(middle(menu) - middle(sw))).toBeLessThanOrEqual(1);
+      expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
+    });
+
+    // CI's Linux fonts draw this row about a fifth wider than macOS's, enough to wrap it at 360 wide.
+    it("480 wide, in English, where there is room, the closed label and the mark stay on one line beside the ⋮", async () => {
+      const el = await mountPhone(480);
+      const closed = box(trigger(el).querySelector(".bill-switcher-closed")!);
+      const mark = box(trigger(el).querySelector("[data-unsent-mark]")!);
+      const sw = box(switcher(el)!);
+      const menu = box(el.shadowRoot!.querySelector("[data-table-menu]")!);
+
+      expect(mark.left).toBeGreaterThanOrEqual(closed.right);
+      expect(Math.abs(middle(mark) - middle(closed))).toBeLessThanOrEqual(1);
+      expect(Math.abs(middle(menu) - middle(sw))).toBeLessThanOrEqual(1);
+      expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
+    });
+  });
 });
