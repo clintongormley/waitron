@@ -47,7 +47,7 @@ vi.mock("node:crypto", async (importOriginal) =>
 afterEach(async () => {
   await watchedOrder();
 });
-import { send as rawPaymentSend } from "./testing/bill-venue.js";
+import { fiscalRecordCount, send as rawPaymentSend } from "./testing/bill-venue.js";
 import {
   billWith,
   inTx,
@@ -552,17 +552,68 @@ describe("Discard resolves the whole owned draft atomically", () => {
     expect(loaded.json).toEqual({ drafts: [], billEdits: expect.any(Array) });
   });
 
+  it.each([false, true])(
+    "rolls back the discard and its cached answer when issuance refuses (recorded=%s)",
+    async (recordFirst) => {
+      const p = await setup(false, true, false, "hold", "grouped");
+      const body = await request(p);
+      const before = await frozen();
+      const records = fiscalRecordCount(venue);
+      const recordSale = venue.backend.recordSale.bind(venue.backend);
+      let attempted = false;
+      const probe = vi.spyOn(venue.backend, "recordSale").mockImplementation(async (tx, sale) => {
+        if (recordFirst) await recordSale(tx, sale);
+        attempted = true;
+        throw new AppError("clock.unusable", {
+          clockAt: "2001-01-01T00:00:00.000Z",
+          offsetMinutes: 0,
+        });
+      });
+      try {
+        const answer = await discard(p, body);
+        expect(answer.json).toMatchObject({ code: "clock.unusable" });
+        expect(attempted).toBe(true);
+        expect(await frozen()).toEqual(before);
+        expect(fiscalRecordCount(venue)).toEqual(records);
+      } finally {
+        probe.mockRestore();
+      }
+    },
+  );
+
+  it("rolls back the invoice when caching the completed discard refuses", async () => {
+    const p = await setup(false, true, false, "hold", "grouped");
+    const body = await request(p);
+    const before = await frozen();
+    const records = fiscalRecordCount(venue);
+    expect(p.billId).toMatch(/^[a-f0-9-]{36}$/);
+    await venue.db
+      .execute(sql`create trigger refuse_completed_discard before insert on service_commands
+      when new.kind = 'draft.discard' and exists (select 1 from sales where working_order_id = '${sql.raw(p.billId)}')
+      begin select raise(abort, 'completed discard probe'); end`);
+    try {
+      const answer = await discard(p, body);
+      expect(answer.json).toMatchObject({ code: "server.internal" });
+      expect(await frozen()).toEqual(before);
+      expect(fiscalRecordCount(venue)).toEqual(records);
+    } finally {
+      await venue.db.execute(sql`drop trigger refuse_completed_discard`);
+    }
+  });
+
   it("uses the existing settlement when cancelling sources leaves the remaining bill fully paid", async () => {
     // Grouped, as an order stored before portions.
     const p = await setup(false, true, false, "hold", "grouped");
     const body = await request(p);
     const before = await frozen();
+    const recordsBefore = fiscalRecordCount(venue);
     const answer = await discard(p, body);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     const after = await frozen();
     const issued = after.sales.filter((s) => s.workingOrderId === p.billId);
     expect(issued).toHaveLength(1);
     expect(issued[0]).toMatchObject({ total: 200 });
+    expect(answer.json).toMatchObject({ invoice: { total: "2.00", invoiceType: "F2" } });
     expect(after.saleLines.filter((l) => l.saleId === issued[0]!.id)).toMatchObject([
       { quantity: 1000, lineGross: 200 },
     ]);
@@ -571,7 +622,10 @@ describe("Discard resolves the whole owned draft atomically", () => {
     ]);
     expect(after.bills.find((b) => b.id === p.billId)).toMatchObject({ status: "settled" });
     expect(after.payments).toEqual(before.payments);
+    const records = fiscalRecordCount(venue);
+    expect(records).toBe(recordsBefore + 1);
     expect((await discard(p, body)).json).toEqual(answer.json);
+    expect(fiscalRecordCount(venue)).toEqual(records);
     expect(await frozen()).toEqual(after);
   });
 

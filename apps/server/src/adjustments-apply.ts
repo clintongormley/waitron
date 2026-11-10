@@ -1,3 +1,4 @@
+import type { TillSaleResult } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
@@ -1351,7 +1352,8 @@ export async function applyAdjustment(
   venueLocale: string,
   attempts?: PinAttempts,
   attendance?: OrderAttendance,
-): Promise<{ adjustmentIds: string[]; revision: number }> {
+  complete?: () => Promise<TillSaleResult | null>,
+): Promise<{ adjustmentIds: string[]; revision: number; invoice?: TillSaleResult }> {
   const { submissionId, approver, admission, ...command } = args;
   await requireEconomicWrite(tx, cfg, admission);
   const expectedEdit =
@@ -1490,7 +1492,8 @@ export async function applyAdjustment(
           activity?.at,
         );
       }
-      return { adjustmentIds: [id], revision };
+      const invoice = await complete?.();
+      return { adjustmentIds: [id], revision, ...(invoice == null ? {} : { invoice }) };
     },
     cfg.madeHereSink,
   );

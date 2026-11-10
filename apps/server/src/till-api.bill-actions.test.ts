@@ -418,40 +418,50 @@ describe("the bill action routes", () => {
     expect(answer.json).toMatchObject({ code: "party.out_of_date" });
   });
 
-  it("a split that leaves the source fully paid issues its invoice", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña");
-    await takeBillPayment(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      venue.cfg,
-      tabId,
-      {
-        submissionId: randomUUID(),
-        kind: "items",
-        lines: [{ lineNo: 1 }],
-        method: "cash",
-        tendered: "35.00",
-        applied: "35.00",
-        tip: "0.00",
-      },
-      operator,
-    );
-    expect(fiscalRecordCount(venue, tabId)).toBe(0);
+  it.each(["split", "move-dishes"] as const)(
+    "a %s that leaves the source fully paid issues its invoice",
+    async (route) => {
+      const { partyId, tabId } = await seated("Paella", "Caña");
+      await takeBillPayment(
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
+        venue.cfg,
+        tabId,
+        {
+          submissionId: randomUUID(),
+          kind: "items",
+          lines: [{ lineNo: 1 }],
+          method: "cash",
+          tendered: "35.00",
+          applied: "35.00",
+          tip: "0.00",
+        },
+        operator,
+      );
+      expect(fiscalRecordCount(venue, tabId)).toBe(0);
 
-    const answer = await post(`/api/bills/${tabId}/split`, {
-      transfers: [{ lineNo: 2 }],
-      expectedPartyRevision: await revisionOf(partyId),
-    });
+      const [line] = venue.db.all<{ id: string }>(
+        sql`select id from working_order_lines where working_order_id = ${tabId} and line_no = 2`,
+      );
+      const answer = await post(`/api/bills/${tabId}/${route}`, {
+        ...(route === "split"
+          ? { transfers: [{ lineNo: 2 }] }
+          : { lineIds: [line!.id], toBillId: null }),
+        expectedPartyRevision: await revisionOf(partyId),
+      });
 
-    expect(answer.status).toBe(200);
-    expect(fiscalRecordCount(venue, tabId)).toBe(1);
-    expect(await statusOf(venue, tabId)).toBe("settled");
-    expect(fiscalRecordCount(venue, answer.json.billId as string)).toBe(0);
-  });
+      expect(answer.status).toBe(200);
+      expect(fiscalRecordCount(venue, tabId)).toBe(1);
+      if (route === "move-dishes")
+        expect(answer.json).toMatchObject({ invoice: { total: "35.00", invoiceType: "F2" } });
+      expect(await statusOf(venue, tabId)).toBe("settled");
+      expect(fiscalRecordCount(venue, answer.json.billId as string)).toBe(0);
+    },
+  );
 });
 
 describe("A803 rename: PUT /api/bills/:id/name", () => {

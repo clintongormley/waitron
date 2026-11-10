@@ -1974,7 +1974,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const expected = requireRevision(body.revision);
       const lateSend = parseLateSend(body.lateSend);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const revision = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
+      const saved = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
         updateHeldOrder(
           { db: deps.db, admission: deps.admission },
           sendCfg,
@@ -1993,7 +1993,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             : { recorder: deps.attendance, clock: deps.clock },
         ),
       );
-      return c.json({ revision });
+      return c.json(saved);
     }),
   );
 
@@ -3657,14 +3657,14 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             },
             deps.attendance,
           );
-          await issueIfFullyPaid(
+          const invoice = await issueIfFullyPaid(
             tx,
             fiscal,
             sendingCfg(cfg, c, session.device),
             result.edit.billId,
             personId,
           );
-          return result;
+          return { ...result, ...(invoice === null ? {} : { invoice }) };
         },
         log,
       );
@@ -3833,8 +3833,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
               draftId,
               { ...input, lateSend: late },
               deps.attendance,
+              (billId) => issueIfFullyPaid(tx, fiscal, sendCfg, billId, personId),
             );
-            await issueIfFullyPaid(tx, fiscal, sendCfg, result.tabId, personId);
             return result;
           },
           log,
@@ -4071,8 +4071,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
               ? undefined
               : { recorder: deps.attendance, clock: deps.clock },
           );
-          await issueIfFullyPaid(tx, fiscal, sendCfg, id, personId);
-          return { revision, party: await partyRevisionOfOrder(tx, id) };
+          const invoice = await issueIfFullyPaid(tx, fiscal, sendCfg, id, personId);
+          return {
+            revision,
+            party: await partyRevisionOfOrder(tx, id),
+            ...(invoice === null ? {} : { invoice }),
+          };
         },
         log,
       );
@@ -4229,7 +4233,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             ...command,
             expectedEdits: parseBillEditExpecteds(body.expectedEdits),
           });
-          await issueIfFullyPaid(tx, fiscal, saleCfg, fromBillId, personId);
+          const invoice = await issueIfFullyPaid(tx, fiscal, saleCfg, fromBillId, personId);
           await captureKitchenActivity(
             tx,
             deps.attendance === undefined
@@ -4238,7 +4242,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             personId,
             [fromBillId, moved.billId],
           );
-          return moved;
+          return { ...moved, ...(invoice === null ? {} : { invoice }) };
         },
         log,
       );

@@ -8,6 +8,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billEditStates,
+  billPayments,
   devices,
   kitchenStations,
   orderDraftLines,
@@ -30,6 +31,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { createTable } from "./testing/live-table.js";
 import {
+  fiscalRecordCount,
   inTx,
   provisionBillVenue,
   send as rawGroupSend,
@@ -1378,6 +1380,53 @@ describe("a line's answers of the wrong shape", () => {
 });
 
 describe("source-backed draft HTTP boundary", () => {
+  it.each(["save", "submit"] as const)(
+    "returns the invoice when a draft %s settles the bill",
+    async (operation) => {
+      const party = await seated();
+      if (operation === "save") {
+        const sent = await ana("POST", `/api/parties/${party.partyId}/groups`, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: await revisionOf(party.partyId),
+          allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+          groups: [{ release: "fire", lines: [dish("Caña")] }],
+        });
+        expect(sent.status).toBe(200);
+      }
+      const draft = await newDraft(ana, party.partyId, [dish("Caña")]);
+      await venue.db.insert(billPayments).values({
+        workingOrderId: party.tabId,
+        submissionId: randomUUID(),
+        fingerprint: "fixture",
+        kind: "contribution",
+        method: "cash",
+        applied: 300,
+        tendered: 300,
+        state: "received",
+        requestedBy: venue.operatorId,
+        source: "device",
+        deviceId: venue.deviceId,
+        receivedAt: new Date().toISOString(),
+      });
+      const method = operation === "save" ? "PUT" : "POST";
+      const path = `/api/parties/${party.partyId}/drafts${operation === "save" ? "" : `/${draft.id}/submit`}`;
+      const body =
+        operation === "save"
+          ? { billId: party.tabId, draftId: draft.id, revision: draft.revision, lines: [] }
+          : await submitBody(party.partyId, draft);
+      const answer = await ana(method, path, body);
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      expect(answer.json).toMatchObject({ invoice: { total: "3.00", invoiceType: "F2" } });
+      if (operation === "submit") {
+        const before = await snapshot();
+        const records = fiscalRecordCount(venue);
+        expect(await ana(method, path, body)).toEqual(answer);
+        expect(fiscalRecordCount(venue)).toEqual(records);
+        expect(await snapshot()).toEqual(before);
+      }
+    },
+  );
+
   it("submits stored source IDs with fresh dishes through HTTP and replays the same result", async () => {
     const party = await seated();
     const draft = await newDraft(ana, party.partyId, [dish("Caña")]);

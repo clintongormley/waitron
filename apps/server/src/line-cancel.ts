@@ -1,3 +1,4 @@
+import type { TillSaleResult } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { eq, inArray } from "drizzle-orm";
 import {
@@ -81,7 +82,11 @@ export interface RefundLink {
   adjustmentId: string;
 }
 
-export type CancelItemAnswer = { revision: number; refundLinks?: RefundLink[] };
+export type CancelItemAnswer = {
+  revision: number;
+  refundLinks?: RefundLink[];
+  invoice?: TillSaleResult;
+};
 
 export async function cancelItem(
   tx: Transaction,
@@ -94,7 +99,7 @@ export async function cancelItem(
   policy: {
     venueLocale: string;
     attempts?: PinAttempts;
-    completeAdjustment?: (billId: string) => Promise<void>;
+    completeAdjustment?: (billId: string) => Promise<TillSaleResult | null | void>;
   } = { venueLocale: cfg.locale },
 ): Promise<CancelItemAnswer> {
   await requireEconomicWrite(tx, cfg, ask.admission);
@@ -136,6 +141,7 @@ export async function cancelItem(
       approverId: ask.approver?.personId,
     },
     async () => {
+      let invoice: TillSaleResult | null | void = undefined;
       const { context, dishIds } = await requireRowCancellationContext(
         tx,
         partyId,
@@ -269,8 +275,8 @@ export async function cancelItem(
               operatorId,
               at,
             );
-          await policy.completeAdjustment?.(bill!.id);
-          return { revision: await partyRevision(tx, partyId) };
+          invoice = await policy.completeAdjustment?.(bill!.id);
+          return { revision: await partyRevision(tx, partyId), ...(invoice ? { invoice } : {}) };
         }
         if (typeof ask.reasonId !== "string" || ask.reasonId.length === 0)
           throw invalid("reasonId");
@@ -332,7 +338,7 @@ export async function cancelItem(
           policy.attempts,
           attendance,
         );
-        await policy.completeAdjustment?.(bill!.id);
+        invoice = await policy.completeAdjustment?.(bill!.id);
       } else {
         if (typeof ask.reasonId !== "string" || ask.reasonId.trim().length === 0)
           throw invalid("reasonId");
@@ -500,7 +506,7 @@ export async function cancelItem(
             refundLinks: [{ lineId: first.id, adjustmentId }],
           };
       }
-      return { revision: await partyRevision(tx, partyId) };
+      return { revision: await partyRevision(tx, partyId), ...(invoice ? { invoice } : {}) };
     },
     cfg.madeHereSink,
   );

@@ -1,3 +1,4 @@
+import type { TillSaleResult } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { and, asc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import {
@@ -152,6 +153,7 @@ export type BillEditExpected = Pick<
 >;
 
 export interface BillDraftSnapshot {
+  invoice?: TillSaleResult;
   draft: Draft | null;
   edit: BillEditState;
 }
@@ -936,7 +938,9 @@ export async function discardDraft(
   venueLocale: string,
   attempts?: PinAttempts,
   attendance?: OrderAttendance,
+  complete?: (billId: string) => Promise<TillSaleResult | null>,
 ): Promise<{
+  invoice?: TillSaleResult;
   draftId: string;
   billId: string;
   revision: number;
@@ -1053,7 +1057,9 @@ export async function discardDraft(
         "discard",
         at,
       );
+      const invoice = await complete?.(billId);
       return {
+        ...(invoice == null ? {} : { invoice }),
         draftId: draft.id,
         billId,
         revision: closed!.revision,
@@ -1082,7 +1088,7 @@ export interface SubmitDraftInput extends PartyCommandArgs {
 }
 
 /** The groups placed, and the operator's draft as it is left: null once every line was sent. */
-export type SubmittedDraft = SubmittedGroups & { draft: Draft | null; edit: BillEditState };
+export type SubmittedDraft = SubmittedGroups & BillDraftSnapshot;
 
 export async function submitDraft(
   tx: Transaction,
@@ -1091,6 +1097,7 @@ export async function submitDraft(
   draftId: string,
   input: SubmitDraftInput,
   attendance?: AttendanceRecorder,
+  complete?: (billId: string) => Promise<TillSaleResult | null>,
 ): Promise<SubmittedDraft> {
   const at = nowIso();
   const { operatorId } = input;
@@ -1227,11 +1234,13 @@ export async function submitDraft(
         },
       );
       await captureDraft(tx, attendance, operatorId, id, draft.revision + 1, "submit", at);
-      return {
+      const result = {
         ...placed,
         draft: emptied ? null : await readOpenDraft(tx, cfg, partyId, id, offers),
         edit: await readBillEditState(tx, billId),
       };
+      const invoice = await complete?.(result.tabId);
+      return { ...result, ...(invoice == null ? {} : { invoice }) };
     },
     cfg.madeHereSink,
   );

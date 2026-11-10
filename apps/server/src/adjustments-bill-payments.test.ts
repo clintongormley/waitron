@@ -2,11 +2,12 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   printJobs,
+  serviceCommands,
   saleReceiptGuests,
   sales,
   withTransaction,
@@ -15,7 +16,7 @@ import {
 } from "@waitron/db";
 import type { RefundAnswer } from "@waitron/payments";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
-import { centsToDecimal } from "@waitron/shared";
+import { AppError, centsToDecimal } from "@waitron/shared";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import {
   inTx,
@@ -263,6 +264,52 @@ describe("a reduction after contributions (design §8 test 11)", () => {
 });
 
 describe("a discount that leaves a bill fully paid", () => {
+  it("rolls back the adjustment and its cached result when issuance refuses", async () => {
+    const billId = await tabWith(venue, "Botella tinto", "Croquetas");
+    await contribute(billId, "cash", "30.00");
+    const commands = await venue.db.select().from(serviceCommands);
+    const adjustmentsBefore = await recordedOn(billId);
+    const revision = await revisionOf(billId);
+    const records = fiscalRecordCount(venue, billId);
+    const probe = vi
+      .spyOn(venue.backend, "recordSale")
+      .mockRejectedValue(
+        new AppError("clock.unusable", { clockAt: "2001-01-01T00:00:00.000Z", offsetMinutes: 0 }),
+      );
+    try {
+      const answer = await adjust(billId, 2, { action: "discount_amount", amount: "10.00" });
+      expect(answer.json).toMatchObject({ code: "clock.unusable" });
+      expect(await recordedOn(billId)).toEqual(adjustmentsBefore);
+      expect(await revisionOf(billId)).toBe(revision);
+      expect(await venue.db.select().from(serviceCommands)).toEqual(commands);
+      expect(fiscalRecordCount(venue, billId)).toBe(records);
+    } finally {
+      probe.mockRestore();
+    }
+  });
+
+  it("rolls back the issued invoice when caching the completed adjustment refuses", async () => {
+    const billId = await tabWith(venue, "Botella tinto", "Croquetas");
+    await contribute(billId, "cash", "30.00");
+    const before = await recordedOn(billId);
+    const commands = await venue.db.select().from(serviceCommands);
+    const records = fiscalRecordCount(venue, billId);
+    expect(billId).toMatch(/^[a-f0-9-]{36}$/);
+    await venue.db
+      .execute(sql`create trigger refuse_completed_adjustment before insert on service_commands
+      when new.kind = 'adjustment.apply' and exists (select 1 from sales where working_order_id = '${sql.raw(billId)}')
+      begin select raise(abort, 'completed adjustment probe'); end`);
+    try {
+      const answer = await adjust(billId, 2, { action: "discount_amount", amount: "10.00" });
+      expect(answer.json).toMatchObject({ code: "server.internal" });
+      expect(await recordedOn(billId)).toEqual(before);
+      expect(await venue.db.select().from(serviceCommands)).toEqual(commands);
+      expect(fiscalRecordCount(venue, billId)).toBe(records);
+    } finally {
+      await venue.db.execute(sql`drop trigger refuse_completed_adjustment`);
+    }
+  });
+
   it("stores the party's count read when the discount issues the invoice", async () => {
     const billId = await tabWith(venue, "Botella tinto", "Croquetas");
     venue.db.run(
@@ -271,9 +318,19 @@ describe("a discount that leaves a bill fully paid", () => {
     );
     await contribute(billId, "cash", "30.00");
 
-    const discounted = await adjust(billId, 2, { action: "discount_amount", amount: "10.00" });
+    const command = {
+      action: "discount_amount",
+      amount: "10.00",
+      submissionId: randomUUID(),
+      expectedEdit: await readBillEditState(venue.db, billId),
+    };
+    const discounted = await adjust(billId, 2, command);
 
     expect(discounted.status).toBe(200);
+    expect(discounted.json).toMatchObject({ invoice: { total: "30.00" } });
+    const records = fiscalRecordCount(venue, billId);
+    expect(await adjust(billId, 2, command)).toEqual(discounted);
+    expect(fiscalRecordCount(venue, billId)).toBe(records);
     expect(await statusOf(venue, billId)).toBe("settled");
     expect(
       await inTx(venue, (tx) =>

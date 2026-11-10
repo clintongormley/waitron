@@ -244,8 +244,9 @@ export function mountLineCancelApi(
                 venueLocale: deps.venueLocale,
                 attempts,
                 completeAdjustment: async (billId) => {
-                  await issueIfFullyPaid(tx, fiscal, cfg, billId, session.personId);
+                  const invoice = await issueIfFullyPaid(tx, fiscal, cfg, billId, session.personId);
                   await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, billId);
+                  return invoice;
                 },
               },
             );
