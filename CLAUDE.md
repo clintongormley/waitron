@@ -835,9 +835,9 @@ passed while proving nothing.
   after; a copy set aside that cannot be avoided goes in `mktemp -d`.
 - **Every A1308 slice runs `apps/server`'s `pnpm protection-list` before and after its change, never
   in CI. `pnpm bench` runs from time to time, not per slice (owner, 2026-11-10: "30 days, full year
-  rarely … make these tests periodic rather than automatic"); a slice that changes a sale-path read
-  says so in its PR. `bench compare` exits 0 whenever it can read both files, so read what it
-  prints.** Nothing guards it. [How and limits](docs/developers/testing-guide.md#the-protection-list),
+  rarely … make these tests periodic rather than automatic"): a slice that changes a sale-path read
+  says so in its PR, and the watcher starts a 30-day run once three such slices have landed.
+  `bench compare` exits 0 whenever it can read both files, so read what it prints.** Nothing guards it. [How and limits](docs/developers/testing-guide.md#the-protection-list),
   [when the bench runs](docs/developers/testing-guide.md#when-the-bench-runs).
 - **A claim about how SQLite plans a query, or what it was built with, is measured where
   `node:sqlite` reports the same SQLite and STAT4 as the box image's base (`node:26-slim`), never

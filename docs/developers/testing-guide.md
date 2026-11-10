@@ -3568,28 +3568,32 @@ The [protection list](#the-protection-list) still runs before and after every sl
   sale-path read is one that a request timed in the table above makes.
 - **The 30-day run** (`--days 30`) happens when three flagged slices have landed since the last
   run, or when the owner asks. The watcher, or the owner, asks one lane to run it; nothing schedules
-  it. It builds current `main` and compares it with the last run's result (see below). On
-  10 November 2026 two 30-day measurements on the Mac took about 16 minutes each.
-- **The full year** (`--days 360`) runs only when the owner asks. One commit took 8 h 28 min to
-  build on 9 November 2026 on the bench server, 2.29.240.15, and each measurement about an hour.
+  it. It builds current `main` and compares it with the last run's result (see below).
+- **The full year** (`--days 360`) runs only when the owner asks.
 - **Where:** the old CI server, 2.29.248.230, which the owner kept for this on 10 November 2026.
-  Nothing had been timed there by that day, so its first run builds both commits. Keep every later
-  run on that one machine, so each result can be compared with the last.
+  Keep every run on that one machine, so each result can be compared with the last. The first run
+  there only records a starting result: there is nothing to compare it with yet. Its build and
+  measure times go here once measured.
 - **The result:** the lane that ran it writes the compare table, with both commits, into the A1308
   entry in `docs/backlog/architecture.md`, and names any case marked `slower` with the flagged
   slices that could explain it.
 
+The schedule is the watcher's decision of 10 November 2026, made on the owner's words above; the
+owner has not approved it separately.
+
 ### How a run uses it
 
-1. The before side is the last run's measurement, if it was made on the same machine by the same
-   Node and SQLite (`bench compare` prints `not compared: …` otherwise). If it was not, build the
-   bench venue again on the last run's commit, in a throwaway worktree (`git worktree add --detach
-   <dir> <sha>`, then `pnpm install` in it), and measure it twice. Compare those two measurements
-   with each other: any case that is not `same` shows how much noise that case has on the machine.
-2. Build a new bench venue on current `main`, in a new folder, measure it on the same machine, and
-   compare it with the before measurement. There is no pass mark: the rule is before against after
-   on one machine. The A1308 design's §5 says that the appendices' absolute figures come from the
-   reference micro PC when one is available, not from a developer Mac.
+1. Build a bench venue on current `main`, in a new folder, and measure it.
+2. If the machine has no earlier run, measure the venue a second time and compare the two
+   measurements with each other: any case that is not `same` shows how much noise that case has on
+   the machine. That is the starting result, and the run ends there.
+3. Otherwise the before side is the last run's measurement. If the last run used another Node or
+   SQLite (`bench compare` prints `not compared: …`), build the bench venue again on the last run's
+   commit, in a throwaway worktree (`git worktree add --detach <dir> <sha>`, then `pnpm install` in
+   it), and measure it on the same machine.
+4. Compare the new measurement with the before side. There is no pass mark: the rule is before
+   against after on one machine. The A1308 design's §5 says that the appendices' absolute figures
+   come from the reference micro PC when one is available, not from a developer Mac.
 
 ### What it does not tell you
 
