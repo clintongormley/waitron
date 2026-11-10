@@ -28,7 +28,7 @@ const attempt = (over: Partial<OrderDeliveryAttempt> = {}): OrderDeliveryAttempt
   requestedAt: "2026-10-12T10:00:00Z",
   at: null,
   personId: "ana",
-  personName: "Anna",
+  personName: "Ana",
   printerHold: null,
   lateSuccess: false,
   ...over,
@@ -265,7 +265,7 @@ describe("the full invoice's delivery status", () => {
       designation: "duplicate",
       status: "sent",
       requestedAt: "2026-10-12T11:00:00Z",
-      personName: "Lewis",
+      personName: "Luis",
     });
     const history = [
       current,
@@ -295,7 +295,7 @@ describe("the full invoice's delivery status", () => {
     expect(lines).toHaveLength(5);
     expect(lines[0]).toMatch(/^12 Oct 2026, \d\d:00: PDF downloaded by Unknown person$/);
     expect(lines[1]).toMatch(/^12 Oct 2026, \d\d:00: PDF downloaded by Rosa$/);
-    expect(lines[2]).toMatch(/^12 Oct 2026, \d\d:00 · A4 · Copy · Delivered · Requested by Lewis$/);
+    expect(lines[2]).toMatch(/^12 Oct 2026, \d\d:00 · A4 · Copy · Delivered · Requested by Luis$/);
     expect(lines[3]).toMatch(
       /^12 Oct 2026, \d\d:00 · Email · Original · Not delivered · Requested by Unknown person$/,
     );
@@ -311,7 +311,7 @@ describe("the full invoice's delivery status", () => {
       personId: personName,
       personName,
     });
-    const history = [at("11:00:00", "Lewis"), at("10:00:00", "Anna"), at("10:00:00", "Eva")];
+    const history = [at("11:00:00", "Luis"), at("10:00:00", "Ana"), at("10:00:00", "Eva")];
     const el = await open(
       stubApi(
         f1(deliveries(history[0]!, { history }), {
@@ -328,7 +328,7 @@ describe("the full invoice's delivery status", () => {
     const names = [...el.shadowRoot!.querySelectorAll("[data-test=delivery-history] li")].map(
       (line) => /(?:by|Requested by) (\w+)$/.exec(line.textContent!.trim())![1],
     );
-    expect(names).toEqual(["Juan", "Lewis", "Pepe", "Marta", "Anna", "Eva", "Rosa"]);
+    expect(names).toEqual(["Juan", "Luis", "Pepe", "Marta", "Ana", "Eva", "Rosa"]);
   });
 
   it.each([
@@ -352,12 +352,12 @@ describe("the full invoice's delivery status", () => {
       setLocale("en-GB");
       const el = await open(stubApi(f1(deliveries(attempt({ status, printerHold: hold })))));
       expect(text(el, "delivery-history")).toMatch(
-        new RegExp(`^12 Oct 2026, \\d\\d:00 · A4 · Original · ${en} · Requested by Anna$`),
+        new RegExp(`^12 Oct 2026, \\d\\d:00 · A4 · Original · ${en} · Requested by Ana$`),
       );
       setLocale("es-ES");
       el.requestUpdate();
       await el.updateComplete;
-      expect(text(el, "delivery-history")).toContain(`A4 · Original · ${es} · Pedida por Anna`);
+      expect(text(el, "delivery-history")).toContain(`A4 · Original · ${es} · Pedida por Ana`);
     },
   );
 
@@ -366,7 +366,7 @@ describe("the full invoice's delivery status", () => {
     const current = attempt({ status: "unknown", designation: "duplicate" });
     const el = await open(stubApi(f1(deliveries(current))));
     const line = text(el, "delivery-history");
-    expect(line).toContain("A4 · Copia · Sin confirmar · Pedida por Anna");
+    expect(line).toContain("A4 · Copia · Sin confirmar · Pedida por Ana");
   });
 
   it("shows no delivery section, and only Reprint, for a simplified invoice", async () => {

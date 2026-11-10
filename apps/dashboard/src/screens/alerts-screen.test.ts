@@ -22,7 +22,7 @@ const handled: AlertView = {
   ...open,
   key: "incident:i2",
   handledAt: "2026-09-14T13:00:00.000Z",
-  handledBy: "Martha",
+  handledBy: "Marta",
 };
 const ongoing: AlertView = {
   key: "backup.disabled:local",
@@ -131,7 +131,7 @@ describe("dashboard-alerts-screen", () => {
       params: {
         confirmationId: "c1",
         confirmedBy: "admin",
-        person: "Anna",
+        person: "Ana",
         clockAt: "2026-10-19T09:14:00.000Z",
         lastRecordAt: "2026-10-19T23:40:00.000Z",
       },
@@ -298,14 +298,14 @@ describe("dashboard-alerts-screen", () => {
     await flush(el);
     expect(location.pathname).toBe("/manage/alerts/view/handled");
     const text = rows(el, "handled-alerts-table")[0]!.textContent!;
-    expect(text).toContain("Martha");
+    expect(text).toContain("Marta");
   });
 
   it("names who handled an alert as written when the name holds a replacement pattern", async () => {
     const api = stubApi({
       listHandledAlerts: vi
         .fn()
-        .mockResolvedValue({ visible: true, alerts: [{ ...handled, handledBy: "Martha $&" }] }),
+        .mockResolvedValue({ visible: true, alerts: [{ ...handled, handledBy: "Marta $&" }] }),
     });
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
     await flush(el);
@@ -315,11 +315,11 @@ describe("dashboard-alerts-screen", () => {
     )!;
     await userEvent.click(handledTab);
     await flush(el);
-    expect(rows(el, "handled-alerts-table")[0]!.textContent!).toContain("Martha $&");
+    expect(rows(el, "handled-alerts-table")[0]!.textContent!).toContain("Marta $&");
   });
 
   it("refreshes who handled an alert when a person changes", async () => {
-    const renamed: AlertView = { ...handled, handledBy: "Martha Reed" };
+    const renamed: AlertView = { ...handled, handledBy: "Marta Ruiz" };
     const api = stubApi({
       listHandledAlerts: vi
         .fn()
@@ -328,10 +328,10 @@ describe("dashboard-alerts-screen", () => {
     });
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
     await flush(el);
-    expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Martha");
+    expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Marta");
     api.liveData.invalidate([{ type: "persons", id: "p1" }]);
     await vi.waitFor(() =>
-      expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Martha Reed"),
+      expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Marta Ruiz"),
     );
   });
 
@@ -346,7 +346,7 @@ describe("dashboard-alerts-screen", () => {
     const nowHandled: AlertView = {
       ...open,
       handledAt: "2026-09-14T14:00:00.000Z",
-      handledBy: "Anna",
+      handledBy: "Ana",
     };
     const api = stubApi({
       listAlerts: vi
@@ -367,7 +367,7 @@ describe("dashboard-alerts-screen", () => {
     expect(api.markIncidentHandled).toHaveBeenCalledWith("i1");
     await vi.waitFor(() => expect(rows(el, "open-alerts-table")).toHaveLength(1));
     await vi.waitFor(() => expect(rows(el, "handled-alerts-table")).toHaveLength(2));
-    expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Anna");
+    expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Ana");
   });
 
   it("shows the error when marking handled fails and keeps the alert listed", async () => {

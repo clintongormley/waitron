@@ -17,7 +17,7 @@ const detail: OrderDetailDto = {
     orderNumber: 12,
     label: null,
     partyId: "party-1",
-    partyName: "Rose",
+    partyName: "Rosa",
     tables: ["Table 5"],
     counter: false,
     saleId: "sale-1",
@@ -39,7 +39,7 @@ const detail: OrderDetailDto = {
       quantity: "1.000",
       total: "10.00",
       listUnitPrice: "12.00",
-      creditedTo: "Anna",
+      creditedTo: "Ana",
     },
   ],
   invoices: [
@@ -48,14 +48,14 @@ const detail: OrderDetailDto = {
       number: "A/12",
       issuedAt: "2026-09-30T12:30:00Z",
       total: "30.00",
-      rungBy: "Lewis",
+      rungBy: "Luis",
     },
     {
       kind: "credit_note",
       number: "R/2",
       issuedAt: "2026-09-30T13:30:00Z",
       total: "-15.00",
-      rungBy: "Lewis",
+      rungBy: "Luis",
     },
   ],
   tenders: [{ method: "cash", amount: "10.00", tip: "1.00" }],
@@ -78,19 +78,19 @@ const detail: OrderDetailDto = {
     },
   ],
   party: {
-    name: "Rose",
+    name: "Rosa",
     guestCount: 2,
     openedAt: "2026-09-30T12:00:00Z",
     closedAt: "2026-09-30T14:00:00Z",
-    openedBy: "Anna",
-    closedBy: "Lewis",
+    openedBy: "Ana",
+    closedBy: "Luis",
     tables: ["Table 5"],
   },
   departure: {
     recordedAt: "2026-09-30T13:00:00Z",
     reason: "Forgot wallet",
-    recordedBy: "Anna",
-    authorizedBy: "Lewis",
+    recordedBy: "Ana",
+    authorizedBy: "Luis",
     amount: "30.00",
   },
   reprints: [
@@ -125,15 +125,15 @@ it("shows the bill's items, invoices, payments, party, departure and copies", as
   const words = el.shadowRoot!.textContent!;
   for (const value of [
     "Soup (Large)",
-    "Anna",
+    "Ana",
     "A/12",
     "R/2",
     "Cash",
     "Wrong card",
-    "Rose",
+    "Rosa",
     "Table 5",
     "Forgot wallet",
-    "Lewis",
+    "Luis",
     "Laura",
     "Bar printer",
   ])
@@ -265,7 +265,7 @@ it("explains payment states and an unnamed party in Spanish", async () => {
     "Devolución completada",
     "Grupo sin nombre",
     "Comensales: 2",
-    "por Lewis",
+    "por Luis",
   ])
     expect(words).toContain(value);
   expect(words).not.toContain(" · received");
@@ -385,7 +385,7 @@ it("shows a departure reason holding a later placeholder or a replacement patter
   });
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
   expect(el.shadowRoot!.textContent).toContain(
-    ": {recorder} $& $1. Recorded by Anna, authorised by Lewis.",
+    ": {recorder} $& $1. Recorded by Ana, authorised by Luis.",
   );
 });
 
