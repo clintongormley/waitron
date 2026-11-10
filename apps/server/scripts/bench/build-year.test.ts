@@ -1,8 +1,16 @@
-import { appendFileSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   buildYear,
   COPY_DIR,
@@ -216,4 +224,86 @@ describe("buildYear", () => {
     },
     CASE_TIMEOUT_MS,
   );
+
+  describe("a folder built before", () => {
+    let out: string;
+    const sessionPath = () => join(out, SESSION_FILE);
+    const volume = () =>
+      JSON.parse(readFileSync(join(out, VOLUME_FILE), "utf8")) as {
+        rows: Record<string, number>;
+        profile: { days: number; billsPerDay: number };
+      };
+
+    beforeAll(async () => {
+      out = mkdtempSync(join(tmpdir(), "wt-bench-build-"));
+      await buildYear({ out, days: 2, billsPerDay: 2, seed: 1 });
+    }, CASE_TIMEOUT_MS);
+    afterAll(() => rmSync(out, { recursive: true, force: true }));
+
+    it("records the bills a day in the session", () => {
+      expect(JSON.parse(readFileSync(sessionPath(), "utf8"))).toMatchObject({
+        day: 2,
+        billsPerDay: 2,
+      });
+    });
+
+    it("refuses a different number of bills a day, leaving volume.json as it was", async () => {
+      const before = readFileSync(join(out, VOLUME_FILE), "utf8");
+
+      await expect(buildYear({ out, days: 2, billsPerDay: 1, seed: 1 })).rejects.toThrow(
+        `bench: ${out} was built with 2 bills a day, not 1`,
+      );
+      await expect(buildYear({ out, days: 3, billsPerDay: 1, seed: 1 })).rejects.toThrow(
+        `bench: ${out} was built with 2 bills a day, not 1`,
+      );
+      expect(readFileSync(join(out, VOLUME_FILE), "utf8")).toBe(before);
+    });
+
+    it("refuses fewer days than it has finished, leaving volume.json as it was", async () => {
+      const before = readFileSync(join(out, VOLUME_FILE), "utf8");
+
+      await expect(buildYear({ out, days: 1, billsPerDay: 2, seed: 1 })).rejects.toThrow(
+        `bench: ${out} has finished 2 days, more than --days 1`,
+      );
+      expect(readFileSync(join(out, VOLUME_FILE), "utf8")).toBe(before);
+    });
+
+    it(
+      "accepts a session from before the bills a day were recorded",
+      async () => {
+        const session = JSON.parse(readFileSync(sessionPath(), "utf8")) as Record<string, unknown>;
+        delete session.billsPerDay;
+        writeFileSync(sessionPath(), JSON.stringify(session));
+
+        await buildYear({ out, days: 2, billsPerDay: 2, seed: 1 });
+
+        expect(volume().profile).toMatchObject({ days: 2, billsPerDay: 2 });
+      },
+      CASE_TIMEOUT_MS,
+    );
+
+    it(
+      "removes volume.json before an extension trades, and writes it again once it finishes",
+      async () => {
+        await expect(
+          buildYear({
+            out,
+            days: 4,
+            billsPerDay: 2,
+            seed: 1,
+            beforeBill: (day) => {
+              if (day === 4) throw new Error("stopped mid-day");
+            },
+          }),
+        ).rejects.toThrow("stopped mid-day");
+        expect(existsSync(join(out, VOLUME_FILE))).toBe(false);
+
+        await buildYear({ out, days: 4, billsPerDay: 2, seed: 1 });
+
+        expect(volume().profile).toMatchObject({ days: 4, billsPerDay: 2 });
+        expect(volume().rows.sales).toBe(8);
+      },
+      CASE_TIMEOUT_MS,
+    );
+  });
 });
