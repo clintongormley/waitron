@@ -249,7 +249,7 @@ it.each(cases)(
 
 it.each(cases.flatMap((dialog) => (["escape"] as const).map((method) => ({ dialog, method }))))(
   "$dialog.kind native $method preserves Keep and discards without a write",
-  async ({ dialog, method }) => {
+  async ({ dialog }) => {
     const el = await mount(dialog);
     const request = vi.fn(async () => ({ id: "new" }));
     el.api = testApi(request);
@@ -261,16 +261,8 @@ it.each(cases.flatMap((dialog) => (["escape"] as const).map((method) => ({ dialo
     await userEvent.fill(page.elementLocator(nativeName), "Protected draft");
     await el.updateComplete;
     const dismiss = async () => {
-      if (method === "cancel") {
-        const cancel = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-          "[data-test=cancel-editor]",
-        )!;
-        await cancel.updateComplete;
-        await userEvent.click(page.elementLocator(cancel.shadowRoot!.querySelector("button")!));
-      } else {
-        await userEvent.click(page.elementLocator(nativeName));
-        await userEvent.keyboard("{Escape}");
-      }
+      await userEvent.click(page.elementLocator(nativeName));
+      await userEvent.keyboard("{Escape}");
       await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
     };
     await dismiss();
