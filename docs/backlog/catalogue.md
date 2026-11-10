@@ -646,15 +646,6 @@ focus to the "Scheduled versions" heading, which may no longer be there.
   dialog, until the page is reloaded, and nothing says why: a delete has no time limit (only reads
   do, `packages/dashboard-kit/src/request.ts`).
 
-## Open test gap from A201b (#1091)
-
-- **Open test gap from A201b** (#1091): removing `#closeLostList()` from `#includeMenu` in a
-  disposable checkout left `pnpm --filter @waitron/dashboard exec vitest run
-  src/screens/menus-screen.test.ts` green. The suite does not establish
-  whether that guard catches a list disappearing between the last read and selection. Check that
-  race with a focused test, or remove the guard if the path cannot occur; its reachability remains
-  unverified.
-
 ## A884. Deleting an options or extras list leaves it on the published menus until they are republished
 
 Found while checking the Modifiers guide for A582 slice 3. Deleting a list does not republish the
@@ -773,23 +764,6 @@ It is greyed only while a shortcut is added or removed: `#moveShortcut`
 keyboard user's focus stays on the grip, and display saves use their own flag. A815 asked for the
 button "greyed while a save is out"; decide whether a remove during a reorder save should wait,
 be refused, or is fine as it is. Not tried in a browser. Left open by A815 (#1880).
-
-## The Structure tab's "Edit section" form may stay open when another menu is opened
-
-**The Structure tab's "Edit section" form may stay open when another menu is opened.** Opening
-another menu (`#select`, `apps/dashboard/src/screens/menus-screen.ts`) closes the bulk dialogs and
-the single "Delete section" one (A817, #1885 found the delete dialog acting on the first menu's
-section from the second menu's screen), but does not reset `editingSection`. Not tried: whether
-the form stays open, and whether saving it then writes the first menu's section. Left open by A817
-(#1885).
-
-## "Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88)
-
-The
-other items in the tree's row menus are greyed out while a change is out; the link to the included
-menu's own editor is not marked `aria-disabled="true"` then, so it stays live (marked so,
-`wt-row-actions` would grey it out and cancel a click or middle-click on it). (A322 renamed it
-from "Edit <menu>", so that the include's own Edit could sit beside it.)
 
 ## Loose ends left by A380 (#1385)
 
@@ -933,19 +907,6 @@ tests. Media still validates required image names and translates its refusal to
   dish name above modifier text resolved in the device's own locale. A joined customer-facing line
   can mix languages when a locale exists on one half only.
   [Detail](catalogue.md#smaller-things-379-surfaced-and-did-not-take)
-
-## Bundle: Menus screen stale selection
-
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The Structure tab's "Edit section" form may stay open when another menu is opened.** Not tried: whether the form stays open, and whether saving it then writes the first menu's section.
-  [Detail](catalogue.md#the-structure-tabs-edit-section-form-may-stay-open-when-another-menu-is-opened)
-- **"Open <menu>" in an included menu's ⋮ can be followed while the tree is busy — OPEN (W88).**
-  [Detail](catalogue.md#open-menu-in-an-included-menus--can-be-followed-while-the-tree-is-busy--open-w88)
-- **Open test gap from A201b** (#1091): the suite does not establish whether `#closeLostList()` in
-  `#includeMenu` catches a list disappearing between the last read and selection. Check that race
-  with a focused test, or remove the guard if the path cannot occur; its reachability remains
-  unverified. [Detail](catalogue.md#open-test-gap-from-a201b-1091)
 
 ## Bundle: wt-data-table: heading wrap, long names, odds and ends
 

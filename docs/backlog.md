@@ -518,8 +518,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Menu home tab** (bundle of 4, size M). [Detail](backlog/catalogue.md#bundle-menu-home-tab)
 
-- **Menus screen stale selection** (bundle of 3, 1 important, size S). [Detail](backlog/catalogue.md#bundle-menus-screen-stale-selection)
-
 - **Tree drag shared** (bundle of 2, size M). [Detail](backlog/catalogue.md#bundle-tree-drag-shared)
 
 - **After A760 moves the bundle format: An import checks rows as a save does** (bundle of 4, size S). Holds A1074. [Detail](backlog/catalogue.md#bundle-after-a760-moves-the-bundle-format-an-import-checks-rows-as-a-save-does)
