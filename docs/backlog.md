@@ -2008,10 +2008,6 @@ outstanding on code that exists.
   A947 slice 3a.
   [Detail](backlog/replication-cloud.md#a1278-the-spare-adding-route-spends-a-reservation-on-a-held-chart-it-then-refuses)
 
-- **A1295: a backup's venue authority is not checked as a pair, and a restore without one keeps the
-  box's old pair.** Left open by A947 slice 3a.
-  [Detail](backlog/replication-cloud.md#a1295-a-backups-venue-authority-is-not-checked-as-a-pair-and-a-restore-without-one-keeps-the-boxs-old-pair)
-
 - **A1296: code-quality follow-ups from A947 slice 3a's finish review.** Parallel venue and node
   code paths, a second HTTPS client, a second durable-write helper.
   [Detail](backlog/replication-cloud.md#a1296-code-quality-follow-ups-from-a947-slice-3as-finish-review)

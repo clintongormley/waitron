@@ -1087,11 +1087,12 @@ about itself is in its own `node.db`. The owner answered yes to both its questio
 the box's role is saved a moment after the switch's fiscal save, and a spare checks the main box's
 certificate fingerprint before it receives the venue's keys. Slice 3b's build
 [plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) was written on 2026-11-04:
-eight pull requests, two of them fiscal and landed by the owner (3b-G, the start steps that decide
+eight pull requests, split on 2026-11-10 into eleven, two of them fiscal and landed by the owner (3b-G, the start steps that decide
 whether a box files; 3b-F, letting a Veri*Factu venue add a spare, which waits on the owner's
 question Q1). 3b-1 landed as [#2721](https://github.com/clintongormley/waitron/pull/2721); 3b-2 (each
-box's own name) as [#2742](https://github.com/clintongormley/waitron/pull/2742). Slices 3c onwards are still open;
-A1273 to A1285, A1295 and A1296 are the loose ends slice 3a left.
+box's own name) as [#2742](https://github.com/clintongormley/waitron/pull/2742); 3b-3 (a joining spare
+takes the venue's certificate authority as its own) is in review. Slices 3c onwards are still open;
+A1273 to A1285 and A1296 are the loose ends slice 3a left (A1295 went with 3b-3: no box keeps a second authority).
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).
 
@@ -1206,15 +1207,6 @@ trust check and the readability check (`assertHeldDocumentReadable`) both run be
 reservation, and both pass this chart: the main box signed it, and the readability check does not
 look for repeated ids. The same snapshot added on the branch still fails with that reservation.
 Wanted: refuse repeated ids before reserving.
-
-## A1295: a backup's venue authority is not checked as a pair, and a restore without one keeps the box's old pair
-
-Left open by A947 slice 3a. A spare's `tls/venue-ca.crt` and `tls/venue-ca.key` travel as optional
-backup state (`apps/server/src/backup-optional-state.ts`). Backup verification checks that
-`tls/ca.crt` and `tls/ca.key` match, but only accepts the venue pair's entries, so a backup holding
-the certificate without its key, or a mismatched pair, passes. And a restore of a backup without
-the pair onto a box that has one leaves the box's old pair in place, as it does for `backup.env`
-and `modules.json`. Read in the finish-branch fix, not run.
 
 ## A1296: code-quality follow-ups from A947 slice 3a's finish review
 
