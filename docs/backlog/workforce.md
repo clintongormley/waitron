@@ -85,16 +85,6 @@ Before adding cadence editing, decide how the first partial period follows a clo
 Keep saved periods and snapshots intact. The
 [owner's cadence rule](#pay-period-cadence-after-closure-owner-2026-10-15) applies to that editor.
 
-## The Spanish working-time record prints English words and internal codes
-
-Seen in A980 S2b's look at the PDF and CSV the working-time export builds: the Spanish files print
-"Versión: standard", the access holders as the codes `trabajador`, `representantes_legales` and
-`inspeccion_trabajo`, "Evento: in/out", "Tipo de autor: worker", and raw `true`, `false` and
-`null` values (`null` in the English files too, see the section above); the English CSV prints the
-access holders as words. Files: `apps/server/src/attendance-export-pdf.ts`,
-`apps/server/src/attendance-export-csv.ts` and `packages/workforce-es/src/`. This predates A980
-S2b (#1750, #1975). Print each value in the file's language.
-
 ## Rota warning query boundaries
 
 The warnings cases exercise the separate JavaScript filter's local dates. Add fixtures at

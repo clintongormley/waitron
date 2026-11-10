@@ -3,6 +3,7 @@ import { inArray } from "drizzle-orm";
 import { readVenue, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import type {
+  RecordExportAudience,
   RecordExportDocument,
   RecordExportInput,
   RecordExportSection,
@@ -11,7 +12,10 @@ import type {
 import {
   WorkforceBackend,
   localWallClock,
+  type CorrectionStatus,
+  type EntryAuthor,
   type TimeRecord,
+  type WorkforceEntryKind,
   type WorkSession,
 } from "@waitron/workforce";
 import {
@@ -22,10 +26,42 @@ import {
 } from "./registro-jornada.js";
 
 type Cells = Record<string, RecordExportValue>;
-const ACCESS_HOLDER_LABELS: Record<TitularAcceso, string> = {
-  trabajador: "Worker",
-  representantes_legales: "Legal representatives",
-  inspeccion_trabajo: "Labour inspectorate",
+type Words = readonly [string, string];
+const ENTRY_KIND_WORDS: Record<WorkforceEntryKind, Words> = {
+  in: ["Clock in", "Entrada"],
+  out: ["Clock out", "Salida"],
+  break_start: ["Break start", "Inicio del descanso"],
+  break_end: ["Break end", "Fin del descanso"],
+  correction: ["Correction", "Corrección"],
+  confirmation: ["Acknowledgement", "Confirmación"],
+};
+const VALUE_WORDS: Record<string, Readonly<Record<string, Words>>> = {
+  audience: {
+    standard: ["Standard", "Estándar"],
+    representatives: ["Representatives", "Representantes"],
+  } satisfies Record<RecordExportAudience, Words>,
+  accessHolder: {
+    trabajador: ["Worker", "Persona trabajadora"],
+    representantes_legales: ["Legal representatives", "Representantes legales"],
+    inspeccion_trabajo: ["Labour inspectorate", "Inspección de Trabajo"],
+  } satisfies Record<TitularAcceso, Words>,
+  entryKind: ENTRY_KIND_WORDS,
+  missingEntryKind: ENTRY_KIND_WORDS,
+  correctionDirection: {
+    worker_request: ["Worker", "Persona trabajadora"],
+    manager_proposal: ["Manager", "Responsable"],
+  } satisfies Record<NonNullable<EntradaJornada["direccionCorreccion"]>, Words>,
+  correctionStatus: {
+    requested: ["Requested", "Solicitado"],
+    approved: ["Approved", "Aprobado"],
+    declined: ["Declined", "Rechazado"],
+    disputed: ["Disputed", "En desacuerdo"],
+  } satisfies Record<CorrectionStatus, Words>,
+  authorKind: {
+    worker: ["Worker", "Persona trabajadora"],
+    manager: ["Manager", "Responsable"],
+    automatic: ["Automatic", "Automático"],
+  } satisfies Record<EntryAuthor["kind"], Words>,
 };
 const LABELS: Record<string, readonly [string, string]> = {
   venueName: ["Workplace", "Centro de trabajo"],
@@ -58,7 +94,7 @@ const LABELS: Record<string, readonly [string, string]> = {
   confirmedByWorker: ["Acknowledged by worker", "Confirmado por la persona"],
   selfApproved: ["Self-approved", "Autoaprobado"],
   corrected: ["Corrected", "Corregido"],
-  disputed: ["Disputed", "Disputado"],
+  disputed: ["Disputed", "En desacuerdo"],
   authorKind: ["Author type", "Tipo de autor"],
   authorPersonId: ["Author reference", "Referencia del autor"],
   authorName: ["Author", "Autor"],
@@ -205,6 +241,13 @@ export function formatTimeRecordExport(
   const language = input.locale === "es" ? 1 : 0;
   const name = (id: string) =>
     people.get(id) ?? ["Unknown person", "Persona desconocida"][language]!;
+  const inWords = (column: string, value: RecordExportValue): RecordExportValue => {
+    if (value === null) return "";
+    if (typeof value === "boolean") return (value ? ["Yes", "Sí"] : ["No", "No"])[language]!;
+    if (typeof value === "number") return value;
+    const words = VALUE_WORDS[column];
+    return words !== undefined && Object.hasOwn(words, value) ? words[value]![language] : value;
+  };
   const reasonKeys = input.audience === "standard" ? ["reason"] : [];
   const section = (
     key: string,
@@ -224,7 +267,12 @@ export function formatTimeRecordExport(
             : column
         ]![language],
     })),
-    rows: data.map((cells, index) => ({ key: `${key}:${index}`, cells })),
+    rows: data.map((cells, index) => ({
+      key: `${key}:${index}`,
+      cells: Object.fromEntries(
+        Object.entries(cells).map(([column, value]) => [column, inWords(column, value)]),
+      ),
+    })),
   });
   const sessionRows = (value: TimeRecord, lines: LineaJornada[]): Cells[] => {
     const sources = new Map<string, WorkSession[]>();
@@ -355,7 +403,7 @@ export function formatTimeRecordExport(
         periodEnd: input.period.end,
         audience: input.audience,
         retainUntil: exported.conservarHasta,
-        accessHolder: language === 0 ? ACCESS_HOLDER_LABELS[accessHolder] : accessHolder,
+        accessHolder,
       })),
       "details",
     ),
@@ -439,7 +487,7 @@ export function formatTimeRecordExport(
         "Desde está incluido; Antes de está excluido. Los nombres son los actuales.",
       ][language]!,
       [
-        "Automatic finishes count immediately. Worker acknowledgment is separate.",
+        "Automatic finishes count immediately. Worker acknowledgement is separate.",
         "Los fines automáticos cuentan de inmediato. La confirmación de la persona se muestra por separado.",
       ][language]!,
       ...(input.audience === "representatives"
