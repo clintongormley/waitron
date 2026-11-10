@@ -1124,7 +1124,7 @@ describe("station printer selection replacement", () => {
         cookie: managerCookie,
         body: { printerIds: [f.next, refused] },
       });
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({
         error: { code: "printer.not_found" },
       });
@@ -1498,7 +1498,7 @@ describe("printer delete routes (hardware.manage)", () => {
         const text = await res.text();
         expect([label, res.status, text === "" ? null : JSON.parse(text)]).toEqual([
           label,
-          404,
+          label === "station list" ? 400 : 404,
           { error: { code: "printer.not_found", params: { id: p.printerId } } },
         ]);
       }

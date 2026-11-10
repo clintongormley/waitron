@@ -98,6 +98,11 @@ function bodyFlag(raw: unknown, field: string): boolean {
 }
 
 const run = createErrorBoundary(STATUS, "report.failed");
+// A category report print names its printer only in the body's `printerId`.
+const runCategoryPrint = createErrorBoundary(
+  { ...STATUS, "printer.not_found": 400 },
+  "report.failed",
+);
 
 /**
  * 1000..9999, the bound `validatePeriod` enforces, so a screened year never reaches its
@@ -376,7 +381,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
   );
 
   app.post("/management-api/reports/categories/print", (c) =>
-    run(c, log, async () => {
+    runCategoryPrint(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const req: CategoryRequest = {

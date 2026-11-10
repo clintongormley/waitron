@@ -526,10 +526,10 @@ describe("POST /management-api/reports/categories/print", () => {
   it.each([
     ["an inactive printer", () => Promise.resolve(inactivePrinter)],
     ["an unknown printer", () => Promise.resolve(randomUUID())],
-  ])("404 printer.not_found for %s, enqueuing nothing", async (_case, printerId) => {
+  ])("400 printer.not_found for %s, enqueuing nothing", async (_case, printerId) => {
     const id = await printerId();
     const res = await print({ from: DAY1, to: DAY1, mode: "current", printerId: id });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
     expect(await errorOf(res)).toMatchObject({ code: "printer.not_found", params: { id } });
     expect(await jobsOn(id)).toEqual([]);
   });
@@ -584,7 +584,7 @@ describe("POST /management-api/reports/categories/print", () => {
 });
 
 describe("a deleted printer and report printing", () => {
-  it("is not offered for reports, and printing on it is 404 printer.not_found with no job", async () => {
+  it("is not offered for reports, and printing on it is 400 printer.not_found with no job", async () => {
     const deleted = await withTransaction(suite.db, async (tx) => {
       const [row] = await tx
         .insert(printers)
@@ -605,7 +605,7 @@ describe("a deleted printer and report printing", () => {
       method: "POST",
       body: { from: DAY1, to: DAY1, mode: "current", printerId: deleted },
     });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
     expect(await errorOf(res)).toMatchObject({ code: "printer.not_found" });
     expect(await suite.db.select({ id: printJobs.id }).from(printJobs)).toEqual(jobsBefore);
   });

@@ -176,7 +176,7 @@ it.each([
 });
 it.each(["reader", "printer"] as const)("refuses a missing %s label", async (kind) => {
   const response = await send({ kind, id: randomUUID() });
-  expect(response.status).toBe(404);
+  expect(response.status).toBe(kind === "reader" ? 400 : 404);
   expect((await response.json()).error.code).toBe(`${kind}.not_found`);
   expect(await suite.db.select().from(printJobs)).toEqual([]);
 });
@@ -202,7 +202,7 @@ it.each(["printer", "reader"] as const)("refuses a deleted %s source", async (ki
       .set({ deletedAt: new Date().toISOString() })
       .where(eq(cardReaders.id, reader));
   const response = await send({ kind, id: kind === "printer" ? source : reader });
-  expect(response.status).toBe(404);
+  expect(response.status).toBe(kind === "reader" ? 400 : 404);
   expect((await response.json()).error.code).toBe(`${kind}.not_found`);
   expect(await suite.db.select().from(printJobs)).toEqual([]);
 });

@@ -150,6 +150,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "print.failed");
+// A station's printer list names its printers only in the body's `printerIds`.
+const runStationPrinterList = createErrorBoundary(
+  { ...STATUS, "printer.not_found": 400 },
+  "print.failed",
+);
+// An equipment label names its card reader only in the body's `id`.
+const runEquipmentLabel = createErrorBoundary(
+  { ...STATUS, "reader.not_found": 400 },
+  "print.failed",
+);
 
 function optionalString(v: unknown, field: string): string | undefined {
   if (v === undefined) return undefined;
@@ -1271,7 +1281,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   );
 
   app.post("/management-api/printers/:id/equipment-label", (c) =>
-    run(c, log, async () => {
+    runEquipmentLabel(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const printerId = requireUuidParam(c.req.param("id"), "PrinterId");
       const body = await readJsonBody<Record<string, unknown>>(c);
@@ -1594,7 +1604,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   );
 
   app.put("/management-api/stations/:sid/printers", (c) =>
-    run(c, log, async () => {
+    runStationPrinterList(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const stationId = requireUuidParam(c.req.param("sid"), "StationId");
       const body = await readJsonBody<{ printerIds?: unknown }>(c);
