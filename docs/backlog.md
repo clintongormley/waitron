@@ -885,8 +885,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   5's size check ran on Santet's invented grid, where Terrace's tables show names but no cue; re-run
   it on the owner's floor. [Detail](backlog/till.md#a937-measure-the-owners-real-floor-plan-once-it-is-drawn)
 
-- **Reason form limits** (bundle of 2, size S). Holds A1021, A919. [Detail](backlog/till.md#bundle-reason-form-limits)
-
 - **A1033. A full invoice's later copies change their guests line when a bill moves to the counter
   (left open by A758-7).** A simplified receipt keeps the count stored at payment.
   [Detail](backlog/till.md#a1033-a-full-invoices-later-copies-change-their-guests-line-when-a-bill-moves-to-the-counter-left-open-by-a758-7)

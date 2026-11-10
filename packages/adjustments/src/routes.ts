@@ -47,6 +47,7 @@ import {
   type AdjustmentRequester,
   type EntryCursor,
 } from "./reports.js";
+import { MAX_REASON_NAME_LENGTH } from "./reason-limits.js";
 import { readAdjustmentSettings, saveAdjustmentSettings } from "./settings.js";
 import "./errors.js";
 
@@ -79,6 +80,10 @@ function invalid(field: string): AppError {
   return new AppError("management.request_invalid", { field });
 }
 
+function tooLong(field: string): AppError {
+  return new AppError("adjustment_reason.invalid", { field, maxLength: MAX_REASON_NAME_LENGTH });
+}
+
 function requireRevision(value: unknown): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
     throw invalid("revision");
@@ -88,7 +93,11 @@ function requireRevision(value: unknown): number {
 function requireNames(value: unknown): Record<string, string> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalid("names");
   const names = value as Record<string, unknown>;
-  if (Object.values(names).some((text) => typeof text !== "string")) throw invalid("names");
+  const texts = Object.values(names);
+  if (!texts.every((text): text is string => typeof text === "string")) throw invalid("names");
+  if (texts.some((text) => text.length > MAX_REASON_NAME_LENGTH)) {
+    throw tooLong("names");
+  }
   return names as Record<string, string>;
 }
 
@@ -133,8 +142,10 @@ function requireFlag(value: unknown, field: string): boolean {
 /** Every field is required; a limit is cleared by an explicit `null`, never by leaving it out. */
 function requireReasonInput(body: Record<string, unknown>): AdjustmentReasonInput {
   const kind: ReasonKind = requireEnum(body.kind, "kind", REASON_KINDS);
+  const name = requireString(body.name, "name");
+  if (name.length > MAX_REASON_NAME_LENGTH) throw tooLong("name");
   return {
-    name: requireString(body.name, "name"),
+    name,
     names: requireNames(body.names),
     kind,
     actions: requireActions(body.actions),

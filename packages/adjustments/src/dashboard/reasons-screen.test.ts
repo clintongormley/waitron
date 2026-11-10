@@ -291,6 +291,13 @@ function button(el: AdjustmentReasonsScreen, test: string): HTMLElement & { disa
 
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
+/** The help-mode bubble a field holds in its help slot. */
+function helpTip(el: AdjustmentReasonsScreen, name: string): HTMLElement {
+  const tip = field(el, name).querySelector<HTMLElement>(":scope > wt-help-tooltip");
+  expect(tip, name).not.toBeNull();
+  return tip!;
+}
+
 describe("the reasons list", () => {
   /** Each reason's translations differ from its staff name, so a cell reading either shows which. */
   const reason = (fields: Partial<AdjustmentReason> & Pick<AdjustmentReason, "id" | "name">) =>
@@ -1217,10 +1224,62 @@ describe("the editor", () => {
       setLocale(locale);
       const el = await mount(fakeApi());
       await press(el, "edit-c");
-      const percent = field(el, "maxPercent") as Named & { placeholder: string; hint: string };
-      const money = field(el, "maxAmount") as Named & { placeholder: string; hint: string };
-      expect([percent.placeholder, percent.hint]).toEqual([none, item]);
-      expect([money.placeholder, money.hint]).toEqual([none, bill]);
+      const percent = field(el, "maxPercent") as Named & { placeholder: string };
+      const money = field(el, "maxAmount") as Named & { placeholder: string };
+      expect([percent.placeholder, helpTip(el, "maxPercent").textContent!.trim()]).toEqual([
+        none,
+        item,
+      ]);
+      expect([money.placeholder, helpTip(el, "maxAmount").textContent!.trim()]).toEqual([
+        none,
+        bill,
+      ]);
+    },
+  );
+
+  it.each([
+    [
+      "en",
+      [
+        ["maxBillComp", "About most comped on one bill", "Every comp on the bill counts"],
+        ["maxPercent", "About most off one item", "Counts every discount on the item"],
+        ["maxAmount", "About most off one bill", "The venue's own amount."],
+      ],
+    ],
+    [
+      "es",
+      [
+        ["maxBillComp", ES["adjustments.limit.help_label"], ES["adjustments.limit.hint"]],
+        [
+          "maxPercent",
+          ES["adjustments.field.max_percent_help_label"],
+          ES["adjustments.field.max_percent_hint"],
+        ],
+        [
+          "maxAmount",
+          ES["adjustments.field.max_amount_help_label"],
+          ES["adjustments.field.max_amount_hint"],
+        ],
+      ],
+    ],
+  ] as const)(
+    "explains each limit in a help-mode bubble, not in a hint the placeholder hides (%s)",
+    async (locale, fields) => {
+      setLocale(locale);
+      const el = await mount(fakeApi());
+      await press(el, "edit-c");
+      for (const [name, label, words] of fields) {
+        const box = field(el, name) as Named & { updateComplete: Promise<unknown> };
+        await box.updateComplete;
+        expect(box.hasAttribute("hint"), name).toBe(false);
+        expect(box.shadowRoot!.querySelector("[data-hint]"), name).toBeNull();
+        const tip = helpTip(el, name);
+        expect(tip.getAttribute("slot")).toBe("help");
+        expect(tip.getAttribute("mode")).toBe("help-mode");
+        expect(tip.dataset.test).toBe(`${name}-help`);
+        expect(tip.getAttribute("aria-label")).toBe(label);
+        expect(tip.textContent!.trim()).toContain(words);
+      }
     },
   );
 
@@ -1481,6 +1540,37 @@ describe("the editor", () => {
     expect(api.updateReason).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["name", "name", "en", "Use at most 500 characters."],
+    ["names-es", "names", "en", "Use at most 500 characters."],
+    ["name", "name", "es", "Usa como máximo 500 caracteres."],
+    ["names-en", "names", "es", "Usa como máximo 500 caracteres."],
+  ])(
+    "refuses a %s over 500 characters beside %s in %s, holding Save until it is 500",
+    async (input, shownBeside, locale, message) => {
+      setLocale(locale);
+      const api = fakeApi();
+      const el = await mount(api);
+      await press(el, "edit-c");
+      await type(el, input, ` ${"a".repeat(501)} `);
+      await press(el, "save-editor");
+      expect(besideField(el, shownBeside)).toBe(message);
+      expect(await bottom(el)).toBe(t("adjustments.fix_fields"));
+      expect(button(el, "save-editor").disabled).toBe(true);
+      expect(api.updateReason).not.toHaveBeenCalled();
+      await type(el, input, ` ${"a".repeat(500)} `);
+      expect(besideField(el, shownBeside)).toBe("");
+      expect(button(el, "save-editor").disabled).toBe(false);
+      await press(el, "save-editor");
+      const sent = api.updateReason.mock.calls[0]![1] as {
+        name: string;
+        names: Record<string, string>;
+      };
+      const language = input.replace("names-", "");
+      expect(input === "name" ? sent.name : sent.names[language]).toBe("a".repeat(500));
+    },
+  );
+
   it("sends a whole number without decimals or leading zeros, as the route reads it", async () => {
     const api = fakeApi();
     const el = await mount(api);
@@ -1580,6 +1670,31 @@ describe("the editor", () => {
     expect(await bottom(el)).toBe(FIX_FIELDS);
     expect(button(el, "save-editor").disabled).toBe(false);
   });
+
+  it.each([
+    ["name", "en", "Use at most 500 characters."],
+    ["names", "en", "Use at most 500 characters."],
+    ["name", "es", "Usa como máximo 500 caracteres."],
+    ["names", "es", "Usa como máximo 500 caracteres."],
+  ])(
+    "says the server's length limit beside the %s it refused (%s)",
+    async (fieldName, locale, message) => {
+      setLocale(locale);
+      const el = await mount(
+        fakeApi({
+          updateReason: vi.fn().mockRejectedValue({
+            code: "adjustment_reason.invalid",
+            params: { field: fieldName, maxLength: 500 },
+          }),
+        }),
+      );
+      await press(el, "edit-c");
+      await type(el, "name", "Edited complaint");
+      await press(el, "save-editor");
+      expect(besideField(el, fieldName)).toBe(message);
+      expect(await bottom(el)).toBe(t("adjustments.fix_fields"));
+    },
+  );
 
   it("shows a name already in use beside the name", async () => {
     const el = await mount(
@@ -1683,10 +1798,7 @@ describe("the editor", () => {
       const box = amount.getBoundingClientRect();
       const signLeft = sign!.getBoundingClientRect().left;
       expect(signLeft < box.left + box.width / 2 ? "before" : "after").toBe(side);
-      const described = (amount.getAttribute("aria-describedby") ?? "")
-        .split(" ")
-        .map((id) => money.shadowRoot!.getElementById(id)?.textContent?.trim());
-      expect(described).toContain(
+      expect(helpTip(el, "maxAmount").textContent!.trim()).toBe(
         locale === "en"
           ? "The venue's own amount. Above it, someone who can approve it is asked."
           : ES["adjustments.field.max_amount_hint"],
@@ -2293,7 +2405,6 @@ describe("the bill comp limit", () => {
       const input = limit(el) as Named & {
         label: string;
         placeholder: string;
-        hint: string;
         updateComplete: Promise<unknown>;
       };
       await input.updateComplete;
@@ -2301,7 +2412,7 @@ describe("the bill comp limit", () => {
       expect(input.value).toBe(value);
       expect(input.label).toBe(label);
       expect(input.placeholder).toBe(placeholder);
-      expect(input.hint).toBe(hint);
+      expect(helpTip(el, "maxBillComp").textContent!.trim()).toBe(hint);
       expect(input.shadowRoot!.querySelector("[part=currency]")).not.toBeNull();
       expect(section(el).querySelector('[data-test="limit-explained"]')).toBeNull();
       const approvers = roleField(el, "billApproverRoles");

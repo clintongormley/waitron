@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import { ADJUSTMENTS_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
+import { MAX_REASON_NAME_LENGTH } from "./reason-limits.js";
 
 /** A reason row as an export writes it: snake_case columns, booleans as 0 and 1, and each list
  * as the JSON text the column stores. */
@@ -12,6 +13,8 @@ function row(
   const isVoid = kind === "void";
   return {
     id: `${kind}-${noteRequired}`,
+    name: `${kind}-${noteRequired}`,
+    names: JSON.stringify({ en: `${kind}-${noteRequired}` }),
     kind,
     actions: JSON.stringify(isVoid ? ["cancel"] : ["comp", "discount_percent"]),
     max_percent: null,
@@ -155,6 +158,33 @@ describe("ADJUSTMENTS_CONFIGURATION_TRANSFER", () => {
     ["max_amount", 500],
   ])("refuses a Void reason with a %s limit", (column, value) => {
     expect(refusal(withExtra(row("void", 0, { [column]: value })))).toEqual(
+      refusedAt(`adjustment_reasons.${column}`),
+    );
+  });
+
+  const longest = "a".repeat(MAX_REASON_NAME_LENGTH);
+  const tooLong = "a".repeat(MAX_REASON_NAME_LENGTH + 1);
+
+  it.each([
+    ["name", { name: longest }],
+    ["names", { names: JSON.stringify({ en: "Complaint", fr: longest }) }],
+  ])("passes a reason whose %s is 500 characters, as the route takes", (_, change) => {
+    expect(MAX_REASON_NAME_LENGTH).toBe(500);
+    expect(refusal(withExtra(row("comp", 0, change)))).toBeUndefined();
+  });
+
+  it.each([
+    ["name", "of 501 characters", tooLong],
+    ["name", "that is not text", 7],
+    ["name", "missing", undefined],
+    ["names", "holding a translation of 501 characters", JSON.stringify({ en: "a", fr: tooLong })],
+    ["names", "holding a translation that is not text", JSON.stringify({ en: 7 })],
+    ["names", "that are a list", JSON.stringify(["Complaint"])],
+    ["names", "that are null", "null"],
+    ["names", "that are not JSON", "Complaint"],
+    ["names", "already parsed", { en: "Complaint" }],
+  ])("refuses a reason whose %s is %s", (column, _, value) => {
+    expect(refusal(withExtra(row("comp", 0, { [column]: value })))).toEqual(
       refusedAt(`adjustment_reasons.${column}`),
     );
   });
