@@ -124,7 +124,11 @@ row. The booking row remains part of the Forms refusal placement bundle.
   refusal is not expected from this screen; (b) in a screenshot of a `wt-modal` editor after a
   refusal that names no field, a blue line runs along the top of the footer, which looks like the
   modal's scrolling body showing a focus ring — not traced, and not checked against `main`; an
-  observation from the implementer's session.
+  observation from the implementer's session. On 2026-11-10, a fresh Chromium modal opened by a
+  pointer kept focus on its body with no outline before and after a no-field refusal; Enter
+  opening gave the body a 2 px blue focus ring. A plain native dialog matched the two
+  `:focus-visible` states. The earlier observation is still open; that focused probe did not
+  establish a focus-contract defect to fix.
 
 ## Request refusals that still land in the bottom message, or under a field in generic words — OPEN (left by C54, #853).
 
