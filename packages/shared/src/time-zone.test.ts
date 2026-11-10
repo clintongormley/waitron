@@ -123,3 +123,24 @@ describe("classifySavedTimeZone", () => {
     expect(() => shared.classifySavedTimeZone("Europe/Madrid")).toThrow(failure);
   });
 });
+
+describe("timeZoneOffsetMinutes formatter reuse", () => {
+  it("builds no date formatter when a zone already read is read again", () => {
+    const Formatter = Intl.DateTimeFormat;
+    const built = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (locales, options) {
+      return new Formatter(locales, options);
+    });
+    expect(shared.timeZoneOffsetMinutes("Asia/Tokyo", new Date(0))).toBe(540);
+    expect(built.mock.calls.length).toBeGreaterThan(0);
+    built.mockClear();
+    expect(shared.timeZoneOffsetMinutes("Asia/Tokyo", new Date(0))).toBe(540);
+    expect(built).not.toHaveBeenCalled();
+  });
+
+  it("answers each zone with its own offset at the same instant", () => {
+    const instant = new Date("2026-01-15T12:00:00Z");
+    expect(shared.timeZoneOffsetMinutes("Europe/Madrid", instant)).toBe(60);
+    expect(shared.timeZoneOffsetMinutes("America/New_York", instant)).toBe(-300);
+    expect(shared.timeZoneOffsetMinutes("Europe/Madrid", instant)).toBe(60);
+  });
+});
