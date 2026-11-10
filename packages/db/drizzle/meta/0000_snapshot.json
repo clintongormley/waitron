@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4f7300ad-9d7c-4afd-9b70-9adad157c769",
+  "id": "f890993c-acf6-46e4-bbd5-8ec0444551ca",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -7024,20 +7024,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "recipe_derivation": {
-          "name": "recipe_derivation",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "diet_derivation": {
-          "name": "diet_derivation",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "diet_override": {
           "name": "diet_override",
           "type": "text",
@@ -7235,159 +7221,6 @@
           "name": "location_catalogues_pk"
         }
       },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "ingredients": {
-      "name": "ingredients",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "allergens": {
-          "name": "allergens",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "dietary_origin": {
-          "name": "dietary_origin",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "active": {
-          "name": "active",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "ingredients_dietary_origin_ck": {
-          "name": "ingredients_dietary_origin_ck",
-          "value": "\"ingredients\".\"dietary_origin\" in ('plant', 'meat', 'fish', 'shellfish', 'dairy', 'egg', 'honey', 'other_animal')"
-        }
-      }
-    },
-    "recipe_lines": {
-      "name": "recipe_lines",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "product_id": {
-          "name": "product_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "ingredient_id": {
-          "name": "ingredient_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "recipe_lines_product_id_idx": {
-          "name": "recipe_lines_product_id_idx",
-          "columns": [
-            "product_id"
-          ],
-          "isUnique": false
-        },
-        "recipe_lines_ingredient_id_idx": {
-          "name": "recipe_lines_ingredient_id_idx",
-          "columns": [
-            "ingredient_id"
-          ],
-          "isUnique": false
-        },
-        "recipe_lines_product_ingredient_key": {
-          "name": "recipe_lines_product_ingredient_key",
-          "columns": [
-            "product_id",
-            "ingredient_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "recipe_lines_product_id_products_id_fk": {
-          "name": "recipe_lines_product_id_products_id_fk",
-          "tableFrom": "recipe_lines",
-          "tableTo": "products",
-          "columnsFrom": [
-            "product_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "recipe_lines_ingredient_id_ingredients_id_fk": {
-          "name": "recipe_lines_ingredient_id_ingredients_id_fk",
-          "tableFrom": "recipe_lines",
-          "tableTo": "ingredients",
-          "columnsFrom": [
-            "ingredient_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -15989,13 +15822,6 @@
         },
         "diet": {
           "name": "diet",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "diet_derivation": {
-          "name": "diet_derivation",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
