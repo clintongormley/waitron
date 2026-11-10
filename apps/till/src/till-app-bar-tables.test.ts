@@ -411,6 +411,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     width: number,
     height: number,
     sendAll: string,
+    beforeSend: () => void = () => {},
   ) {
     await pageAt(width, height);
     server = draftServer(() => ({ tabId: "wo-9", revision: 4, groups: [] }));
@@ -419,6 +420,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await openTable(el, "t9");
     await tap(el, "Beer");
     await waitForSave();
+    beforeSend();
     tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>(sendAll)!.click();
     const toast = () =>
       el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
@@ -444,6 +446,20 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
       ).toBe("true");
       expect(barButton(el, "t9").getAttribute("aria-selected")).toBe("true");
       expect(bar(el)).toEqual(["Floor", "[T9]"]);
+    } finally {
+      await resetPage();
+    }
+  });
+
+  it("after sending everything, a phone's Still to pay at this table shows the floor's new figure", async () => {
+    try {
+      const el = await sendAllFromT9(phone, 390, 844, "[data-menu-send-all]", () => {
+        const sent = { ...table9.party!, revision: 12, outstanding: "84.20" };
+        api.getTablesState!.mockResolvedValue([table4, table("t9", "T9", sent)]);
+      });
+      const outstanding = () =>
+        tableOrder(el)!.shadowRoot!.querySelector("[data-party-outstanding]")!.textContent!.trim();
+      await vi.waitFor(() => expect(outstanding()).toBe("€84.20"));
     } finally {
       await resetPage();
     }
