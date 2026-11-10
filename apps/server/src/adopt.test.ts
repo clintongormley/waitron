@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
-import { X509Certificate, createPrivateKey } from "node:crypto";
+import { X509Certificate } from "node:crypto";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
@@ -37,7 +37,8 @@ import type { PendingAdoption } from "./finish-adoption.js";
 import { verifyBreakGlass } from "./break-glass.js";
 import { keyRingEnv, writeCredentialsRing } from "./box-secrets.js";
 import { parseEnvFile } from "./env-file.js";
-import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { MAIN_AUTHORITY } from "./testing/main-authority.js";
+import { tlsSetMatches } from "./testing/box-tls.js";
 import { runStagedReset, stageResetRequest } from "./reset-request.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 
@@ -87,12 +88,6 @@ const RESERVED: ReservedIdentity = {
 // The main box's ring, distinct from the spare's own `RING`.
 // Same version as `RING`, so opening under the wrong one fails on the key, not the version.
 const BUNDLE_RING = { key: Buffer.alloc(32, 0x6b).toString("base64"), version: 1 };
-// Real, because adopt issues this box's leaf from it.
-const MAIN_AUTHORITY = mintSelfSignedServerCert({
-  hostnames: ["waitron.local"],
-  ipAddresses: [],
-  now: new Date(),
-});
 const CA_KEY_PEM = MAIN_AUTHORITY.caKeyPem;
 
 function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
@@ -596,12 +591,9 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     for (const name of ["ca.crt", "ca.key", "server.crt", "server.key"]) {
       expect((await stat(join(tls, name))).mode & 0o777).toBe(0o600);
     }
+    expect(await tlsSetMatches(stateDir)).toBe(true);
     const leaf = new X509Certificate(await readFile(join(tls, "server.crt"), "utf8"));
-    expect(leaf.verify(new X509Certificate(MAIN_AUTHORITY.caCertPem).publicKey)).toBe(true);
     expect(leaf.subjectAltName).toContain("DNS:box-aaaa.waitron.local");
-    expect(
-      leaf.checkPrivateKey(createPrivateKey(await readFile(join(tls, "server.key"), "utf8"))),
-    ).toBe(true);
   });
 
   it("the joined marker is written before the main box's key ring", async () => {

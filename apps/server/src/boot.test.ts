@@ -17,7 +17,6 @@ import { bookings } from "@waitron/bookings";
 import { absences } from "@waitron/workforce";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { randomUUID, X509Certificate } from "node:crypto";
-import { connect as tlsConnect } from "node:tls";
 import { createServer } from "node:net";
 import {
   chmod,
@@ -104,6 +103,7 @@ import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { Turns } from "./backup-turns.js";
 import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 import { freePort } from "./testing/free-ports.js";
+import { peerCertificate } from "./testing/box-tls.js";
 import { seedDevice, seedWorkingOrder, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   TILL_LOCATION_ID,
@@ -978,15 +978,10 @@ describe("startServer, against a migrated venue directory", () => {
         await awaitListening(httpPort());
         // A device naming this box and pinning its authority completes the handshake only if the
         // served leaf names it.
-        const served = await new Promise<X509Certificate | undefined>((resolve, reject) => {
-          const socket = tlsConnect(
-            { port: httpPort(), host: "127.0.0.1", ca, servername: "box-3333.waitron.local" },
-            () => {
-              resolve(socket.getPeerX509Certificate());
-              socket.destroy();
-            },
-          );
-          socket.once("error", reject);
+        const served = await peerCertificate({
+          port: httpPort(),
+          ca,
+          servername: "box-3333.waitron.local",
         });
         expect(served?.subjectAltName).toContain("DNS:waitron.local");
       } finally {

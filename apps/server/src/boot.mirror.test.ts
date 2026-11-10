@@ -1,7 +1,5 @@
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
-import { X509Certificate } from "node:crypto";
-import { connect as tlsConnect } from "node:tls";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,6 +39,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
+import { peerCertificate } from "./testing/box-tls.js";
 import { get } from "node:https";
 
 vi.mock("@hono/node-server", async () => {
@@ -808,15 +807,10 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     });
     try {
       // The handshake completes only if the served leaf names this box.
-      const served = await new Promise<X509Certificate | undefined>((resolve, reject) => {
-        const socket = tlsConnect(
-          { port: httpPort(), host: "127.0.0.1", ca, servername: "box-3333.waitron.local" },
-          () => {
-            resolve(socket.getPeerX509Certificate());
-            socket.destroy();
-          },
-        );
-        socket.once("error", reject);
+      const served = await peerCertificate({
+        port: httpPort(),
+        ca,
+        servername: "box-3333.waitron.local",
       });
       expect(served?.subjectAltName).toContain("DNS:waitron.local");
     } finally {

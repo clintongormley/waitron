@@ -23,7 +23,7 @@ import {
 } from "./finish-adoption.js";
 import { mountSetup } from "./setup-api.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
-import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
@@ -50,12 +50,6 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   if (stateDir !== undefined) await rm(stateDir, { recursive: true, force: true });
-});
-// Real, because adopt issues the joining box's leaf from it.
-const MAIN_AUTHORITY = mintSelfSignedServerCert({
-  hostnames: ["waitron.local"],
-  ipAddresses: [],
-  now: new Date(),
 });
 function bundle(): MirrorBundle {
   return {

@@ -39,7 +39,7 @@ import { mintBreakGlassSecret } from "./break-glass.js";
 import { keyRingEnv, type EncodedKeyRing } from "./box-secrets.js";
 import { createDeploymentHolders, refreshDeploymentHolders } from "./deployment-holders.js";
 import { finishPromotedRole } from "./promoted-role.js";
-import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 
 // No module reserves anything for the standby, so A's bundle needs no module operation.
 vi.mock("./modules.js", () => ({ ALL_MODULES: [] }));
@@ -97,13 +97,6 @@ let copiedTerm: number;
 function chartBody(term: number, nodes: MembershipDocumentBody["nodes"]): MembershipDocumentBody {
   return { term, nodes };
 }
-
-// Real, because adopt issues the joining box's leaf from it.
-const MAIN_AUTHORITY = mintSelfSignedServerCert({
-  hostnames: ["waitron.local"],
-  ipAddresses: [],
-  now: new Date(),
-});
 
 beforeAll(async () => {
   // Box A: a stamped primary with its signing key, a recovery key and a chart naming it main box.

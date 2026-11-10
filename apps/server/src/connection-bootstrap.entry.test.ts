@@ -1,5 +1,4 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { X509Certificate, createPrivateKey, createPublicKey } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { request as httpsRequest, get as httpsGet } from "node:https";
@@ -18,6 +17,7 @@ import {
 import { installVenueAuthority } from "./box-tls-install.js";
 import { closeListener } from "./close-listener.js";
 import { freePorts } from "./testing/free-ports.js";
+import { tlsFile, tlsSetMatches } from "./testing/box-tls.js";
 import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { runEntry, type EntryDeps } from "./node-entry.js";
 import { FRESH } from "./recovery-state.js";
@@ -659,14 +659,8 @@ async function halfInstalled(renamed: number) {
 
 /** The four files on disk belong together and are the venue's authority's. */
 async function venueSetInstalled(stateDir: string): Promise<boolean> {
-  const tls = (name: string) => readFile(join(stateDir, "tls", name), "utf8");
-  const ca = new X509Certificate(await tls("ca.crt"));
-  const leaf = new X509Certificate(await tls("server.crt"));
   return (
-    (await tls("ca.crt")) === venueSet.caCertPem &&
-    ca.publicKey.equals(createPublicKey(createPrivateKey(await tls("ca.key")))) &&
-    leaf.verify(ca.publicKey) &&
-    leaf.checkPrivateKey(createPrivateKey(await tls("server.key")))
+    (await tlsFile(stateDir, "ca.crt")) === venueSet.caCertPem && (await tlsSetMatches(stateDir))
   );
 }
 

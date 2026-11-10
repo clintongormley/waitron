@@ -31,7 +31,7 @@ import { runStagedReset, stageResetRequest } from "./reset-request.js";
 import { mountSetup } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { writeTradingEnv } from "./trading-config.js";
-import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 import { runEntry } from "./node-entry.js";
 import { FRESH } from "./recovery-state.js";
 
@@ -79,12 +79,6 @@ const ADOPT_BODY = JSON.stringify({
 });
 
 const PRIMARY_KEYS = generateNodeKeyPair();
-// Real, because adopt issues the joining box's leaf from it.
-const MAIN_AUTHORITY = mintSelfSignedServerCert({
-  hostnames: ["waitron.local"],
-  ipAddresses: [],
-  now: new Date(),
-});
 const BUNDLE: MirrorBundle = {
   designated: {
     nodeId: PRIMARY_NODE_ID,
@@ -123,8 +117,10 @@ afterEach(async () => {
 const migrate = (venueDir: string) =>
   applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
 
-/** A box whose adopt wrote its rows and files and then stopped, as `adoptFromPrimary` leaves it. */
-/** `joined`: the adopt got as far as its marker, so the main box's ring and authority may be here. */
+/**
+ * A box whose adopt wrote its rows and files and then stopped, as `adoptFromPrimary` leaves it.
+ * `joined`: the adopt got as far as its marker, so the main box's ring and authority may be here.
+ */
 async function halfAdoptedBox(joined = false): Promise<{
   stateDir: string;
   venueDir: string;

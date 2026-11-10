@@ -1,12 +1,12 @@
 import type { FileHandle } from "node:fs/promises";
-import type { Mock } from "vitest";
+import { vi, type MockInstance } from "vitest";
 
-/** The `node:fs/promises` functions a suite has wrapped with `vi.fn`, each forwarding to the real
- * one by default. */
+/** The `node:fs/promises` functions a suite has wrapped, with `vi.fn` or a spying `vi.mock`, each
+ * forwarding to the real one by default. */
 export interface FsMocks {
-  mkdir: Mock;
-  open: Mock;
-  rename: Mock;
+  mkdir: MockInstance;
+  open: MockInstance;
+  rename: MockInstance;
 }
 
 /** Each sync of an opened file or folder, each rename and each `mkdir` that created a folder, in
@@ -16,14 +16,16 @@ export async function syncsAndRenames(
   run: () => Promise<unknown>,
 ): Promise<string[]> {
   const events: string[] = [];
-  const mkdirThrough = mocks.mkdir.getMockImplementation()!;
+  // A spying `vi.mock` forwards with no implementation set, so the real one stands in.
+  const real = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  const mkdirThrough = mocks.mkdir.getMockImplementation() ?? real.mkdir;
   mocks.mkdir.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
     const created = await (mkdirThrough as (...a: unknown[]) => Promise<unknown>)(p, ...rest);
     if (created !== undefined) events.push(`mkdir ${String(p)}`);
     return created;
   });
-  const openThrough = mocks.open.getMockImplementation()!;
-  const renameThrough = mocks.rename.getMockImplementation()!;
+  const openThrough = mocks.open.getMockImplementation() ?? real.open;
+  const renameThrough = mocks.rename.getMockImplementation() ?? real.rename;
   mocks.open.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
     const handle = (await (openThrough as (...a: unknown[]) => unknown)(p, ...rest)) as FileHandle;
     const realSync = handle.sync.bind(handle);

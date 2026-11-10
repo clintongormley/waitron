@@ -6,41 +6,15 @@ import { dirname, join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { RECOVERY_FILES, collectStateSecrets, unpackBundleToDir } from "./state-secrets.js";
+import { syncsAndRenames as recordSyncsAndRenames } from "./testing/durable-writes.js";
 
 vi.mock("node:fs/promises", { spy: true });
 
-/** Each sync of an opened file or folder, each rename and each `mkdir` that created a folder, in
- * order, while `run` runs. */
-async function syncsAndRenames(run: () => Promise<unknown>): Promise<string[]> {
-  const events: string[] = [];
-  const real = await vi.importActual<typeof fs>("node:fs/promises");
-  vi.mocked(fs.mkdir).mockImplementation((async (path, options) => {
-    const created = await real.mkdir(path, options);
-    if (created !== undefined) events.push(`mkdir ${String(path)}`);
-    return created;
-  }) as typeof fs.mkdir);
-  vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
-    const handle = await real.open(...args);
-    const realSync = handle.sync.bind(handle);
-    handle.sync = async () => {
-      events.push(`sync ${String(args[0])}`);
-      return realSync();
-    };
-    return handle;
-  });
-  vi.mocked(fs.rename).mockImplementation(async (from, to) => {
-    events.push(`rename ${String(from)} ${String(to)}`);
-    return real.rename(from, to);
-  });
-  try {
-    await run();
-  } finally {
-    vi.mocked(fs.mkdir).mockReset();
-    vi.mocked(fs.open).mockReset();
-    vi.mocked(fs.rename).mockReset();
-  }
-  return events;
-}
+const syncsAndRenames = (run: () => Promise<unknown>) =>
+  recordSyncsAndRenames(
+    { mkdir: vi.mocked(fs.mkdir), open: vi.mocked(fs.open), rename: vi.mocked(fs.rename) },
+    run,
+  );
 
 /** Materialise a state dir holding every RECOVERY_FILES path with recognisable contents. */
 async function seedStateDir(): Promise<string> {

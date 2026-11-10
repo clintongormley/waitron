@@ -1,9 +1,6 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { X509Certificate, createPrivateKey, createPublicKey } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { connect, createServer } from "node:tls";
-import type { AddressInfo } from "node:net";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   finishTlsInstall,
@@ -20,6 +17,7 @@ import {
   syncsAndRenames as recordSyncsAndRenames,
   writtenDurably,
 } from "./testing/durable-writes.js";
+import { handshake, tlsFile, tlsSetMatches, writeTlsSet } from "./testing/box-tls.js";
 
 const { mkdirMock, openMock, renameMock } = vi.hoisted(() => ({
   mkdirMock: vi.fn(),
@@ -62,16 +60,9 @@ afterEach(async () => {
 async function ownBox(): Promise<string> {
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-tls-install-"));
   dirs.push(stateDir);
-  const tls = join(stateDir, "tls");
-  await mkdir(tls, { mode: 0o700 });
-  await writeFile(join(tls, "ca.crt"), own.caCertPem, { mode: 0o600 });
-  await writeFile(join(tls, "ca.key"), own.caKeyPem, { mode: 0o600 });
-  await writeFile(join(tls, "server.crt"), own.serverCertPem, { mode: 0o600 });
-  await writeFile(join(tls, "server.key"), own.serverKeyPem, { mode: 0o600 });
+  await writeTlsSet(stateDir, own);
   return stateDir;
 }
-
-const tlsFile = (stateDir: string, name: string) => readFile(join(stateDir, "tls", name), "utf8");
 
 function install(stateDir: string, authority = { certPem: main.caCertPem, keyPem: main.caKeyPem }) {
   return installVenueAuthority({
@@ -86,43 +77,6 @@ function install(stateDir: string, authority = { certPem: main.caCertPem, keyPem
 /** The box's four files, byte for byte. */
 async function setOf(stateDir: string): Promise<string[]> {
   return Promise.all(INSTALLED.map((name) => tlsFile(stateDir, name)));
-}
-
-/** Serves the box's leaf and connects as a device pinning `caPem`, naming `servername`. */
-async function handshake(stateDir: string, caPem: string, servername: string): Promise<string> {
-  const server = createServer({
-    cert: await tlsFile(stateDir, "server.crt"),
-    key: await tlsFile(stateDir, "server.key"),
-  });
-  server.on("secureConnection", (socket) => socket.end());
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  try {
-    const { port } = server.address() as AddressInfo;
-    return await new Promise<string>((resolve) => {
-      const socket = connect({ host: "127.0.0.1", port, servername, ca: caPem });
-      socket.once("secureConnect", () => {
-        socket.destroy();
-        resolve("verified");
-      });
-      socket.once("error", (error: NodeJS.ErrnoException) => resolve(error.code ?? error.message));
-    });
-  } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-  }
-}
-
-/** The authority and leaf on disk belong together: the leaf is signed by the authority and its key
- * is the leaf's. */
-async function matchingSet(stateDir: string): Promise<boolean> {
-  const ca = new X509Certificate(await tlsFile(stateDir, "ca.crt"));
-  const caKey = createPrivateKey(await tlsFile(stateDir, "ca.key"));
-  const leaf = new X509Certificate(await tlsFile(stateDir, "server.crt"));
-  const leafKey = createPrivateKey(await tlsFile(stateDir, "server.key"));
-  return (
-    ca.publicKey.equals(createPublicKey(caKey)) &&
-    leaf.verify(ca.publicKey) &&
-    leaf.checkPrivateKey(leafKey)
-  );
 }
 
 describe("installVenueAuthority", () => {
@@ -158,7 +112,7 @@ describe("installVenueAuthority", () => {
 
       expect(await finishTlsInstall(stateDir)).toBe("finished");
       expect(await tlsFile(stateDir, "ca.crt")).toBe(main.caCertPem);
-      expect(await matchingSet(stateDir)).toBe(true);
+      expect(await tlsSetMatches(stateDir)).toBe(true);
       expect((await readdir(join(stateDir, "tls"))).sort()).toEqual(INSTALLED);
       expect(await finishTlsInstall(stateDir)).toBe("none");
     }
