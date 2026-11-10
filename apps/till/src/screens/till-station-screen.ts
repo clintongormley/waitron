@@ -948,7 +948,7 @@ export class TillStationScreen extends LitElement {
       return this.#renderQueueSurface({
         showBack: false,
         body: html`${this.deviceStations.map((station) => this.#unavailable(station.name))}
-          ${emptiedScreenGuidance(false)}`,
+        ${emptiedScreenGuidance(false)}`,
       });
     const body =
       this.deviceStations.length === 1 && only?.available === true
