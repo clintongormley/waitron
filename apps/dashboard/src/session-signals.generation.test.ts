@@ -10,7 +10,7 @@ it("carries the originating epoch through both session event kinds", () => {
   const signals = createSessionSignals({ target, sessionGeneration: epoch.current });
   const old = epoch.current();
   expect(epoch.advance()).toBe(old + 1);
-  signals.reportError("management_session.expired", 401, old);
+  signals.reportError("management_session.expired", old);
   signals.reportActivity("/old", old);
   signals.reportActivity();
   expect(seen).toEqual([

@@ -28,6 +28,7 @@ async function mount(path = "/manage/backup", permissions = ["venue.view", "venu
         permissions,
         modules: [],
       }),
+      forgetLocales: () => {},
       getLocales: async () => ({
         locales: [
           { code: "en-GB", label: "English" },

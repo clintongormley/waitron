@@ -183,6 +183,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       venueName: "Deli Test SL",
       onboardingIntent: "prepare",
     }),
+    forgetLocales: vi.fn(),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
     putLocale: vi.fn().mockResolvedValue(undefined),
     listStaff: vi.fn().mockResolvedValue(people),
@@ -7026,6 +7027,37 @@ describe("dashboard-app: session signals", () => {
     await flush(el);
     expect(overview(el)).toBeNull();
     expect(notice(el)).toBe(codeMessage("node.reset"));
+  });
+
+  it("drops the old venue's name from the banner when the box was reset", async () => {
+    const { el, api } = await signedIn();
+    expect(venueName(el)!.textContent).toBe("Deli Test SL");
+    vi.mocked(api.getLocales).mockRejectedValue({ code: "node.reset" });
+    sessionInvalid("node.reset");
+    await flush(el);
+    expect(notice(el)).toBe(codeMessage("node.reset"));
+    expect(venueName(el)!.textContent).toBe("");
+  });
+
+  it("reads the venue's name afresh when returning to login", async () => {
+    let name = "Deli Test SL";
+    let cached: Promise<unknown> | undefined;
+    const { el } = await signedIn({
+      getLocales: vi.fn(
+        () =>
+          (cached ??= Promise.resolve({
+            locales: [{ code: "es-ES", label: "Español" }],
+            venueDefault: "es-ES",
+            loginDefault: "es-ES",
+            venueName: name,
+          })),
+      ),
+      forgetLocales: vi.fn(() => (cached = undefined)),
+    });
+    name = "Renamed SL";
+    sessionInvalid("management_session.expired");
+    await flush(el);
+    await vi.waitFor(() => expect(venueName(el)!.textContent).toBe("Renamed SL"));
   });
 
   it("shows the reset notice when the box was reset while signed out", async () => {

@@ -36,6 +36,7 @@ type Locale = "en-GB" | "es-ES";
 function stubApi(locale: Locale = "es-ES", onboardingIntent = "prepare"): DashboardApi {
   return {
     getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+    forgetLocales: () => {},
     getLocales: vi.fn().mockResolvedValue({
       locales: [
         { code: "es-ES", label: "Español" },

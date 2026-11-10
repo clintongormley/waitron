@@ -9,7 +9,7 @@ export function createSessionEpoch(): SessionEpoch {
 }
 
 export interface SessionSignals {
-  reportError: (code: string, status?: number, generation?: number) => void;
+  reportError: (code: string, generation?: number) => void;
   reportActivity: (path?: string, generation?: number) => void;
 }
 
@@ -25,7 +25,7 @@ export function createSessionSignals({
   sessionGeneration,
 }: { target?: EventTarget; sessionGeneration?: () => number } = {}): SessionSignals {
   return {
-    reportError(code, _status, generation = sessionGeneration?.()) {
+    reportError(code, generation = sessionGeneration?.()) {
       if (SESSION_CODES.has(code)) {
         target.dispatchEvent(
           new CustomEvent("waitron-session-invalid", {

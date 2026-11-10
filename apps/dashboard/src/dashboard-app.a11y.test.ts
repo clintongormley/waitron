@@ -50,6 +50,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       permissions: [],
       modules: [],
     }),
+    forgetLocales: () => {},
     getLocales: vi.fn().mockResolvedValue({
       locales: [
         { code: "es-ES", label: "Español" },

@@ -58,21 +58,22 @@ it("keeps setup boot's request identification and reset refusal on encoded line 
         const status = await fetch(`${base}/setup-api/status`, via);
         expect(status.status).toBe(200);
         expect(await status.json()).toMatchObject({ provisioned: false });
-        for (const suffix of ["missing", ...terminators]) {
-          const requestId = `setup-boundary-${terminators.indexOf(suffix) + 1}`;
-          const response = await fetch(`${base}/management-api/${suffix}`, {
-            ...via,
-            headers: { "x-request-id": requestId },
-          });
-          expect(response.status).toBe(404);
-          expect.soft(response.headers.get("x-request-id"), suffix).toBe(requestId);
-          expect
-            .soft(response.headers.get("x-waitron-build"), suffix)
-            .toBe(applicationVersion(process.env));
-          expect
-            .soft(await response.text(), suffix)
-            .toBe(JSON.stringify({ error: { code: "node.reset", params: {} } }));
-        }
+        for (const prefix of ["/management-api/", "/api/"])
+          for (const suffix of ["missing", ...terminators]) {
+            const requestId = `setup-boundary-${terminators.indexOf(suffix) + 1}`;
+            const response = await fetch(`${base}${prefix}${suffix}`, {
+              ...via,
+              headers: { "x-request-id": requestId },
+            });
+            expect(response.status, `${prefix}${suffix}`).toBe(404);
+            expect.soft(response.headers.get("x-request-id"), suffix).toBe(requestId);
+            expect
+              .soft(response.headers.get("x-waitron-build"), suffix)
+              .toBe(applicationVersion(process.env));
+            expect
+              .soft(await response.text(), suffix)
+              .toBe(JSON.stringify({ error: { code: "node.reset", params: {} } }));
+          }
       } finally {
         await client.close();
       }

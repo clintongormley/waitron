@@ -41,6 +41,7 @@ const meResponse = {
 function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
   return {
     getMe: vi.fn().mockResolvedValue({ ...meResponse }),
+    forgetLocales: () => {},
     getLocales: vi.fn().mockResolvedValue({
       locales: [
         { code: "es-ES", label: "Español" },

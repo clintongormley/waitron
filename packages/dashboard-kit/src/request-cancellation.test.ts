@@ -161,7 +161,7 @@ it.each([
     status: 401,
   });
   expect(onError.mock.calls).toEqual(
-    ["node.reset", "permission.denied"].includes(code) ? [[code, 401]] : [],
+    ["node.reset", "permission.denied"].includes(code) ? [[code]] : [],
   );
 });
 
@@ -193,7 +193,7 @@ it.each(["success", "expiry", "reset", "network"] as const)(
     );
     await observed;
     expect(onSuccess).not.toHaveBeenCalled();
-    expect(onError.mock.calls).toEqual(kind === "reset" ? [["node.reset", 401, 1]] : []);
+    expect(onError.mock.calls).toEqual(kind === "reset" ? [["node.reset", 1]] : []);
   },
 );
 
@@ -215,7 +215,7 @@ it("still reports current generation activity and a current ordinary session ref
     status: 401,
   });
   expect(onSuccess).toHaveBeenCalledWith("/ok", 2);
-  expect(onError).toHaveBeenCalledWith("management_session.expired", 401, 2);
+  expect(onError).toHaveBeenCalledWith("management_session.expired", 2);
 });
 
 // Compile the opt-in options at their public boundary as well as executing them above.

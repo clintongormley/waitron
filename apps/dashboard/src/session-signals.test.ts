@@ -36,33 +36,31 @@ describe("session signals", () => {
     "reports %s as an invalid session without asking the box anything",
     async (code) => {
       const h = harness();
-      h.signals.reportError(code, 401);
+      h.signals.reportError(code);
       await settle();
       expect(h.invalid).toEqual([{ code }]);
       expect(fetchSpy).not.toHaveBeenCalled();
     },
   );
 
-  it("reports node.reset from a 404 as an invalid session without asking the box anything", async () => {
+  it("reports node.reset as an invalid session without asking the box anything", async () => {
     const h = harness();
-    h.signals.reportError("node.reset", 404);
+    h.signals.reportError("node.reset");
     await settle();
     expect(h.invalid).toEqual([{ code: "node.reset" }]);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ["server.internal", 404],
-    ["product.not_found", 404],
-    ["server.internal", 500],
-    ["connection.failed", undefined],
-  ] as const)("reports nothing and asks nothing after %s with status %s", async (code, status) => {
-    const h = harness();
-    h.signals.reportError(code, status);
-    await settle();
-    expect(h.invalid).toEqual([]);
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
+  it.each(["server.internal", "product.not_found", "connection.failed"])(
+    "reports nothing and asks nothing after %s",
+    async (code) => {
+      const h = harness();
+      h.signals.reportError(code);
+      await settle();
+      expect(h.invalid).toEqual([]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
 
   it("reports activity as a session-active event", () => {
     const h = harness();

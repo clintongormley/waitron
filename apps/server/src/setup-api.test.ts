@@ -90,6 +90,8 @@ describe("mountSetup — setup-mode routes for an unprovisioned box", () => {
     ["POST", "/management-api/session"],
     ["DELETE", "/management-api/session"],
     ["GET", "/management-api/events"],
+    ["GET", "/api/backup/status"],
+    ["GET", "/api/content-languages"],
   ])("answers %s %s with 404 node.reset, not the placeholder page", async (method, path) => {
     const app = new Hono();
     mountSetup(app, { environment: "preproduction" }, noopLog);
@@ -1638,6 +1640,8 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
     ["GET", "/management-api/session/me"],
     ["POST", "/management-api/session"],
     ["DELETE", "/management-api/session"],
+    ["GET", "/api/backup/status"],
+    ["GET", "/api/content-languages"],
   ])("answers %s %s with 404 node.reset beside the built wizard", async (method, path) => {
     const app = new Hono();
     mountSetup(app, { environment: "preproduction", setupAppDir: wizardDir }, noopLog);

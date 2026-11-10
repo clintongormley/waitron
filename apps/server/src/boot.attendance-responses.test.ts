@@ -214,10 +214,11 @@ for (const enabled of [true, false]) {
                 path,
                 path.startsWith("/api/") ? venue.cookie : managerCookie,
               );
-              if (mode === "setup" && path.startsWith("/api/")) {
-                expect(response.status).toBe(200);
-                expect(response.headers.get("content-type")).toContain("text/html");
-                expect(await response.text()).toMatch(/set ?up/i);
+              if (mode === "setup") {
+                expect(response.status, path).toBe(404);
+                expect(await response.json()).toEqual({
+                  error: { code: "node.reset", params: {} },
+                });
               } else if (mode === "mirror") {
                 expect(response.status, path).toBe(403);
                 expect(await response.json()).toMatchObject({

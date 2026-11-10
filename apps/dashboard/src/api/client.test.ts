@@ -195,7 +195,7 @@ describe("DashboardApi", () => {
       code: "management_session.expired",
       status: 401,
     });
-    expect(onError.mock.calls).toEqual([["management_session.expired", 401]]);
+    expect(onError.mock.calls).toEqual([["management_session.expired"]]);
     expect(onSuccess).not.toHaveBeenCalled();
   });
 
@@ -2080,6 +2080,32 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       credentials: "include",
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it("getLocales reuses its read until forgetLocales, then reads again", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        locales: [],
+        venueDefault: "es-ES",
+        loginDefault: "es-ES",
+        venueName: "Old SL",
+      }),
+    );
+    const api = new DashboardApi("", fetchImpl);
+    await api.getLocales();
+    await api.getLocales();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    fetchImpl.mockImplementation(async () =>
+      jsonResponse({
+        locales: [],
+        venueDefault: "es-ES",
+        loginDefault: "es-ES",
+        venueName: "New SL",
+      }),
+    );
+    api.forgetLocales();
+    expect((await api.getLocales()).venueName).toBe("New SL");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it("putLocale PUTs the session locale route with a { locale } body and returns nothing", async () => {

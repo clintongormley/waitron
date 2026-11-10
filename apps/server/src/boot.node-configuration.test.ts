@@ -154,8 +154,8 @@ it.each([undefined, ""])(
       expect(setup.status).toBe(200);
       await setup.body?.cancel();
       const till = await fetch(`https://127.0.0.1:${httpPort()}/api/till`, via);
-      expect(till.headers.get("content-type")).toContain("text/html");
-      expect(await till.text()).toContain("setup");
+      expect(till.status).toBe(404);
+      expect(await till.json()).toEqual({ error: { code: "node.reset", params: {} } });
     } finally {
       await dispatcher?.close();
       await server.close();

@@ -56,6 +56,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
             venueName: "Deli Test SL",
             tradingAdmission: { state: "invalid" },
           }),
+          forgetLocales: () => {},
           getLocales: vi.fn().mockResolvedValue({
             loginDefault: locale,
             venueDefault: locale,

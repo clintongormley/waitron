@@ -2459,7 +2459,7 @@ export class DashboardApi {
     return this.#menuRevision.value;
   }
   #background?: DashboardApi;
-  #onError?: (code: string, status?: number, generation?: number) => void;
+  #onError?: (code: string, generation?: number) => void;
 
   get background(): DashboardApi {
     if (this.#background) return this.#background;
@@ -2488,7 +2488,7 @@ export class DashboardApi {
   constructor(
     baseUrl = "",
     fetchImpl: FetchLike = fetch,
-    onError?: (code: string, status?: number, generation?: number) => void,
+    onError?: (code: string, generation?: number) => void,
     onSuccess?: (path: string, generation?: number) => void,
     passive = false,
     private readonly options: {
@@ -2558,6 +2558,10 @@ export class DashboardApi {
       throw err;
     });
     return this.#localesPromise;
+  }
+
+  forgetLocales(): void {
+    this.#localesPromise = undefined;
   }
 
   login(input: {

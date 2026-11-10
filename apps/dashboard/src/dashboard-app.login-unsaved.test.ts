@@ -33,6 +33,7 @@ async function mount(path = "/manage/", overrides: Partial<DashboardApi> = {}) {
       },
       getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
       getGoogleConfig: async () => ({ configured: false }),
+      forgetLocales: () => {},
       getLocales: async () => ({
         locales: [
           { code: "en-GB", label: "English" },

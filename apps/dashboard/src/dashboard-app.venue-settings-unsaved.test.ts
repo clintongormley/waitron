@@ -115,6 +115,7 @@ async function mount(
           permissions,
           modules: ["venue-service", "kitchen-test"],
         }),
+        forgetLocales: () => {},
         getLocales: async () => ({
           locales: [
             { code: "en-GB", label: "English" },
