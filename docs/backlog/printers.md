@@ -169,7 +169,9 @@ chosen destination.
   read, not run). The server calls a Bluetooth device paired while the agent's last "paired" report
   is fresh (`isListed(pairedAt)`, `apps/server/src/print-api.ts`: 45 seconds while a discovery
   window is open, 15 otherwise), and a later report that the device is no longer paired keeps the
-  old `pairedAt`. So for up to that long after an Unpair a device can read as paired again. Clearing
+  old `pairedAt`. So for up to that long after an Unpair a device can read as paired again. Pair
+  again (A405, #2678) opens a discovery window, so pressed within 45 seconds of an Unpair it can
+  find the printer still paired and switch it on without pairing it. Clearing
   `pairedAt` when the agent reports a successful unpair, or reports the device unpaired, would end
   it; the owner was asked (questions.md, C103).
 
@@ -321,8 +323,8 @@ checked on the box).
 
 ## Reprint kitchen tickets and other printouts laid out again for any printer
 
-- **Reprint kitchen tickets and other printouts laid out again for any printer (left by A405
-  point 4).** Receipts and full invoices are laid out again from the sale. Every other job keeps
+- **Reprint kitchen tickets and other printouts laid out again for any printer (left open by A405
+  point 4, #2678).** Receipts and full invoices are laid out again from the sale. Every other job keeps
   only its finished bytes, so Reprint copies them: kitchen tickets and refund receipts to an
   active receipt printer at least as wide, centred; everything else to its own printer only.
   Laying them out again needs each job to keep the printer-independent document it was built from,
@@ -334,11 +336,10 @@ checked on the box).
 
 ## Deleting an A4 printer
 
-- **Deleting an A4 printer (left by A405 point 6).** `page_printers` has no deletion column and is
-  referenced with `restrict` by `invoice_deliveries`, `devices` and `device_profile_printers`, so a
-  delete must be a soft delete, which needs a column. Until then A4 details have no Delete.
-  Switching an A4 printer back on and changing its address stay in Add a printer by design: both
-  need a fresh discovery entry (`apps/server/src/page-printers-api.ts:166-167`).
+- **Deleting an A4 printer (left open by A405 point 6, #2678).** `page_printers` has no deletion
+  column and is referenced with `restrict` by `invoice_deliveries`, `devices` and
+  `device_profile_printers`, so a delete must be a soft delete, which needs a column. Until then A4
+  details have no Delete.
 
 ## A Used by link to a prep station opens the Stations tab, not the station
 
@@ -493,11 +494,14 @@ only the app keeps from deletion; no trigger protects it either.
 
 ## Loose ends left by A661 (#1745)
 
-- The print queue's Resend does not follow the till's rule for a full invoice's printer. A till
-  refuses to resend an original a print request sent, when that printer is not the till's invoice
-  printer (`receiptPrinterWithdrawn`, `apps/server/src/invoice-delivery-status.ts`). The
-  dashboard's `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts`) does
-  not apply that rule. Decide whether a manager's resend should.
+- The print queue's Reprint, on its own printer or another (A405, #2678), does not follow the
+  till's rule for a full invoice's printer. A till refuses to resend an original a print request
+  sent, when that printer is not the till's invoice printer (`receiptPrinterWithdrawn`,
+  `apps/server/src/invoice-delivery-status.ts`). The dashboard's
+  `POST /management-api/print-jobs/:id/resend` (`apps/server/src/print-api.ts`) does not apply that
+  rule, and since A405 it can send a full invoice's original that never printed (out of delivery
+  attempts, or still waiting on a disabled or unseen printer) to any other active receipt printer.
+  Decide whether a manager's reprint should.
 
 ## Loose ends left by A663 Parts 1a, 1b and 2 (#1748, #1756, #1768)
 
@@ -781,6 +785,10 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   [Detail](printers.md#loose-ends-left-by-a663-part-3b-1827)
 
 ## Decisions and deliberate limits
+
+- **Switching an A4 printer back on and changing its address stay in Add a printer (A405 point
+  6).** Both need a fresh discovery entry; the server refuses switching one back on with
+  `page_printer.rediscover` (`apps/server/src/page-printers-api.ts`).
 
 - **Add a printer lists a Bluetooth device its agent reports paired unless the agent says it is
   not a printer; one whose kind it cannot tell is listed (A404, 2026-11-05).** The owner asked that

@@ -71,7 +71,7 @@ async function insertPrintJob(
   return { jobId: job!.id };
 }
 
-/** Completed receipt originals need a marked copy; exhausted delivery attempts retain their bytes. */
+/** Completed receipt originals need a marked copy; a job out of delivery attempts may be resent. */
 export function canResendPrintJob(job: {
   kind: "document" | "drawer";
   status: string;

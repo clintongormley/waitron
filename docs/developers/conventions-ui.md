@@ -2125,8 +2125,8 @@ A completed original and its failed predecessors cannot be resent through the pr
 An original with an active retry blocks another retry as well. Exhausted attempts without one of
 those reservations may retry on their retained printer, keeping their bytes, or on another active
 printer, laid out again from the sale and still unmarked (`reprintJobOn`,
-`apps/server/src/print-job-reprint.ts`). An original still waiting on a disabled printer, or on one
-no agent sees, may be moved to another printer the same way; the move ends it on its own printer
+`apps/server/src/print-job-reprint.ts`). An original still waiting on a disabled printer, or on a
+USB or Bluetooth printer no agent sees, may be moved to another printer the same way; the move ends it on its own printer
 in the transaction that queues the reprint.
 
 The dashboard's offered action combines `canResendPrintJob`, or a waiting job's `stuck`, with a

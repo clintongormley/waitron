@@ -1239,11 +1239,11 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
   Finished jobs are to be kept one month (owner, 2026-10-14). [Detail](backlog/printers.md#the-virtual-pdf-printer)
 
-- **Reprint kitchen tickets and other printouts laid out again for any printer (left by A405
-  point 4)** — needs a `print_jobs` column.
+- **Reprint kitchen tickets and other printouts laid out again for any printer (left open by A405
+  point 4, #2678)** — needs a `print_jobs` column.
   [Detail](backlog/printers.md#reprint-kitchen-tickets-and-other-printouts-laid-out-again-for-any-printer)
 
-- **Deleting an A4 printer (left by A405 point 6)** — needs a soft-delete column.
+- **Deleting an A4 printer (left open by A405 point 6, #2678)** — needs a soft-delete column.
   [Detail](backlog/printers.md#deleting-an-a4-printer)
 
 - **A Used by link to a prep station opens the Stations tab, not the station (left open by A405).**

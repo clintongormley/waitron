@@ -58,7 +58,8 @@ reported, check whether the drawer opened before opening it again.
 
 **Reprint** sends a printout again, on its own printer or another: a receipt or invoice on any
 receipt printer, a kitchen ticket or refund receipt on one at least as wide. A printout waiting on a
-printer that is disabled or out of reach can be moved the same way, and is cancelled there. Other
+printer that is disabled, or on a USB or Bluetooth printer no print agent sees, can be moved the
+same way, and is cancelled there. Other
 printouts reprint only on their own printer.
 
 ## Print agents {#print-agents}
