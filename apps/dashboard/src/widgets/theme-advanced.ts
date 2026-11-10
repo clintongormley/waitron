@@ -202,12 +202,6 @@ export class ThemeAdvanced extends LitElement {
     this.#waitingPick = undefined;
   }
 
-  /**
-   * Opens the section holding `key`, then Advanced, and moves focus to that value's code field. While
-   * Advanced's body is hidden (closed, and not mid closing animation), the section opens at once and,
-   * with motion on, Advanced animates once to its full height; the other way round, Advanced would
-   * animate to the height of closed sections while the section grew inside it.
-   */
   async reveal(mode: Mode, key: ThemeColour): Promise<void> {
     type Disclosure = HTMLElementTagNameMap["wt-disclosure"];
     const section = this.renderRoot.querySelector<Disclosure>(
@@ -218,7 +212,12 @@ export class ThemeAdvanced extends LitElement {
     const advanced = this.renderRoot.querySelector<Disclosure>("[data-test=advanced]")!;
     advanced.open = true;
     await advanced.updateComplete;
-    this.renderRoot.querySelector<HTMLElement>(`wt-input[name="handSet.${mode}.${key}"]`)!.focus();
+    await Promise.all([section.whenSettled(), advanced.whenSettled()]);
+    const field = this.renderRoot.querySelector<HTMLElement>(
+      `wt-input[name="handSet.${mode}.${key}"]`,
+    )!;
+    field.focus();
+    field.scrollIntoView({ block: "nearest" });
   }
 
   /** Sends a picked colour still waiting for its animation frame. */

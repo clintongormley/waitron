@@ -782,25 +782,46 @@ describe("the dark version's own button colour", () => {
     return opened;
   }
 
-  it("Pick a different colour for dark screens opens Advanced's Buttons section at the dark Main buttons code, changing nothing", async () => {
-    const { el } = await mountEditing();
-    const fixedLine = q(el, "[data-test=brand-fixed-dark]")!;
-    expect(words(fixedLine)).toBe("Buttons on dark screens: #437e5b");
-    const link = button(el, "pick-dark");
-    expect(words(link)).toBe("Pick a different colour for dark screens");
-    expect(fixedLine.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
-    expect(q(el, "[data-test=dark-own]")).toBeNull();
-    expect(disclosure(el).open).toBe(false);
+  it.each(["reduce", "no-preference"] as const)(
+    "Pick a different colour for dark screens reaches its code after %s motion, changing nothing",
+    async (motion) => {
+      const viewport = { width: innerWidth, height: innerHeight };
+      await page.viewport(1280, 900);
+      await commands.emulateReducedMotion(motion);
+      try {
+        const { el } = await mountEditing();
+        const fixedLine = q(el, "[data-test=brand-fixed-dark]")!;
+        expect(words(fixedLine)).toBe("Buttons on dark screens: #437e5b");
+        const link = button(el, "pick-dark");
+        expect(words(link)).toBe("Pick a different colour for dark screens");
+        expect(fixedLine.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+          0,
+        );
+        expect(q(el, "[data-test=dark-own]")).toBeNull();
+        expect(disclosure(el).open).toBe(false);
 
-    await userEvent.click(link);
-    await settle(el);
-    expect(disclosure(el).open).toBe(true);
-    expect(openSections(el)).toEqual(["buttons"]);
-    const inner = handCode(el, "dark", "primary").shadowRoot!.querySelector("input");
-    await expect.poll(() => focused(el)).toBe(inner);
-    expect(button(el, "save").variant).toBe("secondary");
-    expect(button(el, "save").disabled).toBe(true);
-  });
+        await userEvent.click(link);
+        await settle(el);
+        expect(disclosure(el).open).toBe(true);
+        expect(openSections(el)).toEqual(["buttons"]);
+        const inner = handCode(el, "dark", "primary").shadowRoot!.querySelector("input");
+        await expect.poll(() => focused(el)).toBe(inner);
+        const bodies = [...advanced(el).shadowRoot!.querySelectorAll("wt-disclosure")].map((d) =>
+          d.shadowRoot!.querySelector<HTMLElement>(".body")!,
+        );
+        await expect
+          .poll(() => bodies.some((body) => body.classList.contains("animating")))
+          .toBe(false);
+        const box = handCode(el, "dark", "primary").getBoundingClientRect();
+        expect(box.top).toBeGreaterThanOrEqual(0);
+        expect(box.bottom).toBeLessThanOrEqual(900);
+        expect(button(el, "save").variant).toBe("secondary");
+        expect(button(el, "save").disabled).toBe(true);
+      } finally {
+        await page.viewport(viewport.width, viewport.height);
+      }
+    },
+  );
 
   it("a dark Main buttons colour set by hand paints dark screens only and is sent without the fix", async () => {
     const { el, saveTheme } = await darkOwn();

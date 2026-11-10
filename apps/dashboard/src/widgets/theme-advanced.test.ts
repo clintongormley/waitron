@@ -394,7 +394,9 @@ describe("what opens a section", () => {
   it("reveal opens the section before Advanced, so Advanced animates once to its full height", async () => {
     await commands.emulateReducedMotion(null);
     const el = await mount(CREAM);
-    await el.reveal("dark", "primary");
+    const revealed = el.reveal("dark", "primary");
+    await sectionAt(el, "buttons").updateComplete;
+    await disclosure(el).updateComplete;
     const buttons = sectionAt(el, "buttons").shadowRoot!.querySelector<HTMLElement>(".body")!;
     expect(buttons.classList.contains("animating")).toBe(false);
     expect(buttons.style.height).toBe("");
@@ -404,10 +406,35 @@ describe("what opens a section", () => {
     expect(body.classList.contains("animating")).toBe(true);
     const target = parseFloat(body.style.height);
     expect(target).toBeGreaterThanOrEqual(body.scrollHeight - 1);
-    await vi.waitFor(() => expect(body.classList.contains("animating")).toBe(false), {
-      timeout: 5000,
-    });
+    await revealed;
+    expect(body.classList.contains("animating")).toBe(false);
     expect(target).toBeGreaterThanOrEqual(body.getBoundingClientRect().height - 1);
+  });
+  it("reveal retargets Advanced when Buttons opens during its collapse", async () => {
+    await commands.emulateReducedMotion("no-preference");
+    const el = await mount(CREAM);
+    el.style.setProperty("--wt-duration-disclosure", "900ms");
+    await open(el);
+    const outer = disclosure(el);
+    const body = outer.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    await expect.poll(() => body.classList.contains("animating")).toBe(false);
+    outer.open = false;
+    await outer.updateComplete;
+    await expect.poll(() => body.getAnimations().length).toBeGreaterThan(0);
+    const closing = body.getAnimations()[0]!;
+    closing.pause();
+    closing.currentTime = 450;
+    const revealed = el.reveal("dark", "primary");
+    await sectionAt(el, "buttons").updateComplete;
+    await outer.updateComplete;
+    await sectionAt(el, "buttons").whenSettled();
+    await nextFrame();
+    const target = parseFloat(body.style.height);
+    expect(target).toBeGreaterThan(800);
+    await revealed;
+    expect(Math.abs(body.getBoundingClientRect().height - target)).toBeLessThan(2);
+    expect(body.classList.contains("animating")).toBe(false);
+    expect(focusedInner()).toBe(innerInput(el, "dark", "primary"));
   });
 });
 

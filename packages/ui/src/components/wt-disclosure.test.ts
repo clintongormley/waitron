@@ -161,6 +161,58 @@ test("the body moves through intermediate heights while opening and closing", as
   expect(body.getBoundingClientRect().height).toBe(200);
 });
 
+test("an opening follows content growth before it settles", async () => {
+  const el = (await mount(
+    '<wt-disclosure heading="Kitchen" style="--wt-duration-disclosure:900ms"><div style="height:200px"></div></wt-disclosure>',
+  )) as HTMLElementTagNameMap["wt-disclosure"];
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  el.open = true;
+  await el.updateComplete;
+  const opening = await pauseHeightTransition(body);
+  opening.currentTime = 450;
+  (el.firstElementChild as HTMLElement).style.height = "400px";
+  await expect.poll(() => body.style.height).toBe("400px");
+  const retargeted = await pauseHeightTransition(body, opening);
+  let settled = false;
+  const finished = el.whenSettled().then(() => {
+    settled = true;
+  });
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  expect(settled).toBe(false);
+  retargeted.play();
+  await finished;
+  expect(body.classList.contains("animating")).toBe(false);
+  expect(body.getBoundingClientRect().height).toBe(400);
+});
+
+test("settlement follows an interrupted animation and resolves on disconnect", async () => {
+  const el = (await mount(
+    '<wt-disclosure heading="Kitchen" open><div style="height:200px"></div></wt-disclosure>',
+  )) as HTMLElementTagNameMap["wt-disclosure"];
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  el.open = false;
+  await el.updateComplete;
+  const closing = await pauseHeightTransition(body);
+  closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
+  let settled = false;
+  const finished = el.whenSettled().then(() => {
+    settled = true;
+  });
+  el.open = true;
+  await el.updateComplete;
+  const opening = await pauseHeightTransition(body, closing);
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  expect(settled).toBe(false);
+  await finishHeightTransition(body, opening);
+  await finished;
+  el.open = false;
+  await el.updateComplete;
+  await pauseHeightTransition(body);
+  const removed = el.whenSettled();
+  el.remove();
+  await removed;
+});
+
 test("rapid toggles settle at the last state and keep closed content out of focus", async () => {
   const el = await mount(
     '<wt-disclosure heading="Kitchen"><button>Inside</button><div style="height: 200px"></div></wt-disclosure>',
@@ -278,6 +330,7 @@ test("a validation error interrupts closing and exposes its fields immediately",
   expect(header.getAttribute("aria-expanded")).toBe("true");
   expect(body.hidden).toBe(false);
   expect(body.inert).toBe(false);
+  await disclosure.whenSettled();
   expect(body.classList.contains("animating")).toBe(false);
   expect(body.style.height).toBe("");
   expect(body.getBoundingClientRect().height).toBe(200);
@@ -289,6 +342,7 @@ test("a body with no height still becomes hidden after closing", async () => {
   const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
   el.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
   await disclosure.updateComplete;
+  await disclosure.whenSettled();
   expect(body.classList.contains("animating")).toBe(false);
   expect(body.hidden).toBe(true);
 });
@@ -307,10 +361,10 @@ test("reduced motion opens and closes without waiting for the height animation",
     const header = el.shadowRoot!.querySelector<HTMLElement>("button.header")!;
     const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
     header.click();
-    await disclosure.updateComplete;
+    await disclosure.whenSettled();
     expect(body.getBoundingClientRect().height).toBe(200);
     header.click();
-    await disclosure.updateComplete;
+    await disclosure.whenSettled();
     expect(body.hidden).toBe(true);
   } finally {
     window.matchMedia = original;
@@ -332,6 +386,7 @@ test("switching on reduced motion during a close hides the body immediately", as
     expect(body.hidden).toBe(false);
     await commands.emulateReducedMotion("reduce");
     await expect.poll(() => body.hidden, { timeout: 450, interval: 25 }).toBe(true);
+    await disclosure.whenSettled();
     expect(body.classList.contains("animating")).toBe(false);
     expect(body.style.height).toBe("");
   } finally {
