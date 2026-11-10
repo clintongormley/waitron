@@ -1,9 +1,11 @@
 import { sql } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, decimal } from "@waitron/shared";
 import type { Decimal, NodeId, SaleId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type {
   ClockBehindLatestRecord,
+  CorrectionAdmission,
+  FiledFigures,
   FiscalBackend,
   FiledReceipt,
   FiscalRecordRef,
@@ -54,7 +56,13 @@ export class FakeFiscalBackend implements FiscalBackend {
     return Promise.resolve();
   }
 
+  private readonly filedFigures = new Map<SaleId, FiledFigures>();
   private readonly injectedIssues = new Map<string, IntegrityIssue[]>();
+  private admission: CorrectionAdmission = {
+    eligible: true,
+    filing: "accepted",
+    original: { number: "T1-1", issuedAt: "2027-03-14" },
+  };
 
   constructor(
     private readonly db: Database,
@@ -108,10 +116,9 @@ export class FakeFiscalBackend implements FiscalBackend {
         -- string they are handed.
         total text not null,
         state text not null,
-        -- The filed VAT breakdown, stored so filedReceiptFor can hand back the EXACT figures the
-        -- replay path reprints (Task 14). NULL for a void, which files no breakdown of its own; set
-        -- for a sale, the only kind the replay read-back reads. JSON in a text column: the engine
-        -- has no jsonb, and nothing below filedReceiptFor parses it.
+        -- The filed VAT breakdown, stored so filedReceiptFor and filedFiguresFor hand back the
+        -- EXACT figures filed. Set for a sale and a correction, the kinds they read; NULL for a
+        -- void or a substitution. JSON in a text column: the engine has no jsonb.
         vat_breakdown text,
         unique (node_id, sequence)
       );
@@ -233,6 +240,7 @@ export class FakeFiscalBackend implements FiscalBackend {
       total: sale.total,
       issuedAt: sale.issuedAt,
       offsetMinutes: sale.offsetMinutes,
+      vatBreakdown: sale.vatBreakdown,
     });
   }
 
@@ -277,6 +285,44 @@ export class FakeFiscalBackend implements FiscalBackend {
     return { ok: issues.length === 0, checked, issues };
   }
 
+  correctionAdmissionFor(): Promise<CorrectionAdmission> {
+    return Promise.resolve(this.admission);
+  }
+
+  /**
+   * Each filed sale's or correction's total and split, as both versions, unless a test set it; a
+   * substitution, whose split the fake does not store, is absent.
+   */
+  async filedFiguresFor(
+    tx: Transaction,
+    saleIds: readonly SaleId[],
+  ): Promise<ReadonlyMap<SaleId, FiledFigures>> {
+    const answer = new Map<SaleId, FiledFigures>();
+    for (const saleId of saleIds) {
+      const rows = await tx.execute<{ total: string; vat_breakdown: string }>(sql`
+        select total, vat_breakdown
+        from fake_fiscal_records
+        where sale_id = ${saleId} and kind in ('sale', 'correction')
+        limit 1
+      `);
+      const row = rows.rows[0];
+      if (row === undefined) continue;
+      const filed = {
+        total: decimal(row.total),
+        vatBreakdown: (JSON.parse(row.vat_breakdown) as VatBreakdownLine[]).map((line) => ({
+          rate: decimal(line.rate),
+          base: decimal(line.base),
+          tax: decimal(line.tax),
+        })),
+      };
+      answer.set(
+        saleId,
+        this.filedFigures.get(saleId) ?? { readable: true, newest: filed, newestAnswered: filed },
+      );
+    }
+    return answer;
+  }
+
   async pendingCount(nodeId: NodeId): Promise<number> {
     const rows = await this.db.execute<{ count: string }>(sql`
       select cast(count(*) as text) as count
@@ -292,6 +338,16 @@ export class FakeFiscalBackend implements FiscalBackend {
    * be tested. */
   breakIntegrity(nodeId: NodeId, issue: IntegrityIssue): void {
     this.injectedIssues.set(nodeId, [...(this.injectedIssues.get(nodeId) ?? []), issue]);
+  }
+
+  /** What `correctionAdmissionFor` answers for every sale from now on. */
+  setCorrectionAdmission(admission: CorrectionAdmission): void {
+    this.admission = admission;
+  }
+
+  /** What `filedFiguresFor` answers for `saleId` from now on, while it has a filed record. */
+  setFiledFigures(saleId: SaleId, figures: FiledFigures): void {
+    this.filedFigures.set(saleId, figures);
   }
 
   restoreIntegrity(nodeId: NodeId): void {

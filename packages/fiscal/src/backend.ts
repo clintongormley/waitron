@@ -41,6 +41,41 @@ export interface FiledReceipt {
   issuer?: { legalName: string; taxId: string };
 }
 
+/** Whether a regime's filing of an invoice allows a correction of it; read-only. */
+export type CorrectionAdmission =
+  | {
+      eligible: true;
+      filing: "queued" | "sending" | "accepted" | "accepted_with_issues";
+      original: { number: string; issuedAt: string };
+    }
+  | {
+      eligible: false;
+      reason:
+        | "unsupported"
+        | "missing"
+        | "wrong_node"
+        | "voided"
+        | "not_simplified"
+        | "filing_refused"
+        | "filing_versions_unusable";
+    };
+
+/** The total and VAT split of one filed version of an invoice. */
+export interface FiledVersionFigures {
+  total: Decimal;
+  vatBreakdown: VatBreakdownLine[];
+}
+
+/**
+ * A sale's filed figures: its newest version's, and those of the newest version the authority
+ * accepted (null when none has been). Unreadable when the versions are not one line of fixes, or a
+ * version's split is not one the regime itself files for an ordinary taxed sale (one base and VAT
+ * per rate, nothing else), or does not sum to its totals.
+ */
+export type FiledFigures =
+  | { readable: true; newest: FiledVersionFigures; newestAnswered: FiledVersionFigures | null }
+  | { readable: false };
+
 /** The words a regime prints above and under its verification QR, in the regime's own wording. */
 export interface ReceiptQrText {
   caption: string;
@@ -500,6 +535,22 @@ export interface FiscalBackend {
   filedReceiptFor(tx: Transaction, saleId: SaleId): Promise<FiledReceipt | undefined>;
   /** Optional receipt observation, independent of allocation and the original receipt result. */
   invoiceEvidenceFor?(tx: Transaction, saleId: SaleId): Promise<FiledInvoiceEvidence | undefined>;
+
+  /**
+   * Whether `issuingNodeId`, the box that would issue the correction, may correct the sale.
+   * Optional: a backend without it admits no correction (`unsupported`).
+   */
+  correctionAdmissionFor?(
+    tx: Transaction,
+    saleId: SaleId,
+    issuingNodeId: NodeId,
+  ): Promise<CorrectionAdmission>;
+
+  /** The filed figures of each sale in `saleIds`; a sale with nothing filed is absent. Reads only. */
+  filedFiguresFor?(
+    tx: Transaction,
+    saleIds: readonly SaleId[],
+  ): Promise<ReadonlyMap<SaleId, FiledFigures>>;
 
   /**
    * Cancels a sale. The cancellation is issued by `issuingNodeId`, the box running now, and goes on

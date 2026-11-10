@@ -1,5 +1,6 @@
 import type {
   ClockBehindLatestRecord,
+  CorrectionAdmission,
   FiscalBackend,
   FiledReceipt,
   FiscalRecordRef,
@@ -81,6 +82,10 @@ export class NoneBackend implements FiscalBackend {
 
   recordSubstitution(_tx: Transaction, sale: SaleForFiscalRecord): Promise<FiscalRecordRef> {
     return Promise.resolve(this.recordedRef(sale));
+  }
+
+  correctionAdmissionFor(): Promise<CorrectionAdmission> {
+    return Promise.resolve({ eligible: false, reason: "unsupported" });
   }
 
   filedReceiptFor(): Promise<FiledReceipt | undefined> {

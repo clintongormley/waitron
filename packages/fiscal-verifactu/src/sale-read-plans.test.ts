@@ -31,7 +31,7 @@ function sessionOf(tx: Transaction): Session {
   return (tx as unknown as { session: Session }).session;
 }
 
-const BY_SALE = /sale_id"? = \?/;
+const BY_SALE = /sale_id"? (= \?|in \()/;
 
 /** The plan of the one statement `read` sends that filters by sale id. */
 async function planOf(read: (tx: Transaction) => Promise<unknown>): Promise<string[]> {
@@ -80,6 +80,25 @@ describe("reads of a sale's filed alta", () => {
     const plan = await planOf((tx) => readDeviceReceiptEvidence(tx, brandSaleId(newId())));
     expect(plan).toEqual([
       "SEARCH registros_facturacion USING INDEX registros_sale_idx (sale_id=?)",
+    ]);
+  });
+
+  it("finds each sale's filed figures through the sale index", async () => {
+    const plan = await planOf((tx) => backend().filedFiguresFor(tx, [brandSaleId(newId())]));
+    expect(plan).toEqual([
+      "SEARCH r USING INDEX registros_sale_idx (sale_id=?)",
+      "SEARCH e USING INDEX sqlite_autoindex_envios_1 (registro_id=?) LEFT-JOIN",
+    ]);
+  });
+
+  it("finds the alta admission judges through the sale index", async () => {
+    const node = await seedNode(suite.db);
+    const plan = await planOf((tx) =>
+      backend().correctionAdmissionFor(tx, brandSaleId(newId()), node.nodeId),
+    );
+    expect(plan).toEqual([
+      "SEARCH registros_facturacion USING INDEX registros_sale_idx (sale_id=?)",
+      "SEARCH envios USING INDEX sqlite_autoindex_envios_1 (registro_id=?) LEFT-JOIN",
     ]);
   });
 

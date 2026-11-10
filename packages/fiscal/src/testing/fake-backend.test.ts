@@ -388,3 +388,56 @@ describe("filedReceiptFor", () => {
     expect(filed).toBeUndefined();
   });
 });
+
+describe("correctionAdmissionFor", () => {
+  it("admits by default, and answers what the test sets", async () => {
+    const sale = saleOn(NODE_A, 1).saleId;
+    const contract: FiscalBackend = backend;
+    const ask = () =>
+      suite.db.transaction((tx) => contract.correctionAdmissionFor?.(tx, sale, NODE_A));
+    expect(await ask()).toEqual({
+      eligible: true,
+      filing: "accepted",
+      original: { number: "T1-1", issuedAt: "2027-03-14" },
+    });
+    backend.setCorrectionAdmission({ eligible: false, reason: "filing_refused" });
+    expect(await ask()).toEqual({ eligible: false, reason: "filing_refused" });
+  });
+});
+
+describe("filedFiguresFor", () => {
+  it("answers each filed sale's and correction's figures as both versions, or what the test sets", async () => {
+    const sold = saleOn(NODE_A, 1);
+    const corrective = {
+      ...saleOn(NODE_A, 2),
+      total: decimal("-1.21"),
+      vatBreakdown: [{ rate: decimal("21.00"), base: decimal("-1.00"), tax: decimal("-0.21") }],
+    };
+    const unfiled = saleOn(NODE_A, 3).saleId;
+    await suite.db.transaction(async (tx) => {
+      await backend.registerNode(tx, NODE_A);
+      await backend.recordSale(tx, sold);
+      await backend.recordCorrection(tx, corrective, { correctsSaleId: sold.saleId });
+    });
+    const ask = () =>
+      suite.db.transaction((tx) =>
+        (backend as FiscalBackend).filedFiguresFor!(tx, [sold.saleId, corrective.saleId, unfiled]),
+      );
+    const both = ({ total, vatBreakdown }: SaleForFiscalRecord) => ({
+      readable: true,
+      newest: { total, vatBreakdown },
+      newestAnswered: { total, vatBreakdown },
+    });
+
+    const answer = await ask();
+    backend.setFiledFigures(sold.saleId, { readable: false });
+
+    expect(answer).toEqual(
+      new Map([
+        [sold.saleId, both(sold)],
+        [corrective.saleId, both(corrective)],
+      ]),
+    );
+    expect((await ask()).get(sold.saleId)).toEqual({ readable: false });
+  });
+});

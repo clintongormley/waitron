@@ -43,9 +43,14 @@ const REVIEWED_TYPES: ReadonlyMap<string, string> = new Map([
     "CancellationContext",
     "a bill's status and stage and its components' ids, states and quantities",
   ],
+  [
+    "CorrectionAdmission",
+    "a regime's answer to whether an invoice may be corrected: a filing state, a reason, an invoice number and date; no person",
+  ],
   ["DestinationCleanup", "an enum of clean-up requests: abort_upload or delete_object"],
   ["DestinationOperation", "an enum of archive file store requests"],
   ["EquipmentField", "an enum of a device's equipment field names"],
+  ["Extract", "TypeScript's own; holds what its arguments name, which the guard reads"],
   [
     "FacturaParams",
     "an invoice as AEAT names it: idEmisorFactura, which is on the list, number and date",
