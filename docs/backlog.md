@@ -2003,8 +2003,8 @@ outstanding on code that exists.
   [Detail](backlog/replication-cloud.md#a1321-retire-a-dead-or-reset-spare-from-servers)
 
 - **A947. Go-live on two local boxes.** The owner approved the revised design. Slice 3b's build
-  plan is written (eight pull requests; Q1 is the owner's); 3b-1 landed, 3b-2 onwards are still to
-  build. A second box in setup mode can be trusted by mistake in three ways, to settle before go-live. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
+  plan is written (eight pull requests; Q1 is the owner's); 3b-1 and 3b-2 ([#2742](https://github.com/clintongormley/waitron/pull/2742)) landed, 3b-3 onwards
+  are still to build. A second box in setup mode can be trusted by mistake in three ways, to settle before go-live. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
 
 - **A1273: the shared key ring has no rotation path to the spare.** A spare gets the main box's
   ring only when it joins. For slices 3b and 3c.

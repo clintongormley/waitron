@@ -1090,7 +1090,7 @@ certificate fingerprint before it receives the venue's keys. Slice 3b's build
 eight pull requests, two of them fiscal and landed by the owner (3b-G, the start steps that decide
 whether a box files; 3b-F, letting a Veri*Factu venue add a spare, which waits on the owner's
 question Q1). 3b-1 landed as [#2721](https://github.com/clintongormley/waitron/pull/2721); 3b-2 (each
-box's own name) follows. Slices 3c onwards are still open;
+box's own name) as [#2742](https://github.com/clintongormley/waitron/pull/2742). Slices 3c onwards are still open;
 A1273 to A1285, A1295 and A1296 are the loose ends slice 3a left.
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).
@@ -1110,7 +1110,8 @@ ahead of another device's, and a setup or restore waits 90–150 seconds before 
 §6.7). Any device, even a reloaded one, reaches the
 switch (§6.6); the returning box hands over and becomes the spare by itself after three checks
 (§7.2); a spare is a choice per venue. Found while revising: both boxes put the same address in
-the membership chart, so a till's router sees one server (§2).
+the membership chart, so a till's router sees one server (§2); 3b-2 gives each box its own name in
+the chart, and the till hides a line for its page's own box.
 
 - **A second box in setup mode, while the main box is silent, can be trusted by mistake in three
   ways.** It answers `waitron.local` once its ask hears no other box (3b-2). By default a till
