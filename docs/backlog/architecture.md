@@ -385,7 +385,7 @@ until A977).
   A972 cut 1 moves its original bytes and keeps the existing encoder behavior.
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
-  Shared fixture names remain in the server split suites and bill/party helper consumers.
+  The server split suites' comments and private bill/party helper bindings remain.
   Record and submission names also remain in server seed,
   snapshot and fiscal-identity suites; check protected fixtures and fiscal-provider contracts.
   Fixture strings remain separate from this naming work. Shared helpers' Spanish dish samples

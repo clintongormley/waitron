@@ -2349,8 +2349,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   local Mailpit start refused the absent Docker socket. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A974. Finish the remaining English names in general code.**
-  Remaining names include shared fixture names in the server split suites,
-  bill/party helper consumers and file names.
+  Remaining work includes the server split suites' comments, private bill/party helper
+  bindings and file names.
   Remaining server drink bindings include the sale-source receipt, issuance-identity, list-price
   identity and served-at-huella fixtures. Keep accented search fixtures unchanged.
   Other record and submission names remain in server seed, snapshot and fiscal-identity suites;
