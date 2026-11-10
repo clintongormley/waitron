@@ -650,6 +650,25 @@ it("disables every row action and grip while busy, and a click on one sends noth
   ).toBe(true);
 });
 
+it("marks an included menu's Open link disabled while busy, and cancels a click on it", async () => {
+  const el = await mount({ nodes: [...lunchNodes(), wines()], busy: true });
+  const link = item(el, "source-included-wine");
+  const prevented: boolean[] = [];
+  link.addEventListener("click", (event) => {
+    prevented.push(event.defaultPrevented);
+    event.preventDefault();
+  });
+  expect(link.getAttribute("aria-disabled")).toBe("true");
+  link.click();
+  expect(prevented).toEqual([true]);
+
+  el.busy = false;
+  await settle(el);
+  expect(link.hasAttribute("aria-disabled")).toBe(false);
+  link.click();
+  expect(prevented).toEqual([true, false]);
+});
+
 it("shows an empty menu as the table's empty box, saying so, with the three adds under it", async () => {
   const el = await mount({ nodes: [] });
   const adds = listen(el, "wt-structure-add");

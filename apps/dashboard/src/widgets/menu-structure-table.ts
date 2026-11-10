@@ -1279,6 +1279,7 @@ export class MenuStructureTable extends LitElement {
     if (node.includedMenuId)
       return html`<a
           data-test=${`source-${key}`}
+          aria-disabled=${this.busy ? "true" : nothing}
           href=${`/manage/menus/menu/${node.includedMenuId}/view/structure`}
           >${fill("menus.open_included", {
             name: memberName(node.ref, this.#productNames, this.#sectionNames),

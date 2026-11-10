@@ -1308,6 +1308,8 @@ export class MenusScreen extends LitElement {
     this.removingSelected = null;
     this.deletingSelected = null;
     this.movingSelected = null;
+    this.editingSection = null;
+    this.editingInclude = null;
     this.deletingSection = null;
     this.structure = null;
     this.structureError = false;
@@ -1802,50 +1804,98 @@ export class MenusScreen extends LitElement {
 
   #saveSection(input: SectionInput): void {
     if (this.busy) return;
-    const target = this.creatingSection;
     const editing = this.editingSection;
-    if (!editing && (!target || this.#closeLostList())) return;
+    if (editing) {
+      this.newSectionErrors = {};
+      this.#saveEdit(
+        editing.id,
+        () => this.api.updateSection(editing.id, input),
+        () => this.editingSection === editing,
+        (error) => (this.newSectionErrors = refusal(error)),
+        () => {
+          this.#sectionForm().closeSaved(input);
+          this.editingSection = null;
+        },
+      );
+      return;
+    }
+    const target = this.creatingSection;
+    if (!target || this.#closeLostList()) return;
     this.busy = true;
     this.newSectionErrors = {};
-    this.#writes.run(editing?.id ?? target!.listId, async () => {
+    this.#writes.run(target.listId, async () => {
       try {
-        if (editing) await this.api.updateSection(editing.id, input);
-        else await this.api.createSectionIn(target!.listId, input);
+        await this.api.createSectionIn(target.listId, input);
       } catch (error) {
-        if (editing || !this.#closeRefusedElsewhere(target!, error))
-          this.newSectionErrors = refusal(error);
+        if (!this.#closeRefusedElsewhere(target, error)) this.newSectionErrors = refusal(error);
         this.busy = false;
         return;
       }
-      this.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-section-details-form"]>(
-        '[data-test="section-form"]',
-      )!.closeSaved(input);
+      this.#sectionForm().closeSaved(input);
       this.creatingSection = null;
       this.editingSection = null;
       await this.#refresh();
-      if (target) this.#reportSavedToLost(target);
+      this.#reportSavedToLost(target);
       this.busy = false;
     });
+  }
+
+  #sectionForm(): HTMLElementTagNameMap["dashboard-section-details-form"] {
+    return this.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-section-details-form"]>(
+      '[data-test="section-form"]',
+    )!;
   }
 
   #saveInclude(input: IncludeFolderInput): void {
     const editing = this.editingInclude;
     if (this.busy || !editing) return;
     const { listId, memberId } = editing;
-    this.busy = true;
     this.includeErrors = {};
-    this.#writes.run(listId, async () => {
+    this.#saveEdit(
+      listId,
+      () => this.api.setIncludeFolder(listId, memberId, input),
+      () => this.editingInclude === editing,
+      (error) => (this.includeErrors = includeRefusal(error)),
+      () => {
+        this.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-include-folder-form"]>(
+          '[data-test="include-folder-form"]',
+        )!.closeSaved(input);
+        this.editingInclude = null;
+      },
+    );
+  }
+
+  /** Sends an Edit window's save, which may be answered once another menu has been opened and has
+   * closed the window: as `#deleteSection` does, a refusal is then named with the menu it was sent
+   * from, and a saved change closes nothing and moves no focus. `open` says whether the window
+   * that sent it is still the one open; `refused` shows a refusal in it, and `saved` closes it. */
+  #saveEdit(
+    queue: string,
+    send: () => Promise<unknown>,
+    open: () => boolean,
+    refused: (error: unknown) => void,
+    saved: () => void,
+  ): void {
+    const opened = this.#menuOpenings;
+    const menu = this.#menuName();
+    const returnTo = this.#focusReturn;
+    const here = () => opened === this.#menuOpenings;
+    const stayPut = () => {
+      if (!here() && this.#focusReturn === returnTo) this.#focusReturn = null;
+    };
+    this.busy = true;
+    this.#writes.run(queue, async () => {
       try {
-        await this.api.setIncludeFolder(listId, memberId, input);
+        await send();
       } catch (error) {
-        this.includeErrors = includeRefusal(error);
+        if (here() && open()) refused(error);
+        else this.#reportRefused(menu, error);
+        stayPut();
         this.busy = false;
         return;
       }
-      this.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-include-folder-form"]>(
-        '[data-test="include-folder-form"]',
-      )!.closeSaved(input);
-      this.editingInclude = null;
+      if (here()) saved();
+      stayPut();
       await this.#refresh();
       this.busy = false;
     });
