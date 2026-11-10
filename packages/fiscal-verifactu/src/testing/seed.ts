@@ -5,7 +5,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
 import { deviceOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId } from "@waitron/shared";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { AltaInput, AnulacionInput, SistemaInformatico } from "@waitron/verifactu";
 
 import type { PendingRegistro } from "../chain.js";
@@ -74,11 +74,11 @@ async function insertLocation(tx: Transaction, label: string): Promise<string> {
   const [locationRow] = await tx
     .insert(locations)
     .values({
-      name: "Sala " + label,
       invoiceLocales: ["es"],
       operationDescription: "Venta en establecimiento",
     })
     .returning({ id: locations.id });
+  await seedVenueSettings(tx, { name: "Sala " + label });
   if (locationRow === undefined) throw new Error("seedNode: location insert returned no row");
   return locationRow.id;
 }

@@ -117,11 +117,8 @@ else if (request.command === "stage") {
   await client.markRestored(marker.managedCloud);
   const store = await openVenueDatabase(venueDir);
   try {
-    const venue = await store.venue.select({ name: locations.name }).from(locations);
-    assert.deepEqual(
-      venue.map((row) => row.name),
-      [request.expectedVenue],
-    );
+    const venue = await readVenue(store.venue);
+    assert.equal(venue.name, request.expectedVenue);
   } finally {
     await store.close();
   }

@@ -287,6 +287,34 @@ it("keeps starter options out of an operation without a preparation seat", async
   expect((calls[0]![2] as { input: unknown }).input).toBe(input);
 });
 
+it("first setup writes the venue document and an identical reapply keeps its revision", async () => {
+  const plan = planVenue(request("B10000002"), ALL_MODULES);
+  const first = await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
+  const read = () =>
+    suite.db.all(
+      sql`select version, revision, doc, updated_by from settings where module = 'venue'`,
+    );
+  const expected = [
+    {
+      version: 1,
+      revision: 1,
+      doc: JSON.stringify({
+        name: "Mostrador",
+        addressLine1: "Calle Mayor 1",
+        addressLine2: null,
+        postalCode: "28013",
+        city: "Madrid",
+        province: "Madrid",
+      }),
+      updated_by: null,
+    },
+  ];
+  expect(read()).toEqual(expected);
+  const second = await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
+  expect(second.nodeId).toBe(first.nodeId);
+  expect(read()).toEqual(expected);
+});
+
 describe("applyVenue: the one taxpayer row", () => {
   it("stores the taxpayer domicile without copying the location address", async () => {
     await applyVenue(

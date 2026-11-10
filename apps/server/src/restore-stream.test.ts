@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { readdirSync } from "node:fs";
 import { copyFile, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -137,6 +138,7 @@ beforeAll(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
+  await seedVenueSettings(db, { name: VENUE.venueName });
   await db.insert(nodes).values({ id: T.nodeId, locationId: T.locationId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
   await db.insert(invoiceSeries).values({ nodeId: T.nodeId, code: "FF", purpose: "full" });
@@ -1450,6 +1452,30 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     await expect(stageStreamRestore(deps)).rejects.toMatchObject({
       code: "restore.stream_venue_unconfirmed",
       params: VENUE,
+    });
+    await expectStateUntouched(deps.stateDir);
+  });
+
+  it.each([
+    ["no venue document", "delete from settings where module = 'venue'"],
+    ["no settings table", "drop table settings"],
+    ["another venue document version", "update settings set version = 2 where module = 'venue'"],
+  ])("refuses a copy with %s as an unknown identity", async (_name, change) => {
+    const deps = await stageDeps({
+      venueConfirmed: "",
+      restoreGeneration: async (args) => {
+        await copyFile(fixtureDb, args.outPath);
+        const copy = new DatabaseSync(args.outPath);
+        try {
+          copy.exec(change);
+        } finally {
+          copy.close();
+        }
+      },
+    });
+    await expect(stageStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.identity_unknown",
+      params: { nodeId: T.nodeId },
     });
     await expectStateUntouched(deps.stateDir);
   });

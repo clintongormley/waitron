@@ -4,7 +4,7 @@ import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
-import { locations, openVenueDatabase } from "@waitron/db";
+import { readVenue, openVenueDatabase } from "@waitron/db";
 import { runOnce } from "../src/backup-sweep.js";
 import { validateArtifact, writeValidated } from "../src/restore.js";
 import { ALL_MODULES } from "../src/modules.js";
@@ -117,15 +117,14 @@ if (request.command === "capture") {
       const trading = checked.secretEntries.find((entry) => entry.name === "secrets/trading.env");
       assert(trading);
       const identity = parseEnvFile(Buffer.from(trading.bytes).toString());
-      const venue = await store.venue.select({ name: locations.name }).from(locations);
-      assert.equal(venue.length, 1);
+      const venue = await readVenue(store.venue);
       await writeFile(join(root, "captured.backup.enc"), artifact, { mode: 0o600 });
       console.log(
         JSON.stringify({
           networkDenied,
           manifest: checked.manifest,
           sourceNodeId: identity.WAITRON_NODE_ID,
-          venueName: venue[0]!.name,
+          venueName: venue.name,
           entries: checked.secretEntries.map((entry) => entry.name),
         }),
       );
@@ -182,11 +181,8 @@ if (request.command === "capture") {
     });
     const store = await openVenueDatabase(join(root, "venue"));
     try {
-      const venue = await store.venue.select({ name: locations.name }).from(locations);
-      assert.deepEqual(
-        venue.map((row) => row.name),
-        [request.expectedVenue],
-      );
+      const venue = await readVenue(store.venue);
+      assert.equal(venue.name, request.expectedVenue);
     } finally {
       await store.close();
     }

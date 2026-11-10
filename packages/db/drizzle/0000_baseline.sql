@@ -31,15 +31,9 @@ CREATE TABLE `settings` (
 --> statement-breakpoint
 CREATE TABLE `locations` (
 	`id` text PRIMARY KEY NOT NULL,
-	`name` text NOT NULL,
 	`invoice_locales` text NOT NULL,
 	`operation_description` text NOT NULL,
 	`fiscal_territory` text DEFAULT 'ES-common' NOT NULL,
-	`address_line1` text,
-	`address_line2` text,
-	`postal_code` text,
-	`city` text,
-	`province` text,
 	`time_zone` text DEFAULT 'Europe/Madrid' NOT NULL,
 	`day_cutover` text DEFAULT '06:00:00' NOT NULL,
 	`bump_mode` text DEFAULT 'line' NOT NULL,

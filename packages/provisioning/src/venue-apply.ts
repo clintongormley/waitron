@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import {
   invoiceSeries,
+  createVenueSettings,
+  readVenueSettings,
   kitchenStations,
   locations,
   locationDayCutoverChanges,
@@ -246,15 +248,9 @@ export async function applyVenue(
           const existing = await tx
             .select({
               id: locations.id,
-              name: locations.name,
               invoiceLocales: locations.invoiceLocales,
               operationDescription: locations.operationDescription,
               fiscalTerritory: locations.fiscalTerritory,
-              addressLine1: locations.addressLine1,
-              addressLine2: locations.addressLine2,
-              postalCode: locations.postalCode,
-              city: locations.city,
-              province: locations.province,
               timeZone: locations.timeZone,
               dayCutover: locations.dayCutover,
             })
@@ -264,7 +260,7 @@ export async function applyVenue(
             throw new AppError("provisioning.second_venue", {});
           }
           if (existing.length === 1) {
-            const row = existing[0]!;
+            const row = { ...existing[0]!, ...(await readVenueSettings(tx)).doc };
             const changes = await tx
               .select({
                 effectiveBusinessDay: locationDayCutoverChanges.effectiveBusinessDay,
@@ -304,18 +300,24 @@ export async function applyVenue(
           locationId = randomUUID();
           await tx.insert(locations).values({
             id: locationId,
-            name: action.name,
             invoiceLocales: [...action.invoiceLocales],
             operationDescription: action.operationDescription,
             fiscalTerritory: action.fiscalTerritory,
-            addressLine1: action.addressLine1,
-            addressLine2: action.addressLine2,
-            postalCode: action.postalCode,
-            city: action.city,
-            province: action.province,
             timeZone: action.timeZone,
             dayCutover: action.dayCutover,
           });
+          await createVenueSettings(
+            tx,
+            {
+              name: action.name,
+              addressLine1: action.addressLine1,
+              addressLine2: action.addressLine2,
+              postalCode: action.postalCode,
+              city: action.city,
+              province: action.province,
+            },
+            null,
+          );
           // A line with no more specific route fires to the default station; with no active
           // default, firing fails with `station.no_default`. So a fresh venue ships one.
           await tx.insert(kitchenStations).values({

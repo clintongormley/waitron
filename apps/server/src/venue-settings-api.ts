@@ -170,15 +170,15 @@ export function mountVenueSettingsApi(
 ): void {
   const gated = <T>(
     sessionId: string,
-    fn: (tx: Transaction) => Promise<T>,
+    fn: (tx: Transaction, personId: string) => Promise<T>,
     permission: "venue.configure" | "venue.view" = "venue.configure",
   ) =>
     withTransaction(deps.db, async (tx) => {
-      await authorizeManager(tx, {
+      const { authorizedBy } = await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission,
       });
-      return fn(tx);
+      return fn(tx, authorizedBy);
     });
   app.get("/management-api/venue-details", (c) =>
     run(c, log, async () => {
@@ -248,8 +248,13 @@ export function mountVenueSettingsApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<unknown>(c);
-      const result = await gated(sessionId, (tx) =>
-        writeVenueDetails(tx, body as VenueDetailWrite, (deps.now ?? (() => new Date()))()),
+      const result = await gated(sessionId, (tx, personId) =>
+        writeVenueDetails(
+          tx,
+          body as VenueDetailWrite,
+          (deps.now ?? (() => new Date()))(),
+          personId,
+        ),
       );
       return c.json(result);
     }),

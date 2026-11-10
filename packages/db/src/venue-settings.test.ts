@@ -54,10 +54,18 @@ describe("the venue document", () => {
     });
   });
 
+  it("keeps the interim location identity independent of the venue document", async () => {
+    const [row] = await suite.db
+      .insert(locations)
+      .values({ invoiceLocales: ["es"], operationDescription: "Meals" })
+      .returning({ id: locations.id });
+    expect(await api.venueLocationId(suite.db)).toBe(row!.id);
+  });
+
   it("refuses a locations row without its venue document", async () => {
     await suite.db
       .insert(locations)
-      .values({ name: "Old name", invoiceLocales: ["es"], operationDescription: "Meals" });
+      .values({ invoiceLocales: ["es"], operationDescription: "Meals" });
     await expect(withTransaction(suite.db, api.readVenue)).rejects.toMatchObject({
       code: "venue.not_found",
       params: {},
@@ -65,15 +73,12 @@ describe("the venue document", () => {
   });
 
   it("merges document fields with the remaining location fields and reads place in the clock query", async () => {
-    await suite.db
-      .insert(locations)
-      .values({
-        name: "Old name",
-        invoiceLocales: ["en", "es"],
-        operationDescription: "Meals",
-        timeZone: "Europe/London",
-        dayCutover: "04:00:00",
-      });
+    await suite.db.insert(locations).values({
+      invoiceLocales: ["en", "es"],
+      operationDescription: "Meals",
+      timeZone: "Europe/London",
+      dayCutover: "04:00:00",
+    });
     await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
     expect(await withTransaction(suite.db, api.readVenue)).toEqual({
       ...doc,
@@ -133,7 +138,7 @@ describe("the venue document", () => {
   it("the joined clock read refuses the same invalid document version as the settings reader", async () => {
     await suite.db
       .insert(locations)
-      .values({ name: "Old name", invoiceLocales: ["es"], operationDescription: "Meals" });
+      .values({ invoiceLocales: ["es"], operationDescription: "Meals" });
     await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
     await suite.db.update(settings).set({ version: 2 }).where(eq(settings.module, "venue"));
     for (const read of [api.readVenueSettings, api.readVenueClockAndPlace])

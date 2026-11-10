@@ -154,5 +154,5 @@ export async function readVenueClock(tx: Transaction): Promise<BusinessDayClock>
 
 /** Interim, until the schema stops keying rows by location: the one `locations` row's id. */
 export async function venueLocationId(tx: Transaction): Promise<string> {
-  return (await venueRow(tx)).id;
+  return theOneRow(await tx.select({ id: locations.id }).from(locations).limit(2)).id;
 }

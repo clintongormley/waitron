@@ -73,14 +73,33 @@ export async function seedVenue(
   const [existing] = await db.select({ id: locations.id }).from(locations).limit(1);
   if (existing) throw new Error(`seedVenue: a venue row already exists (${existing.id})`);
   await seedTenant(db);
-  const { defaultCatalogueId, ...columns } = overrides;
+  const {
+    defaultCatalogueId,
+    name,
+    addressLine1,
+    addressLine2,
+    postalCode,
+    city,
+    province,
+    ...columns
+  } = overrides;
   await db.insert(locations).values({
-    name: "Test venue",
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
     ...columns,
     ...(defaultCatalogueId === undefined ? {} : { catalogueId: defaultCatalogueId }),
   });
+  const doc: Partial<VenueSettings> = {};
+  for (const [key, value] of Object.entries({
+    name,
+    addressLine1,
+    addressLine2,
+    postalCode,
+    city,
+    province,
+  }))
+    if (value !== undefined) Object.assign(doc, { [key]: value });
+  await seedVenueSettings(db, doc);
 }
 
 /** Seeds one node and returns its id: at the venue unless `location` is given. */
