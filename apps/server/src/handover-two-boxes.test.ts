@@ -36,7 +36,6 @@ import { compareFinalCopy } from "./handover-compare.js";
 import { mountHandoverDestinationApi } from "./handover-destination-api.js";
 import { receivedCopyPath } from "./handover-destination-duty.js";
 import { createHandoverGate } from "./handover-gate.js";
-import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mountHandoverSourceStartApi } from "./handover-source-start-api.js";
 import { advanceHandover } from "./handover-store.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -139,7 +138,6 @@ async function joined() {
     }),
   );
   const session = await openManagementSession(mainBox.db, "admin");
-  await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, session.token));
 
   const bundleApp = new Hono();
   mountMirrorBundleApi(bundleApp, {
@@ -255,6 +253,9 @@ async function joined() {
       stateDir: mainState,
       migrationsRoot: null,
       advertisedOrigin: MAIN_URL,
+      credentialKeyRing: TOTP_KEY_RING,
+      rpId: "localhost",
+      origin: "http://localhost",
       venueCanPromote: true,
       gate,
       stepDownAfterOffer,
@@ -278,6 +279,7 @@ async function joined() {
         body: JSON.stringify({
           operationId: OP,
           destinationNodeId: spareId,
+          signIn: { method: "password", password: PASSWORD },
         }),
       },
       { incoming: { socket } },

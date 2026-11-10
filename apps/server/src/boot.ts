@@ -3595,6 +3595,9 @@ async function bootServer(
       stateDir: config.stateDir,
       migrationsRoot: config.migrationsRoot,
       advertisedOrigin: config.advertisedOrigin,
+      credentialKeyRing: totpKeyRing,
+      rpId: config.managementRpId,
+      origin: config.managementOrigin,
       venueCanPromote: nodePreparation.hasRecoveryOperation,
       gate: handoverGate,
       stepDownAfterOffer: async (c, binding) => {

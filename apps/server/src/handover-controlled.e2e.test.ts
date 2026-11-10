@@ -18,6 +18,7 @@
 //   folder, but on a test clock ten minutes behind, over an empty history, and with no outside
 //   release check or internet clock; it is provisioning's, not the setup page's.
 // - Neither box has backup settings, which the offer compares.
+// - The dashboard session is minted; the password it then signs in with is checked for real.
 // - M1's certificate is sealed as setup seals one, not through the dashboard's install route.
 // - The test calls `startServer`, so production's entry steps before it never run.
 // - `WAITRON_MIN_TICK_MS` and `WAITRON_MAX_TICK_MS` set how often its duties run.
@@ -929,17 +930,12 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
 
     m1Certificate = await certificateCard(boxes, m1);
     m1SweepsBeforeStepdown = m1.sweeps;
-    const confirmed = await ask(m1, "/management-api/session/me/fresh-sign-in", {
-      cookie: boxes.adminCookie,
-      body: { method: "password", password: PASSWORD },
-    });
-    expect(confirmed.status).toBe(204);
-    await confirmed.text();
     const started = await ask(m1, "/management-api/handover", {
       cookie: boxes.adminCookie,
       body: {
         operationId: OP,
         destinationNodeId: m2.nodeId,
+        signIn: { method: "password", password: PASSWORD },
       },
     });
     const offerText = await started.text();

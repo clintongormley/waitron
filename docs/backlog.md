@@ -1398,13 +1398,14 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   explains its effect before changing access.
   [Correction](backlog/self-service-refusals.md#sign-in).
 
-- **A1437. Dashboard sign-in and SMS through Cloud — email/browser checks, enrolment and SMS remain.**
-  The [ask-again plan](superpowers/plans/2026-11-09-a1437-1-dashboard-reproof.md) now covers
-  backups, recovery material, exports, people, your own sign-in, connections, fiscal and box
-  actions through the fifteen-minute session window. Own-account changes retain their
-  authenticator-code check; sessionless promotion and mirror creation retain body credentials.
-  A Google-only account needs a password from password reset to open the window; Google proof
-  remains open. Continue with the later steps in the
+- **A1437. Dashboard sign-in and SMS through Cloud — handover, then email/browser checks, enrolment and SMS.**
+  Backups, recovery material, exports, people, your own sign-in, connections and fiscal/box
+  changes use the fifteen-minute session window. Handover still asks for its per-action password;
+  convert its newly added dashboard caller and server route together in the next cut (watcher,
+  10 November, 23:33). The [ask-again plan](superpowers/plans/2026-11-09-a1437-1-dashboard-reproof.md)
+  retains current authenticator codes for own-account changes; sessionless promotion and mirror
+  creation keep body credentials. A Google-only account needs a password from password reset
+  to open the window. Google proof and the later sign-in steps remain in the
   [design](superpowers/specs/2026-11-09-a1437-dashboard-sign-in-rules-design.md).
 
 - **A venue without Cloud gets no dashboard email codes, texts or Google sign-in (left by A1437).**
