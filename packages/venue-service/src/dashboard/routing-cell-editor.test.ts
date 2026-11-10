@@ -300,6 +300,7 @@ it("puts Clear setting on the left after Cancel, still red, with Save alone on t
   const save = button(el, "save-cell")!;
   expect(clear.variant).toBe("danger");
   const group = cancel.parentElement!;
+  expect(group.localName).toBe("wt-form-actions");
   expect(cancel.slot).toBe("cancel");
   expect(clear.slot).toBe("cancel");
   expect([...group.querySelectorAll('[slot="cancel"]')]).toEqual([cancel, clear]);

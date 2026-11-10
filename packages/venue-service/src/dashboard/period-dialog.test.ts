@@ -812,9 +812,8 @@ it("Delete… shows only when deletable and editing", async () => {
   const footer = editing.shadowRoot!.querySelector("wt-modal > wt-form-actions[slot=footer]");
   expect(footer).not.toBeNull();
   expect(deleteButton(editing)!.closest("wt-form-actions")).toBe(footer);
-  const cancelGroup = footer!;
   expect(
-    [...cancelGroup!.querySelectorAll("wt-button[slot=cancel]")].map((button) =>
+    [...footer!.querySelectorAll(":scope > wt-button[slot=cancel]")].map((button) =>
       button.textContent!.trim(),
     ),
   ).toEqual(["Cancel", "Delete…"]);

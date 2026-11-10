@@ -535,6 +535,9 @@ describe("guided printer calibration", () => {
         q(el, "[data-test=calibration-next]")!.click();
         await flush(el);
         expect(q(el, "[data-test=calibration-step-2]")?.checkVisibility()).toBe(true);
+        const back = q(el, "[data-test=calibration-back]")!;
+        expect(back.parentElement!.localName).toBe("wt-form-actions");
+        expect(back.slot).toBe("cancel");
         expect(q(el, "[data-test=print-sample-receipt-p1]")?.checkVisibility()).toBe(true);
         expect(text(el, "[data-test=calibration-step-2]")).not.toMatch(/euro/i);
         q(el, "[data-test=calibration-next]")!.click();
