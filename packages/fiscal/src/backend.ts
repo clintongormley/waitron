@@ -68,12 +68,18 @@ export interface FiledVersionFigures {
 
 /**
  * A sale's filed figures: its newest version's, and those of the newest version the authority
- * accepted (null when none has been). Unreadable when the versions are not one line of fixes, or a
- * version's split is not one the regime itself files for an ordinary taxed sale (one base and VAT
- * per rate, nothing else), or does not sum to its totals.
+ * accepted (null when none has been). `newestAwaitingAnswer` is false once the authority has
+ * accepted or refused the newest version. Unreadable when the versions are not one line of fixes,
+ * or a version's split is not one the regime itself files for an ordinary taxed sale (one base and
+ * VAT per rate, nothing else), or does not sum to its totals.
  */
 export type FiledFigures =
-  | { readable: true; newest: FiledVersionFigures; newestAnswered: FiledVersionFigures | null }
+  | {
+      readable: true;
+      newest: FiledVersionFigures;
+      newestAnswered: FiledVersionFigures | null;
+      newestAwaitingAnswer: boolean;
+    }
   | { readable: false };
 
 /** The words a regime prints above and under its verification QR, in the regime's own wording. */

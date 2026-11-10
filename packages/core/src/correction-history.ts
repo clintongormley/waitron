@@ -36,8 +36,9 @@ export type CorrectionPreview = CorrectionAmountPreview &
  * file, as the lines and split `recordCorrection` takes. Refused with
  * `sale.correction_not_admitted` when the invoice was replaced by a full invoice, its regime does
  * not admit a correction of it, the regime cannot read the filed figures of it or of an earlier
- * correction (`filed_figures_unreadable`), or the newest of those figures still waits for the
- * regime's answer (`filed_figures_unanswered`); refused with `sale.correction_unsupported`, as
+ * correction (`filed_figures_unreadable`), or a newest version of them whose figures are not the
+ * answered ones still waits for the regime's answer (`filed_figures_unanswered`); refused with
+ * `sale.correction_unsupported`, as
  * `recordCorrection` is, when the invoice names a customer. When the answered figures differ from
  * the stored ones, the split is worked out from the answered figures and the lines from the stored
  * ones, and `sale.correction_scope_invalid` refuses a request naming lines (`filed_split_changed`)
@@ -70,9 +71,6 @@ export async function previewCorrectionAmounts(
   const figures = await measuredFigures(tx, backend, [stored.sale, ...stored.corrections]);
   if (!figures.readable) {
     throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_unreadable" });
-  }
-  if (figures.sales.some((sale) => sale.differs)) {
-    throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_unanswered" });
   }
   if (!figures.moved) {
     const { history, invoiceLines } = await readHistory(tx, saleId, stored);

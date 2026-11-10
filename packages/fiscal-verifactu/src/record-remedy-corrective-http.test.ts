@@ -626,3 +626,92 @@ it("refuses a production corrective invoice while no producer is set, writing no
   expect(await res.json()).toMatchObject({ error: { code: "sif.producer_unset" } });
   expect(await snapshot()).toEqual(before);
 });
+
+it("credits the whole of a refused original at its stored split when the agency refused its VAT fix too", async () => {
+  vi.stubEnv("WAITRON_PRODUCER_NAME", "PRODUCER PERSON");
+  vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "00000000T");
+  vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "1 Example Street, 00000 Nowhere (Province), Spain");
+  await productionOriginal();
+  generation.environment = "production";
+  const app = new Hono();
+  mountRecordRemedies(
+    app,
+    { db: suite.db, recordGeneration: generation },
+    () => {},
+    new Set(["record-correction", "corrective-invoice"]),
+  );
+  const remedy = (value: unknown) =>
+    app.request("/management-api/fiscal-records/remedy", {
+      method: "POST",
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
+      body: JSON.stringify(value),
+    });
+  const fixed = await remedy({
+    kind: "record-correction",
+    caseId: body.caseId,
+    registroId: body.registroId,
+    actionKey: "fix-at-10",
+    reason: "Filed at the wrong VAT rate",
+    facts: {
+      breakdown: [
+        {
+          ClaveRegimen: "01",
+          CalificacionOperacion: "S1",
+          TipoImpositivo: "10.00",
+          BaseImponibleOimporteNoSujeto: "11.00",
+          CuotaRepercutida: "1.10",
+        },
+      ],
+      taxTotal: "1.10",
+      total: "12.10",
+    },
+  });
+  expect(fixed.status).toBe(200);
+  const [fix] = await suite.db
+    .select()
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.correctsRegistroId, body.registroId as string));
+  await suite.db
+    .update(envios)
+    .set({ estado: "rechazado", codigoError: "1161" })
+    .where(eq(envios.registroId, fix!.id));
+  const fixCase = await withTransaction(suite.db, (tx) =>
+    openFilingCase(tx, {
+      registroId: fix!.id,
+      cause: "fiscal.registro_rechazado",
+      evidence: { codigo: 1161, mensaje: null, csv: null },
+      now: NOW,
+    }),
+  );
+  const [line] = await suite.db.select().from(saleLines).where(eq(saleLines.saleId, fix!.saleId));
+  correction.wholeInvoice = true;
+  correction.total = "-12.10";
+  correction.lines[0] = {
+    ...correction.lines[0]!,
+    correctsLineId: line!.id,
+    productId: null,
+    quantity: "-2",
+    lineTotal: "-10.00",
+    lineGross: "-12.10",
+  };
+
+  const res = await remedy({ ...body, caseId: fixCase.id, registroId: fix!.id });
+
+  const reply = (await res.json()) as { registroId: string };
+  expect([res.status, reply]).toMatchObject([200, { registroId: expect.any(String) }]);
+  const [credit] = await suite.db
+    .select()
+    .from(registrosFacturacion)
+    .where(eq(registrosFacturacion.id, reply.registroId));
+  expect(credit).toMatchObject({
+    importeTotal: "-12.10",
+    cuotaTotal: "-2.10",
+    desglose: [
+      expect.objectContaining({
+        TipoImpositivo: "21.00",
+        BaseImponibleOimporteNoSujeto: "-10.00",
+        CuotaRepercutida: "-2.10",
+      }),
+    ],
+  });
+});

@@ -163,6 +163,31 @@ describe("a fixed filing: both judge the newest version; the newest answered is 
       readable: true,
       newest: V10,
       newestAnswered: answered,
+      newestAwaitingAnswer: fix === "pendiente",
+    });
+  });
+
+  it.each([
+    ["pendiente", true],
+    ["enviando", true],
+    ["detenido", true],
+    ["retenido", true],
+    [null, true],
+    ["aceptado", false],
+    ["aceptado_con_errores", false],
+    ["rechazado", false],
+  ] as const)("a fix in %s waits for an answer: %s", async (estado, awaiting) => {
+    const original = await file({ estado: "rechazado" });
+    await file({
+      figures: AT_10,
+      estado,
+      sale: original.saleId,
+      fixes: { registroId: original.registroId, number: original.number },
+    });
+
+    expect((await figuresFor(original.saleId)).get(original.saleId)).toMatchObject({
+      readable: true,
+      newestAwaitingAnswer: awaiting,
     });
   });
 });

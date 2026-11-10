@@ -18,6 +18,10 @@ type Version = Pick<
 const IDS_PER_QUERY = 1000;
 
 const ANSWERED = new Set(["aceptado", "aceptado_con_errores"]);
+/** Every other state, and no envío, still waits for an answer: a held (`detenido`, `retenido`)
+ * version has none yet, and is sent by a probe or once released (drain.ts,
+ * record-remedy-held.ts). */
+const ACCEPTED_OR_REFUSED = new Set([...ANSWERED, "rechazado"]);
 
 /** The keys `toDetalleDesglose` (./backend.ts) writes, and no other. */
 const DETAIL_KEYS = new Set([
@@ -29,8 +33,9 @@ const DETAIL_KEYS = new Set([
 ]);
 
 /**
- * Each sale's newest alta version (the one no other alta of it fixes, as admission judges) and the
- * newest version of that line of fixes whose submission was accepted, with or without errors.
+ * Each sale's newest alta version (the one no other alta of it fixes, as admission judges), whether
+ * it still waits for AEAT's answer, and the newest version of that line of fixes whose submission
+ * was accepted, with or without errors.
  */
 export async function filedFiguresFor(
   tx: Transaction,
@@ -74,7 +79,12 @@ function figuresOf(versions: readonly Version[]): FiledFigures {
   const newest = versionFigures(latest[0]!);
   const newestAnswered = answered === undefined ? null : versionFigures(answered);
   if (newest === undefined || newestAnswered === undefined) return { readable: false };
-  return { readable: true, newest, newestAnswered };
+  return {
+    readable: true,
+    newest,
+    newestAnswered,
+    newestAwaitingAnswer: !ACCEPTED_OR_REFUSED.has(latest[0]!.estado ?? ""),
+  };
 }
 
 /** The version's figures, or undefined when they are not the shape this backend files. */

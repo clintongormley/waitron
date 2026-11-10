@@ -531,7 +531,12 @@ function version(total: string, split: Split) {
 }
 
 function answered(total: string, split: Split): FiledFigures {
-  return { readable: true, newest: version(total, split), newestAnswered: version(total, split) };
+  return {
+    readable: true,
+    newest: version(total, split),
+    newestAnswered: version(total, split),
+    newestAwaitingAnswer: false,
+  };
 }
 
 /** A correction of the sold €12.10 steak at 21%: one line taking `base`/`gross` from it. */
@@ -568,6 +573,7 @@ const FIXED: FixedCase[] = [
           readable: true,
           newest: version("12.10", [["10.00", "11.00", "1.10"]]),
           newestAnswered: null,
+          newestAwaitingAnswer: true,
         },
       ],
     ],
@@ -587,12 +593,47 @@ const FIXED: FixedCase[] = [
             ["21.00", "10.00", "2.10"],
             ["10.00", "0.00", "0.00"],
           ]),
+          newestAwaitingAnswer: true,
         },
       ],
     ],
     undefined,
     steakDraft("-6.05", "-5.00", "-6.05", [["21.00", "-5.00", "-1.05"]]),
     { code: "sale.correction_not_admitted", params: { reason: "filed_figures_unanswered" } },
+  ],
+  [
+    "was fixed to 10% and the fix refused, files the split at 21% as stored",
+    (invoice) => [
+      [
+        invoice,
+        {
+          readable: true,
+          newest: version("12.10", [["10.00", "11.00", "1.10"]]),
+          newestAnswered: null,
+          newestAwaitingAnswer: false,
+        },
+      ],
+    ],
+    undefined,
+    steakDraft("-6.05", "-5.00", "-6.05", [["21.00", "-5.00", "-1.05"]]),
+    [["21.00", "-5.00", "-1.05"]],
+  ],
+  [
+    "was fixed to 10% and answered, then refixed to 21% and refused, files the split at 10%",
+    (invoice) => [
+      [
+        invoice,
+        {
+          readable: true,
+          newest: version("12.10", [["21.00", "10.00", "2.10"]]),
+          newestAnswered: version("12.10", [["10.00", "11.00", "1.10"]]),
+          newestAwaitingAnswer: false,
+        },
+      ],
+    ],
+    undefined,
+    HALF_AT_10,
+    [["10.00", "-5.50", "-0.55"]],
   ],
   [
     "cannot be read, refuses",

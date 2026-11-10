@@ -427,6 +427,7 @@ describe("filedFiguresFor", () => {
       readable: true,
       newest: { total, vatBreakdown },
       newestAnswered: { total, vatBreakdown },
+      newestAwaitingAnswer: false,
     });
 
     const answer = await ask();

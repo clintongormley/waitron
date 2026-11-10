@@ -480,6 +480,7 @@ const filed = (total: string, ...split: (readonly [string, string, string])[]) =
     })),
   },
   newestAnswered: null,
+  newestAwaitingAnswer: true,
 });
 const AT_21 = ["21.00", "10.00", "2.10"] as const;
 const CHANGED = "filed_figures_unanswered";
@@ -503,7 +504,7 @@ it.each<[name: string, whose: "invoice" | "corrective", figures: FiledFigures, r
 
 const answered = (total: string, ...split: (readonly [string, string, string])[]): FiledFigures => {
   const figures = filed(total, ...split);
-  return { ...figures, newestAnswered: figures.newest };
+  return { ...figures, newestAnswered: figures.newest, newestAwaitingAnswer: false };
 };
 const scopeInvalid = (reason: string) => ({
   code: "sale.correction_scope_invalid",
@@ -521,6 +522,19 @@ it.each<
   [
     "kept its figures in a fix still queued, previews the steak's own split",
     async (saleId) => [saleId, filed("12.10", AT_21)],
+    "steak",
+    {
+      gross: "6.05",
+      vatBreakdown: [{ rate: "21.00", base: "5.00", tax: "1.05" }],
+      lines: [{ vatRate: "21.00", lineTotal: "-5.00", lineGross: "-6.05" }],
+    },
+  ],
+  [
+    "had a fix to 10% refused, previews the steak's own split",
+    async (saleId) => [
+      saleId,
+      { ...filed("12.10", ["10.00", "11.00", "1.10"]), newestAwaitingAnswer: false },
+    ],
     "steak",
     {
       gross: "6.05",

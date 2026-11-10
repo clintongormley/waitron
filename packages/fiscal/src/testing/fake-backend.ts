@@ -290,8 +290,8 @@ export class FakeFiscalBackend implements FiscalBackend {
   }
 
   /**
-   * Each filed sale's or correction's total and split, as both versions, unless a test set it; a
-   * substitution, whose split the fake does not store, is absent.
+   * Each filed sale's or correction's total and split, as both versions, answered, unless a test
+   * set it; a substitution, whose split the fake does not store, is absent.
    */
   async filedFiguresFor(
     tx: Transaction,
@@ -317,7 +317,12 @@ export class FakeFiscalBackend implements FiscalBackend {
       };
       answer.set(
         saleId,
-        this.filedFigures.get(saleId) ?? { readable: true, newest: filed, newestAnswered: filed },
+        this.filedFigures.get(saleId) ?? {
+          readable: true,
+          newest: filed,
+          newestAnswered: filed,
+          newestAwaitingAnswer: false,
+        },
       );
     }
     return answer;

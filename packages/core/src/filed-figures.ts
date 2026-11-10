@@ -1,6 +1,13 @@
 import type { Transaction } from "@waitron/db";
 import type { FiscalBackend, FiledVersionFigures } from "@waitron/fiscal";
-import { decimal, decimalToBasisPoints, decimalToCents, type SaleId } from "@waitron/shared";
+import {
+  AppError,
+  decimal,
+  decimalToBasisPoints,
+  decimalToCents,
+  type SaleId,
+} from "@waitron/shared";
+import "./errors.js";
 
 type Split = readonly { rate: string; base: string; tax: string }[];
 
@@ -15,14 +22,14 @@ export interface MeasuredSale {
   id: string;
   /** The newest answered version's figures, else the stored ones; the total in cents. */
   measured: { total: number; vatBreakdown: Split };
-  /** The newest filed version is not the measured one: a fix still waits for its answer. */
-  differs: boolean;
 }
 
 /**
  * Each sale's figures as the regime holds them. Unreadable when the backend reads no filed figures,
- * or none or unreadable ones for any sale. `moved` when any measured figures differ from the stored
- * ones; `measuredRemaining` is the sum of every measured total, in cents.
+ * or none or unreadable ones for any sale. Refused with `sale.correction_not_admitted`
+ * (`filed_figures_unanswered`) while a sale's newest version, with figures other than the measured
+ * ones, still waits for the regime's answer. `moved` when any measured figures differ from the
+ * stored ones; `measuredRemaining` is the sum of every measured total, in cents.
  */
 export async function measuredFigures(
   tx: Transaction,
@@ -38,6 +45,7 @@ export async function measuredFigures(
     stored.map((sale) => sale.id as SaleId),
   );
   const sales: MeasuredSale[] = [];
+  let unanswered = false;
   for (const sale of stored) {
     const figures = filed.get(sale.id as SaleId);
     if (figures === undefined || !figures.readable) return { readable: false };
@@ -45,7 +53,11 @@ export async function measuredFigures(
       figures.newestAnswered === null
         ? { total: sale.total, vatBreakdown: sale.vatBreakdown }
         : atCents(figures.newestAnswered);
-    sales.push({ id: sale.id, measured, differs: !sameFigures(atCents(figures.newest), measured) });
+    unanswered ||= figures.newestAwaitingAnswer && !sameFigures(atCents(figures.newest), measured);
+    sales.push({ id: sale.id, measured });
+  }
+  if (unanswered) {
+    throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_unanswered" });
   }
   return {
     readable: true,

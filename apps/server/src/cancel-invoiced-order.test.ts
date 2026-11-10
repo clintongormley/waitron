@@ -5,7 +5,7 @@ import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -23,6 +23,7 @@ import {
 } from "@waitron/db";
 import { createExtraList, createProduct, units, writeProductModifiers } from "@waitron/catalogue";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
+import type { FiscalBackend } from "@waitron/fiscal";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import {
   createPinThrottle,
@@ -982,6 +983,67 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect(fiscalSnapshot()).toEqual(before);
     expect(await statusOf(venue, id)).toBe("placed");
     expect(await creditsOf(original.id)).toEqual(raised);
+  });
+
+  /** Answers, for every sale, a newest version fixed to 10% that no accepted version precedes. */
+  function fixedAt10(newestAwaitingAnswer: boolean) {
+    const fix = {
+      total: decimal("3.00"),
+      vatBreakdown: [{ rate: decimal("10.00"), base: decimal("2.73"), tax: decimal("0.27") }],
+    };
+    const spy = vi
+      .spyOn(venue.backend as Required<FiscalBackend>, "filedFiguresFor")
+      .mockImplementation((_tx, saleIds) =>
+        Promise.resolve(
+          new Map(
+            saleIds.map((saleId) => [
+              saleId,
+              { readable: true, newest: fix, newestAnswered: null, newestAwaitingAnswer },
+            ]),
+          ),
+        ),
+      );
+    onTestFinished(() => {
+      spy.mockRestore();
+    });
+  }
+
+  it("refuses an invoice whose VAT fix waits for the tax agency's answer, writing nothing", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    fixedAt10(true);
+    const before = fiscalSnapshot();
+
+    const answer = await cancel(id);
+
+    expect({ status: answer.status, json: answer.json }).toMatchObject({
+      status: 409,
+      json: {
+        code: "sale.correction_not_admitted",
+        params: { reason: "filed_figures_unanswered" },
+      },
+    });
+    expect(fiscalSnapshot()).toEqual(before);
+    expect(await statusOf(venue, id)).toBe("placed");
+    expect(await creditsOf(original.id)).toEqual([]);
+  });
+
+  it("credits an invoice whose VAT fix the tax agency refused at its stored split", async () => {
+    const id = await placed([{ name: "Caña", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    fixedAt10(false);
+
+    const answer = await cancel(id);
+
+    expect(answer).toEqual({ status: 200, json: { body: "" } });
+    const [credit] = await creditsOf(original.id);
+    expect(credit!.vatBreakdown).toEqual(
+      original.vatBreakdown.map((group) => ({
+        rate: group.rate,
+        base: negate(group.base),
+        tax: negate(group.tax),
+      })),
+    );
   });
 
   // The route sends only a reason; both refusals below come from the invoice as stored, so a

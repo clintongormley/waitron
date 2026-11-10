@@ -213,7 +213,9 @@ export async function recordCorrection(
   requireSupportedCorrection(original.counterpartyTaxId, input.correctsSaleId);
 
   const measured =
-    partial === undefined ? undefined : await measuredHistory(tx, backend, input, original);
+    partial === undefined
+      ? undefined
+      : await measuredHistory(tx, backend, input.correctsSaleId, original);
 
   // After the gate, so a session that may not correct is not told what is left on the invoice.
   // Compared, stored and filed at the cent amount the row stores, not the unrounded input.
@@ -238,7 +240,9 @@ export async function recordCorrection(
     derived ?? wholeInvoiceBreakdown(input.correctsSaleId, original, totalCents, input.lines);
   // The stored `sales.vat_breakdown` and the filed breakdown are this one value.
   const vatBreakdown =
-    derived ?? (await movedSplit(tx, backend, input, original, correction)) ?? storedWhole;
+    derived ??
+    (await movedSplit(tx, backend, input.correctsSaleId, original, correction)) ??
+    storedWhole;
   // A whole-invoice credit converts its lines before a number is allocated, so a line value the
   // converters refuse (overflow, or not a decimal) is refused with nothing written; the sale's id
   // is filled in once it exists.
@@ -388,49 +392,38 @@ export async function recordCorrection(
 /**
  * The invoice's and its earlier corrections' figures as the regime holds them. Refused with
  * `sale.correction_history_unusable` when they cannot be read, a backend reading none included, and
- * with `sale.correction_not_admitted` while a filed fix of any of them waits for its answer.
+ * as `measuredFigures` refuses a fix still waiting for its answer.
  */
 async function measuredHistory(
   tx: Transaction,
   backend: FiscalBackend,
-  input: RecordCorrectionInput,
+  saleId: SaleId,
   original: { total: number; vatBreakdown: { rate: string; base: string; tax: string }[] },
 ) {
   const earlier = await tx
     .select({ id: sales.id, total: sales.total, vatBreakdown: sales.vatBreakdown })
     .from(sales)
-    .where(eq(sales.correctsSaleId, input.correctsSaleId));
-  const measured = await measuredFigures(tx, backend, [
-    { id: input.correctsSaleId, ...original },
-    ...earlier,
-  ]);
+    .where(eq(sales.correctsSaleId, saleId));
+  const measured = await measuredFigures(tx, backend, [{ id: saleId, ...original }, ...earlier]);
   if (!measured.readable) throw new AppError("sale.correction_history_unusable", {});
-  if (measured.sales.some((sale) => sale.differs)) {
-    throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_unanswered" });
-  }
   return measured;
 }
 
 /**
  * For a whole-invoice credit, the split the regime accepted negated, when the invoice's filed
  * figures moved from the stored ones; else none, and a backend reading no filed figures keeps the
- * stored split. Refused with `sale.correction_history_unusable` when they cannot be read, or when
- * the move changed the total the credit's lines reverse; with `sale.correction_not_admitted` while
- * a filed fix waits for its answer.
+ * stored split. Refused as `measuredHistory` refuses, and with `sale.correction_history_unusable`
+ * when the move changed the total the credit's lines reverse.
  */
 async function movedSplit(
   tx: Transaction,
   backend: FiscalBackend,
-  input: RecordCorrectionInput,
+  saleId: SaleId,
   original: { total: number; vatBreakdown: { rate: string; base: string; tax: string }[] },
   correction: Decimal,
 ): Promise<VatBreakdownLine[] | undefined> {
   if (!backend.filedFiguresFor) return undefined;
-  const measured = await measuredFigures(tx, backend, [{ id: input.correctsSaleId, ...original }]);
-  if (!measured.readable) throw new AppError("sale.correction_history_unusable", {});
-  if (measured.sales[0]!.differs) {
-    throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_unanswered" });
-  }
+  const measured = await measuredHistory(tx, backend, saleId, original);
   if (measured.sales[0]!.measured.total !== original.total) {
     throw new AppError("sale.correction_history_unusable", {});
   }

@@ -903,12 +903,17 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
     ["figures it cannot read", { readable: false as const }, UNUSABLE],
     [
       "a fix that changed its total",
-      { readable: true as const, newest: FIXED, newestAnswered: FIXED },
+      {
+        readable: true as const,
+        newest: FIXED,
+        newestAnswered: FIXED,
+        newestAwaitingAnswer: false,
+      },
       UNUSABLE,
     ],
     [
       "a fix the agency has not answered",
-      { readable: true as const, newest: AT_10, newestAnswered: null },
+      { readable: true as const, newest: AT_10, newestAnswered: null, newestAwaitingAnswer: true },
       { code: "sale.correction_not_admitted", params: { reason: "filed_figures_unanswered" } },
     ],
   ])("refuses to credit a whole invoice whose filing holds %s", async (_, figures, refusal) => {
@@ -925,6 +930,36 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
       refusal,
     );
   });
+  it.each([
+    [
+      "nothing accepted, at the stored split",
+      null,
+      [{ rate: "21.00", base: "-0.45", tax: "-0.10" }],
+    ],
+    ["an accepted fix, at its split", AT_10, [{ rate: "10.00", base: "-0.50", tax: "-0.05" }]],
+  ])(
+    "credits a whole invoice whose newest fix the agency refused, %s",
+    async (_, newestAnswered, filed) => {
+      const backend = new FilesBreakdownsBackend(suite.db);
+      const { saleId: originalId } = await sellMosto(backend);
+      backend.setFiledFigures(originalId, {
+        readable: true,
+        newest: FIXED,
+        newestAnswered,
+        newestAwaitingAnswer: false,
+      });
+      const [reversed] = wholeCredit().lines;
+      const correctsLineId = await soldLineId(originalId);
+
+      await correct(
+        backend,
+        originalId,
+        wholeCredit({ lines: [{ ...reversed!, correctsLineId }] }),
+      );
+
+      expect(backend.filed).toEqual([filed]);
+    },
+  );
 });
 
 describe("recordCorrection — decoupled refund (the corrective is unsettled)", () => {
