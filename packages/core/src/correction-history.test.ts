@@ -426,6 +426,7 @@ it("refuses an invoice with a named customer, as the writer does", async () => {
     counterparty: { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" },
     recipientAddress: "Calle Mayor 2, 28013 Madrid, España",
   });
+  backend.setFiledFigures(saleId, { readable: false });
 
   expect(await captureError(() => preview(saleId))).toMatchObject({
     code: "sale.correction_unsupported",

@@ -91,6 +91,17 @@ describe("reads of a sale's filed alta", () => {
     ]);
   });
 
+  it("finds the alta admission judges through the sale index", async () => {
+    const node = await seedNode(suite.db);
+    const plan = await planOf((tx) =>
+      backend().correctionAdmissionFor(tx, brandSaleId(newId()), node.nodeId),
+    );
+    expect(plan).toEqual([
+      "SEARCH registros_facturacion USING INDEX registros_sale_idx (sale_id=?)",
+      "SEARCH envios USING INDEX sqlite_autoindex_envios_1 (registro_id=?) LEFT-JOIN",
+    ]);
+  });
+
   it("finds the alta a void cancels through the sale index", async () => {
     const node = await seedNode(suite.db);
     const plan = await planOf((tx) =>

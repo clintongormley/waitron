@@ -320,7 +320,8 @@ that disagrees.
    does not equal `cuota_total`. One query for all ids, through `registros_sale_idx`. fiscal-none
    leaves it out (admission already answers `unsupported` there); the fake backend answers from the
    stored `sales.total` and `sales.vat_breakdown` for both versions, with a setter to override one
-   sale.
+   sale. (As built: one query per 1,000 sale ids, and the fake backend answers from its own filed
+   records; see [As built](#as-built-2026-11-10).)
 2. **Option C is dropped** from question 1, and with it design point 3's "slice 4 … ships with this
    refusal": the owner rejected refusing ("we need to be able to do the refund"). The refusal of a
    moved invoice is slice 3's only, until slice 3b.
@@ -638,7 +639,7 @@ every rate ends exact, the agency accepts both, and the alternative reopens two 
 
 **Slice 3 (this branch), after clearance:**
 
-- **R1. `filedFiguresFor`, failing first** (new `fiscal-verifactu/src/filed-figures.test.ts`, the
+- **R1. `filedFiguresFor`, failing first** (`fiscal-verifactu/src/correction-admission.test.ts`, where the separate file was merged, the
   clearance's point 1): an unfixed invoice and a corrective answer their own figures for both
   versions; a fixed version's figures are the fix's (a fix row at 10% beside a refused first
   version at 21%), `newestAnswered` null while the fix is queued and the fix's once accepted; a
@@ -694,13 +695,13 @@ paragraph's earlier text.
 
 **The preview's order.** `previewCorrectionAmounts` (`packages/core/src/correction-history.ts`)
 refuses an invoice a full invoice replaced (`sale.correction_not_admitted`, reason `replaced`);
-asks the regime's `correctionAdmissionFor`, whose answers are unchanged; reads the stored sale and
-refuses a named-customer invoice with `sale.correction_unsupported`, through the writer's own
-`requireSupportedCorrection`; reads the earlier correctives' ids; asks `filedFiguresFor` for the
-invoice and each corrective, refusing `filed_figures_unreadable` (a sale absent from the answer,
-unreadable figures, or a backend with no `filedFiguresFor`) or `filed_figures_changed` (newest
-filed figures differ from the stored ones); reads the history and builds the lines; then runs slice
-1's calculator.
+asks the regime's `correctionAdmissionFor`, whose answers are unchanged; reads the stored sale and its earlier correctives' ids (refusing `sale.not_found`, or
+`sale.correction_history_unusable` when the sale is itself a correction); refuses a named-customer
+invoice with `sale.correction_unsupported`, through the writer's own `requireSupportedCorrection`;
+asks `filedFiguresFor` for the invoice and each corrective, refusing `filed_figures_unreadable` (a
+sale absent from the answer, unreadable figures, or a backend with no `filedFiguresFor`) or
+`filed_figures_changed` (newest filed figures differ from the stored ones); reads the history; runs
+slice 1's calculator; then builds the lines from its allocations.
 
 **`filedFiguresFor` as built.** It answers `newest` and `newestAnswered`; `newestAnswered` is unused
 until slice 3b. The Veri*Factu reader (`packages/fiscal-verifactu/src/filed-figures.ts`) reads
@@ -732,7 +733,7 @@ decision, one line each with what still covers it:
 - The eligible answer repeated before each admission refusal: the submission-state table owns it.
 - Core's two reader happy paths, two line-builder cases and two "regime lacks a member" cases,
   each merged into one case or table.
-- The fake backend's two-sale filed-figures case now uses one sale.
+- The fake backend's filed-figures case files one sale and one correction, not two sales.
 - From the earlier fix round: the remedy-path cancellation (the core-void case and
   `record-remedy-absent.test.ts` cover it), the exact partial read (the derived-path case and the
   end-to-end rounds) and the regime refusal passed through (the end-to-end refused original).

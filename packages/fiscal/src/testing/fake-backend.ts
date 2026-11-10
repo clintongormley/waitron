@@ -289,7 +289,10 @@ export class FakeFiscalBackend implements FiscalBackend {
     return Promise.resolve(this.admission);
   }
 
-  /** Each filed sale's or correction's total and split, as both versions, unless a test set it. */
+  /**
+   * Each filed sale's or correction's total and split, as both versions, unless a test set it; a
+   * substitution, whose split the fake does not store, is absent.
+   */
   async filedFiguresFor(
     tx: Transaction,
     saleIds: readonly SaleId[],
