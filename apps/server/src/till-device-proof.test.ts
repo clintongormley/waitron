@@ -357,7 +357,13 @@ describe("till refund device proof over HTTP", () => {
 });
 
 type DocumentRoute =
-  "bill-slip-copy" | "receipt" | "payment-slip" | "reprint" | "transaction-reprint" | "refund-reprint" | "drawer";
+  | "bill-slip-copy"
+  | "receipt"
+  | "payment-slip"
+  | "reprint"
+  | "transaction-reprint"
+  | "refund-reprint"
+  | "drawer";
 const documentRoutes: DocumentRoute[] = [
   "bill-slip-copy",
   "receipt",
@@ -379,9 +385,12 @@ async function documentRequest(kind: DocumentRoute) {
   if (kind === "bill-slip-copy") {
     const request = await paymentRequest("bill-reader");
     const response = await post(request.path, `${sessionCookie}; ${deviceCookie}`, request.body);
-    const result = await response.json() as { payment: { id: string } };
+    const result = (await response.json()) as { payment: { id: string } };
     expect(response.status).toBe(200);
-    return { path: `/api/working-orders/${request.id}/payments/${result.payment.id}/slip-copy`, body: {} };
+    return {
+      path: `/api/working-orders/${request.id}/payments/${result.payment.id}/slip-copy`,
+      body: {},
+    };
   }
   const payment = await paymentRequest(kind === "payment-slip" ? "reader" : "sale");
   const answer = await post(payment.path, `${sessionCookie}; ${deviceCookie}`, payment.body);

@@ -162,15 +162,13 @@ it("rejects a payment on another bill and offers no copy for an own-slip reader"
     await tx
       .insert(billPayments)
       .values({ ...row!, id: withoutBalance, submissionId: randomUUID(), remainingAfter: null });
-    await tx
-      .insert(payments)
-      .values({
-        ...capture!,
-        id: randomUUID(),
-        billPaymentId: withoutBalance,
-        paymentRef: randomUUID(),
-        externalRef: null,
-      });
+    await tx.insert(payments).values({
+      ...capture!,
+      id: randomUUID(),
+      billPaymentId: withoutBalance,
+      paymentRef: randomUUID(),
+      externalRef: null,
+    });
   });
   const missing = await send(
     venue.app,
