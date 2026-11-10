@@ -176,3 +176,21 @@ test("paints the message from the danger token", async () => {
   const message = getComputedStyle(el.shadowRoot!.querySelector<HTMLElement>("[data-error]")!);
   expect(message.color).toBe("rgb(1, 2, 3)");
 });
+
+test("spaces direct Cancel and Delete controls with the shared token and wraps them", async () => {
+  const el = await mount(
+    '<wt-form-actions><wt-button slot="cancel">Cancel</wt-button><wt-button slot="cancel" variant="danger">Delete</wt-button><wt-button>Save</wt-button></wt-form-actions>',
+  );
+  host.style.width = "320px";
+  host.style.setProperty("--wt-space-2", "13px");
+  const [cancel, remove, save] = [...el.querySelectorAll<HTMLElement>("wt-button")];
+  const first = cancel!.getBoundingClientRect();
+  const second = remove!.getBoundingClientRect();
+  expect(second.left - first.right).toBe(13);
+  expect(second.right).toBeLessThan(save!.getBoundingClientRect().left);
+  host.style.width = "180px";
+  const wrapped = remove!.getBoundingClientRect();
+  expect(wrapped.left).toBe(cancel!.getBoundingClientRect().left);
+  expect(wrapped.top - cancel!.getBoundingClientRect().bottom).toBe(13);
+  expect(save!.getBoundingClientRect().right).toBe(el.getBoundingClientRect().right);
+});

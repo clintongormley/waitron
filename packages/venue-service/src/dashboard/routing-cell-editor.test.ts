@@ -300,8 +300,9 @@ it("puts Clear setting on the left after Cancel, still red, with Save alone on t
   const save = button(el, "save-cell")!;
   expect(clear.variant).toBe("danger");
   const group = cancel.parentElement!;
-  expect(group.slot).toBe("cancel");
-  expect([...group.children]).toEqual([cancel, clear]);
+  expect(cancel.slot).toBe("cancel");
+  expect(clear.slot).toBe("cancel");
+  expect([...group.querySelectorAll('[slot="cancel"]')]).toEqual([cancel, clear]);
   expect(save.slot).toBe("");
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   expect(clear.getBoundingClientRect().left).toBeGreaterThan(cancel.getBoundingClientRect().right);

@@ -94,15 +94,10 @@ function expectNoRowUnderneath(picker: SectionAddProducts, body: HTMLElement, la
   expect(hit?.closest("li") ?? null, `${label}: a list row shows below the buttons`).toBeNull();
 }
 
-/** Shows the host's refusal in the `message` slot and the picker's none-chosen message: a product
+/** Shows the host's refusal through the row and the picker's none-chosen message: a product
  * is ticked, then the section takes it, so Add stays pressable with nothing left to add. */
 async function withMessages(picker: SectionAddProducts, add: HTMLElement): Promise<void> {
-  const message = document.createElement("p");
-  message.slot = "message";
-  message.setAttribute("role", "alert");
-  message.style.margin = "0";
-  message.textContent = "Some of these products could not be added. Try again.";
-  picker.append(message);
+  picker.requestError = "Some of these products could not be added. Try again.";
   picker.shadowRoot!.querySelector<HTMLInputElement>('input[value="p-000"]')!.click();
   picker.inSection = ["p-000"];
   await picker.updateComplete;
@@ -202,13 +197,8 @@ describe.each([
       await frame();
       const last = picker.shadowRoot!.querySelector<HTMLElement>("li:last-child")!;
       expect(last.getBoundingClientRect().bottom).toBeLessThanOrEqual(blockTop(picker));
-      const message = document.createElement("p");
-      message.slot = "message";
-      message.setAttribute("role", "alert");
-      message.style.margin = "0";
-      message.textContent = t("add_products.none_chosen");
       const before = picker.shadowRoot!.querySelector(".bottom")!.getBoundingClientRect().height;
-      picker.append(message);
+      picker.requestError = t("add_products.none_chosen");
       await frame();
       await frame();
       expect(
@@ -221,7 +211,7 @@ describe.each([
         ).toBeLessThanOrEqual(blockTop(picker));
         expectInView(last, body, "last product");
       });
-      message.textContent = Array(8).fill(t("add_products.none_chosen")).join(" ");
+      picker.requestError = Array(8).fill(t("add_products.none_chosen")).join(" ");
       await frame();
       await frame();
       await vi.waitFor(() => {
@@ -269,10 +259,7 @@ describe.each([
       body.scrollTop = body.scrollHeight / 2;
       await frame();
       const before = body.scrollTop;
-      const message = document.createElement("p");
-      message.slot = "message";
-      message.textContent = t("add_products.none_chosen");
-      picker.append(message);
+      picker.requestError = t("add_products.none_chosen");
       await frame();
       await frame();
       expect(body.scrollTop).toBe(before);

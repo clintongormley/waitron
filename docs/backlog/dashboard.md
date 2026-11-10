@@ -87,12 +87,10 @@ printer keys.
 
 ## A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left open
 
-Three dialogs still draw their own refusal because none has a `wt-form-actions` row in its
-  footer to hand it to: the menus screen's add-products window has its row inside the
-  `section-add-products` component, and `packages/bookings/src/dashboard/booking-form.ts` and
-  `apps/till/src/widgets/supervisor-override-dialog.ts` put bare `wt-button`s in the footer slot. A
-  `wt-form-actions` wrapped in another element inside a dialog's footer would keep its message in
-  the footer; none does today. Not looked at on screen after #961's review fixes.
+The booking form still puts bare buttons in the footer and keeps its refusal in the body
+(`packages/bookings/src/dashboard/booking-form.ts`). Add products now passes its request refusal
+into its sticky `wt-form-actions` row; supervisor approval hands its refusal to the dialog's footer
+row. The booking row remains part of the Forms refusal placement bundle.
 
 ## The form plumbing is hand-written per form
 
@@ -575,14 +573,11 @@ probes do not settle it. This stays inside the existing bundle rather than becom
 
 ## Bundle: Forms refusal placement
 
-4 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries remain after shared button spacing and the Add products/supervisor rows. The image,
+profile, purchase, import, backup and booking work is the second approved slice.
 
-- **Spacing for buttons grouped beside Cancel belongs in `wt-form-actions`.** The
-  `[Cancel] [Delete…] … [Save]` row (design-system.md → Forms) has each dialog space its own group;
-  move it into `packages/ui/src/components/wt-form-actions.ts`. Left open by A719 (#1838).
 - **A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left
-  open:** three dialogs still draw their own refusal because none has a `wt-form-actions` row in its
-  footer to hand it to. Not looked at on screen after #961's review fixes.
+  open:** the booking form still needs its footer row.
   [Detail](dashboard.md#a-forms-refusal-message-sits-at-the-bottom-of-the-form-above-the-buttons-c97-961--left-open)
 - **Loose ends left by C47 (#838/#839/#840/#841).**
   [Detail](dashboard.md#loose-ends-left-by-c47-838839840841)
@@ -1127,7 +1122,10 @@ Left as they were, from #827's review: unlike the two staff
 - `wt-form-error-summary` is deleted once nothing uses it. Besides its own files and exports in
     `packages/ui-core` and `packages/ui`, the `packages/ui` workbench demo
     (`packages/ui/demo/main.ts`) and the consumer test page `packages/ui-core/test/consumer/main.ts`,
-    which `packages/ui-core/test/package-consumer.test.mjs` loads, still use it.
+    which `packages/ui-core/test/package-consumer.test.mjs` loads, still use it. Waitron Cloud's portal
+    also uses it (`waitron-cloud/apps/portal/src/screens.ts:14,68`, `app.ts:227`; watcher checked
+    2026-11-10, read, not run), pinned at ui-core 0.2.1. Keep its published export while that
+    consumer remains.
   - The profile screen, opened with required details missing, marks those fields at once, before
     any press (two existing tests pin it), unlike every other form.
   - The form plumbing is hand-written per form: assembling the bottom message, waiting for the

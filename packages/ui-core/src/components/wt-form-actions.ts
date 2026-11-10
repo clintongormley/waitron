@@ -44,6 +44,10 @@ export class WtFormActions extends LitElement {
       }
 
       .cancel {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
         align-self: flex-end;
       }
 

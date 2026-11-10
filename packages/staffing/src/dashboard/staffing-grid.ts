@@ -230,10 +230,7 @@ export class StaffingGrid extends LitElement {
         width: auto;
       }
       /* The editor is only as wide as its content, so Save keeps its distance from Delete here. */
-      .menu .cancel-group {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
+      [data-test="delete-block"] {
         margin-inline-end: var(--wt-space-4);
       }
     `,
@@ -801,23 +798,24 @@ export class StaffingGrid extends LitElement {
                 ></wt-number-stepper>
               </div>
               <wt-form-actions>
-                <div slot="cancel" class="cancel-group">
-                  <wt-button
-                    data-test="cancel-block"
-                    variant="secondary"
-                    @click=${() => this.#cancel()}
-                    >${t("staffing.role.cancel")}</wt-button
-                  >
-                  <wt-button
-                    data-test="delete-block"
-                    variant="danger"
-                    @click=${() => {
-                      this.#closeMenu();
-                      this.#deleteAt(selected!.key, selected!.index);
-                    }}
-                    >${t("staffing.grid.delete")}</wt-button
-                  >
-                </div>
+                <wt-button
+                  slot="cancel"
+                  data-test="cancel-block"
+                  variant="secondary"
+                  @click=${() => this.#cancel()}
+                  >${t("staffing.role.cancel")}</wt-button
+                >
+                <wt-button
+                  slot="cancel"
+                  data-test="delete-block"
+                  variant="danger"
+                  @click=${() => {
+                    this.#closeMenu();
+                    this.#deleteAt(selected!.key, selected!.index);
+                  }}
+                  >${t("staffing.grid.delete")}</wt-button
+                >
+
                 <wt-button
                   data-test="save-block"
                   variant=${state.variant}

@@ -410,14 +410,6 @@ export class PrintersScreen extends LitElement {
       [hidden] {
         display: none;
       }
-      .wizard-back,
-      .footer-start {
-        display: flex;
-        gap: var(--wt-space-2);
-      }
-      .footer-start {
-        flex-wrap: wrap;
-      }
       /* The test page's note sits under the buttons, across the footer's width. */
       .a4-footer {
         flex: 1;
@@ -2960,6 +2952,7 @@ export class PrintersScreen extends LitElement {
 
   #closeDetailsButton(): TemplateResult {
     return html`<wt-button
+      slot="cancel"
       data-test="printer-details-close"
       @click=${(event: Event) =>
         void (event.currentTarget as HTMLElement).closest("wt-modal")?.requestClose("navigation")}
@@ -2975,7 +2968,7 @@ export class PrintersScreen extends LitElement {
     const readError = pages.readError;
     return html`<div slot="footer" class="a4-footer">
       <wt-form-actions>
-        <div slot="cancel" class="footer-start">${this.#closeDetailsButton()}</div>
+        ${this.#closeDetailsButton()}
         ${
           this.canManage
             ? html`<wt-button
@@ -3102,21 +3095,20 @@ export class PrintersScreen extends LitElement {
 
   #renderDetailViewActions(p: Printer | undefined): TemplateResult {
     return html`<wt-form-actions slot="footer">
-      <div slot="cancel" class="footer-start">
-        ${this.#closeDetailsButton()}
-        ${
-          p
-            ? html`<wt-button
-                variant=${this.detailActiveSavingIds.has(p.id) ? "secondary" : "danger"}
-                data-test="delete-printer-detail"
-                ?disabled=${this.detailActiveSavingIds.has(p.id)}
-                @click=${(event: Event) =>
-                  this.#requestDetailDelete(p, event.currentTarget as HTMLElement)}
-                >${t("action.delete")}</wt-button
-              >`
-            : nothing
-        }
-      </div>
+      ${this.#closeDetailsButton()}
+      ${
+        p
+          ? html`<wt-button
+              slot="cancel"
+              variant=${this.detailActiveSavingIds.has(p.id) ? "secondary" : "danger"}
+              data-test="delete-printer-detail"
+              ?disabled=${this.detailActiveSavingIds.has(p.id)}
+              @click=${(event: Event) =>
+                this.#requestDetailDelete(p, event.currentTarget as HTMLElement)}
+              >${t("action.delete")}</wt-button
+            >`
+          : nothing
+      }
       ${
         p
           ? html`<wt-button
@@ -4179,24 +4171,24 @@ export class PrintersScreen extends LitElement {
         </div>
       </div>
       <wt-form-actions slot="footer" .error=${bottom}>
-        <div slot="cancel" class="wizard-back">
-          <wt-button
-            data-test="cancel-edit-printer"
-            @click=${() => void this.#closeModal("edit-printer-modal")}
-            >${t("action.cancel")}</wt-button
-          >
-          ${
-            this.calibrationStep > 1
-              ? html`<wt-button
-                  data-test="calibration-back"
-                  @click=${() => {
-                    this.calibrationStep--;
-                  }}
-                  >${t("action.back")}</wt-button
-                >`
-              : nothing
-          }
-        </div>
+        <wt-button
+          slot="cancel"
+          data-test="cancel-edit-printer"
+          @click=${() => void this.#closeModal("edit-printer-modal")}
+          >${t("action.cancel")}</wt-button
+        >
+        ${
+          this.calibrationStep > 1
+            ? html`<wt-button
+                slot="cancel"
+                data-test="calibration-back"
+                @click=${() => {
+                  this.calibrationStep--;
+                }}
+                >${t("action.back")}</wt-button
+              >`
+            : nothing
+        }
         ${
           this.calibrationStep > 0 && this.calibrationStep < 3
             ? html`<wt-button
