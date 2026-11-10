@@ -697,12 +697,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Held paper followups** (bundle of 3, 1 important, size M). Holds A1066, A1369. [Detail](backlog/kitchen.md#bundle-held-paper-followups)
 
-- **A1319. The station editor's three switches show their hint line without linking it as the
-  switch's accessible description** ("Waits for the pass", "Also list the order's dishes from other
-  stations" and "Print held groups in advance", `station-editor.ts`): each hint is a separate
-  paragraph, and the switch has no `description`. Department settings passes its hint as
-  `.description` (`department-settings.ts:897`). Fix all three together. Left open by A773-2 PR C.
-
 - **Supervisor station read** (bundle of 2, size S, needs the owner). Holds A1079. [Detail](backlog/kitchen.md#bundle-supervisor-station-read)
 
 - **Browser tests still read `history.length` to tell whether a push happened, and Chromium stops
@@ -1597,9 +1591,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **A701. Opening hours' month reads the holiday tables twice on a holiday-linked special day.**
   [Detail](backlog/workforce.md#a701-opening-hours-month-reads-the-holiday-tables-twice-on-a-holiday-linked-special-day).
-
-- **A702. Opening hours' season chip is clipped on a season name that is one long word.**
-  [Detail](backlog/workforce.md#a702-opening-hours-season-chip-is-clipped-on-a-season-name-that-is-one-long-word).
 
 - **Colour chooser placement** (bundle of 2, size S). [Detail](backlog/workforce.md#bundle-colour-chooser-placement)
 

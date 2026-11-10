@@ -235,10 +235,6 @@ module view draws without that model.
 once in `readCalendarMonthPlan` and again in its own holiday read; `locations` and the venue
 document are read once. Next: hand the plan's holiday facts to the second read.
 
-## A702. Opening hours' season chip is clipped on a season name that is one long word
-
-Next: wrap the chip's text with `overflow-wrap: anywhere` (`packages/venue-service/src/dashboard/season-chips.ts`).
-
 ## At 390 px the staff role dialog's open colour panel covers its own Colour field
 
 Picking a colour still works. See `positionPopup` in

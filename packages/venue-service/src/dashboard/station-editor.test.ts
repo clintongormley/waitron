@@ -1124,3 +1124,22 @@ it.each(["en", "es"] as const)(
     expect(seen).toEqual([{ colour: "grey" }]);
   },
 );
+
+it("A1319 reads each switch's visible hint to screen readers as its description", async () => {
+  const el = await mount();
+  const pairs = [
+    [waitsSwitch(el), "waits-for-pass-hint"],
+    [restSwitch(el), "rest-of-order-hint"],
+    [heldSwitch(el), "held-work-hint"],
+  ] as const;
+  for (const [toggle, hint] of pairs) {
+    await toggle.updateComplete;
+    const input = toggle.shadowRoot!.querySelector("input")!;
+    const describedBy = input.getAttribute("aria-describedby");
+    expect(describedBy, hint).toBeTruthy();
+    expect(toggle.shadowRoot!.getElementById(describedBy!)!.textContent!.trim()).toBe(
+      $(el, `[data-test=${hint}]`)!.textContent!.trim(),
+    );
+    expect($(el, `[data-test=${hint}]`)!.getAttribute("aria-hidden"), hint).toBe("true");
+  }
+});

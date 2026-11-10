@@ -217,3 +217,29 @@ it("as a key only, still draws slotted content after the chips", async () => {
   expect(box.left).toBeGreaterThanOrEqual(last.right);
   expect(box.top).toBeLessThan(last.bottom);
 });
+
+it("A702 wraps a season name that is one long word inside a narrow space, as a button and as a key", async () => {
+  const longWord: SeasonChip = { ...winter, name: "Supercalifragilisticexpialidocious".repeat(2) };
+  for (const keyOnly of [false, true]) {
+    const box = document.createElement("div");
+    box.style.width = "160px";
+    document.body.append(box);
+    el = document.createElement("season-chips");
+    el.seasons = [longWord];
+    el.keyOnly = keyOnly;
+    applyTokens(el);
+    box.append(el);
+    await el.updateComplete;
+    const chip = chips()[0]!;
+    expect(chip.getBoundingClientRect().right, `keyOnly=${keyOnly}`).toBeLessThanOrEqual(
+      box.getBoundingClientRect().right + 1,
+    );
+    expect(chip.scrollWidth, `keyOnly=${keyOnly}`).toBeLessThanOrEqual(chip.clientWidth);
+    const button = chip.querySelector("button");
+    if (!keyOnly) {
+      expect(button).not.toBeNull();
+      expect(button!.scrollWidth).toBeLessThanOrEqual(button!.clientWidth);
+    }
+    box.remove();
+  }
+});

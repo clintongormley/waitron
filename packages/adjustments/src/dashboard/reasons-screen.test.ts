@@ -1124,6 +1124,13 @@ describe("the editor", () => {
     expect(modal(el)!.querySelector('[data-test="note-hint"]')!.textContent!.trim()).toBe(
       "The till asks for the note with “Say why”.",
     );
+    const describedBy = noteSwitch(el).getAttribute("aria-describedby")!;
+    expect(
+      field(el, "noteRequired").shadowRoot!.getElementById(describedBy)!.textContent!.trim(),
+    ).toBe("The till asks for the note with “Say why”.");
+    expect(modal(el)!.querySelector('[data-test="note-hint"]')!.getAttribute("aria-hidden")).toBe(
+      "true",
+    );
     expect(modal(el)!.querySelector('[data-test="void-rule"]')!.textContent!.trim()).toBe(
       "Who may cancel is set by the refund permission, not by the reason.",
     );

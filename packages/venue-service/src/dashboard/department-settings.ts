@@ -915,7 +915,7 @@ export class DepartmentSettings extends LitElement {
                   this.changed("lateSendNeedsManager", e.detail.checked);
                 }}
               ></wt-switch>
-              <p class="hint">${t("venue.late_send_needs_manager_hint")}</p>
+              <p class="hint" aria-hidden="true">${t("venue.late_send_needs_manager_hint")}</p>
               ${errors.lateSendNeedsManager ? html`<p class="error" data-field-error="lateSendNeedsManager">${errors.lateSendNeedsManager}</p>` : nothing}
             </div>
           </section>
@@ -934,7 +934,7 @@ export class DepartmentSettings extends LitElement {
                   this.changed("needsClearing", e.detail.checked);
                 }}
               ></wt-switch>
-              <p class="hint">${t("venue.needs_clearing_hint")}</p>
+              <p class="hint" aria-hidden="true">${t("venue.needs_clearing_hint")}</p>
               ${errors.needsClearing ? html`<p class="error" data-field-error="needsClearing">${errors.needsClearing}</p>` : nothing}
             </div>
             <department-service-steps
