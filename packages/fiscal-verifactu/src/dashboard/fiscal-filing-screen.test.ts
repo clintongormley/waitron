@@ -263,4 +263,64 @@ describe("vf-fiscal-filing-screen", () => {
     });
     expect(text(screen, "[data-test=read-at]")).toContain("Read at");
   });
+
+  it("lists each case, and View on a conflict case shows both fingerprints", async () => {
+    const { screen } = await mount(vi.fn(async () => overview()));
+    const table = screen.shadowRoot!.querySelector("wt-data-table[data-test=case-table]")!;
+    await vi.waitFor(() => expect(table.shadowRoot?.querySelector("tbody tr")).not.toBeNull());
+    const row = (table.shadowRoot!.querySelector("tbody tr")!.textContent ?? "").replace(
+      /\s+/g,
+      " ",
+    );
+    expect(row).toContain("T1/41");
+    expect(row).toContain("AEAT holds a different record");
+    expect(row).toContain("3000");
+    expect(screen.shadowRoot!.querySelector("[data-test=bounded]")).toBeNull();
+    const view = table.shadowRoot!.querySelector("[data-test=view-rec-1]") as HTMLElement | null;
+    (view ?? (table.querySelector("[data-test=view-rec-1]") as HTMLElement)).click();
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector("wt-modal[data-test=case-details]")).toHaveProperty(
+        "open",
+        true,
+      ),
+    );
+    const details = text(screen, "wt-modal[data-test=case-details]");
+    expect(details).toContain(OURS);
+    expect(details).toContain(PREVIOUS);
+    expect(details).toContain(THEIRS);
+    expect(details).toContain("Registro de facturación duplicado.");
+  });
+
+  it("says the list is the newest 200 when there are more", async () => {
+    const cases = Array.from({ length: 200 }, (_, i) =>
+      conflictCase(`rec-${i}`, "2026-11-03T11:02:00.000Z"),
+    );
+    const { screen } = await mount(vi.fn(async () => overview({ cases, totalCases: 201 })));
+    expect(text(screen, "[data-test=bounded]")).toBe("The newest 200 of 201");
+  });
+
+  it("exports every open case, read again, as one file of that answer", async () => {
+    const all = overview({ readAt: "2026-11-10T10:15:00.000Z", totalCases: 1 });
+    const request = vi.fn(async (path: string) => (path.endsWith("?cases=all") ? all : overview()));
+    const blobs: Blob[] = [];
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      blobs.push(blob as Blob);
+      return "blob:fiscal-filing";
+    });
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const names: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      names.push(this.download);
+    });
+    const { screen } = await mount(request);
+    button(screen, "export").click();
+    await vi.waitFor(() => expect(names).toHaveLength(1));
+    expect(request).toHaveBeenLastCalledWith("/management-api/fiscal-filing?cases=all", "GET");
+    const day = formatIsoMinute(all.readAt).slice(0, 10);
+    expect(names).toEqual([`fiscal-filing-${day}.json`]);
+    expect(blobs).toHaveLength(1);
+    expect(JSON.parse(await blobs[0]!.text())).toEqual(all);
+  });
 });

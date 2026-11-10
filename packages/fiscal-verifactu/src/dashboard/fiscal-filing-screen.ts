@@ -1,8 +1,11 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-data-table.js";
+import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-notice.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
 import {
   codeMessage,
   codeOf,
@@ -11,11 +14,16 @@ import {
   subscribeLocale,
 } from "@waitron/dashboard-kit";
 import type { EnvioState } from "../handover-summary.js";
-import type { ActiveConflictView, FilingOverviewAnswer } from "../filing-overview-types.js";
+import type {
+  ActiveConflictView,
+  FilingCaseView,
+  FilingOverviewAnswer,
+} from "../filing-overview-types.js";
 import type { FiscalFilingClient } from "./fiscal-filing-client.js";
 import { t } from "./strings.js";
 
 const RECOVERY_PATH = "/manage/recovery/fiscal-conflict";
+const PAGE_SIZE = 50;
 
 /** The sending states in the order the screen lists them. */
 const STATES: readonly EnvioState[] = [
@@ -31,6 +39,112 @@ const STATES: readonly EnvioState[] = [
 const count = (value: number): string => value.toLocaleString(currentLocale());
 const when = (iso: string | null): string =>
   iso === null ? t("fiscal_filing.none") : formatIsoMinute(iso);
+
+function aeatSaid(state: string | null, code: string | number | null, description: string | null) {
+  return [state, code, description].filter((part) => part !== null && part !== "").join(" ");
+}
+
+function field(label: string, value: string | TemplateResult | null) {
+  return value === null || value === ""
+    ? nothing
+    : html`<div>
+        <dt>${label}</dt>
+        <dd>${value}</dd>
+      </div>`;
+}
+
+function fingerprints(theirs: string | null, ours: string): TemplateResult {
+  return html`${
+      theirs === null
+        ? nothing
+        : html`<span class="fingerprint"
+            >${t("fiscal_filing.detail.theirs", { fingerprint: theirs })}</span
+          >`
+    } <span class="fingerprint">${t("fiscal_filing.detail.ours", { fingerprint: ours })}</span>`;
+}
+
+function caseDetails(found: FilingCaseView): TemplateResult {
+  const { record, submission, evidence } = found;
+  const observations = [
+    ...found.conflicts.map(
+      (seen) =>
+        html`<li>
+          <span
+            >${t("fiscal_filing.detail.observation", {
+              attempt: seen.attempt,
+              time: formatIsoMinute(seen.recordedAt),
+              state: seen.line.EstadoRegistro ?? "",
+              code: seen.line.CodigoErrorRegistro ?? "",
+              description: seen.line.DescripcionErrorRegistro ?? "",
+            }).trim()}</span
+          >
+          ${fingerprints(seen.comparison.storedFingerprint, record.huella)}
+        </li>`,
+    ),
+    ...found.lookups.map(
+      (seen) =>
+        html`<li>
+          <span
+            >${t("fiscal_filing.detail.lookup", {
+              time: formatIsoMinute(seen.recordedAt),
+              state: seen.state,
+            })}</span
+          >
+          ${fingerprints(seen.fingerprint, record.huella)}
+        </li>`,
+    ),
+  ];
+  return html`<dl>
+    ${field(
+      t("fiscal_filing.detail.invoice"),
+      `${record.numSerieFactura} · ${record.fechaExpedicionFactura}`,
+    )}
+    ${field(t("fiscal_filing.detail.issuer"), record.idEmisorFactura)}
+    ${field(
+      t("fiscal_filing.detail.type"),
+      [record.tipoRegistro, record.tipoFactura].filter((part) => part !== null).join(" · "),
+    )}
+    ${field(
+      t("fiscal_filing.detail.total"),
+      [record.importeTotal, record.cuotaTotal].filter((part) => part !== null).join(" · "),
+    )}
+    ${field(t("fiscal_filing.detail.generated"), record.fechaHoraHusoGenRegistro)}
+    ${field(t("fiscal_filing.detail.installation"), record.numeroInstalacion)}
+    ${field(
+      t("fiscal_filing.detail.fingerprint"),
+      html`<span class="fingerprint">${record.huella}</span>`,
+    )}
+    ${field(
+      t("fiscal_filing.detail.previous"),
+      record.anteriorHuella === null
+        ? null
+        : html`<span class="fingerprint">${record.anteriorHuella}</span>`,
+    )}
+    ${field(t("fiscal_filing.detail.then"), aeatSaid(null, evidence.codigo, evidence.mensaje))}
+    ${field(
+      t("fiscal_filing.detail.latest"),
+      submission === null
+        ? null
+        : [
+            aeatSaid(submission.estado, submission.codigoError, submission.mensajeError),
+            submission.enviadoEn === null
+              ? ""
+              : t("fiscal_filing.detail.sent", { time: formatIsoMinute(submission.enviadoEn) }),
+          ]
+            .filter((part) => part !== "")
+            .join(" · "),
+    )}
+    ${field(
+      t("fiscal_filing.detail.observations"),
+      observations.length === 0
+        ? null
+        : html`<ul>
+            ${observations}
+          </ul>`,
+    )}
+    ${field(t("fiscal_filing.detail.now"), t(`fiscal_filing.now.${found.cause}`))}
+  </dl>`;
+}
 
 function conflictLine(conflict: ActiveConflictView): TemplateResult {
   const number = conflict.invoiceNumber;
@@ -138,6 +252,32 @@ export class FiscalFilingScreen extends LitElement {
       a {
         color: var(--wt-color-primary-text);
       }
+      dl:not(.counts) {
+        display: grid;
+        gap: var(--wt-space-3);
+        margin: 0;
+      }
+      dl:not(.counts) dt {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      dl:not(.counts) dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      dd ul {
+        display: grid;
+        gap: var(--wt-space-2);
+        margin: 0;
+        padding-inline-start: var(--wt-space-5);
+      }
+      dd li span {
+        display: block;
+      }
+      .footer {
+        display: flex;
+        justify-content: end;
+      }
       .counts {
         display: flex;
         flex-wrap: wrap;
@@ -162,6 +302,10 @@ export class FiscalFilingScreen extends LitElement {
   @state() private overview: FilingOverviewAnswer | null = null;
   @state() private loading = true;
   @state() private readError = "";
+  @state() private exportError = "";
+  @state() private exporting = false;
+  @state() private page = 0;
+  @state() private viewing: FilingCaseView | null = null;
 
   #generation = 0;
   #unsubscribeLocale?: () => void;
@@ -193,8 +337,129 @@ export class FiscalFilingScreen extends LitElement {
     }
   }
 
-  // Part 2 completes the export: read with every case, then save the answer as one file.
-  #export(): void {}
+  async #export(): Promise<void> {
+    if (this.exporting) return;
+    this.exporting = true;
+    this.exportError = "";
+    try {
+      const answer = await this.client.read({ all: true });
+      const blob = new Blob([JSON.stringify(answer, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `fiscal-filing-${formatIsoMinute(answer.readAt).slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      this.exportError = codeMessage(codeOf(error));
+    } finally {
+      this.exporting = false;
+    }
+  }
+
+  #columns(): DataTableColumn<FilingCaseView>[] {
+    return [
+      {
+        key: "opened",
+        label: t("fiscal_filing.column.opened"),
+        cell: (row) => formatIsoMinute(row.openedAt),
+      },
+      {
+        key: "invoice",
+        label: t("fiscal_filing.column.invoice"),
+        cell: (row) => `${row.record.numSerieFactura} · ${row.record.fechaExpedicionFactura}`,
+      },
+      {
+        key: "reason",
+        label: t("fiscal_filing.column.reason"),
+        cell: (row) => t(`fiscal_filing.cause.${row.cause}`),
+      },
+      {
+        key: "code",
+        label: t("fiscal_filing.column.code"),
+        cell: (row) => (row.evidence.codigo === null ? "—" : String(row.evidence.codigo)),
+      },
+      {
+        key: "held",
+        label: t("fiscal_filing.column.held"),
+        align: "end",
+        cell: (row) => count(row.heldBehind),
+      },
+      {
+        key: "actions",
+        label: t("fiscal_filing.column.actions"),
+        pinned: "end",
+        cell: (row) =>
+          html`<wt-row-actions
+            align="end"
+            label=${`${t("fiscal_filing.column.actions")}: ${row.record.numSerieFactura}`}
+            ><wt-button
+              align="start"
+              variant="secondary"
+              data-test=${`view-${row.registroId}`}
+              @click=${() => (this.viewing = row)}
+              >${t("fiscal_filing.view")}</wt-button
+            ></wt-row-actions
+          >`,
+      },
+    ];
+  }
+
+  #cases(overview: FilingOverviewAnswer): TemplateResult {
+    const cases = overview.cases;
+    const lastPage = Math.max(0, Math.ceil(cases.length / PAGE_SIZE) - 1);
+    const page = Math.min(this.page, lastPage);
+    return html`${
+        overview.totalCases > cases.length
+          ? html`<p class="muted" data-test="bounded">
+              ${t("fiscal_filing.cases.bounded", {
+                shown: count(cases.length),
+                total: count(overview.totalCases),
+              })}
+            </p>`
+          : nothing
+      }
+      <wt-data-table
+        data-test="case-table"
+        aria-label=${t("fiscal_filing.cases")}
+        emptyMessage=${t("fiscal_filing.cases.none")}
+        .columns=${this.#columns()}
+        .rows=${cases.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)}
+        .rowKey=${(row: FilingCaseView) => row.registroId}
+        .serverPaging=${
+          cases.length > PAGE_SIZE ? { page, pageSize: PAGE_SIZE, total: cases.length } : undefined
+        }
+        .pageRangeLabel=${(from: number, to: number, total: number) =>
+          t("fiscal_filing.cases.range", { from: count(from), to: count(to), total: count(total) })}
+        previousPageLabel=${t("fiscal_filing.cases.previous")}
+        nextPageLabel=${t("fiscal_filing.cases.next")}
+        @wt-page-change=${(event: CustomEvent<{ page: number }>) => {
+          this.page = event.detail.page;
+        }}
+      ></wt-data-table>`;
+  }
+
+  #details(): TemplateResult {
+    const found = this.viewing;
+    const close = () => (this.viewing = null);
+    return html`<wt-modal
+      size="compact"
+      data-test="case-details"
+      .open=${found !== null}
+      heading=${found === null ? "" : t(`fiscal_filing.cause.${found.cause}`)}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        close();
+      }}
+    >
+      ${found === null ? nothing : caseDetails(found)}
+      <div slot="footer" class="footer">
+        <wt-button variant="secondary" data-test="close" @click=${close}
+          >${t("fiscal_filing.close")}</wt-button
+        >
+      </div>
+    </wt-modal>`;
+  }
 
   override render(): TemplateResult {
     const overview = this.overview;
@@ -220,7 +485,8 @@ export class FiscalFilingScreen extends LitElement {
           variant="secondary"
           data-test="export"
           ?disabled=${overview === null}
-          @click=${() => this.#export()}
+          ?loading=${this.exporting}
+          @click=${() => void this.#export()}
           >${t("fiscal_filing.export")}</wt-button
         >
       </div>
@@ -229,7 +495,12 @@ export class FiscalFilingScreen extends LitElement {
           ? nothing
           : html`<p class="error" role="alert" data-test="read-error">${this.readError}</p>`
       }
-      ${overview === null ? nothing : this.#parts(overview)}`;
+      ${
+        this.exportError === ""
+          ? nothing
+          : html`<p class="error" role="alert" data-test="export-error">${this.exportError}</p>`
+      }
+      ${overview === null ? nothing : this.#parts(overview)} ${this.#details()}`;
   }
 
   #parts(overview: FilingOverviewAnswer): TemplateResult {
@@ -283,7 +554,7 @@ export class FiscalFilingScreen extends LitElement {
       </section>
       <section aria-labelledby="fiscal-filing-cases" data-test="cases">
         <h2 id="fiscal-filing-cases">${t("fiscal_filing.cases")}</h2>
-        <!-- Part 2: the Filing cases table and its View panel go here. -->
+        ${this.#cases(overview)}
       </section>
       ${
         overview.heldWithoutCase === 0
