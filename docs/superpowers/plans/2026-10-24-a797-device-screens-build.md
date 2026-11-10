@@ -10406,12 +10406,14 @@ How claims are marked: **(read)** means read in the code at `3c673d46be`, not ru
   items", `table-bill-controls.ts:25-40`); A803's plan left the row in one function so this slice
   has one place to add its mark (`docs/superpowers/plans/2026-10-30-a803-3-bill-switcher.md:278`).
 - **Where the screen's party comes from.** `orderParty` is the floor read's party at opening
-  (`apps/till/src/till-app.ts:11575`). A later floor read replaces only its kitchen note
-  (`#applyTables`, `:11278-11302`: `this.orderParty = { ...party, kitchenNote: latest.kitchenNote }`),
-  so `orderParty.unsentDrafts` stays as the table was when it opened. A bill switch saves the bill
-  on screen's draft first (`#switchToBill` → `#flushBeforeSwitch`, `:18373-18401`) and reads no
-  floor. So in worked example 3, Bill 2's bravas, saved when Ana switched back to Bill 1, are in no
-  read the screen holds.
+  (`apps/till/src/till-app.ts:11575`). `#applyTables` (`:11278-11302`) carries only the kitchen
+  note from a later floor read (`this.orderParty = { ...party, kitchenNote: latest.kitchenNote }`);
+  `#retakePartyFromFloor` (`:11813-11826`, reached through `#rereadAmounts` after the screen's
+  commands, `:11841`) and `#rememberOrderParty` (`:11905-11910`) replace the whole party, unsent
+  drafts included. A bill switch saves the bill on screen's draft first (`#switchToBill` →
+  `#flushBeforeSwitch`, `:18373-18401`) and, like + New bill (`:18437-18457`), reads no floor. So
+  in worked example 3, Bill 2's bravas, saved when Ana switched back to Bill 1, are in no read the
+  screen holds.
 - **The bar button.** `barTables` (`apps/till/src/state/bar-tables.ts:75-140`) gives a button per
   table; the app's `#onOpenBarTable` (`till-app.ts:11970-11988`) either goes back to the held bill
   (`held`, D9: `#onTabSelect("order")`, no re-read, the same bill) or opens the table as a Floor
@@ -10423,8 +10425,10 @@ How claims are marked: **(read)** means read in the code at `3c673d46be`, not ru
   `:11327-11360`) records each bill this device left a table on, with its store's line count
   (`LocalBill`, `bar-tables.ts:14-21`), until a floor read started after its save answers
   (`#applyTables`, `:11284`). The held bill is `#heldBill()` (`:11954-11968`).
-- **`savedAt`** is written only as `nowIso()` (`git grep -n 'updatedAt' apps/server/src/order-drafts.ts`:
-  every write is `updatedAt: nowIso()`; ran), one spelling; compare with `Date.parse` anyway.
+- **`savedAt`** is one spelling: the column's default is `nowIso` (`packages/db/src/schema/order-drafts.ts:37`)
+  and every write found sets `updatedAt: nowIso()` (ran: `git grep -n 'updatedAt' -- apps/server/src
+  ':!*.test.ts'`, the hits in `order-drafts.ts`, `bill-editing.ts` and `adjustments-apply.ts`);
+  compare with `Date.parse` anyway.
 
 ### Decisions
 
@@ -10433,16 +10437,23 @@ How claims are marked: **(read)** means read in the code at `3c673d46be`, not ru
   open list marks each. Owner FYI.
 - **D2. Only other bills get the mark.** The bill on screen's New order is on screen; the design's
   rule is "when another bill … holds this person's unsent dishes". The rows' existing per-person
-  lines are A803's and stay as they are.
+  lines are A803's and keep their wording, but D4 makes them current too (they read the same
+  `party.unsentDrafts`, `table-bill-controls.ts:25`). A marked row reads both "Ana has an unsent
+  order: 3 items" and "✎ Unsent"; the design asks for the mark, so it is built, and the look check
+  judges the doubling (owner FYI).
 - **D3. ✎ is the `floor-unsent` icon, `aria-hidden`, as the bar and the map draw it**
   (`apps/till/src/widgets/till-shell.ts:1295`, `till-floor-screen.ts:3075`); the words are text.
   The switcher's `label` (what a screen reader names the trigger) gains the same words after the
   closed label: "Bills: Bill 1 · 2 bills · €38.50 · Bill 2 unsent".
 - **D4. The marks are kept current by the floor read.** `#applyTables` carries the read's
   `unsentDrafts` into `orderParty` in the same branch, and under the same conditions, as it carries
-  the kitchen note; and a bill switch that showed a bill (`#onSwitchBill`, + New bill's
-  `#askForNewBill`) re-reads the floor (`#refreshFloor`) after its draft was saved, so a bill just
-  left shows its mark once that read answers. No local per-bill record is kept: the read is the
+  the kitchen note; and `#showBill` (`:18403-18408`), which every path showing another bill after
+  saving the draft on screen goes through (a switcher tap and Find a bill via `#switchToBill`,
+  + New bill via `#askForNewBill`, the refund-excess switch at `:19095-19103`, and D7), re-reads the
+  floor (`void this.#refreshFloor()`), so a bill just left shows its mark once that read answers.
+  This runs on a till as well as a handheld, deliberately: the switcher, and so the marks, are
+  drawn on every width (`design-system.md:1134-1137`), while the existing after-save floor read is
+  a handheld's only (`till-app.ts:11374`). No local per-bill record is kept: the read is the
   server's word, and it covers another of this person's devices and a takeover. A mark left by an
   older read for the moment a switch's read is out is "owner: not relevant" (RUNNER §0a).
 - **D5. The bar's choice, as one pure function** `barBillToOpen(party, personId, local)` in
@@ -10456,9 +10467,11 @@ How claims are marked: **(read)** means read in the code at `3c673d46be`, not ru
   detail (`billId`), and `#openTable` shows it in place of `openingBillId` when given.
   `#followBillsRead` then keeps it while the bills read shows it (read; `billToShow`).
 - **D7. Going back to the held bill.** The held button still returns to the order screen as D9
-  says. Then, with the held bill counted as the newest local record, if `barBillToOpen` names
+  says. Then, reading `this.barFloor`'s party at the held table (as D6 does, so the choice matches
+  the bar's own ✎) with the held bill counted as the newest local record, if `barBillToOpen` names
   another bill, the screen switches to it as a switcher tap does (`#switchToBill`, then lines and
-  balance). Example: Ana puts bravas on Bill 2, switches to Bill 1, is called away before adding
+  balance). `#heldBill()` gives `billId: null` until the held bill's draft has been read
+  (`:11960-11962`); `barBillToOpen` ignores a local record with no bill id. Example: Ana puts bravas on Bill 2, switches to Bill 1, is called away before adding
   anything, taps Floor, then ✎ T4: Bill 2 opens, the bill with her unsent dishes.
 
 ### Tasks
@@ -10474,8 +10487,8 @@ test), `apps/till/src/till-app.ts` (`#onOpenBarTable`, `#openTableFromEvent`, `#
 - Unit cases for `barBillToOpen` in `bar-tables.test.ts`: the newest `savedAt` wins over the lower
   number; a tie goes to the lower number, an unnumbered bill last; another person's draft and a
   draft with `lineCount: 0` never count; a released record with lines counts as newer than any
-  read; a released record with no lines (or taken by another) removes the read's draft; with none,
-  `undefined`.
+  read; a released record with no lines (or taken by another) removes the read's draft; a local
+  record with `billId: null` is ignored; with none, `undefined`.
 - App cases in `till-app-bar-tables.test.ts` (reuse its existing helpers and fakes): (a) T4 has
   Bill 1 and Bill 2 both with this person's unsent dishes, Bill 2 saved later, the floor's
   `openingBillId` Bill 1: tapping ✎ T4 from another table shows Bill 2 (fails first: Bill 1);
@@ -10489,16 +10502,21 @@ test), `apps/till/src/till-app.ts` (`#onOpenBarTable`, `#openTableFromEvent`, `#
 `apps/till/src/i18n/strings.ts` (en and es: `table.unsent_bill` "{bill} unsent" / "{bill} sin
 enviar"; `table.unsent_bills` "{n} bills unsent" / "{n} cuentas sin enviar"; the row reuses
 `floor.unsent_mark`), `apps/till/src/till-app.ts` (`#applyTables`, `#onSwitchBill`,
-`#askForNewBill`), and tests in `till-table-order-screen.bill-switcher.test.ts` (reuse
-`till-table-order-screen.bill-switcher.test-helpers.ts`) and one till-app file that already
-switches bills.
-- Screen cases: another bill with this person's unsent dishes → the closed switcher's text and its
-  `label` say "Bill 2 unsent", the icon is `aria-hidden`, and only that row says "Unsent"; another
-  person's draft on Bill 2 → no mark; this person's draft on the bill on screen only → no mark; two
-  other bills → "2 bills unsent" and both rows marked; the Spanish words in `es`.
-- App case, worked example 3: open T4 on Bill 1, + New bill, add a dish on Bill 2, switch to
-  Bill 1 → the closed switcher says "Bill 2 unsent" once the floor read answers (fails first: no
-  mark, the screen's party still holds the opening's drafts).
+`#showBill`), and tests in `till-table-order-screen.bill-switcher.test.ts` (reuse
+`till-table-order-screen.bill-switcher.test-helpers.ts`), `till-table-order-screen.bill-controls.a11y.test.ts`
+and one till-app file that already switches bills. In this order:
+- **2a, the drawing.** Screen cases first, then the code: another bill with this person's unsent
+  dishes → the closed switcher's text and its `label` say "Bill 2 unsent", the icon is
+  `aria-hidden`, and only that row says "Unsent"; another person's draft on Bill 2 → no mark; this
+  person's draft on the bill on screen only → no mark; two other bills → "2 bills unsent" and both
+  rows marked; the Spanish words in `es`. Add the marked switcher, closed and open, in both themes,
+  to the a11y file.
+- **2b, keeping it current (D4).** Now the app case, worked example 3: open T4 on Bill 1, + New
+  bill, add a dish on Bill 2, switch to Bill 1 → the closed switcher says "Bill 2 unsent" once the
+  floor read answers, and Bill 2's row in the open list has this person's "has an unsent order"
+  line. It fails first for the stated reason: the marks are drawn but the screen's party still
+  holds the opening's drafts. Control, recorded in one sentence: with only the `#applyTables`
+  change and no re-read in `#showBill`, the case still fails.
 - Expected: no existing check changes, except a check pinning the switcher's whole `label` or
   closed text on a table where another bill holds the signed-in person's unsent dishes; report each.
 
