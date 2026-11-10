@@ -601,7 +601,7 @@ it("+ New period reads nothing and draws no Painted in; a failed or malformed re
   await dialog.updateComplete;
   expect(reads).toEqual([]);
   expect(dialog.shadowRoot!.querySelector("[data-test=painted-in]")).toBeNull();
-  dialog.shadowRoot!.querySelector<HTMLElement>("[slot=cancel] wt-button")!.click();
+  dialog.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
   await expect.poll(() => painter.shadowRoot!.querySelector("period-dialog")).toBeNull();
   // Checked once the promise the dialog awaits has settled, where a failed read and a good one
   // differ: the control answers and must already show the section at that same point.
@@ -622,7 +622,7 @@ it("+ New period reads nothing and draws no Painted in; a failed or malformed re
     await edit.updateComplete;
     expect(edit.period?.id).toBe("p1");
     const section = edit.shadowRoot!.querySelector("[data-test=painted-in]");
-    edit.shadowRoot!.querySelector<HTMLElement>("[slot=cancel] wt-button")!.click();
+    edit.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
     await expect.poll(() => painter.shadowRoot!.querySelector("period-dialog")).toBeNull();
     return section;
   }
@@ -643,7 +643,7 @@ it("a Painted-in read that answers after the dialog closed changes nothing", asy
   await settle(painter);
   const closing = painter.shadowRoot!.querySelector("period-dialog")!;
   await closing.updateComplete;
-  closing.shadowRoot!.querySelector<HTMLElement>("[slot=cancel] wt-button")!.click();
+  closing.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
   await expect.poll(() => painter.shadowRoot!.querySelector("period-dialog")).toBeNull();
   const second = paintedInApi();
   painter.api = second.api;
@@ -868,7 +868,7 @@ async function cancelEditor(
   editor: HTMLElementTagNameMap["period-dialog"],
 ) {
   const closed = new Promise((resolve) => editor.addEventListener("period-close", resolve));
-  editor.shadowRoot!.querySelector<HTMLElement>("[slot=cancel] wt-button")!.click();
+  editor.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
   await closed;
   await settle(painter);
 }
