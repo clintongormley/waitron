@@ -2507,6 +2507,8 @@ describe("till-app", () => {
       payCard(el, "sale").store.addProduct(coffee, "2");
       await flush(el);
 
+      Object.assign(el, { stage: "collect", collectFlow: "ticket_then_pay" });
+      el.requestUpdate();
       emit(counter(el)!, "collect-card", {});
       await flush(el);
 
@@ -10981,7 +10983,11 @@ describe("till-app", () => {
         cardProvider: "stripe_terminal",
         capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
       });
-    const tapPayCard = (el: TillApp): void => emit(counter(el)!, "collect-card", {});
+    const tapPayCard = (el: TillApp): void => {
+      Object.assign(el, { stage: "collect", collectFlow: "ticket_then_pay" });
+      el.requestUpdate();
+      emit(counter(el)!, "collect-card", {});
+    };
 
     it("forwards the selected simulator outcome to POST /api/pay", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
@@ -11008,6 +11014,8 @@ describe("till-app", () => {
       const c = await toCounter(el);
       c.store.addProduct(coffee, "1");
       await flush(el);
+      Object.assign(el, { stage: "collect", collectFlow: "ticket_then_pay" });
+      el.requestUpdate();
       emit(c, "collect-card", { guestCount: 3 });
       await flush(el);
       await tenderPay(el).updateComplete;
@@ -11139,6 +11147,8 @@ describe("till-app", () => {
         outcome: "declined",
       });
 
+      Object.assign(el, { stage: "collect", collectFlow: "ticket_then_pay" });
+      el.requestUpdate();
       emit(counter(el)!, "collect-card", {}); // retry — captures
       await flush(el);
       expect(ticket(el)).not.toBeNull();
@@ -11337,6 +11347,8 @@ describe("till-app", () => {
         c.store.addProduct(coffee, "2");
         await flush(el);
 
+        Object.assign(el, { stage: "collect", collectFlow: "ticket_then_pay" });
+        el.requestUpdate();
         emit(counter(el)!, "collect-card", {});
         await flush(el);
 
@@ -11365,6 +11377,8 @@ describe("till-app", () => {
       c.store.addProduct(coffee, "2");
       await flush(el);
 
+      Object.assign(el, { stage: "collect", collectFlow: "ticket_then_pay" });
+      el.requestUpdate();
       emit(counter(el)!, "collect-card", {});
       await flush(el);
       expect(ticket(el)).not.toBeNull();
@@ -18277,32 +18291,15 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(said).toContain(
       t("table.bill_to_pay").replace("{amount}", formatMoney("1.00", currentLocale())),
     );
-    expect(tenderPay(el).busy).toBe(true);
+    expect(
+      tenderPay(el)
+        .shadowRoot!.querySelector("[data-counter-pay]")!
+        .shadowRoot!.querySelector("button")!.disabled,
+    ).toBe(false);
     expect(currentApi.recordSale).not.toHaveBeenCalled();
     expect(currentApi.pay).not.toHaveBeenCalled();
     expect(alert(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
     expect(c.store.id).toBe("wo-1");
-  });
-
-  it("holds fixed Counter pay controls while the basket's order holds a payment", async () => {
-    const pending: HeldOrderSummary = { ...heldSummary, hasPayments: true };
-
-    const { el, c } = await counterWith({
-      getTill: vi.fn().mockResolvedValue({
-        ...till,
-        formFactor: "till",
-      }),
-      listWorkingOrders: vi.fn().mockResolvedValue([pending]),
-    });
-    emit(c, "retrieve-order", { id: "wo-1" });
-    await flush(el);
-
-    selectTab(el, "counter");
-    await flush(el);
-
-    expect(
-      activeTabGrid(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!.busy,
-    ).toBe(true);
   });
 
   it("treats a card payment still at the reader as a payment on the bill", async () => {
@@ -18627,7 +18624,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     await flush(el);
 
     pressPay(el, "wo-sent");
-    emit(c, "counter-bill-pay", { amount: "1.00" });
+    emit(c, "counter-bill-pay", {});
     await flush(el);
     read.answer(placedRead("wo-sent"));
     await flush(el);

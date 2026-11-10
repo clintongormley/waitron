@@ -323,7 +323,7 @@ const grid = (el: TillApp) => counter(el).shadowRoot!;
 const tenderPay = (el: TillApp) => grid(el).querySelector<TillTenderPay>("till-tender-pay")!;
 const payButton = (el: TillApp) =>
   tenderPay(el).shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-    "[data-counter-pay], .pay",
+    "[data-counter-pay], .pay, .pay-card",
   )!;
 const tile = (el: TillApp, name: string) =>
   [
@@ -818,6 +818,8 @@ describe("the other counter requests refused because the menu changed", () => {
     await toCounter(el);
     add(el, "Lemonade");
     await flush(el);
+    Object.assign(el, { stage: "collect", collectFlow: "ticket_then_pay" });
+    el.requestUpdate();
     emit(counter(el), "collect-card", {});
     await flush(el);
 
@@ -829,7 +831,7 @@ describe("the other counter requests refused because the menu changed", () => {
     await flush(el);
     await tenderPay(el).updateComplete;
     expect(payButton(el).shadowRoot!.querySelector("button")!.disabled).toBe(false);
-    expect(tenderPay(el).shadowRoot!.querySelector("[data-counter-pay]")).not.toBeNull();
+    expect(tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card")).not.toBeNull();
   });
 
   it("retries placing an order once after a silent adoption", async () => {

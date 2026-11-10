@@ -1,3 +1,4 @@
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -116,4 +117,41 @@ describe("Counter payments through the bill window", () => {
       }
     },
   );
+});
+
+it("refuses preview and a first part payment after a placed Counter bill is invoiced", async () => {
+  const venue = await provisionBillVenue(suite.db);
+  const id = randomUUID();
+  const deps = {
+    db: suite.db,
+    backend: venue.backend,
+    clock: venue.clock,
+    admission: testTradingAdmission(),
+  };
+  await parkOrder(deps, venue.cfg, {
+    id,
+    lines: [{ menuItemId: venue.offerFor("Botella tinto"), quantity: "1" }],
+    zoneId: venue.zoneId,
+    operatorId: venue.operatorId,
+  });
+  await placeOrder(deps, venue.cfg, id, venue.operatorId);
+  await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+  const ask = {
+    kind: "contribution",
+    amount: "10.00",
+    method: "cash",
+    tendered: "10.00",
+    expectedEdit: null,
+  };
+  const path = `/api/working-orders/${id}/payments`;
+  const preview = await send(venue.app, venue.cookie, "POST", `${path}/preview`, ask);
+  const taken = await send(venue.app, venue.cookie, "POST", path, {
+    ...ask,
+    submissionId: randomUUID(),
+    applied: "10.00",
+    tip: "0.00",
+  });
+  expect(preview).toMatchObject({ status: 409, json: { code: "working_order.not_open" } });
+  expect(taken).toMatchObject({ status: 409, json: { code: "working_order.not_open" } });
+  expect(await suite.db.select().from(sales).where(eq(sales.workingOrderId, id))).toHaveLength(1);
 });

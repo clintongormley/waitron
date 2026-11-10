@@ -1878,7 +1878,7 @@ describe("till-app: comping a stored counter order", () => {
           updateWorkingOrder,
         });
         await raise(el);
-        emit(counter(el), "counter-bill-pay", { amount: "4.50" });
+        emit(counter(el), "counter-bill-pay", {});
         await flush(el);
 
         const first = vi.mocked(updateWorkingOrder).mock.calls[0]![1] as {
@@ -2028,7 +2028,7 @@ describe("till-app: comping a stored counter order", () => {
       const store = counter(el).store;
       expect(store.lines[0]!.quantity).toBe("0.500");
       store.setLineQuantity(0, "1.000");
-      emit(counter(el), "counter-bill-pay", { amount: "3.50" });
+      emit(counter(el), "counter-bill-pay", {});
       await flush(el);
 
       const saved = vi.mocked(updateWorkingOrder).mock.calls[0]![1] as {

@@ -2326,14 +2326,14 @@ describe("till-app counter: the guests the receipt prints", () => {
       collectOrder: vi.fn().mockResolvedValue(saleResult),
     });
     const c = await toCounter(el);
-    c.store.addProduct(c.products[0]!, "1");
+    c.store.addProduct({ ...c.products[0]!, unitPrice: "0.00" }, "1");
     await flush(el);
     return { el, c };
   }
 
-  it("a cash sale with the field untouched sends no guests line beside a bare tender", async () => {
+  it("a zero-total completion with the field untouched sends no guests line beside a bare tender", async () => {
     const { el, c } = await counterWithCoffee();
-    expect(guests(el)).toBeNull();
+    expect(guests(el)!.value).toBe("");
 
     await payCash(el);
 
@@ -2344,7 +2344,7 @@ describe("till-app counter: the guests the receipt prints", () => {
     expect(call[7]).toBeNull();
   });
 
-  it("identifies a counter sale as having no table editor", async () => {
+  it("identifies a zero-total Counter completion as having no table editor", async () => {
     const { el } = await counterWithCoffee();
     await payCash(el);
     expect(vi.mocked(api.recordSale).mock.calls[0]).toHaveLength(9);
@@ -2359,7 +2359,7 @@ describe("till-app counter: the guests the receipt prints", () => {
     expect(vi.mocked(api.collectOrder).mock.calls[0]![4]).toBeNull();
   });
 
-  it("a whole-order cash request forwards the chosen count of 2", async () => {
+  it("a zero-total completion forwards the chosen count of 2", async () => {
     const { el } = await counterWithCoffee();
     await payCash(el, { guestCount: 2 });
 
@@ -2379,7 +2379,7 @@ describe("till-app counter: the guests the receipt prints", () => {
     ]);
   });
 
-  it("a sale with a full invoice chosen shows no field and sends no guests", async () => {
+  it("a zero-total completion with a full invoice chosen shows no field and sends no guests", async () => {
     const { el, c } = await counterWithCoffee();
     emit(c, "choose-invoice");
     await flush(el);

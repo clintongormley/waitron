@@ -1887,7 +1887,7 @@ const savedLateSends = () =>
 describe("counter pay of a partly paid order", () => {
   it("asks about a new marked dish, and saves it with the ended menu before the bill payment opens", async () => {
     const el = await lateCounter(billPayment(), { products: ["Omelette"], held: true });
-    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
+    emit(counterScreen(el), "counter-bill-pay", {});
     await flush(el, 6);
 
     expect(windowDishes(el)).toEqual(["1× Omelette"]);
@@ -1914,7 +1914,7 @@ describe("counter pay of a partly paid order", () => {
       held: true,
     });
     const notice = errorLine(el);
-    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
+    emit(counterScreen(el), "counter-bill-pay", {});
     await flush(el, 6);
 
     expect(windowDishes(el)).toEqual(["1× Omelette"]);
@@ -1938,7 +1938,7 @@ describe("counter pay of a partly paid order", () => {
       }),
       { products: ["Omelette"], held: true },
     );
-    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
+    emit(counterScreen(el), "counter-bill-pay", {});
     await flush(el, 6);
 
     await choose(el, "data-late-agreed");
@@ -1961,7 +1961,7 @@ describe("counter pay of a partly paid order", () => {
       { products: ["Omelette"], held: true },
     );
     const notice = errorLine(el);
-    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
+    emit(counterScreen(el), "counter-bill-pay", {});
     await flush(el, 6);
     await choose(el, "data-late-agreed");
 
@@ -1986,17 +1986,17 @@ describe("counter pay of a partly paid order", () => {
       }),
       { products: ["Omelette"], held: true },
     );
-    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
+    emit(counterScreen(el), "counter-bill-pay", {});
     await flush(el, 6);
     await choose(el, "data-late-agreed");
     expect(api.serviceDayAuthorizers).toHaveBeenCalledOnce();
-    const payRest = counterScreen(el).shadowRoot!.querySelector<
-      HTMLElement & { disabled: boolean }
-    >("[data-pay-rest]")!;
+    const payRest = counterScreen(el)
+      .shadowRoot!.querySelector("till-tender-pay")!
+      .shadowRoot!.querySelector("[data-counter-pay]")!
+      .shadowRoot!.querySelector("button")!;
     expect(payRest.disabled).toBe(true);
 
-    await userEvent.click(payRest);
-    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
+    emit(counterScreen(el), "counter-bill-pay", {});
     await flush(el, 6);
     expect(windowOf(el)).toBeNull();
 
@@ -2021,7 +2021,7 @@ describe("counter pay of a partly paid order", () => {
       }),
       { products: ["Omelette"], held: true },
     );
-    emit(counterScreen(el), "counter-bill-pay", { amount: "3.00" });
+    emit(counterScreen(el), "counter-bill-pay", {});
     await flush(el, 6);
     await choose(el, "data-late-agreed");
     await authorize(el, "0123");

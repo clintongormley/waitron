@@ -19111,7 +19111,6 @@ export class TillApp extends LitElement {
 
   /** Persist the Counter basket before the payment window allocates its stored dishes. */
   async #onCounterBillPay(event: Event, retried = false, lateSend?: LateSend): Promise<void> {
-    const { amount } = (event as CustomEvent<{ amount?: string }>).detail;
     if (
       this.submitting ||
       this.billPaying !== null ||
@@ -19195,9 +19194,9 @@ export class TillApp extends LitElement {
     }
     if (this.#hasLeftCounterOrder(id, session)) return;
     await this.#openBillPaying(
-      amount === undefined ? "whole" : "contribution",
+      "whole",
       payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
-      amount,
+      undefined,
       { surface: "counter", billId: id, visit: session },
     );
   }
