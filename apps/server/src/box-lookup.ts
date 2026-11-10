@@ -22,8 +22,6 @@ export interface BoxLookupOptions {
   makeSocket?: () => MdnsQuerySocket;
   /** Addresses that are this box's own; an answer from one of them is never another box. */
   ownAddresses?: () => string[];
-  /** Hears a socket failure, which otherwise ends the ask as if nobody answered. */
-  onSocketError?: (err: Error) => void;
 }
 
 const DEFAULT_TIMEOUT_MS = 2000;
@@ -57,10 +55,7 @@ function askNetwork(hostname: string, opts: BoxLookupOptions): Promise<string[]>
         heard.push(ip);
       }
     });
-    socket.on("error", (err) => {
-      opts.onSocketError?.(err);
-      finish();
-    });
+    socket.on("error", finish);
     socket.query({ questions: [{ name: hostname, type: "A" }] });
   });
 }

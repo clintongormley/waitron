@@ -529,7 +529,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         }) as MdnsQuerySocket["on"],
         query: () => {
           asks += 1;
-          queueMicrotask(() => onError?.(new Error("send EHOSTUNREACH")));
+          queueMicrotask(() => onError?.(new Error("bind EADDRINUSE 0.0.0.0:5353")));
         },
         destroy: (cb) => cb?.(),
       };
@@ -570,6 +570,63 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     } finally {
       setTimeoutSpy.mockRestore();
       clearTimeoutSpy.mockRestore();
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it("the setup start takes an answer from its configured box address for its own", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const configured = "203.0.113.7";
+    const querySocket = (): MdnsQuerySocket => {
+      const handlers: {
+        response?: (r: { answers: { name: string; type: string; data: unknown }[] }) => void;
+        error?: (err: Error) => void;
+      } = {};
+      return {
+        on: ((event: "response" | "error", handler: never) => {
+          handlers[event] = handler;
+        }) as MdnsQuerySocket["on"],
+        query: () => {
+          queueMicrotask(() => {
+            handlers.response?.({
+              answers: [{ name: "waitron.local", type: "A", data: configured }],
+            });
+            handlers.error?.(new Error("bind EADDRINUSE 0.0.0.0:5353"));
+          });
+        },
+        destroy: (cb) => cb?.(),
+      };
+    };
+    let onQuery: ((q: { questions: { name: string; type: string }[] }) => void) | undefined;
+    const answered: string[] = [];
+    const responderSocket: MdnsSocket = {
+      on: ((event: string, handler: never) => {
+        if (event === "query") onQuery = handler;
+      }) as MdnsSocket["on"],
+      respond: (response) => answered.push(...response.answers.map((a) => a.data)),
+      destroy: (cb) => cb?.(),
+    };
+    const random = vi.fn(() => 0);
+    try {
+      await withSetupBoot(
+        venue.directory,
+        { WAITRON_HTTP_HOST: "0.0.0.0", WAITRON_BOX_ADDRESSES: configured },
+        async () => {
+          await vi.waitFor(() => expect(random).toHaveBeenCalledTimes(1));
+          onQuery?.({ questions: [{ name: "waitron.local", type: "A" }] });
+          expect(answered).toEqual([configured]);
+        },
+        {
+          seams: {
+            mdnsQuerySocket: querySocket,
+            mdnsSocket: () => responderSocket,
+            setupAskRandom: random,
+          },
+        },
+      );
+    } finally {
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });
     }

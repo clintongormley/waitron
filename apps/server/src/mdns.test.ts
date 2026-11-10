@@ -288,7 +288,12 @@ const OTHER = "192.168.10.9";
 
 /** Each ask opens a socket; whoever is in `answering` answers it, and `fail` makes it error instead. */
 function fakeNetwork() {
-  const net = { answering: [OWN], fail: undefined as Error | undefined, asks: [] as number[] };
+  const net = {
+    answering: [OWN],
+    fail: undefined as Error | undefined,
+    asks: [] as number[],
+    destroys: 0,
+  };
   const makeSocket = (): MdnsQuerySocket => {
     const handlers: {
       response?: (r: { answers: { name: string; type: string; data: unknown }[] }) => void;
@@ -309,6 +314,7 @@ function fakeNetwork() {
         handlers.response?.({ answers });
       },
       destroy(cb) {
+        net.destroys += 1;
         cb?.();
       },
     };
@@ -321,7 +327,7 @@ describe("a box in setup mode and the venue's name", () => {
     vi.useRealTimers();
   });
 
-  function watch(random: () => number, log = vi.fn()) {
+  function watch(random: () => number) {
     const { net, makeSocket } = fakeNetwork();
     const w = watchVenueNameInSetup({
       hostname: "waitron.local",
@@ -330,9 +336,8 @@ describe("a box in setup mode and the venue's name", () => {
       ownAddresses: () => [OWN],
       random,
       makeSocket,
-      log,
     });
-    return { net, w, log };
+    return { net, w };
   }
 
   it("a box in setup mode stops answering the venue's name once another box answers it", async () => {
@@ -369,29 +374,27 @@ describe("a box in setup mode and the venue's name", () => {
     await w.stop();
   });
 
-  it("asks no more once stopped, even with an ask in flight", async () => {
+  it("asks no more once stopped, and stops only after closing an ask in flight", async () => {
     vi.useFakeTimers({ now: 0 });
     const random = vi.fn(() => 0);
     const { net, w } = watch(random);
-    const stopping = w.stop();
+    const destroysWhenStopped = w.stop().then(() => net.destroys);
     await vi.advanceTimersByTimeAsync(120_000);
-    await stopping;
+    expect(await destroysWhenStopped).toBe(1);
     expect(net.asks).toEqual([0]);
     expect(random).not.toHaveBeenCalled();
   });
 
-  it("logs a failed ask once and keeps answering", async () => {
+  it("a failed ask counts as hearing nobody, so the box answers again", async () => {
     vi.useFakeTimers({ now: 0 });
-    const log = vi.fn();
-    const { net, w } = watch(() => 0, log);
+    const { net, w } = watch(() => 0);
     net.answering = [OWN, OTHER];
     await vi.advanceTimersByTimeAsync(2_000 + 30_000 + 2_000);
     expect(w.names()).toEqual([]);
-    net.fail = new Error("send EHOSTUNREACH");
+    net.fail = new Error("bind EADDRINUSE 0.0.0.0:5353");
     await vi.advanceTimersByTimeAsync(30_000);
     expect(net.asks).toEqual([0, 32_000, 64_000]);
     expect(w.names()).toEqual(["waitron.local"]);
-    expect(log.mock.calls).toEqual([["warn", "mdns.ask_failed", { message: "send EHOSTUNREACH" }]]);
     await w.stop();
   });
 
@@ -405,7 +408,6 @@ describe("a box in setup mode and the venue's name", () => {
       ...config,
       random: () => 0,
       makeSocket,
-      log: vi.fn(),
     });
     expect(makeSocket).not.toHaveBeenCalled();
     await w.stop();

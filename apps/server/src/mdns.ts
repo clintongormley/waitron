@@ -3,8 +3,6 @@ import { askedAndHeardOthers, type MdnsQuerySocket } from "./box-lookup.js";
 import type { Logger } from "./logger.js";
 import { isLoopbackHost } from "./primary-url.js";
 
-// A thin mDNS responder so a box answers to its names on the LAN. It holds no cache.
-
 /** One mDNS answer record — the subset of multicast-dns's ResourceRecord this module emits. */
 export interface MdnsAnswer {
   name: string;
@@ -110,7 +108,6 @@ export interface VenueNameWatchDeps {
   random: () => number;
   makeSocket?: () => MdnsQuerySocket;
   ownAddresses?: () => string[];
-  log: Logger;
 }
 
 export interface VenueNameWatch {
@@ -119,27 +116,18 @@ export interface VenueNameWatch {
   stop(): Promise<void>;
 }
 
-/**
- * A box in setup mode answers the venue's name only while no other box does. The random delay
- * keeps two boxes switched on together from asking in step for ever.
- */
+/** The random delay keeps two boxes switched on together from asking in step for ever. */
 export function watchVenueNameInSetup(deps: VenueNameWatchDeps): VenueNameWatch {
-  const { hostname, log } = deps;
+  const { hostname } = deps;
   let heardOthers = false;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inFlight: Promise<void> = Promise.resolve();
 
   const ask = async (): Promise<void> => {
-    let failed = false;
     heardOthers = await askedAndHeardOthers(hostname, {
       makeSocket: deps.makeSocket,
       ownAddresses: deps.ownAddresses,
-      onSocketError: (err) => {
-        if (failed) return;
-        failed = true;
-        log("warn", "mdns.ask_failed", { message: err.message });
-      },
     });
     if (stopped) return;
     timer = setTimeout(

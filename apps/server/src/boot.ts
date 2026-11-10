@@ -1656,7 +1656,6 @@ async function bootServer(
       random: seams.setupAskRandom ?? Math.random,
       makeSocket: seams.mdnsQuerySocket,
       ownAddresses: () => [...ownInterfaceAddresses(), ...boxAddresses()],
-      log,
     });
     undoOnFailure.push(() => venueName.stop());
     const responder = startMdnsResponder({
