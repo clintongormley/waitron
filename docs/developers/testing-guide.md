@@ -3414,8 +3414,9 @@ determinism case.
 
 ## The bench
 
-A1308 changes most of the tables, and every slice has to show it did not make a path staff wait on
-slower. Slice 0 built a bench for that, beside the [protection list](#the-protection-list). It lives
+A1308 changes most of the tables, and the paths staff wait on must not get slower. Slice 0 built a
+bench to check that, beside the [protection list](#the-protection-list); it runs from time to time,
+not for every slice ([when it runs](#when-the-bench-runs)). It lives
 in `apps/server/scripts/bench/` and runs from `apps/server` as `pnpm bench <command>`. It does not
 run in CI: only its unit tests do, in `apps/server`'s suite. It refuses a relative path, and a
 `--venue` or `--out` inside the repository; a refused command exits 2 through `pnpm bench`
@@ -3555,16 +3556,40 @@ docker run --rm --pull always node:26-slim node -e 'const {DatabaseSync}=require
 On 10 November 2026 it printed `v26.13.0 3.54.0 0` (image digest `sha256:5adad64f9a1f…`), and the same script under Homebrew's Node on
 macOS printed `v26.13.0 3.54.1 1`. The bench server matched the box image's base that day.
 
-### How a slice uses it
+### When the bench runs
 
-1. Before the change, in a throwaway worktree of the base commit (`git worktree add --detach <dir>
-   <base-sha>`, then `pnpm install` in it), build the bench venue and measure it twice. Compare the
-   two measurements with each other: any case that is not `same` shows how much noise that case has
-   on your machine.
-2. After the change, build a new bench venue on the new commit, in a new folder, measure it on the
-   same machine, and compare it with the base measurement. There is no pass mark: the rule is before
-   against after on one machine. The A1308 design's §5 says that the appendices' absolute figures
-   come from the reference micro PC when one is available, not from a developer Mac.
+The owner decided on 10 November 2026 that the bench is not a step of every slice: "30 days, full
+year rarely. that said, 30 days is still 30 minutes of build time. so i would make these tests
+periodic rather than automatic", and later that day: "we'll do this seldom, even the 30 day test".
+The [protection list](#the-protection-list) still runs before and after every slice.
+
+- **A slice that changes a read on the selling path says so in its PR**, in one line starting
+  `Sale-path read changed:` that names the request, so the next run knows which cases to read. A
+  sale-path read is one that a request timed in the table above makes.
+- **The 30-day run** (`--days 30`) happens when three flagged slices have landed since the last
+  run, or when the owner asks. The watcher, or the owner, asks one lane to run it; nothing schedules
+  it. It builds current `main` and compares it with the last run's result (see below). On
+  10 November 2026 two 30-day measurements on the Mac took about 16 minutes each.
+- **The full year** (`--days 360`) runs only when the owner asks. One commit took 8 h 28 min to
+  build on 9 November 2026 on the bench server, 2.29.240.15, and each measurement about an hour.
+- **Where:** the old CI server, 2.29.248.230, which the owner kept for this on 10 November 2026.
+  Nothing had been timed there by that day, so its first run builds both commits. Keep every later
+  run on that one machine, so each result can be compared with the last.
+- **The result:** the lane that ran it writes the compare table, with both commits, into the A1308
+  entry in `docs/backlog/architecture.md`, and names any case marked `slower` with the flagged
+  slices that could explain it.
+
+### How a run uses it
+
+1. The before side is the last run's measurement, if it was made on the same machine by the same
+   Node and SQLite (`bench compare` prints `not compared: …` otherwise). If it was not, build the
+   bench venue again on the last run's commit, in a throwaway worktree (`git worktree add --detach
+   <dir> <sha>`, then `pnpm install` in it), and measure it twice. Compare those two measurements
+   with each other: any case that is not `same` shows how much noise that case has on the machine.
+2. Build a new bench venue on current `main`, in a new folder, measure it on the same machine, and
+   compare it with the before measurement. There is no pass mark: the rule is before against after
+   on one machine. The A1308 design's §5 says that the appendices' absolute figures come from the
+   reference micro PC when one is available, not from a developer Mac.
 
 ### What it does not tell you
 
