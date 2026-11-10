@@ -295,7 +295,7 @@ describe("closeBillByTransferTx, new work", () => {
     ]);
   });
 
-  it("records one operation-keyed attendance capture for a bill placed before this command", async () => {
+  it("records one submission-keyed attendance capture for a bill placed before this command", async () => {
     const placed = await t.counterOrder("placed");
     const open = await t.counterOrder("open");
     const facts: Parameters<AttendanceRecorder>[1][] = [];

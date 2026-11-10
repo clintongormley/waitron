@@ -164,7 +164,7 @@ describe("transfer_closures", () => {
     expect(rows).toHaveLength(1);
   });
 
-  it("accepts a second operation on a different bill", async () => {
+  it("accepts a second submission on a different bill", async () => {
     await insert(closure(await invoicedBill()));
     const second = closure(await invoicedBill());
     await insert(second);

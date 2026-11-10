@@ -29,7 +29,7 @@ export interface TransferClosureResult {
 }
 
 /**
- * A bill closed as to be paid by bank transfer: one row per operation, per bill and per sale.
+ * A bill closed as to be paid by bank transfer: one row per submission, per bill and per sale.
  *
  * `fingerprint` is a digest of the request, not the request: the delivery email and invoice
  * recipient stay out of this append-only row.

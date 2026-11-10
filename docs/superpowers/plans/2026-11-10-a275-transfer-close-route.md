@@ -74,13 +74,22 @@ off by default.
    wording already exists in both apps' `i18n/codes.ts`.
 4. **GET recovery read**, same file: `{ closure: CloseByTransferResult | null }` from
    `readTransferClosure`; 200 with `null` for a bill not closed, `working_order.not_found` for none.
-   Session, device and zone read scope as the bill's own read; no `sale.take_payment`, no
+   Session, device and zone read scope as the bill's own read; no `payment.take`, no
    `close-by-transfer`, passive request; it adds no sale or closure and stamps no device sighting.
 5. **Till client.** `apps/till/src/api/transfer-close-types.ts` (browser-safe copies of the request
    and result) and `closeByTransfer` / `getTransferClosure` in `apps/till/src/api/client.ts`, with a
    client test of both shapes. No screen.
 
 ## Tests (red first; `useVenueDb`; implementer dispatches at medium)
+
+2026-11-10, as built: review cut six cases from `transfer-close-api.test.ts`, because each repeats a
+check tested once elsewhere (lane L's 14:06 deviation and the watcher's 14:10 answer, lane L
+`questions.md`, under the owner's 2026-11-09 test rule): the close's no-session, ended-session,
+switched-off-device and profile-without-the-action refusals below, and the read's no-session and
+out-of-zone answers. The sign-in step's own suites
+(`till-session.*.test.ts`), the route inventories (`till-api.profile-actions.test.ts`,
+`till-api.profile-zones.test.ts`, `till-api.session-person.test.ts`) and the revoked-while-queued
+cases cover them.
 
 - `apps/server/src/transfer-close-api.test.ts`: refusals each beside an allowed control differing in
   one fact: no session, expired, suspended person, inactive device or profile, missing
