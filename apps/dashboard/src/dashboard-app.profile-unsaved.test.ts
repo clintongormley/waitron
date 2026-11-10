@@ -39,6 +39,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
         permissions: [],
         modules: [],
       }),
+      forgetLocales: () => {},
       getLocales: async () => ({
         locales: [{ code: "en-GB", label: "English" }],
         venueDefault: "en-GB",

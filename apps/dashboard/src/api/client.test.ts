@@ -2082,6 +2082,32 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     });
   });
 
+  it("getLocales reuses its read until forgetLocales, then reads again", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        locales: [],
+        venueDefault: "es-ES",
+        loginDefault: "es-ES",
+        venueName: "Old SL",
+      }),
+    );
+    const api = new DashboardApi("", fetchImpl);
+    await api.getLocales();
+    await api.getLocales();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    fetchImpl.mockImplementation(async () =>
+      jsonResponse({
+        locales: [],
+        venueDefault: "es-ES",
+        loginDefault: "es-ES",
+        venueName: "New SL",
+      }),
+    );
+    api.forgetLocales();
+    expect((await api.getLocales()).venueName).toBe("New SL");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it("putLocale PUTs the session locale route with a { locale } body and returns nothing", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);

@@ -115,6 +115,7 @@ it.each(["same-account", "other-account", "no-permission"])(
       getGoogleConfig: async () => ({ configured: false }),
       getVenueTheme: async () => ({ hash: "waitron", css: "", logo: null }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
+      forgetLocales: () => {},
       getLocales: async () => ({
         locales: [{ code: "en-GB", label: "English" }],
         venueDefault: "en-GB",

@@ -18,6 +18,7 @@ export function stubShellApi(signedIn: boolean, locale: ShellLocale = "es-ES"): 
   const api = {
     liveData: new LiveData(),
     getGoogleConfig: async () => ({ configured: false }),
+    forgetLocales: () => {},
     getLocales: async () => ({
       locales: [
         { code: "es-ES", label: "Español" },

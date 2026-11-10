@@ -27,6 +27,7 @@ async function mount(path = "/manage/my-schedule") {
         permissions: [],
         modules: [],
       }),
+      forgetLocales: () => {},
       getLocales: async () => ({
         locales: [
           { code: "en-GB", label: "English" },

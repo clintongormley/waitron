@@ -7626,6 +7626,7 @@ it.each([
         permissions: ["product.manage"],
         modules: [],
       }),
+      forgetLocales: () => {},
       getLocales: async () => ({
         locales: [
           { code: "en-GB", label: "English" },
@@ -9012,6 +9013,7 @@ describe("publishing", () => {
         permissions: ["product.manage"],
         modules: [],
       }),
+      forgetLocales: () => {},
       getLocales: async () => ({
         locales: [{ code: "en-GB", label: "English" }],
         venueDefault: "en-GB",

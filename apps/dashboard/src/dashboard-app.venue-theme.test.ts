@@ -43,6 +43,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
   const api = {
     liveData: new LiveData(),
     getGoogleConfig: async () => ({ configured: false }),
+    forgetLocales: () => {},
     getLocales: async () => ({
       locales: [{ code: "es-ES", label: "Spanish" }],
       venueDefault: "es-ES",

@@ -62,6 +62,7 @@ async function mount() {
       permissions: ["venue.view", "venue.configure"],
       modules: [],
     }),
+    forgetLocales: () => {},
     getLocales: async () => ({
       locales: [{ code: "en-GB", label: "English" }],
       venueDefault: "en-GB",

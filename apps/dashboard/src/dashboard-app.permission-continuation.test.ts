@@ -106,6 +106,7 @@ async function mount(path = "/manage/test-evidence") {
     getGoogleConfig: async () => ({ configured: false }),
     getVenueTheme: async () => ({ hash: "waitron", css: "", logo: null }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
+    forgetLocales: () => {},
     getLocales: async () => ({
       locales: [{ code: "en-GB", label: "English" }],
       venueDefault: "en-GB",

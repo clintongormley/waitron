@@ -1559,8 +1559,10 @@ export class DashboardApp extends LitElement {
     this.#broadcastSessionDeadline(0);
     this.#url.write({ dashboard: next }, true);
     this.#permissionContinuation.notify();
+    if (code === "node.reset") this.venueName = "";
     if (this.isConnected) {
       setLocale(this.#loginLocale ?? this.#venueLocale);
+      this.api.forgetLocales();
       void this.#seedLocale();
     }
   }

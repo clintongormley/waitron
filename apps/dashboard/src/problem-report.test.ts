@@ -105,6 +105,7 @@ it.each([false, true])(
             venueName: "Report fixture",
           };
         },
+        forgetLocales: () => {},
         getLocales: async () => ({
           locales: [{ code: "en-GB", label: "English" }],
           venueDefault: "en-GB",
