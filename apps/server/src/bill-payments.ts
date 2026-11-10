@@ -1501,7 +1501,7 @@ export async function takeReaderBillPayment(
   let release = (): void => {};
   try {
     // Read before the queue wait; `noted()` then catches a refusal noted while this payment waited.
-    // Awaited only while `since()` names a refusal: otherwise P1 enters the write
+    // Awaited only while `since()` names a refusal: otherwise payment preparation enters the write
     // queue in this turn.
     const preRead =
       deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());

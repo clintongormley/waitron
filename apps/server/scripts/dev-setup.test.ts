@@ -90,8 +90,7 @@ describe("the demo login PIN + seed locale", () => {
   });
 });
 
-// The directory-backed `devSetup` suite runs only the English path, so the Spanish locale's route
-describe("buildDevEnv carries the resolved seed locale into the env contract", () => {
+describe("buildDevEnv", () => {
   const ids = {
     nodeId: "33333333-3333-3333-3333-333333333333",
     seriesId: "44444444-4444-4444-4444-444444444444",
