@@ -20,6 +20,7 @@ import {
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import type { ReturnState } from "./return-records.js";
 import { restrictedPageRoute } from "./restricted-page.js";
+import { RESTRICTED_RETURN_WORDS } from "./i18n/restricted-page.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -356,7 +357,16 @@ it.each(["waiting", "sending", "needs-attention", "clock", "clash", "confirmed"]
     else {
       expect(html).toContain("Do not reset this box.");
       expect(html).not.toContain("You can reset this box.");
-      if (state === "clock") expect(html).toContain("clock");
+      if (state === "clock") expect(html).toContain(RESTRICTED_RETURN_WORDS["en-GB"].clock);
     }
   },
 );
+
+it("shows the Spanish clock refusal while withholding reset permission", async () => {
+  await handOver(await seedSuccessor("Main box"));
+  const response = await request("es-ES", suite.db, "clock");
+  expect(response.status).toBe(200);
+  const html = await response.text();
+  expect(html).toContain(RESTRICTED_RETURN_WORDS["es-ES"].clock);
+  expect(html).not.toContain(RESTRICTED_RETURN_WORDS["es-ES"].confirmed);
+});

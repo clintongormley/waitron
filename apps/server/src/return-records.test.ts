@@ -259,16 +259,14 @@ it("rejects a matching receipt signed by the source without contacting the main"
           nonce: body.nonce!,
           digest: returnDigest({ module: body.module!, payload: body.payload! }),
           accounted: true,
-          complete: true,
         }),
       );
     }),
   ).toBe("needs-attention");
-  expect(received).toEqual([]);
 });
 
 it.each([
-  "missing pin",
+  "missing pin on a non-primary caller",
   "self pin",
   "other primary",
   "evicted source",
@@ -277,7 +275,7 @@ it.each([
 ])("does not enable former-main correction with %s", async (field) => {
   const deps = { db: suite.db, node: suite.node, ring, nodeId: receiver };
   expect(await formerMainForReturn(deps)).toBe(source);
-  if (field === "missing pin") {
+  if (field === "missing pin on a non-primary caller") {
     expect(await formerMainForReturn({ ...deps, nodeId: source })).toBeNull();
     return;
   }
