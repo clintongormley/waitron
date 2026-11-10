@@ -234,7 +234,7 @@ pin today's number are in the part named.
 - **Setup (A394-16)** — part 1: `provisioning.foreign_tenant` (provision, adopt),
   `provisioning.second_venue` (adopt), `mirror.environment_mismatch` (adopt) default 400 → 409.
 - **Shift swaps (A394-17)** — parts 2 and 3: `shift.not_found` from the body on
-  `POST /management-api/me/schedule/swaps` and `POST /api/schedule/swaps` → 400.
+  `POST /management-api/me/schedule/swaps` and `POST /api/schedule/swaps` → 400 (done 2026-11-10).
 - **Bookings package (A394-18)** — part 1: `table.not_found` (body, 3 routes) → 400.
 - **Adjustments package (A394-19)** — part 1: `adjustment_reason.not_found` on `PUT /reason-order`
   (body `ids`) → 400.
@@ -603,6 +603,13 @@ Status changes:
   `me-api.ts`. Changes `shift.not_found` → 400 on both swap routes (the path routes keep 404 under
   a second boundary); `swap.not_permitted` per question 13. Tests: none found at HTTP level. Size S.
   Depends on: A394-1 (same function).
+  **2026-11-10 (A394-17):** done — an unknown `fromShiftId`, and an own `fromShiftId` with an
+  unknown `toShiftId`, now answer `shift.not_found` 400 on `POST /api/schedule/swaps` and
+  `POST /management-api/me/schedule/swaps`, and write no swap. Both files' `STATUS` entries changed
+  in place, with no second boundary: `requestSwap`'s two body checks are the only raisers of
+  `shift.not_found` either file reaches (no route there takes a shift id in its path). The till's
+  and dashboard's clients read the code, not the status. Left alone: `swap.not_permitted` 403, which
+  still waits on question 13; A394-20 now carries it.
 - **A394-18 — Bookings: a body table answers 400; a no-longer-booked booking 409.** Files:
   `packages/bookings/src/routes.ts`, `bookings.ts`. Changes `table.not_found` → 400 on three routes;
   `booking.not_found` for a booking that exists → `booking.invalid_transition` 409. Clients: code
@@ -620,8 +627,9 @@ Status changes:
   folder summary's query ids at 404 (question 8, left by A394-11), and `payments-api.ts`'s
   `reader.not_listed` on adopt and its other 422s, `/unpair`'s `management.request_invalid
   {field:"providerId"}` and the `payment.provider_unknown` a stored provider raises (enable,
-  disable, delete, status, unpair, and the stuck and bill-payment resolves; left by A394-15). Statuses per questions 4, 5, 8,
-  9, 10, 11, 14. Tests listed per row in the parts.
+  disable, delete, status, unpair, and the stuck and bill-payment resolves; left by A394-15), and
+  the swap routes' `swap.not_permitted` 403 for a `toShiftId` its `toPersonId` does not own (question
+  13, left by A394-17). Statuses per questions 4, 5, 8, 9, 10, 11, 13, 14. Tests listed per row in the parts.
   Size M; split by file if it grows. Depends on: those questions.
 - **A394-21 — Server faults answer 500, an unset box 409.** Files:
   `configuration-transfer.ts`, `email-settings-api.ts`, `backup-api.ts`, `location-settings-api.ts`,
@@ -1205,6 +1213,8 @@ this code with 404 when the signed-in person holds no passkey; it now answers 40
 | POST /management-api/me/schedule/swaps | `shift.not_found` | 404 (`me-api.ts:89`) | 400 | Body `fromShiftId` / `toShiftId` (`me-api.ts:397-399`) → `packages/workforce/src/shift-swaps.ts:28,38`. A body `toPersonId` naming no person is not checked before the insert; what then happens is not established. | `apps/dashboard/src/screens/roster-screen.test.ts:574-582` (code-based) | `workforce-api.test.ts:323` (proximity; a different file's route) |
 | POST /management-api/me/schedule/swaps/:swapId/accept, DELETE /management-api/session/me/passkeys/:id | `shared.invalid_id` (MALFORMED path id) | 400 (`:87`) | 404 (owner to confirm) | `requireUuidParam` (`packages/server-kit/src/request-screens.ts:14-15`) answers 400 for a malformed path id, while a well-formed missing one answers 404 (`swap.not_found` `shift-swaps.ts:69`; `passkey.not_registered`). management-api treats a malformed path id as the resource's not-found (`management-api.ts:320-324`). | `apps/dashboard/src/screens/recipe-screen.test.ts:516-536` (catalogue, not this share); none for these routes | `catalogue-api*.test.ts` pin 400 for catalogue routes (not this share) |
 
+**2026-11-10 (A394-17):** the `shift.not_found` row now answers 400, pinned by `me-api.test.ts`.
+
 ### membership-removal-api.ts — boundaries `membership-removal-api.ts:38` and `:39` (one STATUS, `:18-31`)
 
 15 codes checked / 15 match / 0 mismatch (same map for both). `membership.node_not_found` 404 is the
@@ -1484,6 +1494,8 @@ Codes checked 8 / match 6 / mismatch 2. Fitting: `swap.not_found` 404 (path, acc
 | --- | --- | --- | --- | --- | --- | --- |
 | `POST /api/schedule/swaps` | `shift.not_found` | 404 (`:36`) | 400 | body `fromShiftId` / `toShiftId` (`schedule-api.ts:79-81`), checked at `packages/workforce/src/shift-swaps.ts:28,38` | none found | none found |
 | `POST /api/schedule/swaps` | none (foreign-key refusal on `shift_swaps.to_person_id`) | 500, by reading | 400 | body `toPersonId` with `toShiftId: null` is inserted unchecked (`shift-swaps.ts:47-54`); key at `packages/workforce/src/schema/shift-swaps.ts:40` | none | none |
+
+**2026-11-10 (A394-17):** the `shift.not_found` row now answers 400, pinned by `schedule-api.test.ts`.
 
 ### setup-email-api.ts — boundary `setup-email-api.ts:23`
 

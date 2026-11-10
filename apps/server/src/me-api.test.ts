@@ -735,6 +735,35 @@ describe("mountMeApi — swaps", () => {
     });
   });
 
+  it("400s (shift.not_found) a fromShiftId that names no shift, and writes no swap", async () => {
+    const swapCount = async () =>
+      (await suite.db.execute<{ n: number }>(sql`select count(*) as n from shift_swaps`)).rows[0]!
+        .n;
+    const before = await swapCount();
+    const res = await send(mountApp(), "POST", "/management-api/me/schedule/swaps", {
+      cookie: await cookieFor(me),
+      body: { fromShiftId: crypto.randomUUID(), toPersonId: colleague, toShiftId: null },
+    });
+    const body = (await res.json()) as { error: { code: string } };
+    expect([res.status, body.error.code]).toEqual([400, "shift.not_found"]);
+    expect(await swapCount()).toBe(before);
+  });
+
+  it("400s (shift.not_found) an own shift offered for a toShiftId that names no shift, and writes no swap", async () => {
+    const myShift = await insertShift(me, "2026-12-08T09:00:00Z", "2026-12-08T17:00:00Z");
+    const swapCount = async () =>
+      (await suite.db.execute<{ n: number }>(sql`select count(*) as n from shift_swaps`)).rows[0]!
+        .n;
+    const before = await swapCount();
+    const res = await send(mountApp(), "POST", "/management-api/me/schedule/swaps", {
+      cookie: await cookieFor(me),
+      body: { fromShiftId: myShift, toPersonId: colleague, toShiftId: crypto.randomUUID() },
+    });
+    const body = (await res.json()) as { error: { code: string } };
+    expect([res.status, body.error.code]).toEqual([400, "shift.not_found"]);
+    expect(await swapCount()).toBe(before);
+  });
+
   it("403s (swap.not_permitted) offering a from_shift the requester does not own", async () => {
     const theirShift = await insertShift(colleague, "2026-05-08T09:00:00Z", "2026-05-08T17:00:00Z");
     const res = await send(mountApp(), "POST", "/management-api/me/schedule/swaps", {
