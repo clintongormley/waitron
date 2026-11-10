@@ -39,18 +39,35 @@ const itemKeys = {
 const namedItems = new Set(["profile_starting_zones", "transfer_desks"]);
 const refusalKeys = {
   "department.last_active": "venue.delete_refusal_department_last_active",
-  "zone.table_in_use": "venue.delete_refusal_zone_table_in_use",
+  "zone.table_in_use": [
+    "venue.delete_refusal_zone_table_in_use",
+    "venue.delete_refusal_zone_table_in_use",
+    "venue.delete_refusal_zone_table_in_use_unnamed",
+  ],
   "table.delivery_in_progress": [
     "venue.delete_refusal_table_delivery_in_progress",
     "venue.delete_refusal_table_delivery_in_progress_one",
+    "venue.delete_refusal_table_delivery_in_progress_unnamed",
   ],
-  "table.booked": ["venue.delete_refusal_table_booked", "venue.delete_refusal_table_booked_one"],
+  "table.booked": [
+    "venue.delete_refusal_table_booked",
+    "venue.delete_refusal_table_booked_one",
+    "venue.delete_refusal_table_booked_unnamed",
+  ],
   "zone.order_in_progress": "venue.delete_refusal_zone_order_in_progress",
   "department.order_in_progress": "venue.delete_refusal_department_order_in_progress",
   "zone.transfer_pending": "venue.delete_refusal_zone_transfer_pending",
   "department.transfer_pending": "venue.delete_refusal_department_transfer_pending",
-  "zone.profile_in_use": "venue.delete_refusal_zone_profile_in_use",
-  "department.profile_in_use": "venue.delete_refusal_department_profile_in_use",
+  "zone.profile_in_use": [
+    "venue.delete_refusal_zone_profile_in_use",
+    "venue.delete_refusal_zone_profile_in_use_one",
+    "venue.delete_refusal_zone_profile_in_use_unnamed",
+  ],
+  "department.profile_in_use": [
+    "venue.delete_refusal_department_profile_in_use",
+    "venue.delete_refusal_department_profile_in_use_one",
+    "venue.delete_refusal_department_profile_in_use_unnamed",
+  ],
 } as const;
 export function serviceDeleteCopy(kind: "zone" | "department"): DeleteDialogCopy {
   return {
@@ -81,8 +98,9 @@ export function serviceDeleteCopy(kind: "zone" | "department"): DeleteDialogCopy
     refusal(item) {
       const keys = refusalKeys[item.code as keyof typeof refusalKeys];
       if (!keys) return t("venue.delete_action_error");
-      const [many, one] = typeof keys === "string" ? [keys, keys] : keys;
-      return format(item.targets.length === 1 ? one : many, {
+      const [many, one, unnamed] = typeof keys === "string" ? [keys, keys, keys] : keys;
+      const shown = item.targets.length;
+      return format(shown === 0 ? unnamed : shown === 1 ? one : many, {
         tableName: String(item.params.tableName ?? ""),
         names: item.targets.map((target) => target.name).join(", "),
       });

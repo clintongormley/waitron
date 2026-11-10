@@ -121,6 +121,7 @@ it.each([
     "en",
     "Choose another default station first.",
     "Move the bound screens first.",
+    "Move the bound screen first.",
     "3 dishes are still waiting or being prepared.",
     "The change could not be saved.",
   ],
@@ -128,16 +129,20 @@ it.each([
     "es",
     "Elige otra estación predeterminada primero.",
     "Cambia primero las pantallas vinculadas.",
+    "Cambia primero la pantalla vinculada.",
     "3 platos siguen pendientes o en preparación.",
     "No se pudo guardar el cambio.",
   ],
 ] as const)(
   "explains delete action refusals and unexpected failures in %s",
-  (locale, defaultLine, screens, work, fallback) => {
+  (locale, defaultLine, screens, screen, work, fallback) => {
     setLocale(locale);
     expect(stationDeleteError({ code: "station.is_default" })).toBe(defaultLine);
     expect(stationDeleteError({ code: "station.screen_in_use", params: { count: 2 } })).toBe(
       screens,
+    );
+    expect(stationDeleteError({ code: "station.screen_in_use", params: { count: 1 } })).toBe(
+      screen,
     );
     expect(stationDeleteError({ code: "station.work_in_progress", params: { count: 3 } })).toBe(
       work,
@@ -235,22 +240,18 @@ it.each([
   }
 });
 
+it("words a counted line by its count, whatever names it carries", () => {
+  expect(stationDeleteCopy().item({ key: "station_unsent_lines", count: 2, targets: grill })).toBe(
+    "2 unsent order lines return to normal routing.",
+  );
+});
+
 it.each([
-  [
-    "en",
-    "Move this screen first: Grill.",
-    "1 dish is still waiting or being prepared.",
-    "Move these screens first: .",
-  ],
-  [
-    "es",
-    "Cambia primero esta pantalla: Grill.",
-    "1 plato sigue pendiente o en preparación.",
-    "Cambia primero estas pantallas: .",
-  ],
+  ["en", "Move this screen first: Grill.", "1 dish is still waiting or being prepared."],
+  ["es", "Cambia primero esta pantalla: Grill.", "1 plato sigue pendiente o en preparación."],
 ] as const)(
   "words a refusal about one screen or one dish in the singular in %s",
-  (locale, screen, work, noNames) => {
+  (locale, screen, work) => {
     setLocale(locale);
     const copy = stationDeleteCopy();
     expect(
@@ -260,9 +261,6 @@ it.each([
         targets: [{ id: "private-id", name: "Grill" }],
       }),
     ).toBe(screen);
-    expect(copy.refusal({ code: "station.screen_in_use", params: { count: 1 }, targets: [] })).toBe(
-      noNames,
-    );
     expect(
       copy.refusal({ code: "station.work_in_progress", params: { count: 1 }, targets: [] }),
     ).toBe(work);

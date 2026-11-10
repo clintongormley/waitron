@@ -55,7 +55,7 @@ export function stationDeleteCopy(): DeleteDialogCopy {
         ],
       } as const;
       const [many, one] = keys[item.key as keyof typeof keys];
-      const single = item.targets.length > 0 ? item.targets.length === 1 : item.count === 1;
+      const single = item.count === 1;
       return format(single ? one : many, {
         count: String(item.count),
         names: item.targets.map((target) => target.name).join(", "),
@@ -75,7 +75,12 @@ export function stationDeleteCopy(): DeleteDialogCopy {
 export function stationDeleteError(error: unknown): string {
   const code = codeOf(error);
   if (code === "station.is_default") return t("prep.delete_default");
-  if (code === "station.screen_in_use") return t("prep.delete_screen_error");
+  if (code === "station.screen_in_use")
+    return t(
+      (error as { params?: { count?: number } }).params?.count === 1
+        ? "prep.delete_screen_error_one"
+        : "prep.delete_screen_error",
+    );
   if (code === "station.work_in_progress")
     return work((error as { params: { count: number } }).params.count);
   return t("prep.save_error");

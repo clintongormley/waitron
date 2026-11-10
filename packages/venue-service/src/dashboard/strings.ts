@@ -62,22 +62,34 @@ const en = {
   "venue.delete_item_counter_default": "Sets the Counter default to: {names}.",
   "venue.delete_refusal_department_last_active": "Keep at least one department.",
   "venue.delete_refusal_zone_table_in_use": "Table {tableName} has open work: {names}.",
+  "venue.delete_refusal_zone_table_in_use_unnamed": "Table {tableName} has open work.",
   "venue.delete_refusal_table_delivery_in_progress_one":
     "Complete delivery of this order first: {names}.",
   "venue.delete_refusal_table_delivery_in_progress":
     "Complete delivery of these orders first: {names}.",
+  "venue.delete_refusal_table_delivery_in_progress_unnamed":
+    "Complete delivery of the orders to the tables being deleted first.",
   "venue.delete_refusal_table_booked_one": "Move or cancel this booking first: {names}.",
   "venue.delete_refusal_table_booked": "Move or cancel these bookings first: {names}.",
+  "venue.delete_refusal_table_booked_unnamed":
+    "Move or cancel the bookings on the tables being deleted first.",
   "venue.delete_refusal_zone_order_in_progress": "An order is still open or placed in this zone.",
   "venue.delete_refusal_department_order_in_progress":
     "An order is still open or placed in this department.",
   "venue.delete_refusal_zone_transfer_pending": "Resolve the pending transfer to this zone first.",
   "venue.delete_refusal_department_transfer_pending":
     "Resolve the pending transfer involving this department first.",
+  "venue.delete_refusal_zone_profile_in_use_one":
+    "This profile would have no allowed zones: {names}.",
   "venue.delete_refusal_zone_profile_in_use":
     "These profiles would have no allowed zones: {names}.",
+  "venue.delete_refusal_zone_profile_in_use_unnamed": "A profile would have no allowed zones.",
+  "venue.delete_refusal_department_profile_in_use_one":
+    "Move this profile to another department first: {names}.",
   "venue.delete_refusal_department_profile_in_use":
     "Move these profiles to another department first: {names}.",
+  "venue.delete_refusal_department_profile_in_use_unnamed":
+    "Move this department's profiles to another department first.",
   "calendar.special_day": "Special day",
   "calendar.area_required":
     "{year}: only official holidays for the whole province are shown until you choose the holiday area here.",
@@ -91,7 +103,7 @@ const en = {
   "special.closed": "Closed all day",
   "special.every_year": "Every year",
   "special.holiday_note":
-    "On a holiday, this repeats on that holiday, whatever its date that year.",
+    "With Yes, a date on a holiday repeats on that holiday, whatever its date that year.",
   "special.leap": "Repeats only in leap years",
   "special.dates_required": "Add at least one date.",
   "special.range_long": "Choose at most 366 dates.",
@@ -394,6 +406,7 @@ const en = {
   "prep.delete_default": "Choose another default station first.",
   "prep.delete_screens_one": "Move this screen first: {names}.",
   "prep.delete_screens": "Move these screens first: {names}.",
+  "prep.delete_screen_error_one": "Move the bound screen first.",
   "prep.delete_screen_error": "Move the bound screens first.",
   "prep.delete_work_one": "1 dish is still waiting or being prepared.",
   "prep.delete_work": "{count} dishes are still waiting or being prepared.",
@@ -982,12 +995,17 @@ const es: Record<keyof typeof en, string> = {
   "venue.delete_item_counter_default": "Establece la zona predeterminada de Mostrador: {names}.",
   "venue.delete_refusal_department_last_active": "Conserva al menos un departamento.",
   "venue.delete_refusal_zone_table_in_use": "La mesa {tableName} tiene trabajo abierto: {names}.",
+  "venue.delete_refusal_zone_table_in_use_unnamed": "La mesa {tableName} tiene trabajo abierto.",
   "venue.delete_refusal_table_delivery_in_progress_one":
     "Completa primero la entrega de este pedido: {names}.",
   "venue.delete_refusal_table_delivery_in_progress":
     "Completa primero la entrega de estos pedidos: {names}.",
+  "venue.delete_refusal_table_delivery_in_progress_unnamed":
+    "Completa primero la entrega de los pedidos a las mesas que se eliminan.",
   "venue.delete_refusal_table_booked_one": "Mueve o cancela primero esta reserva: {names}.",
   "venue.delete_refusal_table_booked": "Mueve o cancela primero estas reservas: {names}.",
+  "venue.delete_refusal_table_booked_unnamed":
+    "Mueve o cancela primero las reservas de las mesas que se eliminan.",
   "venue.delete_refusal_zone_order_in_progress": "Hay un pedido abierto o enviado en esta zona.",
   "venue.delete_refusal_department_order_in_progress":
     "Hay un pedido abierto o enviado en este departamento.",
@@ -995,10 +1013,17 @@ const es: Record<keyof typeof en, string> = {
     "Resuelve primero el traslado pendiente a esta zona.",
   "venue.delete_refusal_department_transfer_pending":
     "Resuelve primero el traslado pendiente de este departamento.",
+  "venue.delete_refusal_zone_profile_in_use_one":
+    "Este perfil se quedaría sin zonas permitidas: {names}.",
   "venue.delete_refusal_zone_profile_in_use":
     "Estos perfiles se quedarían sin zonas permitidas: {names}.",
+  "venue.delete_refusal_zone_profile_in_use_unnamed": "Un perfil se quedaría sin zonas permitidas.",
+  "venue.delete_refusal_department_profile_in_use_one":
+    "Mueve primero este perfil a otro departamento: {names}.",
   "venue.delete_refusal_department_profile_in_use":
     "Mueve primero estos perfiles a otro departamento: {names}.",
+  "venue.delete_refusal_department_profile_in_use_unnamed":
+    "Mueve primero a otro departamento los perfiles de este departamento.",
   "venue.delete_zone_heading": "Eliminar zona",
   "venue.delete_department_heading": "Eliminar departamento",
   "venue.delete": "Eliminar",
@@ -1026,7 +1051,7 @@ const es: Record<keyof typeof en, string> = {
   "special.closed": "Cerrado todo el día",
   "special.every_year": "Cada año",
   "special.holiday_note":
-    "En un festivo, se repite en ese festivo, caiga en la fecha que caiga ese año.",
+    "Con Sí, una fecha en un festivo se repite en ese festivo, caiga en la fecha que caiga ese año.",
   "special.leap": "Se repite solo en años bisiestos",
   "special.dates_required": "Añade al menos una fecha.",
   "special.range_long": "Elige como máximo 366 fechas.",
@@ -1333,6 +1358,7 @@ const es: Record<keyof typeof en, string> = {
   "prep.delete_default": "Elige otra estación predeterminada primero.",
   "prep.delete_screens_one": "Cambia primero esta pantalla: {names}.",
   "prep.delete_screens": "Cambia primero estas pantallas: {names}.",
+  "prep.delete_screen_error_one": "Cambia primero la pantalla vinculada.",
   "prep.delete_screen_error": "Cambia primero las pantallas vinculadas.",
   "prep.delete_work_one": "1 plato sigue pendiente o en preparación.",
   "prep.delete_work": "{count} platos siguen pendientes o en preparación.",
