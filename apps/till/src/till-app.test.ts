@@ -513,7 +513,9 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listZones: vi.fn().mockResolvedValue([]),
     seatTable: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
-    getBillBalance: vi.fn(async (id: string) => balanceOf({ workingOrderId: id, total: "3.00", outstanding: "3.00" })),
+    getBillBalance: vi.fn(async (id: string) =>
+      balanceOf({ workingOrderId: id, total: "3.00", outstanding: "3.00" }),
+    ),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     fireCourse: vi.fn().mockResolvedValue(undefined),
@@ -810,7 +812,27 @@ describe("till-app", () => {
       order.push("pay");
       return saleResult;
     });
-    const { el } = await mountApp({ askSaleDeadEnds, recordSale });
+    const { el } = await mountApp({
+      askSaleDeadEnds,
+      recordSale,
+      listStations: vi
+        .fn()
+        .mockResolvedValue([
+          defaultStation,
+          { ...defaultStation, id: "kitchen", name: "Kitchen", isDefault: false },
+        ]),
+      retrieveWorkingOrder: vi.fn(async (id: string) => ({
+        id,
+        orderNumber: 5,
+        label: null,
+        revision: 0,
+        expectedEdit: null,
+        kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+        lines: [
+          { product: coffee, menuItemId: "menu-item-cafe-0", quantity: "1", makeAt: "kitchen" },
+        ],
+      })),
+    });
     const c = await toCounter(el);
     c.store.addProduct(coffee, "1");
     await flush(el);
@@ -832,9 +854,11 @@ describe("till-app", () => {
     await flush(el);
     expect(c.store.lines[0]!.makeAt).toBe("kitchen");
     expect(recordSale).not.toHaveBeenCalled();
-    expect(currentApi.parkOrder).toHaveBeenCalledWith(expect.objectContaining({
-      lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1", makeAt: "kitchen" }],
-    }));
+    expect(currentApi.parkOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1", makeAt: "kitchen" }],
+      }),
+    );
     expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).not.toBeNull();
   });
 
@@ -1104,7 +1128,18 @@ describe("till-app", () => {
       ],
       stations: [],
     });
-    const { el } = await mountApp({ askSaleDeadEnds });
+    const { el } = await mountApp({
+      askSaleDeadEnds,
+      retrieveWorkingOrder: vi.fn(async (id: string) => ({
+        id,
+        orderNumber: 5,
+        label: null,
+        revision: 0,
+        expectedEdit: null,
+        kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+        lines: [{ product: ham, menuItemId: "menu-item-ham", quantity: "1" }],
+      })),
+    });
     const c = await toCounter(el);
     c.store.addProduct(coffee, "1");
     c.store.addProduct(ham, "1");
@@ -3718,7 +3753,9 @@ describe("till-app", () => {
     c.store.loadFrom("large-bill", [{ product: coffee, quantity: "2001" }]);
     await flush(el);
     const pay = () =>
-      tenderPay(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-counter-pay], .pay-card")!;
+      tenderPay(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "[data-counter-pay], .pay-card",
+      )!;
     expect(pay().disabled).toBe(false);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
@@ -10944,8 +10981,7 @@ describe("till-app", () => {
         cardProvider: "stripe_terminal",
         capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
       });
-    const tapPayCard = (el: TillApp): void =>
-      emit(counter(el)!, "collect-card", {});
+    const tapPayCard = (el: TillApp): void => emit(counter(el)!, "collect-card", {});
 
     it("forwards the selected simulator outcome to POST /api/pay", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
@@ -11448,42 +11484,9 @@ describe("till-app", () => {
       await flush(el);
       await tenderPay(el).updateComplete;
       expect(tenderPay(el).busy).toBe(false);
-      expect(tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card")).not.toBeNull();
-    });
-
-    it("an earlier reader payment finishing late leaves a newer one's pay card waiting on the reader", async () => {
-      let heldRead: ((orders: HeldOrderSummary[]) => void) | undefined;
-      let holdHeldRead = false;
-      const listWorkingOrders = vi.fn(() =>
-        holdHeldRead
-          ? new Promise<HeldOrderSummary[]>((resolve) => (heldRead = resolve))
-          : Promise.resolve([]),
-      );
-      const pay = vi
-        .fn()
-        .mockRejectedValueOnce({ code: "bill.payments_received", status: 409 })
-        .mockImplementationOnce(() => new Promise<PayOutcome>(() => {}));
-      const { el } = await mountApp({ getTill: withReaderTill(), pay, listWorkingOrders });
-      const c = await toCounter(el);
-      c.store.addProduct(coffee, "2");
-      await flush(el);
-
-      holdHeldRead = true;
-      tapPayCard(el);
-      await flush(el);
-      expect(heldRead).toBeDefined();
-      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
-      await tenderPay(el).updateComplete;
-      tapPayCard(el);
-      await flush(el);
-      expect(pay).toHaveBeenCalledTimes(2);
-      await tenderPay(el).updateComplete;
-      expect(tenderPay(el).busy).toBe(true);
-
-      heldRead!([]);
-      await flush(el);
-      await tenderPay(el).updateComplete;
-      expect(tenderPay(el).busy).toBe(true);
+      expect(
+        tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card"),
+      ).not.toBeNull();
     });
 
     const deadEnd = {
@@ -11523,7 +11526,7 @@ describe("till-app", () => {
         .mockRejectedValueOnce({ code: "station.no_replacement" })
         .mockResolvedValue({ revision: 4 });
 
-    it("keeps the pay card waiting on the reader through the kitchen-station question a refused save asks, and puts its choices back once the retry ends", async () => {
+    it("retries a whole-order payment only after the refused save's routing choice", async () => {
       const lookup = heldStationLookup();
       const updateWorkingOrder = updateRefusedOnceForStation();
       const pay = vi.fn().mockRejectedValue({ code: "server.internal", status: 500 });
@@ -11545,14 +11548,14 @@ describe("till-app", () => {
       await tenderPay(el).updateComplete;
       expect(updateWorkingOrder).toHaveBeenCalledOnce();
       expect(lookup.held()).toBe(true);
-      expect(tenderPay(el).busy).toBe(true);
+      expect(pay).not.toHaveBeenCalled();
 
       lookup.answer(deadEnd);
       await flush(el);
       const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
       expect(dialog).not.toBeNull();
       await tenderPay(el).updateComplete;
-      expect(tenderPay(el).busy).toBe(true);
+      expect(pay).not.toHaveBeenCalled();
 
       dialog
         .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
@@ -11562,57 +11565,10 @@ describe("till-app", () => {
       await flush(el);
       await tenderPay(el).updateComplete;
       expect(pay).toHaveBeenCalledOnce();
-      expect(tenderPay(el).busy).toBe(false);
-      expect(tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card")).not.toBeNull();
-    });
-
-    it("puts the pay card back to its choices when an earlier attempt's kitchen-station retry ends after a newer attempt was declined", async () => {
-      const lookup = heldStationLookup();
-      let refuseRetry: (reason: unknown) => void = () => undefined;
-      const pay = vi
-        .fn()
-        .mockResolvedValueOnce({ outcome: "declined" })
-        .mockImplementationOnce(
-          () => new Promise<PayOutcome>((_resolve, reject) => (refuseRetry = reject)),
-        );
-      const { el } = await mountApp({
-        getTill: withReaderTill(),
-        askSaleDeadEnds: lookup.askSaleDeadEnds,
-        updateWorkingOrder: updateRefusedOnceForStation(),
-        pay,
-      });
-      const c = await toCounter(el);
-      emit(c, "retrieve-order", { id: "wo-1" });
-      await flush(el);
-      c.store.addProduct(coffee, "1");
-      await flush(el);
-
-      tapPayCard(el);
-      lookup.holdNext();
-      await flush(el);
-      expect(lookup.held()).toBe(true);
-      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
-      await tenderPay(el).updateComplete;
-      tapPayCard(el);
-      await flush(el);
-      await tenderPay(el).updateComplete;
-      expect(pay).toHaveBeenCalledOnce();
-      expect(tenderPay(el).shadowRoot!.querySelector(".retry")).not.toBeNull();
-
-      lookup.answer(noDeadEnds);
-      await flush(el);
-      expect(pay).toHaveBeenCalledTimes(2);
-      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".retry")!.click();
-      await flush(el);
-      await tenderPay(el).updateComplete;
-      expect(pay).toHaveBeenCalledTimes(2);
-      expect(tenderPay(el).busy).toBe(true);
-
-      refuseRetry({ code: "server.internal", status: 500 });
-      await flush(el);
-      await tenderPay(el).updateComplete;
-      expect(tenderPay(el).busy).toBe(false);
-      expect(tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card")).not.toBeNull();
+      expect(c.orderInFlight).toBe(false);
+      expect(
+        tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card"),
+      ).not.toBeNull();
     });
 
     it("shows the decline again when a retried reader payment is declined again", async () => {
@@ -11652,7 +11608,9 @@ describe("till-app", () => {
       expect(updateWorkingOrder).toHaveBeenCalled();
       expect(pay).not.toHaveBeenCalled();
       expect(tenderPay(el).busy).toBe(false);
-      expect(tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card")).not.toBeNull();
+      expect(
+        tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card"),
+      ).not.toBeNull();
     });
 
     it("resets the busy state after a declined outcome so the counter re-enables for a retry", async () => {

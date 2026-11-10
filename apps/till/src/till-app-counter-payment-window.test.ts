@@ -61,12 +61,10 @@ it("persists the first Counter payment before opening the window, then offers th
   const api = stubApi({
     parkOrder,
     retrieveWorkingOrder,
-    getTabLines: vi
-      .fn()
-      .mockResolvedValue({
-        revision: 0,
-        lines: [line({ id: "dish-1", lineNo: 1, name: "Lunch", unitPriceGross: "30.00" })],
-      }),
+    getTabLines: vi.fn().mockResolvedValue({
+      revision: 0,
+      lines: [line({ id: "dish-1", lineNo: 1, name: "Lunch", unitPriceGross: "30.00" })],
+    }),
     getBillBalance: vi.fn(async () =>
       balanceOf({ workingOrderId: id, total: "30.00", outstanding: "30.00" }),
     ),
@@ -120,22 +118,35 @@ it("persists the first Counter payment before opening the window, then offers th
   expect(dialog(el)!.shadowRoot!.querySelector('[name="method"][value="cash"]')).not.toBeNull();
   expect(dialog(el)!.shadowRoot!.querySelector('[name="method"][value="card"]')).not.toBeNull();
   vi.mocked(api.previewBillPayment).mockResolvedValue(cash("20.00", "0.00"));
-  vi.mocked(api.takeBillPayment).mockResolvedValue(takenOf(
-    { applied: "20.00", tendered: "20.00", change: "0.00" },
-    { workingOrderId: id, total: "30.00", received: "30.00", outstanding: "0.00", status: "settled" },
-    invoiceOf("30.00"),
-  ));
+  vi.mocked(api.takeBillPayment).mockResolvedValue(
+    takenOf(
+      { applied: "20.00", tendered: "20.00", change: "0.00" },
+      {
+        workingOrderId: id,
+        total: "30.00",
+        received: "30.00",
+        outstanding: "0.00",
+        status: "settled",
+      },
+      invoiceOf("30.00"),
+    ),
+  );
   await type(el, "amount", "20");
   await type(el, "tendered", "20");
   await press(el, "[data-pay-continue]");
-  const guests = inDialog(el, '[name="guests"]') as HTMLElement & { updateComplete: Promise<unknown> };
+  const guests = inDialog(el, '[name="guests"]') as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
   await guests.updateComplete;
   const input = guests.shadowRoot!.querySelector("input")!;
   input.value = "2";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await flush(el);
   await press(el, "[data-pay-confirm]");
-  expect(vi.mocked(api.takeBillPayment).mock.calls[1]![1]).toMatchObject({ amount: "20", guestCount: 2 });
+  expect(vi.mocked(api.takeBillPayment).mock.calls[1]![1]).toMatchObject({
+    amount: "20",
+    guestCount: 2,
+  });
   expect(dialog(el)).toBeNull();
 });
 
@@ -173,12 +184,10 @@ it.each([undefined, "F1/7"])(
           { workingOrderLineId: "dish-1", menuItemId: "offer-meal", quantity: "1.000", product },
         ],
       }),
-      getTabLines: vi
-        .fn()
-        .mockResolvedValue({
-          revision: 0,
-          lines: [line({ id: "dish-1", lineNo: 1, name: "Lunch", unitPriceGross: "30.00" })],
-        }),
+      getTabLines: vi.fn().mockResolvedValue({
+        revision: 0,
+        lines: [line({ id: "dish-1", lineNo: 1, name: "Lunch", unitPriceGross: "30.00" })],
+      }),
     });
     const { el } = await mountWidget<TillApp>("till-app", { api });
     await flush(el);

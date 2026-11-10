@@ -2308,9 +2308,14 @@ describe("till-app counter: the guests the receipt prints", () => {
   const guests = (el: TillApp) =>
     pane(el).shadowRoot!.querySelector<Pane & { value: string }>('[name="guests"]');
 
-  async function payCash(el: TillApp, guestCount?: number): Promise<void> {
+  async function payCash(
+    el: TillApp,
+    guests: { guestCount?: number | null } = { guestCount: null },
+  ): Promise<void> {
     emit(el.shadowRoot!.querySelector("till-counter-screen")!, "confirm-payment", {
-      method: "cash", amount: "5", ...(guestCount === undefined ? {} : { guestCount }),
+      method: "cash",
+      amount: "5",
+      ...guests,
     });
     await flush(el);
   }
@@ -2356,7 +2361,7 @@ describe("till-app counter: the guests the receipt prints", () => {
 
   it("a whole-order cash request forwards the chosen count of 2", async () => {
     const { el } = await counterWithCoffee();
-    await payCash(el, 2);
+    await payCash(el, { guestCount: 2 });
 
     const call = vi.mocked(api.recordSale).mock.calls[0]!;
     expect(call[1]).toStrictEqual({ method: "cash", amount: "5" });
@@ -2395,7 +2400,7 @@ describe("till-app counter: the guests the receipt prints", () => {
     await flush(el);
     expect(guests(el)).toBeNull();
 
-    await payCash(el);
+    await payCash(el, {});
 
     expect(api.recordSale).toHaveBeenCalledWith(
       expect.any(Array),
