@@ -13,6 +13,7 @@ import {
   themeChoicesStyles,
   visuallyHiddenStyles,
   type VenueLogoState,
+  type WtRowActions,
 } from "@waitron/ui";
 // `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
 import { countText, currentLocale, t } from "../i18n/t.js";
@@ -525,6 +526,9 @@ export class TillShell extends LitElement {
     this.#observer = undefined;
     this.#stripObserver?.disconnect();
     this.#stripObserver = undefined;
+    this.#barObserver?.disconnect();
+    this.#barObserver = undefined;
+    this.#watchedBar = undefined;
     this.#watchedStrip = undefined;
     this.#watchedTable = undefined;
     if (this.#overflowFrame !== undefined) cancelAnimationFrame(this.#overflowFrame);
@@ -553,9 +557,11 @@ export class TillShell extends LitElement {
   #logoRetry?: ReturnType<typeof setTimeout>;
   #observer?: ResizeObserver;
   #stripObserver?: ResizeObserver;
+  #barObserver?: ResizeObserver;
   #overflowFrame?: number;
   #counterObserver?: ResizeObserver;
   #counterTargets = new Set<Element>();
+  #watchedBar?: Element;
   #watchedStrip?: Element;
   #watchedTable?: Element;
   #watchedPopup?: Element;
@@ -572,12 +578,17 @@ export class TillShell extends LitElement {
    * capped height under ☰ rather than moved up over the bar to fit. */
   readonly #onPopupOpening = (event: Event) => {
     if ((event as ToggleEvent).newState !== "open") return;
-    const menu = this.renderRoot.querySelector<HTMLElement>(
+    this.#capMoreBelowTrigger();
+  };
+
+  #capMoreBelowTrigger(): WtRowActions {
+    const menu = this.renderRoot.querySelector<WtRowActions>(
       'wt-row-actions[data-test="more-menu"]',
     )!;
     const trigger = menu.shadowRoot!.querySelector("button")!;
     menu.style.setProperty("--more-top", `${trigger.getBoundingClientRect().bottom}px`);
-  };
+    return menu;
+  }
 
   /** An open More can hold the name though `steps` puts it on the bar; once it has closed, above
    * phone width, raise `steps` to cover it, so closing it moves nothing back before the fit steps
@@ -751,6 +762,7 @@ export class TillShell extends LitElement {
       this.#observer.observe(this);
     }
     this.#observeStrip();
+    this.#observeBar();
     const popup = this.#popup();
     if (popup !== this.#watchedPopup) {
       this.#watchedPopup?.removeEventListener("toggle", this.#onPopupToggle);
@@ -783,6 +795,20 @@ export class TillShell extends LitElement {
       if (this.#watchedTable) this.#stripObserver.unobserve(this.#watchedTable);
       if (table) this.#stripObserver.observe(table, { box: "border-box" });
       this.#watchedTable = table;
+    }
+  }
+
+  /** A bar that changes size while More is open, as after a rotation, moves ☰, so the menu is
+   * capped and placed under it again then. */
+  #observeBar(): void {
+    const bar = this.renderRoot.querySelector(".head") ?? undefined;
+    this.#barObserver ??= new ResizeObserver(() => {
+      if (this.#menuOpen()) this.#capMoreBelowTrigger().reposition();
+    });
+    if (bar !== this.#watchedBar) {
+      if (this.#watchedBar) this.#barObserver.unobserve(this.#watchedBar);
+      if (bar) this.#barObserver.observe(bar);
+      this.#watchedBar = bar;
     }
   }
 

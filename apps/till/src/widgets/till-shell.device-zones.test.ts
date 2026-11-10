@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "./test-helpers.js";
-import type { TillShell } from "./till-shell.js";
+import type { ShellAffordance, TillShell } from "./till-shell.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import "./till-shell.js";
 
@@ -162,7 +162,11 @@ it("the handheld More menu keeps its host height cap below the bar after rotatio
     const trigger = menu.shadowRoot!.querySelector("button")!;
     const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
     await userEvent.click(trigger);
+    const portraitBottom = trigger.getBoundingClientRect().bottom;
     await page.viewport(844, 390);
+    await vi.waitFor(() => {
+      expect(trigger.getBoundingClientRect().bottom).not.toBe(portraitBottom);
+    });
     await vi.waitFor(() => {
       expect(popup.getBoundingClientRect().top).toBeCloseTo(
         trigger.getBoundingClientRect().bottom,
@@ -171,6 +175,63 @@ it("the handheld More menu keeps its host height cap below the bar after rotatio
       expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
       expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
     });
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+async function openHandheldMore(affordances: ShellAffordance[]) {
+  const { el } = await mountWidget<TillShell>("till-shell", {
+    formFactor: "phone-portrait",
+    operatorName: "Ana",
+    activeScreen: "floor",
+    affordances,
+  });
+  const menu = el.shadowRoot!.querySelector<HTMLElement>('[data-test="more-menu"]')!;
+  await (menu as TillShell).updateComplete;
+  const trigger = menu.shadowRoot!.querySelector("button")!;
+  const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  await userEvent.click(trigger);
+  const resizeUntilTriggerMoves = async (width: number, height: number) => {
+    const before = trigger.getBoundingClientRect().bottom;
+    await page.viewport(width, height);
+    await vi.waitFor(() => {
+      expect(trigger.getBoundingClientRect().bottom).not.toBe(before);
+    });
+  };
+  // A popup shorter than its cap keeps its size when the cap moves, so its own size observer does
+  // not place it again.
+  const expectPopupUnderTriggerBelowCap = () =>
+    vi.waitFor(() => {
+      expect(popup.matches(":popover-open")).toBe(true);
+      expect(popup.scrollHeight).toBe(popup.clientHeight);
+      expect(popup.getBoundingClientRect().top).toBeCloseTo(
+        trigger.getBoundingClientRect().bottom,
+        0,
+      );
+    });
+  return { resizeUntilTriggerMoves, expectPopupUnderTriggerBelowCap };
+}
+
+it("a short handheld More menu follows ☰ through a rotation and back", async () => {
+  await page.viewport(390, 844);
+  try {
+    const more = await openHandheldMore([]);
+    await more.resizeUntilTriggerMoves(844, 390);
+    await more.expectPopupUnderTriggerBelowCap();
+    await more.resizeUntilTriggerMoves(390, 844);
+    await more.expectPopupUnderTriggerBelowCap();
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+it("the handheld More menu follows ☰ when a wider window moves it", async () => {
+  await page.viewport(390, 844);
+  try {
+    const more = await openHandheldMore(["find-bill", "schedule", "station"]);
+    await more.resizeUntilTriggerMoves(1024, 768);
+    await more.expectPopupUnderTriggerBelowCap();
   } finally {
     await page.viewport(1280, 900);
   }

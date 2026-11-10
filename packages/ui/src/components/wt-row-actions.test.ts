@@ -470,10 +470,28 @@ test("show() opens the popup under its trigger and hide() closes it", async () =
   expect(popup.matches(":popover-open")).toBe(false);
 });
 
-test("show() and hide() do nothing before the first render", () => {
+test("reposition() places an open popup under its moved trigger, and leaves a closed one alone", async () => {
+  const { el, trigger, popup } = await mountActions();
+  el.show();
+  const openedTop = popup.getBoundingClientRect().top;
+  expect(openedTop).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
+  el.style.marginBlockStart = "40px";
+  el.reposition();
+  expect(popup.getBoundingClientRect().top).toBeCloseTo(openedTop + 40, 0);
+  expect(popup.getBoundingClientRect().top).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
+  el.hide();
+  const closedTop = popup.style.top;
+  el.style.marginBlockStart = "80px";
+  el.reposition();
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(popup.style.top).toBe(closedTop);
+});
+
+test("show(), hide() and reposition() do nothing before the first render", () => {
   const el = document.createElement("wt-row-actions");
   expect(() => el.show()).not.toThrow();
   expect(() => el.hide()).not.toThrow();
+  expect(() => el.reposition()).not.toThrow();
 });
 
 test("show() does nothing once the menu has been removed from the page", async () => {
