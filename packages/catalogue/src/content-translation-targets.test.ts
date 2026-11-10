@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { countingSettingsReads } from "../test/fixtures.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
@@ -15,7 +16,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { setProductVariants } from "./variants.js";
@@ -28,6 +29,7 @@ import {
 } from "./content-translation-targets.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(() => seedVenueSettings(suite.db));
 const context = { fallbackLanguage: "es", required: ["es"] };
 
 async function fixture(tx: Transaction) {
@@ -144,11 +146,13 @@ describe("inline translation targets", () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
+      const counting = countingSettingsReads(tx);
       const executeSpy = vi.spyOn(tx, "execute");
       const page = await (async () => {
         try {
-          const answer = await listTranslationTargets(tx, "en", {}, context);
-          expect(executeSpy).toHaveBeenCalledTimes(4);
+          const answer = await listTranslationTargets(counting.tx, "en", {}, context);
+          expect(executeSpy).toHaveBeenCalledTimes(3);
+          expect(counting.reads()).toBe(1);
           return answer;
         } finally {
           executeSpy.mockRestore();
@@ -351,19 +355,22 @@ describe("inline translation targets", () => {
           precision: 0,
         })),
       );
+      const counting = countingSettingsReads(tx);
       const actual = vi.spyOn(tx, "execute");
       try {
-        await resolveTranslationTargets(tx, "en", refs.slice(0, 1), context);
+        await resolveTranslationTargets(counting.tx, "en", refs.slice(0, 1), context);
         const count = actual.mock.calls.length;
-        expect(await actual.mock.results[1]!.value).toMatchObject({
+        expect(counting.reads()).toBe(1);
+        expect(await actual.mock.results[0]!.value).toMatchObject({
           rows: [{ kind: "unit", id: "unit-0" }],
         });
         actual.mockClear();
-        const many = await resolveTranslationTargets(tx, "en", refs, context);
+        const many = await resolveTranslationTargets(counting.tx, "en", refs, context);
         expect(many.targets).toHaveLength(100);
-        expect(await actual.mock.results[1]!.value).toHaveProperty("rows.length", 100);
+        expect(await actual.mock.results[0]!.value).toHaveProperty("rows.length", 100);
         expect(actual).toHaveBeenCalledTimes(count);
-        expect(count).toBe(2);
+        expect(count).toBe(1);
+        expect(counting.reads()).toBe(2);
       } finally {
         actual.mockRestore();
       }

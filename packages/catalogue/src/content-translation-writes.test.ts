@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
@@ -16,7 +16,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
 import { setProductVariants } from "./variants.js";
@@ -30,6 +30,7 @@ import { writeTranslationMaps } from "./content-translation-writes.js";
 import type { TranslationItem } from "./content-translation-types.js";
 import { resolveTranslationTargets } from "./content-translation-targets.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(() => seedVenueSettings(suite.db));
 const context = { fallbackLanguage: "en", required: ["es", "ca"] };
 const kinds = ["product", "variant", "option_list", "option_label", "extra_list", "unit"] as const;
 type Kind = (typeof kinds)[number];

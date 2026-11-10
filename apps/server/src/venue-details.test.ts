@@ -268,7 +268,7 @@ describe("venue detail edits", () => {
       suite.db.all(
         sql`select json_extract(doc, '$.name') as name, updated_by, revision from settings where module = 'venue'`,
       ),
-    ).toEqual([{ name: "New trading name", updated_by: person!.id, revision: 2 }]);
+    ).toEqual([{ name: "New trading name", updated_by: person!.id, revision: 3 }]);
   });
 
   it("reads the deployed address, issuer and history independently", async () => {
@@ -935,7 +935,7 @@ describe("venue details preserve committed history", () => {
       );
       expect(saved.changed).toBe(true);
       const [activity] = suite.db.all<{ id: string }>(
-        sql`select id from activity_log where kind = 'settings.saved' and subject_id = 'venue' and json_extract(data, '$.revision') = 2`,
+        sql`select id from activity_log where kind = 'settings.saved' and subject_id = 'venue' and json_extract(data, '$.revision') = 3`,
       );
       expect(events).toEqual([
         { resources: [{ type: "settings.venue" }] },

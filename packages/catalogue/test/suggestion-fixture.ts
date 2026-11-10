@@ -11,7 +11,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { contentLanguageChoices } from "@waitron/shared";
 import { createCatalogue, createProduct } from "../src/operations.js";
 import { writeContentLanguages } from "../src/content-languages.js";
@@ -70,6 +70,7 @@ export async function seedSuggestionVenue(
   breadCustomerName: Record<string, string> = { ca: "CLIENT-CA Pa" },
 ): Promise<SuggestionVenue> {
   await seedTenant(db);
+  await seedVenueSettings(db);
   return withTransaction(db, async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "ca", languages: ["ca", "es", "en"] });
     const menu = await createCatalogue(tx, {

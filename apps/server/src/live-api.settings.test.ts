@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  VENUE_SETTINGS,
   CORE_CHANGE_SOURCES,
   defineSettingsDocument,
   installChangeFeed,
@@ -96,8 +97,8 @@ it("a save to one module's document wakes only that module's subscribers", async
       'event: change\ndata: [{"type":"settings.menu"}]\n\n',
     );
     await withTransaction(suite.db, (tx) =>
-      saveSettings(tx, document("venue"), {
-        doc: { note: "venue changed" },
+      saveSettings(tx, VENUE_SETTINGS, {
+        doc: { ...VENUE_SETTINGS.defaults(), name: "Venue changed" },
         expectedRevision: 0,
         personId: null,
       }),

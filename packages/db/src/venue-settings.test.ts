@@ -65,10 +65,8 @@ describe("the venue document", () => {
   it.each([[], ["es", "ca", "en"], ["es", "es"], [""], "es"].map((value) => [value]))(
     "refuses invalid receipt languages %j",
     (invoiceLocales) => {
-      expect(api.VENUE_SETTINGS.parse({ ...doc, invoiceLocales })).toEqual({
-        ok: false,
-        field: "invoiceLocales",
-      });
+      const result = api.VENUE_SETTINGS.parse({ ...doc, invoiceLocales });
+      expect(result).toEqual({ ok: false, field: "invoiceLocales" });
     },
   );
 
@@ -81,11 +79,6 @@ describe("the venue document", () => {
     expect(api.VENUE_SETTINGS.parse({ ...doc, ...fields })).toEqual({
       ok: true,
       doc: { ...doc, ...fields },
-    });
-    const empty = { contentLanguages: null, defaultContentLanguage: null, holidayArea: null };
-    expect(api.VENUE_SETTINGS.parse({ ...doc, ...empty })).toEqual({
-      ok: true,
-      doc: { ...doc, ...empty },
     });
   });
 
@@ -100,10 +93,8 @@ describe("the venue document", () => {
       defaultContentLanguage: "language-0",
     },
   ])("refuses an invalid content-language policy %j", (fields) => {
-    expect(api.VENUE_SETTINGS.parse({ ...doc, holidayArea: null, ...fields })).toEqual({
-      ok: false,
-      field: "contentLanguages",
-    });
+    const result = api.VENUE_SETTINGS.parse({ ...doc, ...fields });
+    expect(result).toEqual({ ok: false, field: "contentLanguages" });
   });
 
   it.each([
@@ -113,14 +104,8 @@ describe("the venue document", () => {
     { country: "ZZ", provinceCode: "30", cityKey: "", areaKey: null },
     { country: "ZZ", provinceCode: "30", cityKey: "villa real", areaKey: 5 },
   ])("refuses an invalid holiday area %j", (holidayArea) => {
-    expect(
-      api.VENUE_SETTINGS.parse({
-        ...doc,
-        contentLanguages: null,
-        defaultContentLanguage: null,
-        holidayArea,
-      }),
-    ).toEqual({ ok: false, field: "holidayArea" });
+    const result = api.VENUE_SETTINGS.parse({ ...doc, holidayArea });
+    expect(result).toEqual({ ok: false, field: "holidayArea" });
   });
 
   it("keeps the interim location identity independent of the venue document", async () => {

@@ -539,28 +539,7 @@ describe("configuration transfer database path", () => {
       new Date("2026-11-10T10:00:00Z"),
       versions,
     );
-    expect(Object.keys(exported.venue).sort()).toEqual(
-      [
-        "country",
-        "taxId",
-        "legalName",
-        "taxpayerDomicile",
-        "name",
-        "invoiceLocales",
-        "operationDescription",
-        "fiscalTerritory",
-        "addressLine1",
-        "addressLine2",
-        "postalCode",
-        "city",
-        "province",
-        "timeZone",
-        "dayCutover",
-        "seriesCode",
-        "fullSeriesCode",
-        "rectificativeSeriesCode",
-      ].sort(),
-    );
+    expect(Object.keys(exported.venue).sort()).toEqual(Object.keys(bundle.venue).sort());
     expect(exported.contentLanguages).toEqual({ defaultLanguage: "es", languages: ["es", "en"] });
     expect(exported.holidayArea).toEqual(holidayArea);
     expect(exported.tables).not.toHaveProperty("content_languages");

@@ -295,6 +295,13 @@ for (const locale of ["en", "es"] as const) {
     const phases = structuredClone(manifest.phases[locale]!);
     for (const phase of ["before", "provisioned", "seeded"] as const) {
       const at = "2026-10-08T10:00:00.000Z";
+      const venueMetadata = {
+        module: "venue",
+        version: 1,
+        revision: phase === "seeded" ? 3 : 2,
+        updatedAt: at,
+        updatedBy: null,
+      };
       expected[phase] = madridWithDocument(
         expected[phase],
         "locations",
@@ -308,11 +315,7 @@ for (const locale of ["en", "es"] as const) {
           province: "province",
         },
         {
-          module: "venue",
-          version: 1,
-          revision: phase === "seeded" ? 3 : 2,
-          updatedAt: at,
-          updatedBy: null,
+          ...venueMetadata,
           defaults: { contentLanguages: null, defaultContentLanguage: null, holidayArea: null },
         },
       );
@@ -337,11 +340,7 @@ for (const locale of ["en", "es"] as const) {
           phases[phase]![table]!,
         );
         expected[phase] = madridWithDocument(expected[phase], table, fields, {
-          module: "venue",
-          version: 1,
-          revision: phase === "seeded" ? 3 : 2,
-          updatedAt: at,
-          updatedBy: null,
+          ...venueMetadata,
           mode: "row",
           targetField,
         });

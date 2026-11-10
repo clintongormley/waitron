@@ -13,13 +13,9 @@ const insertDoc = async (doc: unknown, module = "venue") =>
 `);
 
 async function refuses(action: () => unknown) {
-  let error: unknown;
-  try {
-    await action();
-  } catch (caught) {
-    error = caught;
-  }
-  expect(triggerRaised(error, "settings.invalid")).toBe(true);
+  await expect(Promise.resolve().then(action)).rejects.toSatisfy((error: unknown) =>
+    triggerRaised(error, "settings.invalid"),
+  );
 }
 
 describe("receipt languages in the venue document", () => {

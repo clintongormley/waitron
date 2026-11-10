@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { beforeEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
@@ -44,6 +44,7 @@ const wake = vi.fn();
 beforeEach(async () => {
   wake.mockReset();
   await seedTenant(suite.db);
+  await seedVenueSettings(suite.db);
   await inTx(async (tx) => {
     for (const role of ["manager", "staff"] as const) {
       const [person] = await tx.insert(persons).values({ displayName: role, role }).returning();

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { contentLanguageChoices } from "@waitron/shared";
 import {
@@ -10,7 +10,7 @@ import {
   units,
   withTransaction,
 } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue, createProduct } from "./operations.js";
@@ -25,6 +25,7 @@ import type { TranslationCellRef } from "./content-translation-types.js";
 
 type Edit = TranslationCellRef & { expected: string; text: string | null };
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(() => seedVenueSettings(suite.db));
 const context = { fallbackLanguage: "es", required: ["es"] };
 function baseline() {
   return {

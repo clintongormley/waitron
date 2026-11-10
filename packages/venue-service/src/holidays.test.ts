@@ -589,12 +589,7 @@ describe("territorial areas", () => {
     });
 
     const again = (await run((tx) => store.saveHolidayArea(tx, { areaKey: "isle-b" })))!;
-    expect(again).toMatchObject({
-      country: "ZZ",
-      provinceCode: "30",
-      city: "Villa Real",
-      areaKey: "isle-b",
-    });
+    expect(again).toMatchObject({ ...geography, areaKey: "isle-b" });
     const cleared = await run((tx) => store.saveHolidayArea(tx, { areaKey: null }));
     expect(cleared).toMatchObject({ country: "ZZ", provinceCode: "30", areaKey: null });
     expect(await run((tx) => store.readHolidayAreaModel(tx))).toMatchObject({

@@ -1,9 +1,7 @@
-import { settings } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { kitchenCourses, products, withTransaction, venueLocationId } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { createCatalogue, listProducts, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
@@ -13,6 +11,7 @@ import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { setProductVariants } from "./variants.js";
 import {
+  countingSettingsReads,
   plantStoredCategory,
   plantStoredUnit,
   storedUnitId,
@@ -105,27 +104,6 @@ it("round-trips cereal and nut kinds through the editor and stored published dec
     manualAllergens: allergens,
   });
 });
-
-/** `tx`, counting the `select … from settings` queries built on it. */
-function countingSettingsReads(tx: Transaction): { tx: Transaction; reads: () => number } {
-  let reads = 0;
-  const counted = new Proxy(tx, {
-    get(target, prop) {
-      const value: unknown = Reflect.get(target, prop, target);
-      if (prop !== "select") return typeof value === "function" ? value.bind(target) : value;
-      return (...args: Parameters<Transaction["select"]>) => {
-        const builder = target.select(...args);
-        const from = builder.from.bind(builder);
-        builder.from = ((source: Parameters<typeof from>[0]) => {
-          if (source === settings) reads += 1;
-          return from(source);
-        }) as typeof builder.from;
-        return builder;
-      };
-    },
-  });
-  return { tx: counted, reads: () => reads };
-}
 
 describe("one save builds one query on the content-language setting", () => {
   const named = (name: string) => ({

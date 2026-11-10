@@ -1,10 +1,12 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { contentLanguageChoices } from "@waitron/shared";
-import { expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { readContentLanguages, writeContentLanguages } from "./content-languages.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(() => seedVenueSettings(suite.db));
 
 it("keeps required enabled languages while freely choosing a default", async () => {
   await withTransaction(suite.db, (tx) =>

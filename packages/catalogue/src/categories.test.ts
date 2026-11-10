@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, createProduct, listProducts } from "./operations.js";
 import {
@@ -17,6 +17,7 @@ import { writeContentLanguages, listContentTranslationGaps } from "./content-lan
 // Authoring results. The cases with two transactions started together are in
 // categories.db.test.ts.
 const fx = useCatalogueDb();
+beforeEach(() => seedVenueSettings(fx.db));
 const byId = <T extends { id: string }>(rows: readonly T[]): T[] =>
   [...rows].sort((a, b) => a.id.localeCompare(b.id));
 

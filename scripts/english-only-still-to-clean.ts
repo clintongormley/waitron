@@ -1046,7 +1046,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "packages/db/src/schema/variant-snapshot-columns.test.ts",
   "packages/db/src/table-in-service.test.ts",
   "packages/db/src/table-short-names.test.ts",
-  "packages/db/src/tenancy.test.ts",
   "packages/fiscal-none/src/backend.test.ts",
   "packages/fiscal/src/backend.test.ts",
   "packages/fiscal/src/testing/fake-backend.test.ts",

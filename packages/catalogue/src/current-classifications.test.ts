@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { createCategory, setMainReportingCategory, updateCategory } from "./categories.js";
@@ -9,6 +9,7 @@ import { writeContentLanguages } from "./content-languages.js";
 import { currentClassifications } from "./current-classifications.js";
 
 const fx = useCatalogueDb();
+beforeEach(() => seedVenueSettings(fx.db));
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 /** Drinks > Softs, and a top-level Spirits. */

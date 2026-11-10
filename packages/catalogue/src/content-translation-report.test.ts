@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
@@ -14,7 +14,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { ContentLanguages } from "@waitron/shared";
 import {
   listContentTranslationGaps,
@@ -33,6 +33,7 @@ import { addMember, createSectionIn } from "./sections.js";
 import { setProductVariants } from "./variants.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(() => seedVenueSettings(suite.db));
 
 // A Barcelona venue whose default is Spanish: Catalan is the region's other required language and
 // English is an extra one.

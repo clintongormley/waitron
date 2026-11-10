@@ -67,9 +67,9 @@ describe("readStarterStaffLanguage", () => {
     };
     if (tenant) await seedVenue(db, venue);
     else {
-      const { name, province, ...columns } = venue;
+      const { name, province, invoiceLocales, ...columns } = venue;
       await db.insert(locations).values(columns);
-      await seedVenueSettings(db, { name, province });
+      await seedVenueSettings(db, { name, province, invoiceLocales });
     }
     expect(await withTransaction(db, (tx) => readStarterStaffLanguage(tx))).toBe(expected);
   });

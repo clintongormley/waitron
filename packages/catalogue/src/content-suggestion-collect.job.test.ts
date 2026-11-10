@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   contentSuggestionJobs,
@@ -15,7 +15,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { ContentLanguages } from "@waitron/shared";
 import { createCategory } from "./categories.js";
 import {
@@ -41,6 +41,7 @@ import {
 } from "./content-suggestion-collect.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(() => seedVenueSettings(suite.db));
 const THREE: ContentLanguages = { defaultLanguage: "ca", languages: ["ca", "es", "en"] };
 const context = { fallbackLanguage: "ca", required: [] };
 const LUNCH_NAMES = { ca: "CLIENT-CA Dinar", es: "CLIENT-ES Dinar", en: "CLIENT-EN Dinar" };

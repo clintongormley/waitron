@@ -75,23 +75,21 @@ it("merges captured table rows into the existing venue document and empties the 
   const result = madridWithDocument(
     captured,
     "content_languages",
-    {
-      default_language: "defaultContentLanguage",
-      languages: "contentLanguages",
-    },
+    { default_language: "defaultContentLanguage", languages: "contentLanguages" },
     { ...metadata, revision: 2, mode: "row" },
   );
+  const expectedDoc = {
+    name: "Deli",
+    city: "Madrid",
+    defaultContentLanguage: "en",
+    contentLanguages: ["en", "es"],
+  };
   expect(Object.values(result.tables.settings!.rows)).toEqual([
     {
       module: "venue",
       version: 1,
       revision: 2,
-      doc: {
-        name: "Deli",
-        city: "Madrid",
-        defaultContentLanguage: "en",
-        contentLanguages: ["en", "es"],
-      },
+      doc: expectedDoc,
       updated_at: metadata.updatedAt,
       updated_by: null,
     },
@@ -103,18 +101,10 @@ it("merges captured table rows into the existing venue document and empties the 
     result,
     "holiday_geographies",
     { country: "country" },
-    {
-      ...metadata,
-      revision: 2,
-      mode: "row",
-      targetField: "holidayArea",
-    },
+    { ...metadata, revision: 2, mode: "row", targetField: "holidayArea" },
   );
   expect(Object.values(emptyArea.tables.settings!.rows)[0]!.doc).toEqual({
-    name: "Deli",
-    city: "Madrid",
-    defaultContentLanguage: "en",
-    contentLanguages: ["en", "es"],
+    ...expectedDoc,
     holidayArea: null,
   });
 });
