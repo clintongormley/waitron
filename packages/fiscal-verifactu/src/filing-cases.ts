@@ -3,6 +3,8 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { envios } from "./schema/envios.js";
+import { registrosFacturacion } from "./schema/registros.js";
+import { registroSif } from "./schema/sif.js";
 import {
   filingCaseEvents,
   filingCases,
@@ -208,6 +210,103 @@ export async function listFilingCases(tx: Transaction): Promise<FilingCaseReport
   });
 }
 
+/** A `filing_cases` row has no resolution yet. */
+function caseIsOpen(tx: Transaction): SQL {
+  return notExists(
+    tx
+      .select({ id: filingCaseEvents.id })
+      .from(filingCaseEvents)
+      .where(
+        and(eq(filingCaseEvents.caseId, filingCases.id), eq(filingCaseEvents.kind, "resolved")),
+      ),
+  );
+}
+
+export interface OpenFilingCase {
+  caseId: string;
+  registroId: string;
+  cause: FilingCaseCause;
+  evidence: FilingCaseEvidence;
+  openedAt: Date;
+  record: {
+    tipoRegistro: string;
+    idEmisorFactura: string;
+    numSerieFactura: string;
+    fechaExpedicionFactura: string;
+    tipoFactura: string | null;
+    importeTotal: string | null;
+    cuotaTotal: string | null;
+    huella: string;
+    anteriorHuella: string | null;
+    fechaHoraHusoGenRegistro: Date;
+    numeroInstalacion: string;
+  };
+  submission: {
+    estado: string;
+    codigoError: string | null;
+    mensajeError: string | null;
+    enviadoEn: Date | null;
+  } | null;
+}
+
+/** The record ids of the newest `limit` open cases (every open case when `limit` is null), as a
+ * subquery, so a caller can restrict a read to them without binding a list that grows. */
+export function openCaseRecordIds(tx: Transaction, limit: number | null) {
+  const query = tx
+    .select({ registroId: filingCases.registroId })
+    .from(filingCases)
+    .where(caseIsOpen(tx))
+    .orderBy(sql`${filingCases}.rowid desc`);
+  return limit === null ? query : query.limit(limit);
+}
+
+/**
+ * The newest `limit` cases with no resolution yet, newest first (every one when `limit` is null),
+ * each with its record, identity and submission, and how many cases are open in all. Newest by
+ * `rowid`, for the reason `listFilingCases` gives.
+ */
+export async function openFilingCases(
+  tx: Transaction,
+  limit: number | null,
+): Promise<{ cases: OpenFilingCase[]; total: number }> {
+  const query = tx
+    .select({
+      caseId: filingCases.id,
+      registroId: filingCases.registroId,
+      cause: filingCases.cause,
+      evidence: filingCases.evidence,
+      openedAt: filingCases.openedAt,
+      record: {
+        tipoRegistro: registrosFacturacion.tipoRegistro,
+        idEmisorFactura: registrosFacturacion.idEmisorFactura,
+        numSerieFactura: registrosFacturacion.numSerieFactura,
+        fechaExpedicionFactura: registrosFacturacion.fechaExpedicionFactura,
+        tipoFactura: registrosFacturacion.tipoFactura,
+        importeTotal: registrosFacturacion.importeTotal,
+        cuotaTotal: registrosFacturacion.cuotaTotal,
+        huella: registrosFacturacion.huella,
+        anteriorHuella: registrosFacturacion.anteriorHuella,
+        fechaHoraHusoGenRegistro: registrosFacturacion.fechaHoraHusoGenRegistro,
+        numeroInstalacion: registroSif.numeroInstalacion,
+      },
+      submission: {
+        estado: envios.estado,
+        codigoError: envios.codigoError,
+        mensajeError: envios.mensajeError,
+        enviadoEn: envios.enviadoEn,
+      },
+    })
+    .from(filingCases)
+    .innerJoin(registrosFacturacion, eq(registrosFacturacion.id, filingCases.registroId))
+    .innerJoin(registroSif, eq(registroSif.id, registrosFacturacion.sifId))
+    .leftJoin(envios, eq(envios.registroId, filingCases.registroId))
+    .where(caseIsOpen(tx))
+    .orderBy(sql`${filingCases}.rowid desc`);
+  const cases = await (limit === null ? query : query.limit(limit));
+  const [{ total }] = await tx.select({ total: count() }).from(filingCases).where(caseIsOpen(tx));
+  return { cases, total };
+}
+
 /** How many cases have no resolution yet, and when the oldest of them opened; null when none. */
 export async function openFilingCasesSummary(
   tx: Transaction,
@@ -215,16 +314,7 @@ export async function openFilingCasesSummary(
   const [{ n, oldest }] = await tx
     .select({ n: count(), oldest: min(filingCases.openedAt) })
     .from(filingCases)
-    .where(
-      notExists(
-        tx
-          .select({ id: filingCaseEvents.id })
-          .from(filingCaseEvents)
-          .where(
-            and(eq(filingCaseEvents.caseId, filingCases.id), eq(filingCaseEvents.kind, "resolved")),
-          ),
-      ),
-    );
+    .where(caseIsOpen(tx));
   // `opened_at` is not null, so the oldest is null exactly when no case is open.
   if (oldest === null) return null;
   return { count: n, oldestOpenedAt: new Date(oldest) };
