@@ -3589,7 +3589,10 @@ other venue's secrets: the authority every one of its tills trusts, and the key 
 its sealed credentials. A box with an empty `tls/` and no `secrets.env` mints a fresh set at its
 next setup start (`ensureBoxSecrets`). A box that never joined keeps both, as before. A spare
 later promoted keeps the marker, so a plain reset of it also empties `tls/`, and its devices must
-trust it again.
+trust it again. While a staged reset that will empty `tls/` is pending (`stagedResetEmptiesTls`),
+the image's start (`runEntry`) skips its connection check, which would otherwise send a
+part-emptied `tls/` to connection repair before the reset re-runs; with no such reset pending, the
+same `tls/` still goes to repair.
 
 **Every start checks its leaf.** `ensureLeaf` (`apps/server/src/box-secrets.ts`) reissues the
 leaf when it lacks one of the box's names or a current address, does not verify under
@@ -3601,7 +3604,8 @@ reason to stop selling.
 **Guards.** `apps/server/src/box-tls-install.test.ts` (every crash point of the install),
 `box-secrets.test.ts` (a stop between the reissue's two renames),
 `reset-request.test.ts` and `scripts/waitron-sh.test.mjs` (the joined and never-joined resets and
-the marker-last order), `box-leaf-names.test.ts`, and the refused-restore and fenced cases in
+the marker-last order; `reset-request.test.ts` also starts the real entry after a reset cut short
+in `tls/`), `box-leaf-names.test.ts`, and the refused-restore and fenced cases in
 `boot.restore.test.ts` and `boot.reconcile.test.ts`. Weaker than the rule: nothing checks that a
 NEW entry point which reads `tls/` calls `finishTlsInstall` first.
 

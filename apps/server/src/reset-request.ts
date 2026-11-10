@@ -79,6 +79,21 @@ async function refusal(deps: StagedResetDeps, raw: string): Promise<string | nul
 }
 
 /**
+ * Whether a reset is staged that passes every check needing no database and will empty `tls/`
+ * because this box joined another; `runStagedReset` repeats every check under the venue lock.
+ */
+export async function stagedResetEmptiesTls(stateDir: string): Promise<boolean> {
+  const raw = await readFile(join(stateDir, MARKER), "utf8").catch(() => null);
+  const operationId = raw === null ? null : stagedOperationId(raw);
+  return (
+    operationId !== null &&
+    !existsSync(join(stateDir, TRADING_ENV_FILE)) &&
+    (await recordMatches(stateDir, operationId)) &&
+    (await joinedAnotherBox(stateDir))
+  );
+}
+
+/**
  * Carry out a staged reset of an adopt that stopped partway; the caller runs it before anything in
  * this process opens the venue database. Every check runs under the venue lock, and any that fails
  * discards the request having deleted nothing. Returns true only when the reset ran.

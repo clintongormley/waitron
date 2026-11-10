@@ -52,7 +52,7 @@ import { BOOT_INCOMPLETE, HOLDER_STALLED, recoveryApp } from "./recovery-surface
 import { installShutdownHandlers } from "./run-server.js";
 import { closeListener } from "./close-listener.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
-import { runStagedReset, type StagedResetDeps } from "./reset-request.js";
+import { runStagedReset, stagedResetEmptiesTls, type StagedResetDeps } from "./reset-request.js";
 import { clearReplacedDatabases } from "./restore.js";
 import { loadCloudOrigin } from "./cloud-client.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
@@ -310,6 +310,9 @@ async function releaseSpareToStart(deps: EntryDeps): Promise<void> {
  *    writes the count back unchanged before resolution's app or the page is served: a finished
  *    setup's inspection fails on a full disk and would serve resolution (plan F4), and its
  *    admission takes the venue lock before the count.
+ * 8. The connection check stands aside while a staged reset of a box that joined another is
+ *    pending: that reset empties `tls/`, so one cut short leaves a part-emptied set that only the
+ *    reset, further on, can finish.
  *
  * `startServer` resolving, and its `fullyStarted` settling where present, is the signal rather
  * than a healthy `/health`, because `/health` is 503 on a setup box by design, so a health-gated
@@ -387,7 +390,11 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     operatorTls:
       !isUnset(transportEnv.WAITRON_TLS_CERT_FILE) || !isUnset(transportEnv.WAITRON_TLS_KEY_FILE),
   };
-  if (await needsConnectionBootstrap(transport, transportEnv)) {
+  // Ordering 8 in the doc comment above.
+  if (
+    !(await stagedResetEmptiesTls(transport.stateDir)) &&
+    (await needsConnectionBootstrap(transport, transportEnv))
+  ) {
     await deps.serveRecovery(new Hono(), { ...transport, bootstrapOnly: true });
     return;
   }

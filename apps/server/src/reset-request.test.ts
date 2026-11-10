@@ -32,6 +32,8 @@ import { mountSetup } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { writeTradingEnv } from "./trading-config.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { runEntry } from "./node-entry.js";
+import { FRESH } from "./recovery-state.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -604,5 +606,116 @@ describe("runStagedReset", () => {
     expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
     expect(existsSync(join(stateDir, "setup-operation.json"))).toBe(false);
     expect(existsSync(join(stateDir, "reset-request.json"))).toBe(false);
+  });
+});
+
+describe("a start after a reset of a box that joined was cut short in tls/", () => {
+  /** A joined box with a healthy set, whose staged reset stopped while it emptied `tls/`. */
+  async function cutShortInTls(): Promise<{ stateDir: string; venueDir: string }> {
+    const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
+    await rm(join(stateDir, "tls"), { recursive: true, force: true });
+    await rm(join(stateDir, "secrets.env"));
+    await ensureBoxSecrets({
+      stateDir,
+      hostnames: ["waitron.local", "localhost"],
+      now: () => new Date(),
+      listIpv4: () => [],
+    });
+    await markJoined(stateDir, PRIMARY_NODE_ID);
+    await stageResetRequest(stateDir, operationId);
+    watchRemovals(join(stateDir, "tls", "server.key"));
+    await expect(runStagedReset({ stateDir, venueDir, log: () => {} })).rejects.toThrow(
+      "power lost",
+    );
+    rmMock.mockImplementation(actualRm.current!);
+    expect(existsSync(join(stateDir, "tls", "joined.json"))).toBe(true);
+    return { stateDir, venueDir };
+  }
+
+  async function start(box: { stateDir: string; venueDir: string }) {
+    const served: Array<{ bootstrapOnly?: boolean }> = [];
+    const reset = vi.fn(runStagedReset);
+    await runEntry({
+      ...box,
+      args: [],
+      baseEnv: {
+        WAITRON_HTTP_HOST: "127.0.0.1",
+        WAITRON_HTTP_PORT: "7443",
+        WAITRON_HTTP_LANDING_PORT: "0",
+      },
+      spareBytes: 0,
+      freeSpaceFloor: 0,
+      readRecoveryState: async () => ({ ...FRESH, level: "normal" }),
+      writeRecoveryState: async () => {},
+      loadBoxEnv: async (base) => base,
+      runStagedRestore: async () => false,
+      runStagedReset: reset,
+      assertNotAhead: async () => {},
+      clearReplacedDatabases: async () => {},
+      startServer: async () => {
+        throw new Error("past the reset");
+      },
+      serveRecovery: async (_app, options) => {
+        served.push(options);
+      },
+      installShutdownHandlers: () => {},
+      scheduleStayedUp: () => {},
+      log: () => {},
+      exit: () => {},
+    }).catch((error: Error) => {
+      if (error.message !== "past the reset") throw error;
+    });
+    return { served, reset };
+  }
+
+  it("finishes the reset instead of asking for connection repair", async () => {
+    const box = await cutShortInTls();
+
+    const { served, reset } = await start(box);
+
+    expect(served).toEqual([]);
+    expect(await reset.mock.results[0]?.value).toBe(true);
+    expect(await readdir(join(box.stateDir, "tls"))).toEqual([]);
+    expect(existsSync(join(box.stateDir, "secrets.env"))).toBe(false);
+    expect(existsSync(join(box.stateDir, "reset-request.json"))).toBe(false);
+  });
+
+  it("still asks for connection repair when no reset is staged", async () => {
+    const box = await cutShortInTls();
+    await rm(join(box.stateDir, "reset-request.json"));
+
+    const { served, reset } = await start(box);
+
+    expect(served.map((options) => options.bootstrapOnly)).toEqual([true]);
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it("still asks for connection repair on a box that never joined, whose reset keeps tls/", async () => {
+    const box = await cutShortInTls();
+    await rm(join(box.stateDir, "tls", "joined.json"));
+
+    const { served, reset } = await start(box);
+
+    expect(served.map((options) => options.bootstrapOnly)).toEqual([true]);
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it("still asks for connection repair when the box holds trading settings", async () => {
+    const box = await cutShortInTls();
+    await writeFile(join(box.stateDir, "trading.env"), "T=1\n");
+
+    const { served } = await start(box);
+
+    expect(served.map((options) => options.bootstrapOnly)).toEqual([true]);
+  });
+
+  it("still asks for connection repair when the staged reset names another operation", async () => {
+    const box = await cutShortInTls();
+    await stageResetRequest(box.stateDir, "00000000-0000-4000-8000-000000000000");
+
+    const { served, reset } = await start(box);
+
+    expect(served.map((options) => options.bootstrapOnly)).toEqual([true]);
+    expect(reset).not.toHaveBeenCalled();
   });
 });
