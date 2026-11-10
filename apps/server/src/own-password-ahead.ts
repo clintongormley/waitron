@@ -9,7 +9,7 @@ type Change<I, T> = (
   input: I & { managementSessionId: string; checked?: SecretCheck },
 ) => Promise<T>;
 
-/** Derive a requested password before the write lock so other writers can commit during scrypt. */
+/** Password checks take turns per person, outside the write lock, so refusals count in order. */
 export function ownPasswordChanges(
   db: Database,
   throttle: PasswordThrottle & PasswordThrottleProbe,

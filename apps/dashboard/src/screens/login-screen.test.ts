@@ -346,14 +346,19 @@ describe("login-screen", () => {
 
   it("requests an authenticator code when registration reauthentication requires it", async () => {
     const { el, api } = await mountPasskeyOffer({
-      passkeyRegisterOptions: vi.fn().mockRejectedValue({ code: "totp.invalid" }),
+      ...passkeyRegistrationStubs(),
+      confirmFreshSignIn: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "totp.invalid" })
+        .mockResolvedValue(undefined),
     });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("wt-input[name=one-time-code]")).not.toBeNull();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
     await flush(el);
-    expect(api.passkeyRegisterOptions).toHaveBeenCalledTimes(1);
+    expect(api.confirmFreshSignIn).toHaveBeenCalledTimes(1);
+    expect(api.passkeyRegisterOptions).not.toHaveBeenCalled();
     input(el, "one-time-code", "654321");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
     await flush(el);

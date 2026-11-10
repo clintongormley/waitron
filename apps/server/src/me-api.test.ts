@@ -1159,11 +1159,8 @@ describe("mountMeApi — own credentials and second factor", () => {
   it("reuses one confirmation for a passwordless person's PIN and password changes", async () => {
     const personId = await personWithPassword({
       passwordHash: null,
+      email: "passwordless-window@example.test",
     });
-    const keyId = crypto.randomUUID();
-    await suite.db
-      .insert(webauthnCredentials)
-      .values({ id: keyId, personId, credentialId: keyId, publicKey: "public" });
     const cookie = await cookieFor(personId);
     const app = mountApp();
     const pin = await send(app, "PUT", "/management-api/session/me/pin", {

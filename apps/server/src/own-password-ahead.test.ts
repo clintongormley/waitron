@@ -26,7 +26,7 @@ const suite = useVenueDb({
 
 /** A password throttle that also records each outcome its attempts finish with. */
 function recordingThrottle() {
-  const throttle = createPasswordThrottle();
+  const throttle = createPasswordThrottle(() => 1_000_000);
   const outcomes: string[] = [];
   return {
     outcomes,
