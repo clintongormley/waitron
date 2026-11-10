@@ -459,6 +459,7 @@ ensure_images_present() {
 # The box's IPv4 addresses, one per line, by the same interface choice as the server's listBoxIpv4
 # (apps/server/src/box-reach.ts). It applies neither WAITRON_BOX_ADDRESSES nor the server's
 # private-range filter. Prints nothing, and still succeeds, when `ip` is missing or fails.
+# WAITRON_SH_PROC_NET_ROUTE is a test override for the route file.
 box_own_ipv4() {
   local route_file="${WAITRON_SH_PROC_NET_ROUTE:-/proc/net/route}" uplink="" best=""
   local iface dest metric mask family cidr addr listing

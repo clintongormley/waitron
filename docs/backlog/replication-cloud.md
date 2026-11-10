@@ -679,10 +679,7 @@ The start check verifies a peer's signed status with
 `peerKeyOf` (`apps/server/src/handover-signing.ts`): this box's own key, the main-box key a spare
 pins at adoption, and keys the held chart's endorsements vouch for. A main box holds none of
 these for its spare, so once 3b makes a spare finish joining, the spare's answers count as
-silent. No box has a joined peer before 3b. 3b must also give each box its own address in the
-chart: by default both advertise `https://waitron.local` (`deploy/Dockerfile`, sent at
-`apps/server/src/adopt.ts:109`), and the check never asks a peer at its own address. Left open by
-A1018 Slice 3 (Ruling R13).
+silent. No box has a joined peer before 3b. Left open by A1018 Slice 3 (Ruling R13).
 
 
 ## The boot peer reconcile cannot reach a real box's certificate.

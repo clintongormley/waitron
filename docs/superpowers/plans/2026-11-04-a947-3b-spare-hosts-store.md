@@ -1431,7 +1431,11 @@ trust, until one completes the TLS handshake; a handshake failure on every addre
 failure), and `boxDownload` in the same file finds the name the same way: it opens its own request
 for a handover's final copy (A1018 Slice 5), so a lookup in `boxExchange` alone would leave the new
 box unable to reach the old one on real boxes. Share the request-opening code, or carry the lookup
-across. Test `mirror-bundle-fetch.test.ts`.
+across. Test `mirror-bundle-fetch.test.ts`. On `mirror.peer_unresolved` the caller logs the
+peer's node id beside it: the refusal carries no host name, which can be an operator's
+`WAITRON_ADVERTISED_ORIGIN` (watcher, 2026-11-10 13:36). Each lookup opens its own multicast socket
+and waits up to 2 s; before a lookup runs per exchange, ask through the responder's own socket and
+keep answers for their lifetime (`MDNS_TTL_SECONDS`, `mdns.ts`) (3b-2's review, 2026-11-10).
 
 - [ ] **Step 1: Write the failing tests** against local HTTPS servers: "connects to the address the
   lookup gave and checks the certificate against the name" (lookup stubbed to `127.0.0.1`, URL

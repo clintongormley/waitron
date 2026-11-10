@@ -200,6 +200,8 @@ venue is untouched and `wa-wt` brings the containers back. Pass
 collision cannot arise.
 
 If HTTP is disabled, use the installer's **Secure help** address, `https://waitron.local/setup/trust`.
+On a second box in a venue that already has one, use `https://` and one of this box's own addresses
+at the same path.
 The main listener serves this guide during setup, trading, pending adoption and boot recovery.
 While the listener presents your own TLS certificate, the guide directs you to whoever installed
 it. It does not offer the box's fallback CA, which cannot certify that connection.
@@ -727,8 +729,9 @@ replaced (`restore.membership_invalid`, described under
 
 **`WAITRON_BOX_ADDRESSES`** is a comma-separated list of IPv4 literals that REPLACES interface
 sniffing in the server: the SANs in the leaf certificate it presents, the reach URLs and QR the
-setup wizard shows, and the mDNS responder's answers. The addresses `waitron.sh` prints on the
-console do not use it. Leave it empty on a
+setup wizard shows, and the mDNS responder's answers. The setup start's check for another box
+answering `waitron.local` counts both these and every interface address as this box's own. The
+addresses `waitron.sh` prints on the console do not use it. Leave it empty on a
 real box — unset, the box advertises only its **default-route interface** (its real uplink), so the
 Docker bridge interfaces every box carries (`docker0`/`br-*`, on 172.x) are not advertised and
 `waitron.local` resolves to a reachable address without any override. Set it where the container
