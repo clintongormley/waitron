@@ -130,6 +130,15 @@ export function foldInserts(source, path, rules) {
     edits = [],
     reports = [],
     folded = new Set();
+  const typeImports = tree.statements
+    .filter(ts.isImportDeclaration)
+    .flatMap(({ importClause: clause }) =>
+      ts.isNamedImports(clause?.namedBindings)
+        ? clause.namedBindings.elements
+            .filter((item) => clause.isTypeOnly || item.isTypeOnly)
+            .map((item) => item.name.text)
+        : [],
+    );
   const report = (node, reason) =>
     reports.push(
       `${path}:${tree.getLineAndCharacterOfPosition(node.getStart()).line + 1}: ${reason}`,
@@ -167,6 +176,8 @@ export function foldInserts(source, path, rules) {
           ? mapped(pairs(value.properties), rule.key, rule.fields, rule.constants)
           : null;
       if (!data) return report(node, "unsupported insert values");
+      if (data.fields.length && [rule.parent, "eq"].some((name) => typeImports.includes(name)))
+        return report(node, "type-only import requires a manual edit");
       const database = insert.expression.expression.getText();
       let replacement = "";
       if (data.fields.length) {
@@ -209,14 +220,24 @@ export function foldInserts(source, path, rules) {
         report(node, "unsupported raw SQL columns or values");
         continue;
       }
+      const call = node.parent;
+      const statement =
+        ts.isCallExpression(call) &&
+        call.arguments.length === 1 &&
+        ts.isPropertyAccessExpression(call.expression) &&
+        ["execute", "run"].includes(call.expression.name.text)
+          ? statementFor(call)
+          : null;
+      if (!statement) {
+        report(node, "SQL result is used or the execution call is unknown");
+        continue;
+      }
       let outer = node,
         replacement;
       if (data.fields.length)
         replacement = `sql\`update ${raw.parentTable} set ${data.fields.map(([key, value]) => `${key} = ${value}`).join(", ")} where ${raw.parentKey ?? "id"} = ${data.key}\``;
       else {
-        const call = node.parent;
-        outer =
-          ts.isCallExpression(call) && call.arguments.length === 1 ? statementFor(call) : null;
+        outer = statement;
         if (!deletable(outer)) {
           report(node, "empty SQL result is used or conditional");
           continue;

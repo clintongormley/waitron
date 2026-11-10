@@ -160,6 +160,8 @@ describe("foldInserts", () => {
   it.each([
     "await Promise.all([tx.execute(sql`insert into policies (zone_id) values (${Z})`), seedOther(tx)]);",
     "expect(await tx.execute(sql`insert into policies (zone_id) values (${Z})`)).toBeTruthy();",
+    "await expect(tx.execute(sql`insert into policies (zone_id, enabled) values (${Z}, 1)`)).rejects.toThrow();",
+    "await expectInsertFails(sql`insert into policies (zone_id) values (${Z})`);",
     "if (withPolicy) await db.insert(policies).values({ zoneId: Z });\nawait mustAlwaysRun();",
     "if (withPolicy) await tx.execute(sql`insert into policies (zone_id) values (${Z})`);\nawait mustAlwaysRun();",
     "await expect(db.insert(policies).values({ zoneId: Z, enabled: true })).rejects.toThrow();",
@@ -178,6 +180,18 @@ describe("foldInserts", () => {
       text: 'import { eq } from "drizzle-orm";\nimport { floorZones } from "./zones.js";\ndb.update(floorZones).set({ active: true }).where(eq(floorZones.id, Z));',
       reports: [],
     });
+  });
+
+  it.each([
+    'import type { floorZones } from "@waitron/db";',
+    'import { type floorZones } from "@waitron/db";',
+  ])("reports a type-only table binding for a manual edit: %s", (binding) => {
+    const text =
+      binding +
+      "\ntype Zone = typeof floorZones;\ndb.insert(policies).values({ zoneId: Z, enabled: true });";
+    const out = foldInserts(text, path, [rule]);
+    expect(out.text).toBe(text);
+    expect(out.reports).toEqual([expect.stringContaining("type-only")]);
   });
 
   it("previews the command line, writes on request, and reports manual sites", async () => {
