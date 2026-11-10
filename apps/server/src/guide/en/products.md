@@ -269,8 +269,8 @@ Menus**.
 When your next menu is similar to one you already have, start with a copy. In **Products and
 menus → Menus**, open the menu's ⋮ and choose **Copy…**. Enter a new name, then choose **Copy**.
 You must use a name no menu already holds; upper and lower case count as the same name. **Cancel**
-creates nothing. If you have typed a name, you can keep editing or discard it when you close the
-window.
+discards the name without asking and creates nothing. Escape still asks whether to keep editing
+or discard a name you have typed.
 
 Use a different name when you create or rename a menu too. If another menu already has it, the
 message appears under Name. Names ignore surrounding spaces and case, including on inactive

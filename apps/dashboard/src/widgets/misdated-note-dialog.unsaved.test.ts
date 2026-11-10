@@ -83,22 +83,12 @@ it("tracks the trimmed note against an empty one", async () => {
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
-it.each([
-  ["handle", "cancel"],
-  ["handle", "escape"],
-  ["note", "cancel"],
-  ["note", "escape"],
-] as const)(
-  "%s mode: closing by %s with a typed note asks, Keep keeps it, Discard closes",
-  async (mode, reason) => {
+it.each(["handle", "note"] as const)(
+  "%s mode: Escape with a typed note asks, Keep keeps it, Discard closes",
+  async (mode) => {
     const { app, form, dialog, input } = await fixture(mode);
     await edit(form, "Adviser said fine");
-    const close = () =>
-      reason === "cancel"
-        ? Promise.resolve(
-            form.shadowRoot!.querySelector<HTMLElement>("[data-test=note-cancel]")!.click(),
-          )
-        : userEvent.keyboard("{Escape}");
+    const close = () => userEvent.keyboard("{Escape}");
     input.focus();
     await close();
     const q = await warning(app);

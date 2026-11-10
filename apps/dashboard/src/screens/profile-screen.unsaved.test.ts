@@ -96,7 +96,7 @@ for (const [action, field] of [
   ["setup-google", "currentPassword"],
   ["setup-authenticator", "currentPassword"],
 ] as const) {
-  it(`${action} keeps unsubmitted values on Cancel and Escape, then discards only after approval`, async () => {
+  it(`${action} keeps unsubmitted values on Escape, then discards only after approval`, async () => {
     const { app, screen } = await mount({
       getProfile: async () => ({
         ...profile,
@@ -109,7 +109,7 @@ for (const [action, field] of [
     change(screen, field, "typed value");
     await screen.updateComplete;
     expect(unload()).toBe(true);
-    await click(screen, "cancel");
+    void modal.requestClose("escape");
     await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
     expect(modal.open).toBe(true);
     const q = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
@@ -189,7 +189,7 @@ it("a refused credential write retains its values and blocks dismissal during th
     )
     .toBe(false);
   expect(value(screen, "pin")).toBe("1234");
-  await click(screen, "cancel");
+  void screen.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
 });
 it("commits a submitted profile before refresh refuses, without losing newer delivered input", async () => {

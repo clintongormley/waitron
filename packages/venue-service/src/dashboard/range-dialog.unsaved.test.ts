@@ -87,7 +87,7 @@ it("asks before closing a changed range and Keep preserves the editor", async ()
   expect(unload()).toBe(false);
   await change(el, "11:00");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   expect(el.open).toBe(true);
@@ -114,7 +114,7 @@ it("asks for an edit made after removal and reconnect", async () => {
   await reconnect(el);
   await change(el, "11:00");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
 });
@@ -127,7 +127,7 @@ it("retains an edit made before removal and still compares it to the opened valu
   expect(save(el).variant).toBe("primary");
   expect(save(el).disabled).toBe(false);
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
 });
@@ -135,7 +135,7 @@ it("retains an edit made before removal and still compares it to the opened valu
 it("changing the draft cancels a pending discard answer", async () => {
   const el = await mount();
   await change(el, "11:00");
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   expect((await question()).open).toBe(true);
   await change(el, "12:00");
   expect(await close).toBe(false);

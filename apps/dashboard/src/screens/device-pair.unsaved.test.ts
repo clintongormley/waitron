@@ -167,7 +167,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
   return { app, screen, api, deny, release, accept };
 }
 
-for (const route of ["cancel", "escape", "add-close"] as const) {
+for (const route of ["escape", "add-close"] as const) {
   it(`pair settings ${route} keeps its draft and hold until Discard`, async () => {
     const { app, screen, deny, release } = await mount();
     change(screen, "name", "Renamed");
@@ -176,13 +176,10 @@ for (const route of ["cancel", "escape", "add-close"] as const) {
     await field.updateComplete;
     const input = field.shadowRoot!.querySelector("input")!;
     input.focus();
-    const dismiss = async () =>
-      route === "escape"
-        ? userEvent.keyboard("{Escape}")
-        : q(
-            screen,
-            `[data-test=${route === "cancel" ? "pair-cancel" : "add-device-close"}]`,
-          )!.click();
+    const dismiss = async () => {
+      if (route === "add-close") q(screen, "[data-test=add-device-close]")!.click();
+      else await userEvent.keyboard("{Escape}");
+    };
     await dismiss();
     await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
     expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
@@ -238,7 +235,7 @@ it("new-device settings start clean after number proof and retain invalid edits"
   });
   expect(unload()).toBe(false);
   change(screen, "name", "");
-  q(screen, "[data-test=pair-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   expect((q(screen, "[data-test=pair-name]") as HTMLInputElement).value).toBe("");
   expect(deny).not.toHaveBeenCalled();
@@ -285,7 +282,7 @@ it("refused pairing retains changed settings and asks before cleanup", async () 
     .poll(() => (q(screen, "[data-test=pair-cancel]") as HTMLButtonElement).disabled)
     .toBe(false);
   expect(unload()).toBe(true);
-  q(screen, "[data-test=pair-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   expect(deny).not.toHaveBeenCalled();
   expect((q(screen, "[data-test=pair-name]") as HTMLInputElement).value).toBe("Renamed");
@@ -321,7 +318,7 @@ it("submitted pairing remains nondismissible and newer delivered input stays dir
   expect(q(screen, "[data-test=waiting-empty]")).toBeNull();
   expect(q(screen, "[data-test=waiting-table]")).toBeNull();
   expect(q(screen, "[data-test=joined-modal]")).toBeNull();
-  q(screen, "[data-test=pair-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "discard");
   await expect.poll(() => modal(screen)).toBeNull();
   expect(deny).not.toHaveBeenCalled();
@@ -367,7 +364,7 @@ it("a new knock invalidates settings and its question without denying the replac
   let current = request;
   const { app, screen, deny } = await mount({ liveData, joinRequests: async () => [current] });
   change(screen, "name", "Renamed");
-  q(screen, "[data-test=pair-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   current = { ...request, createdAt: "2026-10-06T01:00:00.000Z", label: "New ask" };
   liveData.refresh();
@@ -390,7 +387,7 @@ it("same-request reads do not overwrite edited settings or their baseline", asyn
     .toContain("Refreshed label");
   expect((q(screen, "[data-test=pair-name]") as HTMLInputElement).value).toBe("Renamed");
   expect(unload()).toBe(true);
-  q(screen, "[data-test=pair-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   change(screen, "name", "Counter");
   expect(unload()).toBe(false);
@@ -440,7 +437,7 @@ it("replacement and disconnect invalidate a pending settings decision and detach
   const { app, screen, deny } = await mount();
   change(screen, "name", "Renamed");
   const old = q(screen, "[data-test=pair-name]")!;
-  q(screen, "[data-test=pair-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   await open(screen, "j2");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
@@ -449,7 +446,7 @@ it("replacement and disconnect invalidate a pending settings decision and detach
   expect(unload()).toBe(false);
   expect(deny).toHaveBeenCalledExactlyOnceWith("j1", { createdAt: request.createdAt });
   change(screen, "name", "Changed bar");
-  q(screen, "[data-test=pair-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   screen.remove();
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
@@ -487,12 +484,12 @@ it("#1422 reconnect: a Pair dialog opened after the screen is put back asks befo
   );
   await screen.updateComplete;
   expect(unload()).toBe(true);
-  q(screen, "[data-test=pair-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
   await choose(app, "keep");
   expect((q(screen, "[data-test=pair-screen]") as HTMLInputElement).value).toBe("station");
-  q(screen, "[data-test=pair-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "discard");
   await expect.poll(() => modal(screen)).toBeNull();
   expect(unload()).toBe(false);

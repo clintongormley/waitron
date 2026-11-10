@@ -56,12 +56,11 @@ async function choose(el: TillApp, decision: "keep" | "discard") {
   );
 }
 
-it.each(["cancel", "escape"])(
+it.each(["escape"])(
   "the host retains the allergy editor through %s and Keep, then Discard closes",
-  async (action) => {
+  async () => {
     const { el, form, input } = await editing();
-    if (action === "escape") await userEvent.keyboard("{Escape}");
-    else await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+    await userEvent.keyboard("{Escape}");
     await choose(el, "keep");
     expect(dialog(el)).toBe(form);
     expect(input.value).toBe("Retained guest");
@@ -69,7 +68,7 @@ it.each(["cancel", "escape"])(
     const closed = new Promise<void>((resolve) =>
       native.addEventListener("wt-close", () => resolve(), { once: true }),
     );
-    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+    await userEvent.keyboard("{Escape}");
     await choose(el, "discard");
     await closed;
     await vi.waitFor(() => expect(dialog(el)).toBeNull());

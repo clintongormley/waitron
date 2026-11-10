@@ -103,7 +103,7 @@ it("keeps Save quiet until a day changes, and quiet again once the change is und
   expect(unload()).toBe(false);
 });
 
-it.each(["dismiss", "cancel"])(
+it.each(["dismiss"])(
   "%s with edits asks first: Keep stays, Discard returns to the month",
   async (button) => {
     const painter = await mount();

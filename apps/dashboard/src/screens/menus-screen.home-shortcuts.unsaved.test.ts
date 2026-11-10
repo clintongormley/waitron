@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons } from "@waitron/ui";
@@ -156,7 +157,7 @@ it("closes on Cancel without asking when nothing is chosen", async () => {
   expect((await question(app)).open).toBe(false);
 });
 
-it("asks before Cancel discards a choice, and Keep leaves the window open", async () => {
+it("asks before Escape discards a choice, and Keep leaves the window open", async () => {
   const { app, window, picker } = await mount(
     client(
       async () => ({}),
@@ -164,7 +165,7 @@ it("asks before Cancel discards a choice, and Keep leaves the window open", asyn
     ),
   );
   await choose(picker(), ["p-lager"]);
-  cancel(window());
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   await vi.waitFor(() => expect(q.open).toBe(true));
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -188,7 +189,7 @@ it("commits the adds before closing, so a failed read of the home afterwards ask
   expect((await question(app)).open).toBe(false);
 });
 
-it("keeps a refused choice, and Cancel then asks", async () => {
+it("keeps a refused choice, and Escape then asks", async () => {
   const api = client(
     async () => {
       throw { code: "server.internal" };
@@ -208,7 +209,7 @@ it("keeps a refused choice, and Cancel then asks", async () => {
     ).toBe(false),
   );
   expect(picker().shadowRoot!.querySelector("wt-combobox")!.values).toEqual(["p-lager"]);
-  cancel(window());
+  await userEvent.keyboard("{Escape}");
   await vi.waitFor(async () => expect((await question(app)).open).toBe(true));
   expect(window().open).toBe(true);
 });
@@ -223,7 +224,7 @@ it("still asks after the window's picker was taken out of the page and put back"
   await choose(picker(), ["p-lager"]);
   await reattachAfterDetachedUpdate(picker());
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  cancel(window());
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   await vi.waitFor(() => expect(q.open).toBe(true));
   expect(window().open).toBe(true);
@@ -240,7 +241,7 @@ it("still asks after the screen was taken out of the page and put back", async (
   await reattachAfterDetachedUpdate(screen);
   await vi.waitFor(() => expect(window()?.open).toBe(true));
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  cancel(window());
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   await vi.waitFor(() => expect(q.open).toBe(true));
 });

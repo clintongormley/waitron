@@ -2091,7 +2091,7 @@ export class DevicesScreen extends LitElement {
         <wt-button
           slot="cancel"
           data-test="joined-close"
-          @click=${() => void this.renderRoot.querySelector<WtModal>("[data-test=joined-modal]")?.requestClose("cancel")}
+          @click=${() => void this.renderRoot.querySelector<WtModal>("[data-test=joined-modal]")?.requestClose("navigation")}
           >${t("action.close")}</wt-button
         >
         <wt-button
@@ -2146,7 +2146,7 @@ export class DevicesScreen extends LitElement {
         ><wt-button
           slot="cancel"
           data-test="add-device-close"
-          @click=${() => void this.renderRoot.querySelector<WtModal>("[data-test=add-device-modal]")?.requestClose("cancel")}
+          @click=${() => void this.renderRoot.querySelector<WtModal>("[data-test=add-device-modal]")?.requestClose("navigation")}
           >${t("action.close")}</wt-button
         ></wt-form-actions
       >

@@ -367,7 +367,7 @@ it("keeping a requested zone switch retains the department editor's originating 
   await userEvent.click(page.elementLocator(link));
   await choose("keep");
   expect(location.pathname).toBe("/manage/venue-operations/department/d1");
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose("discard");
   await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
   await expect.poll(() => menu.shadowRoot!.activeElement).toBe(trigger);

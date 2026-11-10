@@ -69,7 +69,7 @@ it("asks before closing a changed new set; Keep keeps it, Discard closes", async
   await change(el, "departmentId", "restaurant");
   await change(el, "name", "Brunch");
   expect(unload()).toBe(true);
-  const kept = modal(el).requestClose("cancel");
+  const kept = modal(el).requestClose("escape");
   await choose("keep");
   expect(await kept).toBe(false);
   expect(el.open).toBe(true);

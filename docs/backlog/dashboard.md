@@ -748,6 +748,10 @@ probes do not settle it. This stays inside the existing bundle rather than becom
 
 ## Decisions and deliberate limits
 
+- **Cancel discards without asking (A657, owner, 2026-10-14).** An explicit Cancel, including
+  page Cancel, restores and leaves its drafts. Escape, an existing backdrop action, the close
+  cross and other navigation still ask. See the shared [draft contract](../developers/design-system.md#protect-an-edited-dialog-before-closing-it).
+
 - **Help mode beside hints (A582 and A237, owner, 2026-10-18; A582 design §7).** A short
   explanation stays the field's hint, never a "?" button (owner, 2026-10-03); help mode holds the
   longer explanation. The dashboard's remaining "?" buttons became help-mode badges, and the setup
@@ -983,27 +987,6 @@ The owner reversed the disabled-zone ruling on 2026-10-08.
   Existing invalid stored-scope validation still applies; this earlier A396 receipt remains historical.
 
 The per-form classifications remain in the [A331 plan](../superpowers/plans/2026-10-07-a331-save-follows-changes.md).
-
-## A657 — Cancel leaves without asking
-
-Owner, 2026-10-14: "when you click cancel you shouldn't get the 'discard changes' warning. just
-when you click escape or click outside the form". Asked about the rest the same day: a dialog's ✕
-still asks, and a full page's own Cancel leaves without asking too.
-
-- **Today.** design-system.md → "Protect an edited dialog before closing it" says to route "Cancel,
-  close controls and an existing backdrop action through `requestClose(reason)`", and the
-  coordinator asks whatever the reason (`LeaveReason` in `packages/ui-core/src/unsaved-changes.ts`:
-  `cancel`, `escape`, `backdrop`, `navigation`, `signout`). `requestClose("cancel")` is by far the
-  most common call in the tree; if those calls are the Cancel buttons, the rule can live where the
-  reason is read rather than in each screen. Which of them are Cancel buttons was not checked.
-- **The ✕.** It must still ask. Check what each dialog's close cross passes before keying the
-  change on `"cancel"`: a ✕ that passes `"cancel"` today needs a reason of its own (not checked).
-- **Full pages.** A page's own Cancel (the floor plan editor's Cancel link is the one named in
-  design-system.md; find the others) is a route change the shell guards, so that link has to tell
-  the shell it is a deliberate discard. Every other way off the page still asks.
-- **Scope.** The dashboard, till and setup shells share the controller, so all three follow.
-  Update the rule's paragraph and the unsaved-changes tests that pin a question on Cancel; a test
-  that asserts Cancel asks is now asserting the old rule.
 
 ## A refused early dashboard payment authorization may become allowed before the PIN transaction — UNVERIFIED (A530 review)
 

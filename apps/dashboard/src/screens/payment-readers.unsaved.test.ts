@@ -116,7 +116,7 @@ for (const discovery of [false, true]) {
     const { app, screen } = await mount({}, discovery);
     change(screen, "New counter", field);
     expect(unload()).toBe(true);
-    q(screen, `[data-test=${cancel}]`)!.click();
+    await userEvent.keyboard("{Escape}");
     await choose(app, "keep");
     expect(dialog(screen, selector)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
     expect((q(screen, `[data-test=${field}]`) as HTMLInputElement).value).toBe("New counter");
@@ -152,7 +152,7 @@ for (const discovery of [false, true]) {
       .poll(() => dialog(screen, selector)!.querySelector("wt-form-actions")!.error)
       .toBe(codeMessage("connection.failed"));
     expect(unload()).toBe(true);
-    q(screen, `[data-test=${cancel}]`)!.click();
+    await userEvent.keyboard("{Escape}");
     await choose(app, "keep");
     expect((q(screen, `[data-test=${field}]`) as HTMLInputElement).value).toBe("New counter");
   });
@@ -239,7 +239,7 @@ it("adopting one discovery row does not discard another edited name", async () =
   expect(dialog(screen, "reader-discovery")).not.toBeNull();
   expect(unload()).toBe(true);
   expect((q(screen, "[data-test=name-a2]") as HTMLInputElement).value).toBe("New bar");
-  q(screen, "[data-test=cancel-discovery]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
 });
 it("adoption commits only the submitted name when newer input arrives before its reply", async () => {
@@ -267,7 +267,7 @@ it("adoption commits only the submitted name when newer input arrives before its
     .toBe(false);
   expect((q(screen, "[data-test=name-a1]") as HTMLInputElement).value).toBe("Newer");
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-discovery]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   change(screen, "Submitted", "name-a1");
   expect(unload()).toBe(false);
@@ -344,7 +344,7 @@ for (const action of ["replace", "disconnect"] as const) {
   it(`rename ${action} invalidates a pending leave and releases its draft`, async () => {
     const { app, screen } = await mount();
     change(screen, "New counter");
-    q(screen, "[data-test=close-reader-editor]")!.click();
+    await userEvent.keyboard("{Escape}");
     await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
     if (action === "replace") await open(screen, "r2");
     else screen.remove();
@@ -507,10 +507,10 @@ it("an own-slip toggle protects the reader draft and Discard restores its saved 
   await userEvent.click(toggle().shadowRoot!.querySelector("label")!);
   expect(input.checked).toBe(true);
   expect(unload()).toBe(true);
-  q(screen, "[data-test=close-reader-editor]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   expect(toggle().shadowRoot!.querySelector("input")!.checked).toBe(true);
-  q(screen, "[data-test=close-reader-editor]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "discard");
   await expect.poll(() => dialog(screen, "reader-editor")).toBeNull();
   await open(screen);

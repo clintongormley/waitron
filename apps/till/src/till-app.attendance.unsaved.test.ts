@@ -54,7 +54,7 @@ it("native Escape in the real sign-in editor protects the response until Keep or
   await expect.poll(() => q.open).toBe(false);
   expect(f.input.value).toBe("Closed after the delivery");
   expect(f.api.sendAttendanceCommand).not.toHaveBeenCalled();
-  await userEvent.click(f.editor.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+  await userEvent.keyboard("{Escape}");
   await warning(f.el);
   const closed = new Promise((resolve) =>
     f.editor.addEventListener("correction-cancel", resolve, { once: true }),
@@ -117,7 +117,7 @@ it("a live locale change retains the real editor's draft and form scope", async 
   expect(f.el.shadowRoot!.querySelector("till-attendance-correction-dialog")).toBe(f.editor);
   expect(f.input.value).toBe("Closed after the delivery");
   expect(f.editor.shadowRoot!.querySelector("wt-textarea")!.label).toBe("Motivo");
-  await userEvent.click(f.editor.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+  await userEvent.keyboard("{Escape}");
   expect((await warning(f.el)).open).toBe(true);
   expect(f.api.sendAttendanceCommand).not.toHaveBeenCalled();
 });

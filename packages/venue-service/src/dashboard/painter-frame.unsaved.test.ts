@@ -107,7 +107,6 @@ function closed(frame: PainterFrame) {
 
 it.each([
   ["the close button", (frame: PainterFrame) => button(frame, "dismiss").click()],
-  ["Cancel", (frame: PainterFrame) => button(frame, "cancel").click()],
   [
     "Escape",
     async (frame: PainterFrame) => {
@@ -141,4 +140,15 @@ it("an unchanged draft closes without asking", async () => {
   await close;
   expect(question().open).toBe(false);
   expect(frame.open).toBe(false);
+});
+
+it("the Cancel footer discards the painter instead of taking the close-cross path", async () => {
+  const { painter, frame } = await mount();
+  painter.edit("b");
+  await painter.updateComplete;
+  await frame.updateComplete;
+  button(frame, "cancel").click();
+  await expect.poll(() => frame.open).toBe(false);
+  expect(question().open).toBe(false);
+  expect(painter.draft).toBe("a");
 });

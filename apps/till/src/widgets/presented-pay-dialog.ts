@@ -347,7 +347,7 @@ export class TillPresentedPayDialog extends LitElement {
   }
 
   #requestClose(): void {
-    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("navigation");
   }
 
   #resend(): void {

@@ -90,11 +90,11 @@ function cancel(screen: Screen) {
   q(screen, "[data-test=cancel-printer-details]")!.click();
 }
 
-it("closing a rename with a typed name asks, keeps the name through Keep, and closes after Discard", async () => {
+it("navigation keeps a typed rename through Keep and Cancel closes without asking", async () => {
   const { app, screen } = await mount();
   await openRename(screen);
   await type(screen, "Upstairs");
-  cancel(screen);
+  void app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
   const q1 = await question(app);
   expect(q1.open).toBe(true);
   q1.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -103,8 +103,7 @@ it("closing a rename with a typed name asks, keeps the name through Keep, and cl
   expect(editing(screen)).toBe(true);
   expect(nameField(screen).value).toBe("Upstairs");
   cancel(screen);
-  await question(app);
-  q1.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  expect((await question(app)).open).toBe(false);
   await expect.poll(() => editing(screen)).toBe(false);
   await closeReportsDelivered();
   expect(app.leave.coordinator.isDirty()).toBe(false);
@@ -142,7 +141,7 @@ it("a refused rename keeps the name as a change, so closing still asks", async (
   await expect.poll(() => app.api.updatePagePrinter.mock.calls.length).toBe(1);
   await screen.updateComplete;
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  cancel(screen);
+  void app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
   expect((await question(app)).open).toBe(true);
 });
 

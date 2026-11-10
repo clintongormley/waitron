@@ -68,7 +68,7 @@ for (const name of ["secret-key", "webhook-secret", "success-url", "cancel-url"]
     expect(unload()).toBe(false);
     await field(form, name, "  changed  ");
     expect(unload()).toBe(true);
-    let leave = app.leave.coordinator.request({ scopes: [form], reason: "cancel", proceed });
+    let leave = app.leave.coordinator.request({ scopes: [form], reason: "navigation", proceed });
     let q = await question();
     expect(q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -80,11 +80,11 @@ for (const name of ["secret-key", "webhook-secret", "success-url", "cancel-url"]
     ).toBe("  changed  ");
     await field(form, name, "");
     expect(unload()).toBe(false);
-    expect(await app.leave.coordinator.request({ scopes: [form], reason: "cancel", proceed })).toBe(
-      "proceeded",
-    );
+    expect(
+      await app.leave.coordinator.request({ scopes: [form], reason: "navigation", proceed }),
+    ).toBe("proceeded");
     await field(form, name, " ");
-    leave = app.leave.coordinator.request({ scopes: [form], reason: "cancel", proceed });
+    leave = app.leave.coordinator.request({ scopes: [form], reason: "navigation", proceed });
     q = await question();
     expect(q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();

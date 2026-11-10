@@ -12372,7 +12372,7 @@ it("keeps a reconnected menu's snapshot when the departed initial read answers l
   expect(structure(el).nodes).toEqual([]);
 });
 
-for (const route of ["cancel", "escape"] as const) {
+for (const route of ["escape"] as const) {
   it(`W69 Menu Add products ${route} asks before discarding chosen products`, async () => {
     const host = await placementLeaveHost();
     const el = await mountLunch(api());
@@ -12386,9 +12386,7 @@ for (const route of ["cancel", "escape"] as const) {
     await picker.updateComplete;
     picker.shadowRoot!.querySelector<HTMLInputElement>('input[value="p-chips"]')!.click();
     await picker.updateComplete;
-    if (route === "cancel")
-      picker.querySelector<HTMLElement>("[data-test=add-products-cancel]")!.click();
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     await host.updateComplete;
     const q = host.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await q.updateComplete;
@@ -12400,9 +12398,10 @@ for (const route of ["cancel", "escape"] as const) {
     expect(
       picker.shadowRoot!.querySelector<HTMLInputElement>('input[value="p-chips"]')!.checked,
     ).toBe(true);
-    picker.querySelector<HTMLElement>("[data-test=add-products-cancel]")!.click();
+    await userEvent.keyboard("{Escape}");
     await host.updateComplete;
     await q.updateComplete;
+    expect(q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => modal(el, "add-products").open).toBe(false);
     expect(host.leave.coordinator.isDirty()).toBe(false);
@@ -12478,7 +12477,7 @@ for (const succeeds of [true, false]) {
     } else {
       await expect.poll(() => picker.busy).toBe(false);
       expect(atCommit).toBeUndefined();
-      picker.querySelector<HTMLElement>("[data-test=add-products-cancel]")!.click();
+      await userEvent.keyboard("{Escape}");
       await host.updateComplete;
       const q = host.shadowRoot!.querySelector("wt-unsaved-changes")!;
       await q.updateComplete;

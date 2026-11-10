@@ -159,14 +159,14 @@ test("discarding a dirty child restores only its values and the edited parent st
   scene.childScope.changed();
   scene.child.open = true;
   await scene.child.updateComplete;
-  const leavingChild = scene.child.requestClose("cancel");
+  const leavingChild = scene.child.requestClose("escape");
   await userEvent.click(page.getByRole("button", { name: "Discard changes" }));
   expect(await leavingChild).toBe(true);
   expect(scene.childField.value).toBe("Variant");
   expect(scene.parentField.value).toBe("Parent edit");
   expect(scene.parent.shadowRoot!.querySelector("dialog")!.open).toBe(true);
   expect(scene.coordinator.isDirty([scene.parent])).toBe(true);
-  const leavingParent = scene.parent.requestClose("cancel");
+  const leavingParent = scene.parent.requestClose("escape");
   await userEvent.click(page.getByRole("button", { name: "Keep editing" }));
   expect(await leavingParent).toBe(false);
   expect(scene.parentField.value).toBe("Parent edit");
@@ -177,7 +177,7 @@ test("a submitted-value commit aborts its visible question without restoring an 
   const scene = await nestedEditors();
   scene.parentField.value = "Saved product";
   scene.parentScope.changed();
-  const leaving = scene.parent.requestClose("cancel");
+  const leaving = scene.parent.requestClose("escape");
   await expect.element(page.getByRole("button", { name: "Discard changes" })).toBeVisible();
   scene.parentScope.commit("Saved product");
   expect(await leaving).toBe(false);

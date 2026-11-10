@@ -257,11 +257,11 @@ it("a secret typed before the form's draft is taken again is not restored by Dis
   await change(screen, "archive-destination", "custom-s3");
   expect(field(screen, "archive-bucket-secret-access-key").value).toBe("");
 });
-it("settings Cancel protects changed values but normalized retention and weekday reverts close directly", async () => {
+it("settings navigation protects changed values and Cancel leaves a normalized revert directly", async () => {
   const { app, screen } = await mount(on);
   await edit(screen);
   await change(screen, "retain-count", "invalid");
-  await click(screen, "cancel-edit");
+  void leave(app);
   await choose(app, "keep");
   expect(field(screen, "retain-count").value).toBe("invalid");
   await change(screen, "retain-count", "7.0");
@@ -373,7 +373,7 @@ it("Discard on settings Cancel restores only the archive draft, preserving expor
   await credentials(screen);
   await change(screen, "destination", "/mnt/changed");
   await click(screen, "cancel-edit");
-  await choose(app, "discard");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=save-settings]")).toBeNull();
   expect(field(screen, "configuration-passphrase").value).toBe("synthetic passphrase");
   expect(unload()).toBe(true);
@@ -611,7 +611,7 @@ it("a departed rotation cannot clear a reconnected pasted key", async () => {
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280]) {
-      it(`${locale} ${theme} ${width}: native settings Cancel, Escape, Keep and Discard`, async () => {
+      it(`${locale} ${theme} ${width}: native settings navigation, Escape, Keep, Discard and Cancel`, async () => {
         setLocale(locale);
         await page.viewport(width, 850);
         const { app, screen } = await mount(on, {}, theme);
@@ -622,7 +622,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
         await userEvent.fill(native, "/mnt/native-draft");
         await screen.updateComplete;
         const cancel = field(screen, "cancel-edit").shadowRoot!.querySelector("button")!;
-        await userEvent.click(cancel);
+        void leave(app);
         const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
         await expect.poll(() => warning.open).toBe(true);
         await warning.updateComplete;
@@ -642,7 +642,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
         await page.screenshot({
           path: `__screenshots__/w69-backup-look/${locale}-${theme}-${width}-kept.png`,
         });
-        await userEvent.click(cancel);
+        void leave(app);
         await expect.poll(() => warning.open).toBe(true);
         await userEvent.click(
           warning
@@ -651,13 +651,15 @@ for (const locale of ["en-GB", "es-ES"] as const)
         );
         await expect.poll(() => warning.open).toBe(false);
         expect(native.value).toBe("/mnt/native-draft");
-        await userEvent.click(cancel);
+        void leave(app);
         await expect.poll(() => warning.open).toBe(true);
         await userEvent.click(
           warning
             .shadowRoot!.querySelector("[data-choice=discard]")!
             .shadowRoot!.querySelector("button")!,
         );
+        await expect.poll(() => warning.open).toBe(false);
+        await userEvent.click(cancel);
         await expect
           .poll(() => screen.shadowRoot!.querySelector("[data-test=save-settings]"))
           .toBeNull();

@@ -120,7 +120,7 @@ function fixture(decision: LeaveDecision = "keep") {
   const coordinator = core.createLeaveCoordinator(confirm, target as Window);
   coordinators.push(coordinator);
   let proceeds = 0;
-  const request = (scopes: readonly object[], reason: "cancel" | "navigation" = "cancel") =>
+  const request = (scopes: readonly object[], reason: "cancel" | "navigation" = "navigation") =>
     coordinator.request({
       scopes,
       reason,
@@ -180,6 +180,33 @@ function unload(target: EventTarget) {
   target.dispatchEvent(event);
   return event as BeforeUnloadEvent;
 }
+
+it("Cancel restores selected descendants before leaving without asking and retains unrelated drafts", async () => {
+  const f = fixture();
+  const parent = draft(f.coordinator, "parent");
+  const child = draft(f.coordinator, "child", { parent: parent.id });
+  const other = draft(f.coordinator, "other");
+  parent.set("parent edit");
+  child.set("child edit");
+  other.set("other edit");
+  const atProceed: string[][] = [];
+  expect(
+    await f.coordinator.request({
+      scopes: [parent.id],
+      reason: "cancel",
+      proceed() {
+        atProceed.push([parent.value, child.value, other.value]);
+      },
+    }),
+  ).toBe("proceeded");
+  expect(f.questions).toEqual([]);
+  expect(atProceed).toEqual([["parent", "child", "other edit"]]);
+  expect(parent.restored).toEqual(["parent"]);
+  expect(child.restored).toEqual(["child"]);
+  expect(other.restored).toEqual([]);
+  expect(f.coordinator.isDirty([parent.id])).toBe(false);
+  expect(unload(f.target).defaultPrevented).toBe(true);
+});
 
 it("exposes the coordinator through the browser barrel", () => {
   expect(core).toHaveProperty("createLeaveCoordinator", expect.any(Function));

@@ -73,12 +73,11 @@ function saveState(form: TillBillNameDialog) {
   const save = form.shadowRoot!.querySelector<HTMLElement>("[data-name-save]")!;
   return { variant: save.getAttribute("variant"), disabled: save.hasAttribute("disabled") };
 }
-for (const action of ["Cancel", "Escape"]) {
+for (const action of ["Escape"]) {
   it(`bill name ${action} keeps the typed name, then discards without naming`, async () => {
     const { app, form } = await mount();
     const input = await fill(form, "Luis");
-    if (action === "Cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.closes).toBe(0);
@@ -91,7 +90,7 @@ for (const action of ["Cancel", "Escape"]) {
         input.getRootNode() instanceof ShadowRoot &&
           (input.getRootNode() as ShadowRoot).activeElement,
       ).toBe(input);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -101,6 +100,7 @@ for (const action of ["Cancel", "Escape"]) {
     expect(unload()).toBe(false);
   });
 }
+
 it("normalized reverted bill names close without a warning", async () => {
   const { app, form } = await mount();
   await fill(form, "Luis");
@@ -123,7 +123,7 @@ it("invalid long names remain protected after validation refuses them", async ()
   expect(app.submitted).toEqual([]);
   expect(form.shadowRoot!.querySelector("wt-input")!.error).toBe(t("table.name_too_long"));
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -146,7 +146,7 @@ it("submitting names directly and commits the normalized name without a discard 
 it("disconnect aborts a bill-name leave decision; reconnect retains the original name baseline", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "Luis");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -159,7 +159,7 @@ it("disconnect aborts a bill-name leave decision; reconnect retains the original
   await form.updateComplete;
   expect(input.value).toBe("Luis");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("retained departed bill-name controls cannot submit, cancel or replace the draft", async () => {
@@ -184,7 +184,7 @@ it("retained departed bill-name controls cannot submit, cancel or replace the dr
 it("a parent rerender does not reset the typed bill name or pending warning", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "Luis");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   form.bill = "Jo · Bill 3";
@@ -199,7 +199,7 @@ it("a parent rerender does not reset the typed bill name or pending warning", as
 it("a bill-name submission invalidates a pending Discard and reconnect keeps the accepted name baseline", async () => {
   const { app, form } = await mount();
   await fill(form, "Luis");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -223,7 +223,7 @@ it("a refused submitted name starts dirty against the stored bill name", async (
   const { app, form } = await mount({ value: "Luis", savedValue: "Ana", refusal: "Name refused" });
   expect(form.shadowRoot!.querySelector("wt-input")!.error).toBe("Name refused");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();

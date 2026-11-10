@@ -91,7 +91,7 @@ it("asks before closing a changed staff role, and Keep preserves the editor", as
   expect(unload()).toBe(false);
   await chooseOptions(people(el), ["p-ana", "p-marc"]);
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   expect(el.open).toBe(true);
@@ -135,7 +135,7 @@ it("keeps an edit made before the dialog is taken out and put back", async () =>
   ).toBe("Runner");
   expect(save(el).disabled).toBe(false);
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("discard");
   expect(await close).toBe(true);
 });

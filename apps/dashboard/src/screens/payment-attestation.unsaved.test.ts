@@ -69,6 +69,7 @@ function value(screen: PaymentsScreen, field: string) {
 function cancel(screen: PaymentsScreen) {
   dialog(screen)!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
 }
+
 function unload() {
   return !window.dispatchEvent(new Event("beforeunload", { cancelable: true }));
 }
@@ -140,7 +141,7 @@ for (const kind of ["payment", "refund"]) {
       const { app, screen } = await mount(kind);
       change(screen, field!, edited!);
       expect(unload()).toBe(true);
-      cancel(screen);
+      await userEvent.keyboard("{Escape}");
       await choose(app, "keep");
       expect(dialog(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
       expect(value(screen, field!)).toBe(edited);
@@ -180,7 +181,7 @@ for (const kind of ["payment", "refund"]) {
       )
       .not.toBe("");
     expect(unload()).toBe(true);
-    cancel(screen);
+    await userEvent.keyboard("{Escape}");
     await choose(app, "keep");
     expect(value(screen, "note")).toBe("  Provider confirmed  ");
     expect(value(screen, "pin")).toBe("1234");
@@ -251,7 +252,7 @@ for (const kind of ["payment", "refund"]) {
     expect(dialog(screen)).not.toBeNull();
     expect(value(screen, "note")).toBe("A newer note");
     expect(unload()).toBe(true);
-    cancel(screen);
+    await userEvent.keyboard("{Escape}");
     await choose(app, "keep");
   });
 }
@@ -281,7 +282,7 @@ it("disconnect clears sensitive values and a late acceptance cannot close a new 
   await screen.updateComplete;
   expect(value(screen, "note")).toBe("Replacement");
   expect(q(screen, "[data-test=bill-action-result]")).toBeNull();
-  cancel(screen);
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
 });
 
@@ -301,13 +302,13 @@ it("departed attestation controls and native close reports leave a replacement a
   expect(value(screen, "pin")).toBe("");
   expect(value(screen, "outcome")).toBe("");
   expect(dialog(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
-  cancel(screen);
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
 });
 it("successful submission invalidates an outstanding discard question", async () => {
   const { app, screen } = await mount("payment");
   await fill(screen, "payment");
-  cancel(screen);
+  await userEvent.keyboard("{Escape}");
   const confirmation = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await expect.poll(() => confirmation.open).toBe(true);
   q(screen, "[data-test=confirm-bill-attest]")!.click();
@@ -326,7 +327,7 @@ it("successful submission invalidates an outstanding discard question", async ()
 it("disconnect cancels a pending question and clears the PIN without asking", async () => {
   const { app, screen } = await mount("payment");
   change(screen, "pin", "1234");
-  cancel(screen);
+  await userEvent.keyboard("{Escape}");
   const confirmation = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await expect.poll(() => confirmation.open).toBe(true);
   screen.remove();
@@ -391,7 +392,7 @@ it("provider-check confirmation remains a direct-close exemption", async () => {
   expect(unload()).toBe(false);
 });
 
-it("post-invoice attestation keeps its note and PIN through Cancel/Keep, then discards without a refund", async () => {
+it("post-invoice attestation keeps its note and PIN through Escape/Keep, then discards without a refund", async () => {
   let writes = 0;
   const { app, screen } = await mount("tender", {
     attestStuckTenderRefund: async () => {
@@ -401,7 +402,7 @@ it("post-invoice attestation keeps its note and PIN through Cancel/Keep, then di
   });
   await fill(screen, "tender");
   expect(unload()).toBe(true);
-  cancel(screen);
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   expect(value(screen, "note")).toBe("  Provider confirmed  ");
   expect(value(screen, "pin")).toBe("1234");

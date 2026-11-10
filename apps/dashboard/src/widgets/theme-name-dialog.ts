@@ -274,7 +274,7 @@ export class ThemeNameDialog extends LitElement {
           variant="secondary"
           data-test="name-back"
           ?disabled=${this.busy}
-          @click=${() => void this.#dialog()?.requestClose("cancel")}
+          @click=${() => void this.#dialog()?.requestClose("navigation")}
           >${t("action.back")}</wt-button
         >
         <wt-button

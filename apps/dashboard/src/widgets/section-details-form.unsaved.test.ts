@@ -91,12 +91,12 @@ function unload() {
 function cancel(form: HTMLElement) {
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
 }
-for (const route of ["cancel", "escape"] as const) {
+
+for (const route of ["escape"] as const) {
   it(`Section ${route} retains translated values through Keep and emits cancellation once after Discard`, async () => {
     const { app, form } = await mount();
     await edit(form, "names-es", "Primeros platos");
-    if (route === "cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(app.cancelled).toBe(0);
     expect(q.open).toBe(true);
@@ -109,7 +109,7 @@ for (const route of ["cancel", "escape"] as const) {
     expect(
       form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=names-es]")!.value,
     ).toBe("Primeros platos");
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.cancelled).toBe(1);
@@ -141,7 +141,7 @@ it("Section Add starts clean and a refused save retains the authored draft", asy
   ]);
   form.fieldErrors = { _form: "Refused" };
   await form.updateComplete;
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
 });
@@ -160,7 +160,7 @@ it("Section Add opened on a start colour and left untouched closes without askin
 it("a replacement Section invalidates its pending answer and uses the new baseline", async () => {
   const { app, form } = await mount();
   await edit(form, "internalName", "Old draft");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   app.value = { ...section, id: "desserts", internalName: "Desserts" };
   app.requestUpdate();
@@ -317,7 +317,7 @@ it("a Section taken out of the page and put back asks before discarding an edit 
     form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=internalName]")!.value,
   ).toBe("Changed");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
 });
@@ -349,7 +349,7 @@ it("a Section keeps an edit made before it was taken out and put back, and still
     disabled: false,
     innerDisabled: false,
   });
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
 });

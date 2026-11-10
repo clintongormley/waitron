@@ -123,14 +123,14 @@ for (const name of ["dayCutover"]) {
     expect(unload()).toBe(false);
   });
 }
-it("Cancel asks before discarding without sending a request", async () => {
+it("navigation Keep retains the draft and Cancel discards without sending a request", async () => {
   const { app, editor, writes } = await mount();
   await change(editor, "dayCutover", "03:00");
-  await click(editor, "cancel");
+  void app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
   await choose(app, "keep");
   expect(unload()).toBe(true);
   await click(editor, "cancel");
-  await choose(app, "discard");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await expect.poll(() => editor.shadowRoot!.querySelector("wt-input")).toBeNull();
   expect(unload()).toBe(false);
   expect(writes).toEqual([]);

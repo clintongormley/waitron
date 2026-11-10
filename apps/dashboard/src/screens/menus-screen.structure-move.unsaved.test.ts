@@ -151,11 +151,11 @@ it("closes on Cancel without asking when no destination is chosen", async () => 
   expect((await question(app)).open).toBe(false);
 });
 
-it("asks before Cancel discards a chosen destination, and Keep leaves the window open", async () => {
+it("asks before Escape discards a chosen destination, and Keep leaves the window open", async () => {
   const { app, window, destination } = await mount(client(async () => []));
   await chooseOption(destination(), "s-drinks");
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  cancel(window());
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   await vi.waitFor(() => expect(q.open).toBe(true));
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -187,7 +187,7 @@ it("commits the move before closing, so nothing is left to ask about", async () 
   expect((await question(app)).open).toBe(false);
 });
 
-it("keeps a refused choice with its message in the footer above the buttons, and Cancel then asks", async () => {
+it("keeps a refused choice with its message in the footer above the buttons, and Escape then asks", async () => {
   const api = client(async () => {
     throw { code: "menu_section.member_duplicate" };
   });
@@ -208,7 +208,7 @@ it("keeps a refused choice with its message in the footer above the buttons, and
     window().querySelector('[data-test="move-selected-save"]')!,
     codeMessage("menu_section.member_duplicate"),
   );
-  cancel(window());
+  await userEvent.keyboard("{Escape}");
   await vi.waitFor(async () => expect((await question(app)).open).toBe(true));
   expect(window().open).toBe(true);
 });
@@ -219,7 +219,7 @@ it("still asks after the screen was taken out of the page and put back", async (
   await reattachAfterDetachedUpdate(screen);
   await vi.waitFor(() => expect(window()?.open).toBe(true));
   await vi.waitFor(() => expect(app.leave.coordinator.isDirty()).toBe(true));
-  cancel(window());
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   await vi.waitFor(() => expect(q.open).toBe(true));
   expect(window().open).toBe(true);

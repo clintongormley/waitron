@@ -24,7 +24,7 @@ export type PainterBand = CalendarColour | "special" | "";
  * inside itself and the bar stays put.
  *
  * The host owns the draft: it hands over the scope and coordinator `draftScopeFor` gave it, which
- * the frame asks before Cancel, close or Escape, and `dirty`, which sets Save. It sends
+ * the frame uses when leaving, and `dirty`, which sets Save. It sends
  * `painter-save` when Save is pressed on a changed draft, and `painter-close` once it has closed,
  * however it closed.
  */
@@ -148,7 +148,6 @@ export class PainterFrame extends LitElement {
 
   @property({ type: Boolean }) open = false;
   @property() heading = "";
-  /** The host's draft scope, from `draftScopeFor`, which Cancel, close and Escape ask. */
   @property({ attribute: false }) scope?: Pick<DraftScope<unknown>, "id">;
   /** The host's `scope.isDirty()`, passed on each render: the frame cannot see the draft change. */
   @property({ type: Boolean }) dirty = false;
@@ -176,8 +175,8 @@ export class PainterFrame extends LitElement {
     return outcome === "proceeded" && !this.busy;
   };
 
-  private close() {
-    if (!this.busy) void this.renderRoot.querySelector("wt-modal")?.requestClose("cancel");
+  private close(reason: LeaveReason) {
+    if (!this.busy) void this.renderRoot.querySelector("wt-modal")?.requestClose(reason);
   }
 
   private save() {
@@ -219,7 +218,7 @@ export class PainterFrame extends LitElement {
               variant="ghost"
               aria-label=${t("painter.close")}
               ?disabled=${this.busy}
-              @click=${() => this.close()}
+              @click=${() => this.close("navigation")}
               ><wt-icon name="close"></wt-icon
             ></wt-button>
             <h2>${this.heading}</h2>
@@ -233,7 +232,7 @@ export class PainterFrame extends LitElement {
                       data-test="cancel"
                       variant="secondary"
                       ?disabled=${this.busy}
-                      @click=${() => this.close()}
+                      @click=${() => this.close("cancel")}
                       >${t("hours.cancel")}</wt-button
                     >
                     <slot

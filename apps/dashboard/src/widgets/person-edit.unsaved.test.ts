@@ -77,15 +77,15 @@ async function question(app: PersonEditApp) {
 function cancel(form: HTMLElement) {
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
 }
-for (const route of ["cancel", "escape"] as const) {
+
+for (const route of ["escape"] as const) {
   it(`Edit staff ${route} retains the details and focus on Keep, then discards once`, async () => {
     const { app, form } = await mount();
     await edit(form, "email", "new@example.com");
     const field = form
       .shadowRoot!.querySelector("[data-test=edit-email]")!
       .shadowRoot!.querySelector("input")!;
-    if (route === "cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.closes).toBe(0);
@@ -95,12 +95,11 @@ for (const route of ["cancel", "escape"] as const) {
     q.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!.click();
     await expect.poll(() => q.open).toBe(false);
     expect(field.value).toBe("new@example.com");
-    if (route === "escape")
-      expect(
-        field.getRootNode() instanceof ShadowRoot &&
-          (field.getRootNode() as ShadowRoot).activeElement,
-      ).toBe(field);
-    cancel(form);
+    expect(
+      field.getRootNode() instanceof ShadowRoot &&
+        (field.getRootNode() as ShadowRoot).activeElement,
+    ).toBe(field);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -151,7 +150,7 @@ it("a refreshed staff summary preserves the draft, and a different identity canc
     form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=edit-email]")!
       .value,
   ).toBe("new@example.com");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   app.person = { ...person, personId: "p2", email: "bea@example.com" };
@@ -188,7 +187,7 @@ it("Edit staff blocks dismissal and resubmission during an outstanding write", a
 it("a completed staff save invalidates a pending discard question and closes once", async () => {
   const { app, form } = await mount();
   await edit(form, "email", "new@example.com");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const submitted = {
@@ -251,7 +250,7 @@ it("Edit staff keeps an edit made before it was taken out and put back, and stil
   expect(emailField(form).value).toBe("new@example.com");
   expect(app.leave.coordinator.isDirty()).toBe(true);
   expect(await saveButton(form)).toEqual({ variant: "primary", disabled: false });
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(form.open).toBe(true);
   expect(app.closes).toBe(0);

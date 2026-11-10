@@ -822,7 +822,7 @@ export class ImageLibrary extends LitElement {
       if (this.#leave)
         await this.#leave.request({
           scopes: [this],
-          reason: "cancel",
+          reason: "navigation",
           proceed: () => this.#edit(image),
         });
       else this.#edit(image);

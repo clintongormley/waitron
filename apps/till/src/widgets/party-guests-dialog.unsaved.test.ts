@@ -77,12 +77,11 @@ function saveState(form: TillPartyGuestsDialog) {
   const save = form.shadowRoot!.querySelector<HTMLElement>("[data-guests-save]")!;
   return { variant: save.getAttribute("variant"), disabled: save.hasAttribute("disabled") };
 }
-for (const action of ["Cancel", "Escape"]) {
+for (const action of ["Escape"]) {
   it(`party guests ${action} keeps the typed count, then discards without sending`, async () => {
     const { app, form } = await mount();
     const input = await fill(form, "4");
-    if (action === "Cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.closes).toBe(0);
@@ -95,7 +94,7 @@ for (const action of ["Cancel", "Escape"]) {
         input.getRootNode() instanceof ShadowRoot &&
           (input.getRootNode() as ShadowRoot).activeElement,
       ).toBe(input);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -124,7 +123,7 @@ it("an invalid count remains protected after validation refuses it", async () =>
   expect(app.submitted).toEqual([]);
   expect(form.shadowRoot!.querySelector("wt-input")!.error).toBe(t("seat.guest_count_invalid"));
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -147,7 +146,7 @@ it("submitting sends the count directly and commits it without a discard questio
 it("disconnect aborts a party-guests leave decision; reconnect retains the original baseline", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "4");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -160,7 +159,7 @@ it("disconnect aborts a party-guests leave decision; reconnect retains the origi
   await form.updateComplete;
   expect(input.value).toBe("4");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("retained departed party-guests controls cannot submit, cancel or replace the draft", async () => {
@@ -185,7 +184,7 @@ it("retained departed party-guests controls cannot submit, cancel or replace the
 it("a parent rerender does not reset the typed count or pending warning", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "4");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   form.tables = "4, 5";
@@ -200,7 +199,7 @@ it("a parent rerender does not reset the typed count or pending warning", async 
 it("a party-guests submission invalidates a pending Discard and reconnect keeps the accepted baseline", async () => {
   const { app, form } = await mount();
   await fill(form, "4");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -223,7 +222,7 @@ it("a refused submitted count starts dirty against the stored count", async () =
   const { app, form } = await mount({ value: "4", savedValue: "2", refusal: "Count refused" });
   expect(form.shadowRoot!.querySelector("wt-input")!.error).toBe("Count refused");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();

@@ -91,7 +91,7 @@ it.each(cases)("$kind asks before closing, Keep preserves and Discard closes", a
   await change(el, "Draft");
   expect(unload()).toBe(true);
   const modal = el.shadowRoot!.querySelector("wt-modal")!;
-  const close = modal.requestClose("cancel");
+  const close = modal.requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   expect(field(el).value).toBe("Draft");
@@ -113,7 +113,7 @@ it.each(cases)(
     await el.updateComplete;
     expect(field(el).value).toBe("Retained draft");
     expect(unload()).toBe(true);
-    const close = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    const close = el.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
     await choose("keep");
     expect(await close).toBe(false);
     await change(el, "row" in dialog ? dialog.row.name : "");
@@ -148,7 +148,7 @@ it("replacing a dialog cancels its leave question and ignores retained old butto
   const el = await mount(cases[0]!);
   await change(el, "Draft");
   const old = el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!;
-  const close = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+  const close = el.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
   await app.updateComplete;
   el.dialog = cases[1];
   await el.updateComplete;
@@ -167,7 +167,7 @@ it.each(["add-to-department"] as const)(
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!;
     await chooseOption(box, "d2");
     expect(unload()).toBe(true);
-    const close = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    const close = el.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
     await choose("keep");
     expect(await close).toBe(false);
     expect(box.value).toBe("d2");
@@ -181,7 +181,7 @@ it.each(["add-to-department"] as const)(
         .value,
     ).toBe("d2");
     expect(unload()).toBe(true);
-    const discard = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    const discard = el.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
     await choose("discard");
     expect(await discard).toBe(true);
     await expect.poll(() => el.dialog).toBeUndefined();
@@ -225,7 +225,7 @@ it.each(cases)(
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!
         .disabled,
     ).toBe(false);
-    const close = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    const close = el.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
     await choose("keep");
     expect(await close).toBe(false);
     expect(field(el).value).toBe("Newer name");
@@ -247,11 +247,9 @@ it.each(cases)(
   },
 );
 
-it.each(
-  cases.flatMap((dialog) => (["cancel", "escape"] as const).map((method) => ({ dialog, method }))),
-)(
+it.each(cases.flatMap((dialog) => (["escape"] as const).map((method) => ({ dialog, method }))))(
   "$dialog.kind native $method preserves Keep and discards without a write",
-  async ({ dialog, method }) => {
+  async ({ dialog }) => {
     const el = await mount(dialog);
     const request = vi.fn(async () => ({ id: "new" }));
     el.api = testApi(request);
@@ -263,16 +261,8 @@ it.each(
     await userEvent.fill(page.elementLocator(nativeName), "Protected draft");
     await el.updateComplete;
     const dismiss = async () => {
-      if (method === "cancel") {
-        const cancel = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-          "[data-test=cancel-editor]",
-        )!;
-        await cancel.updateComplete;
-        await userEvent.click(page.elementLocator(cancel.shadowRoot!.querySelector("button")!));
-      } else {
-        await userEvent.click(page.elementLocator(nativeName));
-        await userEvent.keyboard("{Escape}");
-      }
+      await userEvent.click(page.elementLocator(nativeName));
+      await userEvent.keyboard("{Escape}");
       await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
     };
     await dismiss();
@@ -294,7 +284,7 @@ it("disconnecting a dialog with a pending leave question closes the question and
   const el = await mount(cases[0]!);
   await change(el, "Unsaved rename");
   const modal = el.shadowRoot!.querySelector("wt-modal")!;
-  const closing = modal.requestClose("cancel");
+  const closing = modal.requestClose("escape");
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await expect.poll(() => question.open).toBe(true);
   el.remove();
@@ -309,7 +299,7 @@ it.each(cases)("$kind ignores a stale discard after a replacement dialog opens",
   el.api = testApi(request);
   await change(el, "Departed draft");
   const modal = el.shadowRoot!.querySelector("wt-modal")!;
-  const closing = modal.requestClose("cancel");
+  const closing = modal.requestClose("escape");
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await expect.poll(() => question.open).toBe(true);
   const oldCancel = el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!;
@@ -335,7 +325,7 @@ it.each(cases)("$kind ignores a stale discard after a replacement dialog opens",
   expect(field(el).value).toBe("Replacement draft");
   expect(unload()).toBe(true);
   expect(request).not.toHaveBeenCalled();
-  const freshClose = replacementModal.requestClose("cancel");
+  const freshClose = replacementModal.requestClose("escape");
   await choose("keep");
   expect(await freshClose).toBe(false);
   expect(field(el).value).toBe("Replacement draft");
@@ -362,7 +352,7 @@ it.each(acceptedNames)(
     const request = vi.fn(async () => ({ id: "new" }));
     el.api = testApi(request);
     await change(el, " Accepted name ");
-    const closing = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    const closing = el.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
     const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await expect.poll(() => question.open).toBe(true);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
@@ -409,7 +399,7 @@ it.each(acceptedNames)(
     );
     el.api = testApi(request);
     await change(el, " Accepted name ");
-    const closing = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    const closing = el.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
     const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await expect.poll(() => question.open).toBe(true);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
@@ -441,7 +431,7 @@ it.each(acceptedNames)(
       nativeDisabled: save.shadowRoot!.querySelector("button")!.disabled,
     }).toEqual({ variant: "primary", disabled: false, nativeDisabled: false });
     expect(request.mock.calls).toEqual([accepted]);
-    const close = modal.requestClose("cancel");
+    const close = modal.requestClose("escape");
     await choose("keep");
     expect(await close).toBe(false);
     expect(field(el).value).toBe("Newer protected name");

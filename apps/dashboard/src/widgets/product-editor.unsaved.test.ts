@@ -97,12 +97,12 @@ async function cancel(editor: ProductEditor) {
   editor.shadowRoot!.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
   await editor.updateComplete;
 }
-for (const route of ["cancel", "escape"] as const) {
+
+for (const route of ["escape"] as const) {
   it(`edited Product ${route} keeps the native editor and draft until Discard`, async () => {
     const { app, editor, modal } = await mount();
     await edit(editor, "name", "Edited coffee");
-    if (route === "cancel") await cancel(editor);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(app.cancelled).toBe(0);
     expect(q.open).toBe(true);
@@ -113,7 +113,7 @@ for (const route of ["cancel", "escape"] as const) {
     await closeReportsDelivered();
     expect(editor.currentValue.name).toBe("Edited coffee");
     expect(app.cancelled).toBe(0);
-    await cancel(editor);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     expect(q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
@@ -135,7 +135,7 @@ it("reverted and trimmed-equivalent product values close directly", async () => 
 it("an Add draft uses its initialized creation defaults as its baseline", async () => {
   const { app, editor } = await mount(null);
   await edit(editor, "name", "Coffee");
-  await cancel(editor);
+  await userEvent.keyboard("{Escape}");
   expect(app.cancelled).toBe(0);
   expect((await question(app)).open).toBe(true);
 });
@@ -166,7 +166,7 @@ it("valid decimal price spellings compare exactly while invalid raw input remain
   expect(app.leave.coordinator.isDirty()).toBe(false);
   await change(editor, "[name=unit-price]", "009");
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  await cancel(editor);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("a dietary-only change immediately enables unload protection", async () => {
@@ -185,7 +185,7 @@ it("commits the exact submitted Product values and invalidates a pending close a
   });
   editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
   expect(submitted!.name).toBe("Saved coffee");
-  await cancel(editor);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   editor.commitSaved(submitted!);
   expect(app.leave.coordinator.isDirty()).toBe(false);
@@ -193,7 +193,7 @@ it("commits the exact submitted Product values and invalidates a pending close a
   expect(app.cancelled).toBe(0);
   await edit(editor, "name", "Later edit");
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  await cancel(editor);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("a refused save retains its edited values and still asks before closing", async () => {
@@ -202,7 +202,7 @@ it("a refused save retains its edited values and still asks before closing", asy
   editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
   editor.fieldErrors = { name: "Refused by server" };
   await editor.updateComplete;
-  await cancel(editor);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(editor.currentValue.name).toBe("Refused coffee");
   expect(app.cancelled).toBe(0);
@@ -210,7 +210,7 @@ it("a refused save retains its edited values and still asks before closing", asy
 it("replacing an open Product invalidates its old question and adopts the new baseline", async () => {
   const { app, editor } = await mount();
   await edit(editor, "name", "Discarded old draft");
-  await cancel(editor);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   app.value = { ...product, name: "New product" };
   app.requestUpdate();
@@ -304,13 +304,13 @@ for (const succeeds of [true, false]) {
       await expect.poll(() => editor.busy).toBe(false);
       expect(editor.currentValue.name).toBe(" Saved product ");
       expect(app.leave.coordinator.isDirty()).toBe(true);
-      await cancel(editor);
+      await userEvent.keyboard("{Escape}");
       expect((await question(app)).open).toBe(true);
     }
   });
 }
 
-for (const route of ["cancel", "escape"] as const) {
+for (const route of ["escape"] as const) {
   it(`nested Variant ${route} protects only the child and retains the parent Product draft`, async () => {
     const { app, editor } = await mount();
     await edit(editor, "name", "Parent draft");
@@ -326,9 +326,7 @@ for (const route of ["cancel", "escape"] as const) {
       "Child draft",
     );
     await child.updateComplete;
-    if (route === "cancel")
-      child.shadowRoot!.querySelector<HTMLElement>("[data-test=variant-cancel]")!.click();
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(
@@ -376,7 +374,7 @@ it("a saved nested Variant commits only its child and leaves the Product unsaved
   expect(app.leave.coordinator.isDirty([child])).toBe(false);
   expect(app.leave.coordinator.isDirty([editor])).toBe(true);
   expect((await question(app)).open).toBe(false);
-  await cancel(editor);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("a clean nested Variant closes directly while retaining an edited Product", async () => {
@@ -461,7 +459,7 @@ it("the submitted baseline does not swallow edits made after pressing Save", asy
 it("disposing an edited Product unregisters unload protection and aborts its question", async () => {
   const { app, editor } = await mount();
   await edit(editor, "name", "Detached draft");
-  await cancel(editor);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   editor.remove();
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
@@ -533,7 +531,7 @@ it("equivalent nested Variant prices are clean and invalid raw prices are protec
   );
   await child.updateComplete;
   expect(app.leave.coordinator.isDirty([child])).toBe(true);
-  child.shadowRoot!.querySelector<HTMLElement>("[data-test=variant-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 
@@ -658,7 +656,7 @@ it("a Product keeps an edit made before it was taken out and put back, and still
     disabled: false,
     innerDisabled: false,
   });
-  await cancel(editor);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(editor.open).toBe(true);
   expect(app.cancelled).toBe(0);
@@ -725,7 +723,7 @@ it("a Product put back with an edited Variant open keeps both edits unsaved, and
   expect(field.shadowRoot!.querySelector("input")!.value).toBe("Child draft");
   expect(app.leave.coordinator.isDirty([child])).toBe(true);
   expect(app.leave.coordinator.isDirty([editor])).toBe(true);
-  child.shadowRoot!.querySelector<HTMLElement>("[data-test=variant-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
@@ -736,7 +734,7 @@ it("a Product put back with an edited Variant open keeps both edits unsaved, and
   expect(app.leave.coordinator.isDirty([child])).toBe(false);
   expect(app.leave.coordinator.isDirty([editor])).toBe(true);
   expect(app.cancelled).toBe(0);
-  await cancel(editor);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 
@@ -794,7 +792,7 @@ it("incomplete allergen kinds survive reconnect and Keep, then Discard restores 
   await editor.updateComplete;
   await reattachAfterDetachedUpdate(editor);
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  await cancel(editor);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!.click();
@@ -802,7 +800,7 @@ it("incomplete allergen kinds survive reconnect and Keep, then Discard restores 
   await closeReportsDelivered();
   expect(editor.currentValue.allergens).toEqual({ gluten: {} });
   expect(app.cancelled).toBe(0);
-  await cancel(editor);
+  await userEvent.keyboard("{Escape}");
   await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();

@@ -228,7 +228,7 @@ describe.each(["en", "es"])("Year discard (%s)", (locale) => {
     expect(unload()).toBe(true);
     const modal =
       frame(form).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
-    const keeping = modal.requestClose("cancel");
+    const keeping = modal.requestClose("escape");
     await choose("keep");
     expect(await keeping).toBe(false);
     expect(input.value).toBe("New anniversary");

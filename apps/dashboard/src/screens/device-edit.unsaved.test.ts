@@ -168,7 +168,7 @@ async function choose(app: DeviceLeaveApp, decision: "keep" | "discard") {
   question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
   await expect.poll(() => question.open).toBe(false);
 }
-for (const route of ["cancel", "escape"] as const) {
+for (const route of ["escape"] as const) {
   it(`device edit ${route} keeps values and focus until explicit Discard`, async () => {
     const { app, screen } = await mount();
     change(screen, "name", "New counter");
@@ -179,10 +179,7 @@ for (const route of ["cancel", "escape"] as const) {
     native.focus();
     let closes = 0;
     modal(screen)!.addEventListener("wt-close", () => closes++);
-    const dismiss = async () =>
-      route === "escape"
-        ? userEvent.keyboard("{Escape}")
-        : q(screen, "[data-test=edit-cancel]")!.click();
+    const dismiss = async () => userEvent.keyboard("{Escape}");
     await dismiss();
     await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
     expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
@@ -309,7 +306,7 @@ it("a failed device write keeps both device and reader changes", async () => {
     .poll(() => (q(screen, "[data-test=edit-cancel]") as HTMLButtonElement).disabled)
     .toBe(false);
   expect(unload()).toBe(true);
-  q(screen, "[data-test=edit-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   expect((q(screen, "[data-test=edit-name]") as HTMLInputElement).value).toBe("New counter");
   expect((q(screen, "[data-test=edit-reader]") as HTMLInputElement).value).toBe("r2");
@@ -343,7 +340,7 @@ it("device success commits before reader failure without committing the reader",
     ],
   ]);
   expect(unload()).toBe(true);
-  q(screen, "[data-test=edit-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   change(screen, "reader", "r1");
   expect(unload()).toBe(false);
@@ -413,7 +410,7 @@ for (const action of ["replace", "disconnect"] as const) {
   it(`device ${action} aborts a pending answer and releases its draft`, async () => {
     const { app, screen } = await mount();
     change(screen, "name", "New counter");
-    q(screen, "[data-test=edit-cancel]")!.click();
+    await userEvent.keyboard("{Escape}");
     await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
     if (action === "replace") await open(screen, "d2");
     else screen.remove();
@@ -683,14 +680,14 @@ it("#1422 reconnect: an Edit opened after the screen is put back asks before dis
   toggle(screen, "edit-screen-station-s2", true);
   await screen.updateComplete;
   expect(unload()).toBe(true);
-  q(screen, "[data-test=edit-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
   await choose(app, "keep");
   expect(
     (q(screen, "[data-test=edit-screen-station-s2]") as HTMLElement & { checked: boolean }).checked,
   ).toBe(true);
-  q(screen, "[data-test=edit-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "discard");
   await expect.poll(() => modal(screen)).toBeNull();
   expect(unload()).toBe(false);
@@ -731,14 +728,14 @@ it("W69 device approvals ask before closing and a reverted approval is clean", a
   expect(unload()).toBe(false);
   approve(screen, true);
   expect(unload()).toBe(true);
-  q(screen, "[data-test=edit-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   expect(
     (q(screen, 'input[name="approvedProfileIds"][value="p2"]') as HTMLInputElement).checked,
   ).toBe(true);
   approve(screen, false);
   expect(unload()).toBe(false);
-  q(screen, "[data-test=edit-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => modal(screen)).toBeNull();
 });
 it("W69 accepted approvals stay clean when the separate reader write fails", async () => {

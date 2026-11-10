@@ -148,7 +148,7 @@ async function choose(app: ProfileLeaveApp, decision: "keep" | "discard") {
   question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
   await expect.poll(() => question.open).toBe(false);
 }
-it("W69 profile Cancel preserves the draft and focus until explicit Discard", async () => {
+it("profile navigation preserves the draft and focus; Cancel discards without asking", async () => {
   const { app, screen } = await mount();
   change(screen, "profile-name", "New counter");
   await screen.updateComplete;
@@ -156,12 +156,12 @@ it("W69 profile Cancel preserves the draft and focus until explicit Discard", as
   await field.updateComplete;
   const native = field.shadowRoot!.querySelector("input")!;
   native.focus();
-  q(screen, "profile-cancel")!.click();
+  void app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
   await choose(app, "keep");
   expect(field.value).toBe("New counter");
   await expect.poll(() => field.shadowRoot!.activeElement).toBe(native);
   q(screen, "profile-cancel")!.click();
-  await choose(app, "discard");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await expect.poll(() => q(screen, "editor-form")).toBeNull();
   expect(unload()).toBe(false);
 });
@@ -224,7 +224,7 @@ it("A366 a till's pass monitor is protected, and leaving with it asks", async ()
   const { app, screen } = await mount();
   change(screen, "profile-pass-monitor", true);
   expect(unload()).toBe(true);
-  q(screen, "profile-cancel")!.click();
+  void app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
   await choose(app, "keep");
   expect(q(screen, "editor-form")).not.toBeNull();
   change(screen, "profile-pass-monitor", false);
@@ -253,12 +253,12 @@ it("A773 a pass monitor's other-stations switch is protected, leaving with it ch
   change(screen, "profile-pass-monitor-other-stations", true);
   expect(unload()).toBe(false);
   change(screen, "profile-pass-monitor-other-stations", false);
-  q(screen, "profile-cancel")!.click();
+  void app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
   await choose(app, "keep");
   await screen.updateComplete;
   expect(other().checked).toBe(false);
   q(screen, "profile-cancel")!.click();
-  await choose(app, "discard");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await expect.poll(() => q(screen, "editor-form")).toBeNull();
   expect(unload()).toBe(false);
 });
@@ -305,7 +305,7 @@ it("A366 reconnect: a departed save's narrowed devices stay off the screen, and 
   );
   expect(unload()).toBe(true);
   q(screen, "profile-cancel")!.click();
-  await choose(app, "discard");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await expect.poll(() => q(screen, "editor-form")).toBeNull();
   expect(q(screen, "narrowed-devices")).toBeNull();
   expect(unload()).toBe(false);
@@ -410,7 +410,7 @@ it("W69 profile save keeps newer input against the accepted submitted snapshot",
 it("W69 disconnect removes a profile draft and makes a pending answer inert", async () => {
   const { app, screen } = await mount();
   change(screen, "profile-name", "New counter");
-  q(screen, "profile-cancel")!.click();
+  void app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   screen.remove();
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
@@ -739,13 +739,13 @@ for (const [id, initial, edited] of [
 it("W100 Discard puts back the profile's card readers and closes the editor", async () => {
   const { app, screen } = await mountWithEquipment();
   change(screen, "profile-reader-rb", true);
-  q(screen, "profile-cancel")!.click();
+  void app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
   await choose(app, "keep");
   expect((q(screen, "profile-reader-rb") as HTMLInputElement & { checked: boolean }).checked).toBe(
     true,
   );
   q(screen, "profile-cancel")!.click();
-  await choose(app, "discard");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await expect.poll(() => q(screen, "editor-form")).toBeNull();
   expect(unload()).toBe(false);
 });

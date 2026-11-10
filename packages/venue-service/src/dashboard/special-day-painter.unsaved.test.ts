@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { applyTokens, LeaveController } from "@waitron/ui";
@@ -107,11 +108,11 @@ it("✕ with edits asks first: Keep stays with the edit, Discard closes", async 
   const painter = await mount();
   tick(painter).click();
   await settle(painter);
-  dismiss(painter);
+  await userEvent.keyboard("{Escape}");
   await choose("keep");
   expect(painter.open).toBe(true);
   expect(tick(painter).checked).toBe(true);
-  dismiss(painter);
+  await userEvent.keyboard("{Escape}");
   await choose("discard");
   await expect.poll(() => painter.open).toBe(false);
 });

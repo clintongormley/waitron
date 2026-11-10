@@ -93,12 +93,11 @@ function unload() {
   return event.defaultPrevented;
 }
 for (const mode of ["make-at", "move"] as const) {
-  for (const action of ["Cancel", "Escape"]) {
+  for (const action of ["Escape"]) {
     it(`${mode} ${action} keeps the selected station then discards without submitting`, async () => {
       const { app, form } = await mount({ mode });
       await choose(form, "bar");
-      if (action === "Cancel") cancel(form);
-      else await userEvent.keyboard("{Escape}");
+      await userEvent.keyboard("{Escape}");
       const q = await question(app);
       expect(q.open).toBe(true);
       expect(app.closes).toBe(0);
@@ -107,7 +106,7 @@ for (const mode of ["make-at", "move"] as const) {
       await expect.poll(() => q.open).toBe(false);
       expect(field(form).value).toBe("bar");
       expect(unload()).toBe(true);
-      cancel(form);
+      await userEvent.keyboard("{Escape}");
       await question(app);
       q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
       await expect.poll(() => app.closes).toBe(1);
@@ -148,7 +147,7 @@ it("a Move refusal retains its uncommitted destination", async () => {
   expect((await question(app)).open).toBe(false);
   form.refusal = "ticket.already_started";
   await form.updateComplete;
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(field(form).value).toBe("bar");
   expect(app.closes).toBe(0);
@@ -163,34 +162,34 @@ it("background current station and option ordering do not replace the opening se
   expect(field(form).value).toBe("grill");
   expect(unload()).toBe(false);
   await choose(form, "bar");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("reconnect retains the opening baseline and departed controls cannot submit", async () => {
   const { app, form } = await mount();
   await choose(form, "bar");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
   form.remove();
   expect(unload()).toBe(false);
   submit(form);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   oldDiscard.click();
   await app.updateComplete;
   expect(app.chosen).toEqual([]);
   expect(app.closes).toBe(0);
   app.shadowRoot!.prepend(form);
   await form.updateComplete;
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(field(form).value).toBe("bar");
 });
 it("a local Save invalidates a pending discard and newer changes compare against the saved choice", async () => {
   const { app, form } = await mount();
   await choose(form, "bar");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
   submit(form);
@@ -201,7 +200,7 @@ it("a local Save invalidates a pending discard and newer changes compare against
   expect(unload()).toBe(false);
   await choose(form, "grill");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   await question(app);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await expect.poll(() => app.closes).toBe(1);
@@ -249,7 +248,7 @@ it("removing the opening station updates unload protection for the actual null s
   await form.updateComplete;
   expect(field(form).value).not.toBe("grill");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   submit(form);
   expect(app.chosen).toEqual([{ stationId: null }]);

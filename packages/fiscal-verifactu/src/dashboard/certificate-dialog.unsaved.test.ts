@@ -109,7 +109,7 @@ it("asks before Cancel throws away a chosen file, and Keep leaves the dialog and
   const { card, dialog } = await open();
   await choose(dialog);
   expect(unload()).toBe(true);
-  await cancel(dialog);
+  await userEvent.keyboard("{Escape}");
   await vi.waitFor(async () => expect((await question()).open).toBe(true));
   const q = await question();
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -119,7 +119,7 @@ it("asks before Cancel throws away a chosen file, and Keep leaves the dialog and
   expect(dialog.shadowRoot!.querySelector("wt-file-input")!.files).toHaveLength(1);
 
   const close = closed(dialog);
-  await cancel(dialog);
+  await userEvent.keyboard("{Escape}");
   await vi.waitFor(async () => expect((await question()).open).toBe(true));
   (await question()).shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await close;
@@ -186,7 +186,7 @@ it.each(["en", "es"])(
     expect(install).toHaveBeenCalledTimes(1);
     expect(unload()).toBe(true);
 
-    await cancel(dialog);
+    await userEvent.keyboard("{Escape}");
     await vi.waitFor(async () => expect((await question()).open).toBe(true));
     await userEvent.click((await question()).shadowRoot!.querySelector("[data-choice=keep]")!);
     await vi.waitFor(async () => expect((await question()).open).toBe(false));
@@ -200,7 +200,7 @@ it.each(["en", "es"])(
     expect(unload()).toBe(true);
 
     const close = closed(dialog);
-    await cancel(dialog);
+    await userEvent.keyboard("{Escape}");
     await vi.waitFor(async () => expect((await question()).open).toBe(true));
     await userEvent.click((await question()).shadowRoot!.querySelector("[data-choice=discard]")!);
     await close;

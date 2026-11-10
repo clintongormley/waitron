@@ -68,29 +68,25 @@ describe("zone draft", () => {
   function cancel(form: TillKeepOpenDialog) {
     form.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
   }
-  it.each(["Cancel", "Escape"])(
-    "an edited %s asks to keep or discard without submitting",
-    async (action) => {
-      const { app, form } = await mount();
-      await choose(form, "14:30");
-      expect(unload()).toBe(true);
-      if (action === "Cancel") cancel(form);
-      else await userEvent.keyboard("{Escape}");
-      const q = await question(app);
-      expect(q.open).toBe(true);
-      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
-      await expect.poll(() => q.open).toBe(false);
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("14:30");
-      expect(app.closes).toBe(0);
-      cancel(form);
-      await question(app);
-      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-      await expect.poll(() => app.closes).toBe(1);
-      expect(app.confirmed).toEqual([]);
-      expect(unload()).toBe(false);
-    },
-  );
+  it.each(["Escape"])("an edited %s asks to keep or discard without submitting", async () => {
+    const { app, form } = await mount();
+    await choose(form, "14:30");
+    expect(unload()).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    const q = await question(app);
+    expect(q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => q.open).toBe(false);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("14:30");
+    expect(app.closes).toBe(0);
+    await userEvent.keyboard("{Escape}");
+    await question(app);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => app.closes).toBe(1);
+    expect(app.confirmed).toEqual([]);
+    expect(unload()).toBe(false);
+  });
   it("clean and reverted selections close without a warning", async () => {
     const { app, form } = await mount();
     expect(unload()).toBe(false);
@@ -109,14 +105,14 @@ describe("zone draft", () => {
     expect(unload()).toBe(false);
     field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
     form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     expect(app.confirmed).toEqual([]);
     expect(app.closes).toBe(0);
     app.shadowRoot!.prepend(form);
     await form.updateComplete;
     expect(field.value).toBe("14:30");
     expect(unload()).toBe(true);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     expect((await question(app)).open).toBe(true);
   });
   it("successful commit invalidates an old discard and retains an independent parent draft", async () => {
@@ -152,7 +148,7 @@ describe("zone draft", () => {
     await form.updateComplete;
     expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("14:30");
     expect(unload()).toBe(true);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     expect((await question(app)).open).toBe(true);
   });
 });

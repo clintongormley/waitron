@@ -435,7 +435,7 @@ export class InvoiceCustomerDialog extends LitElement {
           slot="cancel"
           variant="secondary"
           data-test="close"
-          @click=${() => void dialog()?.requestClose("cancel")}
+          @click=${() => void dialog()?.requestClose("navigation")}
           >${t("action.close")}</wt-button
         >
         <wt-button

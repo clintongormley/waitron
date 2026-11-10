@@ -145,7 +145,7 @@ async function lastStep(screen: PrintersScreen) {
   }
 }
 
-for (const route of ["cancel", "escape"] as const) {
+for (const route of ["escape"] as const) {
   it(`calibration ${route} retains settings and focus until Discard`, async () => {
     const { app, screen } = await mount();
     change(screen, "printer-ruler-number", "360");
@@ -159,8 +159,7 @@ for (const route of ["cancel", "escape"] as const) {
     let closes = 0;
     modal(screen)!.addEventListener("wt-close", () => closes++);
     const dismiss = async () => {
-      if (route === "cancel") q(screen, "[data-test=cancel-edit-printer]")!.click();
-      else await userEvent.keyboard("{Escape}");
+      await userEvent.keyboard("{Escape}");
     };
     await dismiss();
     await choose(app, "keep");
@@ -212,6 +211,7 @@ it("calibration steps and test results alone are exempt", async () => {
   q(screen, "[data-test=calibration-back]")!.click();
   await screen.updateComplete;
   expect(field(screen, "printer-ruler-number").value).toBe("512");
+  change(screen, "printer-ruler-number", "360");
   q(screen, "[data-test=cancel-edit-printer]")!.click();
   await expect.poll(() => modal(screen)).toBeNull();
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
@@ -223,7 +223,7 @@ it("ruler-derived paper settings stay dirty across wizard steps", async () => {
   expect(paperResult(screen)).toBe(t("printers.paper_width_58"));
   await lastStep(screen);
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-edit-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   expect(q(screen, "[data-test=calibration-step-3]")!.checkVisibility()).toBe(true);
 });
@@ -296,7 +296,7 @@ it("a refused calibration save preserves settings and warning", async () => {
     .toContain(codeMessage("connection.failed"));
   expect(paperResult(screen)).toBe(t("printers.paper_width_58"));
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-edit-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
 });
 it("a successful captured calibration retains newer input and compares against saved settings", async () => {
@@ -333,7 +333,7 @@ it("calibration disconnect cancels the question and unload protection", async ()
   const { app, screen } = await mount();
   change(screen, "printer-ruler-number", "360");
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-edit-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   screen.remove();
   expect(unload()).toBe(false);
@@ -471,7 +471,7 @@ for (const result of ["success", "refusal"] as const) {
 it("replacing a calibration cancels its outstanding question", async () => {
   const { app, screen } = await mount();
   change(screen, "printer-ruler-number", "360");
-  q(screen, "[data-test=cancel-edit-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   q(screen, "[data-test=calibrate-printer-details]")!.click();
   await screen.updateComplete;
@@ -545,7 +545,7 @@ it("a completed hardware test refresh leaves calibration edits dirty", async () 
   await expect.poll(() => reads).toBeGreaterThan(1);
   expect(paperResult(screen)).toBe(t("printers.paper_width_58"));
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-edit-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
 });
 for (const command of ["sample", "drawer"] as const) {
@@ -590,10 +590,10 @@ it("an unsaved pick-up set survives Keep and returns to the saved set after Disc
   roles().dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["payment_slip"] } }));
   await screen.updateComplete;
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-edit-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   expect(roles().values).toEqual(["payment_slip"]);
-  q(screen, "[data-test=cancel-edit-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "discard");
   await expect.poll(() => modal(screen)).toBeNull();
   expect(unload()).toBe(false);

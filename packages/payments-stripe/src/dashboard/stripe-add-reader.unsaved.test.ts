@@ -85,13 +85,12 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 for (const id of ["reader-name", "reader-id"])
-  for (const route of ["cancel", "escape"]) {
+  for (const route of ["escape"]) {
     it(`protects exact ${id} through ${route}, Keep and Discard`, async () => {
       const form = await mount();
       await field(form, id, "  edited  ");
       expect(unload()).toBe(true);
-      if (route === "cancel") cancel(form);
-      else await userEvent.keyboard("{Escape}");
+      await userEvent.keyboard("{Escape}");
       expect((await question()).open).toBe(true);
       expect(native(form).open).toBe(true);
       expect(app.closed).not.toHaveBeenCalled();
@@ -99,7 +98,7 @@ for (const id of ["reader-name", "reader-id"])
       expect(value(form, id)).toBe("  edited  ");
       expect(native(form).open).toBe(true);
       const closed = dialogClosed(form);
-      cancel(form);
+      await userEvent.keyboard("{Escape}");
       await choice("discard");
       await closed;
       await vi.waitFor(() => expect(app.closed).toHaveBeenCalledOnce());
@@ -158,7 +157,7 @@ it("a refused registration retains its draft and Cancel still asks", async () =>
     expect(form.shadowRoot!.querySelector("[data-test=add]")!.hasAttribute("loading")).toBe(false),
   );
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   await choice("keep");
   expect(value(form, "reader-id")).toBe("tmr_bad");
   expect(app.added).not.toHaveBeenCalled();

@@ -538,15 +538,13 @@ for (const locale of ["en-GB", "es-ES"]) {
   }
 }
 
-it("the Receipts tab's Cancel protects the appearance before closing", async () => {
+it("the Receipts tab's Escape protects the appearance before closing", async () => {
   const { app, editor: el } = await mountReceiptTab();
   const dialog = departmentDialog(app)!.shadowRoot!.querySelector("wt-modal")!;
   await editReceipt(el, "headerSubtitle-es-ES", "Edited heading");
   const input = receiptField(el, "headerSubtitle-es-ES");
   for (const decision of ["keep", "discard"] as const) {
-    await userEvent.click(
-      page.elementLocator(receiptRoot(el).querySelector("[data-test=cancel-receipt]")!),
-    );
+    await userEvent.keyboard("{Escape}");
     const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await expect.poll(() => warning.open).toBe(true);
     await warning.updateComplete;

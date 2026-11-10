@@ -106,7 +106,7 @@ it("a confirmed number is the new baseline", async () => {
 it("disconnect aborts a leave decision; reconnect keeps the opened number as the baseline", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "9");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;

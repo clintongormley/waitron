@@ -54,7 +54,7 @@ async function choose(app: EmailLeaveHost, decision: "keep" | "discard") {
   );
 }
 it.each(["en-GB", "es"])(
-  "protects edited credentials on Cancel and reconnect in %s",
+  "protects edited credentials on navigation and reconnect in %s",
   async (locale) => {
     setLocale(locale);
     const { app, form } = await mount();
@@ -64,14 +64,25 @@ it.each(["en-GB", "es"])(
     await reattachAfterDetachedUpdate(form);
     expect(input(form, "password").value).toBe("new-secret");
     expect(app.leave.coordinator.isDirty()).toBe(true);
-    click(form, "cancel");
+    const kept = app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {},
+    });
     await choose(app, "keep");
+    expect(await kept).toBe("kept");
     await vi.waitFor(() =>
       expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false),
     );
     expect(cancel).not.toHaveBeenCalled();
-    click(form, "cancel");
+    const discarded = app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {},
+    });
     await choose(app, "discard");
+    expect(await discarded).toBe("proceeded");
+    click(form, "cancel");
     await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
     expect(input(form, "password").value).toBe("");
     expect(app.leave.coordinator.isDirty()).toBe(false);

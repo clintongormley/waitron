@@ -3359,8 +3359,10 @@ parent's server write still has its own baseline.
 Bind the dialog's `beforeClose` property to a scoped coordinator request and return whether its
 outcome is `"proceeded"`. Keep the callback reference stable while that editor is open:
 `WtDialog.requestClose` rejects a pending close if its `beforeClose` callback changes. A background
-render must not replace it while you are answering the question. Route Cancel, close controls and
-an existing backdrop action through `requestClose(reason)`. Native Escape uses the same gate,
+render must not replace it while you are answering the question. Route Cancel through
+`requestClose("cancel")`: it restores the selected drafts and leaves without asking. Close, Back,
+Skip and switching actions use `"navigation"` and still ask about unsaved work. Route an existing
+backdrop action through `requestClose("backdrop")`. Native Escape uses the same gate,
 including after a focused control was disabled (a field disabled while its save is sent) and
 Chromium dropped focus to the page body: the most recently opened dialog still open is asked when it
 has a `beforeClose`, unless the page already handled the key, the key ends a text composition, or one
@@ -3370,8 +3372,9 @@ its focused field is disabled" and the "page-body Escape" cases). The
 dialog stays open while asking, and a later answer cannot close a different opening. `closeAfter("saved")` and
 `closeAfter("security")` bypass a pending question for a successful write or forced teardown.
 An owner's `open` binding still controls rendering; it is not a user-dismissal path. The floor
-plan editor's full-window modal is the exception: its `beforeClose` follows its Cancel link, whose
-route change the shell guards, and returns false, so the modal goes only when the route changes.
+plan editor's full-window modal leaves with its route: its Cancel link first discards its scoped
+drafts, then requests guarded navigation. Its `beforeClose` requests guarded navigation directly
+and returns false, so the modal goes only when the route changes.
 
 Use one `LeaveController` from `@waitron/ui` in each application shell. Render its confirmation
 with `render(copy)` and resolve that same coordinator from a connected descendant with
@@ -4278,8 +4281,8 @@ once, under Status, and acts at once. The view footer reads Close and Delete at 
 Calibrate printer and Edit at the end. Edit turns the modal into one form of the name and, for a
 network receipt printer, its host and port; that form has no Close button, its footer reads Cancel and Save
 with the one bottom message, Cancel returns to the details, and Escape closes the window. The
-list's Edit opens the details in edit mode with the name focused. A dirty form asks before Cancel,
-Escape or leaving the page discards it. An A4 printer opens the same modal with a Paper group and no
+list's Edit opens the details in edit mode with the name focused. Cancel discards edits without
+asking. Escape and leaving the page ask before discarding an edited form. An A4 printer opens the same modal with a Paper group and no
 Delete or Calibrate; Print test page and Edit sit in its footer only when the screen's `canManage`
 is set. Its Active switch only switches off, and its Edit form holds the name alone.
 

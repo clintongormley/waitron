@@ -259,15 +259,13 @@ describe("a pending routing cell choice", () => {
     expect(unload()).toBe(false);
   });
 
-  for (const how of ["Cancel", "Escape"] as const) {
+  for (const how of ["Escape"] as const) {
     it(`preview ${how} restores without a second question`, async () => {
       const { screen, writes } = await mount();
       await choose(screen, "c:drinks", "every", "Kitchen");
-      const confirmation = await preview(screen);
+      await preview(screen);
       expect(unload()).toBe(true);
-      if (how === "Cancel")
-        confirmation.querySelector<HTMLElement>("[data-test=cancel-routing]")!.click();
-      else await userEvent.keyboard("{Escape}");
+      await userEvent.keyboard("{Escape}");
       await expect
         .poll(() => screen.shadowRoot!.querySelector("[data-test=routing-preview]"))
         .toBeNull();
@@ -281,7 +279,7 @@ describe("a pending routing cell choice", () => {
       const closed = new Promise((resolve) =>
         modal.addEventListener("wt-close", resolve, { once: true }),
       );
-      editor.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-cell"]')!.click();
+      await userEvent.keyboard("{Escape}");
       await answer("discard");
       await closed;
       await expect.poll(() => editorOf(screen)).toBeNull();

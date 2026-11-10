@@ -53,12 +53,11 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
-for (const action of ["Cancel", "Escape"]) {
+for (const action of ["Escape"]) {
   it(`seat ${action} keeps the typed count, then discards without seating`, async () => {
     const { app, form } = await mount();
     const input = await fill(form, "3");
-    if (action === "Cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.closes).toBe(0);
@@ -71,7 +70,7 @@ for (const action of ["Cancel", "Escape"]) {
         input.getRootNode() instanceof ShadowRoot &&
           (input.getRootNode() as ShadowRoot).activeElement,
       ).toBe(input);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -101,7 +100,7 @@ for (const value of ["0", "2.5", "3e1", "1000"]) {
     expect(app.submitted).toEqual([]);
     expect(form.shadowRoot!.querySelector("wt-input")!.error).toBe(t("seat.guest_count_invalid"));
     expect(unload()).toBe(true);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -125,7 +124,7 @@ it("submitting seats directly and commits the normalized count without a discard
 it("disconnect aborts a seat leave decision; reconnect retains the original blank baseline", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "3");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -138,7 +137,7 @@ it("disconnect aborts a seat leave decision; reconnect retains the original blan
   await form.updateComplete;
   expect(input.value).toBe("3");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("retained departed seat controls cannot submit, cancel or replace the draft", async () => {
@@ -163,7 +162,7 @@ it("retained departed seat controls cannot submit, cancel or replace the draft",
 it("a parent rerender does not reset the typed seat count or pending warning", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "3");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   form.tableLabel = "4, 5";
@@ -177,7 +176,7 @@ it("a parent rerender does not reset the typed seat count or pending warning", a
 it("a seat submission invalidates a pending Discard and reconnect keeps the accepted count baseline", async () => {
   const { app, form } = await mount();
   await fill(form, "3");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;

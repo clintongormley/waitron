@@ -113,7 +113,7 @@ it("asks before closing a changed cell; Keep keeps the edit and Discard closes",
   expect(unload()).toBe(false);
   await change(el, "station:down");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   expect(el.open).toBe(true);
@@ -133,7 +133,7 @@ it("asks before closing when only a period line was removed", async () => {
   const el = await mount();
   await removeLine(el);
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
 });
@@ -160,7 +160,7 @@ it("asks for an edit made after removal and reconnect", async () => {
   await reconnect(el);
   await change(el, "station:down");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
 });
@@ -173,7 +173,7 @@ it("retains an edit made before removal and still compares it to the opened valu
   expect(save(el).variant).toBe("primary");
   expect(save(el).disabled).toBe(false);
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
 });

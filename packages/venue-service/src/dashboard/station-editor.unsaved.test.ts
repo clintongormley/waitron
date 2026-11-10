@@ -109,7 +109,7 @@ it("asks before closing a changed station; Keep keeps the edit and Discard close
   expect(unload()).toBe(false);
   await rename(el, "Hot grill");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   expect(el.open).toBe(true);
@@ -129,7 +129,7 @@ it("asks when only the printers changed", async () => {
   const el = await mount();
   await pickPrinters(el, ["epson", "star"]);
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
 });
@@ -149,7 +149,7 @@ it("asks for an edit made after removal and reconnect", async () => {
   await reconnect(el);
   await rename(el, "Hot grill");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
 });
@@ -162,7 +162,7 @@ it("retains an edit made before removal and still asks before discarding it", as
   expect(save(el).variant).toBe("primary");
   expect(save(el).disabled).toBe(false);
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
 });
@@ -192,7 +192,7 @@ it("asks when only a timing changed", async () => {
   const el = await mount();
   await setTiming(el, "warmAfterMinutes", "4");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
 });
@@ -228,14 +228,14 @@ it("a changed colour counts as unsaved, and picking the opened colour again does
   expect(unload()).toBe(true);
   expect(save(el).variant).toBe("primary");
   expect(save(el).disabled).toBe(false);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   await pickColour(el, "orange");
   expect(unload()).toBe(false);
   expect(save(el).variant).toBe("secondary");
   expect(save(el).disabled).toBe(true);
-  expect(await modal(el).requestClose("cancel")).toBe(true);
+  expect(await modal(el).requestClose("escape")).toBe(true);
 });
 
 it("a changed MOVED slips choice asks before closing, and choosing back the opened one does not", async () => {
@@ -248,12 +248,12 @@ it("a changed MOVED slips choice asks before closing, and choosing back the open
   };
   await pickMoved("dont-print");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   await pickMoved("print");
   expect(unload()).toBe(false);
-  expect(await modal(el).requestClose("cancel")).toBe(true);
+  expect(await modal(el).requestClose("escape")).toBe(true);
 });
 
 it("a changed ticket grouping asks before closing, and choosing back the opened one does not", async () => {
@@ -266,12 +266,12 @@ it("a changed ticket grouping asks before closing, and choosing back the opened 
   };
   await pickGrouping("separate");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   await pickGrouping("combined");
   expect(unload()).toBe(false);
-  expect(await modal(el).requestClose("cancel")).toBe(true);
+  expect(await modal(el).requestClose("escape")).toBe(true);
 });
 
 it("a changed bump mode asks before closing, and choosing back the opened one does not", async () => {
@@ -284,12 +284,12 @@ it("a changed bump mode asks before closing, and choosing back the opened one do
   };
   await pickBumpMode("ticket");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   await pickBumpMode("line");
   expect(unload()).toBe(false);
-  expect(await modal(el).requestClose("cancel")).toBe(true);
+  expect(await modal(el).requestClose("escape")).toBe(true);
 });
 
 it("a changed held printing choice asks before closing, and choosing back the opened one does not", async () => {
@@ -302,12 +302,12 @@ it("a changed held printing choice asks before closing, and choosing back the op
   };
   await setHeld(true);
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   await setHeld(false);
   expect(unload()).toBe(false);
-  expect(await modal(el).requestClose("cancel")).toBe(true);
+  expect(await modal(el).requestClose("escape")).toBe(true);
 });
 
 it("A773 station policy: a changed pass waiting asks before closing, and choosing back the opened one does not", async () => {
@@ -320,12 +320,12 @@ it("A773 station policy: a changed pass waiting asks before closing, and choosin
   };
   await setWaits(true);
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   await setWaits(false);
   expect(unload()).toBe(false);
-  expect(await modal(el).requestClose("cancel")).toBe(true);
+  expect(await modal(el).requestClose("escape")).toBe(true);
 });
 
 it("a changed changes after sending choice asks before closing, and choosing back the opened one does not", async () => {
@@ -338,10 +338,10 @@ it("a changed changes after sending choice asks before closing, and choosing bac
   };
   await pickChanges("never");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   await pickChanges("held-or-waiting");
   expect(unload()).toBe(false);
-  expect(await modal(el).requestClose("cancel")).toBe(true);
+  expect(await modal(el).requestClose("escape")).toBe(true);
 });

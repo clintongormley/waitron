@@ -93,12 +93,12 @@ async function question(app: CatalogueFormsApp) {
 function cancel(form: HTMLElement) {
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
 }
-for (const route of ["cancel", "escape"] as const) {
+
+for (const route of ["escape"] as const) {
   it(`Unit ${route} retains edited input through Keep and reports Discard once`, async () => {
     const { app, form } = await mount();
     await edit(form, "name-en", "Edited kilogram");
-    if (route === "cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(app.cancelled).toBe(0);
     expect(q.open).toBe(true);
@@ -111,7 +111,7 @@ for (const route of ["cancel", "escape"] as const) {
     expect(
       form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="name-en"]')!.value,
     ).toBe("Edited kilogram");
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
     await expect.poll(() => app.cancelled).toBe(1);
@@ -128,7 +128,7 @@ it("Unit measure switch retains its toggle through Keep and reports Discard once
   await toggle.updateComplete;
   await userEvent.click(page.elementLocator(toggle.shadowRoot!.querySelector("label")!));
   await (form as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   expect(app.cancelled).toBe(0);
@@ -136,7 +136,7 @@ it("Unit measure switch retains its toggle through Keep and reports Discard once
   await expect.poll(() => q.open).toBe(false);
   await closeReportsDelivered();
   expect(toggle.checked).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   await question(app);
   q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
   await expect.poll(() => app.cancelled).toBe(1);
@@ -179,14 +179,14 @@ it("an Add Unit starts clean, protects the first name and retains refused submis
   ]);
   form.fieldErrors = { name: "Refused by server" };
   await form.updateComplete;
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
 });
 it("replacing an open Unit invalidates its old question and starts with the replacement values", async () => {
   const { app, form } = await mount();
   await edit(form, "name-en", "Old edit");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   app.value = { ...unit, id: "g", name: { en: "Gram" }, precision: 0 };
   app.requestUpdate();
@@ -262,12 +262,12 @@ it("category colour choices submit immediately and Cancel remains direct without
   await expect.poll(() => app.cancelled).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
-it("a Unit put back after a detached update still asks before Cancel discards an edit", async () => {
+it("a Unit put back after a detached update still asks before Escape discards an edit", async () => {
   const { app, form } = await mount();
   await reattachAfterDetachedUpdate(form);
   await edit(form, "name-en", "Edited kilogram");
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
 });
@@ -307,7 +307,7 @@ it("a Unit keeps an edit made before it was taken out and put back, and still as
     disabled: false,
     innerDisabled: false,
   });
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
 });

@@ -90,12 +90,11 @@ function file(library: HTMLElement, value: File | null) {
   field.files = data.files;
   field.dispatchEvent(new Event("change", { bubbles: true }));
 }
-for (const route of ["cancel", "escape"] as const) {
+for (const route of ["escape"] as const) {
   it(`Image Edit ${route} retains values through Keep and discards without a write`, async () => {
     const library = await mount();
     await edit(library, "Pan editado");
-    if (route === "cancel") cancel(library);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question();
     expect(q.open).toBe(true);
     expect(
@@ -107,7 +106,7 @@ for (const route of ["cancel", "escape"] as const) {
       library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-es]")!.value,
     ).toBe("Pan editado");
     const closed = editorClosed(library);
-    cancel(library);
+    await userEvent.keyboard("{Escape}");
     await question();
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await closed;
@@ -137,7 +136,7 @@ it("Upload protects a selected opaque File and becomes clean when cleared", asyn
   const dirty = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(dirty);
   expect(dirty.defaultPrevented).toBe(true);
-  cancel(library);
+  await userEvent.keyboard("{Escape}");
   const q = await question();
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -153,7 +152,7 @@ it("Upload protects a selected opaque File and becomes clean when cleared", asyn
   await library.updateComplete;
   expect(app.leave.coordinator.isDirty()).toBe(false);
   const closed = editorClosed(library);
-  cancel(library);
+  await userEvent.keyboard("{Escape}");
   await closed;
   await expect.poll(() => library.shadowRoot!.querySelector("wt-modal")).toBeNull();
   expect(app.client.uploadImage).not.toHaveBeenCalled();
@@ -175,7 +174,7 @@ it("a refused Image update retains the exact submitted metadata and remains prot
     framing: { x: 5000, y: 5000, zoom: 100 },
     expectedRevision: 1,
   });
-  cancel(library);
+  await userEvent.keyboard("{Escape}");
   expect((await question()).open).toBe(true);
 });
 it("successful Upload closes and clears its scope before a failed refresh without deleting stored bytes", async () => {
@@ -200,7 +199,7 @@ it("replacing a selected File while asking invalidates the old answer, even for 
   const library = await mount(true);
   file(library, new File(["first"], "same.png", { type: "image/png" }));
   await library.updateComplete;
-  cancel(library);
+  await userEvent.keyboard("{Escape}");
   const q = await question();
   expect(q.open).toBe(true);
   const oldChoice = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -224,7 +223,7 @@ it("replacing a selected File while asking invalidates the old answer, even for 
 it("replacing an Image editor while asking starts a clean scope and invalidates the old answer", async () => {
   const library = await mount();
   await edit(library, "Pan editado");
-  cancel(library);
+  await userEvent.keyboard("{Escape}");
   const q = await question();
   expect(q.open).toBe(true);
   const oldChoice = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -461,7 +460,7 @@ it("accepted framing and replacement stay under the picker's parent leave scope 
   );
   await library.updateComplete;
   expect(app.leave.coordinator.isDirty([library])).toBe(true);
-  cancel(library);
+  await userEvent.keyboard("{Escape}");
   const q = await question();
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -470,7 +469,7 @@ it("accepted framing and replacement stay under the picker's parent leave scope 
     selected.name,
   );
   const closed = editorClosed(library);
-  cancel(library);
+  await userEvent.keyboard("{Escape}");
   await question();
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await closed;

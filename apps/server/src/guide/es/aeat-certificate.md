@@ -22,8 +22,7 @@ se te pedirá que confirmes de nuevo que eres quien inició la configuración an
 Si al sustituir un certificado aparece un error HTTP o un fallo inesperado en la comprobación,
 el certificado actual sigue instalado. Comprueba la conexión a internet o elige otro archivo o
 tipo de certificado en el diálogo. Pulsa **Guardar** para repetir la comprobación. Pulsa
-**Cancelar** para parar sin sustituir el certificado actual; si se pregunta por los cambios sin
-guardar, elige **Descartar cambios** para cerrar. El código HTTP por sí solo no indica si esperar ayudará.
+**Cancelar** para parar sin sustituir el certificado actual. El código HTTP por sí solo no indica si esperar ayudará.
 
 ## Averigua qué ha observado una comprobación {#diagnosis}
 

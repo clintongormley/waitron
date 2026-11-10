@@ -96,15 +96,14 @@ function unload() {
   return e.defaultPrevented;
 }
 
-for (const action of ["Cancel", "Escape"] as const) {
+for (const action of ["Escape"] as const) {
   it(`${action} keeps staged amount and reason until Discard and never sends a refund`, async () => {
     const { app, form } = await mount();
     await fill(form, "appliedAmount", "12.50");
     await fill(form, "tipAmount", "0");
     await choose(form, "courtesy");
     expect(unload()).toBe(true);
-    if (action === "Cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.asks).toEqual([]);
@@ -116,7 +115,7 @@ for (const action of ["Cancel", "Escape"] as const) {
       form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=appliedAmount]")!
         .value,
     ).toBe("12.50");
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     expect((await question(app)).open).toBe(true);
     const closed = new Promise<void>((resolve) =>
       form.addEventListener("tender-refund-close", () => resolve(), { once: true }),
@@ -171,7 +170,7 @@ it("a restored unanswered request is the baseline and can close while the journa
 it("disconnect aborts a pending question; reconnect retains the original baseline and draft", async () => {
   const { app, form } = await mount();
   await choose(form, "return");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   form.remove();
@@ -187,7 +186,7 @@ it("disconnect aborts a pending question; reconnect retains the original baselin
 it("closeSaved commits before leaving and invalidates an older unsaved question", async () => {
   const { app, form } = await mount();
   await choose(form, "return");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   form.closeSaved();

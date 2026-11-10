@@ -21510,7 +21510,7 @@ describe("application unsaved changes renderer", () => {
         let left = 0;
         const pending = coordinator!.request({
           scopes: [scope.id],
-          reason: "cancel",
+          reason: "navigation",
           proceed() {
             left++;
           },
@@ -21570,7 +21570,7 @@ it("forced session exit aborts an open unsaved question and clears its registry 
   let left = 0;
   const pending = coordinator.request({
     scopes: [scope.id],
-    reason: "cancel",
+    reason: "navigation",
     proceed() {
       left++;
     },
@@ -21636,7 +21636,7 @@ describe("dead-end unsaved choices in the till shell", () => {
         section.shadowRoot!.querySelector<HTMLElement>(".remove")!.click();
       }
       await dialog.updateComplete;
-      dialog.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+      await userEvent.keyboard("{Escape}");
       await flush(el);
       const q = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
       expect(q.open).toBe(true);
@@ -21654,7 +21654,7 @@ describe("dead-end unsaved choices in the till shell", () => {
       if (edit === "destination") expect(section.choices.get("0")).toBe("kitchen");
       else expect(section.answer.deadEnds).toEqual([]);
       expect(recordSale).not.toHaveBeenCalled();
-      dialog.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+      await userEvent.keyboard("{Escape}");
       await flush(el);
       expect(q.open).toBe(true);
       q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
@@ -21671,51 +21671,6 @@ describe("dead-end unsaved choices in the till shell", () => {
     },
   );
 });
-
-it.each(["cash", "reference"] as const)(
-  "W69 counter %s Cancel keeps tender and basket until local Discard without a sale",
-  async (kind) => {
-    const recordSale = vi.fn().mockResolvedValue(saleResult);
-    const { el } = await mountApp({ recordSale });
-    const c = await toCounter(el);
-    c.store.addProduct(coffee, "1");
-    await flush(el);
-    const form = tenderPay(el);
-    form.shadowRoot!.querySelector<HTMLElement>(kind === "cash" ? ".pay" : ".pay-card")!.click();
-    await flush(el);
-    if (kind === "cash") {
-      const pad = form.shadowRoot!.querySelector("till-numeric-pad")!;
-      await pad.updateComplete;
-      pad.shadowRoot!.querySelector<HTMLElement>('[data-key="5"]')!.click();
-    } else {
-      const field = form.shadowRoot!.querySelector<WtInput>(".ref-input")!;
-      await field.updateComplete;
-      const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-      await userEvent.fill(page.elementLocator(input), "  TX-007  ");
-    }
-    await flush(el);
-    form.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
-    await flush(el);
-    const q = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
-    expect(q.open).toBe(true);
-    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
-    await flush(el);
-    expect(q.open).toBe(false);
-    if (kind === "cash")
-      expect(form.shadowRoot!.querySelector("till-numeric-pad")!.value).toBe("5");
-    else expect(form.shadowRoot!.querySelector<WtInput>(".ref-input")!.value).toBe("  TX-007  ");
-    form.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
-    await flush(el);
-    expect(q.open).toBe(true);
-    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-    await flush(el);
-    expect(form.shadowRoot!.querySelector(".pay")).not.toBeNull();
-    expect(
-      c.store.lines.map((line) => ({ product: line.product.id, quantity: line.quantity })),
-    ).toEqual([{ product: "cafe", quantity: "1" }]);
-    expect(recordSale).not.toHaveBeenCalled();
-  },
-);
 
 describe("W69 till shell leave routes", () => {
   async function editedSchedule(

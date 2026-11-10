@@ -80,6 +80,7 @@ async function question(app: IncludeLeaveApp) {
 function cancel(form: HTMLElement) {
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
 }
+
 function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
@@ -91,7 +92,7 @@ const nameValue = (form: Form, name: string) =>
 it("closing with a change asks to discard, keeps the edit through Keep, and cancels once after Discard", async () => {
   const { app, form } = await mount();
   await edit(form, "names-es", "Barra");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   expect(app.cancelled).toBe(0);
@@ -99,7 +100,7 @@ it("closing with a change asks to discard, keeps the edit through Keep, and canc
   await expect.poll(() => q.open).toBe(false);
   await closeReportsDelivered();
   expect(nameValue(form, "names-es")).toBe("Barra");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   await question(app);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await expect.poll(() => app.cancelled).toBe(1);
@@ -218,7 +219,7 @@ it("an include taken out of the page and put back asks before discarding an edit
   await edit(form, "names-es", "Barra");
   expect(nameValue(form, "names-es")).toBe("Barra");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
 });
@@ -246,7 +247,7 @@ it("an include keeps an edit made before it was taken out and put back, and stil
     disabled: false,
     innerDisabled: false,
   });
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
 });

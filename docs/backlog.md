@@ -1455,9 +1455,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Theme logo** (bundle of 2, size M). [Detail](backlog/dashboard.md#bundle-theme-logo)
 
-- **A657 — Cancel leaves without asking (owner, 2026-10-14; open).**
-  [Detail](backlog/dashboard.md#a657--cancel-leaves-without-asking)
-
 - **Help tooltip primitive** (bundle of 2, size S). Holds A1244, A1247. [Detail](backlog/dashboard.md#bundle-help-tooltip-primitive)
 
 - **A1315. Help bubbles: the Transfers wording and missing guide destinations.** The Transfers

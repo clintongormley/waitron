@@ -168,20 +168,19 @@ function native(modal: HTMLElementTagNameMap["wt-modal"]) {
 }
 
 for (const add of [false, true])
-  for (const route of ["cancel", "escape"]) {
+  for (const route of ["escape"]) {
     it(`protects ${add ? "Add" : "Edit"} reason through ${route}, Keep and Discard`, async () => {
       const { screen, api } = await mount();
       const modal = await open(screen, add);
       await field(screen, "name", "Changed reason");
       expect(unload()).toBe(true);
-      if (route === "escape") await userEvent.keyboard("{Escape}");
-      else await press(screen, "cancel-editor");
+      await userEvent.keyboard("{Escape}");
       expect((await question()).open).toBe(true);
       expect(native(modal).open).toBe(true);
       await choose("keep");
       expect(value(screen, "name")).toBe("Changed reason");
       const closed = editorClosed(screen);
-      await press(screen, "cancel-editor");
+      await userEvent.keyboard("{Escape}");
       await choose("discard");
       await closed;
       await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
@@ -235,7 +234,7 @@ for (const name of ["names-es", "maxPercent", "maxAmount"]) {
     const modal = await open(screen);
     await field(screen, name, "invalid edited input");
     expect(unload()).toBe(true);
-    await press(screen, "cancel-editor");
+    await userEvent.keyboard("{Escape}");
     expect((await question()).open).toBe(true);
     await choose("keep");
     expect(native(modal).open).toBe(true);
@@ -255,7 +254,7 @@ for (const name of ["applyRoles", "approverRoles"]) {
     const before = reason[name as "applyRoles" | "approverRoles"];
     await roles(screen, name, ["admin"]);
     expect(unload()).toBe(true);
-    await press(screen, "cancel-editor");
+    await userEvent.keyboard("{Escape}");
     expect((await question()).open).toBe(true);
     await choose("keep");
     expect(native(modal).open).toBe(true);
@@ -297,7 +296,7 @@ it("actions compare membership and note-required compares its boolean", async ()
   toggle.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: false } }));
   await settle(screen);
   expect(unload()).toBe(true);
-  await press(screen, "cancel-editor");
+  await userEvent.keyboard("{Escape}");
   expect((await question()).open).toBe(true);
 });
 for (const add of [false, true]) {
@@ -450,7 +449,7 @@ for (const refusal of [false, true]) {
       screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="name"]')!.error,
     ).toBe("");
     expect(unload()).toBe(true);
-    await press(screen, "cancel-editor");
+    await userEvent.keyboard("{Escape}");
     expect((await question()).open).toBe(true);
   });
 }
@@ -458,7 +457,7 @@ it("disconnect aborts a question and old controls cannot change or save a replac
   const { screen, api } = await mount();
   const old = await open(screen);
   await field(screen, "name", "Old edit");
-  await press(screen, "cancel-editor");
+  void old.requestClose("escape");
   const q = await question();
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!;
@@ -543,7 +542,7 @@ it("acceptance invalidates a pending discard without undoing the saved reason", 
   const { screen, api } = await mount();
   await open(screen);
   await field(screen, "name", "Saved edit");
-  await press(screen, "cancel-editor");
+  await userEvent.keyboard("{Escape}");
   const q = await question();
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!;
@@ -747,7 +746,7 @@ it("saving a limit leaves the independent reason dirty", async () => {
   expect(value(screen, "name")).toBe("Changed");
   expect(unload()).toBe(true);
   const closed = editorClosed(screen);
-  await press(screen, "cancel-editor");
+  await userEvent.keyboard("{Escape}");
   await choose("discard");
   await closed;
   await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();

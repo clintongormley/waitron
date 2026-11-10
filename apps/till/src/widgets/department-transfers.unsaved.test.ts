@@ -99,17 +99,11 @@ function unload() {
   window.dispatchEvent(e);
   return e.defaultPrevented;
 }
-for (const action of ["Cancel", "Escape", "Close"]) {
+for (const action of ["Escape", "Close"]) {
   it(`${action} keeps a decline draft, then discards without writing`, async () => {
     const { app, form, input } = await mount();
     expect(unload()).toBe(true);
-    if (action === "Escape") await userEvent.keyboard("{Escape}");
-    else
-      form
-        .shadowRoot!.querySelector<HTMLElement>(
-          action === "Cancel" ? "[data-cancel-transfer]" : "[data-close-transfers]",
-        )!
-        .click();
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     await expect.poll(() => q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -117,7 +111,7 @@ for (const action of ["Cancel", "Escape", "Close"]) {
     expect(input.value).toBe("Closing soon");
     expect(app.closes).toBe(0);
     expect(app.writes).toEqual([]);
-    form.shadowRoot!.querySelector<HTMLElement>("[data-cancel-transfer]")!.click();
+    await userEvent.keyboard("{Escape}");
     await expect.poll(() => q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => form.shadowRoot!.querySelector("wt-textarea")).toBeNull();
@@ -150,7 +144,7 @@ it("a refused decline and a parent rerender keep the typed reason protected", as
   await app.updateComplete;
   expect(input.value).toBe("Closing soon");
   expect(unload()).toBe(true);
-  form.shadowRoot!.querySelector<HTMLElement>("[data-cancel-transfer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
   form.remove();
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(false);

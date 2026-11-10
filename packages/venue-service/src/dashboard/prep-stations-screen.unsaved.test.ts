@@ -202,7 +202,7 @@ for (const rename of [false, true]) {
     await choose("keep");
     expect(modal.querySelector("wt-input")!.value).toBe("Kitchen");
     const closed = closeOf(modal);
-    modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+    await userEvent.keyboard("{Escape}");
     await choose("discard");
     await closed;
     await expect.poll(() => modalIn(screen)).toBeNull();
@@ -269,7 +269,7 @@ for (const rename of [false, true]) {
       )
       .toBe(false);
     expect(unload()).toBe(true);
-    modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+    await userEvent.keyboard("{Escape}");
     await choose("keep");
     expect(modal.querySelector("wt-input")!.value).toBe("Kitchen");
   });
@@ -282,7 +282,7 @@ for (const rename of [false, true]) {
       .querySelector<HTMLElement>(`[data-test=${rename ? "save-station-edit" : "save-station"}]`)!
       .click();
     await screen.updateComplete;
-    expect(await modal.requestClose("cancel")).toBe(false);
+    expect(await modal.requestClose("escape")).toBe(false);
     expect((await question()).open).toBe(false);
     await field(modal, "Newer kitchen");
     write.resolve();
@@ -298,14 +298,14 @@ for (const rename of [false, true]) {
     expect(modal.isConnected).toBe(true);
     expect(modal.querySelector("wt-input")!.value).toBe("Newer kitchen");
     expect(unload()).toBe(true);
-    modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+    await userEvent.keyboard("{Escape}");
     await choose("discard");
   });
   it(`${label} disconnect aborts its pending question and unload handling`, async () => {
     const { screen } = await mount();
     const modal = await open(screen, rename);
     await field(modal, "Kitchen");
-    modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+    await userEvent.keyboard("{Escape}");
     expect((await question()).open).toBe(true);
     screen.remove();
     await expect.poll(async () => (await question()).open).toBe(false);
@@ -357,11 +357,11 @@ for (const [name, changed, reverted] of [
     const modal = await open(screen, false);
     await field(modal, changed, name);
     expect(unload()).toBe(true);
-    modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+    await userEvent.keyboard("{Escape}");
     await choose("keep");
     await field(modal, reverted, name);
     expect(unload()).toBe(false);
-    expect(await modal.requestClose("cancel")).toBe(true);
+    expect(await modal.requestClose("escape")).toBe(true);
   });
 }
 
@@ -390,11 +390,11 @@ for (const rename of [false, true]) {
     await save.updateComplete;
     expect(save.variant).toBe("primary");
     expect(save.disabled).toBe(false);
-    modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+    await userEvent.keyboard("{Escape}");
     expect((await question()).open).toBe(true);
     await choose("keep");
     expect(modal.querySelector("wt-input")!.value).toBe("After reconnect");
-    modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+    await userEvent.keyboard("{Escape}");
     await choose("discard");
     expect(writes).toEqual([]);
     expect(unload()).toBe(false);
@@ -554,7 +554,7 @@ it("Add station with only its colour changed counts as unsaved, asks before clos
   expect(picker.value).toBe("teal");
   expect(tile("teal").getAttribute("aria-checked")).toBe("true");
   expect(unload()).toBe(true);
-  modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose("keep");
   expect(modalIn(screen)).not.toBeNull();
   await field(modal, "Grill");

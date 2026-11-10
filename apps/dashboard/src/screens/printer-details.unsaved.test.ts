@@ -150,18 +150,18 @@ for (const owner of ["name", "host"] as const) {
     });
   }
   const edited = owner === "name" ? "New kitchen" : "10.0.0.88";
-  it(`a ${owner} edit protects unload and asks on Cancel, then reopens saved values`, async () => {
+  it(`a ${owner} edit protects navigation and Cancel reopens saved values without asking`, async () => {
     const { app, screen } = await mount();
     await open(screen);
     expect(unload()).toBe(false);
     change(screen, owner, edited);
     expect(unload()).toBe(true);
-    cancelDetailsEdit(screen);
+    void app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
     await choose(app, "keep");
     expect(field(screen, owner).value).toBe(edited);
     expect(unload()).toBe(true);
     cancelDetailsEdit(screen);
-    await choose(app, "discard");
+    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     await expect.poll(() => field(screen, owner)).toBeNull();
     expect(unload()).toBe(false);
     await open(screen);
@@ -241,7 +241,7 @@ for (const owner of ["name", "host"] as const) {
     await expect.poll(() => field(screen, owner).disabled).toBe(false);
     expect(field(screen, owner).value).toBe(newer);
     expect(unload()).toBe(true);
-    cancelDetailsEdit(screen);
+    void app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
     await choose(app, "keep");
   });
 }

@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons } from "@waitron/ui";
@@ -116,7 +117,7 @@ it("a pending staff edit blocks dismissal, then a refused write keeps the draft"
   await screen.updateComplete;
   await form.updateComplete;
   expect(form.busy).toBe(true);
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await app.updateComplete;
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   expect(form.open).toBe(true);
@@ -128,7 +129,7 @@ it("a pending staff edit blocks dismissal, then a refused write keeps the draft"
       .value,
   ).toBe("new@example.com");
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await app.updateComplete;
   const q = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await q.updateComplete;

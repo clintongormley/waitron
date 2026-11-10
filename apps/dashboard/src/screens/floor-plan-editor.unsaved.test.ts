@@ -125,8 +125,9 @@ async function undo(el: FloorPlanEditor) {
   button(el, "undo").click();
   await el.updateComplete;
 }
-function close(el: FloorPlanEditor) {
-  el.shadowRoot!.querySelector<HTMLElement>("[data-action=close]")!.click();
+async function escape(el: FloorPlanEditor) {
+  el.shadowRoot!.querySelector<HTMLElement>("[data-action=close]")!.focus();
+  await userEvent.keyboard("{Escape}");
 }
 async function choose(app: DashboardApp, decision: "keep" | "discard") {
   const warning = question(app);
@@ -143,28 +144,55 @@ function unload() {
 
 it("an untouched editor closes without asking", async () => {
   const { app } = await mount();
-  close(editor(app));
+  await escape(editor(app));
   await expect.poll(() => location.pathname).toBe("/manage/overview");
   expect(question(app).open).toBe(false);
 });
 
-it("Cancel asks after a move, and Keep stays with the move", async () => {
+it("Escape asks after a move, and Keep stays with the move", async () => {
   const { app } = await mount();
   const el = editor(app);
   await move(el);
-  close(el);
+  await escape(el);
   await choose(app, "keep");
   expect(location.pathname).toBe("/manage/floor-plan/set/s1/zone/z1");
   expect(placed(el, "m1").x).toBe(5);
 });
 
-it("Discard on Cancel leaves and writes nothing", async () => {
+it("Cancel discards a move and leaves without asking or writing", async () => {
   const { app, api } = await mount();
   const el = editor(app);
   await move(el);
-  close(el);
-  await choose(app, "discard");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-action=close]")!.click();
   await expect.poll(() => location.pathname).toBe("/manage/overview");
+  expect(question(app).open).toBe(false);
+  expect(api.saveFloorPlan).not.toHaveBeenCalled();
+});
+
+it("a modified Cancel click leaves its draft and navigation to the browser", async () => {
+  const { app, api } = await mount();
+  const el = editor(app);
+  await move(el);
+  const push = vi.spyOn(history, "pushState");
+  onTestFinished(() => push.mockRestore());
+  const link = el.shadowRoot!.querySelector<HTMLElement>("[data-action=close]")!;
+  let intercepted: boolean | undefined;
+  link.addEventListener(
+    "click",
+    (event) => {
+      intercepted = event.defaultPrevented;
+      event.preventDefault();
+    },
+    { once: true },
+  );
+  link.dispatchEvent(
+    new MouseEvent("click", { ctrlKey: true, bubbles: true, composed: true, cancelable: true }),
+  );
+  await el.updateComplete;
+  expect(intercepted).toBe(false);
+  expect(push).not.toHaveBeenCalled();
+  expect(placed(el, "m1").x).toBe(5);
+  expect(question(app).open).toBe(false);
   expect(api.saveFloorPlan).not.toHaveBeenCalled();
 });
 
@@ -196,7 +224,7 @@ it("undoing every change closes without asking", async () => {
   const el = editor(app);
   await move(el);
   await undo(el);
-  close(el);
+  await escape(el);
   await expect.poll(() => location.pathname).toBe("/manage/overview");
   expect(question(app).open).toBe(false);
 });
@@ -207,7 +235,7 @@ it("a table moved by hand back to where it was closes without asking", async () 
   await move(el);
   await move(el, placement.x, placement.y);
   expect(button(el, "undo").disabled).toBe(false);
-  close(el);
+  await escape(el);
   await expect.poll(() => location.pathname).toBe("/manage/overview");
   expect(question(app).open).toBe(false);
 });
@@ -268,19 +296,19 @@ it("refused text standing in a field holds the plan, though the draft is unchang
   await el.updateComplete;
   expect(panel.draft.tables.find((t) => t.key === "m1")!.seats).toBe(4);
   expect(unload()).toBe(true);
-  close(el);
+  await escape(el);
   await choose(app, "keep");
   await userEvent.type(input, "{Backspace}");
   await el.updateComplete;
   expect(unload()).toBe(false);
 });
 
-it("put back after a detached update, the editor still asks before Cancel discards a change", async () => {
+it("put back after a detached update, the editor still asks before Escape discards a change", async () => {
   const { app } = await mount();
   const el = editor(app);
   await reattachAfterDetachedUpdate(el);
   await move(el);
-  close(el);
+  await escape(el);
   await expect.poll(() => question(app).open).toBe(true);
   expect(location.pathname).toBe("/manage/floor-plan/set/s1/zone/z1");
 });
@@ -302,7 +330,7 @@ it("a departed save's answer cannot change a reconnected editor", async () => {
   await el.updateComplete;
   expect(button(el, "save").variant).toBe("primary");
   expect(api.getFloorPlan).toHaveBeenCalledTimes(1);
-  close(el);
+  await escape(el);
   await expect.poll(() => question(app).open).toBe(true);
   expect(location.pathname).toBe("/manage/floor-plan/set/s1/zone/z1");
   await choose(app, "keep");
@@ -310,7 +338,7 @@ it("a departed save's answer cannot change a reconnected editor", async () => {
   await expect.poll(() => api.saveFloorPlan.mock.calls.length).toBe(2);
 });
 
-it("an edit made while a save is sent still asks on Cancel once the save is accepted", async () => {
+it("an edit made while a save is sent still asks on Escape once the save is accepted", async () => {
   const { app, api } = await mount();
   let answer!: (value: { revision: number; ids: Record<string, string> }) => void;
   api.saveFloorPlan.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
@@ -323,7 +351,7 @@ it("an edit made while a save is sent still asks on Cancel once the save is acce
   await expect.poll(() => api.getFloorPlan.mock.calls.length).toBe(2);
   await el.updateComplete;
   expect(placed(el, "m1").x).toBe(7);
-  close(el);
+  await escape(el);
   await expect.poll(() => question(app).open).toBe(true);
   expect(location.pathname).toBe("/manage/floor-plan/set/s1/zone/z1");
 });
@@ -335,7 +363,7 @@ it("an accepted save leaves without asking", async () => {
   button(el, "save").click();
   await expect.poll(() => api.getFloorPlan.mock.calls.length).toBe(2);
   await el.updateComplete;
-  close(el);
+  await escape(el);
   await expect.poll(() => location.pathname).toBe("/manage/overview");
   expect(question(app).open).toBe(false);
 });
@@ -413,7 +441,7 @@ function expectSaveQuiet(el: FloorPlanEditor) {
   expect(button(el, "save").disabled).toBe(true);
 }
 
-it("a typed short name turns Save on, asks before Cancel, and typed back is clean again", async () => {
+it("a typed short name turns Save on, asks before Escape, and typed back is clean again", async () => {
   const before = [window.innerWidth, window.innerHeight] as const;
   onTestFinished(() => page.viewport(...before));
   const { app } = await mount();
@@ -424,12 +452,12 @@ it("a typed short name turns Save on, asks before Cancel, and typed back is clea
   await type("Win");
   expect(button(el, "save").variant).toBe("primary");
   expect(button(el, "save").disabled).toBe(false);
-  close(el);
+  await escape(el);
   await choose(app, "keep");
   expect(location.pathname).toBe("/manage/floor-plan/set/s1/zone/z1");
   await type(stored);
   expectSaveQuiet(el);
-  close(el);
+  await escape(el);
   await expect.poll(() => location.pathname).toBe("/manage/overview");
   expect(question(app).open).toBe(false);
 });

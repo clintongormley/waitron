@@ -190,7 +190,7 @@ export class TillFindBillDialog extends LitElement {
 
   #back(): void {
     if (!this.isConnected || !this.active || this.busy || this.unconfirmed) return;
-    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("navigation");
   }
 
   #emit(type: string, detail?: unknown): void {

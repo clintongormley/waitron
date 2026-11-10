@@ -1019,7 +1019,7 @@ export class ContentTranslationsDialog extends LitElement {
           slot="cancel"
           variant="secondary"
           ?disabled=${this.busy}
-          @click=${() => void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel")}
+          @click=${() => void this.shadowRoot!.querySelector("wt-modal")!.requestClose("navigation")}
           >${t("action.close")}</wt-button
         >
         <wt-button

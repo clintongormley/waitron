@@ -7306,7 +7306,7 @@ describe("till-app: giving back a bill payment", () => {
 
     await expect.poll(() => approval(el)).toBeNull();
     expect(refundDialog(el)).not.toBeNull();
-    inRefund(el, "[data-refund-close]")!.click();
+    await userEvent.keyboard("{Escape}");
     await flush(el);
     const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await question.updateComplete;
@@ -7319,7 +7319,7 @@ describe("till-app: giving back a bill payment", () => {
         '[name="reason"]',
       )!.value,
     ).toBe("Charged twice");
-    inRefund(el, "[data-refund-close]")!.click();
+    await userEvent.keyboard("{Escape}");
     await flush(el);
     expect(question.open).toBe(true);
     question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();

@@ -6,6 +6,7 @@ import {
   UrlStateController,
   baseStyles,
   draftScopeFor,
+  leaveCoordinatorFor,
   navigationGuardFor,
   saveActionState,
   type DraftScope,
@@ -30,7 +31,7 @@ import "./floor-plan-table-panel.js";
 import "./floor-plan-tables-panel.js";
 import { bookedReason } from "./floor-plan-booked.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import { dashboardPath } from "../navigation.js";
+import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -458,11 +459,31 @@ export class FloorPlanEditor extends LitElement {
   readonly #userScrolls = (): void => {
     this.#revealing = false;
   };
-  /** Escape takes Cancel's path, which the shell guards; the modal stays until the route changes. */
+  /** The modal stays mounted until its guarded route change is accepted. */
   readonly #leave = async (): Promise<boolean> => {
-    this.renderRoot.querySelector<HTMLElement>("a.close")?.click();
+    this.#navigateBack();
     return false;
   };
+
+  #navigateBack(): void {
+    const url = new URL(closeHref(this.back), location.origin);
+    const guard = navigationGuardFor(window);
+    if (guard) void guard.write(url);
+    else location.assign(url.href);
+  }
+
+  async #cancel(event: MouseEvent): Promise<void> {
+    if (leftToBrowser(event)) return;
+    event.preventDefault();
+    const coordinator = leaveCoordinatorFor(this);
+    if (
+      coordinator &&
+      (await coordinator.request({ scopes: [this], reason: "cancel", proceed() {} })) !==
+        "proceeded"
+    )
+      return;
+    this.#navigateBack();
+  }
 
   constructor() {
     super();
@@ -1313,7 +1334,13 @@ export class FloorPlanEditor extends LitElement {
                   ><wt-icon name="redo"></wt-icon
                 ></wt-button>
               </span>
-              <a slot="secondary" class="close" data-action="close" href=${closeHref(this.back)}
+              <a
+                slot="secondary"
+                class="close"
+                data-action="close"
+                data-own-click
+                href=${closeHref(this.back)}
+                @click=${(event: MouseEvent) => void this.#cancel(event)}
                 >${t("action.cancel")}</a
               >
               <wt-button

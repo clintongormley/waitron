@@ -123,7 +123,7 @@ describe.each(["en", "es"])("Periods discard (%s)", (locale) => {
     await change(editor);
     expect(unload()).toBe(true);
     const modal = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
-    const keep = modal.requestClose("cancel");
+    const keep = modal.requestClose("escape");
     await choose("keep");
     expect(await keep).toBe(false);
     expect(
@@ -151,7 +151,7 @@ describe.each(["en", "es"])("Periods discard (%s)", (locale) => {
       expect(unload()).toBe(true);
       const close = editor
         .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!
-        .requestClose("cancel");
+        .requestClose("escape");
       await choose("keep");
       expect(await close).toBe(false);
       expect(screen.shadowRoot!.querySelector("period-dialog")).toBe(editor);

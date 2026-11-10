@@ -76,6 +76,7 @@ async function question(app: PagePrinterLeaveApp) {
 function cancel(dialog: Dialog) {
   dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-add-page-printer]")!.click();
 }
+
 async function add(dialog: Dialog) {
   dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-add-page-printer]")!.click();
   await dialog.updateComplete;
@@ -84,7 +85,7 @@ async function add(dialog: Dialog) {
 it("closing with a typed name asks to discard, keeps the name through Keep, and closes once after Discard", async () => {
   const { app, dialog } = await mount();
   await type(dialog, "Back office");
-  cancel(dialog);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   expect(app.closed).toBe(0);
@@ -92,7 +93,7 @@ it("closing with a typed name asks to discard, keeps the name through Keep, and 
   await expect.poll(() => q.open).toBe(false);
   await closeReportsDelivered();
   expect(nameOf(dialog)).toBe("Back office");
-  cancel(dialog);
+  await userEvent.keyboard("{Escape}");
   await question(app);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await expect.poll(() => app.closed).toBe(1);
@@ -130,7 +131,7 @@ it("a refused add keeps the name as a change, so closing still asks", async () =
   await expect.poll(() => app.api.registerPagePrinter.mock.calls.length).toBe(1);
   await dialog.updateComplete;
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  cancel(dialog);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.closed).toBe(0);
 });
@@ -141,7 +142,7 @@ it("a name typed before the dialog is taken out of the page still counts once it
   await reattachAfterDetachedUpdate(dialog);
   expect(nameOf(dialog)).toBe("Back office");
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  cancel(dialog);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.closed).toBe(0);
 });
@@ -152,7 +153,7 @@ it("a dialog put back and then edited asks before discarding the edit", async ()
   expect(app.leave.coordinator.isDirty()).toBe(false);
   await type(dialog, "Back office");
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  cancel(dialog);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 

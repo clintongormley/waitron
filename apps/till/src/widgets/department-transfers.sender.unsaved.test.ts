@@ -95,17 +95,11 @@ function unload() {
   window.dispatchEvent(e);
   return e.defaultPrevented;
 }
-for (const action of ["Cancel", "Escape", "Close"]) {
+for (const action of ["Escape", "Close"]) {
   it(`${action} keeps a destination draft, then discards without writing`, async () => {
     const { app, form, input } = await mount();
     expect(unload()).toBe(true);
-    if (action === "Escape") await userEvent.keyboard("{Escape}");
-    else
-      form
-        .shadowRoot!.querySelector<HTMLElement>(
-          action === "Cancel" ? "[data-cancel-transfer]" : "[data-close-transfers]",
-        )!
-        .click();
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     await expect.poll(() => q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -113,7 +107,7 @@ for (const action of ["Cancel", "Escape", "Close"]) {
     expect(input.value).toBe("restaurant");
     expect(app.closes).toBe(0);
     expect(app.writes).toEqual([]);
-    form.shadowRoot!.querySelector<HTMLElement>("[data-cancel-transfer]")!.click();
+    await userEvent.keyboard("{Escape}");
     await expect.poll(() => q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect
@@ -150,7 +144,7 @@ it("a refused request and a parent rerender keep the chosen destination protecte
   await app.updateComplete;
   expect(input.value).toBe("restaurant");
   expect(unload()).toBe(true);
-  form.shadowRoot!.querySelector<HTMLElement>("[data-cancel-transfer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
   form.remove();
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(false);

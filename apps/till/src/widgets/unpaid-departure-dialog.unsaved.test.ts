@@ -57,12 +57,11 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
-for (const action of ["Cancel", "Escape"]) {
+for (const action of ["Escape"]) {
   it(`departure ${action} preserves the reason until Discard, without recording anything`, async () => {
     const { app, form } = await mount();
     const input = await fill(form, "  Left during clearing  ");
-    if (action === "Cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.closes).toBe(0);
@@ -74,7 +73,7 @@ for (const action of ["Cancel", "Escape"]) {
       input.getRootNode() instanceof ShadowRoot &&
         (input.getRootNode() as ShadowRoot).activeElement,
     ).toBe(input);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -111,7 +110,7 @@ it("departure submission sends the exact trimmed reason directly and a refusal k
   form.bills = [{ workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "12.00" }];
   await form.updateComplete;
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -126,7 +125,7 @@ it("an invalid departure reason stays protected after validation", async () => {
   await form.updateComplete;
   expect(form.shadowRoot!.querySelector("wt-input")!.error).toBe(t("departure.reason_long"));
   expect(app.submitted).toEqual([]);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(input.value).toBe("x".repeat(501));
 });
@@ -147,7 +146,7 @@ it("a busy departure cannot be cancelled or submitted again and Escape does not 
 it("removing a recorded departure aborts an outstanding answer and unregisters its reason", async () => {
   const { app, form } = await mount();
   await fill(form, "Ran off");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;

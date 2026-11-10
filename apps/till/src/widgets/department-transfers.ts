@@ -396,7 +396,7 @@ export class TillDepartmentTransfers extends LitElement {
   }
 
   #close(): void {
-    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")?.requestClose("cancel");
+    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")?.requestClose("navigation");
   }
 
   async #view(requestId: string): Promise<void> {

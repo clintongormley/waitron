@@ -695,7 +695,7 @@ export class TillBillPayDialog extends LitElement {
 
   #requestClose(): void {
     if (!this.isConnected || !this.#active || this.busy) return;
-    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("navigation");
   }
 
   #back(): void {
@@ -708,7 +708,8 @@ export class TillBillPayDialog extends LitElement {
       this.shownRefusal = null;
       this.#emit("bill-pay-edit");
     };
-    if (this.#tip) void this.#leave!.request({ scopes: [this.#tipId], reason: "cancel", proceed });
+    if (this.#tip)
+      void this.#leave!.request({ scopes: [this.#tipId], reason: "navigation", proceed });
     else proceed();
   }
 

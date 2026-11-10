@@ -979,7 +979,7 @@ export class MenuPatchDialog extends LitElement {
                 slot="cancel"
                 variant="secondary"
                 data-test="close"
-                @click=${() => void this.renderRoot.querySelector("wt-modal")!.requestClose("cancel")}
+                @click=${() => void this.renderRoot.querySelector("wt-modal")!.requestClose("navigation")}
                 >${t("action.close")}</wt-button
               >${reload}<wt-button
                 variant=${action.variant}

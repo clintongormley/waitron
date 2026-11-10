@@ -876,7 +876,7 @@ describe("leaving a painter with edits", () => {
     }
   });
 
-  it("Cancel with edits asks once, then goes back to the view the painter opened over", async () => {
+  it("Close with edits asks once, then goes back to the view the painter opened over", async () => {
     history.replaceState(null, "", "/manage/before");
     let app!: PainterApp;
     const guard = new NavigationGuard(window, {
@@ -892,7 +892,7 @@ describe("leaving a painter with edits", () => {
       const pushed = pushedPaths();
       const painter = await shownPainter(el);
       await drag(painter, "3", 120, 240);
-      frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+      frame(painter).shadowRoot!.querySelector<HTMLElement>("[data-test=dismiss]")!.click();
       await choose(app, "discard");
       await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/year");
       await expect.poll(() => painterOf(el)).toBeNull();

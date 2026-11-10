@@ -1507,7 +1507,9 @@ export class TillTableOrderScreen extends LitElement {
   #dismissServe(): void {
     if (!this.isConnected || !this.servePending) return;
     if (this.#serveScope) {
-      void this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]")!.requestClose("cancel");
+      void this.renderRoot
+        .querySelector<WtDialog>("[data-serve-dialog]")!
+        .requestClose("navigation");
     } else {
       this.servePending = null;
     }
@@ -3346,7 +3348,7 @@ export class TillTableOrderScreen extends LitElement {
   #askSentChangeLeave(act: () => void): void {
     const picker = this.renderRoot.querySelector<TillModifierPicker>("[data-sent-change-fields]");
     if (picker === null) return;
-    void picker.requestLeave("cancel").then((leave) => {
+    void picker.requestLeave("navigation").then((leave) => {
       if (leave) act();
     });
   }
@@ -3743,7 +3745,7 @@ export class TillTableOrderScreen extends LitElement {
             else
               void (event.currentTarget as HTMLElement)
                 .closest<WtDialog>("wt-dialog")!
-                .requestClose("cancel");
+                .requestClose("navigation");
           }}
           >${t("table.submitted_close")}</wt-button
         >
@@ -6383,7 +6385,7 @@ export class TillTableOrderScreen extends LitElement {
     const step = this.actionStep;
     void this.#actionLeave!.request({
       scopes: [this.#actionId],
-      reason: "cancel",
+      reason: "navigation",
       proceed: () => {
         if (
           !this.isConnected ||
@@ -6474,7 +6476,7 @@ export class TillTableOrderScreen extends LitElement {
     const step = this.actionStep;
     void this.#actionLeave!.request({
       scopes: [this.#actionId],
-      reason: "cancel",
+      reason: "navigation",
       proceed: () => {
         if (
           !this.isConnected ||

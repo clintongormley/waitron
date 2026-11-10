@@ -2887,7 +2887,7 @@ it("station-choice Keep and Discard leave the counter basket and server writes a
   )!;
   option.click();
   await flush(el);
-  form.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await flush(el);
   const q = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
   expect(q.open).toBe(true);
@@ -2896,7 +2896,7 @@ it("station-choice Keep and Discard leave the counter basket and server writes a
   expect(el.shadowRoot!.querySelector("till-station-choice-dialog")).toBe(form);
   expect(field.value).toBe("bar");
   expect(store.lines).toEqual(before);
-  form.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await flush(el);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await expect.poll(() => el.shadowRoot!.querySelector("till-station-choice-dialog")).toBeNull();

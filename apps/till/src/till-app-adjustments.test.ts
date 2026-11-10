@@ -4489,9 +4489,7 @@ describe("till-app: service cancellation consent", () => {
         value: "Changed my mind",
       });
       await form.updateComplete;
-      await userEvent.click(
-        page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-close]")!),
-      );
+      await userEvent.keyboard("{Escape}");
       await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
       expect(refundForm(el)).toBe(form);
       const closed = new Promise<void>((resolve) =>

@@ -46,7 +46,7 @@ async function question(app: PickerLeaveApp) {
 }
 /** Asks to leave the picker, as closing its window does; resolves whether the leave went ahead. */
 function leave(app: PickerLeaveApp, picker: HomeShortcutPicker) {
-  return app.leave.coordinator.request({ scopes: [picker], reason: "cancel", proceed() {} });
+  return app.leave.coordinator.request({ scopes: [picker], reason: "navigation", proceed() {} });
 }
 async function addState(picker: HomeShortcutPicker) {
   await picker.updateComplete;

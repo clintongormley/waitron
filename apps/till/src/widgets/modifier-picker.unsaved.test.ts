@@ -270,7 +270,7 @@ const edits = {
   },
 };
 
-it.each(["Cancel", "Escape", "navigation"])(
+it.each(["Escape", "navigation"])(
   "A738 combined line edits survive Keep and reconnect, then restore together on %s Discard",
   async (action) => {
     const { app, form } = await mount({
@@ -319,8 +319,7 @@ it.each(["Cancel", "Escape", "navigation"])(
             app.closes++;
           },
         });
-      } else if (action === "Cancel") cancel(form);
-      else return userEvent.keyboard("{Escape}");
+      } else return userEvent.keyboard("{Escape}");
     };
     await leave();
     const q = await question(app);
@@ -339,9 +338,9 @@ it.each(["Cancel", "Escape", "navigation"])(
   },
 );
 
-it.each(["Cancel", "Escape"])(
+it.each(["Escape"])(
   "A738 quantity %s protects Keep and restores the initial quantity on Discard",
-  async (action) => {
+  async () => {
     const { app, form } = await mount({
       product: { ...product, variants: undefined },
       lineDetails: true,
@@ -353,15 +352,14 @@ it.each(["Cancel", "Escape"])(
     await userEvent.fill(field.shadowRoot!.querySelector("input")!, "3");
     await form.updateComplete;
     expect(unload()).toBe(true);
-    if (action === "Cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
     await expect.poll(() => q.open).toBe(false);
     expect(field.value).toBe("3");
     expect(app.closes).toBe(0);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await expect.poll(() => q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -370,12 +368,11 @@ it.each(["Cancel", "Escape"])(
   },
 );
 for (const [name, edit] of Object.entries(edits)) {
-  for (const action of ["Cancel", "Escape"]) {
+  for (const action of ["Escape"]) {
     it(`modifier ${name} ${action} preserves edits on Keep and restores only this picker on Discard`, async () => {
       const { app, form } = await mount();
       await edit(form);
-      if (action === "Cancel") cancel(form);
-      else await userEvent.keyboard("{Escape}");
+      await userEvent.keyboard("{Escape}");
       const q = await question(app);
       expect(q.open).toBe(true);
       expect(modal(form).shadowRoot!.querySelector("dialog")!.open).toBe(true);
@@ -402,7 +399,7 @@ for (const [name, edit] of Object.entries(edits)) {
         ).toBe(true);
       if (name === "note")
         expect(form.shadowRoot!.querySelector("wt-textarea")!.value).toBe("No salt");
-      cancel(form);
+      await userEvent.keyboard("{Escape}");
       await question(app);
       q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
       await expect.poll(() => app.closes).toBe(1);
@@ -423,7 +420,7 @@ for (const [name, edit] of Object.entries(edits)) {
       expect(form.shadowRoot!.querySelector("wt-textarea")!.value).toBe("");
       expect(app.submitted).toEqual([]);
       expect(unload()).toBe(false);
-      cancel(form);
+      await userEvent.keyboard("{Escape}");
       expect(app.closes).toBe(1);
     });
   }
@@ -450,7 +447,7 @@ it("Confirm commits normalized local selections without asking or accepting an o
   await edits.pick(form);
   await edits.answer(form);
   await note(form, "  No salt  ");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -473,7 +470,7 @@ it("Confirm commits normalized local selections without asking or accepting an o
   expect(unload()).toBe(true);
   await note(form, "No salt");
   expect(unload()).toBe(false);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
@@ -487,14 +484,14 @@ it("an incomplete reopened choice stays unsaved and cannot confirm", async () =>
   await note(form, "Retain this incomplete line");
   submit(form);
   expect(app.submitted).toEqual([]);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.closes).toBe(0);
 });
 it("disconnect invalidates the warning while reconnect retains the original selection baseline", async () => {
   const { app, form } = await mount();
   await edits.pick(form);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -510,7 +507,7 @@ it("disconnect invalidates the warning while reconnect retains the original sele
   expect(form.shadowRoot!.querySelector<HTMLInputElement>("#pick-extras-bacon")!.checked).toBe(
     true,
   );
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("departed controls cannot edit, submit or cancel a replacement picker", async () => {
@@ -549,7 +546,7 @@ it("departed controls cannot edit, submit or cancel a replacement picker", async
 it("background offer reorder and label changes retain an edited note and its pending decision", async () => {
   const { app, form } = await mount();
   await note(form, "Keep note");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   app.product = {
@@ -566,7 +563,7 @@ it("background offer reorder and label changes retain an edited note and its pen
   await expect.poll(() => q.open).toBe(false);
   await note(form, "");
   expect(unload()).toBe(false);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.closes).toBe(1);
   expect(app.submitted).toEqual([]);
 });
@@ -636,7 +633,7 @@ it("a local child Confirm leaves an independent parent draft protected", async (
 it("security reset invalidates a pending picker answer without a local submission", async () => {
   const { app, form } = await mount();
   await note(form, "Draft");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -690,14 +687,14 @@ it("the menu's real picker leaves the basket untouched on Keep and Discard, whil
   await form.updateComplete;
   await modal(form).updateComplete;
   await note(form, "No salt");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   expect(app.store.lines).toEqual([]);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
   await expect.poll(() => q.open).toBe(false);
   expect(browser.shadowRoot!.querySelector("till-modifier-picker")).toBe(form);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   await question(app);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await expect.poll(() => browser.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
@@ -734,7 +731,7 @@ it("the basket's reopened picker keeps stored answers on Discard and commits onl
   await modal(form).updateComplete;
   expect(unload()).toBe(false);
   await edits.answer(form);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
@@ -771,8 +768,7 @@ for (const action of ["Close", "Escape"] as const) {
     course.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "dessert" } }));
     await form.updateComplete;
     expect(unload()).toBe(true);
-    if (action === "Close") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.submitted).toEqual([]);
@@ -780,7 +776,7 @@ for (const action of ["Close", "Escape"] as const) {
     await expect.poll(() => q.open).toBe(false);
     expect(course.value).toBe("dessert");
     expect(app.closes).toBe(0);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -803,7 +799,7 @@ it("saving Course commits its own baseline and a stale discard cannot undo it", 
   const course = form.shadowRoot!.querySelector<WtCombobox>('[name="course"]')!;
   course.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "dessert" } }));
   await form.updateComplete;
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
   expect(q.open).toBe(true);
@@ -829,11 +825,11 @@ it("inline, a changed draft asks before leaving, keeps it on Keep and restores i
   const form = app.shadowRoot!.querySelector("till-modifier-picker")!;
   await form.updateComplete;
   expect(form.shadowRoot!.querySelector("wt-modal")).toBeNull();
-  expect(await form.requestLeave("cancel"), "nothing changed, so nothing to ask").toBe(true);
+  expect(await form.requestLeave("navigation"), "nothing changed, so nothing to ask").toBe(true);
   await note(form, "No onion");
   await input(form, "#label-cooked-rare");
   expect(unload()).toBe(true);
-  const kept = form.requestLeave("cancel");
+  const kept = form.requestLeave("navigation");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
