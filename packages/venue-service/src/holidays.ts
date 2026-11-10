@@ -278,7 +278,6 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     };
   }
 
-  /** Clearing an absent choice writes nothing. */
   async function saveHolidayArea(
     tx: Transaction,
     input: { areaKey: string | null },

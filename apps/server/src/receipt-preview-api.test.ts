@@ -5,13 +5,7 @@ import sharp from "sharp";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
-import {
-  devices,
-  printers,
-  readTenant,
-  withTransaction,
-  type Database,
-} from "@waitron/db";
+import { devices, printers, readTenant, withTransaction, type Database } from "@waitron/db";
 import { mediaImages, uploadImage, prepareImage, saveImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
