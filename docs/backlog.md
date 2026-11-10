@@ -1421,7 +1421,8 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Contrast pass** (bundle of 1, size S). [Detail](backlog/dashboard.md#bundle-contrast-pass)
 
 
-- **A1315. Help bubbles: missing guide destinations.** Some help still has no guide section to link.
+- **A1315. Help bubbles: missing guide destinations.** Equipment, department transfers, Fix my hours
+  and zone Reset still have no guide sections.
   The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients).
   [Detail](backlog/dashboard.md#a1315-bring-every-help-bubble-down-to-orientation-one-area-per-pr)
 

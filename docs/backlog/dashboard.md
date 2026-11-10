@@ -912,5 +912,5 @@ The remaining help work is in English and Spanish. The rule is in
 describes first, move each dropped fact into its linked guide section, and list every changed text
 before and after.
 
-- **No guide section to link yet:** the guide has no section on a device's profile, equipment,
-  department transfers or Fix my hours, nor on a zone's Reset.
+- **No guide section to link yet:** the guide has no section on equipment, department
+  transfers or Fix my hours, nor on a zone's Reset.
