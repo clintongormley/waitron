@@ -2,7 +2,7 @@
 
 **Outcome.** Clean the complete remaining sample-name area in the main printer-screen test file. Its accessibility and save-state siblings are outside this slice. Use the approved device-sample method; add no tests, helpers, scripts or production code.
 
-**Authority.** The owner’s 2026-11-10 campaign prompt says “advance one eligible item” and “The owner authorises finish-branch and land-branch”; Lane J `RUNNER.md:15–16` records that standing authority, `:20` requires scope approval and `:46–49` requires separate planning. This printer scope is NOT yet approved. A1018 #2669 remains owner-only, A1342 held; neither creates a wait for this slice. This writer runs no tests, commits, reviews, push or PR.
+**Authority.** The owner’s 2026-11-10 campaign prompt says “advance one eligible item” and “The owner authorises finish-branch and land-branch”; Lane J `RUNNER.md:15–16` records that standing authority, `:20` requires scope approval and `:46–49` requires separate planning. This printer scope was not approved when written; see the dated approval below. A1018 #2669 remains owner-only, A1342 held; neither creates a wait for this slice. This writer runs no tests, commits, reviews, push or PR.
 
 **Exact repository paths, only:**
 
@@ -28,7 +28,7 @@
 5. Update only the named backlog entries. List each changed check's original line and before/after value in the PR's Changed test checks section and lane progress FYI, per RUNNER §0(6). Keep the existing method's evidence outside the repository.
 6. Run normal `finish-branch`: one Claude run-it whole-branch review after initial rebase, in an installed disposable checkout, then the normal push hook and selected required CI jobs on the exact head. Sign off every commit. Re-read Lane J queue/questions before finish and land; use `land-branch` under RUNNER H11's shared lock, including install/cleanup, and record the merge's own CI. No review is invoked by this writer.
 
-**Backlog wording, during build.** In `docs/backlog/architecture.md`, delete the two-line sentence beginning “The printers-screen accessibility and save-state suites use English samples, but” and ending “Spanish printer, agent and profile sample names.” only after the whole mapped area qualifies; remove “printer” from the next “Order, printer and API” sentence too. If the scope shrinks, retain its remaining names. In `docs/backlog.md`, retain open A1241 and add: “Catalogue, device and menu sample names remain.” Add no history or completion counts.
+**Backlog wording, during build.** In `docs/backlog/architecture.md`, delete the two-line sentence beginning “The printers-screen accessibility and save-state suites use English samples, but” and ending “Spanish printer, agent and profile sample names.” only after the whole mapped area qualifies; remove “printer” from the next “Order, printer and API” sentence too. If the scope shrinks, retain its remaining names. In `docs/backlog.md`, retain open A1241 and add: “Catalogue, device, menu and other dashboard sample names remain.” Add no history or completion counts.
 
 **Size estimates (added/removed separately).** Production +0/−0; tests +150/−141 (141 mapped source lines plus added-line formatter allowance); test support +0/−0; docs +50/−3; generated +0/−0. Total 344 changed lines. Stop above 516 (1.5×), before an unlisted path or any assertion-meaning change, and request watcher deviation approval. Three active hours from build to open PR, excluding recorded external waits; at the limit checkpoint and request OVER BUDGET.
 

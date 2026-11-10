@@ -2373,7 +2373,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
 
 - **A1241. Finish the remaining dashboard test sample names, one small slice per PR.**
-  Catalogue, device and menu sample names remain.
+  Catalogue, device, menu and other dashboard sample names remain.
   Keep Spanish-language checks, recorded receipt snapshots and the unit-screen accent-search
   fixture `Gin & Tónic`.
   [Detail](backlog/architecture.md#a1241-continue-the-dashboard-test-sample-name-cleanup-one-small-slice-per-pr)
