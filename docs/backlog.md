@@ -2387,10 +2387,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Loose ends left by A394-3 (#1447).**
   [Detail](backlog/architecture.md#loose-ends-left-by-a394-3-1447).
 
-- **A394-5, A394-8 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule** —
+- **A394-5, A394-9 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule** —
   OPEN, low priority, not queued — owner 2026-10-08: take them from here when a lane has room. (A394-1 to A394-4 landed as #1441, #1444, #1447 and #1455.) The follow-ups and the rows:
   `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
-  [Detail](backlog/architecture.md#a394-5-a394-8-to-a394-17-and-a394-20-to-a394-22--refusal-statuses-by-one-rule)
+  [Detail](backlog/architecture.md#a394-5-a394-9-to-a394-17-and-a394-20-to-a394-22--refusal-statuses-by-one-rule)
 
 - **Every read route now takes the venue's exclusive write lock and issues a DELETE** — OPEN.
   **Next action:** decide whether a read-only body should take the lock at all.

@@ -1,13 +1,6 @@
 import "@waitron/shared";
 import type { BusinessDayClockConflict } from "@waitron/module";
 
-/** Something that still names a menu of a department's list, so the menu cannot leave it. */
-export type MenuUse =
-  | { kind: "department_all_day" }
-  | { kind: "period"; periodId: string }
-  | { kind: "zone_all_day"; zoneId: string }
-  | { kind: "zone_period"; zoneId: string; periodId: string };
-
 declare module "@waitron/shared" {
   interface ErrorParams {
     "device.not_found": { deviceId: string };
@@ -73,10 +66,6 @@ declare module "@waitron/shared" {
       row?: "category" | "product" | "no_category" | "all";
       name?: string;
     };
-    /** A default names a menu the department's list does not hold. */
-    "department_menu.not_found": { departmentId: string; menuId: string };
-    /** Removing a menu from a department's list that `uses` still name, every one of them. */
-    "department_menu.in_use": { departmentId: string; menuId: string; uses: MenuUse[] };
     "zone_extension.invalid": { field: "until"; reason: "step" | "not_later" | "clock_skips" };
     "zone_extension.not_allowed": { zoneId: string; reason: "not_closing" | "department_closed" };
     "menu_period.not_found": { periodId: string };

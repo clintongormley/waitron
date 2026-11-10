@@ -581,4 +581,38 @@ describe("the special-day routes", () => {
       params: { field: "dates.0.date" },
     });
   });
+
+  it("answers 400 for a department or zone the body paints that the venue does not hold, on POST and PUT, writing nothing", async () => {
+    const r = await routed();
+    const day = await seeded(r);
+    const before = await stored(day.id);
+    const unknown = randomUUID();
+    const departmentPaint = { ...christmas(r).paint[0]!, departmentId: unknown };
+    const zonePaint = { ...christmas(r).zonePaint[0]!, zoneId: unknown };
+    for (const [method, path] of [
+      ["POST", ""],
+      ["PUT", `/${day.id}`],
+    ] as const) {
+      const department = await r.send(method, path, r.manager, {
+        ...christmas(r),
+        paint: [departmentPaint],
+        expectedClockRevision: 0,
+      });
+      expect(department.status, method).toBe(400);
+      expect(await department.json()).toEqual({
+        error: { code: "department.not_found", params: { departmentId: unknown } },
+      });
+      const zone = await r.send(method, path, r.manager, {
+        ...christmas(r),
+        zonePaint: [zonePaint],
+        expectedClockRevision: 0,
+      });
+      expect(zone.status, method).toBe(400);
+      expect(await zone.json()).toEqual({
+        error: { code: "service_zone.not_found", params: { zoneId: unknown } },
+      });
+    }
+    expect(await countDays()).toBe(1);
+    expect(await stored(day.id)).toEqual(before);
+  });
 });

@@ -110,8 +110,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "department.transfer_pending": 409,
   "department.profile_in_use": 409,
   "service_zone.not_found": 404,
-  "department_menu.not_found": 404,
-  "department_menu.in_use": 409,
   "zone_extension.invalid": 400,
   "zone_extension.not_allowed": 409,
   "menu_period.not_found": 404,
@@ -120,8 +118,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_period.invalid": 400,
   "zone.name_taken": 409,
   "catalogue.not_found": 404,
-  "route.subject_not_found": 404,
-  "route.station_inactive": 409,
+  "route.subject_not_found": 400,
+  "route.station_inactive": 400,
   "route.period_invalid": 409,
   "station.not_found": 404,
   "station.destination_invalid": 400,
@@ -133,7 +131,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "season.not_found": 404,
   "season.invalid": 400,
   "zone_closed_time.invalid": 400,
-  "station.always_open": 409,
   "holiday.invalid": 400,
   "special_day.invalid": 400,
   "special_day.not_found": 404,
@@ -144,6 +141,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "floor_plan_set.not_found": 404,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
+/** For a route where these codes can only name an id the request body sent, never its path. */
+const runBodyIds = (...codes: string[]) =>
+  createErrorBoundary(
+    { ...STATUS, ...Object.fromEntries(codes.map((code) => [code, 400] as const)) },
+    "venue_service.failed",
+  );
+const runBodyZone = runBodyIds("service_zone.not_found");
+const runBodyDepartment = runBodyIds("department.not_found");
+const runBodyPaint = runBodyIds("department.not_found", "service_zone.not_found");
+const runBodyMenus = runBodyIds("catalogue.not_found");
 const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
 const COLLECTION_NUMBER = new Set(["none", "numbered"]);
 const RECEIPT_PRINT_MODE = new Set(["auto", "on_request"]);
@@ -643,7 +650,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     );
 
     app.post("/management-api/venue-service/special-days", (c) =>
-      run(c, log, async () => {
+      runBodyPaint(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<Record<string, unknown>>(c);
         const saved = await gated(sessionId, (tx) => {
@@ -663,7 +670,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     );
 
     app.put("/management-api/venue-service/special-days/:id", (c) =>
-      run(c, log, async () => {
+      runBodyPaint(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = requireUuidParam(c.req.param("id"), "SpecialDayId");
         const body = await readJsonBody<Record<string, unknown>>(c);
@@ -709,7 +716,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     );
 
     app.post("/management-api/venue-service/routing/preview", (c) =>
-      run(c, log, async () => {
+      runBodyZone(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const change = requirePreviewChange(await readJsonBody<Record<string, unknown>>(c));
         return c.json(await gated(sessionId, (tx) => previewRoutingChange(tx, change)));
@@ -717,7 +724,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     );
 
     app.put("/management-api/venue-service/routing/cell", (c) =>
-      run(c, log, async () => {
+      runBodyZone(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<Record<string, unknown>>(c);
         onlyKeys(body, ["address", "target", "periods"]);
@@ -973,7 +980,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     );
 
     app.post("/management-api/venue-service/zones", (c) =>
-      run(c, log, async () => {
+      runBodyDepartment(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<Record<string, unknown>>(c);
         if (Array.isArray(body))
@@ -993,7 +1000,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     );
 
     app.put("/management-api/venue-service/zones/:zoneId", (c) =>
-      run(c, log, async () => {
+      runBodyDepartment(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
         const body = await readJsonBody<Record<string, unknown>>(c);
@@ -1088,7 +1095,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     );
 
     app.post("/management-api/venue-service/departments/:departmentId/menu-periods", (c) =>
-      run(c, log, async () => {
+      runBodyMenus(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
@@ -1193,7 +1200,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     );
 
     app.put("/management-api/venue-service/seasons/:seasonId/weeks", (c) =>
-      run(c, log, async () => {
+      runBodyPaint(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const seasonId = requireUuidParam(c.req.param("seasonId"), "SeasonId");
         const body = await readJsonBody<Record<string, unknown>>(c);

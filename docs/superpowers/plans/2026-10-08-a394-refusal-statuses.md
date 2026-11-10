@@ -145,6 +145,10 @@ Codes that already answer more than one status today, on different boundaries:
 `packages/bookings/src/routes.ts:49`), `zone.department_inactive` (400 on the configuration import
 since A393, 409 at `packages/venue-service/src/routes.ts:109` and `management-api.ts:295`),
 `service_zone.not_found` (400 on the import, 404 on the till and venue-service).
+**2026-11-10 (A394-8):** venue-service now answers `service_zone.not_found` 400 for a zone the body
+names and 404 for a zone in the path, and `route.subject_not_found` and `route.station_inactive`
+400; the till answers those two 404 and 409 (`apps/server/src/till-api.ts:572-573`).
+`zone.department_inactive` is raised nowhere now.
 
 ## Client contract: clients branch on the code, not the status
 
@@ -424,6 +428,19 @@ Status changes:
   Tests to change: `routes.test.ts:409,843,1907,1913,1915,1920,1926,1933,1941,2056,2313`,
   `menu-timetable-routes.test.ts:335` (and `:381`, `hours-routes.test.ts:830,841` with question 9).
   Size M. Depends on: nothing (question 9 for its two optional rows).
+  **2026-11-10 (A394-8):** done — re-traced on main: an unknown or switched-off department, zone,
+  menu, routing subject or station that a request body names now answers 400 on the routing grid's
+  preview and save, zone create and move, special days, season weeks and period create; path ids
+  keep 404. Left: `PATCH /menu-periods/:periodId` keeps 404 for `catalogue.not_found`, because a
+  body that omits the menu makes it check the period's stored menus. The explain, fallback and
+  department-menu routes no longer exist, and `department_menu.not_found` and
+  `department_menu.in_use`, raised nowhere, are deleted. `route.station_inactive` moved without
+  question 9: both queries that raise it refuse an unknown and a switched-off station alike
+  (`routing-store.ts:158-162,219-230`), and the rule makes both 400 ("missing or unusable"). Question 9's
+  other rows are not on this boundary: `zone.department_inactive` is raised nowhere, and
+  `station.always_open` only by closing a station for today, which answers through the till's
+  table, so its unused row here is deleted. The A374 bullet named above no longer exists. The
+  client grep above, re-run on 2026-11-10, finds no status comparison on these routes.
 - **A394-9 — Till, tables, zones and readers: body and query ids answer 400.** Files:
   `apps/server/src/till-api.ts` (`STATUS` `:370-551`, a second boundary for
   `GET /api/service-zones/:zoneId/offers` and for `POST /api/tables/:id/seat`),
@@ -847,6 +864,12 @@ department is retired (`operations.ts:434-435`; pinned by `routes.test.ts:381`).
 **Looks wrong.** `time_zone.unreadable` 409 (`:123`, raised at `station-times.ts:75`) is a broken
 venue setting, not a clash. `zone.table_in_use` 409 is in the table, but I could not establish
 that any route raises it (`deactivateServiceZone`, `operations.ts:294`, is not imported by routes.ts).
+
+**2026-11-10 (A394-8):** the body-id rows above now answer 400, except PATCH
+`/menu-periods/:periodId`, which keeps 404 for `catalogue.not_found`. `department_menu.not_found`
+is deleted, and the explain, fallback and department-menu routes are gone. The Borderline rows no
+longer apply: `zone.department_inactive` is raised nowhere, and `station.always_open` only by the
+till's close-for-today route.
 
 ---
 

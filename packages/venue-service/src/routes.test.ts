@@ -1351,7 +1351,7 @@ describe("venue service management routes", () => {
         fx.managerCookie,
         { departmentId: department.id },
       );
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(active ? 400 : 404);
       expect(await response.json()).toMatchObject({
         error: active
           ? { code: "department.not_found", params: { departmentId: department.id } }
@@ -1381,7 +1381,7 @@ describe("venue service management routes", () => {
       fx.managerCookie,
       { name: "Orphan garden", departmentId: crypto.randomUUID() },
     );
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: { code: "department.not_found" } });
     expect(await db.select().from(floorZones).where(eq(floorZones.name, "Orphan garden"))).toEqual(
       [],
@@ -2619,19 +2619,19 @@ describe("routing cell route", () => {
       [
         { row: { kind: "category", categoryId: crypto.randomUUID() }, zoneId: null },
         noPrep,
-        404,
+        400,
         { code: "route.subject_not_found", params: { subject: "category" } },
       ],
       [
         { row: { kind: "product", productId: crypto.randomUUID() }, zoneId: null },
         noPrep,
-        404,
+        400,
         { code: "route.subject_not_found", params: { subject: "product" } },
       ],
       [
         categoryCell(fx.categoryId),
         { kind: "station", stationId: offStation!.id },
-        409,
+        400,
         { code: "route.station_inactive" },
       ],
     ] as const) {
@@ -2647,7 +2647,7 @@ describe("routing cell route", () => {
       address: categoryCell(fx.categoryId, fx.zoneId),
       target: noPrep,
     });
-    expect(inactiveZone.status).toBe(404);
+    expect(inactiveZone.status).toBe(400);
     expect(await inactiveZone.json()).toMatchObject({ error: { code: "service_zone.not_found" } });
     expect(await cellsOf(fx)).toEqual([]);
   });
@@ -2679,6 +2679,46 @@ describe("routing cell route", () => {
       expect(await response.json()).toEqual({
         error: { code: "management.request_invalid", params: { field: "address" } },
       });
+    }
+  });
+
+  it("answers 400 for a preview naming a zone, subject or station the venue does not hold or has switched off", async () => {
+    const fx = await fixture();
+    await servedZone(fx);
+    const unknown = crypto.randomUUID();
+    const [offStation] = await db
+      .insert(kitchenStations)
+      .values({ locationId: fx.locationId, name: "Off", active: false })
+      .returning({ id: kitchenStations.id });
+    for (const [address, target, error] of [
+      [
+        { row: { kind: "category", categoryId: fx.categoryId }, zoneId: unknown },
+        noPrep,
+        { code: "service_zone.not_found", params: { zoneId: unknown } },
+      ],
+      [
+        { row: { kind: "category", categoryId: unknown }, zoneId: null },
+        noPrep,
+        { code: "route.subject_not_found", params: { subject: "category", id: unknown } },
+      ],
+      [
+        { row: { kind: "product", productId: unknown }, zoneId: null },
+        noPrep,
+        { code: "route.subject_not_found", params: { subject: "product", id: unknown } },
+      ],
+      [
+        categoryCell(fx.categoryId),
+        { kind: "station", stationId: offStation!.id },
+        { code: "route.station_inactive", params: { stationId: offStation!.id } },
+      ],
+    ] as const) {
+      const response = await send(fx.app, "POST", `${base}/preview`, fx.managerCookie, {
+        kind: "cell",
+        address,
+        target,
+      });
+      expect(response.status, JSON.stringify(error)).toBe(400);
+      expect(await response.json()).toEqual({ error });
     }
   });
 
@@ -2739,7 +2779,7 @@ describe("routing cell route", () => {
       .set({ active: false })
       .where(eq(kitchenStations.id, upstairs!.id));
     const write = await send(fx.app, "PUT", `${base}/cell`, fx.managerCookie, change);
-    expect(write.status).toBe(409);
+    expect(write.status).toBe(400);
     expect(await write.json()).toMatchObject({
       error: { code: "route.station_inactive", params: { stationId: upstairs!.id } },
     });
@@ -3020,7 +3060,7 @@ describe("a routing cell's period choices on the routes", () => {
     ]);
   });
 
-  it("answers a refused line with its status: 409 route.period_invalid, 404 for an unknown period", async () => {
+  it("answers a refused line with its status: 409 route.period_invalid, 400 for an unknown period", async () => {
     const fx = await lunchFixture();
     const unknown = crypto.randomUUID();
     for (const [periods, status, error] of [
@@ -3034,7 +3074,7 @@ describe("a routing cell's period choices on the routes", () => {
       ],
       [
         [{ periodId: unknown, target: at(fx.downstairs) }],
-        404,
+        400,
         { code: "route.subject_not_found", params: { subject: "period", id: unknown } },
       ],
     ] as const) {

@@ -56,7 +56,6 @@ const REVIEWED_TYPES: ReadonlyMap<string, string> = new Map([
     "inherits idEmisorFactura, on the list, from FacturaParams (packages/fiscal-verifactu/src/errors.ts:15); adds AEAT's reply codes and message",
   ],
   ["MemberRef", "a menu section member: a kind and a product or section id"],
-  ["MenuUse", "where a menu is used: a kind and zone and period ids"],
   ["Operacion", "an enum of AEAT operations: Alta or Anulacion"],
   ["OrphanRemediation", "an enum of what a reconcile sweep did with an orphaned payment"],
   ["OvertakenEdition", "a menu edition: a version id, a number and an instant"],
