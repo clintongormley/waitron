@@ -29,5 +29,4 @@ describe("LocaleChangeController", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain(t("action.logout", "es-ES"));
   });
-
 });
