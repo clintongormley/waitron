@@ -1450,14 +1450,14 @@ describe("the Edit dialog", () => {
             { value: "", label: useDefaultNone() },
             { value: "pr1", label: "Kitchen" },
             { value: "pr2", label: "Terrace" },
-            { value: "pr4", label: receiptLabel },
+            { value: "pr4", label: receiptLabel, fixed: true },
           ]);
           const slip = field(el, "edit-slip-printer");
           expect(slip.value).toBe("pr3");
           expect(slip.options).toEqual([
             { value: "", label: useDefaultNone() },
             { value: "pr2", label: "Terrace" },
-            { value: "pr3", label: slipLabel },
+            { value: "pr3", label: slipLabel, fixed: true },
           ]);
           for (const [id, label] of [
             ["edit-receipt-printer", receiptLabel],
@@ -6069,7 +6069,7 @@ describe("a device's kitchen screens", () => {
         expect(choice.label).toBe(t("device_profiles.show_other_stations"));
         expect(choice.name).toBe("showNonPassStations");
         expect(choice.options).toEqual([
-          { value: "profile", label: t("devices.use_profile_setting") },
+          { value: "profile", label: t("devices.use_profile_setting"), fixed: true },
           { value: "show", label: t("devices.other_stations_show") },
           { value: "hide", label: t("devices.other_stations_hide") },
         ]);

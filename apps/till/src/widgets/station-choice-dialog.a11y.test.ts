@@ -91,7 +91,10 @@ describe.each(["light", "dark"] as const)("station choice dialog a11y (%s)", (th
       const select = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="station"]')!;
       select.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
       await select.updateComplete;
-      select.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')[2]!.click();
+      const label = select.options.find(({ value }) => value === "bar")!.label;
+      [...select.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')]
+        .find((row) => row.textContent!.trim() === label)!
+        .click();
       await el.updateComplete;
     }
     const submit = submitButton(el);

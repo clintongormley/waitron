@@ -68,10 +68,12 @@ async function choose(form: TillStationChoiceDialog, value: string | null) {
   const f = field(form);
   f.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
   await f.updateComplete;
-  const index = f.options.findIndex((o) =>
+  const option = f.options.find((o) =>
     value === null ? o.value !== "grill" && o.value !== "bar" : o.value === value,
   );
-  f.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")[index]!.click();
+  [...f.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")]
+    .find((row) => row.textContent!.trim() === option!.label)!
+    .click();
   await form.updateComplete;
 }
 function cancel(form: TillStationChoiceDialog) {

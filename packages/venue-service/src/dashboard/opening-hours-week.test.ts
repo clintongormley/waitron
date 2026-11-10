@@ -1270,10 +1270,10 @@ describe("Opening hours week, a station shown", () => {
     }
   });
 
-  it("with no stations Show is as before", async () => {
+  it("with no stations Show lists all departments without groups", async () => {
     const el = await mount({ departmentId: "bar" });
     expect(show(el).options).toEqual([
-      { value: "all", label: "All departments" },
+      { value: "all", fixed: true, label: "All departments" },
       { value: "rest", label: "Restaurant" },
       { value: "bar", label: "Bar" },
     ]);

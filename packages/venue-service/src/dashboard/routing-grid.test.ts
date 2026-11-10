@@ -2437,6 +2437,9 @@ describe("one period", () => {
     expect(status(el)).toBe("1 match");
     expect(periodField(el)!.options).toBe(options);
     setLocale("es");
+    await el.updateComplete;
+    await root(el).querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="search"]')!
+      .updateComplete;
     await userEvent.fill(searchInput(el), "margh");
     await el.updateComplete;
     expect(periodField(el)!.options[0]).toEqual({ value: "", label: "Todos los periodos" });

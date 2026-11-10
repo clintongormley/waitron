@@ -59,9 +59,10 @@ describe.each(["light", "dark"] as const)("full invoice recipient a11y (%s theme
         const medium = withEmail ? "email" : "a4";
         delivery.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
         await delivery.updateComplete;
-        delivery
-          .shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")
-          [delivery.options.findIndex((option) => option.value === medium)]!.click();
+        const label = delivery.options.find((option) => option.value === medium)!.label;
+        [...delivery.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")]
+          .find((row) => row.textContent!.trim() === label)!
+          .click();
         await el.updateComplete;
         expect(delivery.value).toBe(medium);
       }

@@ -184,8 +184,10 @@ async function chooseDelivery(el: TillInvoiceRecipientDialog, value: string) {
   const field = deliveryField(el)!;
   field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
   await field.updateComplete;
-  const index = field.options.findIndex((option) => option.value === value);
-  field.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")[index]!.click();
+  const label = field.options.find((option) => option.value === value)!.label;
+  [...field.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")]
+    .find((option) => option.textContent!.trim() === label)!
+    .click();
   await el.updateComplete;
 }
 
