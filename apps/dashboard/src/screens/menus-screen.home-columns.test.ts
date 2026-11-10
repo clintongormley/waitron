@@ -30,7 +30,7 @@ it.each(["en", "es-ES"])(
         rootSectionId: "root",
         root: {
           id: "root",
-          internalName: "Carta",
+          internalName: "Menu",
           names: {},
           image: null,
           color: null,
@@ -55,7 +55,7 @@ it.each(["en", "es-ES"])(
         },
       );
       const api = {
-        listCatalogues: async () => [{ id: "menu", name: "Carta", active: true, version: 1 }],
+        listCatalogues: async () => [{ id: "menu", name: "Menu", active: true, version: 1 }],
         listLibraryProducts: async () => [],
         listCategories: async () => [],
         getCatalogueSettings: async () => ({

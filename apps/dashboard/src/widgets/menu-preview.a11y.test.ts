@@ -85,7 +85,7 @@ const states: Record<string, Partial<MenuPreviewPanel>> = {
     preview: changes,
     includedBy: [
       { id: "lunch", name: "Lunch" },
-      { id: "terrace", name: "Terraza" },
+      { id: "terrace", name: "Terrace" },
     ],
   },
   unpublished: { status: { state: "unpublished", clashes: 0 }, preview: changes },

@@ -32,9 +32,9 @@ const sections: SectionDetails[] = [
 }));
 
 const categories: CategorySummary[] = [
-  { id: "c-drinks", name: "Bebidas", parentId: null, color: null },
-  { id: "c-beer", name: "Cerveza", parentId: "c-drinks", color: null },
-  { id: "c-mains", name: "Principales", parentId: null, color: null },
+  { id: "c-drinks", name: "Beverages", parentId: null, color: null },
+  { id: "c-beer", name: "Brews", parentId: "c-drinks", color: null },
+  { id: "c-mains", name: "Main courses", parentId: null, color: null },
 ];
 
 /** The staff, customer and kitchen names differ, so a surface reading the wrong one fails. */
@@ -43,7 +43,7 @@ function variant(id: string, name: string, unitPrice: string | null) {
     id,
     name,
     customerName: { es: `${name} para clientes` },
-    kitchenName: `${name.toUpperCase()} COCINA`,
+    kitchenName: `${name.toUpperCase()} KITCHEN`,
     image: null,
     unitPrice,
     available: true,
@@ -395,7 +395,7 @@ it("lists each product once with its price override, and where it appears by the
   ]);
   const placements = [...row(el, "mi-lemonade")!.querySelectorAll("[part~=placement]")].map(text);
   expect(placements).toEqual(["Favourites", "Drinks"]);
-  expect(column(el, "category")).toEqual(["", "", "Cerveza"]);
+  expect(column(el, "category")).toEqual(["", "", "Brews"]);
   const keys = ["mi-burger", "mi-lemonade", "mi-lager"];
   expect(keys.map((key) => override(el, key).value)).toEqual(["", "2.50", ""]);
   // Lemonade left blank would charge its variants' prices: 3.00 for the small, following the
@@ -446,11 +446,11 @@ it("finds a product by its name", async () => {
 });
 
 it.each([
-  "Cerveza",
-  "Bebidas / Cerveza",
-  "Bebidas › Cerveza",
-  "Bebidas > Cerveza",
-  "Cerveza Bebidas",
+  "Brews",
+  "Beverages / Brews",
+  "Beverages › Brews",
+  "Beverages > Brews",
+  "Brews Beverages",
 ])("does not find a product by its main category, typed as %s", async (term) => {
   const el = await mount();
   await search(el, "lager");
@@ -533,7 +533,7 @@ it("a category filter long enough to search shows its search box and empty list 
   setLocale("es-ES");
   const many = Array.from({ length: 8 }, (_, index) => ({
     id: `c-${index}`,
-    name: `Categoría ${index}`,
+    name: `Category ${index}`,
     parentId: null,
     color: null,
   }));
@@ -555,9 +555,9 @@ it("filters by a reporting category, including the categories inside it", async 
   const el = await mount();
   expect(options(el, "category")).toEqual([
     t("menu_prices.all_categories"),
-    "Bebidas",
-    "Bebidas › Cerveza",
-    "Principales",
+    "Beverages",
+    "Beverages › Brews",
+    "Main courses",
   ]);
   await choose(el, "category", ["c-drinks"]);
   expect(shown(el)).toEqual(["mi-lemonade", "mi-lager"]);
@@ -2589,9 +2589,9 @@ it.each(["en-GB", "es-ES"])(
     try {
       await page.viewport(390, 800);
       await vi.waitFor(() => expect(window.innerWidth).toBe(390));
-      const long = "Cerveza artesana de trigo sin filtrar";
-      const longVariant = "Media pinta de limonada natural";
-      const menuName = "Carta de bebidas de la terraza de verano";
+      const long = "Unfiltered craft wheat beer from cask";
+      const longVariant = "Refreshing half pint of lemonade";
+      const menuName = "The terrace drinks menu for a summer day";
       const price = clashPriceIn(menuName);
       const el = await mount({
         rows: [clashRow({ ...lager, name: long }, price), variantClashRow(price)],
