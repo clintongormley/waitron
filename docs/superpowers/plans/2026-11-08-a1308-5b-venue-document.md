@@ -120,6 +120,8 @@ differs on `main` is a stop (rules §5.1).
    `"locations"` gains `"settings.venue"` beside it — `"locations"` stays until 5d, which still writes
    the clock there.
 
+> Watcher, 2026-11-10 05:54: `readVenueClockAndPlace` joins settings and uses a small shared decoder extracted from `settings.ts`, preserving its one-SELECT assertion; this is the exception to every reader using `readVenueSettings`.
+
 ## What it leaves out
 
 | Left out | Taken by |

@@ -41,6 +41,13 @@ export async function readSettings<T extends object>(
   definition: SettingsDocument<T>,
 ): Promise<SettingsRead<T>> {
   const [row] = await db.select().from(settings).where(eq(settings.module, definition.module));
+  return decodeSettingsRow(row, definition);
+}
+
+export function decodeSettingsRow<T extends object>(
+  row: Pick<typeof settings.$inferSelect, "version" | "doc" | "revision"> | undefined,
+  definition: SettingsDocument<T>,
+): SettingsRead<T> {
   if (row === undefined) return { doc: definition.defaults(), revision: 0 };
   if (row.version !== definition.version)
     throw new AppError("settings.invalid", {

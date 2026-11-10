@@ -1,3 +1,4 @@
+import { VENUE_SETTINGS } from "@waitron/db";
 import { CARD_PROVIDERS } from "./card-providers.js";
 import { MEDIA_MODULE } from "@waitron/media";
 import { CREDENTIALS_BACKUP_VERIFICATION } from "./credentials-backup-verification.js";
@@ -159,6 +160,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     startAgainDeletable: ["activity_log"],
     changes: CORE_CHANGE_SOURCES,
     configurationTransfer: CORE_TRANSFER,
+    settings: [VENUE_SETTINGS],
     backup: { verification: CORE_BACKUP_VERIFICATION },
   },
   {

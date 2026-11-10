@@ -77,6 +77,9 @@ export { withoutId, removeIdFromJson } from "./json-id-lists.js";
 export type { Tenant } from "./read-tenant.js";
 export {
   readVenue,
+  readVenueSettings,
+  createVenueSettings,
+  saveVenueFields,
   readVenueClock,
   readVenueClockAndPlace,
   readVenueInvoiceLocales,
@@ -533,3 +536,6 @@ export type {
   ActivityEntry,
   ActivityReadOptions,
 } from "./activity-log.js";
+
+export { VENUE_SETTINGS } from "./venue-settings.js";
+export type { VenueSettings } from "./venue-settings.js";
