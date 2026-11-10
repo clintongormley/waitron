@@ -825,3 +825,16 @@ test("the label is inset --wt-space-2 from both edges of the box, spanning above
   expect(label.left - field.left).toBe(5);
   expect(field.right - label.right).toBe(5);
 });
+
+test("an intrinsic-width stepper gives a long error the available line width", async () => {
+  const el = await mount('<wt-number-stepper label="Quantity" value="0"></wt-number-stepper>');
+  host.style.width = "400px";
+  const stepper = el as HTMLElementTagNameMap["wt-number-stepper"];
+  stepper.error = "Choose a whole quantity between 1 and the quantity ordered";
+  await stepper.updateComplete;
+  const error = stepper.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+  const range = document.createRange();
+  range.selectNodeContents(error);
+  expect(new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size).toBe(1);
+  expect(error.scrollWidth).toBeLessThanOrEqual(error.clientWidth);
+});

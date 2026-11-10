@@ -209,6 +209,7 @@ test("settlement follows an interrupted animation and resolves on disconnect", a
   await el.updateComplete;
   await pauseHeightTransition(body);
   const removed = el.whenSettled();
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   el.remove();
   await removed;
 });
@@ -325,12 +326,14 @@ test("a validation error interrupts closing and exposes its fields immediately",
   await disclosure.updateComplete;
   const closing = await pauseHeightTransition(body);
   closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
+  const settled = disclosure.whenSettled();
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   disclosure.hasError = true;
   await disclosure.updateComplete;
   expect(header.getAttribute("aria-expanded")).toBe("true");
   expect(body.hidden).toBe(false);
   expect(body.inert).toBe(false);
-  await disclosure.whenSettled();
+  await settled;
   expect(body.classList.contains("animating")).toBe(false);
   expect(body.style.height).toBe("");
   expect(body.getBoundingClientRect().height).toBe(200);
@@ -384,9 +387,11 @@ test("switching on reduced motion during a close hides the body immediately", as
     const closing = await pauseHeightTransition(body);
     closing.currentTime = Number(closing.effect!.getTiming().duration) / 2;
     expect(body.hidden).toBe(false);
+    const settled = disclosure.whenSettled();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     await commands.emulateReducedMotion("reduce");
     await expect.poll(() => body.hidden, { timeout: 450, interval: 25 }).toBe(true);
-    await disclosure.whenSettled();
+    await settled;
     expect(body.classList.contains("animating")).toBe(false);
     expect(body.style.height).toBe("");
   } finally {

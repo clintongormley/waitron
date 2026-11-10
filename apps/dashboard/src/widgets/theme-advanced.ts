@@ -217,7 +217,6 @@ export class ThemeAdvanced extends LitElement {
       `wt-input[name="handSet.${mode}.${key}"]`,
     )!;
     field.focus();
-    field.scrollIntoView({ block: "nearest" });
   }
 
   /** Sends a picked colour still waiting for its animation frame. */

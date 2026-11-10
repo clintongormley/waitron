@@ -23,6 +23,10 @@ export class WtNumberStepper extends LitElement {
         max-width: var(--wt-field-max-width);
       }
 
+      .error {
+        contain: none;
+      }
+
       .control {
         position: relative;
         display: grid;

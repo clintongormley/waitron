@@ -794,7 +794,7 @@ the action's native button, so its disabled and loading states still refuse the 
 does nothing in this mode. A sole Remove or a mixed set of actions keeps the popup. When a row is renamed, update the
 disclosure’s `label` as well as the action’s `aria-label`.
 
-An opening `wt-disclosure` retargets as its assigned content grows until it settles. Its
+An opening `wt-disclosure` retargets when the elements assigned at its start grow until it settles. Its
 `whenSettled()` promise waits through retargeting and interrupted toggles; it also resolves when
 motion is reduced, an error exposes the body immediately, or the component is disconnected.
 
@@ -2645,8 +2645,9 @@ menu" in `apps/dashboard/src/screens/menus-screen.test.ts`; nothing checks a new
 
 ### Forms
 
-Field errors wrap within the control's existing width without widening it. Long words may break
-across lines so narrow controls keep the whole message inside their width.
+Field errors wrap within the control's existing width without widening it. An intrinsic-width
+number stepper may widen to fit its error; a stepper given an explicit width keeps that width.
+Long words may break across lines so narrow controls keep the whole message inside their width.
 
 `wt-button` has no `type` property. A `<button type="submit">` rendered inside a shadow root is
 **not form-associated** — clicking it produces zero native `submit` events, and the enclosing
@@ -4528,8 +4529,8 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   clipped away, so no line starts with it.
 - **Under Brand colour's lines, the dark version's own button colour** (A841 slice 6, D13): while
   dark Main buttons is not set by hand, a link "Pick a different colour for dark screens" opens
-  Advanced at its Buttons section, waits for the opening to settle, then focuses and scrolls the
-  whole code field into view, leaving the other sections as
+  Advanced at its Buttons section, waits for the opening to settle, then focuses the
+  code field, leaving the other sections as
   they were; once set, the link gives way to "Buttons on dark
   screens: {colour}, set by hand · Use the brand colour", drawn with the Undo line's markup, and Use
   the brand colour is Use worked-out colour on that value. Both are disabled while a save is under
