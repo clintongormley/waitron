@@ -33,3 +33,28 @@ Recompute confirmation from committed original ids and immutable fingerprints, i
 **Estimate, added/removed:** production +650/−30; test support +100/−0; tests +650/−0; docs +100/−40; generated zero: **1,570 changed lines**. This pre-correction estimate excludes the 55-line wiring/docs increment and optional 195-line sketch above; the revised full proposal is 1,820. Both exceed the approximately 1,250 outside-opinion threshold: await the owner’s allowance and batch/clash decisions or usable cut before build. Keep all eight owner-approved tables; dropping payments reverses the 20:11 choice. Open the usable PR within three active hours, excluding owner waits; otherwise stop with an over-budget report. No scaffolding-only finish.
 
 **Clearance recorded 2026-11-10.** The proposal and its pending wording above are retained as the reviewed historical text at `7ba43105ecc26d8899b982d3820f7e2638860ceb`. Lane J’s watcher note headed 2026-11-10 15:40 records the owner’s words, “Approve all three (Recommended)”, from `desk/done/20261110-0946-J-a1342-record-return.md`: one pull request, batches of at most 100, and the action that lets a person accept a clash. The watcher clears the 1,820-line full proposal, with an outside opinion before exceeding 2,730 lines, and keeps the already-cleared narrow correction policy. This records those three owner decisions and the watcher’s build clearance; it does not claim the owner separately approved every design detail. The owner lands the fiscal PR. The watcher’s later note headed 17:24 orders the current A1241 batch landed before this build; this checkout was prepared while A1241 CI ran, without implementation or tests.
+
+
+## PR1 cut cleared 2026-11-10 at 19:45
+
+The owner said “Split it into two PRs” (the watcher’s Lane J note at 19:30). Codex proposed the
+cut; Claude’s first read rejected the existing-case recovery promise. Two disposable probes
+reproduced both directions of the single-case coupling: a settled ordinary case cannot become a
+return-clash case, and an accepted return-clash case blocks correction after later AEAT rejection.
+The watcher cleared the smaller first cut at 19:45; Claude’s permitted correction read took
+229 seconds and judged it buildable with distinct clash wording and no repeated clash transfers.
+
+PR1 returns ordinary originals and late facts in signed bounded batches, keeps normal outbox
+filing and the API-only former-main correction, and confirms reset only after a complete signed
+receipt. A signed unaccounted batch stops the sender until restart and creates or resolves no
+transfer filing case. Generic return failures retain retry behavior. A clash can leave later
+originals unfiled; keep both boxes and their data. No clash recovery is claimed. The receiver
+compares row shapes; it does not negotiate versions or migrate returned data.
+
+Remove the transfer-case cause, evidence fingerprint and acceptance route from this first cut.
+Retain original-byte, payment rollback, dependency and orphan-sale assertions. The real signed
+return/outbox/correction test carries the two case-coexistence regressions. Sender tests separate
+signed clashes from refused or lost answers and observe that a stopped clash schedules no retry.
+The page, EN/ES guides, backlog and dated historical pointers describe this result. Estimate
+2,250–2,450 lines; the combined outside-opinion stop remains about 3,100. Both PRs are owner-landed.
+PR2’s exact acceptance and remaining refusals wait for the owner’s case-coexistence decision.

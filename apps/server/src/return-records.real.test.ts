@@ -7,7 +7,13 @@ import { steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { invoiceSeries, stampDeployment, withTransaction, writeNodeMembership } from "@waitron/db";
+import {
+  tenders,
+  invoiceSeries,
+  stampDeployment,
+  withTransaction,
+  writeNodeMembership,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode as bareNode } from "@waitron/db/testing/seed.js";
 import { ALL_MODULES } from "@waitron/composition";
@@ -137,8 +143,8 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
     () => {},
   );
 
-  expect(
-    await runReturnRecordsPass({
+  const send = () =>
+    runReturnRecordsPass({
       db: old.db,
       node: old.node,
       ring,
@@ -146,12 +152,34 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
       modules,
       stopped: () => false,
       fetch: async (url, init) => app.request(String(url), init),
-    }),
-  ).toBe("confirmed");
+    });
+  expect(await send()).toBe("confirmed");
   expect(current.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
     originals.records,
   );
   expect(wakes).toBe(1);
+  await old.db
+    .insert(tenders)
+    .values({
+      id: "late-payment",
+      saleId,
+      method: "cash",
+      amount: 200,
+      tipAmount: 0,
+      settledAt: now.toISOString(),
+    });
+  await current.db
+    .insert(tenders)
+    .values({
+      id: "late-payment",
+      saleId,
+      method: "cash",
+      amount: 300,
+      tipAmount: 0,
+      settledAt: now.toISOString(),
+    });
+  expect(await send()).toBe("clash");
+  expect(await withTransaction(current.db, listFilingCases)).toEqual([]);
   const aeat = createFakeAeat({ serverNow: now, tiempoEsperaInicial: 60 });
   aeat.reject(`${identity!.nif}|Source/1|20-07-2026`, 1161, "Wrong detail");
   const filed = await drain(
@@ -168,6 +196,9 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   expect(filed.recordsHalted).toBe(1);
 
   const [filingCase] = await withTransaction(current.db, listFilingCases);
+  expect(filingCase).toMatchObject({ cause: "fiscal.registro_rechazado", status: "open" });
+  expect(await send()).toBe("clash");
+  expect(await withTransaction(current.db, listFilingCases)).toEqual([filingCase]);
   registerModulePermissions(FISCAL_PERMISSIONS);
   const token = await withTransaction(current.db, async (tx) => {
     const [person] = await tx
@@ -206,6 +237,16 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   });
   expect(correction.status).toBe(200);
   const corrected = (await correction.json()) as { registroId: string };
+  const settled = await withTransaction(current.db, listFilingCases);
+  expect(settled).toEqual([
+    expect.objectContaining({
+      id: filingCase!.id,
+      cause: "fiscal.registro_rechazado",
+      status: "resolved",
+    }),
+  ]);
+  expect(await send()).toBe("clash");
+  expect(await withTransaction(current.db, listFilingCases)).toEqual(settled);
   expect(
     current.db.all<ReturnRow>(
       sql`select * from registros_facturacion where id = ${originals.records[0]!.id}`,

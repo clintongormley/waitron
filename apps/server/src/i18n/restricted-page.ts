@@ -99,7 +99,9 @@ export const RESTRICTED_RETURN_WORDS: Readonly<
     sending:
       "This box is returning its invoice records to the main box. Do not reset this box. Refresh this page to check again.",
     "needs-attention":
-      "The return needs attention on the main box. Keep this box's data. Do not reset this box. Refresh this page after the return has been resolved.",
+      "The return could not be confirmed. Keep this box running with its data intact while it retries. Do not reset this box. Refresh this page to check again.",
+    clash:
+      "The main box found differing invoice or payment facts. This return has stopped. Keep both boxes running with their data intact. Do not reset this box. Clash recovery is not available yet.",
     confirmed:
       "The main box has confirmed that every invoice record is accounted for. You can reset this box.",
   },
@@ -109,7 +111,9 @@ export const RESTRICTED_RETURN_WORDS: Readonly<
     sending:
       "Este equipo está devolviendo sus registros de facturación al equipo principal. No restablezcas este equipo. Actualiza esta página para comprobar el estado.",
     "needs-attention":
-      "La devolución necesita atención en el equipo principal. Conserva los datos de este equipo. No restablezcas este equipo. Actualiza esta página cuando se haya resuelto la devolución.",
+      "No se ha podido confirmar la devolución. Mantén este equipo encendido y conserva sus datos mientras vuelve a intentarlo. No restablezcas este equipo. Actualiza esta página para comprobar el estado.",
+    clash:
+      "El equipo principal ha encontrado diferencias en los datos de facturación o de pago. La devolución se ha detenido. Mantén ambos equipos encendidos y conserva sus datos. No restablezcas este equipo. La resolución de estas diferencias aún no está disponible.",
     confirmed:
       "El equipo principal ha confirmado que todos los registros se han recibido o sus conflictos se han revisado y aceptado. Ya puedes restablecer este equipo.",
   },

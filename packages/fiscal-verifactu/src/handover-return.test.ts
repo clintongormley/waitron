@@ -1,9 +1,3 @@
-import { Hono } from "hono";
-import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
-import { mountRecordRemedies } from "./record-remedy-routes.js";
-import { FISCAL_PERMISSIONS } from "./permissions.js";
-import { steadyClock } from "../test/write-path-fixtures.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,11 +15,11 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { saleId } from "@waitron/shared";
-import { seedNode as bareNode, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { archiveTo, openBackupQuery } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { acceptReturnClash, listFilingCases } from "./filing-cases.js";
+import { listFilingCases } from "./filing-cases.js";
 import { appendToChain } from "./chain.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
 import {
@@ -230,9 +224,7 @@ it("includes the cancellation fact alongside the original and its cancellation r
     ),
   ).toEqual({ complete: false });
   expect(receiver.db.all<ReturnRow>(sql`select * from sale_voids`)).toEqual(returned.voids);
-  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([
-    expect.objectContaining({ cause: "fiscal.return_clash" }),
-  ]);
+  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
 });
 
 it("includes the replacement-invoice fact with both commercial originals", async () => {
@@ -300,9 +292,7 @@ it("includes the replacement-invoice fact with both commercial originals", async
   expect(receiver.db.all<ReturnRow>(sql`select * from sale_substitutions`)).toEqual(
     returned.substitutions,
   );
-  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([
-    expect.objectContaining({ cause: "fiscal.return_clash" }),
-  ]);
+  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
 });
 
 it("includes a corrective sale's parent from another node and its payment facts", async () => {
@@ -625,7 +615,7 @@ it("clears a bill-payment link whose payment the receiver does not hold", async 
   ]);
 });
 
-it("rolls back both incoming payment facts on a named payment clash and opens a case", async () => {
+it("rolls back both incoming payment facts on a named payment clash without opening a fiscal case", async () => {
   const source = await original("Source", 1, copyBase);
   const now = new Date("2026-07-20T17:22:00.000Z");
   const first = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId));
@@ -680,13 +670,7 @@ it("rolls back both incoming payment facts on a named payment clash and opens a 
     { id: "receiver-tender" },
   ]);
   expect(receiver.db.all<ReturnRow>(sql`select * from sale_settlements`)).toEqual([]);
-  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([
-    expect.objectContaining({
-      registroId: source.recordId,
-      cause: "fiscal.return_clash",
-      status: "open",
-    }),
-  ]);
+  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
 });
 
 it("preflights a different-id record clash before importing its orphan sale", async () => {
@@ -715,81 +699,7 @@ it("preflights a different-id record clash before importing its orphan sale", as
   expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
     existing.records,
   );
-  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([
-    expect.objectContaining({ registroId: "receiver-original", cause: "fiscal.return_clash" }),
-  ]);
-  const [filingCase] = await withTransaction(receiver.db, listFilingCases);
-  const evidence = JSON.parse(filingCase!.evidence.mensaje!) as { fingerprint: string };
-  registerModulePermissions(FISCAL_PERMISSIONS);
-  const [person] = await receiver.db
-    .insert(persons)
-    .values({ displayName: "Administrator", role: "admin" })
-    .returning();
-  const token = (
-    await withTransaction(receiver.db, (tx) => startManagementSession(tx, { personId: person!.id }))
-  ).token;
-  const currentNode = await bareNode(receiver.db);
-  const acceptance = {
-    caseId: filingCase!.id,
-    sourceNodeId: source.nodeId,
-    fingerprint: evidence.fingerprint,
-    actionKey: "accept-exact-clash",
-    reason: "Keep the receiver original",
-    personId: person!.id,
-    now,
-  };
-  await expect(
-    withTransaction(receiver.db, (tx) =>
-      acceptReturnClash(tx, { ...acceptance, fingerprint: "0".repeat(64) }),
-    ),
-  ).rejects.toMatchObject({ code: "fiscal.remedy_request_invalid" });
-  const accepted = await withTransaction(receiver.db, (tx) => acceptReturnClash(tx, acceptance));
-  expect(await withTransaction(receiver.db, (tx) => acceptReturnClash(tx, acceptance))).toEqual(
-    accepted,
-  );
-  expect(
-    await withTransaction(receiver.db, (tx) =>
-      receiveReturnedOriginals(tx, source.nodeId, returned, now),
-    ),
-  ).toEqual({ complete: true });
-  const app = new Hono();
-  mountRecordRemedies(
-    app,
-    {
-      db: receiver.db,
-      recordGeneration: {
-        nodeId: currentNode,
-        environment: "production",
-        clock: steadyClock,
-        requireWritable: () => {},
-        returnSource: async () => source.nodeId,
-      },
-    },
-    () => {},
-  );
-  const request = {
-    method: "POST",
-    headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      fingerprint: evidence.fingerprint,
-      actionKey: acceptance.actionKey,
-      reason: acceptance.reason,
-    }),
-  };
-  const endpoint = `/management-api/fiscal-records/return-clashes/${filingCase!.id}/accept`;
-  expect((await app.request(endpoint, request)).status).toBe(200);
-  await receiver.db.update(persons).set({ role: "manager" }).where(eq(persons.id, person!.id));
-  expect((await app.request(endpoint, request)).status).toBe(403);
-  const changed = structuredClone(returned);
-  changed.records[0]!.offset_minutos = 60;
-  expect(
-    await withTransaction(receiver.db, (tx) =>
-      receiveReturnedOriginals(tx, source.nodeId, changed, now),
-    ),
-  ).toEqual({ complete: false });
-  expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
-    existing.records,
-  );
+  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
 });
 
 it("rolls back every imported fact when an original's hash does not verify", async () => {
@@ -833,9 +743,7 @@ it("withholds confirmation when a held id has different immutable bytes", async 
   expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
     returned.records,
   );
-  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([
-    expect.objectContaining({ registroId: source.recordId, cause: "fiscal.return_clash" }),
-  ]);
+  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
 });
 
 it.each([
@@ -927,9 +835,7 @@ it("withholds confirmation for changed commercial facts even when the record is 
     ),
   ).toEqual({ complete: false });
   expect(receiver.db.all<{ total: number }>(sql`select total from sales`)).toEqual([{ total: 0 }]);
-  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([
-    expect.objectContaining({ registroId: source.recordId, cause: "fiscal.return_clash" }),
-  ]);
+  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
 });
 
 it("batches real originals within the row and byte bounds without splitting payment facts", async () => {

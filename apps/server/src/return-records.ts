@@ -22,7 +22,7 @@ export interface ReturnRecordsDeps extends PeerStatusApiDeps {
   modules: readonly WaitronModule[];
   now?: () => Date;
 }
-export type ReturnState = "waiting" | "sending" | "needs-attention" | "confirmed";
+export type ReturnState = "waiting" | "sending" | "needs-attention" | "clash" | "confirmed";
 export const returnDigest = (value: CanonicalValue) => sha256Hex(canonicalize(value));
 
 export async function returnVenue(deps: Pick<ReturnRecordsDeps, "db">) {
@@ -94,9 +94,10 @@ export async function runReturnRecordsPass(
         receipt.sourceNodeId !== deps.nodeId ||
         receipt.destinationNodeId !== target.nodeId ||
         canonicalize(receipt.venue as CanonicalValue) !== canonicalize(venue) ||
-        receipt.accounted !== true
+        (receipt.accounted !== true && receipt.accounted !== false)
       )
         return "needs-attention";
+      if (receipt.accounted === false) return "clash";
       complete = receipt.complete === true;
     } catch {
       return "waiting";
@@ -122,7 +123,7 @@ export function startReturnRecordsDuty(
         state = "needs-attention";
         deps.log("warn", "return-records.failed", { errorCode: codeOf(error) });
       }
-      if (state === "confirmed") return;
+      if (state === "confirmed" || state === "clash") return;
       await realSleep(30_000, stopping.signal);
     }
   })();

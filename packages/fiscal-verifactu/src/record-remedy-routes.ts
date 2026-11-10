@@ -1,9 +1,6 @@
 import "./errors.js";
 import { sql } from "drizzle-orm";
 import type { Hono } from "hono";
-import { authorizeManager } from "@waitron/identity";
-import { acceptReturnClash } from "./filing-cases.js";
-import { FISCAL_REMEDY } from "./permissions.js";
 import { withTransaction } from "@waitron/db";
 import { requireFreshManagementSignIn } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
@@ -50,46 +47,6 @@ export function mountRecordRemedies(
   log: Logger,
   enabledRemedies: ReadonlySet<RemedyKind> = ENABLED_REMEDIES,
 ): void {
-  app.post("/management-api/fiscal-records/return-clashes/:caseId/accept", (c) =>
-    run(c, log, async () => {
-      const token = requireManagementSession(c);
-      const body = await readJsonBody<unknown>(c);
-      if (!body || typeof body !== "object" || Array.isArray(body))
-        throw new AppError("fiscal.remedy_request_invalid", {});
-      const raw = body as Record<string, unknown>;
-      if (
-        typeof raw.fingerprint !== "string" ||
-        typeof raw.actionKey !== "string" ||
-        typeof raw.reason !== "string" ||
-        Object.keys(raw).some((key) => !["fingerprint", "actionKey", "reason"].includes(key))
-      )
-        throw new AppError("fiscal.remedy_request_invalid", {});
-      const { fingerprint, actionKey, reason } = raw;
-      const event = await withTransaction(ctx.db, async (tx) => {
-        const { authorizedBy } = await authorizeManager(tx, {
-          managementSessionId: token,
-          permission: FISCAL_REMEDY,
-        });
-        const generation = ctx.recordGeneration;
-        generation?.requireWritable();
-        const source = await generation?.returnSource?.(tx);
-        if (!generation || !source)
-          throw new AppError("fiscal.remedy_disabled", { kind: "accept-return-clash" });
-        return acceptReturnClash(tx, {
-          caseId: c.req.param("caseId"),
-          sourceNodeId: source,
-          fingerprint,
-          actionKey,
-          reason,
-          personId: authorizedBy,
-          now: generation.clock.now().instant,
-        });
-      });
-      c.header("Cache-Control", "no-store");
-      return c.json(event, 200);
-    }),
-  );
-
   app.post("/management-api/fiscal-records/remedy", (c) =>
     run(c, log, async () => {
       c.header("Cache-Control", "no-store");

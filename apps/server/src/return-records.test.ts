@@ -1,5 +1,6 @@
+import * as loop from "./loop.js";
 import { Hono } from "hono";
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, stampDeployment, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -166,10 +167,10 @@ it("waits after a lost final confirmation and safely re-enumerates on the next p
   expect(received).toEqual(["first", "second", "first", "second"]);
 });
 
-it("withholds full confirmation when a committed batch needs attention", async () => {
+it("distinguishes a signed unaccounted batch from a request refusal", async () => {
   accounted = false;
   const app = destination();
-  expect(await send(async (url, init) => app.request(String(url), init))).toBe("needs-attention");
+  expect(await send(async (url, init) => app.request(String(url), init))).toBe("clash");
   expect(received).toEqual(["first"]);
 });
 
@@ -208,4 +209,28 @@ it("waits for the active exchange to end before shutdown and starts no later bat
   expect(events).toEqual(["exchange ended", "stopped"]);
   expect(received).toEqual(["first"]);
   expect(duty.state()).not.toBe("confirmed");
+});
+
+it("ends the duty after a signed clash without scheduling another receiver pass", async () => {
+  accounted = false;
+  const app = destination();
+  const pause = vi.spyOn(loop, "realSleep");
+  const duty = startReturnRecordsDuty({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules,
+    log: () => {},
+    fetch: async (url, init) => app.request(String(url), init),
+  });
+  try {
+    await vi.waitFor(() => expect(duty.state()).toBe("clash"));
+    await duty.stop();
+    expect(received).toEqual(["first"]);
+    expect(pause).not.toHaveBeenCalled();
+  } finally {
+    await duty.stop();
+    pause.mockRestore();
+  }
 });

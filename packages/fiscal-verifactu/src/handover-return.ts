@@ -113,24 +113,6 @@ export async function receiveReturnedOriginals(
     )
       throw new AppError("fiscal.return_invalid", { reason: "missing record metadata" });
   }
-  const resolutions = new Set<string>();
-  for (const event of tx.all<{ action: string }>(sql`select e.action from filing_case_events e
-    join filing_cases c on c.id = e.case_id where e.kind = 'resolved' and c.cause = 'fiscal.return_clash'`)) {
-    try {
-      const action = JSON.parse(event.action) as Record<string, unknown>;
-      if (
-        action.kind === "accept-return-clash" &&
-        action.sourceNodeId === sourceNodeId &&
-        typeof action.fingerprint === "string"
-      )
-        resolutions.add(action.fingerprint);
-    } catch (error) {
-      if (!(error instanceof SyntaxError)) throw error;
-    }
-  }
-  const accepted = (record: ReturnRow) =>
-    resolutions.has(returnFingerprint(returned, sourceNodeId, record));
-  const clashes: { heldId: string; incoming: ReturnRow; reason: string }[] = [];
   const allowed: ReturnRow[] = [];
   let blocked = false;
   for (const record of [...returned.records].sort(
@@ -149,9 +131,7 @@ export async function receiveReturnedOriginals(
         ? own
         : undefined
       : collision;
-    if (conflict && accepted(record)) continue;
     if (conflict) {
-      clashes.push({ heldId: String(conflict.id), incoming: record, reason: "original" });
       blocked = true;
     } else allowed.push(record);
   }
@@ -187,7 +167,7 @@ export async function receiveReturnedOriginals(
       created_at: now.toISOString(),
     });
   }
-  const paymentClashes: ReturnRow[] = [];
+  let missing = false;
   for (const sale of orderedSales(returned.sales.filter((row) => needed.has(row.id)))) {
     if (!held(tx, "sales", sale.id))
       await insertRow(tx, "sales", { ...sale, working_order_id: null });
@@ -214,7 +194,7 @@ export async function receiveReturnedOriginals(
         !triggerRaised(error, "tenders do not cover the sale")
       )
         throw error;
-      paymentClashes.push(sale);
+      missing = true;
     }
   }
   for (const record of allowed) {
@@ -266,12 +246,7 @@ export async function receiveReturnedOriginals(
           conflict = true;
         }
       }
-      if (conflict) {
-        const saleId = table === "sale_voids" ? row.sale_id : row.substitution_sale_id;
-        const [record] = tx.all<ReturnRow>(sql`select * from registros_facturacion
-          where sale_id = ${saleId} order by secuencia limit 1`);
-        if (record) clashes.push({ heldId: String(record.id), incoming: row, reason: table });
-      }
+      if (conflict) missing = true;
     }
   }
   const [last] = tx.all<ReturnRow>(sql`select * from registros_facturacion
@@ -285,13 +260,6 @@ export async function receiveReturnedOriginals(
   }
   if ((await checkFiscalChains(transactionQuery(tx))) !== "ok")
     throw new AppError("fiscal.return_invalid", { reason: "chain verification failed" });
-  for (const sale of paymentClashes) {
-    const [record] =
-      tx.all<ReturnRow>(sql`select * from registros_facturacion where sale_id = ${sale.id}
-      order by secuencia limit 1`);
-    if (record) clashes.push({ heldId: String(record.id), incoming: record, reason: "payment" });
-  }
-  let missing = false;
   for (const [table, rows] of [
     ["registros_facturacion", returned.records],
     ["sales", returned.sales],
@@ -301,58 +269,16 @@ export async function receiveReturnedOriginals(
     ["sale_substitutions", returned.substitutions],
   ] as const) {
     for (const row of rows) {
-      const sourceRecords =
-        table === "registros_facturacion"
-          ? [row]
-          : returned.records.filter(
-              (record) =>
-                record.sale_id ===
-                (table === "sales" ? row.id : (row.sale_id ?? row.substitution_sale_id)),
-            );
-      if (sourceRecords.some(accepted)) continue;
       const own = held(tx, table, row.id);
       if (!own) {
         missing = true;
         continue;
       }
       if (canonicalize(normalized(table, own)) === canonicalize(normalized(table, row))) continue;
-      const saleId = table === "sales" ? row.id : (row.sale_id ?? row.substitution_sale_id);
-      const [record] = tx.all<ReturnRow>(sql`select * from registros_facturacion
-        where sale_id = ${saleId} order by secuencia limit 1`);
-      if (record) clashes.push({ heldId: String(record.id), incoming: row, reason: table });
-      else missing = true;
+      missing = true;
     }
   }
-  let unresolved = false;
-  for (const clash of clashes) {
-    const original = clash.incoming.tipo_registro
-      ? clash.incoming
-      : returned.records.find(
-          (record) =>
-            record.sale_id ===
-            (clash.reason === "sales"
-              ? clash.incoming.id
-              : (clash.incoming.sale_id ?? clash.incoming.substitution_sale_id)),
-        );
-    if (original && accepted(original)) continue;
-    unresolved = true;
-    await openFilingCase(tx, {
-      registroId: clash.heldId,
-      cause: "fiscal.return_clash",
-      evidence: {
-        codigo: null,
-        csv: null,
-        mensaje: canonicalize({
-          sourceNodeId,
-          fingerprint: returnFingerprint(returned, sourceNodeId, original ?? clash.incoming),
-          originalId: (original ?? clash.incoming).id!,
-          reason: clash.reason,
-        }),
-      },
-      now,
-    });
-  }
-  return { complete: !blocked && !missing && !unresolved };
+  return { complete: !blocked && !missing };
 }
 
 function orderedSales(sales: ReturnRow[]): ReturnRow[] {
@@ -396,27 +322,6 @@ function normalized(table: string, row: ReturnRow): ReturnRow {
   if (table === "sales") return { ...row, working_order_id: null };
   if (table === "tenders") return { ...row, bill_payment_id: null };
   return row;
-}
-
-function returnFingerprint(returned: ReturnedOriginals, sourceNodeId: string, record: ReturnRow) {
-  const saleId = record.sale_id;
-  return createHash("sha256")
-    .update(
-      canonicalize({
-        sourceNodeId,
-        record,
-        sales: returned.sales
-          .filter((row) => row.id === saleId)
-          .map((row) => normalized("sales", row)),
-        tenders: returned.tenders
-          .filter((row) => row.sale_id === saleId)
-          .map((row) => normalized("tenders", row)),
-        settlements: returned.settlements.filter((row) => row.sale_id === saleId),
-        voids: returned.voids.filter((row) => row.sale_id === saleId),
-        substitutions: returned.substitutions.filter((row) => row.substitution_sale_id === saleId),
-      }),
-    )
-    .digest("hex");
 }
 
 export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOriginals[] {
