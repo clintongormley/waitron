@@ -14,6 +14,36 @@
 > joined-spare refusals in Tasks 5.6/5.9/5.10, with EN/ES wording where offered.
 > The historical plan below remains unchanged.
 
+> **2026-11-08, revised 2026-11-10: a spare's backup settings are planned (D18).** The owner's
+> answer of 2026-11-04 (A1018 Slice 5's Ruling O3): joining gives the spare the main box's
+> `backup.env`, every later change follows without anyone acting on the spare, and a spare that was
+> off catches up. This amendment adds Decision D18, which also states an open owner question, **Q2**
+> (a main box that holds no backup recovery key); changes Task 6.3 (the joining spare reads its
+> stream key from its own `backup.env` on every attempt, and waits while it has none); and adds
+> eight tasks. In 3b-5: Task 5.5b-1 (one check, one reader and one digest for the settings) and Task
+> 5.5b-2 (the join carries them; a reset of a box that joined removes them). In 3b-6: Task 6.3b (a
+> main box with no recovery key refuses a join, under Q2's recommended option), Task 6.3c (the setup
+> app's words for it), Task 6.5b (the spare's receiving route, on a spare's full start), Task 6.5c
+> (the main box's sending duty), Task 6.5d (new words for `handover.backup_settings_differ`, which
+> open PR #2669 also rewrites) and Task 6.9b (the two-box phases). No PR becomes FISCAL, and A1018
+> Slice 5's handover code is not changed. D7 (no key ring rotation under a joined spare) stands.
+> **3b-6 waits for the owner's answer to Q2.** The revision of 2026-11-10 answers the fresh review
+> of the first draft (`~/waitron-campaign/item-a947-3b-d18-review.md`; its rows are in "Review
+> response (D18 draft → revision of 2026-11-10)" at the end): the draft's send just before the offer
+> is gone, and Q2 is new. A second round the same day answers the round-3 claim check
+> (`~/waitron-campaign/item-a947-3b-d18-round3.md`): the spare's store does not check the stream key
+> (probe P34), so a stale key never blocks the first copy, and the route is no longer mounted in the
+> joining spare's start. Line numbers in these header notes, D18, the D18 tasks and the four dated
+> corrections are `main` at `bfd71ca306`; the rest of the plan keeps `6a52e7189c`'s.
+> Four dated corrections, each marked "2026-11-08:" at its spot: (1) since A1308 1a (#2628) the node
+> migration set holds one starting migration, which Task 5.1 rebuilds rather than adds to, so 3b-5
+> ships with a venue reset (the header's migration line, the slice table, 3b-5's header, Tasks 5.1
+> and 5.11, the file structure); (2) Task G.1 also moves the handover start's unpinned box-to-box
+> calls (`handover-source-start-api.ts:212`) onto the venue authority; (3) D8 and Task 4.5b account
+> for A1018 Slice 5's handover routes on a mirror, and for D18's route on a mirror; (4) Task 3.2's
+> `secrets.env` line is `reset-request.test.ts:238`. The header's review-path line also names the
+> contracts D18 changes.
+
 # A947 slice 3b — the spare hosts the store, and joining brings the data — Implementation Plan (revision 4)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
@@ -67,14 +97,24 @@ the slice table (`:776-796`) and "Slice 3 as built" (`:1731-1760`, Rulings R12 a
   the owner may overrule (D16):** Task 4.1 (in 3b-4) changes how the start check reaches another
   box by name, and Task 6.2 (in 3b-6) writes the spare's `nodes` row, which the already-landed start
   check then counts. Each PR's body says so in its first line.
-- **Migration: yes, one, in `node.db` only**, in 3b-5: a new table `node_pair_link` in the node
-  migration set (`packages/node-db/drizzle`, which holds `0000` and `0001` today). No `venue.db`
-  migration in any of the eight. No venue reset is needed: the table is additive.
+- **Migration: yes, in `node.db` only**, in 3b-5: a new table `node_pair_link` in the node
+  migration set (`packages/node-db/drizzle`). No `venue.db` migration in any of the eight.
+  **2026-11-08:** since A1308 1a (#2628) every migration set holds exactly one starting migration,
+  and the node set's is `0000_baseline.sql`. Task 5.1 changes the TypeScript schema and runs
+  `pnpm --filter @waitron/node-db db:generate` (`packages/node-db/package.json:14`:
+  `migration-baseline rebuild --set node`), which rebuilds that starting migration;
+  `scripts/starting-migrations.test.ts` refuses a second file (its cases "every set holds one
+  starting migration and nothing else" and "refuses an additional migration in a copy" ran, P31).
+  The rebuild edits a migration that has shipped, so under CLAUDE.md §3 3b-5 ships only with a
+  venue reset, named in its PR's first line (Task 5.11). Revision 4's "no venue reset is needed: the
+  table is additive" no longer holds. The D18 amendment adds no migration.
 - **Review path: full** for 3b-2 to 3b-6, 3b-G and 3b-F. They touch trust and authentication (keys,
   certificates, an access key, who a box believes, what a mirror serves to the network),
   cross-package contracts (`@waitron/node-db`, `@waitron/membership`'s chart minting, the stream's
   target in `stream-host.ts`, the till's server router) and, in 3b-G and 3b-F, whether a box may
-  file and when a fiscal module's spare may exist. 3b-1 (a binary and its licence notices in the
+  file and when a fiscal module's spare may exist. **2026-11-08:** D18 adds two contracts to 3b-6's
+  list (`@waitron/shared`'s `HandoverKind` and `@waitron/handover`'s envelope kinds, Task 6.5b) and
+  one to 3b-5's (the joining bundle's `backupSettings`, Task 5.5b-2); both PRs were already full. 3b-1 (a binary and its licence notices in the
   image) touches no risk trigger and takes the light path. The Codex run-it seat runs on every
   branch.
 
@@ -354,9 +394,9 @@ the end, which gives the command and what it printed.
 | **3b-2** | Each box's own name in its chart row and mDNS answers; the mDNS lookup that ignores the box's own answers; who answers `waitron.local`; the console's second address; tills show one line per box | a one-box venue keeps selling at `waitron.local`; nothing calls the lookup yet | no | no | full |
 | **3b-3** | A joining spare's authority becomes the venue's, installed with its leaf, and marked; both resets empty `tls/` and `secrets.env` on a box that joined; every start checks the leaf's names and signer | no spare finishes joining yet; a main box's files are unchanged but for its leaf's added name | no | no | full |
 | **3b-4** | Boxes reach and trust each other: the lookup in every box-to-box call, charts that vouch for every listed box (R13), a mirror that listens on the network with its open dashboard, its landing pages and its promotion kept to its own screen | no box has a counted peer before 3b-6, so the start check still proceeds | no (D16 judgement 1) | no | full |
-| **3b-5** | The store on the spare and the pair's access key: `node_pair_link`, a joining route that needs no relay and refuses first, the spare passing each refusal on in its own words, the spare running versitygw behind a TLS listener that checks the main box's client certificate, the bucket screen and rotation refusing while a spare is joined | the store runs and receives nothing | no | **yes** (`node.db`) | full |
+| **3b-5** | The store on the spare and the pair's access key: `node_pair_link`, a joining route that needs no relay and refuses first, the spare passing each refusal on in its own words, the spare running versitygw behind a TLS listener that checks the main box's client certificate, the bucket screen and rotation refusing while a spare is joined; the join carries the main box's backup settings (D18) | the store runs and receives nothing | no | **yes**: `node.db`'s starting migration is rebuilt, so it ships with a venue reset (correction (1)) | full |
 | **3b-G** | The start steps that decide whether a box files: the start check trusts only the venue authority (R12); the boot reconcile reaches a real box; a box with a lost `node.db` refuses to start (A1274) | no box has a counted peer or a mirror link to a real box before 3b-6, so on a real venue only the A1274 refusal can fire, and only on a box that holds a chart naming it but no mode row | **yes — the owner lands it** (D16) | no | full |
-| **3b-6** | Joining brings the data: the main box streams to the spare and writes its `nodes` row when the store answers; the spare restores, places and checks its first copy and finishes joining; a two-box end-to-end test on a main box without Veri*Factu; the setup app's and the guide's words | a venue that does not file with Veri*Factu adds a spare end to end; a Veri*Factu venue is still refused before anything is reserved | no (D16 judgement 2) | no | full |
+| **3b-6** | Joining brings the data: the main box streams to the spare and writes its `nodes` row when the store answers; the spare restores, places and checks its first copy and finishes joining; a two-box end-to-end test on a main box without Veri*Factu; the setup app's and the guide's words; the joining spare reads its stream key from the backup settings the join gave it, the main box sends it every later change, and a main box with no backup recovery key refuses a join (D18; waits for the owner's answer to Q2) | a venue that does not file with Veri*Factu adds a spare end to end; a Veri*Factu venue is still refused before anything is reserved | no (D16 judgement 2) | no | full |
 | **3b-F** | A Veri*Factu venue can add a spare (Q1 decides how); the stream loop's Veri*Factu box B gains its spare steps | lands last; until then the refusal of 3b-5 stands | **yes — the owner lands it** | no | full |
 
 Why this order: names (3b-2) and the authority (3b-3) before trust, because 3b-4 and 3b-G pin
@@ -414,7 +454,7 @@ the A1018 plan, not run.
 | A1284, an environment-set vault key | no | no production box sets it (`deploy/` names none, per the entry) |
 | A1285, the staged reset and `secrets.env` | **partly** | Task 3.2: on a box that joined, the staged reset now removes `secrets.env` (fact 19). The entry's other cases are untouched |
 | A1295, the venue authority pair in backups | **yes, by removal** | Task 3.1: a joined spare's authority becomes its `tls/ca.crt` and `tls/ca.key`, which backup verification already checks as a pair; `venue-ca.*` go |
-| A spare's backup settings (the owner's answer of 2026-11-04, A1018 Slice 5's Ruling O3): joining gives `backup.env`, later changes follow, and a spare that was off catches up | **not yet planned here** | No task carries it yet. It is still to be written, docs-only, before 3b-1 starts, saying how it relates to A1273's key ring (Decision D7). Until it lands, the offer refuses `handover.backup_settings_differ` on a venue with a recovery key, the main box still selling |
+| A spare's backup settings (the owner's answer of 2026-11-04, A1018 Slice 5's Ruling O3): joining gives `backup.env`, later changes follow, and a spare that was off catches up | **yes** (amendment of 2026-11-08, revised 2026-11-10) | Decision D18. Tasks 5.5b-1 and 5.5b-2 (3b-5): the join carries it. Task 6.3 (3b-6): the joining spare's first copy reads its stream key from it. Tasks 6.5b and 6.5c (3b-6): the spare's route, on its full start, and the main box's duty that sends every change from the spare's first full start on, and until a spare that was off answers. Tasks 6.3b and 6.3c (3b-6): a main box with no recovery key refuses a join, under owner question Q2's recommended option; 3b-6 waits for that answer. Task 6.5d: words for the existing refusal. Task 6.9b: the two-box phases. The offer's comparison stays the check before the main box stops selling. A1273's key ring stays under D7, and D18 says why |
 | A1296, code-quality follow-ups from 3a | no | none is on 3b's path except the hand-written HTTPS client; 3b extends `boxExchange`; `boxDownload` is D4's one exception |
 
 ---
@@ -537,6 +577,36 @@ the A1018 plan, not run.
      `POST /api/node/membership` (signed requests only, as item 2), the store's port to the paired
      main box's client certificate only (Tasks 5.7, 5.8), and mDNS for its own name (D3); every
      other path answers 404, because the latch start mounts nothing else (`boot.ts:1695-1704`).
+  **2026-11-08: A1018 Slice 5's handover routes on a mirror** (landed after this plan's base,
+  #2484; line numbers here are `bfd71ca306`'s). A mirror's full start mounts them all
+  (`boot.ts:2368,2395,3516,3527`), and three are exempt from the read-only gate
+  (`read-only-exemptions.ts:70-90`). This list serves them from the network as Slice 5 built them,
+  each under its own check:
+  - `POST /api/node/handover/offer`: a box-to-box call from the main box. Admitted only as a
+    `stepdown` envelope signed by a key `peerKeyOf` knows, whose binding names the signer as source
+    and this box as destination, and for a new operation only from the box the held chart names
+    `serving-primary` (`handover-destination-api.ts:77-90,116-142`); a body that is not a signed
+    envelope answers 400 `handover.request_invalid` (`readRawJsonBody` gives `null`,
+    `verifyEnvelope` finds it malformed).
+  - `POST /api/node/handover/:operationId/preparation` and `/activate`: a person's browser on the
+    handover page this box serves, so from the network by design (A1018 decision 6,
+    `2026-11-02-a1018-handover-build.md:305-312`: the second clock must be a browser's, never one on
+    the same machine). Admitted only over HTTPS from this box's own page
+    (`requireNodeOperationHttps`, `node-operation-https.ts:7-11`, else 403
+    `authorization.not_permitted`), for a stored operation at `filing_assumed` with its copy placed
+    or `emergency_declared` (`readOperationReadyToPromote`, `handover-preparation.ts:57-71`), with a
+    promote module operation naming it and the sign-in of a person holding `node.promote`.
+    `filing_assumed` is written only on receiving the main box's signed relinquishment
+    (`handover-destination-duty.ts:503`), and `emergency_declared` has no writer outside tests until
+    A1018 Slice 7 (`git grep -n emergency_declared -- apps/server/src packages`). So unlike the
+    promotion routes of item 3, neither can switch a spare on beside a live main box, and neither
+    becomes `promotion.from_box_only`.
+  - `GET /api/node/handover/:operationId`: an open read under item 1, no sign-in, answering a
+    signed status (A1018 Ruling P5; `handover-status-api.ts:69-82`).
+  - The other handover writes a mirror's full start mounts, such as `POST /management-api/handover`
+    (`boot.ts:3538`, `handover-source-start-api.ts:460`), are not exempt and answer `node.read_only`.
+  D18 adds `POST /api/node/backup-settings` to item 2 (Task 6.5b); the latch start does not mount
+  it, so item 7 is unchanged. Read, not run.
   Task 4.5b's test walks every route a mirror's full start mounts and every route the latch start
   mounts, from a non-box address with each method, and checks them against items 1–3 and 7; and it
   checks the landing listener's bound address in all three starts named in item 6. So the list is
@@ -647,6 +717,207 @@ the A1018 plan, not run.
   `nodes` row and waits with it, probe P29). The session running this plan
   adds a backlog entry for a way to retire a joined standby (Task 6.10), and the guide says what
   to do meanwhile.
+- **D18 — The spare holds the main box's backup settings: the join brings them, and the main box
+  sends every later change until the spare has them** (amendment of 2026-11-08, revised
+  2026-11-10; line numbers are `main` at `bfd71ca306`). The owner's answer of 2026-11-04 (A1018
+  Slice 5's Ruling O3): "Joining gives it, but it also needs to be updated whenever the primary
+  makes changes".
+  - **What travels.** `backup.env` holds the backup recovery key, `WAITRON_BACKUP_RECOVERY_KEY` — a
+    secret: archives are locked with it, and so is each box's sealed state row, "packed and locked
+    exactly as an archive is" (`sealed-state.ts:36-42`) — and the time it last changed,
+    `WAITRON_BACKUP_KEY_ROTATED_AT`. `writeRecoveryKey` writes it (`backup-env-writer.ts:32-50`,
+    `0o600`): the backup routes call it through `persistKey` (`backup-api.ts:310-311`) at the first
+    archive Save (`:474`) and at rotation (`:542`, `:551`), and the bucket copy's Save calls it when
+    no key is held (`stream-api.ts:243-245`, which Task 5.9 refuses while a spare is joined). Restores
+    write it too, by archive entry name through `unpackBundleToDir` (`restoreSecrets`,
+    `restore.ts:852-867`; `restore-secrets.ts:91`). No other production code makes or writes a key
+    (`git grep -n "writeRecoveryKey(\|mintRecoveryKey()"` over `apps/server/src` without tests:
+    those callers, the mint route that hands a key to the browser, `backup-api.ts:398`, and boot's
+    wiring of the bucket copy's writer, `boot.ts:3396`). The duty below reads the file, not its
+    writers, so its poll covers every one of them, restores included. A handover compares the file
+    by its values: `backupSettingsDigest` hashes its non-empty values in a fixed order
+    (`handover-manifest.ts:184-194`). What travels is exactly those values, and the spare writes them
+    whole, so the two digests are equal. **Probe P30** (run again for this revision): a script
+    calling `readOfferSettings` on a file and on a second file written by `formatEnvFile` from the
+    first's non-empty values in reverse order printed equal digests; a file holding another key
+    printed a different one (the control); no file, and a file of empty values only, both read
+    `null`. Today's refusal runs: `vitest run src/handover-source-start-api.test.ts -t "settings
+    differ"` passed 7 of 7 (P33).
+  - **What the spare does with it.** **First, its first copy (Task 6.3).** The main box streams
+    under `deriveStreamKey(recoveryKey, venueId)` (`stream-host.ts:286`; Litestream sends it as a
+    customer-supplied key, `packages/stream/src/litestream.ts:98`), and `restoreGeneration` takes a
+    stream key and checks it with `verifyStreamKey` before it restores
+    (`packages/stream/src/restore.ts:67`, `sse-c.ts:21-69`). Task 6.3 therefore needs some key: it
+    works one out from the spare's own `backup.env`, read on every attempt, and waits while it holds
+    none. Which key it holds does not decide whether the copy succeeds: the spare's store, versitygw
+    1.8.0 with `posix` storage (Task 5.7), ignores customer-supplied keys (probe P34, 2026-11-10: on
+    the pinned versitygw 1.8.0, an object written with key A passed `verifyStreamKey` with key A and
+    with key B, a read with no key returned its bytes, and the bytes lay unencrypted in the store's
+    data folder; the round-3 claim check measured the same). So the right key matters on an Amazon
+    S3 bucket, not on the spare's store, and a key the main box changed between the join and the
+    first copy does not hold the copy up. **The spare's store keeps the stream unencrypted on the
+    spare's disk.** That is a fact to state, not a gap to close: the spare holds the restored
+    `venue.db` unencrypted anyway. **Then its own sealed row.** The sealed-state refresher reads the
+    key afresh on every refresh (`sealed-state.ts:98`); a refresh runs at every start past setup and
+    adoption, "standby and mirror included" (`boot.ts:2937-2939`), and on every `node.db` commit
+    (`boot.ts:2960-2971`). The latch start returns before it (`boot.ts:1706`). So the spare seals
+    its own row into its `venue.db` at its first start as a mirror, under whatever key its
+    `backup.env` holds then — the join's, which is the current one unless the main box changed it
+    since — and again after each change at its next `node.db` commit or start. The duty delivers a
+    newer key within about 35 seconds of that start ((ii) below), so a row sealed under the join's
+    key is replaced soon after. 3c, which makes the spare follow the stream into that file, must
+    allow for that row from the spare's first start as a mirror. Backups do not run on it
+    (`backup-supervisor.ts:401`: enabled only on the primary). Read, not run.
+  - **(i) At joining** (Tasks 5.5b-1 and 5.5b-2, 3b-5): the bundle carries `backupSettings` beside
+    `credentialsRing` and `moduleOverrides`. The spare checks it with the same check the writer uses
+    (Task 5.5b-1), so a bundle carrying a name or value the writer would refuse is
+    `mirror.bundle_fetch_failed` (`mirror-bundle-fetch.ts:393`) before adopt writes anything
+    (`adopt.ts:166`). Adopt writes it whole right after `modules.json` (`adopt.ts:193-194`), so after
+    `tls/joined.json` (D9). The bundle reaches only a signed-in administrator, over the authority the
+    person confirmed (`mirror-bundle-fetch.ts:363-368`). Both resets remove it from a box that
+    joined: the staged reset gains it (today it keeps it, `reset-request.test.ts:239`; the list is
+    `reset-request.ts:109-117`), and `waitron.sh reset` already empties every state entry but `tls/`
+    and `records/` (`deploy/waitron.sh:806-809`).
+  - **(ii) Every later change, and (iii) a spare that was off** (Tasks 6.5b and 6.5c, 3b-6): the
+    main box pushes. A duty on the one main box runs while its pair link is `streaming` (Task 6.2:
+    the spare's store has answered), the same state in which it streams to the spare (Task 6.1).
+    Every 5 seconds it reads its own file and, when the digest differs from the last one this spare
+    confirmed **in this process**, sends the values in an envelope of a new signed kind,
+    `backup-settings`, to the spare's new route `POST /api/node/backup-settings`. The spare writes
+    them whole and answers the digest it then holds; the send counts as delivered only when that
+    digest is the main box's. The route is mounted on a spare's full start only. The main box's link
+    reaches `streaming` while the spare is still in its latch start, which mounts nothing but D8
+    item 7's routes, so **sends fail from then until the spare's first full start, and that is
+    expected**: a join's settings arrive in the bundle ((i)), and only a change made since the join
+    waits for that start. A failed send is tried again 30 seconds later, for as long as it takes, so
+    a spare that was off or unreachable is caught up within about 35 seconds of answering again (one
+    retry wait and one check), and nobody acts on it. The confirmed digest lives in memory only, so
+    every start of the main box sends once: no column, no migration.
+  - **(iv) Before the point of no return: the check already exists, so none is added.** It is the
+    offer's comparison: the spare compares the two digests when the offer arrives
+    (`handover-destination-api.ts:134-140`), and the main box steps down only after that answer
+    (`handover-source-start-api.ts:297-308`), so a spare holding other settings refuses
+    `handover.backup_settings_differ` while the main box still sells; the final-copy comparison
+    stays behind it (`settingsRefused`, `handover-compare.ts:317-339`). With the duty, a spare that
+    answers holds a change within one 5-second check, and a spare that was off within about 35
+    seconds of answering again. A handover started inside that window is refused with the main box
+    still selling, and Task 6.5d's words say to try again in a minute. A1018 Slice 5's
+    handover code is not changed.
+  - **Q2 — open, the owner's: a main box that holds no backup recovery key.** Such a box never
+    streams: the stream host stops with `reseal_required` when the sealed-state refresh does not
+    seal or no key is read (`stream-host.ts:266-274`; the case "starts no child until resealing
+    succeeds" ran, P33), and the refresh answers `no_key` with no key (`sealed-state.ts:127-129`).
+    Nothing in setup makes a key (the `git grep` above); a venue copying to its bucket cannot add a
+    spare (Task 5.3); so, unchanged, a venue that never turned backups on adds a spare that waits
+    for its first copy for ever.
+    *Worked example.* Harbour Kitchen never turned backups on. The owner plugs in the second box,
+    opens its setup page and presses Connect.
+    - **(i) The join is refused, in words.** The spare's screen says: "The primary server has no
+      backup recovery key yet, and a standby server needs one. Nothing was changed on either server.
+      In the primary's dashboard, open Backups and choose Turn on backups: it shows you the key to
+      save. Then press Connect again." The owner does that, saves the key behind the existing "I
+      have saved this key somewhere safe" tick, presses Connect again, and the join goes through.
+      Cost: one refusal in the joining route, passed on by Task 5.6b's relay, with setup-app words
+      (Tasks 6.3b and 6.3c; the code `backup.recovery_key_missing` exists already, `errors.ts:1370`);
+      and a venue turns backups on before it adds a spare.
+    - **(ii) The main box makes a key at the join, and the spare's Connect screen shows it once.**
+      The owner presses Connect; the screen shows the new key, with copy and download, and finishes
+      only after the "I have saved this key somewhere safe" tick, as the Backups page does for a key
+      it makes. Cost: a key-writing step in the joining route, outside its venue transaction (as the
+      first Save's "deliberate split", `backup-api.ts:472`), with the sealed refresh and the stream
+      reload `persistKey` does (`backup-api.ts:310-311`); the bundle and adopt answer carrying the
+      key to the spare's browser; a key display and new words on the spare's Connect screen, in
+      English and Spanish; and new Backups-page words, because turning backups on later reuses a held
+      key without showing it, and today's words for that point at "the bucket copy … your recovery
+      pack" (`apps/dashboard/src/i18n/strings.ts:2054-2055`; the screen case "turning backups on with
+      a recovery key already held mints none and sends none" ran, P32). On a main box whose key comes
+      from the environment, the minted key would travel while the main box keeps using the
+      environment's, so that spare would hold a key that does not open the main box's archives
+      (Limits).
+    **Recommended: (i)**, for its cost: it adds one refusal and reuses the Backups page's existing
+    flow, which already makes a key, shows it once, and keeps its button off until the tick
+    (`apps/dashboard/src/screens/backup-screen.ts:687-696`; `backup.key.minted_note` and
+    `backup.saved_it`, `strings.ts:2058-2059,2069`; the screen cases "mints a key by default and shows
+    it with copy + download + the saved-it checkbox" and "keeps apply disabled until the saved-it
+    checkbox is ticked" ran, P32). (ii) needs a second place that shows a key, on a different screen,
+    and new words in two apps. Both leave every key a spare holds shown to a person first. **PR 3b-6
+    waits for the answer; 3b-5 does not**, because before 3b-6 no spare takes a copy (Task 6.3).
+    Tasks 6.3b and 6.3c are written for (i). Under (ii) they are replaced by two tasks: the joining
+    route mints and writes the key before it hands out the bundle, as above; and the spare's Connect
+    screen shows it behind the tick, with the Backups page's words for a key made at a join. Task
+    6.9b's `spare-refused-no-key` phase then becomes "a join under a main box with no key leaves both
+    boxes holding one key".
+  - **Why the main box pushes, and what loses.** The stream: `backup.env` is a file, not a row, and
+    until 3c the spare does not follow the stream into its copy (D10); the one row that carries the
+    file, the sealed state row, is locked with the recovery key itself. The spare pulling: the main
+    box would need a route that hands the recovery key to whoever signs a query, and the spare
+    cannot know when the main box changed it; a push sends the key only to the box the pair link
+    names. Inside the offer: the offer envelope is kept in `node.db` on both boxes
+    (`readHandoverEnvelope`, `handover-source-start-api.ts:383`), which would store the recovery key
+    in the handover record, and an emergency handover (A1018 Slice 7) has no offer.
+  - **How the key is protected.** In transit: TLS pinned to the venue authority with the spare's
+    own name as the certificate name (D4, Tasks 4.1 and G.1), the same protection the joining bundle
+    gives the key ring. The envelope is signed by the main box. A mirror accepts it only while it is
+    a mirror, only from the box its held chart names `serving-primary`, and only naming itself, so a
+    box that has handed over can never overwrite the new main box's settings. Not logged and not stored:
+    the route keeps no envelope, and the error boundary logs a refusal's code, params and reason
+    (`packages/server-kit/src/error-boundary.ts:43-48`), none of which carries a value. At rest:
+    written whole with `writeFileDurable` at `0o600`, as the main box writes its own. Never on a
+    command line. Only names of the form `WAITRON_BACKUP_[A-Z0-9_]+` are accepted: `backup.env` is
+    read after `secrets.env` and `trading.env` and a later file's value wins (`box-env.ts:7-8`), so
+    another name, such as `WAITRON_NODE_ID` (`node-config.ts:32`), could replace a value of the
+    spare's own (read, not run). No replay guard beyond the pinned connection; cost if that is
+    wrong: settings the main box once held are put back on the spare until its next change, and the
+    offer then refuses with the main box still selling.
+    **What one more box holding the key can open** — the cost the owner accepted with option (a) on
+    2026-11-04: every archive of the venue, and the main box's own sealed state row inside the copy
+    streamed to the spare. That row carries a snapshot of the main box's `node.db`, which holds its
+    signing key sealed under the key ring the spare already holds since it joined, and the files
+    `RECOVERY_FILES` lists — `secrets.env`, `trading.env`, the venue authority and the main box's own
+    HTTPS key (`collectSealedEntries`, `sealed-state.ts:25-34`; `state-secrets.ts:16-23`). Read, not
+    run.
+  - **Alerts and logs.** No new alert. The usual ways a spare stops answering — switched off,
+    unplugged, its server stopped — also stop its store (Task 5.7's server starts it), which raises
+    `backup.stream_behind` after 15 minutes (Task 6.1 keeps that rule). Failed sends are expected
+    from the link reaching `streaming` until the spare's first full start, whatever `postToBox`
+    reports for them ((ii)); a spare whose store answers while its HTTPS port does not is a case no
+    alert covers. Each run of failures is logged once, `spare-settings.send_failed` with the reason:
+    at `info` until the first delivery to that spare since this box started, at `warn` after, so a
+    join does not read as a fault. Read, not run.
+  - **A1273 and D7.** The same gap for a different secret, and this channel could carry a ring: a
+    signed envelope over the pinned connection. It does not, and D7 stands: a ring is more than a
+    file. The spare's own `node.db` rows (its signing key, the pair's secret, Task 5.2) are sealed
+    under it and would have to be sealed again, which only `waitron-credentials rotate` does, from a
+    terminal; and the ring is loaded once as a start begins (`boot.ts:1670`), so the spare would have
+    to restart. Go-live does not rotate. A later rotation path can reuse this envelope's pattern.
+  - **Not FISCAL, no migration of its own.** Nothing here decides whether a box files: it changes
+    which settings the spare holds, where a joining spare reads its stream key, and, under Q2's
+    option (i), adds one refusal to the joining route; it adds nothing to the handover start, no
+    handover refusal and no change to the stepdown. New codes, registered in
+    `apps/server/src/errors.ts` and answered only to another box, so no person reads them:
+    `spare.settings_invalid` (400, `{ reason }`, never a value), `spare.settings_sender_unknown`
+    (403), `spare.settings_not_a_spare` (409). They extend Global Constraints' list. Option (i)
+    reuses `backup.recovery_key_missing`, worded for the setup app in Task 6.3c. Log lines, not
+    codes: `spare-settings.sent`, `spare-settings.send_failed`, `spare.first_copy_waiting`. D8 item 2
+    gains the route.
+  - **Limits.** An emergency handover (A1018 Slice 7) between a change and its delivery — up to one
+    5-second check while the spare answers, longer while it does not — takes the spare's older
+    settings; Slice 7 decides how it compares. `modules.json`, which the offer also compares
+    (`handover.modules_differ`) and which a module operation rewrites on a running box
+    (`module-operation-host.ts:102-106`), has the same gap and is not carried here. **A key set from
+    the environment never travels.** `deploy/compose.yml:38` passes `WAITRON_BACKUP_RECOVERY_KEY` as
+    `${WAITRON_BACKUP_RECOVERY_KEY:-}`, empty unless the operator sets it, and a non-empty
+    environment value wins over the file (`box-env.ts:28-33`). Both digests read `backup.env` only,
+    so with the key in the environment both read `null` and the offer passes while the spare holds
+    no key. Under Q2's option (i), Task 6.3b's check reads the file too, so such a main box is
+    refused a join in words instead of leaving a spare whose Task 6.3 waits for ever, holding no
+    key. Its refusal words point at the Backups page, which on such a box refuses every change with
+    `backup.managed_by_environment` (`guardWritable`, `backup-api.ts:297-301`;
+    `isBackupManagedByEnvironment`, `backup-config.ts:126-128`, true when any backup variable is
+    set), so its next step is not open there: its operator puts the key in `backup.env` instead. No
+    task covers it, because the shipped configuration sets no backup variable:
+    `deploy/.env.example:41-42` leaves them commented out and `deploy/compose.yml:37-38` passes them
+    empty unless the operator sets them.
 
 ## Departures from the approved design
 
@@ -755,7 +1026,8 @@ and 3b leaves them there.
 - **`.github/workflows/`**: `image-smoke.yml` (versitygw's version), `ci.yml` (Task 5.7's store
   case and Task 6.8b's two-box test in the stream job and the server shards' excludes,
   `ci.yml:1177,1312-1323`).
-- **`packages/node-db/`**: `src/schema/node-pair-link.ts`, `drizzle/0002_*.sql` (generated),
+- **`packages/node-db/`**: `src/schema/node-pair-link.ts`, `drizzle/0000_baseline.sql` and its snapshot
+  (rebuilt by `db:generate`, **2026-11-08** correction (1); revision 4 said `0002_*.sql`, generated),
   `src/classification.ts`, `src/pair-link.ts` (readers only), `src/index.ts`; delete helpers in
   `mode.ts`, `mirror-link.ts`, `recovery-key.ts`, `primary-key.ts`.
 - **`packages/credentials/`**: `src/node-pair-link.ts` (the writers, which seal, and the pair link's
@@ -779,6 +1051,16 @@ and 3b leaves them there.
   screen); **`apps/dashboard/src/i18n/codes.ts`** (the bucket refusal, the promotion refusal).
 - **`docs/`**: `docs/developers/conventions-data.md` (the store, the pair link, the rotation rule,
   the resets), `docs/backlog/replication-cloud.md` (Task 6.11, by the session running this plan).
+- **2026-11-08, D18's files:** new `apps/server/src/spare-settings.ts` (Task 6.5c) and
+  `spare-settings-api.ts` (Task 6.5b); changed in `apps/server/src/`: `backup-env-writer.ts`,
+  `handover-manifest.ts` (Task 5.5b-1), `mirror-bundle.ts`, `mirror-bundle-fetch.ts`, `adopt.ts`,
+  `reset-request.ts` (Task 5.5b-2), `spare-copy.ts` (Task 6.3), `mirror-bundle-api.ts`,
+  `setup-api.ts` (Task 6.3b), `read-only-exemptions.ts` (Task 6.5b), `background-duties.ts` (Task
+  6.5c), `boot.ts` and `errors.ts`; elsewhere: `packages/shared/src/handover-envelope-types.ts` and
+  `packages/handover/src/envelope.ts` (Task 6.5b), `apps/setup/src/setup-app.ts` and
+  `i18n/strings/shell.ts` (Task 6.3c), `apps/dashboard/src/i18n/codes.ts`'s
+  `handover.backup_settings_differ` (Task 6.5d), and `deploy/README.md` (the staged reset, Task
+  5.5b-2).
 
 ---
 
@@ -1084,7 +1366,9 @@ in `tls/` and `secrets.env` go, beside today's list; the `venue-ca` names go),
 reset keeps). Tests `reset-request.test.ts`, `scripts/waitron-sh.test.mjs`.
 
 **Changed checks:** `reset-request.test.ts:120-124,154-157,231-234` (the `venue-ca` fixtures and
-expected removals) and `:239` ("`secrets.env` kept") — on a joined box `secrets.env` now goes;
+expected removals) and `:239` ("`secrets.env` kept") — on a joined box `secrets.env` now goes
+(**2026-11-08:** that line is `reset-request.test.ts:238` on `main` at `bfd71ca306`; `:239` is
+`backup.env` kept, which Task 5.5b-2 changes);
 `waitron-sh.test.mjs:1740` ("removes the venue authority a join left in tls/ and keeps the box's own
 files") — its fixture and expected list change: a box with `tls/joined.json` ends with an empty
 `tls/`, and a new control keeps today's four files for a box without it.
@@ -1228,7 +1512,15 @@ behaviour, and the new cases here and in Task 4.5b carry the protection it gave.
     and the two promotion routes (Task 4.6 makes those answer `promotion.from_box_only`; until it
     lands, list them as the test's known gap and say so); each `GET` answers 401 or 403 unless it is
     on the test's own short list of open reads, which the test file names and Task 4.7's PR body
-    copies;
+    copies; **2026-11-08:** the walk also expects D8's Slice 5 routes (D8, the dated note after
+    item 7): with no credentials from a non-box address, `POST /api/node/handover/offer` answers 400
+    `handover.request_invalid`; `/preparation` and `/activate`, under any one-segment operation id,
+    answer 403 `authorization.not_permitted`; `GET /api/node/handover/:operationId` is on the open-read
+    list and answers 404 `handover.operation_unknown` for the walk's made-up id; none records an
+    operation (`node_handover_operations` is empty afterwards). They are expected, not a STOP.
+    From Task 6.5b (3b-6, D18) the walk also expects `POST /api/node/backup-settings` among the
+    signed routes: with no credentials it answers 400 `spare.settings_invalid` (`{ reason:
+    "envelope" }`) and writes no `backup.env`; Task 6.5b adds it, with its row in its Changed checks;
   - **"a joining spare serves the network only what D8 item 7 lists"** — boot a latch start (a
     state folder holding `pending-adoption.json`, as `boot.adoption-allocation.test.ts` builds one)
     on `0.0.0.0` and walk its routes the same way: only `/health`, `/api/box/status` and the two
@@ -1286,15 +1578,24 @@ two promotion rows changes).
 
 ## PR 3b-5 — the store on the spare, and the pair's access key
 
-Full review path. **Adds one `node.db` migration.**
+Full review path. **Rebuilds `node.db`'s starting migration, so it ships with a venue reset**
+(**2026-11-08**, correction (1): since A1308 1a, #2628, a migration set has one starting migration
+and a schema change rebuilds it; revision 4 said this PR added a migration).
 
-### Task 5.1: `node_pair_link`, node.db's third migration, and its readers
+### Task 5.1: `node_pair_link` in node.db's starting migration, and its readers
+
+**2026-11-08:** revision 4 called this node.db's third migration. On `bfd71ca306`
+`packages/node-db/drizzle` holds one starting migration, `0000_baseline.sql`, and a schema change
+rebuilds it (the header's migration line); `scripts/starting-migrations.test.ts` refuses a second
+file, and `scripts/migrations-match-schema.test.ts`, which Step 4 named, was deleted by #2628
+(`git log --diff-filter=D -1 -- scripts/migrations-match-schema.test.ts`: `1f9899da5e`, P31).
 
 **Files:** Create `packages/node-db/src/schema/node-pair-link.ts`, `src/pair-link.ts` (readers).
 Modify `packages/node-db/src/schema/index.ts`, `classification.ts` (`local`, with the `LOCAL`
 reason), `index.ts`; `scripts/write-path-tables.json` (`node_pair_link` →
 `packages/credentials/src/node-pair-link.ts`); `scripts/schema-constraints.test.ts` (the new check
-names). From `packages/node-db`, `pnpm exec drizzle-kit generate` once.
+names). Run `pnpm --filter @waitron/node-db db:generate` once (`packages/node-db/package.json:14`:
+`migration-baseline rebuild --set node`), which rebuilds `drizzle/0000_baseline.sql` and its snapshot.
 
 **The table** (columns through `packages/db/src/schema/columns.ts` builders only): `node_id`
 (primary key: this box), `role` (`label`, `"streams" | "serves"`; check `node_pair_link_role_ck`),
@@ -1312,9 +1613,10 @@ column comment says nothing establishes it exists in this file (CLAUDE.md §3).
   node_pair_link in node.db and not in venue.db"; "refuses a state that does not belong to its role"
   (CHECK naming `node_pair_link_state_ck`).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/node-db exec vitest run src/schema.test.ts` — FAIL.
-- [ ] **Step 3: Implement**; generate the migration once; do not hand-edit it or `_journal.json`.
+- [ ] **Step 3: Implement**; rebuild the starting migration once with `db:generate`; never a second
+  file, and never a hand edit of it or `_journal.json`.
 - [ ] **Step 4: Run** it — PASS; then from the root `scripts/classification-complete.test.ts
-  scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts
+  scripts/two-file-foreign-keys.test.ts scripts/starting-migrations.test.ts
   scripts/schema-constraints.test.ts scripts/journal-monotonic.test.ts scripts/write-path-tables.test.ts
   scripts/column-vocabulary.test.ts scripts/module-graph-honesty.test.ts`.
   (`scripts/id-columns-are-references.test.ts` reads only tables a configuration export carries,
@@ -1429,6 +1731,95 @@ D11; Task 5.8's listener reads the same setting), `boot.ts` (the setup start pas
 - [ ] **Step 4: Run** it — PASS; then `src/boot.reconcile.test.ts`,
   `pnpm --filter @waitron/node-db exec vitest run src/mirror-link.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "joining: the spare keeps the pair's access key and clears what an abandoned attempt left"`.
+
+### Task 5.5b-1: One check, one reader and one digest for a box's backup settings (D18, amendment of 2026-11-08)
+
+Line numbers in Tasks 5.5b-1 and 5.5b-2 are `main` at `bfd71ca306`; Tasks 3.2, 5.4 and 5.5 move some
+of them first.
+
+**Files:** Modify `apps/server/src/backup-env-writer.ts`:
+- new `checkBackupSettings(value: unknown): { ok: true; settings: Record<string, string> } | { ok: false; reason: "shape" | "name" | "value" | "control_char" | "round_trip" }`
+  — the one check both the bundle reader (Task 5.5b-2) and the writer below use: a plain object
+  (`shape`); every name matching `^WAITRON_BACKUP_[A-Z0-9_]+$` (`name`); every value a string
+  (`value`); and `assertStorableRecord`'s two checks (`:13-28`: no control character, a tab
+  included, and the env-file round trip), whose `backup.destinations_invalid` it turns into
+  `control_char` or `round_trip`. The reason names the check, never a value;
+- new `replaceBackupSettings(stateDir, settings: Record<string, string> | null): Promise<void>` —
+  `null` removes the file (a missing file is not an error); otherwise `checkBackupSettings` first,
+  refusing `spare.settings_invalid` `{ reason }` before writing anything, then the whole file with
+  `writeFileDurable` at `0o600`, as `writeRecoveryKey` writes it (`:32-50`).
+
+Modify `apps/server/src/handover-manifest.ts`: export
+`readBackupSettings(stateDir): Promise<Record<string, string> | null>` — the non-empty values
+`backupSettingsDigest` reads today (`:184-194`), `null` for no file or no values, any read error but a
+missing file thrown — and `backupSettingsDigestOf(settings: Record<string, string> | null): string | null`;
+`backupSettingsDigest` becomes `backupSettingsDigestOf(await readBackupSettings(stateDir))`, so the
+digest the offer carries and what travels can never read the file differently. `errors.ts`
+(`spare.settings_invalid`, 400, `{ reason }`). Tests `backup-env-writer.test.ts`,
+`handover-manifest.test.ts`.
+
+**Changed checks:** none expected: the digest's readers keep their answers, and Step 4 runs their
+suites unedited. An `expect(` line there that must change is a STOP.
+
+- [ ] **Step 1: Write the failing tests.** `handover-manifest.test.ts`: "the backup settings it
+  reads hash to the digest the offer carries" (a file with an empty value: `backupSettingsDigestOf`
+  of what `readBackupSettings` returns equals `readOfferSettings`'s `backupSettings`; written back
+  with `replaceBackupSettings` into a second folder, that folder's `readOfferSettings` gives the same
+  digest — probe P30's shape); "no file, or only empty values, reads null". `backup-env-writer.test.ts`:
+  "replaces the settings whole and owner-only" (mode `0o600`; a name the old file held and the new
+  record does not is gone); "null removes the file, and removing a missing file is not an error";
+  "refuses a name outside WAITRON_BACKUP_, a value that is not text, and a value holding a tab or a
+  newline, writing nothing" (the file's bytes unchanged; the error's params and reason hold no value);
+  "the check refuses exactly what the writer refuses" (each record above gives `ok: false` with the
+  reason the writer's refusal carries).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/backup-env-writer.test.ts src/handover-manifest.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS; then `src/handover-source-start-api.test.ts
+  src/handover-destination-api.test.ts src/handover-compare.test.ts src/backup-api.route.test.ts
+  src/stream-api.route.test.ts`, unedited; root `scripts/errors-reachable.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: one check and one reader for a box's backup settings, shared with the handover's digest"`.
+
+### Task 5.5b-2: The join brings the main box's backup settings, and a reset of a box that joined removes them (D18)
+
+**Files:** Modify `apps/server/src/mirror-bundle.ts` (`MirrorBundle` gains
+`backupSettings: Record<string, string> | null`, which `assembleMirrorBundle` reads with
+`readBackupSettings(deps.stateDir)` beside `readModuleConfig`, `:160`; the doc comment's list of
+secrets, `:50`, gains the backup recovery key), `mirror-bundle-fetch.ts` (`isMirrorBundle`, `:37`:
+`backupSettings` is `null` or passes `checkBackupSettings`, Task 5.5b-1, so a bundle the writer would
+refuse is `mirror.bundle_fetch_failed`, `:393`, before adopt's first write, `adopt.ts:166`),
+`adopt.ts` (`AdoptDeps` gains `persistBackupSettings`, called unconditionally right after
+`persistModuleConfig`, `:193-194`, so a second join overwrites and a main box with no settings leaves
+none), `boot.ts` (the setup start wires it to `replaceBackupSettings(config.stateDir, …)` beside
+`persistCredentialsRing`, `:1605`), `reset-request.ts` (the staged reset's list, `:109-117`, gains
+`backup.env`, under the same `joinedAnotherBox` condition Task 3.2 gives `secrets.env`: it now holds
+the other venue's recovery key), `deploy/README.md:460-472` (the staged reset of a box that joined no
+longer keeps `backup.env`, `:467`). Tests `mirror-bundle.test.ts`, `mirror-bundle-fetch.test.ts`,
+`adopt.test.ts`, `reset-request.test.ts`.
+
+**Changed checks:** `reset-request.test.ts:239` (`backup.env` kept, `"B=1\n"`) — on a box that
+joined, `backup.env` now joins the removed files; a control keeps it on a box that never joined. The
+bundle fixtures in the suites that name `credentialsRing` (`git grep -ln credentialsRing --
+'apps/server/src/*.test.ts'`: on `bfd71ca306` `adopt`, `adoption-allocation-refusal`,
+`boot.setup-routes`, `mirror-bundle-fetch`, `mirror-bundle`, `reset-request`, `start-again-ring-copy`)
+gain `backupSettings: null`; that is a fixture, not a check, and a fixture change that makes an
+`expect(` line change is a STOP.
+
+No word a person sees changes: a bundle whose settings fail the check is `mirror.bundle_fetch_failed`,
+which the setup app words today (`apps/setup/src/setup-app.ts:297`).
+
+- [ ] **Step 1: Write the failing tests.** `mirror-bundle.test.ts`: "the bundle carries the main box's
+  backup settings, and null when it has none". `mirror-bundle-fetch.test.ts`: "refuses a bundle whose
+  backup settings name anything but a WAITRON_BACKUP_ setting" and "refuses a bundle whose backup
+  settings hold a tab" (both `mirror.bundle_fetch_failed`, nothing written). `adopt.test.ts`: "the
+  spare holds the main box's backup settings once it has joined" (the two folders'
+  `readOfferSettings` digests equal) and "a second join under a main box with no settings leaves
+  none". `reset-request.test.ts`: "a staged reset of a box that joined removes the other venue's
+  backup settings" (control: a box that never joined keeps them).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/mirror-bundle.test.ts src/mirror-bundle-fetch.test.ts src/adopt.test.ts src/reset-request.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS; then `src/boot.setup-routes.test.ts src/start-again-ring-copy.test.ts
+  src/adoption-allocation-refusal.test.ts`, unedited but for the fixture field.
+- [ ] **Step 5: Commit** `git commit -s -m "joining: the spare receives the main box's backup settings, and a reset of a box that joined removes them"`.
 
 ### Task 5.6: The setup app explains the new refusals
 
@@ -1649,8 +2040,9 @@ a joined spare.)
   `@waitron/dashboard`; `pnpm format:check`; root `scripts/errors-reachable.test.ts`,
   `scripts/write-path-tables.test.ts`, `scripts/alert-codes.test.ts` (no new incident code is
   expected; it must stay green), `scripts/personal-log-params.test.ts`, `scripts/english-only.test.ts`.
-  PR first line: "Adds a node.db migration (`node_pair_link`). A spare runs its store, which admits
-  only its main box; nothing streams to it yet." `/finish-branch`, full path.
+  PR first line (**2026-11-08**, correction (1)): "Venue reset: this rebuilds node.db's starting
+  migration (`node_pair_link`). A spare runs its store, which admits only its main box; nothing
+  streams to it yet." `/finish-branch`, full path.
 
 ---
 
@@ -1670,6 +2062,20 @@ reaches a real box, and a box that lost its own record does not start selling or
 every peer), `boot-peer-check.ts:346-353` (the `rejectUnauthorized: false` branch and its comment
 go; a TLS refusal records the silent reason `certificate`). Tests `boot-peer-check.test.ts`,
 `start-peer-check.test.ts`.
+
+**2026-11-08: a second caller since A1018 Slice 5** (line numbers are `bfd71ca306`'s). The unchecked
+branch is now `boot-peer-check.ts:356-363`. The controlled handover's start builds its `exchange`
+with no `authorityOf` (`handover-source-start-api.ts:212`), so both of its calls to the spare connect
+unchecked today: the reachability ask (`askPeerStatus`, `:418-421`) and the offer (`postToBox`,
+`:232`). G.1 also gives that `exchange` an `authorityOf` returning this box's `tls/ca.crt` for every
+peer, so no caller of `postToBox` is left without the venue authority. Its other callers already pin
+one: the start check (this task) and the spare's handover duty (`handover-destination-duty.ts:520`,
+the mirror link's authority). Add to Files `handover-source-start-api.ts` and its test; add to Step 1
+"a handover start finds a spare whose certificate another authority signed unreachable, and offers
+it nothing" (two local HTTPS servers, as the first case; `handover.destination_unreachable`, nothing
+recorded on the spare), with Step 2's command also running `src/handover-source-start-api.test.ts`.
+Its existing cases reach the spare through an injected `fetch`, which bypasses the trust, so none of
+their checks changes. Task 6.5c keeps its STOP line: it sends the recovery key through `postToBox`.
 
 **Changed checks:** the cases that ask a peer serving a certificate no authority signed and expect
 an answer (`git grep -n "rejectUnauthorized\|authorityOf" -- 'apps/server/src/*.test.ts'`) now
@@ -1771,7 +2177,8 @@ Lands only after 3b-G is on `main` (fact 16). Not labelled FISCAL; D16 states wh
 body's first line says: "From this PR, a main box with a joined spare asks it at start and waits
 while it is silent (the landed A1018 Slice 3 rule), and a venue that does not file with Veri*Factu
 can add a spare that receives its data over the venue's network." Task number 6.6 moved to 3b-G
-(Task G.3) and is not reused.
+(Task G.3) and is not reused. **2026-11-08 (D18):** 3b-6 also waits for the owner's answer to Q2
+(D18); Tasks 6.3b and 6.3c are written for its recommended option (i).
 
 ### Task 6.1: The main box streams to the spare
 
@@ -1846,15 +2253,113 @@ main box writes it before streaming, D6, so this is a late copy). Then it writes
 and `ms` as D14 defines them (the pair link's `created_at` to the checks passing, both on this box's
 clock).
 
+**2026-11-08 (D18): the stream key comes from the spare's own `backup.env`, read on every
+attempt.** Line numbers in this note are `main` at `bfd71ca306`. `restoreGeneration` takes a stream
+key and checks it with `verifyStreamKey` before it starts Litestream
+(`packages/stream/src/restore.ts:67`, `sse-c.ts:21-69`); the main box streams under
+`deriveStreamKey(recoveryKey, venueId)` (`stream-host.ts:286`; `stream-key.ts:3-7`). Revision 4
+listed no key among the inputs. `takeFirstCopy`'s deps gain
+`readRecoveryKey: () => Promise<string | undefined>`, which the latch start wires exactly as the full
+start wires its own (`boot.ts:2867-2868`): `loadRecoveryKey(await loadBoxEnv(base, config.stateDir))`
+(`backup-config.ts:233-235`; `box-env.ts:16-35`, which reads `backup.env` last of the state files).
+Each 5-second attempt calls it afresh and hands `restoreGeneration` the stream key
+`deriveStreamKey(key, venueId)`. With no key (nothing is read from the store and no restore starts),
+or a key `loadRecoveryKey` refuses (`backup.recovery_key_too_short`), the status reads
+`copy: "waiting"` and the next attempt reads the file again. A `backup.stream_request_failed` from
+`restoreGeneration` is tried again at the next attempt like any other failed attempt: on the
+spare's store it means an empty store or a network fault, never a wrong key, because that store does
+not check the key (D18, probe P34); an Amazon S3 bucket would also answer it for a key it does not
+accept. Each change of reason is logged once, `spare.first_copy_waiting`
+`{ reason: "no_key" | "key_too_short" | <the refusal's code>, status }`, never the key. A key the
+main box changed between the join and the first copy does not hold the copy up; the duty delivers it
+after the spare's first full start (Task 6.5c). A main box that holds no key never streams
+(`stream-host.ts:266-274`): that case is Q2's (D18), and under its recommended option Task 6.3b
+refuses the join.
+
 - [ ] **Step 1: Write the failing tests** (fake store and fake restore): "restores the newest
   generation the main box signed"; "ignores a pointer another key signed" (control: the right key
   passes); "discards a copy without this box's row and tries again"; "ignores a pointer naming
   another venue id"; "reports waiting, restoring and ready, with bytes and ms, on the box status"
-  (a fixed clock: `ms` equals ready minus `created_at`).
+  (a fixed clock: `ms` equals ready minus `created_at`); (D18) "waits while it holds no key" (no
+  `backup.env`: the status reads `copy: "waiting"`, the fake restore is never called, and one
+  `spare.first_copy_waiting` line says `no_key`); "reads the key afresh on every attempt" (no
+  `backup.env` at the first attempt; the file written before the second; the second attempt hands
+  the fake restore that key's stream key and reaches `ready`).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/spare-copy.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS; then `src/box-status.route.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a joining spare restores its first full copy from its own store"`.
+
+### Task 6.3b: A main box with no backup recovery key refuses a join (D18, Q2's recommended option (i))
+
+**Waits for the owner's answer to Q2 (D18).** Written for option (i). If the owner chooses (ii), this
+task and Task 6.3c are replaced by the one task D18's Q2 describes under (ii). Line numbers in Tasks
+6.3b to 6.5d and 6.9b are `main` at `bfd71ca306`; earlier tasks move some.
+
+**Files:** Modify `apps/server/src/mirror-bundle-api.ts`: after the credential and **before the
+reservation**, beside Task 5.3's refusals, refuse `backup.recovery_key_missing` (409, no parameters;
+the code exists, `errors.ts:1370`, and the backup routes already answer it 409, `backup-api.ts:105`)
+unless this box's `backup.env` holds a key long enough to use:
+`readHeldKey(async () => checkedRecoveryKey((await readBackupSettings(deps.stateDir))?.WAITRON_BACKUP_RECOVERY_KEY))`
+gives a `key` (`backup-config.ts:224-230,246`; `readBackupSettings`, Task 5.5b-1; `deps.stateDir`,
+`mirror-bundle-api.ts:51`), so a key under the length floor counts as none. It reads the file, never
+`loadBoxEnv`, because the file is what travels (D18, Limits: a key set only in the environment never
+reaches the spare). The route's `STATUS` (`:59-69`) gains the row. `errors.ts` (the code's doc comment,
+`:1366-1369`, names where it is raised — a configured destination and a recovery pack page — and
+gains the joining route), `mirror-bundle-fetch.ts`
+(`refusalFrom`, `:82`, and Task 5.6b's named list: gains `backup.recovery_key_missing`, with no
+parameters), `setup-api.ts` (`ADOPT_STATUS`, `:292-305`: 409). Tests `mirror-bundle-api.test.ts`,
+`mirror-bundle-fetch.test.ts`, `adoption-allocation-refusal.test.ts` (or Task 5.6b's
+`adopt-refusal-relay.test.ts`).
+
+**Changed checks:** the suites whose main box answers a real join (`git grep -ln
+"mountMirrorBundleApi" -- 'apps/server/src/*.test.ts'`: on `bfd71ca306` `boot.start-check`,
+`handover-two-boxes`, `mirror-bundle-api`, `standby-public-operation`,
+`standby-public-operation.fiscal`) — their main box's state folder gains a `backup.env` holding a
+key. That is a fixture; a fixture change that makes an `expect(` line change is a STOP.
+
+- [ ] **Step 1: Write the failing tests.** `mirror-bundle-api.test.ts`: "refuses a join while this box
+  holds no recovery key, reserving nothing and listing nobody" (reservations and chart before and
+  after: equal); "a key under the length floor is refused the same way"; control: "a key in
+  backup.env lets the join through". `mirror-bundle-fetch.test.ts`: "passes on
+  backup.recovery_key_missing, carrying no parameters". Route-level, through the real
+  `fetchMirrorBundle` as Task 5.6b builds it: the spare's `POST /setup-api/adopt` answers 409
+  `backup.recovery_key_missing`, writes nothing, and does not restart.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/mirror-bundle-api.test.ts src/mirror-bundle-fetch.test.ts src/adoption-allocation-refusal.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS; then `src/boot.setup-routes.test.ts src/setup-api.test.ts
+  src/adopt.test.ts src/boot.start-check.test.ts src/handover-two-boxes.test.ts`; root
+  `scripts/errors-reachable.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "joining: a main box with no backup recovery key refuses a spare, before anything is reserved"`.
+
+### Task 6.3c: The setup app explains the no-key refusal (D18, Q2's option (i))
+
+Waits for Q2, as Task 6.3b.
+
+**Files:** Modify `apps/setup/src/setup-app.ts` (`ADOPT_ERROR_MESSAGES`, `:295-305`, gains
+`backup.recovery_key_missing`), `apps/setup/src/i18n/strings/shell.ts` (English and Spanish). Test
+`apps/setup/src/setup-app.test.ts`. The words use the setup app's terms ("primary server", "this
+server", Connect) and the dashboard's own labels for the page and its button: `nav.backup` "Backups"
+/ «Copias de seguridad» and `backup.apply` "Turn on backups" / «Activar las copias»
+(`apps/dashboard/src/i18n/strings.ts:1093,2081,4950,5963`). Turning backups on with no key held
+shows the key the box makes, once, and keeps the button off until "I have saved this key somewhere
+safe" is ticked (D18, Q2; P32), which is why the words can say the person is shown the key.
+
+- `backup.recovery_key_missing` on the adopt path
+  - EN: "The primary server has no backup recovery key yet, and a standby server needs one. Nothing
+    was changed on either server. In the primary's dashboard, open Backups and choose Turn on
+    backups: it shows you the key to save. Then press Connect again."
+  - ES: "El servidor principal aún no tiene clave de recuperación de las copias, y un servidor en
+    espera la necesita. No se ha cambiado nada en ninguno de los dos servidores. En el panel del
+    servidor principal, abre Copias de seguridad y elige «Activar las copias»: te muestra la clave
+    para que la guardes. Después vuelve a pulsar Conectar."
+
+- [ ] **Step 1: Write the failing tests.** "shows the no-key refusal and leaves Connect working", in
+  English and in Spanish (the screen tests read expected strings, CLAUDE.md §3).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/setup exec vitest run src/setup-app.test.ts` — FAIL.
+- [ ] **Step 3: Implement.** Open the refusal in both themes and at phone width, and look.
+- [ ] **Step 4: Run** it — PASS; `pnpm --filter @waitron/setup typecheck`.
+- [ ] **Step 5: Commit** `git commit -s -m "setup: words for a join refused because the primary has no backup recovery key"`.
 
 ### Task 6.4: The copy is put in place at the next start
 
@@ -1899,6 +2404,180 @@ this box's `nodes` row exists with its own public key — else keeps the latch a
 - [ ] **Step 4: Run** it — PASS; then `src/boot.mirror.test.ts src/boot.adoption-allocation.test.ts
   src/reserved-identity.test.ts src/allocated-standby-host.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a spare whose copy holds its own row finishes joining"`.
+
+### Task 6.5b: The spare takes the backup settings its main box signs, and nobody else's (D18, amendment of 2026-11-08)
+
+**Files:** Modify `packages/shared/src/handover-envelope-types.ts` (`HandoverKind`, `:4`, gains
+`"backup-settings"`), `packages/handover/src/envelope.ts` (`HANDOVER_KINDS`, `:6`, gains it, last).
+Create `apps/server/src/spare-settings-api.ts`:
+`mountSpareSettingsApi(app, deps: PeerStatusApiDeps & { stateDir: string }, log)`, the route
+`POST /api/node/backup-settings`, which in this order:
+1. verifies the body as a `backup-settings` envelope (`verifyEnvelope`,
+   `packages/handover/src/envelope.ts:70`) under `peerKeyOf` (`handover-signing.ts:41-47`).
+   Malformed or the wrong purpose: `spare.settings_invalid` `{ reason: "envelope" }`; any other
+   failure: `spare.settings_sender_unknown`;
+2. requires the body to be exactly `{ toNodeId, settings }` with `toNodeId` this box (else
+   `spare.settings_invalid` `{ reason: "body" }`);
+3. refuses `spare.settings_not_a_spare` unless `readNodeMode` reads `mirror`, and
+   `spare.settings_sender_unknown` unless the held chart's `servingPrimaryNodeId` is the signer;
+4. writes `settings` with `replaceBackupSettings` (Task 5.5b-1, which refuses a bad name or value,
+   writing nothing);
+5. answers 200 `{ backupSettings: backupSettingsDigestOf(await readBackupSettings(stateDir)) }` (Task
+   5.5b-1): the digest of what it now holds. Not through `readOfferSettings`
+   (`handover-manifest.ts:75-111`), which reads every node-local file and the ring and can refuse with
+   a code this route does not map.
+
+It stores no envelope and logs nothing of the body. Mount it in `boot.ts`'s full start beside
+`mountHandoverDestinationApi` (`:2395`), on every full start, as the offer is (A1018 Ruling P3); the
+latch start does not mount it (D8 item 7 is unchanged). Modify `read-only-exemptions.ts` (a row after
+the three handover rows, `:70-90`: `POST /api/node/backup-settings`, boxes `["mirror"]`,
+authenticates "a `backup-settings` envelope signed by the box the held chart names
+`serving-primary`, under a key this box stores for it or the held chart vouches for (`peerKeyOf`),
+naming this box; answers only the digest of what it then holds"), `errors.ts`
+(`spare.settings_sender_unknown`, 403; `spare.settings_not_a_spare`, 409; the route's `STATUS` also
+maps `spare.settings_invalid` to 400). Tests `spare-settings-api.test.ts` (new),
+`packages/handover/src/envelope.test.ts`, `read-only-exemptions.test.ts`, `boot.mirror-surface.test.ts`.
+
+**Changed checks:** `packages/handover/src/envelope.test.ts:64-76` ("lists the ten kinds") — becomes
+"lists the eleven kinds", with `"backup-settings"` last (the type check at `:80` follows the list);
+`read-only-exemptions.test.ts:69-82` ("the exempt set is exactly this list") — gains
+`["POST", "/api/node/backup-settings", ["mirror"]]`, last; Task 4.5b's mirror walk in
+`boot.mirror-surface.test.ts` — its signed routes (D8 item 2) gain this route, which with no
+credentials from a non-box address answers 400 `spare.settings_invalid` `{ reason: "envelope" }` and
+writes no `backup.env`. The latch walk is unchanged.
+
+No word a person sees: the three codes are answered only to another box (Task 6.5c logs them).
+
+- [ ] **Step 1: Write the failing tests.** `spare-settings-api.test.ts`, against real state folders
+  and a real `node.db`: "a mirror writes the settings its main box signed, and answers their digest"
+  (equal to the main box's `readOfferSettings` digest); "null settings remove the spare's file";
+  "refuses settings another key signed, writing nothing"; "refuses settings a listed standby signed,
+  writing nothing" (its key known through the chart's endorsement, but not `serving-primary`);
+  "refuses on a box that is not a mirror, writing nothing" (the case of a box that took over: its
+  old main box can never overwrite its settings); "refuses an envelope naming another box"; "refuses
+  a name outside WAITRON_BACKUP_, writing nothing"; "no log line carries the recovery key" (every
+  line a refused and an accepted send wrote, searched for the key's text). Then the changed checks
+  above.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/handover exec vitest run src/envelope.test.ts` and
+  `pnpm --filter @waitron/server exec vitest run src/spare-settings-api.test.ts src/read-only-exemptions.test.ts src/boot.mirror-surface.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS; then `src/handover-destination-api.test.ts src/peer-status-api.test.ts`,
+  unedited; typecheck `@waitron/shared`, `@waitron/handover`, `@waitron/server`; root
+  `scripts/errors-reachable.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a spare takes the backup settings its main box signs, and nobody else's"`.
+
+### Task 6.5c: The main box sends its backup settings, and every change, until the spare has them
+
+**Files:** Create `apps/server/src/spare-settings.ts`:
+- `sendBackupSettings(deps: { node; ring; nodeId; stateDir; exchange: { timeoutMs: number; fetch?; authorityOf? } }, to: { nodeId: string; contactUrl: string }): Promise<{ delivered: true; digest: string | null } | { delivered: false; reason: string }>`
+  — reads `readBackupSettings` (Task 5.5b-1); a read that fails sends nothing (`reason:
+  "unreadable"`), never `null` in its place, so a damaged file on the main box never removes the
+  spare's; signs `{ toNodeId, settings }` as `backup-settings` (`signAsThisBox`); posts it with
+  `postToBox` (`boot-peer-check.ts:340`) to `<contactUrl>/api/node/backup-settings`, 5 seconds (the
+  value of `PEER_TIMEOUT_MS`, `handover-source-start-api.ts:74`). Delivered only on 200 with an
+  answered digest equal to `backupSettingsDigestOf` of what it sent; otherwise `reason` is the
+  refusal's code (`boxRefusal`, `boot-peer-check.ts:327`), the status when an answer carries no code,
+  `unreachable`, or `digest_differs`.
+- `runSpareSettings(deps: { db; node; ring; nodeId; stateDir; exchange; checkMs?: number; retryMs?: number; log; signal }): { stop(): Promise<void> }`
+  — every `checkMs` (5 seconds): with this box's pair link `role: "streams"` and `state:
+  "streaming"` (`readPairLink`, Task 5.1; the state in which Task 6.1 streams to the spare), the spare's `contactUrl` from the held chart's
+  entry for `peerNodeId` (none, or an empty one, sends nothing), and this box's digest: when
+  `{ peerNodeId, digest }` equals the last delivered one, nothing; when the last attempt failed less
+  than `retryMs` (30 seconds) ago, nothing; otherwise send. The last delivered pair is kept in memory
+  only. Sends fail from the link reaching `streaming` until the spare's first full start, because
+  only a full start mounts the route (D18 (ii)); that is expected. Logs `spare-settings.sent` (info,
+  `{ peerNodeId }`) on each delivery, and `spare-settings.send_failed` (`{ peerNodeId, reason }`) on
+  the first failure of a run of failures only: at `info` until the first delivery to that spare
+  since this box started, at `warn` after. Its `stop` is written `stop: async () => {` with
+  `stopped = true;` as its first line, before its first `await`: it is called inside the stepdown
+  request, and that is the shape `handover-stepdown.test.ts`'s early-stops case reads (`:262-279`).
+
+Modify `boot.ts` (start it in the full start on the one main box, `isSingletonPrimary &&
+!fencedOrMirror` (`:1998`, `:1972`), beside Task 6.2's `runSpareJoin`, with the exchange Task G.1
+gives the start check: the venue authority pinned for every peer; push its stop on `undoOnFailure`
+before the next step that can throw, CLAUDE.md §3; `StartServerSeams` gains
+`spareSettings?: { checkMs?; retryMs? }`, a test seam), `background-duties.ts`
+(`BackgroundDutyHandles` gains `spareSettings`, a closer with `atStepdown: true`, so a main box that
+hands over stops sending). Test `spare-settings.test.ts` (new).
+
+**Interfaces — Consumes:** `readPairLink` (Task 5.1), `readBackupSettings` and
+`backupSettingsDigestOf` (Task 5.5b-1), the route (Task 6.5b), `postToBox` as Task G.1 leaves it, with
+no unchecked branch. If `postToBox` can still connect without the venue authority when this task
+starts, STOP: the settings carry the recovery key.
+
+**Changed checks:** `background-duties.test.ts:19-45` (`CLOSERS`) and its two cases at `:100-137`
+("holds the aborts and the closers in exactly today's shutdown order" and "stops every duty in that
+order…") — `spareSettings` in its place, its handle added where `recordingHandles` (`:48`) builds
+them. `handover-stepdown.test.ts:71-83` (`STOPPERS`, which builds the stand-in handles) and `:84-91`
+(`AT_STEPDOWN`, which "every abort and every atStepdown stop has taken effect when stepDown resolves",
+`:246-259`, and "every closer is either atStepdown or carries a reason", `:312-322`, compare against)
+— both gain `spareSettings`; "the five early stops' source text sets the stop flag before the first
+await" (`:262-279`) — becomes "the six early stops'…", its file list gaining `spare-settings.ts`.
+Task 6.2's own duty changes the same lists; whichever lands second adds its row beside the first's.
+
+- [ ] **Step 1: Write the failing tests.** `spare-settings.test.ts`, the spare a Hono app mounting
+  `mountSpareSettingsApi` over its own state folder and `node.db`, reached through `exchange.fetch`,
+  on a fake clock: "sends the settings once the pair link is streaming, and the spare then holds
+  the same digest"; "sends nothing while the link is pending"; "fails quietly until the first
+  delivery" (a spare that answers 404 until its full start: the first failure is logged at `info`,
+  then one delivery, then a later run of failures is logged once at `warn`); "a change
+  on this box reaches the spare within one check" (`writeRecoveryKey` with a new key, the clock moved
+  5 seconds); "a spare that was off catches up once it answers again, logging one failure for the
+  whole time it was off" (the spare's fetch throws for two simulated minutes; it holds M's digest no
+  later than 35 simulated seconds after it answers); "sends nothing with no link, or with no address
+  for the spare"; "a file this box cannot read sends nothing, and the spare keeps its settings"
+  (`backup.env` made a folder); "a new start sends once even when nothing changed" (a second duty
+  over the same folders); "a box that is no longer the main box sends nothing" (stopped at a
+  stepdown: no request after `stop`); "no log line carries the recovery key". Then the changed checks
+  above.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/spare-settings.test.ts src/background-duties.test.ts src/handover-stepdown.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS; then `src/boot.failed-start.test.ts src/boot.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: the main box sends its backup settings to its spare, again after every change and until the spare has them"`.
+
+### Task 6.5d: Words for `handover.backup_settings_differ` that name the next step (D18)
+
+The handover start is not changed: the offer's comparison already is the check before the main box
+stops selling (D18 (iv)), and from 3b-6 the duty keeps the spare current. Only the words change.
+
+**Files:** Modify `apps/dashboard/src/i18n/codes.ts` (`handover.backup_settings_differ`). Test
+`apps/dashboard/src/i18n/codes.test.ts`. The session running this plan removes
+`backup_settings_differ` from the backlog's list of words naming no next step
+(`docs/backlog/replication-cloud.md`, "Words naming no next step"), unless #2669 already has.
+
+**Open PR #2669** (`feat/a1018-6-controlled-handover-pages`, lane J's A1018 Slice 6; open at head
+`64db622f06` on 2026-11-10, `gh pr view 2669`) rewrites the same entry to "The two boxes have
+different backup settings. Choose Stop and make their backup settings match before handing over."
+Nobody can make a spare's settings match by hand, and from 3b-6 the main box does it by itself.
+Whichever of #2669 and this task lands second reconciles the entry, and these words replace #2669's.
+
+The words:
+- EN: "The spare does not hold this box's backup settings, so it did not accept the handover. This
+  box keeps selling, and sends the spare its settings by itself. Try again in a minute."
+- ES: "El equipo de reserva no tiene los ajustes de copia de seguridad de este equipo, así que no ha
+  aceptado el traspaso. Este equipo sigue vendiendo y le envía sus ajustes solo. Vuelve a intentarlo
+  dentro de un minuto."
+
+They hold in both cases that reach this refusal: a spare that has not yet received a change, which
+the duty delivers within about 35 seconds (D18 (ii)); and a spare that keeps refusing them, for
+example over a name outside `WAITRON_BACKUP_` in this box's file, which only a hand edit or a
+restored archive can put there (D18 "What travels"). The words make no promise that the next try
+succeeds, and leave the rare second case unexplained on purpose.
+
+No test pins today's words: `git grep -n "hold different backup settings\|ajustes de copia de
+seguridad distintos" -- apps packages` finds only `apps/dashboard/src/i18n/codes.ts`. The guide gains
+nothing: staff do nothing different (CLAUDE.md §3, a guide sentence earns its place by changing what
+staff do).
+
+**Changed checks:** none.
+
+- [ ] **Step 1: Write the failing test.** `codes.test.ts`: "the backup-settings refusal says this box
+  keeps selling and to try again in a minute", in English and Spanish (the two texts above).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/dashboard exec vitest run src/i18n/codes.test.ts` — FAIL.
+- [ ] **Step 3: Implement.** Where a screen on `main` shows this code by then (#2669's), look at it in
+  both themes and at phone width.
+- [ ] **Step 4: Run** it — PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "dashboard: a handover refused for backup settings says the spare receives them by itself"`.
 
 ### Task 6.7: The setup app's joined screen tells the truth
 
@@ -2033,6 +2712,35 @@ The phases:
   (CLAUDE.md §2).
 - [ ] **Step 4: Commit** `git commit -s -m "test: the main box counts its spare, and joining stays on the venue's network"`.
 
+### Task 6.9b: The two-box test — the spare's backup settings, from the join on (D18)
+
+**Files:** as Task 6.8c. M starts with Task 6.5c's `spareSettings` seam at `retryMs` 2 seconds, so
+the phases add seconds, not half a minute, to the stream job (Task 6.9 Step 3's budget).
+
+The phase list gains three entries, each named and placed:
+- **`spare-refused-no-key`, right after `probe`** (Q2's option (i), Tasks 6.3b and 6.3c): M holds no
+  `backup.env`; S's `POST /setup-api/adopt` against M answers 409 `backup.recovery_key_missing`
+  through the real `fetchMirrorBundle`; M's chart and reservations are unchanged and S wrote nothing.
+  Phase 1's bucket Save then gives M its key (`stream-api.ts:243-245`; if phase 1 sets the bucket
+  another way, it first turns backups on). Under Q2's option (ii) this phase changes as D18 says.
+- **a step inside `spare-join` (phase 3)**: as soon as S's adopt answers, M rotates its recovery key
+  (`POST /api/backup/rotate`), so the key S's bundle carried is no longer M's. `spare-copy` (phase 4)
+  must still pass: a changed key does not hold up the first copy on the spare's store (D18, probe
+  P34). Then, within 10 seconds of S's first full start answering, S's `backup.env` digest
+  (`readOfferSettings`) equals M's new one. Nothing orders this check against the copy: it starts
+  from S's full start, which comes after the copy.
+- **`backup-settings`, after `loopback-only`**: M rotates again and within 10 seconds S's digest
+  equals M's; S is stopped through the restart seam, M rotates again, S is started, and within 10
+  seconds of S answering its digest equals M's; every log line both servers wrote during the two-box
+  phases is searched for the text of each key (phase 1's and the three rotations'), and none holds
+  one.
+
+- [ ] **Step 1: Write the phases.**
+- [ ] **Step 2: Run** the file — PASS. Control, restored after: start M without Task 6.5c's duty
+  (comment out its line in `boot.ts`) and see `spare-copy` still pass and the `spare-join` digest
+  step fail at its 10-second limit, S still holding the bundle's key.
+- [ ] **Step 3: Commit** `git commit -s -m "test: a spare keeps its main box's backup settings from the join on, including after it was off"`.
+
 ### Task 6.10: The guide, the docs, and final checks
 
 **Files:** `apps/server/src/guide/en/servers.md` and `guide/es/servers.md` (a section "Adding a spare
@@ -2042,8 +2750,10 @@ its console prints; the fingerprint comparison; that a venue copying to its own 
 spare yet, and what to do; that a key ring is not rotated while a spare is joined; that a standby
 that finished joining cannot be removed in this version, and one that never finished can, under
 Servers; and that while a joined standby is off, the main box waits at each start until an
-administrator carries on, linking the existing `{#carry-on}` section); the session running this
-plan adds the backlog entry D17 names ("a joined standby cannot be retired, so a dead spare makes
+administrator carries on, linking the existing `{#carry-on}` section; **2026-11-08 (D18):** under
+Q2's option (i), also that backups are turned on on the main box before a spare joins, because the
+spare needs its recovery key, naming the dashboard's Backups page and its Turn on backups button);
+the session running this plan adds the backlog entry D17 names ("a joined standby cannot be retired, so a dead spare makes
 the main box wait at every start"), in the A947 area;
 `docs/developers/conventions-data.md` (one entry: the pair link and the store). Final checks:
 typecheck every touched package, `pnpm format:check`, root `scripts/guide-links.test.ts`,
@@ -2232,6 +2942,11 @@ does not carry that file.
 **Recommended default: (c).** Either way 3b-F lands last and you land it. You also land 3b-G (the
 start steps that decide whether a box files, D16); the other six pull requests never wait for you.
 
+### Q2 — A main box that holds no backup recovery key: refuse the join, or make a key at the join?
+
+Stated once, with its worked example and recommendation, in D18 (amendment of 2026-11-08, revised
+2026-11-10). 3b-6 waits for the answer.
+
 ---
 
 ## Probes
@@ -2271,6 +2986,11 @@ under `/tmp/a947-3b-r3.Iv7F/` — all outside the worktree.
 | P27 | `gh pr view 2442`, `2422`, `2428 --json state,title,mergedAt` | #2442 `OPEN` ("FISCAL … A1018 Slice 4: …"); #2422 `MERGED` 2026-11-03 ("payments: one collection owner per payment (A764) …"); #2428 `MERGED` 2026-11-03 ("FISCAL — a promotion whose old box relinquished filing stores a version 2 approval …") | the A1018 table |
 | P28 | `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run src/primary-url.test.ts -t "192.168"` | `Tests 1 passed \| 32 skipped` | fact 7 |
 | P29 | `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run src/boot-peer-check.test.ts -t "pending spare at the same address\|nodes row for the spare and no answer waits"` | `Tests 2 passed \| 128 skipped` | D17, Task G.3's words |
+| P30 | (2026-11-10, from `apps/server`) `pnpm exec tsx /tmp/a947-d18-fix1/p30.mts "$PWD"`: `readOfferSettings` over a `backup.env` holding a key, an empty value and a rotation time; over a second file `formatEnvFile` wrote from the first's non-empty values in reverse order; over a file holding another key; over no file; over a file of empty values only | first two `b025ee36…411b` (equal); another key `8bfb0c1d…bebe`; no file `null`; empty values only `null` | D18, Task 5.5b-1 |
+| P31 | (2026-11-10) root `env -u AI_AGENT -u CLAUDECODE pnpm exec vitest run scripts/starting-migrations.test.ts -t "one starting migration and nothing else\|refuses an additional migration"`; `git log --oneline --diff-filter=D -1 -- scripts/migrations-match-schema.test.ts`; `git log --oneline -3 -- packages/node-db/drizzle` | `Tests 2 passed \| 12 skipped`; `1f9899da5e Rebuild each migration set from one starting migration (A1308 1a) (#2628)`; `1f9899da5e`, `eed41cc3c0 A760 part 3 … (#2539)`, `4aeb14613c …` | the header's migration line, correction (1), Task 5.1 |
+| P32 | (2026-11-10) `pnpm --filter @waitron/server exec vitest run src/backup-api.route.test.ts src/stream-api.route.test.ts -t "turning archives on reuses the key the box already holds\|Save sets a recovery key when there is none\|Save keeps an existing recovery key"`; `pnpm --filter @waitron/dashboard exec vitest run src/screens/backup-screen.test.ts -t "turning backups on with a recovery key already held mints none and sends none\|mints a key by default and shows it with copy\|keeps apply disabled until the saved-it checkbox is ticked"` (both under `env -u AI_AGENT -u CLAUDECODE`) | `Tests 3 passed \| 167 skipped`; `Tests 3 passed \| 117 skipped` (Chromium) | D18 Q2, Task 6.3c |
+| P33 | (2026-11-10) `pnpm --filter @waitron/server exec vitest run src/stream-host.test.ts -t "starts no child until resealing succeeds"`; the same with `src/handover-source-start-api.test.ts -t "settings differ"`; `pnpm --filter @waitron/stream exec vitest run src/restore.test.ts -t "refused"` (each under `env -u AI_AGENT -u CLAUDECODE`) | `Tests 2 passed \| 52 skipped`; `Tests 7 passed \| 174 skipped`; `Tests 2 passed \| 21 skipped` (a stand-in store answering 403 to the keyed read: `backup.stream_request_failed`, no Litestream started) | D18, Task 6.3, Q2 |
+| P34 | (2026-11-10) `node scripts/setup-s3-test-server.mjs` (the pinned versitygw 1.8.0, darwin-arm64, its SHA-256 checked by the script; `versitygw --version`: `Version  : 1.8.0`), then from `apps/server` `pnpm exec tsx /tmp/a947-d18-fix1/p34.mts <repo>`: `startS3TestServer` (`apps/server/src/testing/s3-test-server.ts:135`, which runs `versitygw … posix --sidecar <meta> <data>`, `:179-197`), the real `verifyStreamKey` on the empty store, a PUT of `venues/venue1/<generation>/0000/0000000000000001-0000000000000001.ltx` with customer key A, `verifyStreamKey` with key A and with key B, a GET with no key, and a search of the data folder for the bytes. Failing case, had the store checked keys: key B refused `backup.stream_request_failed` with status 403, the plain GET refused, no plaintext on disk | `empty store, verify key A: refused backup.stream_request_failed {…"status":null…}`; `PUT with SSE-C key A: ok`; `verify key A: ok`; `verify key B: ok`; `GET with no key: ok secret-bytes-0123456789`; `plaintext on disk: /data/waitron-loop/venues/venue1/…/0000000000000001-0000000000000001.ltx`. `versitygw --help` and `posix --help` list no encryption option. Not run: Litestream against it, the Linux build. The round-3 claim check measured the same | D18, Tasks 6.3 and 6.9b |
 
 **Claims that rest on reading only:** the till router's list and lock-screen lines (fact 17); the
 mirror's ambient viewer and who reaches it today (fact 6) — Task 4.5b's surface test turns D8 into a
@@ -2375,3 +3095,35 @@ The fourth-round claim check is `/Users/clintongormley/waitron-campaign/item-a94
 | M5, Task 5.6b's route test said "as" a test that stubs the fetch | fixed | Mounted as that test mounts `mountSetup`, but with the real `fetchMirrorBundle` over plain `http` to `127.0.0.1` (that test's stub is at `:73-99`; loopback is allowed, `primary-url.ts:6,50`) |
 | M6, Task 6.8a too big | fixed | Split: 6.8a (the `boxLookup` and `restart` seams, with their own tests in existing boot suites), 6.8b (the shared box set-up, the new file, the CI lists and the setup-mode probe with its STOP); the phases are now 6.8c |
 | Design pointer | unchanged | No departure was added or removed; its item 6 ("a mirror listens on the venue's network with a listed surface") still holds |
+
+## Review response (D18 draft → revision of 2026-11-10)
+
+The review: `/Users/clintongormley/waitron-campaign/item-a947-3b-d18-review.md` (of the draft at
+`fde41e7525`, rebased as `4aedddf984`). Lane A's decisions of 2026-11-10 set each row's direction.
+Round 2 answers the round-3 claim check (`/Users/clintongormley/waitron-campaign/item-a947-3b-d18-round3.md`),
+which changed some of the rows below; they are written as they now stand.
+
+| Finding | Done | Where |
+| --- | --- | --- |
+| C1, the spare needs the key for its first copy | fixed, narrowed in round 2 | Task 6.3's dated note and two tests: the stream key from the spare's own `backup.env`, read on every attempt, `waiting` while it holds none. The spare's store does not check the key (probe P34), so a key is needed only because `restoreGeneration` takes one; the round-1 claim that the store refuses a wrong key, and its retry test, are withdrawn |
+| C1, a key rotated between the join and the first copy | does not block the copy | Round 1 mounted the route in the latch start to cover this; round 2 removed that mount (lane A decision, 2026-11-10), because the copy does not depend on the key on the spare's store (P34). The duty delivers the new key within about 35 seconds of the spare's first full start; its first sealed row is locked with the join's key until then (D18). Task 6.9b rotates M's key during the join and checks S's key after its full start, with a control that fails for that reason |
+| C1, a main box with no recovery key | raised | Q2 in D18 (one statement; pointer under "Questions for the owner"). Recommended (i), planned as Tasks 6.3b and 6.3c; 3b-6 waits; Task 6.9b's `spare-refused-no-key` phase |
+| I1 and I2, the send before the offer | removed | Task 6.5d is words only; D18 (iv) says the offer's comparison is the check and none is added; 3b-6's second PR line is gone |
+| I3, node.db's migration | fixed | Correction (1) rewritten: one starting migration rebuilt by `db:generate`, a venue reset named in 3b-5's first line (header, slice table, 3b-5's header, Tasks 5.1 and 5.11, the file structure) |
+| I4, #2669's words | fixed | Task 6.5d names #2669; whichever lands second reconciles, and D18's words replace #2669's; the `git grep` receipt has no line number |
+| I5, the duty's test lists | fixed | Task 6.5c's Changed checks: `CLOSERS`, `STOPPERS`, `AT_STEPDOWN` and the early-stops case, with the file's `stop` shape |
+| I6, the spare's sealed row | fixed | D18 "What the spare does with it": sealed at its first start as a mirror, then after each change at its next `node.db` commit or start |
+| M1, one check | fixed | Task 5.5b-1's `checkBackupSettings`, used by `isMirrorBundle` (Task 5.5b-2) and `replaceBackupSettings` |
+| M2, the route's answer | fixed | Task 6.5b step 5: the digest of `readBackupSettings`, not `readOfferSettings` |
+| M3 | moot | no second send |
+| M4, a 404 from a joining spare | fixed | D18 (ii) and "Alerts and logs": sends fail from the link reaching `streaming` until the spare's first full start, whatever `postToBox` reports, and that is expected; the first failure of a run is logged at `info` until the first delivery to that spare, at `warn` after |
+| M5, a key set from the environment | fixed | D18 Limits; Task 6.3b's check reads the file, so such a main box is refused in words |
+| M6, what a spare holding the key can open | fixed | D18 "How the key is protected" |
+| M7 | fixed, with a stated gap | Task 6.5d's words promise nothing that holds only when the spare accepts: this box keeps selling, sends the settings by itself, try again in a minute. A spare that keeps refusing is left out of the words on purpose, and Task 6.5d says so |
+| M8 | moot | Task 6.5d changes no handover code; D18 "Not FISCAL" says what it changes |
+| M9, the writers | fixed | D18 "What travels" lists the restores and says the poll covers them |
+| M10, Task 5.5b's size | fixed | split into Tasks 5.5b-1 and 5.5b-2 |
+| Found while revising: the guide's "Adding a spare box" | fixed | Task 6.10 names turning backups on first, under Q2's option (i) |
+| Round 3, I3: Q2's option (ii) in its weakest form | fixed | (ii) now shows the key once on the spare's Connect screen behind the same tick; both options' costs stated; (i) recommended for cost and reuse of the Backups flow, not safety |
+| Round 3, M2, M3, M5, M6 | fixed | D18 Limits names the environment-managed main box and why no task covers it; Task 6.3b updates `backup.recovery_key_missing`'s doc comment; the file structure lists D18's files; the first sealed row's key is worded as "whatever key its `backup.env` holds then" |
+| Stale citations | re-anchored | every line number in the header notes, D18, the D18 tasks and the four corrections, read on `bfd71ca306` |

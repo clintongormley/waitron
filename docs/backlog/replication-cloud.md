@@ -769,7 +769,15 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
 - **A spare needs the main box's backup settings, and nothing carries them yet.** The owner's answer
   (2026-11-04): joining gives `backup.env`, later changes follow, and a spare that was off catches
   up. Until then a venue with a recovery key is refused `handover.backup_settings_differ` at the
-  offer, the main box still selling. Goes in A947 3b's plan, with A1273. Ruling O3.
+  offer, the main box still selling. Planned, not built: A947 3b's plan, Decision D18 (2026-11-08,
+  revised 2026-11-10) — in 3b-5, Tasks 5.5b-1 and 5.5b-2 (the join carries it); in 3b-6, Task 6.3
+  (the joining spare's first copy reads its stream key from it), Tasks 6.5b and 6.5c (the main box
+  sends it every change from the spare's first full start on, and until a spare that was off
+  answers), Tasks 6.3b and 6.3c (a main box with no recovery key refuses a join; 3b-6 waits for the
+  owner's question Q2),
+  Task 6.5d (words for the refusal that say what to do) and Task 6.9b (two boxes). The offer's
+  comparison stays the check before the main box stops selling. A1273's key ring stays under D7.
+  Ruling O3. [Plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md)
 - **A different key under the same version passes the handover's comparison.** It compares ring
   versions only, so M2 places a copy whose sealed rows it cannot open, and filing then refuses (both
   run in a test). A real join copies the ring (`apps/server/src/adopt.ts`), so no real box reaches
