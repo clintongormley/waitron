@@ -1689,7 +1689,11 @@ describe("card payments stuck after a restart", () => {
     ],
     [
       { code: "payment.not_stuck", params: { paymentId: "pay-1" } },
-      "This payment is no longer stuck — the list has been refreshed.",
+      "This payment is no longer stuck.",
+    ],
+    [
+      { code: "stuck_payment.not_found", params: { paymentId: "pay-1" } },
+      "There is no such stuck payment.",
     ],
     [
       { code: "payment.resolve_unsupported", params: { providerId: "acme" } },

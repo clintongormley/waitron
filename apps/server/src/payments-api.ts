@@ -165,6 +165,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.not_found": 404,
   "device_profile.invalid": 400,
   "payment.not_stuck": 409,
+  "stuck_payment.not_found": 404,
   "payment.hold_not_found": 404,
   "payment.hold_already_recorded": 409,
   "payment.resolve_unsupported": 422,
@@ -194,6 +195,17 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const DASHBOARD_PIN_SLOT = "management";
 
 const run = createErrorBoundary(STATUS, "payments.failed");
+// Pairing and adoption name their provider only in the body's `providerId`.
+const runBodyProvider = createErrorBoundary(
+  { ...STATUS, "payment.provider_unknown": 400 },
+  "payments.failed",
+);
+// A device's reader and a profile's reader list name their readers only in the body's `readerId`
+// and `readerIds`.
+const runBodyReaders = createErrorBoundary(
+  { ...STATUS, "reader.not_found": 400 },
+  "payments.failed",
+);
 
 async function requireKnownReader(tx: Transaction, readerId: string): Promise<void> {
   const [reader] = await tx
@@ -556,7 +568,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   );
 
   app.post("/management-api/payments/readers/adopt", (c) =>
-    run(c, log, async () => {
+    runBodyProvider(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const providerId = requireString(body.providerId, "providerId");
@@ -833,7 +845,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   );
 
   app.post("/management-api/payments/readers", (c) =>
-    run(c, log, async () => {
+    runBodyProvider(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const providerId = requireString(body.providerId, "providerId");
@@ -978,7 +990,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   // A reader id is the device's explicit choice, never taking one another device holds; `null`
   // puts the device on its profile's default.
   app.put("/management-api/payments/devices/:id/reader", (c) =>
-    run(c, log, async () => {
+    runBodyReaders(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const deviceId = requireUuidParam(c.req.param("id"), "DeviceId");
       const body = await readJsonBody<{ readerId?: unknown }>(c);
@@ -1015,7 +1027,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   // Replaces the profile's reader list and default; its devices' choices it no longer lists go
   // back to Use default.
   app.put("/management-api/payments/device-profiles/:id/readers", (c) =>
-    run(c, log, async () => {
+    runBodyReaders(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const profileId = requireUuidParam(c.req.param("id"), "DeviceProfileId");
       const body = await readJsonBody<{ readerIds?: unknown; defaultReaderId?: unknown }>(c);
@@ -1124,6 +1136,15 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
               await collectionScope(tx),
             ),
           );
+        if (row === undefined) {
+          // Only an id naming no payment at all is missing; another box's payment, or a bill's,
+          // exists and is not stuck here.
+          const [exists] = await tx
+            .select({ id: payments.id })
+            .from(payments)
+            .where(eq(payments.id, paymentId));
+          if (exists === undefined) throw new AppError("stuck_payment.not_found", { paymentId });
+        }
         if (
           row?.state !== "attempting" ||
           (row.orderStatus !== "open" && row.orderStatus !== "placed") ||

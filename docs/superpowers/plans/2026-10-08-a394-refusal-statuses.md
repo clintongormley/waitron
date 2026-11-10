@@ -228,8 +228,9 @@ pin today's number are in the part named.
   `/stations/:sid/printers` → 400; `watcher.not_found` on `/printers/:id/watcher` → 400;
   `printer.invalid_config` 422 → 400 (moved to A394-20 on 2026-11-10; it waits on question 4).
 - **Payments (A394-15)** — part 3: `payment.provider_unknown` (body, 2 routes), `reader.not_found`
-  (body, 2 routes) → 400; `reader.not_listed` on adopt 422 → 400; `payment.not_stuck` for an unknown
-  payment 409 → 404.
+  (body, 2 routes) → 400; `reader.not_listed` on adopt 422 → 400 (moved to A394-20 on 2026-11-10; it
+  waits on question 4); `payment.not_stuck` for an unknown payment 409 → 404 (answered since
+  2026-11-10 by a new code, `stuck_payment.not_found`).
 - **Setup (A394-16)** — part 1: `provisioning.foreign_tenant` (provision, adopt),
   `provisioning.second_venue` (adopt), `mirror.environment_mismatch` (adopt) default 400 → 409.
 - **Shift swaps (A394-17)** — parts 2 and 3: `shift.not_found` from the body on
@@ -570,6 +571,26 @@ Status changes:
   `bill.payment_not_found` 404 (already in this table; check its params); the `/unpair` field
   param; the 422 group per question 4. Tests to change: `payments-api.test.ts:586,1027,1448`,
   `payments-api.stuck.test.ts:838`. Size M. Depends on: question 4 for the 422 group.
+  **2026-11-10 (A394-15):** done — a provider that only the body's `providerId` names now answers
+  `payment.provider_unknown` 400 on `POST /management-api/payments/readers` (pair) and
+  `POST /management-api/payments/readers/adopt`; the provider in the path of
+  `/providers/:id/connect` and `/disconnect` keeps 404. A card reader that only the body names
+  answers `reader.not_found` 400 on `PUT /management-api/payments/devices/:id/reader` (`readerId`)
+  and `PUT /management-api/payments/device-profiles/:id/readers` (`readerIds`), for an unknown and
+  for a deleted reader; the path device and profile keep `device.not_found` and
+  `device_profile.not_found` 404. Each pair of routes has its own boundary built from the file's
+  `STATUS` with that one code at 400 (`runBodyProvider`, `runBodyReaders`); the shared table is
+  unchanged. `POST /management-api/payments/stuck/:id/resolve` now answers an id naming no payment
+  with a new code, `stuck_payment.not_found {paymentId}` 404, rather than `bill.payment_not_found`
+  as planned: that code names a bill payment, which this route never resolves. A payment that
+  exists but is not stuck here (settled, unmarked, another box's, or part of a bill) keeps
+  `payment.not_stuck` 409. On these routes nothing else raises the two codes: pair and adopt look up only
+  the body's provider (a stored reader's provider is looked up on other routes), and `selectDeviceEquipment`
+  raises `reader.not_found` only for the body's reader. Left alone: `reader.not_listed` on adopt and
+  the rest of the 422 group (question 4), and `/unpair`'s `management.request_invalid
+  {field:"providerId"}` and the stored-provider `payment.provider_unknown` rows; A394-20 now
+  carries them. A grep of `apps/dashboard`, `apps/till`, `apps/setup` and `packages/` on 2026-11-10
+  finds no client comparing the status of these five routes; the dashboard reads the code.
 - **A394-16 — Setup: clashes answer 409, unreadable copies 422.** Files: `apps/server/src/setup-api.ts`
   (`PROVISION_STATUS`, `ADOPT_STATUS`), `configuration-transfer.ts:524,529`, `apps/setup` for a new
   code. Changes `provisioning.foreign_tenant`, `provisioning.second_venue`,
@@ -596,7 +617,10 @@ Status changes:
   till's no-reader case, `print-api.ts`'s `printer.invalid_config` 422 and two Bluetooth 409s
   (left by A394-14), and `catalogue-api.ts`'s `menu_section.wrong_role`,
   `menu.shortcut_unreachable` and `extras.product_has_variants` 409s (left by A394-11) and its
-  folder summary's query ids at 404 (question 8, left by A394-11). Statuses per questions 4, 5, 8,
+  folder summary's query ids at 404 (question 8, left by A394-11), and `payments-api.ts`'s
+  `reader.not_listed` on adopt and its other 422s, `/unpair`'s `management.request_invalid
+  {field:"providerId"}` and the `payment.provider_unknown` a stored provider raises (enable,
+  disable, delete, status, unpair, and the stuck and bill-payment resolves; left by A394-15). Statuses per questions 4, 5, 8,
   9, 10, 11, 14. Tests listed per row in the parts.
   Size M; split by file if it grows. Depends on: those questions.
 - **A394-21 — Server faults answer 500, an unset box 409.** Files:
@@ -1361,6 +1385,12 @@ STORED provider (`:421,626`), so a reader whose provider module is switched off 
 `payment.provider_unknown` 404 although the path reader exists. And `/unpair` answers
 `management.request_invalid` `{ field: "providerId" }` 400 (`:628-629`) when the provider cannot unpair,
 though the request has no `providerId` field.
+
+**2026-11-10 (A394-15):** the two `payment.provider_unknown` rows and the two `reader.not_found` rows
+now answer 400, each pair under its own boundary; an unknown id on the stuck resolve now answers a new
+code, `stuck_payment.not_found` 404, and a payment that exists but is not stuck keeps
+`payment.not_stuck` 409. The `reader.not_listed` row, the 422 group, the stored-provider
+`payment.provider_unknown` and `/unpair`'s `management.request_invalid` now sit under A394-20.
 
 ### print-api.ts — boundary `print-api.ts:136` (map `:110-134`)
 
