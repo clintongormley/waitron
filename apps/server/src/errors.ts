@@ -409,6 +409,7 @@ declare module "@waitron/shared" {
      */
     "payment.provider_in_use": { activeReaders: number };
     "payment.not_stuck": { paymentId: string };
+    "stuck_payment.not_found": { paymentId: string };
     "payment.resolve_unsupported": { providerId: string };
     /** The processor could not say what became of the payment; the row and the order's mark are
      * left as they were. */

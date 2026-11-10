@@ -610,7 +610,18 @@ describe("device and profile readers", () => {
 
     expect(noProfile.status).toBe(404);
     expect(await noProfile.json()).toMatchObject({ error: { code: "device_profile.not_found" } });
-    expect(noReader.status).toBe(404);
+    const unknownProfile = randomUUID();
+    const putNoProfile = await send(
+      app,
+      "PUT",
+      `/management-api/payments/device-profiles/${unknownProfile}/readers`,
+      { ...opts, body: { readerIds: [unknownReader], defaultReaderId: null } },
+    );
+    expect(putNoProfile.status).toBe(404);
+    expect(await putNoProfile.json()).toMatchObject({
+      error: { code: "device_profile.not_found" },
+    });
+    expect(noReader.status).toBe(400);
     expect(await noReader.json()).toEqual({
       error: { code: "reader.not_found", params: { id: unknownReader } },
     });
@@ -1945,6 +1956,37 @@ describe("screens and unknown ids", () => {
     expect(await sealedStripe()).toBeNull();
   });
 
+  it("answers a provider only the body names with 400 payment.provider_unknown, and one in the path with 404", async () => {
+    const venue = await seedVenueWithStaff();
+    const app = mountApp(venue);
+    const opts = { cookie: venue.managerCookie };
+    const unknown = { error: { code: "payment.provider_unknown", params: { providerId: "nope" } } };
+
+    const pair = await send(app, "POST", "/management-api/payments/readers", {
+      ...opts,
+      body: { providerId: "nope", name: "Barra 1", reference: nextRef() },
+    });
+    expect(pair.status).toBe(400);
+    expect(await pair.json()).toEqual(unknown);
+
+    const adopt = await send(app, "POST", "/management-api/payments/readers/adopt", {
+      ...opts,
+      body: { providerId: "nope", providerRef: "tmr_x", name: "Counter" },
+    });
+    expect(adopt.status).toBe(400);
+    expect(await adopt.json()).toEqual(unknown);
+
+    const connect = await send(app, "POST", "/management-api/payments/providers/nope/connect", {
+      ...opts,
+      body: GOOD_KEY,
+    });
+    expect(connect.status).toBe(404);
+    expect(await connect.json()).toEqual(unknown);
+
+    const readers = await send(app, "GET", "/management-api/payments/readers", opts);
+    expect(await readers.json()).toEqual([]);
+  });
+
   it.each([
     ["PATCH", "", { name: "Nuevo" }],
     ["POST", "/disable", undefined],
@@ -2089,7 +2131,7 @@ describe("screens and unknown ids", () => {
 
     const unknownReader = randomUUID();
     const noReader = await put(device, { readerId: unknownReader });
-    expect(noReader.status).toBe(404);
+    expect(noReader.status).toBe(400);
     expect(await noReader.json()).toEqual({
       error: { code: "reader.not_found", params: { id: unknownReader } },
     });
@@ -2870,11 +2912,11 @@ describe("reader delete", () => {
 
       const notFound = { error: { code: "reader.not_found", params: { id: doomed } } };
       expect({ status: chosen.status, body: await chosen.json() }).toEqual({
-        status: 404,
+        status: 400,
         body: notFound,
       });
       expect({ status: relisted.status, body: await relisted.json() }).toEqual({
-        status: 404,
+        status: 400,
         body: notFound,
       });
       expect(

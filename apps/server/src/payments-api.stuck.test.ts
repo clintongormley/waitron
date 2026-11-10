@@ -1386,7 +1386,7 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect(await orderOf(orderId)).toEqual({ status: "open", mark: MARK });
   });
 
-  it("refuses not_stuck for an attempting payment whose order carries no mark, and for an unknown id", async () => {
+  it("refuses not_stuck for an attempting payment whose order carries no mark, and not_found for an unknown id", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
     const { paymentId } = await strandPayment(
@@ -1403,9 +1403,9 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
 
     const unknownId = randomUUID();
     const unknown = await send(v, "POST", resolvePath(unknownId));
-    expect(unknown.status).toBe(409);
+    expect(unknown.status).toBe(404);
     expect(await errorOf(unknown)).toEqual({
-      code: "payment.not_stuck",
+      code: "stuck_payment.not_found",
       params: { paymentId: unknownId },
     });
   });

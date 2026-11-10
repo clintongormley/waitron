@@ -1271,6 +1271,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This payment is no longer stuck — the list has been refreshed.",
     es: "Este cobro ya no está pendiente; se ha actualizado la lista.",
   },
+  "stuck_payment.not_found": {
+    en: "There is no such stuck payment — the list has been refreshed.",
+    es: "No existe ese cobro pendiente; se ha actualizado la lista.",
+  },
   "payment.hold_not_found": {
     en: "That payment is no longer held.",
     es: "Ese pago ya no está retenido.",

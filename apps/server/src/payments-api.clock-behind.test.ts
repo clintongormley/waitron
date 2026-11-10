@@ -144,7 +144,7 @@ const ROUTES: {
   {
     name: "stuck resolve",
     path: (id) => `/management-api/payments/stuck/${id}/resolve`,
-    next: { status: 409, code: "payment.not_stuck" },
+    next: { status: 404, code: "stuck_payment.not_found" },
   },
   {
     name: "bill payment resolve",
