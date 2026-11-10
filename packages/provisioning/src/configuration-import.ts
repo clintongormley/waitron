@@ -85,9 +85,14 @@ export async function stageConfigurationImport(
       .map(([name, rows]) => [name, rows.length]),
   );
   await rm(join(stateDir, MARKER), { force: true });
-  await writeFileDurable(join(stateDir, ARTIFACT), artifact, 0o600);
-  await writeFileDurable(join(stateDir, KEY), wrapPassphrase(ring, passphrase), 0o600);
-  await writeFileDurable(join(stateDir, MARKER), JSON.stringify({ version: 1 }), 0o600);
+  try {
+    await writeFileDurable(join(stateDir, ARTIFACT), artifact, 0o600);
+    await writeFileDurable(join(stateDir, KEY), wrapPassphrase(ring, passphrase), 0o600);
+    await writeFileDurable(join(stateDir, MARKER), JSON.stringify({ version: 1 }), 0o600);
+  } catch (error) {
+    await clearStagedConfigurationImport(stateDir);
+    throw error;
+  }
   return { venue: bundle.venue, counts, reconnect: bundle.reconnect };
 }
 

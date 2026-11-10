@@ -285,6 +285,7 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
       0o600,
     );
   } catch (error) {
+    await rm(join(stateDir, MARKER), { force: true });
     await clearNodeKey(stateDir);
     throw error;
   }

@@ -9,7 +9,7 @@ import { readOperationalVenueIds, readTenantIdentities } from "@waitron/provisio
 import { SECRETS_ENV_FILE, TLS_DIR, TLS_JOINED_FILE, VENUE_FILE } from "@waitron/store";
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
-import { writeFileDurable } from "./fs-atomic.js";
+import { failedAtFolderSync, writeFileDurable } from "./fs-atomic.js";
 import { joinedAnotherBox } from "./box-tls-install.js";
 import type { Logger } from "./logger.js";
 import { createSetupOperationStore } from "./setup-operation.js";
@@ -25,11 +25,16 @@ export interface StagedResetDeps {
 
 /** Stage the reset of the adopt `operationId`, for the next start to carry out. */
 export async function stageResetRequest(stateDir: string, operationId: string): Promise<void> {
-  await writeFileDurable(
-    join(stateDir, MARKER),
-    JSON.stringify({ version: 1, operationId }),
-    0o600,
-  );
+  try {
+    await writeFileDurable(
+      join(stateDir, MARKER),
+      JSON.stringify({ version: 1, operationId }),
+      0o600,
+    );
+  } catch (error) {
+    if (failedAtFolderSync(error)) await rm(join(stateDir, MARKER), { force: true });
+    throw error;
+  }
 }
 
 function stagedOperationId(raw: string): string | null {

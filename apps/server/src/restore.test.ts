@@ -591,6 +591,19 @@ describe("the first-start marker (rebuild-first-start.ts)", () => {
     await noMarker();
   });
 
+  it("disarms the first-start marker when its folder sync fails before placement", async () => {
+    const failure = Object.assign(new Error("folder sync failed"), { code: "EIO" });
+    const thrown = await failingOn(
+      "open",
+      (path) => path === stateDir && existsSync(join(stateDir, REBUILD_MARKER)),
+      failure,
+      () => restoreFromArtifact(makeRestoreDeps()),
+    );
+    expect(thrown).toBe(failure);
+    await noMarker();
+    expect(existsSync(join(venueDir, "venue.db"))).toBe(false);
+  });
+
   it("leaves no marker when the restore fails after it began writing", async () => {
     await expect(
       restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": boom }) })),

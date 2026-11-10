@@ -538,14 +538,14 @@ export async function writeValidated(
     // before anything is placed, so a box that trades after this restore finds it; a restore that
     // throws removes it while the lock is still held.
     const marker = join(deps.stateDir, REBUILD_MARKER);
-    if (!deps.skipSecrets) {
-      await writeFileDurable(
-        marker,
-        JSON.stringify({ version: 1, source: deps.rebuildSource ?? "archive" }),
-        0o600,
-      );
-    }
     try {
+      if (!deps.skipSecrets) {
+        await writeFileDurable(
+          marker,
+          JSON.stringify({ version: 1, source: deps.rebuildSource ?? "archive" }),
+          0o600,
+        );
+      }
       await placeValidated(admitted, deps);
     } catch (error) {
       if (!deps.skipSecrets) await rm(marker, { force: true });
