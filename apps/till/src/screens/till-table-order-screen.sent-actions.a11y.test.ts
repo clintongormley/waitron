@@ -6,7 +6,7 @@ import { setLocale } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
-import { resized } from "./till-table-order-screen.test-helpers.js";
+import { resized, showView } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import "../till-app.js";
 
@@ -61,11 +61,7 @@ describe.each(["en", "es"] as const)("Sent dish actions in %s", (locale) => {
       );
       host.style.width = "100%";
       await resized(el);
-      const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-      if (review?.checkVisibility()) {
-        await userEvent.click(review);
-        await el.updateComplete;
-      }
+      await showView(el, "order", { ifShown: true });
       const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
       for (const kind of ["held", "served"] as const) {

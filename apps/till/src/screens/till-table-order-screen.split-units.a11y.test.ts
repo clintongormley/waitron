@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
-import { beer, menuOf, resized } from "./till-table-order-screen.test-helpers.js";
+import { beer, menuOf, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
 afterEach(async () => {
@@ -26,10 +26,7 @@ describe.each(["en", "es"] as const)("Split quantity %s", (locale) => {
       );
       host.style.width = "100%";
       await resized(el);
-      if (width < 1280) {
-        await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!);
-        await el.updateComplete;
-      }
+      if (width < 1280) await showView(el, "order");
       const pane = el.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]")!;
       const control = pane.querySelector<HTMLButtonElement>("[data-split-draft-line]")!;
       const basket = control.closest("till-basket")!;

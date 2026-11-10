@@ -7,7 +7,7 @@ import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
-import { beer, flan, mount, resized } from "./till-table-order-screen.test-helpers.js";
+import { beer, flan, mount, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
@@ -191,9 +191,7 @@ it("a drop on another mounted table cannot move this bill's draft", async () => 
   other.el.style.width = "500px";
   other.el.style.zIndex = "10";
   await resized(other.el);
-  const review = q(other.el, "[data-view=order]");
-  if (review?.checkVisibility()) await userEvent.click(review);
-  await other.el.updateComplete;
+  await showView(other.el, "order", { ifShown: true });
   await drop(el, lead(el, 0), q(other.el, '[data-draft-group="new:2"] h3'));
   expect(draft.lines[0]!.place).toEqual({ kind: "fire" });
   expect(other.draft.lines[0]!.place).toEqual({ kind: "fire" });

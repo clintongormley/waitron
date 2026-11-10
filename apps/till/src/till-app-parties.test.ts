@@ -2,7 +2,7 @@ import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import type { TillSentOrders } from "./widgets/sent-orders.js";
 import type { FinishTableResolution } from "./api/finish-table-types.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
-import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
+import { openDraftLine, showView } from "./screens/till-table-order-screen.test-helpers.js";
 import {
   openTableMenu,
   switchToBill,
@@ -462,11 +462,8 @@ const tableOrder = (el: TillApp) =>
 const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
 async function heldGroupsList(el: TillApp) {
   const order = tableOrder(el)!;
-  const review = order.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-  if (review?.checkVisibility()) {
-    await userEvent.click(review);
-    await flush(el);
-  }
+  await showView(order, "order", { ifShown: true });
+  await flush(el);
   const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
   for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
@@ -7396,11 +7393,8 @@ describe("till-app: the order's groups", () => {
 
     async function openSent(el: TillApp) {
       const order = tableOrder(el)!;
-      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-      if (review?.checkVisibility()) {
-        await userEvent.click(review);
-        await flush(el);
-      }
+      await showView(order, "order", { ifShown: true });
+      await flush(el);
       const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
       for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
@@ -8429,7 +8423,7 @@ describe("till-app: submitting the draft", () => {
     const server = groupsServer();
     const { el } = await mountApp({ ...withCourses(), ...server, ...firstOrderHistory() });
     const order = await openPartyTable(el);
-    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-view=menu]")!);
+    await showView(order, "menu");
     await flush(el);
     await ring(el, order, beer, salad, croquettes, steak, flan);
 
@@ -9863,11 +9857,7 @@ describe("till-app: Current orders", () => {
 
     async function visiblePanel(order: TillTableOrderScreen): Promise<TillSentOrders> {
       await order.updateComplete;
-      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-      if (review?.checkVisibility()) {
-        await userEvent.click(review);
-        await order.updateComplete;
-      }
+      await showView(order, "order", { ifShown: true });
       const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
       const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;

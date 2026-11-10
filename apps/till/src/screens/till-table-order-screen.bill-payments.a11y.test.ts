@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
-import { resized } from "./till-table-order-screen.test-helpers.js";
+import { page } from "vitest/browser";
+import { resized, showView } from "./till-table-order-screen.test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
@@ -138,11 +138,7 @@ describe("till-table-order-screen handheld Pay button look", () => {
           expect(window.innerWidth).toBe(width);
           const { el } = await mountHandheld(theme, bill, balance);
           await resized(el);
-          const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-          if (review?.checkVisibility()) {
-            await userEvent.click(review);
-            await el.updateComplete;
-          }
+          await showView(el, "order", { ifShown: true });
           // The bill switcher is painted in the surface colour the drawer was.
           const switcher = el
             .shadowRoot!.querySelector("[data-bill-switcher]")!

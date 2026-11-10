@@ -1123,7 +1123,7 @@ tile's size and the name stays centred and wraps as it would with no number draw
 Every count comes from `apps/till/src/state/new-order-count.ts`: `newOrderItems` (the switch and
 the bar), `newOrderDishes` (the bar's list, one entry per shown name in first-appearance order) and
 `newOrderByProduct` (the tiles), where a whole-unit line counts by quantity and a weighed or
-fractional one counts as one. Guards: `till-table-order-screen.review.test.ts`,
+fractional one counts as one. Guards: `till-table-order-screen.view-switch.test.ts`,
 `till-table-order-screen.new-order-bar.test.ts`, the "a tile's number in the New order" cases in
 `widgets/menu-browser.test.ts` and `state/new-order-count.test.ts`; weaker than the paragraph:
 the screen cases mount the screen without `till-app`; `till-app-open-table.test.ts`'s handheld

@@ -279,6 +279,7 @@ it.each([390, 1280])(
     const {
       mount,
       resized,
+      showView,
       store: draftOf,
       beer,
     } = await import("./till-table-order-screen.test-helpers.js");
@@ -287,10 +288,7 @@ it.each([390, 1280])(
     host.style.height = "700px";
     host.style.overflow = "auto";
     await resized(el);
-    if (width === 390) {
-      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!);
-      await el.updateComplete;
-    }
+    if (width === 390) await showView(el, "order");
     const draft = draftOf(el);
     for (let n = 0; n < 25; n++)
       draft.addProduct(

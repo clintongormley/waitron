@@ -24,7 +24,7 @@ import {
   mountWidget,
   servedMenus,
 } from "../widgets/test-helpers.js";
-import { openDraftLine, resized } from "./till-table-order-screen.test-helpers.js";
+import { openDraftLine, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import { TillTableOrderScreen, type TableRelocationOpenDetail } from "./till-table-order-screen.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -299,12 +299,6 @@ const draftToggle = (el: TillTableOrderScreen, name: string) =>
   [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-select]")].find((toggle) =>
     toggle.textContent!.includes(name),
   )!;
-
-/** Below the side-by-side width, as in Vitest's default frame, the draft is on its Review view. */
-async function openReview(el: TillTableOrderScreen): Promise<void> {
-  el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
-  await el.updateComplete;
-}
 
 async function saveDraftLine(el: TillTableOrderScreen): Promise<void> {
   for (const basket of el.shadowRoot!.querySelectorAll("till-basket")) {
@@ -1300,7 +1294,7 @@ describe("till-table-order-screen", () => {
         host.style.width = "390px";
         await ring(el, [beer, "1"], [steak, "1"]);
         await toggle(el, "Beer");
-        await openReview(el);
+        await showView(el, "order", { scripted: true });
         const edge = el.getBoundingClientRect().right;
         const actions = [...el.shadowRoot!.querySelectorAll("[data-draft-action]")];
         expect(actions.length).toBe(2);
@@ -1325,7 +1319,7 @@ describe("till-table-order-screen", () => {
         const { el } = await mount({ courses: serviceCourses, products: menu });
         await ring(el, [beer, "1"]);
         await toggle(el, "Beer");
-        await openReview(el);
+        await showView(el, "order", { scripted: true });
         let sent = false;
         el.addEventListener("submit-draft", () => (sent = true));
         const places = grid(el).store.lines.map((line) => line.place);
@@ -1412,7 +1406,7 @@ describe("till-table-order-screen", () => {
         );
       async function openMove(el: TillTableOrderScreen, name: string): Promise<void> {
         await toggle(el, name);
-        await openReview(el);
+        await showView(el, "order", { scripted: true });
         await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-draft-move]")!);
         expect(moveDialog(el).open).toBe(true);
       }
@@ -1531,7 +1525,7 @@ describe("till-table-order-screen", () => {
         const { el, host } = await mount({ courses: serviceCourses, products: menu, groups: held });
         host.style.width = "390px";
         await ring(el, [croquettes, "1"]);
-        await openReview(el);
+        await showView(el, "order", { scripted: true });
         await openMove(el, "Croquetas");
         const edge = el.getBoundingClientRect().right;
         const controls = [...moveDialog(el).querySelectorAll("[data-draft-move-to]")];
@@ -1544,7 +1538,7 @@ describe("till-table-order-screen", () => {
       it("gives draft rows, Move to, Fire and Send all, destinations and Back 44 px tap targets", async () => {
         const { el } = await mount({ courses: serviceCourses, products: menu, groups: held });
         await ring(el, [croquettes, "1"], [steak, "1"]);
-        await openReview(el);
+        await showView(el, "order", { scripted: true });
         const controls = el.shadowRoot!.querySelectorAll(
           "[data-draft-select], [data-draft-move], [data-draft-action]",
         );
@@ -5882,7 +5876,7 @@ describe("closed department ordering", () => {
 });
 
 describe("A668 nutrition after table-order names", () => {
-  it("shows nutrition in the last-added draft summary and the draft review row", async () => {
+  it("shows nutrition in the last-added draft summary and the draft row on Order", async () => {
     const draft = new WorkingOrderStore();
     const dish: TillProduct = {
       ...coffee,
@@ -5905,7 +5899,7 @@ describe("A668 nutrition after table-order names", () => {
           '[data-last-added] .last-added-name wt-icon[name="diet-no_meat"]',
         ),
     ).not.toBeNull();
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     expect(
       el.shadowRoot!.querySelector(
         '[data-draft-select] .draft-line-name wt-icon[name="allergen-milk"]',

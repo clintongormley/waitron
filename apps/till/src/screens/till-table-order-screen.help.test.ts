@@ -6,7 +6,14 @@ import { cleanupWidgets, expectNoA11yViolations } from "../widgets/test-helpers.
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { helpBadgeLabel, helpEn, helpEs } from "../i18n/help-strings.js";
 import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
-import { beer, flan, mount, resized, store } from "./till-table-order-screen.test-helpers.js";
+import {
+  beer,
+  flan,
+  mount,
+  resized,
+  showView,
+  store,
+} from "./till-table-order-screen.test-helpers.js";
 
 let locale = currentLocale();
 let viewport = { width: 0, height: 0 };
@@ -34,11 +41,7 @@ async function mountWithLines(over: Partial<TillTableOrderScreen> = {}, theme?: 
   store(mounted.el).addProduct(flan, "1");
   await mounted.el.updateComplete;
   await resized(mounted.el);
-  const review = mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-  if (review?.checkVisibility()) {
-    await userEvent.click(review);
-    await mounted.el.updateComplete;
-  }
+  await showView(mounted.el, "order", { ifShown: true });
   return mounted;
 }
 

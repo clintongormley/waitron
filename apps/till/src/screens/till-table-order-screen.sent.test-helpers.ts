@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import type { WtDialog, WtRowActions } from "@waitron/ui";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import { resized } from "./till-table-order-screen.test-helpers.js";
+import { resized, showView } from "./till-table-order-screen.test-helpers.js";
 
 export async function sentPanelFor(screen: TillTableOrderScreen): Promise<TillSentOrders> {
   screen.style.width = "1280px";
@@ -66,10 +66,7 @@ export async function chooseSentServing(
 
 export async function sentFallbackFor(screen: TillTableOrderScreen): Promise<HTMLElement> {
   const pane = screen.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]")!;
-  if (pane.hidden) {
-    await userEvent.click(screen.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!);
-    await screen.updateComplete;
-  }
+  if (pane.hidden) await showView(screen, "order");
   const fallback = screen.shadowRoot!.querySelector<HTMLElement>("[data-sent-fallback]");
   expect(
     fallback,

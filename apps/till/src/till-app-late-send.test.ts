@@ -36,6 +36,7 @@ import {
   server as allergyServer,
   tableOrder as allergyOrder,
 } from "../test/allergy-app-fixture.js";
+import { showView } from "./screens/till-table-order-screen.test-helpers.js";
 
 interface Menu {
   id: string;
@@ -318,7 +319,7 @@ function emit(source: Element, type: string, detail?: unknown): void {
 const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen")!;
 const screen = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!.shadowRoot!;
-/** The draft's store, read from the menu browser before it gives way to the order's review. */
+/** The draft's store, read from the menu browser before it gives way to the Order view. */
 let store: WorkingOrderStore;
 const windowOf = (el: TillApp) => el.shadowRoot!.querySelector("till-late-send-dialog");
 const windowDishes = (el: TillApp) =>
@@ -935,7 +936,7 @@ describe("a manager's PIN", () => {
     await act(el, "send-all");
     await choose(el, "data-late-agreed");
     expect(api.serviceDayAuthorizers).toHaveBeenCalledOnce();
-    await userEvent.click(screen(el).querySelector<HTMLElement>("[data-view=order]")!);
+    await showView(allergyOrder(el)!, "order");
     await flush(el);
 
     const send = screen(el).querySelector<HTMLElement>('[data-draft-action="send-all"]')!;

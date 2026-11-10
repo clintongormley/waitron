@@ -25,6 +25,7 @@ import type {
   TillMenuOffer,
   ZoneOfferCatalogue,
 } from "../src/api/client.js";
+import { showView } from "../src/screens/till-table-order-screen.test-helpers.js";
 export const unit = {
   id: "unit-each",
   staffName: "Staff unit",
@@ -361,8 +362,7 @@ export async function addDish(el: TillApp): Promise<void> {
   )!;
   await userEvent.click(tile);
   await flush(el);
-  const review = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-  if (review && review.getBoundingClientRect().width > 0) await userEvent.click(review);
+  await showView(tableOrder(el)!, "order", { ifShown: true });
   await flush(el);
 }
 export const dialog = (el: TillApp) =>

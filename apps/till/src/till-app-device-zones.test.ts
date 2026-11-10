@@ -27,6 +27,7 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import { ServerRouter } from "./api/server-router.js";
 import { SessionActivity } from "./session-activity.js";
 import { TillApp } from "./till-app.js";
+import { showView } from "./screens/till-table-order-screen.test-helpers.js";
 
 const locale = currentLocale();
 afterEach(() => {
@@ -3016,8 +3017,7 @@ describe("a handheld's zones", () => {
       await vi.waitFor(() => expect(order()!.billEdit?.draftRevision).toBe(1));
       await el.updateComplete;
       await order()!.updateComplete;
-      const review = order()!.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-      if (review !== null) await userEvent.click(review);
+      await showView(order()!, "order", { ifShown: true });
       const sendAll = () =>
         order()!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
           '[data-draft-action="send-all"]',

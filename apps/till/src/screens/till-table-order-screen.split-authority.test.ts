@@ -5,7 +5,7 @@ import { DraftStore } from "../state/draft-sync.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
-import { beer, mount } from "./till-table-order-screen.test-helpers.js";
+import { beer, mount, showView } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
@@ -42,9 +42,7 @@ async function opening(kind: "split" | "source" | "fold") {
   if (kind === "source")
     draft.lines[0]!.source = { line: storedDish, extras: [storedExtra], netAmount: "8.00" };
   const { el } = await mount({ draftStore: draft, billEdit: { ...observation } });
-  const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-  if (review?.checkVisibility()) await userEvent.click(review);
-  await el.updateComplete;
+  await showView(el, "order", { ifShown: true });
   if (kind === "fold") {
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-split-draft-line]")!);
     await el.updateComplete;

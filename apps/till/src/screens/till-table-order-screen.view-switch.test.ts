@@ -27,8 +27,6 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 describe("till-table-order-screen: browsing and the order by the screen's width", () => {
-  const review = (el: TillTableOrderScreen) =>
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
   const draftPane = (el: TillTableOrderScreen) =>
     el.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]");
   const browsing = (el: TillTableOrderScreen) =>
@@ -150,8 +148,7 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     await resized(el);
     await tap(el, "Beer");
     await tap(el, "Beer");
-    review(el)!.click();
-    await el.updateComplete;
+    await showView(el, "order", { scripted: true });
     for (const basket of el.shadowRoot!.querySelectorAll<
       HTMLElement & { updateComplete: Promise<unknown> }
     >("till-basket"))
@@ -161,7 +158,7 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     expect(toggle.getBoundingClientRect().height).toBeLessThan(2 * 44);
   });
 
-  it("comes Back to the same browsing, its open section and its scroll position, with the draft kept", async () => {
+  it("Menu comes back to the same browsing, its open section and its scroll position, with the draft kept", async () => {
     const fillers = Array.from({ length: 40 }, (_, n) => ({
       ...beer,
       id: `tapa-${n}`,
@@ -189,9 +186,8 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     expect(scrolled).toBeGreaterThan(0);
     const before = browser(el);
 
-    review(el)!.click();
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view=menu]")!.click();
+    await showView(el, "order", { scripted: true });
+    await showView(el, "menu", { scripted: true });
     await resized(el);
 
     expect(browser(el)).toBe(before);
@@ -217,7 +213,7 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     host.scrollTop = 700;
     const scrolled = host.scrollTop;
     expect(scrolled).toBeGreaterThan(0);
-    review(el)!.click();
+    await showView(el, "order", { scripted: true });
     await resized(el);
 
     host.style.width = "1280px";
@@ -240,7 +236,7 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     await resized(el);
     await tap(el, "Beer");
 
-    expect(review(el)).toBeNull();
+    expect(orderButton(el)).toBeNull();
     expect(shown(browsing(el))).toBe(true);
     expect(shown(draftPane(el))).toBe(true);
     const side = browsing(el)!.getBoundingClientRect();
@@ -253,12 +249,12 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     host.style.width = "1280px";
     await resized(el);
     await tap(el, "Beer");
-    expect(review(el)).toBeNull();
+    expect(orderButton(el)).toBeNull();
 
     host.style.width = `${DRAFT_SIDE_BY_SIDE_MIN_WIDTH - 1}px`;
     await resized(el);
 
-    expect(shown(review(el))).toBe(true);
+    expect(shown(orderButton(el))).toBe(true);
     expect(shown(draftPane(el))).toBe(false);
   });
 

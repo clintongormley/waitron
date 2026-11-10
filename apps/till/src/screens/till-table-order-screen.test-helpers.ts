@@ -171,11 +171,7 @@ export async function openDraftLine(
   el: TillTableOrderScreen,
   index: number,
 ): Promise<TillModifierPicker> {
-  const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-  if (review?.checkVisibility()) {
-    await userEvent.click(review);
-    await el.updateComplete;
-  }
+  await showView(el, "order", { ifShown: true });
   const basket = [...el.shadowRoot!.querySelectorAll<TillBasket>("till-basket")].find((each) =>
     each.lineIndexes?.includes(index),
   );
@@ -191,9 +187,20 @@ export async function openDraftLine(
   return picker;
 }
 
-/** Taps the narrow screen's Menu or Order switch button and waits for the screen to draw it. */
-export async function showView(el: TillTableOrderScreen, view: "menu" | "order"): Promise<void> {
-  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>(`[data-view="${view}"]`)!);
+/**
+ * Taps the narrow screen's Menu or Order switch button and waits for the screen to draw it.
+ * `ifShown` skips the tap where no switch is on screen, as side by side. `scripted` clicks in
+ * script, which, unlike a real tap, does not scroll the button into view first.
+ */
+export async function showView(
+  el: TillTableOrderScreen,
+  view: "menu" | "order",
+  { ifShown = false, scripted = false }: { ifShown?: boolean; scripted?: boolean } = {},
+): Promise<void> {
+  const button = el.shadowRoot!.querySelector<HTMLElement>(`[data-view="${view}"]`);
+  if (ifShown && !button?.checkVisibility()) return;
+  if (scripted) button!.click();
+  else await userEvent.click(button!);
   await el.updateComplete;
 }
 

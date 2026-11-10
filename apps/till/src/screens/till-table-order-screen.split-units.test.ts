@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { setLocale, t } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import { beer, flan, ham, mount, store } from "./till-table-order-screen.test-helpers.js";
+import { beer, flan, ham, mount, showView, store } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { OrderLine } from "../state/working-order.js";
 
@@ -58,9 +58,7 @@ async function draftWithUnits() {
   const draft = store(el);
   draft.addProduct(beer, "3");
   await el.updateComplete;
-  const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!;
-  if (review.checkVisibility()) await userEvent.click(review);
-  await el.updateComplete;
+  await showView(el, "order", { ifShown: true });
   return { el, draft };
 }
 

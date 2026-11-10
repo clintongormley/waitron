@@ -5,7 +5,7 @@ import { setLocale } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
-import { mount, resized } from "./till-table-order-screen.test-helpers.js";
+import { mount, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
@@ -17,11 +17,7 @@ it.each([390, 1280])(
     const { el } = await mount({ orderId: "wo-4", groups, currentOrders: current(), now });
     el.style.width = `${width}px`;
     await resized(el);
-    const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-    if (review?.checkVisibility()) {
-      await userEvent.click(review);
-      await el.updateComplete;
-    }
+    await showView(el, "order", { ifShown: true });
     const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
     await panel.updateComplete;
     for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {

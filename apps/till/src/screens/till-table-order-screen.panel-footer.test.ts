@@ -6,7 +6,7 @@ import { DraftStore } from "../state/draft-sync.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import { beer, resized } from "./till-table-order-screen.test-helpers.js";
+import { beer, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import {
   footerBalance,
   footerBill,
@@ -528,14 +528,10 @@ describe("A803 pay scope", () => {
       await page.viewport(1024, 768);
     });
 
-    /** The foot, which a narrow screen with a New order shows on its Review view. */
+    /** The foot, which a narrow screen with a New order shows on its Order view. */
     async function showFoot(el: TillTableOrderScreen): Promise<void> {
       await resized(el);
-      const review = q(el, "[data-view=order]");
-      if (review?.checkVisibility()) {
-        await userEvent.click(review);
-        await el.updateComplete;
-      }
+      await showView(el, "order", { ifShown: true });
     }
 
     const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));

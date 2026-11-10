@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { decimal, formatMoney } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { resized } from "./till-table-order-screen.test-helpers.js";
+import { resized, showView } from "./till-table-order-screen.test-helpers.js";
 import { current } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { dish, extra, recorded } from "./till-table-order-screen.sent-prices.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -45,11 +45,7 @@ describe.each(["en", "es"] as const)("Served prices %s", (locale) => {
         );
         host.style.width = "100%";
         await resized(el);
-        const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-        if (review?.checkVisibility()) {
-          await userEvent.click(review);
-          await el.updateComplete;
-        }
+        await showView(el, "order", { ifShown: true });
         const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
         await panel.updateComplete;
         for (const selector of ["[data-sent-toggle]", "[data-served-toggle]"]) {

@@ -11,6 +11,7 @@ import {
   menuOf,
   openDraftLine,
   resized,
+  showView,
 } from "./till-table-order-screen.test-helpers.js";
 import type { TillDeadEndsSection } from "../widgets/dead-ends-section.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -50,10 +51,7 @@ describe.each(["en", "es"] as const)("retained routing warning %s", (locale) => 
       );
       host.style.width = "100%";
       await resized(el);
-      if (width < 1280) {
-        await userEvent.click(el.shadowRoot!.querySelector<WtButton>("[data-view=order]")!);
-        await el.updateComplete;
-      }
+      if (width < 1280) await showView(el, "order");
       const checked = new Promise<{ sent: readonly OrderLine[]; checkId: number }>((resolve) =>
         el.addEventListener(
           "check-dead-ends",

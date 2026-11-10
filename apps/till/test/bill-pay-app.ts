@@ -1,5 +1,4 @@
 import { expect, vi } from "vitest";
-import { userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import {
   adjustmentStubs,
@@ -9,7 +8,7 @@ import {
 } from "../src/widgets/test-helpers.js";
 import { BAR_PRINTER, SECOND_READER, roleOf } from "./pay-equipment-fixtures.js";
 import type { TillApp } from "../src/till-app.js";
-import { resized } from "../src/screens/till-table-order-screen.test-helpers.js";
+import { resized, showView } from "../src/screens/till-table-order-screen.test-helpers.js";
 import { currentLocale } from "../src/i18n/t.js";
 import type { TillLockScreen } from "../src/screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "../src/screens/till-table-order-screen.js";
@@ -406,11 +405,7 @@ export async function openDialog(el: TillApp, way: "items" | "contribution" | "s
 
 export async function showBillFooter(order: TillTableOrderScreen): Promise<void> {
   await resized(order);
-  const review = order.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-  if (review?.checkVisibility()) {
-    await userEvent.click(review);
-    await order.updateComplete;
-  }
+  await showView(order, "order", { ifShown: true });
 }
 
 export async function type(el: TillApp, name: string, value: string): Promise<void> {

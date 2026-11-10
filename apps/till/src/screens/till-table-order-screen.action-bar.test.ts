@@ -123,8 +123,7 @@ describe("till-table-order-screen: the unsent order's action bar stays in the wi
 
   it("keeps Send all on screen without scrolling on the phone's Order view, with a long order", async () => {
     const { el, host } = await orderedInWindow(390, 700);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
-    await el.updateComplete;
+    await showView(el, "order", { scripted: true });
     await linesRendered(el);
     host.scrollTop = 0;
 
@@ -154,8 +153,7 @@ describe("till-table-order-screen: the unsent order's action bar stays in the wi
       { currentOrders: longSent },
       dishes.slice(0, 2),
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
-    await el.updateComplete;
+    await showView(el, "order", { scripted: true });
     await sentExpanded(el);
     await linesRendered(el);
     host.scrollTop = 0;
@@ -244,8 +242,7 @@ describe("till-table-order-screen: the unsent order's action bar under the shell
       await pageAt(width, height);
       const { screen, area, overlay } = await inShell(height);
       if (width === 390) {
-        screen.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
-        await screen.updateComplete;
+        await showView(screen, "order", { scripted: true });
         await linesRendered(screen);
       }
       const sendAll = screen.shadowRoot!.querySelector<HTMLElement>(

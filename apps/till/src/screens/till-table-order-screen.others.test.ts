@@ -10,6 +10,7 @@ import {
   mount,
   resized,
   shown,
+  showView,
   tap,
 } from "./till-table-order-screen.test-helpers.js";
 
@@ -182,8 +183,7 @@ describe("till-table-order-screen: other people's drafts", () => {
     await resized(el);
 
     expect(shown(panels(el)[0]!)).toBe(false);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
-    await el.updateComplete;
+    await showView(el, "order", { scripted: true });
     expect(shown(panels(el)[0]!)).toBe(true);
   });
 

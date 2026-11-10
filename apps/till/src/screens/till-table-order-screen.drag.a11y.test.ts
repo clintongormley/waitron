@@ -6,7 +6,7 @@ import { DraftStore } from "../state/draft-sync.js";
 import type { TillBasket } from "../widgets/basket.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import { beer, flan, resized } from "./till-table-order-screen.test-helpers.js";
+import { beer, flan, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import { TillTableOrderScreen } from "./till-table-order-screen.js";
 import "../till-app.js";
 
@@ -46,9 +46,7 @@ async function open(theme: "light" | "dark") {
     theme,
   );
   await resized(el);
-  const review = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
-  if (review?.checkVisibility()) await userEvent.click(review);
-  await el.updateComplete;
+  await showView(el, "order", { ifShown: true });
   for (const basket of el.shadowRoot!.querySelectorAll<TillBasket>("till-basket"))
     await basket.updateComplete;
   return { el, host, draft };
