@@ -954,7 +954,7 @@ On a till's PIN sign-in, a person the device's profile does not admit also answe
 several of them more broadly — the token rule there binds any component or view, not only
 `packages/ui`. What follows records what the GUARDS mechanically enforce, which is narrower and in
 one place wider: `packages/ui/src/no-hardcoded-chrome.test.ts` scans `packages/ui/src/components/*.ts`
-only, and its forbidden list includes `color()`, which design-system.md's wording omits. Where the
+only, and its forbidden list includes `color()`. Where the
 two differ, the guard decides what CI does and design-system.md decides what a reviewer should ask
 for.
 The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and

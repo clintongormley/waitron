@@ -291,14 +291,9 @@ renamed `verifySecret` (optional).
 
 ## Open, and it bites this work first: two documents state the component rules and they have drifted
 
-**Open, and it bites this work first: two documents state the component rules and they have
-drifted** (found by the #337 review). `design-system.md` binds the token rule to "any component or
-view" and its forbidden-colour list omits `color()`; [conventions-ui.md](../developers/conventions-ui.md)
-records what the guard mechanically enforces, which is narrower —
-`packages/ui/src/no-hardcoded-chrome.test.ts` globs `packages/ui/src/components/*.ts` only — and
-its list does include `color()`. **Next action:** decide whether the token rule binds views as well
-as components, then make the guard and both documents agree. Whoever picks up the next screen should
-settle this first, because every screen after it inherits the answer.
+The design rule binds every component and view. The guards in `packages/ui` and `packages/ui-core`
+scan their components' static styles; they do not scan app views. The docs now distinguish the rule
+from that coverage. The remaining work is to enforce the rule in views too.
 
 ## The colour field's Custom square (`apps/dashboard/src/widgets/color-field.ts`, left by C25)
 
@@ -505,20 +500,11 @@ probes do not settle it. This stays inside the existing bundle rather than becom
 
 ## Bundle: Design system doc truth
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S.
 
-- **Loose ends left by W79 (#1186, the Menus list).**
-  [Detail](dashboard.md#loose-ends-left-by-w79-1186-the-menus-list)
-- **A904. Correct the list of users in `--wt-cell-name-max-width`'s comment
-  (`packages/ui-core/src/tokens/structure.css`) (left open by A827, #1889).**
-  [Detail](dashboard.md#a904-correct-the-list-of-users-in---wt-cell-name-max-widths-comment-packagesui-coresrctokensstructurecss-left-open-by-a827-1889)
-- **Open, and it bites this work first: two documents state the component rules and they have
-  drifted**
+- **The token guards do not scan app views.** The shared design rule already binds every component
+  and view; extend enforcement without claiming that component-only checks cover those views.
   [Detail](dashboard.md#open-and-it-bites-this-work-first-two-documents-state-the-component-rules-and-they-have-drifted)
-- **`--wt-cell-name-max-width` is used in three different directions, and is named for one.** Some
-  consumers CAP a name cell with it, others use it as a `min-width` FLOOR, and one uses it as a FLEX
-  BASIS on a combobox. **Next action (design decision):** a second token for the floor, or one
-  shared sizing value used three ways.
 
 ## Bundle: Other browser check
 
@@ -559,18 +545,6 @@ probes do not settle it. This stays inside the existing bundle rather than becom
 - **Four tidy-ups A681's review left for later (#1842, 2026-10-17).**
   [Detail](dashboard.md#four-tidy-ups-a681s-review-left-for-later-1842-2026-10-17)
 
-## Bundle: Help tooltip primitive
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1244. `wt-help-tooltip` is not in the tap-target and focus guard's set (left open by A582
-  slice 2a, #1848).** A throwaway check showed it would fail the guard's focus check
-  (`packages/ui/src/tap-target-and-focus.test.ts`), because focus on the element does not pass to
-  its inner button. Decide whether it should delegate focus, then add it to the set.
-- **A1247. Help badges that cannot link to the guide (left open by A582 slice 3, #1871).** A
-  `wt-data-table` column badge, a `wt-tabs` item's badge and a `wt-menu-row` badge cannot carry a
-  guide link, and Products' Availability badge has none.
-
 ## Bundle: Box reset tab
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -581,6 +555,11 @@ probes do not settle it. This stays inside the existing bundle rather than becom
   [Detail](dashboard.md#loose-ends-left-by-a501-1552)
 
 ## Decisions and deliberate limits
+
+- **A1247 (watcher, 2026-11-10):** Keep Availability without a guide link and leave the table,
+  tabs and menu-row wrapper APIs unchanged; no user was named for a wrapper link.
+- **W79 (watcher, 2026-11-10):** Keep the Add-menu default and the documented Menus, Staff and Units
+  text-button exceptions.
 
 ### Forms refusal placement exclusions (watcher, 2026-11-10)
 
@@ -943,16 +922,6 @@ The editor repeats the list title and has no parent link above the heading
   then apply the parent link and one item-name `h1` while retaining the unsaved-changes check.
 
 
-## Loose ends left by W79 (#1186, the Menus list).
-
-- `docs/developers/design-system.md` still says a list's Add action goes in a menu beside the
-    table heading, while Menus, Staff and Units put a text Add button at the heading row's
-    trailing edge; the doc only names the exceptions, and whether the rule itself changes is the
-    owner's call.
-  - The row-highlight tests focus only the row's own button, so nothing tests that a row
-    highlights while another control in it, such as its Actions menu, has focus.
-
-
 ## Loose ends left by W83's review (#1193), not started.
 
 - The table's Customise columns button is icon-only beside Filters and Select but has neither
@@ -962,17 +931,6 @@ The editor repeats the list title and has no parent link above the heading
     `wt-button` does not pass `aria-pressed` through, and the Structure tab's Reorder and Select
     toggles are hand-built icon buttons for the same reason.
   [Detail](catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
-
-
-## A904. Correct the list of users in `--wt-cell-name-max-width`'s comment (`packages/ui-core/src/tokens/structure.css`) (left open by A827, #1889).
-
-It names "the modifier
-  form's choices" as a cap and "the options list form" as a floor, but on main `c11e3572c` no
-  modifier form and not `option-list-form.ts` read the token (`grep -rln wt-cell-name-max-width apps
-  packages`), while `orders-screen.ts`, `page-printers-panel.ts` (folded into `printers-screen.ts` by A405) and venue-service's
-  `periods-list.ts`, `routing-grid.ts` and `departments-list.ts` do and are not named. Read each
-  user's rule, then rewrite the list from what they do, or describe the directions without naming
-  users.
 
 
 ## What C38 left as it was (a generated display name is the first given name and first surname, #827, owner decision 2026-09-28).

@@ -1,11 +1,12 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
-import { uniqueId } from "../interactive.js";
+import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 import { HelpModeController } from "../help-mode.js";
 
 @customElement("wt-help-tooltip")
 export class WtHelpTooltip extends LitElement {
+  static override shadowRootOptions = delegatesFocusShadowRootOptions;
   static override styles = [
     baseStyles,
     css`

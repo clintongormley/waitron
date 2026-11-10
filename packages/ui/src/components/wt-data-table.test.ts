@@ -6941,6 +6941,11 @@ test("a clickable row, pinned cell included, takes the lifted surface while hove
     expect(getComputedStyle(cell).backgroundColor).not.toBe("rgb(60, 70, 80)");
   el.shadowRoot!.querySelector<HTMLButtonElement>('tr[data-row-key="b"] .row-activate')!.focus();
   for (const cell of cells) expect(getComputedStyle(cell).backgroundColor).toBe("rgb(60, 70, 80)");
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Edit Bea"]')!.focus();
+  for (const cell of cells) expect(getComputedStyle(cell).backgroundColor).toBe("rgb(60, 70, 80)");
+  const otherCells = [...el.shadowRoot!.querySelectorAll<HTMLElement>('tr[data-row-key="a"] td')];
+  for (const cell of otherCells)
+    expect(getComputedStyle(cell).backgroundColor).not.toBe("rgb(60, 70, 80)");
 });
 
 test("a row that is not clickable does not take the lifted surface on hover", async () => {

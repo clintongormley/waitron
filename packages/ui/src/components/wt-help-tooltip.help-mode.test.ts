@@ -52,6 +52,9 @@ test("while help is off it takes no room and cannot be reached", async () => {
   expect(badge.checkVisibility()).toBe(false);
   parts(badge).button.focus();
   expect(badge.shadowRoot!.activeElement).toBeNull();
+  badge.focus();
+  expect(badge.shadowRoot!.activeElement).toBeNull();
+  expect(document.activeElement).not.toBe(badge);
 
   cleanup();
   const always = await mountBadge('mode="always"');
