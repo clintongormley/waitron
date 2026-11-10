@@ -155,12 +155,16 @@ describe("createPrinter", () => {
     expect((await asTx(cfg, (tx) => createPrinter(tx, { ...endpoint, name: "Scan" }))).id).toBe(
       newer.id,
     );
-    await asTx(cfg, (tx) =>
-      tx.update(printers).set({ active: false, deletedAt: null }).where(eq(printers.id, older.id)),
-    );
     const fresh = await asTx(cfg, (tx) => createPrinter(tx, { ...endpoint, name: "Another" }));
     expect(fresh.id).not.toBe(newer.id);
     expect(fresh.id).not.toBe(older.id);
+    await asTx(cfg, (tx) =>
+      tx.update(printers).set({ active: false, deletedAt: null }).where(eq(printers.id, older.id)),
+    );
+    const another = await asTx(cfg, (tx) => createPrinter(tx, { ...endpoint, name: "Third active" }));
+    expect(another.id).not.toBe(older.id);
+    expect(another.id).not.toBe(newer.id);
+    expect(another.id).not.toBe(fresh.id);
   });
 
   it("lists printers with no watcherId", async () => {

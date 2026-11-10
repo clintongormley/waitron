@@ -116,7 +116,7 @@ taken where zero was also the correct answer.
 
 ### A wording key's name does not identify all its consumers
 
-A1484's printer footer reused `printers.delete_irreversible`, which course and theme dialogs also
+Cost: A1484's printer footer reused `printers.delete_irreversible`, which course and theme dialogs also
 read. The run-it review found printer-specific promises on both unrelated deletes. The existing
 course/theme copy tests reproduced three failures; printers now use their own footer key. Trace
 wording-key consumers before changing what a shared sentence means.
