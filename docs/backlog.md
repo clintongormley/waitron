@@ -1883,7 +1883,8 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 - **A1438. Code Waitron and Cloud share, published like ui-core (owner, 2026-11-08).** The
   box builds pairing and machine requests through the database-free workspace package `@waitron/contract`,
   which also supplies the access-lease format. The box still reads leases through its own saved-state adapter.
-  Private publication as `@waitron-io/contract` and Cloud adoption remain open, then the sign-in rules (with A1437 and Cloud's D608), then the
+  The UI publisher now checks and uploads both packages, including `@waitron-io/contract`.
+  Actual private publication and Cloud’s own-token installation/adoption remain to be qualified, then the sign-in rules (with A1437 and Cloud's D608), then the
   message list and texts (with Cloud's D610 and the email relay). Roles, storage, sessions and
   screens stay apart. [Plan](superpowers/plans/2026-11-09-a1438-code-shared-with-cloud.md).
 

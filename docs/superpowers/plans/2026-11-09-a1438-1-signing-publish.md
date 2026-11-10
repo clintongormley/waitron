@@ -3,7 +3,11 @@
 **2026-11-10 status:** A1437-1's initial proof check landed as `049ddd9`; this plan's build condition is met. The watcher
 cleared the as-built core and box use at about 1,550 changed lines, with a stop at 2,325, followed
 by the publisher at about 500, with a stop at 750 (Lane K questions.md, 12:48).
-The core is under review; publication and authenticated registry qualification remain open.
+The core landed in PR #2743 (`1e93c62fdc`); the separate publisher implements the fixed
+matrix. Watcher 2026-11-10 16:38 retired the earlier credential pre-check requirement:
+use the plain restricted upload, then qualify actual publication and Cloud’s own-token
+installation. This settles the fresh reader’s design finding; it is a watcher decision,
+not an owner approval. The item remains open until the real registry/install checks pass.
 The forecast and waiting state below are the original planning record.
 
 **Authority:** Implements [parent §§3a,4,6a,6e](2026-11-09-a1438-code-shared-with-cloud.md). Watcher22:04 approved signing-first, private publication, one fixed matrix and no peers now. Owner22:22 asks to reuse UI's setup; this bounded amendment needs no new Claude plan read. The driver submits the revised forecast below before building. **Build waits for A1437-1 to land.**

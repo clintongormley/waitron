@@ -100,13 +100,20 @@ whose author and committer times differ. Image smoke exercises the real Docker b
 cases do not establish Docker's network isolation. The original network stall's cause remains
 unverified; the image no longer invokes the generator's optional source-fetch mode.
 
-## Automatic private UI releases
+## Automatic private package releases
 
-`publish-ui.yml` runs on main pushes changing `packages/ui-core/**`. It checks
-package types, lint and coverage, prepares the numbered tarball from the event's
-full SHA and runs the independent browser consumer before publishing. Only the
+`publish-ui.yml` runs on main pushes changing either `packages/ui-core/**` or
+`packages/contract/**`. It checks types, lint and coverage for both packages, prepares
+numbered tarballs from the event’s full SHA and runs independent browser/Node
+consumers before publishing. Only the
 publish step receives `UI_PACKAGES_WRITE_TOKEN`. A failed upload fails the run;
 the next qualifying merge attempts a new `0.2.<run number>` version.
+
+The publisher uses a fixed UI/contract matrix, with UI-only Chromium setup and independent
+failures (`fail-fast: false`). Each row runs the same source/preparation/installed-consumer
+checks; contract runs in Node with no peers. Both upload with restricted access.
+Actual private publication and Cloud’s own-token installation remain to be checked
+after the first contract release; local package checks do not establish registry access.
 
 The publisher uses its own concurrency group with `queue: max` and no cancellation
 of a running publication. This serializes uploads separately from `ci.yml`, whose

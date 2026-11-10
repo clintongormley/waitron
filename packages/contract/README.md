@@ -22,5 +22,6 @@ pnpm --filter @waitron/contract test:package
 The package check installs both a workspace tarball and a locally prepared
 `@waitron-io/contract` tarball outside the workspace, checks their types and runs a
 Node consumer. [Prepare a tarball](../../docs/developers/shared-ui-preparation.md#inspect-the-signing-package-locally)
-when you need to inspect exact bytes. Registry publication and Cloud adoption remain
-separate work; the current publishing workflow still publishes only the UI package.
+when you need to inspect exact bytes. The shared publishing workflow checks and publishes both packages when either package
+changes on main. Confirm its registry result before selecting a release; Cloud adoption
+and an installation with Cloud’s own token remain separate checks.

@@ -33,17 +33,17 @@ const command = (id) => {
   return body.replace(/^ {10}/gm, "");
 };
 
-function checkFixture(fn) {
+function checkFixture(fn, packageName = "ui-core") {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "ui-publish-checks-")));
   try {
     mkdirSync(join(dir, "scripts"));
-    mkdirSync(join(dir, "packages/ui-core"), { recursive: true });
+    mkdirSync(join(dir, `packages/${packageName}`), { recursive: true });
     for (const file of ["changed-packages.mjs", "changed-scope.mjs", "run-with-deadline.mjs"])
       copyFileSync(resolve(import.meta.dirname, "..", file), join(dir, "scripts", file));
     const scripts = Object.fromEntries(
       ["typecheck", "lint", "test:coverage", "test:package"].map((key) => [key, "present"]),
     );
-    const manifest = join(dir, "packages/ui-core/package.json");
+    const manifest = join(dir, `packages/${packageName}/package.json`);
     const record = join(dir, "calls.jsonl");
     const pnpm = join(dir, "pnpm");
     writeFileSync(
@@ -52,7 +52,8 @@ function checkFixture(fn) {
 import { appendFileSync } from "node:fs";
 const args = process.argv.slice(2);
 appendFileSync(process.env.CHECK_RECORD, JSON.stringify(args) + "\\n");
-if (args[2] === "ls") console.log(JSON.stringify([{ name: "@waitron/ui-core", path: process.env.CHECK_PACKAGE }]));
+if (args[1] !== process.env.SOURCE_PACKAGE) process.exit(21);
+if (args[2] === "ls") console.log(JSON.stringify([{ name: process.env.SOURCE_PACKAGE, path: process.env.CHECK_PACKAGE }]));
 else if (args[2] === process.env.FAIL_CHECK) process.exit(19);
 `,
     );
@@ -60,7 +61,7 @@ else if (args[2] === process.env.FAIL_CHECK) process.exit(19);
     const invoke = (id, { missing, fail } = {}) => {
       const kept = { ...scripts };
       if (missing) delete kept[missing];
-      writeFileSync(manifest, JSON.stringify({ name: "@waitron/ui-core", scripts: kept }));
+      writeFileSync(manifest, JSON.stringify({ name: `@waitron/${packageName}`, scripts: kept }));
       writeFileSync(record, "");
       const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", command(id)], {
         cwd: dir,
@@ -69,7 +70,9 @@ else if (args[2] === process.env.FAIL_CHECK) process.exit(19);
         env: {
           ...process.env,
           PATH: `${dir}${delimiter}${process.env.PATH}`,
-          CHECK_PACKAGE: join(dir, "packages/ui-core"),
+          CHECK_PACKAGE: join(dir, `packages/${packageName}`),
+          SOURCE_PACKAGE: `@waitron/${packageName}`,
+          PACKAGE: packageName,
           CHECK_RECORD: record,
           FAIL_CHECK: fail ?? "",
           GITHUB_WORKSPACE: dir,
@@ -84,12 +87,15 @@ else if (args[2] === process.env.FAIL_CHECK) process.exit(19);
   }
 }
 
-describe("automatic private UI publication", () => {
-  it("selects main UI changes and queues publications without cancelling earlier runs", () => {
+describe.each(["ui-core", "contract"])("automatic private %s publication", (packageName) => {
+  it("selects main UI and contract changes and queues publications without cancelling earlier runs", () => {
     const text = workflow();
     expect(text.match(/^on:\n([\s\S]*?)(?=^\S)/m)?.[1]).toBe(
-      '  push:\n    branches: [main]\n    paths: ["packages/ui-core/**"]\n\n',
+      '  push:\n    branches: [main]\n    paths: ["packages/ui-core/**", "packages/contract/**"]\n\n',
     );
+    expect(text).toMatch(/matrix:\n {8}package: \[ui-core, contract\]/);
+    expect(text).toContain("fail-fast: false");
+    expect(text).toMatch(/- name: Install Chromium\n {8}if: matrix\.package == 'ui-core'/);
     expect(text).toMatch(
       /^concurrency:\n {2}group: ui-core-publication\n {2}queue: max\n {2}cancel-in-progress: false$/m,
     );
@@ -104,17 +110,22 @@ describe("automatic private UI publication", () => {
       expect(step(id)).not.toMatch(/^ {8}(continue-on-error|if):/m);
     expect(workflow().match(/persist-credentials: false/g)).toHaveLength(2);
     for (const check of ["typecheck", "lint", "test:coverage"])
-      expect(step("checks")).toContain(`pnpm --filter @waitron/ui-core ${check}`);
+      expect(step("checks")).toContain(`pnpm --filter "@waitron/$PACKAGE" ${check}`);
     expect(step("prepare")).toContain("scripts/release/prepare-ui.mjs");
     expect(step("prepare")).toContain('--source-commit "$GITHUB_SHA"');
     expect(step("prepare")).toContain('--release-version "0.2.$GITHUB_RUN_NUMBER"');
     const consumer = step("consumer");
-    expect(consumer).toContain("pnpm --filter @waitron/ui-core test:package");
+    expect(consumer).toContain('pnpm --filter "@waitron/$PACKAGE" test:package');
     expect(consumer).toContain(
-      "UI_PACKAGE_TARBALL: ${{ runner.temp }}/ui-release/waitron-io-ui-core-0.2.${{ github.run_number }}.tgz",
+      "UI_PACKAGE_TARBALL: ${{ runner.temp }}/shared-release/waitron-io-${{ matrix.package }}-0.2.${{ github.run_number }}.tgz",
     );
     expect(consumer).toContain("UI_PACKAGE_RELEASE_VERSION: 0.2.${{ github.run_number }}");
     expect(consumer).toContain("UI_PACKAGE_SOURCE_COMMIT: ${{ github.sha }}");
+    expect(consumer).toContain(
+      "CONTRACT_PACKAGE_TARBALL: ${{ runner.temp }}/shared-release/waitron-io-${{ matrix.package }}-0.2.${{ github.run_number }}.tgz",
+    );
+    expect(consumer).toContain("CONTRACT_PACKAGE_RELEASE_VERSION: 0.2.${{ github.run_number }}");
+    expect(consumer).toContain("CONTRACT_PACKAGE_SOURCE_COMMIT: ${{ github.sha }}");
     for (const [before, after] of [
       ["checks", "prepare"],
       ["prepare", "consumer"],
@@ -138,7 +149,7 @@ describe("automatic private UI publication", () => {
         expect(result.status).toBe(1);
         expect(result.stderr).toContain(`declares no "${missing}" script`);
         expect(result.calls.every((args) => args[2] === "ls")).toBe(true);
-      });
+      }, packageName);
     },
   );
 
@@ -152,7 +163,7 @@ describe("automatic private UI publication", () => {
       const result = invoke(id, { fail });
       expect(result.status).toBe(19);
       expect(result.calls.at(-1)[2]).toBe(fail);
-    });
+    }, packageName);
   });
 
   it("runs every source check when all four required scripts exist", () => {
@@ -164,7 +175,7 @@ describe("automatic private UI publication", () => {
         "lint",
         "test:coverage",
       ]);
-    });
+    }, packageName);
   });
 
   it.each([0, 23])("publishes the numbered artifact and propagates npm status %i", (status) => {
@@ -189,6 +200,7 @@ process.exit(Number(process.env.PUBLISH_STATUS));
           PATH: `${dir}${delimiter}${process.env.PATH}`,
           RUNNER_TEMP: join(dir, "runner temporary files"),
           GITHUB_RUN_NUMBER: "742",
+          PACKAGE: packageName,
           NODE_AUTH_TOKEN: "test-publishing-credential",
           PUBLISH_RECORD: record,
           PUBLISH_STATUS: String(status),
@@ -200,7 +212,7 @@ process.exit(Number(process.env.PUBLISH_STATUS));
       expect(JSON.parse(readFileSync(record, "utf8"))).toEqual({
         args: [
           "publish",
-          join(dir, "runner temporary files/ui-release/waitron-io-ui-core-0.2.742.tgz"),
+          join(dir, `runner temporary files/shared-release/waitron-io-${packageName}-0.2.742.tgz`),
           "--registry=https://npm.pkg.github.com",
           "--access=restricted",
           "--ignore-scripts",

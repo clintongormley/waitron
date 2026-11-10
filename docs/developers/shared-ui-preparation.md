@@ -1,26 +1,31 @@
-# Publish the shared UI package
+# Publish the shared UI and signing packages
 
 Cloud consumes a private registry release of Waitron's shared account controls.
 Keep using `@waitron/ui-core` with `workspace:*` in Waitron; the published package
 has the separate name `@waitron-io/ui-core`.
 
-When a push to `main` changes `packages/ui-core/**`,
-[Publish shared UI](../../.github/workflows/publish-ui.yml) checks the source
-package, builds the merged commit and checks its tarball in an independent
-browser consumer. It publishes `0.2.<workflow run number>` to GitHub Packages.
+When a push to `main` changes `packages/ui-core/**` or `packages/contract/**`,
+[Publish shared packages](../../.github/workflows/publish-ui.yml) checks both source
+packages, builds the merged commit and checks each tarball in an independent
+consumer: UI in Chromium, signing in Node. It publishes `0.2.<workflow run number>` to GitHub Packages.
 The source manifest keeps its workspace version. Publications share a concurrency
-queue and run one at a time.
+queue; one workflow runs at a time, with independent jobs for the two packages.
 
 The owner stores `UI_PACKAGES_WRITE_TOKEN` as an Actions secret. Only the final
 publish step receives it. The prepared manifest keeps the existing Cloud
 repository association and records the full Waitron commit in `waitronSource.commit`.
-The package carries built JavaScript, declarations, CSS, the Lit peer dependency,
-Elastic License 2.0 and `LICENSE-GRANTS.md`.
+Both packages carry built JavaScript, declarations, Elastic License 2.0 and
+`LICENSE-GRANTS.md`. UI also carries CSS and its Lit peer; the signing package has no peers.
 
 Check the workflow result after a qualifying merge. A publication error fails the
 run; the next qualifying merge attempts a new numbered version. An older run can
 be refused if a higher package version has already been published. There is no
 scheduled publisher or catch-up process.
+
+After the first contract publication, record its version, source commit, integrity
+and private Cloud repository association. Cloud must install that exact version with
+its own workflow token; a refused install needs a package access grant for Cloud.
+A local tarball or a writer-token download does not establish that access.
 
 The [first publication on 7 November 2026](https://github.com/clintongormley/waitron/actions/runs/42376444927)
 released private `@waitron-io/ui-core@0.2.1`. Its downloaded registry tarball records
@@ -79,5 +84,5 @@ The contract has no runtime or peer dependencies. Its installed consumer checks
 declarations and the three signing formats in Node, using the shared archive,
 source-commit and licence checks. UI keeps its Lit peer and browser checks.
 Changes to that shared installed-package checker select both packages in pull-request CI.
-The publishing workflow still selects only UI; this local route does not publish
-the contract or establish that Cloud can install it from the registry.
+The publishing workflow selects both packages. A local check still does not establish
+registry access or that Cloud can install the released version with its own credential.
