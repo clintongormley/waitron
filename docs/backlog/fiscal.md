@@ -947,6 +947,18 @@ asesor Q31 (2026-09-30), not decided.
     −€5.50, base −€5.00, VAT −€0.50.
   - Later fit: the bills-and-tables brainstorm (2026-10-17/18) moves order lines to one portion per
     line; a correction then picks portions the same way staff pick dishes to move.
+- **The older derived correction path checks almost nothing against the invoice.** A correction
+  sent without `partialVatBreakdown` or `wholeInvoice` gets each rate's VAT by rounding its lines'
+  bases (`deriveVatBreakdown`, `packages/core/src/record-sale.ts`, from #982, 2026-10-01). Runs in
+  the [A802 correction-history plan](../superpowers/plans/2026-11-10-a802-correction-history.md),
+  section A: a corrective of total −12.00 whose lines add to −12.10 was accepted, and corrections
+  at 10% of an invoice stored at 21% were filed. Slice 3b left this path unchanged.
+- **A refused cancellation of a fixed invoice has no way out on the till.** Since slice 3b,
+  cancelling an issued order is refused while a VAT fix of its invoice waits for AEAT's answer
+  (`sale.correction_not_admitted`, `filed_figures_unanswered`), and when a fix changed its total or
+  its filed figures cannot be read (`sale.correction_history_unusable`); the till API answers 409.
+  The till has no wording for either and offers no next step until slice 5's till screen or the
+  filing-case remedy screens give one.
 
 ## Correct VAT without returning money
 
@@ -1187,7 +1199,8 @@ a line with no operation is not refused for that.
   unless AEAT exempts its code (2004, 2009). Three conflicts in a row still trip the same-code
   brake until Tasks 4 and 7 switch to a fresh number series instead.
 - **Decided (owner, 2026-10-02): a whole-invoice credit copies the invoice's own VAT split,
-  negated** (`recordCorrection`'s `wholeInvoice`, `packages/core/src/record-correction.ts`).
+  negated** (`recordCorrection`'s `wholeInvoice`, `packages/core/src/record-correction.ts`). Once
+  AEAT accepted a fix of that split, it copies the fixed one (owner, 2026-11-10 21:10).
   Worked out from the lines, as a partial correction still is, a 0.55 dish at 21% invoiced
   0.45 + 0.10 reverses to -0.45 - 0.09 (measured 2026-10-02); copied, it is -0.45 - 0.10.
 - **Over-limit invoices (A261-2c, #1285; owner decision, 2026-10-06).** Non-fiscal placement

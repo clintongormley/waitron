@@ -1034,8 +1034,8 @@ refusals in `checkPartialCorrectionBreakdown` refuse nothing the writer accepts 
 
 ### Left out
 
-Point 5, the whole-invoice credit filing a moved invoice's figures when an issued order is cancelled,
-was never put to the owner: cancelling such an order still files the stored split.
+Nothing: point 5, the whole-invoice credit filing a fixed invoice's accepted split when an issued
+order is cancelled, is built (owner, 2026-11-10 21:10, "1").
 
 ### Size per step
 
@@ -1080,3 +1080,48 @@ deleted, `partial-correction-breakdown.test.ts:293`, `:294` and `:297` failed. C
    put to the owner as a question; this slice does not build it unless the owner says so.
 
 Size after these: about 175 production and 320 test lines.
+
+### As built (3b, 2026-11-10)
+
+**What was built.**
+
+- `measuredFigures` (`packages/core/src/filed-figures.ts`) reads the filed figures of the invoice
+  and its earlier correctives in one `filedFiguresFor` call; the preview and the writer share it.
+- The writer's exact-split path (`partialVatBreakdown`) checks against those figures. It refuses
+  `sale.correction_history_unusable` when they cannot be read, a backend with no `filedFiguresFor`
+  included, and `sale.correction_not_admitted` (`filed_figures_unanswered`) while a filed fix waits
+  for its answer. Its per-rate check also covers every rate an earlier corrective used, and refuses
+  `sale.correction_history_unusable` when earlier corrections at a rate already took more base or
+  gross than the accepted figures hold there (the review's €23.10 case: a fix that moved €6.05
+  from 21% to 10% after the steak's €12.10 was refunded at 21%). A changed total must be emptied at
+  every rate and on every invoice line.
+- The whole-invoice credit (the cancellation) files the accepted split negated when a fix moved it,
+  and the stored split otherwise or when the backend reads no filed figures. It refuses
+  `sale.correction_history_unusable` when the figures cannot be read or a fix changed the total,
+  and `sale.correction_not_admitted` (`filed_figures_unanswered`) while a fix waits for its answer.
+  The administrator's corrective-invoice remedy for a refused original is unchanged: its newest
+  version is the refused one, so nothing waits for an answer (`record-remedy-corrective-http.test.ts`,
+  "credits the whole original using its stored line and exact VAT", passes).
+- The preview's moved path: naming dishes refuses `sale.correction_scope_invalid`
+  (`filed_split_changed`), a part of a changed total refuses it (`filed_total_changed`); the split
+  comes from the accepted figures and the lines from the stored history.
+- Reports: top sellers count a dish as returned once its corrections reach its money (gross where
+  the line stored one); the category report puts a corrected extra under its dish.
+- The till API answers both refusals with 409 (`apps/server/src/till-api.ts`); the till has no
+  wording for them yet.
+
+**Decisions.**
+
+- The reason for an unanswered fix is `filed_figures_unanswered`, not slice 3's
+  `filed_figures_changed`, so no reason string means two things (Q3 covers the refusal, not its
+  name).
+- The writer refuses a backend with no filed-figures read on the exact-split path rather than
+  falling back to the stored figures.
+- A cancellation of a fixed invoice whose total changed, or whose figures cannot be read, is
+  refused: its lines reverse the stored total.
+- A cancellation is refused while a fix waits for its answer, the same rule as the preview and the
+  exact-split path.
+
+**Size** (`git diff --numstat 8add5a04a7`, TypeScript only): production 453 lines added and 137
+removed; tests and test fixtures 678 added and 41 removed. The plan review estimated about 175
+and 320, before point 5 and the review's fixes were added.
