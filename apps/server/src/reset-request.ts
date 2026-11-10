@@ -105,11 +105,9 @@ export async function runStagedReset(
       return false;
     }
     await wipeVenueDatabases(deps.venueDir, deps.stateDir);
-    for (const file of [PENDING_ADOPTION_FILE, MODULES_FILE, SETUP_OPERATION_FILE]) {
-      await rm(join(deps.stateDir, file), { force: true });
-    }
     // The other venue's authority and key ring may be here, so the box's own go with them and the
-    // next setup start mints a fresh set. The marker goes last.
+    // next setup start mints a fresh set. Before the operation record, whose removal makes a re-run
+    // discard; the joined record goes last of them, so a re-run still finds this box joined.
     if (await joinedAnotherBox(deps.stateDir)) {
       await rm(join(deps.stateDir, SECRETS_ENV_FILE), { force: true });
       const tlsDir = join(deps.stateDir, TLS_DIR);
@@ -119,6 +117,9 @@ export async function runStagedReset(
         }
       }
       await rm(join(deps.stateDir, TLS_JOINED_FILE), { force: true });
+    }
+    for (const file of [PENDING_ADOPTION_FILE, MODULES_FILE, SETUP_OPERATION_FILE]) {
+      await rm(join(deps.stateDir, file), { force: true });
     }
     // Last, so a start cut short re-runs the reset; once the record is gone a re-run discards.
     await rm(markerPath, { force: true });

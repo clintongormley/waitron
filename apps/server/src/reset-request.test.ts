@@ -43,6 +43,32 @@ vi.mock("./modules.js", async (importOriginal) => {
   };
 });
 
+const { rmMock, actualRm } = vi.hoisted(() => ({
+  rmMock: vi.fn(),
+  actualRm: { current: undefined as undefined | typeof import("node:fs/promises").rm },
+}));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  actualRm.current = actual.rm;
+  rmMock.mockImplementation(actual.rm);
+  return { ...actual, rm: rmMock };
+});
+
+/** Records every removal, and fails the first removal of `failing`, if named. */
+function watchRemovals(failing?: string): string[] {
+  const removed: string[] = [];
+  let failOnce = failing;
+  rmMock.mockImplementation(async (path: string, options?: object) => {
+    removed.push(path);
+    if (path === failOnce) {
+      failOnce = undefined;
+      throw Object.assign(new Error("power lost"), { code: "EIO" });
+    }
+    return actualRm.current!(path, options);
+  });
+  return removed;
+}
+
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 const PRIMARY_NODE_ID = "22222222-2222-4222-8222-222222222222";
 const ADOPT_BODY = JSON.stringify({
@@ -88,6 +114,7 @@ const BUNDLE: MirrorBundle = {
 
 const dirs: string[] = [];
 afterEach(async () => {
+  rmMock.mockImplementation(actualRm.current!);
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -275,6 +302,45 @@ describe("runStagedReset", () => {
     });
     expect((await readdir(tls)).sort()).toEqual(["ca.crt", "ca.key", "server.crt", "server.key"]);
     expect(await readFile(join(tls, "ca.crt"), "utf8")).not.toBe("ca");
+  });
+
+  it("a staged reset of a box that joined, cut short before the key ring went, leaves nothing of the other venue when it runs again", async () => {
+    const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
+    const tls = join(stateDir, "tls");
+    await writeFile(join(tls, "ca.key"), "ca.key");
+    await stageResetRequest(stateDir, operationId);
+    watchRemovals(join(stateDir, "secrets.env"));
+    const { log, events } = capturingLog();
+
+    await expect(runStagedReset({ stateDir, venueDir, log })).rejects.toThrow("power lost");
+    expect(await runStagedReset({ stateDir, venueDir, log })).toBe(true);
+
+    expect(events.map(([, event]) => event)).toEqual(["setup.reset_done"]);
+    expect(existsSync(join(stateDir, "secrets.env"))).toBe(false);
+    expect(await readdir(tls)).toEqual([]);
+    expect(existsSync(join(stateDir, "reset-request.json"))).toBe(false);
+  });
+
+  it("a staged reset of a box that joined removes its joined record after everything else in tls, and its request last", async () => {
+    const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
+    const tls = join(stateDir, "tls");
+    for (const name of ["ca.key", "server.crt", "server.key"]) {
+      await writeFile(join(tls, name), name);
+    }
+    await stageResetRequest(stateDir, operationId);
+    const removed = watchRemovals();
+
+    expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
+
+    const joinedAt = removed.indexOf(join(tls, "joined.json"));
+    const others = ["ca.crt", "ca.key", "server.crt", "server.key"].map((name) =>
+      removed.indexOf(join(tls, name)),
+    );
+    for (const at of [...others, removed.indexOf(join(stateDir, "secrets.env"))]) {
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(at).toBeLessThan(joinedAt);
+    }
+    expect(removed.at(-1)).toBe(join(stateDir, "reset-request.json"));
   });
 
   it("lets the real adopt run to completion where before the reset it was refused", async () => {
