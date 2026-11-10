@@ -347,12 +347,12 @@ describe("Current orders and Sent service", () => {
     const previous = currentLocale();
     setLocale("es-ES");
     try {
-      const ham = row("l-jamon", "Ham", "0.250", { unitPrecision: 3 });
+      const ham = row("l-jamon", "Jamón", "0.250", { unitPrecision: 3 });
       const { el } = await mountSent({
         currentOrders: current({ groups: [currentGroup("g1", 1, "fired", [ham])] }),
       });
       await openSentDish(el, "l-jamon");
-      expect(text(q(el, "[data-sent-line-dialog] .move-dish")!)).toContain("Ham ×0,25");
+      expect(text(q(el, "[data-sent-line-dialog] .move-dish")!)).toContain(`${ham.name} ×0,25`);
       await closeSentDish(el);
       const serves = capture(el, "serve-lines");
       await chooseSentServing(el, "l-jamon");
