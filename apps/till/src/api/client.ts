@@ -170,10 +170,7 @@ export interface TillInfo {
   locale: string;
   clockingAvailable: boolean;
   onboardingIntent?: "demo" | "prepare" | "live";
-  /**
-   * The RECEIPT (fiscal document) locale, DELIBERATELY DISTINCT from the UI {@link locale}: the venue
-   * default derivation drops UI-unsupported codes, which must never reach the receipt.
-   */
+
   invoiceLocale: string;
   /**
    * The receipt languages staff may choose for a sale or a copy, the venue's own first
@@ -276,15 +273,8 @@ export interface VatBreakdownEntry {
   tax: string;
 }
 
-export type {
-  DietaryOrigin,
-  ContainsTag,
-  DietLabel,
-  DietDerivation,
-  DietOverride,
-  DietProfile,
-} from "@waitron/shared";
-import type { DietDerivation, DietOverride, DietProfile } from "@waitron/shared";
+export type { ContainsTag, DietLabel, DietOverride, DietProfile } from "@waitron/shared";
+import type { DietOverride, DietProfile } from "@waitron/shared";
 
 /**
  * One sellable product as the till's widgets consume it, built from exactly two payloads:
@@ -293,7 +283,7 @@ import type { DietDerivation, DietOverride, DietProfile } from "@waitron/shared"
  */
 export interface TillProduct {
   id: string;
-  /** The shared product identity used by recipes, stock and preparation routing. */
+  /** The shared product identity used by stock and preparation routing. */
   productId?: string;
   /** The selling identity whose menu, price and offered modifiers were selected. */
   menuItemId?: string;
@@ -370,10 +360,7 @@ export interface TillProduct {
   /** The PUBLISHED diet profile. Null/absent reads as an unreviewed dish (never vegan/vegetarian), so
    * the diet filters exclude it. */
   diet?: DietProfile | null;
-  /** The recipe-derived diet basis, carried so the basket can recompute the AS-SERVED diet
-   * client-side. Null/absent = no recipe (folds as pending). */
-  dietDerivation?: DietDerivation | null;
-  /** The staff diet OVERRIDE alone, re-applied over the as-served derivation. Null/absent = none. */
+
   dietOverride?: DietOverride | null;
   dietaryDeclarations?: string[];
 }
@@ -388,7 +375,6 @@ export type TillSellingValues = Pick<
   | "allergens"
   | "courseId"
   | "diet"
-  | "dietDerivation"
   | "dietOverride"
   | "dietaryDeclarations"
 >;
@@ -404,7 +390,6 @@ export function sellingValuesOf(source: TillSellingValues): TillSellingValues {
     allergens: source.allergens,
     courseId: source.courseId,
     diet: source.diet,
-    dietDerivation: source.dietDerivation,
     dietOverride: source.dietOverride,
     dietaryDeclarations: source.dietaryDeclarations,
   };
@@ -509,7 +494,6 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
     offeredModifiers: sellableModifiers(offer.offeredModifiers),
     dietaryDeclarations: offer.dietaryDeclarations,
     diet: offer.diet,
-    dietDerivation: offer.dietDerivation,
     dietOverride: offer.dietOverride,
   };
 }

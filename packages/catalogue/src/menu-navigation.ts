@@ -172,7 +172,7 @@ const PRODUCT_KEYS = {
   color: ["color"],
   unit: ["unit", "pricingUnit"],
   allergens: ["allergens"],
-  diet: ["diet", "dietDerivation", "dietOverride", "dietaryDeclarations"],
+  diet: ["diet", "dietOverride", "dietaryDeclarations"],
   vat: ["vatClass"],
   ordering: ["ordering"],
 } as const;

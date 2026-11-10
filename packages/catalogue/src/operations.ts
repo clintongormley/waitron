@@ -3,7 +3,7 @@ import { includedMenus, placesOf } from "./menu-inclusion.js";
 import { isDeepStrictEqual } from "node:util";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductModifiers } from "./product-modifiers.js";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   AppError,
   centsToDecimal,
@@ -12,10 +12,9 @@ import {
   colorOrNull,
   validateAllergens,
   type ProductAllergens,
-  deriveDietProfile,
+  UNDECLARED_DIET,
   overlayDietProfile,
   validateDietOverride,
-  type DietDerivation,
   type DietOverride,
   type DietProfile,
   validateDietaryDeclarations,
@@ -90,7 +89,6 @@ import {
   isTopLevelProduct,
   parentJoin,
   parentProducts,
-  productWithId,
   unitOwnerJoin,
 } from "./variant-fallback.js";
 export type {
@@ -169,8 +167,7 @@ export interface UpdateProductInput {
   color?: string | null;
   /** `null` clears the declaration back to unreviewed. */
   allergens?: ProductAllergens | null;
-  /** `null` clears the staff diet override; published `diet` reverts to the recipe-derived
-   * profile. */
+
   dietOverride?: DietOverride | null;
   image?: string | null;
   active?: boolean;
@@ -208,7 +205,6 @@ const PRODUCT_BASE_COLUMNS = {
   allergens: effective.allergens,
   manualAllergens: effective.manualAllergens,
   dietOverride: effective.dietOverride,
-  dietDerivation: effective.dietDerivation,
   image: effective.image,
   description: effective.description,
   kitchenName: products.kitchenName,
@@ -264,7 +260,6 @@ interface RawProduct {
     addContains?: string[];
     removeContains?: string[];
   } | null;
-  dietDerivation: { origins: string[]; pending: boolean } | null;
   image: string | null;
   unitMeasure: boolean | null;
   courseId: string | null;
@@ -304,7 +299,6 @@ function toProduct(row: RawProduct, variants: ListedVariant[] = []): Product {
     vatClass: row.vatClass as VatClass,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     dietOverride: row.dietOverride as DietOverride | null,
-    dietDerivation: row.dietDerivation as DietDerivation | null,
     variants,
   };
 }
@@ -455,7 +449,6 @@ const offerLineColumns = {
   category: categories.name,
   allergens: effective.allergens,
   diet: effective.diet,
-  dietDerivation: effective.dietDerivation,
   dietOverride: effective.dietOverride,
   dietaryDeclarations: effective.dietaryDeclarations,
   courseId: effective.courseId,
@@ -479,7 +472,6 @@ interface OfferLineRow {
   category: (typeof categories.$inferSelect)["name"] | null;
   allergens: ProductRow["allergens"];
   diet: ProductRow["diet"];
-  dietDerivation: ProductRow["dietDerivation"];
   dietOverride: ProductRow["dietOverride"];
   dietaryDeclarations: NonNullable<ProductRow["dietaryDeclarations"]>;
   courseId: ProductRow["courseId"];
@@ -503,7 +495,6 @@ function offerLineValues(row: OfferLineRow) {
     category: row.category,
     allergens: row.allergens,
     diet: row.diet as DietProfile | null,
-    dietDerivation: row.dietDerivation as DietDerivation | null,
     dietOverride: row.dietOverride as DietOverride | null,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     courseId: row.courseId,
@@ -909,10 +900,7 @@ async function republishOverlays(
       allergens: products.allergens,
       diet: products.diet,
       ownManual: products.manualAllergens,
-      ownDietDerivation: products.dietDerivation,
       ownDietOverride: products.dietOverride,
-      dietDerivation: products.dietDerivation,
-      dietOverride: products.dietOverride,
     })
     .from(products)
     .where(eq(products.id, id));
@@ -920,60 +908,19 @@ async function republishOverlays(
     const inherits = row.parentId !== null;
     const changed: { allergens?: ProductAllergens | null; diet?: typeof row.diet } = {};
     if (columns.allergens) {
-      const allergens =
-        inherits && row.ownManual === null ? null : publishedAllergens(row.ownManual);
+      const allergens = publishedAllergens(row.ownManual);
       if (!isDeepStrictEqual(allergens, row.allergens)) changed.allergens = allergens;
     }
     if (columns.diet) {
       const diet =
-        inherits && row.ownDietDerivation === null && row.ownDietOverride === null
+        inherits && row.ownDietOverride === null
           ? null
-          : overlayDietProfile(
-              deriveDietProfile(
-                (row.dietDerivation ?? { origins: [], pending: true }) as DietDerivation,
-              ),
-              row.dietOverride as DietOverride | null,
-            );
+          : overlayDietProfile(UNDECLARED_DIET, row.ownDietOverride as DietOverride | null);
       if (!isDeepStrictEqual(diet, row.diet)) changed.diet = diet;
     }
     if (Object.keys(changed).length > 0)
       await tx.update(products).set(changed).where(eq(products.id, row.id));
   }
-}
-
-async function applyDerivation(
-  tx: Transaction,
-  productId: string,
-  derivation: { dietDerivation: DietDerivation | null },
-  columns: { allergens: boolean; diet: boolean },
-): Promise<void> {
-  const [written] = await tx
-    .update(products)
-    .set({ ...derivation, updatedAt: now() })
-    .where(productWithId(productId, "top-level"))
-    .returning({ id: products.id });
-  if (written === undefined) {
-    const [row] = await tx
-      .select({ id: products.id })
-      .from(products)
-      .where(eq(products.id, productId));
-    if (row !== undefined) throw new AppError("product.not_found", { productId });
-    return;
-  }
-  await republishOverlays(tx, productId, columns);
-}
-
-export async function applyDietDerivation(
-  tx: Transaction,
-  productId: string,
-  derivation: DietDerivation | null,
-): Promise<void> {
-  await applyDerivation(
-    tx,
-    productId,
-    { dietDerivation: derivation },
-    { allergens: false, diet: true },
-  );
 }
 
 export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
@@ -1034,7 +981,7 @@ async function insertProduct(
     manualAllergens: allergens,
     allergens: publishedAllergens(allergens),
     dietOverride,
-    diet: overlayDietProfile(deriveDietProfile({ origins: [], pending: true }), dietOverride),
+    diet: overlayDietProfile(UNDECLARED_DIET, dietOverride),
     image: input.image ?? null,
   };
   if (checkCatalogue) await assertCatalogueExists(tx, input.catalogueId);
@@ -1409,7 +1356,6 @@ export async function listAvailableProducts(
       category: categories.name,
       allergens: effective.allergens,
       diet: effective.diet,
-      dietDerivation: effective.dietDerivation,
       dietOverride: effective.dietOverride,
       dietaryDeclarations: effective.dietaryDeclarations,
       courseId: effective.courseId,
@@ -1463,7 +1409,6 @@ export async function listAvailableProducts(
     category: row.category,
     allergens: row.allergens,
     diet: row.diet as DietProfile | null,
-    dietDerivation: row.dietDerivation as DietDerivation | null,
     dietOverride: row.dietOverride as DietOverride | null,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
     courseId: row.courseId,

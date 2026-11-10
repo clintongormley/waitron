@@ -33,7 +33,6 @@ const toPriceable = (p: AvailableProduct): PriceableProduct => ({
 });
 import {
   addCatalogueToVenue,
-  applyDietDerivation,
   assignCatalogueToVenue,
   catalogueExists,
   createCatalogue,
@@ -980,12 +979,10 @@ describe("catalogue operations", () => {
 
       expect(available!.diet).toMatchObject({ vegan: "no", halal: "yes", contains: ["meat"] });
       expect(available!.dietOverride).toEqual({ vegan: "no", halal: "yes", addContains: ["meat"] });
-      expect(available!.dietDerivation).toBeNull();
     });
   });
 
-  // A product with no recipe publishes exactly the manual value.
-  it("createProduct publishes the manual allergen map when there is no recipe", async () => {
+  it("createProduct publishes the manual allergen map", async () => {
     const result = await withTransaction(fx.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "C" });
       const p = await createProduct(tx, {
@@ -1044,19 +1041,15 @@ describe("catalogue operations", () => {
     });
   });
 
-  // ── Diet derivation + override republish ─────────────────────────────────────────────────────────
   const readDiet = (tx: Transaction, id: string) =>
     tx
       .select({
         diet: products.diet,
-        deriv: products.dietDerivation,
         override: products.dietOverride,
       })
       .from(products)
       .where(eq(products.id, id));
 
-  // CAUTIOUS posture: with no recipe and no override, vegan/vegetarian read "unknown" — never a
-  // positive claim on an unreviewed plate.
   it("createProduct with no override publishes an unknown (cautious) diet profile", async () => {
     const [row] = await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "C" });
@@ -1502,7 +1495,6 @@ describe("catalogue operations", () => {
       category: null,
       allergens: null,
       diet: null,
-      dietDerivation: null,
       dietOverride: null,
       dietaryDeclarations: [],
       courseId: null,
@@ -1764,15 +1756,10 @@ describe("menu offers nest a product's variants", () => {
 });
 
 describe("a variant's published allergens and diet", () => {
-  // The parent's four overlays each carry a value a variant's own could never produce by accident:
-  // its manual map (nuts) and its recipe floor (eggs) are different allergens, and its diet
-  // override (halal) and derivation (dairy) set different parts of the profile.
   const PARENT_MANUAL = { nuts: { kinds: ["almonds" as const] } };
-  const PARENT_DIET_DERIVATION = { origins: ["plant" as const, "dairy" as const], pending: false };
   const PARENT_DIET_OVERRIDE = { halal: "yes" as const };
   let parentId: string;
   let variantId: string;
-  let bareVariantId: string;
   const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(fx.db, fn);
   const wine = (name: string) => ({
     name,
@@ -1785,7 +1772,7 @@ describe("a variant's published allergens and diet", () => {
 
   beforeEach(async () => {
     await seedVenueWithSeries(fx.db);
-    ({ parentId, variantId, bareVariantId } = await run(async (tx) => {
+    ({ parentId, variantId } = await run(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Bar" });
       const parent = await createProduct(tx, {
         catalogueId: menu.id,
@@ -1797,7 +1784,6 @@ describe("a variant's published allergens and diet", () => {
         allergens: PARENT_MANUAL,
         dietOverride: PARENT_DIET_OVERRIDE,
       });
-      await applyDietDerivation(tx, parent.id, PARENT_DIET_DERIVATION);
       const [variant, bare] = await setProductVariants(
         tx,
         parent.id,

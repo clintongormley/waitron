@@ -49,7 +49,6 @@ function variant(id: string, name: string): FrozenOfferVariant {
     vatClass: "reduced",
     allergens: null,
     diet: null,
-    dietDerivation: null,
     dietOverride: null,
     dietaryDeclarations: [],
   };

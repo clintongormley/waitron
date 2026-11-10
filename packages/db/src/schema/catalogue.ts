@@ -83,9 +83,6 @@ export const products = table(
     allergens: json<AllergenMap>("allergens"),
     // Staff-authored allergen overlay — what a human explicitly declared. NULL = not reviewed.
     manualAllergens: json<AllergenMap>("manual_allergens"),
-    dietDerivation: json<{ origins: string[]; pending: boolean }>("diet_derivation"),
-    // Staff override — forced vegan/vegetarian/halal/kosher + hand contains-tags. halal/kosher live
-    // ONLY here (no derivation). NULL = no override.
     dietOverride: json<{
       vegan?: "yes" | "no";
       vegetarian?: "yes" | "no";
@@ -94,8 +91,7 @@ export const products = table(
       addContains?: string[];
       removeContains?: string[];
     }>("diet_override"),
-    // Published, display diet profile — the diet twin of the published `allergens` column, recomputed
-    // by @waitron/catalogue whenever derivation or override changes. Read by the menu filter/grid.
+    // The published profile: the override laid over UNDECLARED_DIET.
     diet: json<{
       vegan: "yes" | "no" | "unknown";
       vegetarian: "yes" | "no" | "unknown";

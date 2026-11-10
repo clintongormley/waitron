@@ -1,9 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { AppError } from "../errors.js";
 import {
-  deriveDietProfile,
+  UNDECLARED_DIET,
   overlayDietProfile,
-  validateOrigin,
   validateContainsTag,
   validateDietOverride,
   assertDietOverrideDisjoint,
@@ -11,54 +10,10 @@ import {
   type DietProfile,
 } from "./dietary.js";
 
-describe("deriveDietProfile", () => {
-  it("all-plant, reviewed → vegan+vegetarian yes, no contains", () => {
-    expect(deriveDietProfile({ origins: ["plant"], pending: false })).toEqual({
-      vegan: "yes",
-      vegetarian: "yes",
-      contains: [],
-    });
-  });
-  it("dairy present → vegetarian yes, vegan no", () => {
-    expect(deriveDietProfile({ origins: ["dairy", "plant"], pending: false })).toEqual({
-      vegan: "no",
-      vegetarian: "yes",
-      contains: [],
-    });
-  });
-  it("meat present → both no, contains meat", () => {
-    expect(deriveDietProfile({ origins: ["meat", "plant"], pending: false })).toEqual({
-      vegan: "no",
-      vegetarian: "no",
-      contains: ["meat"],
-    });
-  });
-  it("fish present → both no, contains fish", () => {
-    expect(deriveDietProfile({ origins: ["fish"], pending: false })).toEqual({
-      vegan: "no",
-      vegetarian: "no",
-      contains: ["fish"],
-    });
-  });
-  it("other_animal (gelatine) → vegetarian no", () => {
-    expect(
-      deriveDietProfile({ origins: ["other_animal", "plant"], pending: false }).vegetarian,
-    ).toBe("no");
-  });
-  it("PENDING withholds vegan/veg but NOT a known contains-meat", () => {
-    expect(deriveDietProfile({ origins: ["meat"], pending: true })).toEqual({
-      vegan: "unknown",
-      vegetarian: "unknown",
-      contains: ["meat"],
-    });
-  });
-  it("PENDING all-plant → unknown, NOT vegan (cautious)", () => {
-    expect(deriveDietProfile({ origins: ["plant"], pending: true })).toEqual({
-      vegan: "unknown",
-      vegetarian: "unknown",
-      contains: [],
-    });
-  });
+it("UNDECLARED_DIET claims nothing", () => {
+  const expected = { vegan: "unknown", vegetarian: "unknown", contains: [] };
+  expect(UNDECLARED_DIET).toEqual(expected);
+  expect(overlayDietProfile(UNDECLARED_DIET, null)).toEqual(expected);
 });
 
 describe("overlayDietProfile", () => {
@@ -95,11 +50,7 @@ describe("overlayDietProfile", () => {
   });
 });
 
-describe("validateOrigin / assertDietOverrideDisjoint", () => {
-  it("accepts a valid origin, rejects junk", () => {
-    expect(validateOrigin("meat")).toBe("meat");
-    expect(() => validateOrigin("wombat")).toThrow();
-  });
+describe("assertDietOverrideDisjoint", () => {
   it("rejects an override that adds and removes the same tag", () => {
     expect(() =>
       assertDietOverrideDisjoint({ addContains: ["meat"], removeContains: ["meat"] }),
@@ -164,15 +115,7 @@ describe("diet refusals and the override's edges", () => {
     throw new Error("should have thrown");
   }
 
-  it("refuses an unknown origin and a tag outside meat and fish, echoing the value", () => {
-    expect(refusal(() => validateOrigin("rock"))).toEqual({
-      code: "diet.invalid_origin",
-      params: { origin: "rock" },
-    });
-    expect(refusal(() => validateOrigin(5))).toEqual({
-      code: "diet.invalid_origin",
-      params: { origin: "5" },
-    });
+  it("refuses a tag outside meat and fish, echoing the value", () => {
     expect(refusal(() => validateContainsTag("plant"))).toEqual({
       code: "diet.invalid_origin",
       params: { origin: "plant" },
@@ -194,11 +137,6 @@ describe("diet refusals and the override's edges", () => {
   it("accepts an override of labels alone", () => {
     const override: DietOverride = { vegan: "no" };
     expect(validateDietOverride(override)).toBe(override);
-  });
-
-  it("counts dairy, egg and honey as vegetarian", () => {
-    for (const origin of ["dairy", "egg", "honey"] as const)
-      expect(deriveDietProfile({ origins: [origin], pending: false }).vegetarian).toBe("yes");
   });
 
   it("keeps the derived tags, overrides each label, sorts, and adds halal and kosher only when set", () => {

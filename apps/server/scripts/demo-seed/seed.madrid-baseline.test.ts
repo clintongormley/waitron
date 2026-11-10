@@ -338,8 +338,30 @@ for (const locale of ["en", "es"] as const) {
         match: "NONE",
       });
       const products = expected[phase].tables.products!;
-      products.columns = products.columns.filter((column) => column.name !== "recipe_derivation");
-      for (const row of Object.values(products.rows)) delete row.recipe_derivation;
+      products.columns = products.columns.filter(
+        (column) => !["recipe_derivation", "diet_derivation"].includes(column.name),
+      );
+      for (const row of Object.values(products.rows)) {
+        delete row.recipe_derivation;
+        delete row.diet_derivation;
+      }
+      const contexts = expected[phase].tables.working_line_contexts!;
+      contexts.columns = contexts.columns.filter((column) => column.name !== "diet_derivation");
+      for (const row of Object.values(contexts.rows)) delete row.diet_derivation;
+      for (const row of Object.values(expected[phase].tables.menu_versions!.rows)) {
+        const document = row.document as {
+          offers: Record<
+            string,
+            { dietDerivation?: unknown; variants: { dietDerivation?: unknown }[] }
+          >;
+        };
+        for (const offer of Object.values(document.offers)) {
+          delete offer.dietDerivation;
+          for (const variant of offer.variants) delete variant.dietDerivation;
+        }
+      }
+      expected[phase] = madridWithNameChanges(expected[phase], []);
+
       const parties = expected[phase].tables.parties!;
       parties.columns = parties.columns.filter((column) => column.name !== "main_bill_id");
       parties.foreignKeys = parties.foreignKeys.filter((key) => key.from !== "main_bill_id");

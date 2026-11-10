@@ -1011,6 +1011,7 @@ CREATE TABLE `products` (
 	`color` text,
 	`allergens` text,
 	`manual_allergens` text,
+	`recipe_derivation` text,
 	`diet_derivation` text,
 	`diet_override` text,
 	`diet` text,
@@ -1038,6 +1039,29 @@ CREATE TABLE `location_catalogues` (
 	FOREIGN KEY (`catalogue_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE TABLE `ingredients` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`allergens` text,
+	`dietary_origin` text,
+	`active` integer DEFAULT true NOT NULL,
+	`created_at` text NOT NULL,
+	`updated_at` text NOT NULL,
+	CONSTRAINT "ingredients_dietary_origin_ck" CHECK("ingredients"."dietary_origin" in ('plant', 'meat', 'fish', 'shellfish', 'dairy', 'egg', 'honey', 'other_animal'))
+);
+--> statement-breakpoint
+CREATE TABLE `recipe_lines` (
+	`id` text PRIMARY KEY NOT NULL,
+	`product_id` text NOT NULL,
+	`ingredient_id` text NOT NULL,
+	`created_at` text NOT NULL,
+	FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`ingredient_id`) REFERENCES `ingredients`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE INDEX `recipe_lines_product_id_idx` ON `recipe_lines` (`product_id`);--> statement-breakpoint
+CREATE INDEX `recipe_lines_ingredient_id_idx` ON `recipe_lines` (`ingredient_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `recipe_lines_product_ingredient_key` ON `recipe_lines` (`product_id`,`ingredient_id`);--> statement-breakpoint
 CREATE TABLE `purchase_invoice_vat` (
 	`id` text PRIMARY KEY NOT NULL,
 	`purchase_invoice_id` text NOT NULL,

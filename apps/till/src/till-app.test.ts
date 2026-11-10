@@ -354,7 +354,6 @@ function fixtureOffers(
     category: product.category ?? "Other",
     allergens: product.allergens,
     diet: product.diet ?? null,
-    dietDerivation: product.dietDerivation ?? null,
     dietOverride: product.dietOverride ?? null,
     // The source `TillProduct` types the declarations looser than the offer's wire shape (plain
     // `string[]`), so the fixture narrows them — the fixtures only ever supply real labels.
@@ -388,7 +387,6 @@ function fixtureOffers(
         category: product.category ?? "Other",
         allergens: product.allergens,
         diet: product.diet ?? null,
-        dietDerivation: product.dietDerivation ?? null,
         dietOverride: product.dietOverride ?? null,
         dietaryDeclarations: (product.dietaryDeclarations ??
           []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
@@ -1665,7 +1663,6 @@ describe("till-app", () => {
           category: "Cocktail",
           allergens: null,
           diet: null,
-          dietDerivation: null,
           dietOverride: null,
           courseId: null,
           available: true,
@@ -1686,7 +1683,6 @@ describe("till-app", () => {
           category: "Cocktail",
           allergens: null,
           diet: null,
-          dietDerivation: null,
           dietOverride: null,
           courseId: null,
           available: true,
@@ -8079,7 +8075,6 @@ describe("till-app", () => {
       catalogueId: "menu-winter",
       catalogueName: "Winter menu",
       diet: null,
-      dietDerivation: null,
       dietOverride: null,
       courseId: null,
     };

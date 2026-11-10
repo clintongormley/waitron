@@ -106,7 +106,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
           category: "Other",
           allergens: products[0]!.allergens,
           diet: null,
-          dietDerivation: null,
           dietOverride: null,
           courseId: null,
           offeredModifiers: [],

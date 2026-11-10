@@ -254,7 +254,6 @@ export const workingLineContexts = table(
     vatClass: label("vat_class").notNull(),
     allergens: json<AllergenMap>("allergens"),
     diet: json<unknown>("diet"),
-    dietDerivation: json<unknown>("diet_derivation"),
     dietOverride: json<unknown>("diet_override"),
     latePeriodName: label("late_period_name"),
     // No key yet; the writer takes the id from the same request's session or its manager

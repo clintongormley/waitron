@@ -797,7 +797,7 @@ const PRODUCT_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["image", ["image"]],
   ["unit", ["unit", "pricingUnit"]],
   ["allergens", ["allergens"]],
-  ["diet", ["diet", "dietDerivation", "dietOverride", "dietaryDeclarations"]],
+  ["diet", ["diet", "dietOverride", "dietaryDeclarations"]],
   ["vat", ["vatClass"]],
 ];
 

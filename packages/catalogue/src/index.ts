@@ -19,7 +19,6 @@ export * from "./units.js";
 export {
   addCatalogueToVenue,
   addProductToMenu,
-  applyDietDerivation,
   assignCatalogueToVenue,
   catalogueExists,
   createCatalogue,
@@ -78,18 +77,14 @@ export {
 } from "@waitron/shared";
 export * from "./derivation.js";
 export {
-  validateOrigin,
   validateContainsTag,
   validateDietOverride,
-  deriveDietProfile,
+  UNDECLARED_DIET,
   overlayDietProfile,
   assertDietOverrideDisjoint,
-  DIETARY_ORIGINS,
   CONTAINS_TAGS,
-  type DietaryOrigin,
   type ContainsTag,
   type DietLabel,
-  type DietDerivation,
   type DietOverride,
   type DietProfile,
 } from "@waitron/shared";

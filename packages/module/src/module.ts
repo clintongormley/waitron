@@ -234,7 +234,6 @@ export interface ZoneMenuOffer {
   readonly category: string | null;
   readonly allergens: Readonly<AllergenMap> | null;
   readonly diet: unknown;
-  readonly dietDerivation: unknown;
   readonly dietOverride: unknown;
   readonly dietaryDeclarations: readonly string[];
   /** The product's Active variants, each with its RESOLVED `unitPrice`, this menu's stored
@@ -434,7 +433,6 @@ export interface ZoneMenuOfferVariant {
   readonly courseId: string | null;
   readonly allergens: ZoneMenuOffer["allergens"];
   readonly diet: unknown;
-  readonly dietDerivation: unknown;
   readonly dietOverride: unknown;
   readonly dietaryDeclarations: readonly string[];
 }
@@ -1188,7 +1186,6 @@ export interface VenueServiceContribution {
       vatClass: string;
       allergens: ZoneMenuOffer["allergens"];
       diet: unknown;
-      dietDerivation: unknown;
       dietOverride: unknown;
     }[]
   >;

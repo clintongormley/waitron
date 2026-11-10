@@ -738,52 +738,48 @@ describe("till-basket", () => {
   it.each([
     {
       name: "plant-only reviewed",
-      origins: ["plant"],
-      pending: false,
-      override: null,
+      override: { vegan: "yes", vegetarian: "yes" },
       labels: ["vegan", "vegetarian"],
     },
-    { name: "meat", origins: ["meat"], pending: false, override: null, labels: [] },
-    { name: "pending diet", origins: [], pending: true, override: null, labels: [] },
     {
-      name: "halal and kosher overrides",
-      origins: ["meat"],
-      pending: false,
-      override: { halal: "yes", kosher: "yes" },
-      labels: ["halal", "kosher"],
-    },
-    {
-      name: "partly resolved pending diet",
-      origins: [],
-      pending: true,
-      override: { vegan: "no" },
+      name: "meat",
+      override: { vegan: "no", vegetarian: "no", addContains: ["meat"] },
       labels: [],
     },
-    { name: "other animal", origins: ["other_animal"], pending: false, override: null, labels: [] },
-  ])(
-    "shows only positive inline diet icons for $name",
-    async ({ origins, pending, override, labels }) => {
-      const store = new WorkingOrderStore();
-      store.addProduct(
-        {
-          ...coffee,
-          allergens: {},
-          dietDerivation: { origins, pending } as NonNullable<TillProduct["dietDerivation"]>,
-          dietOverride: override as TillProduct["dietOverride"],
-        },
-        "1",
-      );
-      const { el } = await mountWidget<TillBasket>("till-basket", { store });
-      const name = el.shadowRoot!.querySelector(".line > .name")!;
-      expect(
-        [...name.querySelectorAll("wt-icon")].map((icon) => icon.getAttribute("name")),
-      ).toEqual(labels.map((label) => `diet-${label}`));
-      expect(el.shadowRoot!.querySelector(".line-diet")).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-diet-pending]")).toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-diet-contains]")).toBeNull();
-      expect(el.shadowRoot!.textContent).not.toContain(t("diet.not_reviewed"));
+    { name: "pending diet", override: null, labels: [] },
+    {
+      name: "halal and kosher overrides",
+      override: {
+        vegan: "no",
+        vegetarian: "no",
+        addContains: ["meat"],
+        halal: "yes",
+        kosher: "yes",
+      },
+      labels: ["halal", "kosher"],
     },
-  );
+    { name: "partly resolved pending diet", override: { vegan: "no" }, labels: [] },
+    { name: "other animal", override: { vegan: "no", vegetarian: "no" }, labels: [] },
+  ])("shows only positive inline diet icons for $name", async ({ override, labels }) => {
+    const store = new WorkingOrderStore();
+    store.addProduct(
+      {
+        ...coffee,
+        allergens: {},
+        dietOverride: override as TillProduct["dietOverride"],
+      },
+      "1",
+    );
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    const name = el.shadowRoot!.querySelector(".line > .name")!;
+    expect([...name.querySelectorAll("wt-icon")].map((icon) => icon.getAttribute("name"))).toEqual(
+      labels.map((label) => `diet-${label}`),
+    );
+    expect(el.shadowRoot!.querySelector(".line-diet")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-diet-pending]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-diet-contains]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(t("diet.not_reviewed"));
+  });
 
   it("keeps the dish's own vegan and vegetarian icons beside a meat-adding extra", async () => {
     const bacon = offeredItem("p-bacon", "Beicon", "1.00");

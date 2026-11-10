@@ -1799,7 +1799,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       band: "fresh",
       // This dish's own allergens are unreviewed, so the profile is empty and flagged pending.
       asServed: { allergens: {}, pending: true },
-      // No recipe, so the diet reads "unknown": an unreviewed plate asserts no positive claim.
+      // No override, so the diet reads "unknown": an unreviewed plate asserts no positive claim.
       asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
     };
     expect(groups1).toEqual([
