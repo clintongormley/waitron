@@ -1,5 +1,7 @@
 # A1470: hosted fallback for blind new-run routing
 
+**Build clearance, 2026-11-10 15:40.** The owner chose “Unsure → GitHub (Recommended)” in `~/waitron-campaign-shared/desk/done/20261110-0946-I-a1470-ci-routing.md`. The watcher cleared this corrected plan (54ff4538e0) in Lane I `questions.md`, WATCHER 15:40 A1470. Claude reviewed the approach in 197 seconds; all five findings were incorporated. This dated clearance supersedes the pending status above.
+
 **PLAN FOR APPROVAL. No build authorised.** Lane I `questions.md`, watcher 2026-11-10 06:00: “After A1463's PR is open, write a short plan (no build) for the smallest change that stops it”. The 06:10/06:16 instructions retain unqualified timing and put this plan before D-Bus diagnosis. A1463 Cloud PR #1131 is open. Requests are transcribed in receipt `author-brief.txt`; driver holds originals under RUNNER’s private-approval exception.
 
 **Outcome and evidence.** Stop adding new runs to the server solely because routing inputs cannot be verified. In `~/waitron-campaign-i/receipts/a1470-routing-plan-20261110/`, `routing-reasons.json` and the three `*-changes.log` files identify:
@@ -32,5 +34,3 @@ Provisional lines added/removed: code **4/4**; workflow **2/2**; tests **25/25**
 Exclude timing weights, duration estimators, history, new state/protocol/deadline, reservations, approval machinery and Cloud changes. A1463 timings remain **unqualified** because of slow checkouts and uncontrolled host cache; use neither weights nor savings claims.
 
 **Finish line.** Claude source read is complete; driver submits corrected PLAN FOR APPROVAL. Build approval remains absent. After approved delivery, retain the first natural blind decision's workflow/source SHA, run/attempt, reason/BLIND line, output and actual hosted runner labels/results. No natural blind decision means live fallback remains unverified; do not manufacture one or claim queue savings.
-
-**Build clearance, 2026-11-10 15:40.** The owner chose “Unsure → GitHub (Recommended)” in `~/waitron-campaign-shared/desk/done/20261110-0946-I-a1470-ci-routing.md`. The watcher cleared this corrected plan (54ff4538e0) in Lane I `questions.md`, WATCHER 15:40 A1470. Claude reviewed the approach in 197 seconds; all five findings were incorporated. This dated clearance supersedes the pending status above.

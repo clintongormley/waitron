@@ -222,8 +222,12 @@ cat "$FIXTURE_ROUTER"
       expect(readFileSync(join(root, "fetch-calls"), "utf8").trim().split("\n")).toHaveLength(
         refused === false ? 1 : 2,
       );
-      if (refused === true)
+      if (refused === true) {
         expect(readFileSync(join(root, "outputs"), "utf8")).toBe("server_route=hosted\n");
+        expect(readFileSync(join(root, "summary"), "utf8")).toContain(
+          "CI routing script could not be read; using GitHub.",
+        );
+      }
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

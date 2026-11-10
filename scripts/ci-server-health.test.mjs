@@ -502,7 +502,7 @@ describe("server health recovery", () => {
       { report: (line) => reports.push(line), output: (line) => outputs.push(line) },
     );
     expect(outputs).toEqual(["server_route=hosted"]);
-    expect(reports[0]).toContain("could not be verified");
+    expect(reports[0]).toContain("could not be verified; using GitHub");
   });
 
   it("rejects a changed run identity while waiting for cancellation", async () => {

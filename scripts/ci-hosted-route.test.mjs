@@ -456,7 +456,7 @@ describe("queue-pressure routing", () => {
         report: (line) => reports.push(line),
       });
       expect(outputs).toEqual(["server_route=hosted"]);
-      expect(reports[0]).toContain("could not be verified");
+      expect(reports[0]).toContain("could not be verified; using GitHub");
     },
   );
 });

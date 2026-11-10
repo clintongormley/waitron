@@ -240,12 +240,11 @@ job can keep new runs on hosted until someone resolves it; the check only report
 The health reader requests job inventories in pages of 30 and run inventories in pages of 100.
 GET failures reporting HTTP 5xx get two 15-second attempts, one second apart. Writes and
 JSON parse errors are not retried; the final request error remains visible.
-A hosted route chosen without readable inputs logs `CI_ROUTE_BLIND run=ID attempt=N`
-once, including a failed routing-module fetch. Use those lines to count daily blind
-routes after deployment; this change does not reconsider or move them. The workflow-module
-fetch also retries once after one second. A routing step killed at its existing two-minute
-limit leaves an empty route and uses hosted runners; it does not emit a BLIND line, so
-the daily count excludes those killed-step choices. Read failed routing-step logs separately.
+The router's explicit blind decisions and a failed routing-module fetch log `CI_ROUTE_BLIND run=ID attempt=N`
+once. Use those lines to count reported blind choices after deployment. The workflow-module
+fetch also retries once after one second. A routing step that crashes or reaches its existing two-minute
+limit before reporting leaves an empty route and uses hosted runners without a BLIND line;
+the daily count excludes those choices. Read failed routing-step logs separately.
 On 9 November, the attempt-job endpoints for runs `42580703144` (84 jobs) and `42584158356`
 (87 jobs) returned HTTP 502 with 100-record pages and returned 30 records with 30-record pages.
 The reader keeps its complete-count, unique-ID and run/attempt/head checks across those pages.
