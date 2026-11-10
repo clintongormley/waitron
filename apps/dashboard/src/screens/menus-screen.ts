@@ -1308,6 +1308,7 @@ export class MenusScreen extends LitElement {
     this.removingSelected = null;
     this.deletingSelected = null;
     this.movingSelected = null;
+    this.editingSection = null;
     this.deletingSection = null;
     this.structure = null;
     this.structureError = false;

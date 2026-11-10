@@ -4144,6 +4144,23 @@ describe("a row's own Delete section confirm and another menu", () => {
   });
 });
 
+it("closes a row's Edit section form when another menu is opened, saving nothing", async () => {
+  const client = api();
+  const el = await mountLunch(client);
+  await rowAction(el, "m-drinks", "edit");
+  await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(true));
+  await visit(el, DINNER_PATH, "Dinner Menu");
+  expect(modal(el, "new-section").open).toBe(false);
+  emit(q(el, '[data-test="section-form"]')!, "wt-submit", {
+    internalName: "Ciders",
+    names: {},
+    image: null,
+    color: null,
+  });
+  await el.updateComplete;
+  expect(client.updateSection).not.toHaveBeenCalled();
+});
+
 it("keeps a picker whose add is out open when the person goes to another menu, marking nothing from that menu, and closes it quietly when the add is saved", async () => {
   const adding = deferred<{ added: number }>();
   const client = api({ addSectionProducts: vi.fn(() => adding.promise) });
@@ -11696,6 +11713,30 @@ describe("review fix: inclusion target and validation", () => {
       }
     },
   );
+  it("closes a refused Include, sending nothing, when it is chosen again after its list left the menu while it was out", async () => {
+    const live = new LiveData();
+    const adding = deferred<SectionMember>();
+    const client = includeApi({ liveData: live, addSectionMember: vi.fn(() => adding.promise) });
+    const el = await mountLunch(client);
+    await editDrinks(el);
+    const picker = await openInclude(el);
+    await vi.waitFor(() => expect(client.addSectionMember).toHaveBeenCalledOnce());
+    await takeDrinksOff(el, client, live);
+    adding.reject({ code: "menu_section.not_found" });
+    await vi.waitFor(async () =>
+      expect(await bottom(el, "include")).toBe(codeMessage("menu_section.not_found")),
+    );
+    await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+    expect(modal(el, "include").open).toBe(true);
+
+    emit(picker, "wt-change", { value: "wine-root" });
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(client.addSectionMember).toHaveBeenCalledOnce();
+    expect(modal(el, "include").open).toBe(false);
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.list_gone").replace("{name}", "Drinks"),
+    );
+  });
   it("closes an idle Include on navigation without retargeting the selection", async () => {
     const client = includeApi();
     const el = await mountLunch(client);
