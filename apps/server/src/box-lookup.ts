@@ -2,10 +2,15 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import multicastDns from "multicast-dns";
 import { AppError } from "@waitron/shared";
-import { MDNS_TTL_SECONDS } from "./mdns.js";
 import { isLoopbackHost } from "./primary-url.js";
 import { ownInterfaceAddresses } from "./request-from-box.js";
 import "./errors.js";
+
+/** TTL (seconds) on the A records — short so a moved box is re-resolved quickly. */
+export const MDNS_TTL_SECONDS = 120;
+
+/** A venue has a handful of boxes; a network answering for many names cannot grow the store. */
+const MAX_KEPT_NAMES = 64;
 
 /** A minimal view of a multicast-dns instance used for asking, so lookups can be tested with a fake. */
 export interface MdnsQuerySocket {
@@ -44,12 +49,17 @@ interface Heard {
 
 /**
  * Answers heard for each name, each kept until the shortest lifetime among its records ends, and
- * never longer than the lifetime a Waitron box gives its own records.
+ * never longer than the lifetime a Waitron box gives its own records. Lifetimes are measured on a
+ * clock that setting the box's time of day does not move.
  */
 export class RememberedAnswers {
   private readonly kept = new Map<string, { addresses: string[]; untilMs: number }>();
 
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(private readonly now: () => number = () => performance.now()) {}
+
+  get size(): number {
+    return this.kept.size;
+  }
 
   recall(hostname: string): string[] | undefined {
     const entry = this.kept.get(hostname.toLowerCase());
@@ -67,14 +77,31 @@ export class RememberedAnswers {
     const lifetimes = heard.map((h) => h.ttlSeconds);
     if (heard.length === 0 || lifetimes.some((ttl) => ttl === undefined || ttl <= 0)) return;
     const shortest = Math.min(MDNS_TTL_SECONDS, ...(lifetimes as number[]));
-    this.kept.set(hostname.toLowerCase(), {
+    const nowMs = this.now();
+    const key = hostname.toLowerCase();
+    for (const [name, entry] of this.kept) if (nowMs >= entry.untilMs) this.kept.delete(name);
+    if (!this.kept.has(key) && this.kept.size >= MAX_KEPT_NAMES) this.dropSoonestToEnd();
+    this.kept.set(key, {
       addresses: heard.map((h) => h.address),
-      untilMs: this.now() + shortest * 1000,
+      untilMs: nowMs + shortest * 1000,
     });
+  }
+
+  private dropSoonestToEnd(): void {
+    let soonest: [string, number] | undefined;
+    for (const [name, { untilMs }] of this.kept)
+      if (soonest === undefined || untilMs < soonest[1]) soonest = [name, untilMs];
+    if (soonest !== undefined) this.kept.delete(soonest[0]);
   }
 }
 
 const DEFAULT_TIMEOUT_MS = 2000;
+
+/** Read when asked, so an address this box has taken since an answer was kept counts as its own. */
+function ownAddressCheck(opts: BoxLookupOptions): (ip: string) => boolean {
+  const own = new Set(opts.ownAddresses?.() ?? ownInterfaceAddresses());
+  return (ip) => own.has(ip) || isLoopbackHost(ip);
+}
 
 /**
  * Asks once for `hostname`'s A record and gathers every other box's IPv4 answered within the time
@@ -83,8 +110,11 @@ const DEFAULT_TIMEOUT_MS = 2000;
  * answering for the venue's name it also answers for. A socket error rejects with that error: an
  * ask that could not be made heard nothing about who answers.
  */
-function askNetwork(hostname: string, opts: BoxLookupOptions): Promise<Heard[]> {
-  const own = new Set(opts.ownAddresses?.() ?? ownInterfaceAddresses());
+function askNetwork(
+  hostname: string,
+  opts: BoxLookupOptions,
+  isOwn = ownAddressCheck(opts),
+): Promise<Heard[]> {
   const wanted = hostname.toLowerCase();
   const socket = (opts.makeSocket ?? (() => multicastDns() as MdnsQuerySocket))();
   const heard: Heard[] = [];
@@ -102,7 +132,7 @@ function askNetwork(hostname: string, opts: BoxLookupOptions): Promise<Heard[]> 
         if (answer.type !== "A" || answer.name.toLowerCase() !== wanted) continue;
         const ip = answer.data;
         if (typeof ip !== "string" || isIP(ip) !== 4) continue;
-        if (own.has(ip) || isLoopbackHost(ip) || heard.some((h) => h.address === ip)) continue;
+        if (isOwn(ip) || heard.some((h) => h.address === ip)) continue;
         heard.push({ address: ip, ttlSeconds: answer.ttl });
       }
     });
@@ -125,9 +155,12 @@ export async function lookupBoxName(
     return { addresses: found.map((entry) => entry.address), remembered: false };
   }
   if (opts.fresh === true) opts.remembered?.forget(hostname);
-  const recalled = opts.remembered?.recall(hostname);
-  if (recalled !== undefined) return { addresses: recalled, remembered: true };
-  const heard = await askNetwork(hostname, opts).catch((): Heard[] => []);
+  const isOwn = ownAddressCheck(opts);
+  const recalled = opts.remembered?.recall(hostname)?.filter((ip) => !isOwn(ip));
+  if (recalled !== undefined && recalled.length > 0)
+    return { addresses: recalled, remembered: true };
+  if (recalled !== undefined) opts.remembered?.forget(hostname);
+  const heard = await askNetwork(hostname, opts, isOwn).catch((): Heard[] => []);
   if (heard.length === 0) throw new AppError("mirror.peer_unresolved", {});
   opts.remembered?.keep(hostname, heard);
   return { addresses: heard.map((h) => h.address), remembered: false };

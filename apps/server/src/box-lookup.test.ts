@@ -10,10 +10,10 @@ vi.mock("node:dns/promises", () => ({ lookup: systemLookup }));
 import {
   askedAndHeardOthers,
   lookupBoxName,
+  MDNS_TTL_SECONDS,
   RememberedAnswers,
   type MdnsQuerySocket,
 } from "./box-lookup.js";
-import { MDNS_TTL_SECONDS } from "./mdns.js";
 
 const NAME = "box-a1b2.waitron.local";
 const OWN = "192.168.10.5";
@@ -276,6 +276,106 @@ describe("lookupBoxName keeping answers", () => {
     await expect(
       lookupBoxName(NAME.toUpperCase(), { ...opts(other), remembered }),
     ).resolves.toEqual({ addresses: ["192.168.10.7"], remembered: true });
+  });
+});
+
+describe("lookupBoxName and this box's own addresses", () => {
+  const lived = (data: string): Answer => ({ ...a(data), ttl: 120 });
+
+  function changingOwn(packets: Answer[][]) {
+    const own = [OWN];
+    const fake = fakeSocket(packets);
+    const remembered = new RememberedAnswers(() => 0);
+    return {
+      fake,
+      own,
+      remembered,
+      ask: () =>
+        lookupBoxName(NAME, {
+          timeoutMs: 20,
+          makeSocket: () => fake.socket,
+          ownAddresses: () => own,
+          remembered,
+        }),
+    };
+  }
+
+  it("passes over a kept address that has since become this box's own", async () => {
+    const c = changingOwn([[lived("192.168.10.7"), lived("192.168.10.8")]]);
+    await c.ask();
+    c.own.push("192.168.10.7");
+    await expect(c.ask()).resolves.toEqual({ addresses: ["192.168.10.8"], remembered: true });
+    expect(c.fake.queries).toHaveLength(1);
+  });
+
+  it("asks the network again when every kept address has since become this box's own", async () => {
+    const packets = [[lived("192.168.10.7")]];
+    const c = changingOwn(packets);
+    await c.ask();
+    c.own.push("192.168.10.7");
+    packets.splice(0, 1, [lived("192.168.10.7"), lived("192.168.10.9")]);
+    await expect(c.ask()).resolves.toEqual(fresh("192.168.10.9"));
+    expect(c.fake.queries).toHaveLength(2);
+  });
+
+  it("forgets a kept answer that is all this box's own, though no other box answers", async () => {
+    const packets = [[lived("192.168.10.7")]];
+    const c = changingOwn(packets);
+    await c.ask();
+    c.own.push("192.168.10.7");
+    packets.splice(0, 1);
+    await refusal(c.ask());
+    expect(c.remembered.size).toBe(0);
+  });
+});
+
+describe("RememberedAnswers", () => {
+  const heard = (ttlSeconds: number) => [{ address: "192.168.10.7", ttlSeconds }];
+  const name = (i: number) => `box-${i}.waitron.local`;
+
+  it("measures a kept answer's lifetime on a clock that setting the time of day does not move", () => {
+    vi.useFakeTimers();
+    try {
+      const remembered = new RememberedAnswers();
+      remembered.keep(NAME, heard(120));
+      vi.setSystemTime(Date.now() - 3_600_000);
+      vi.advanceTimersByTime(119_999);
+      expect(remembered.recall(NAME)).toEqual(["192.168.10.7"]);
+      vi.advanceTimersByTime(1);
+      expect(remembered.recall(NAME)).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops every answer whose lifetime has ended when it keeps another", () => {
+    let nowMs = 0;
+    const remembered = new RememberedAnswers(() => nowMs);
+    for (let i = 0; i < 10; i++) remembered.keep(name(i), heard(1));
+    nowMs += 1_000;
+    remembered.keep(NAME, heard(120));
+    expect(remembered.size).toBe(1);
+  });
+
+  it("keeps at most 64 names, dropping the one whose lifetime ends soonest", () => {
+    let nowMs = 0;
+    const remembered = new RememberedAnswers(() => nowMs);
+    for (let i = 0; i < 65; i++) {
+      remembered.keep(name(i), heard(i === 1 ? 60 : 120));
+      nowMs += 1;
+    }
+    expect(remembered.size).toBe(64);
+    expect(remembered.recall(name(1))).toBeUndefined();
+    expect(remembered.recall(name(0))).toEqual(["192.168.10.7"]);
+    expect(remembered.recall(name(64))).toEqual(["192.168.10.7"]);
+  });
+
+  it("keeping a name it already holds drops no other name when full", () => {
+    const remembered = new RememberedAnswers(() => 0);
+    for (let i = 0; i < 64; i++) remembered.keep(name(i), heard(120 - i));
+    remembered.keep(name(0), heard(120));
+    expect(remembered.size).toBe(64);
+    expect(remembered.recall(name(63))).toEqual(["192.168.10.7"]);
   });
 });
 

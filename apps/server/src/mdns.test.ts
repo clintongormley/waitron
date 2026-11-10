@@ -1,10 +1,9 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import type { MdnsQuerySocket } from "./box-lookup.js";
+import { MDNS_TTL_SECONDS, type MdnsQuerySocket } from "./box-lookup.js";
 import {
   buildMdnsAnswers,
   startMdnsResponder,
   watchVenueNameInSetup,
-  MDNS_TTL_SECONDS,
   type MdnsSocket,
 } from "./mdns.js";
 
