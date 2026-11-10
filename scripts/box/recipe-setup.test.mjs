@@ -176,6 +176,14 @@ describe("installed boot evidence", () => {
     machineId: "machine-a",
     ca: "ca-a",
     writerAbsent: true,
+    disk: {
+      action: "ready",
+      openedBy: "chip",
+      emptyPassword: false,
+      keySlots: 2,
+      tpmSlots: 1,
+      tpmPcrs: [5, 7, 8, 9, 15],
+    },
     areas: ["@rootfs", "@images", "@volumes", "@logs", "@host-state"],
   };
   it("accepts the installed services and a second boot keeping identity", async () => {
@@ -184,6 +192,14 @@ describe("installed boot evidence", () => {
   });
   it.each([
     ["uuid", { uuid: expected.uuid }, "root-uuid"],
+    ["missing disk proof", { disk: undefined }, "disk-startup"],
+    ...[
+      { emptyPassword: true },
+      { openedBy: "bootstrap" },
+      { tpmSlots: 0 },
+      { keySlots: 3 },
+      { tpmPcrs: [5, 7, 15] },
+    ].map((patch) => ["disk proof", { disk: { ...first.disk, ...patch } }, "disk-startup"]),
     ["writer", { writerAbsent: false }, "installer-present"],
     ["areas", { areas: ["@rootfs"] }, "areas"],
     ["identity", { machineId: "another" }, "machine-id"],
@@ -274,6 +290,16 @@ sleep 0.1
 `,
       { mode: 0o700 },
     );
+    writeFileSync(
+      join(root, "swtpm"),
+      `#!${process.execPath}
+const net = require("node:net");
+const ctrl = process.argv[process.argv.indexOf("--ctrl") + 1];
+net.createServer().listen(ctrl.split("path=")[1]);
+`,
+      { mode: 0o700 },
+    );
+    writeFileSync(join(root, "mkfs.ext4"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
     writeFileSync(join(root, "vars.fd"), "private firmware fixture");
     writeFileSync(
       join(root, "firmware.mjs"),
@@ -300,6 +326,7 @@ syncBuiltinESMExports();
           ...process.env,
           PATH: `${root}:${process.env.PATH}`,
           B3_INSTALLER_IMAGE: join(root, "image"),
+          XDG_RUNTIME_DIR: root,
         },
         encoding: "utf8",
         timeout: 5000,

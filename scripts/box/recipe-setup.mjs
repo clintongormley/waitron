@@ -47,6 +47,16 @@ export function installedFailures(expected, installedUuid, first, again) {
       boot.dataPartition?.name !== WAITRON_LAYOUTS[0].partitionName
     )
       failures.push("disk-markers");
+    const disk = boot.disk;
+    if (
+      disk?.action !== "ready" ||
+      disk.openedBy !== "chip" ||
+      disk.emptyPassword !== false ||
+      disk.keySlots !== 2 ||
+      disk.tpmSlots !== 1 ||
+      JSON.stringify(disk.tpmPcrs) !== "[5,7,8,9,15]"
+    )
+      failures.push("disk-startup");
     const sizes = boot.partitionBytes;
     if (
       sizes?.length !== 3 ||

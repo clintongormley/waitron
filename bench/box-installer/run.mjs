@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { createConnection } from "node:net";
 import process from "node:process";
 import console from "node:console";
@@ -7,9 +7,11 @@ import { URL } from "node:url";
 import { setTimeout, clearTimeout } from "node:timers";
 import { createHash, X509Certificate } from "node:crypto";
 import { appendFileSync, createReadStream } from "node:fs";
-import { mkdir, readFile, writeFile, copyFile, truncate, open } from "node:fs/promises";
+import { mkdir, readFile, writeFile, copyFile, truncate, open, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
+import { runDiskCommand } from "../../scripts/box/disk-start.mjs";
+import { diskRecoveryKeyPassphrase } from "../../scripts/box/disk-recovery-key.mjs";
 import { parseRigArgs } from "../../scripts/box/rig-contract.mjs";
 import {
   recipeFailures,
@@ -279,192 +281,352 @@ async function installedRun() {
     "-smbios",
     "type=1,product=Waitron-B3-dev",
   ];
-  async function boot(name, source, marker, deadline) {
-    const phaseStarted = Date.now();
-    const vars = join(runDir, `${name}-vars.fd`);
-    await copyFile("/usr/share/OVMF/OVMF_VARS_4M.fd", vars);
-    const monitor = join(runDir, `${name}-monitor.sock`);
-    const args = [
-      ...common,
-      "-monitor",
-      `unix:${monitor},server=on,wait=off`,
-      "-drive",
-      "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd",
-      "-drive",
-      `if=pflash,format=raw,file=${vars}`,
-    ];
-    if (source)
-      args.push(
-        "-drive",
-        `file=${stick},format=raw,if=none,id=stick,readonly=on`,
-        "-device",
-        "qemu-xhci,id=usb",
-        "-device",
-        "usb-storage,bus=usb.0,drive=stick,serial=waitron-dev-stick,bootindex=1",
-      );
-    args.push(
-      "-drive",
-      `file=${target},format=raw,if=none,id=target`,
-      "-device",
-      `virtio-blk-pci,drive=target,serial=waitron-dev-target,bootindex=${source ? 2 : 1}`,
-      "-nic",
-      source ? "none" : "user,restrict=on,hostfwd=tcp:127.0.0.1:443-:443",
-    );
-    await writeFile(join(runDir, `${name}-args.json`), JSON.stringify(args));
-    const child = spawn("qemu-system-x86_64", args, { stdio: ["ignore", "pipe", "pipe"] });
-    await writeFile(join(runDir, `${name}-pid.json`), JSON.stringify({ pid: child.pid }));
-    let serial = "";
-    let failure;
-    const stopped = new Promise((done) =>
-      child.once("exit", (code, signal) => {
-        console.error(name, "exit", { code, signal });
-        done({ code, signal });
-      }),
-    );
-    const stop = async () => {
-      clearTimeout(deadlineKill);
-      await writeFile(
-        join(runDir, `${name}-timing.json`),
-        JSON.stringify({ started: phaseStarted, elapsedMs: Date.now() - phaseStarted }),
-      );
-      console.error(name, "stop", { code: child.exitCode, signal: child.signalCode });
-      if (child.exitCode !== null || child.signalCode !== null) return;
-      await new Promise((done) => {
-        const socket = createConnection(monitor);
-        socket.resume();
-        socket.setTimeout(1000, () => socket.destroy());
-        socket.on("error", (error) => console.error(name, "monitor", error.code));
-        socket.on("connect", () => {
-          console.error(name, "powerdown");
-          socket.end("system_powerdown\n");
-        });
-        socket.on("close", () => {
-          console.error(name, "monitor closed");
-          done();
-        });
-      });
-      const polite = setTimeout(() => child.kill("SIGTERM"), 20000);
-      const force = setTimeout(() => child.kill("SIGKILL"), 23000);
-      console.error(name, "waiting for exit");
-      await stopped;
-      console.error(name, "stopped");
-      clearTimeout(polite);
-      clearTimeout(force);
-    };
-    let deadlineKill;
-    const timer = setTimeout(() => {
-      failure = new Error(`${name} deadline`);
-      child.kill("SIGTERM");
-      deadlineKill = setTimeout(() => child.kill("SIGKILL"), 3000);
-    }, deadline);
-    try {
-      await new Promise((done, reject) => {
-        for (const stream of [child.stdout, child.stderr])
-          stream.on("data", (bytes) => {
-            serial += bytes.toString();
-            appendFileSync(join(runDir, `${name}-serial.log`), bytes);
-            if (rigLine(serial, marker) !== undefined) done();
-          });
-        child.once("error", reject);
-        child.once("exit", (code, signal) =>
-          reject(failure ?? new Error(`${name} exited ${code}/${signal} before ${marker}`)),
-        );
-      });
-      return {
-        get serial() {
-          return serial;
-        },
-        finish: async () => {
-          const result = await stopped;
-          clearTimeout(timer);
-          clearTimeout(deadlineKill);
-          await writeFile(
-            join(runDir, `${name}-timing.json`),
-            JSON.stringify({ started: phaseStarted, elapsedMs: Date.now() - phaseStarted }),
-          );
-          if (failure) throw failure;
-          if (result.code !== 0) throw new Error(`${name} exit ${result.code}/${result.signal}`);
-        },
-        stop: async () => {
-          clearTimeout(timer);
-          await stop();
-        },
-      };
-    } catch (error) {
-      clearTimeout(timer);
-      await stop();
-      throw error;
-    }
-  }
-  if (caseName === "installed-refusals") {
-    const handle = await open(target, "r+");
-    try {
-      await handle.write("occupied");
-    } finally {
-      await handle.close();
-    }
-    const before = await diskHash(target);
-    let failure;
-    try {
-      const guest = await boot("refused", true, "install.refused:occupied", 300000);
-      await guest.stop();
-    } catch (error) {
-      failure = error;
-    }
-    const after = await diskHash(target);
-    if (before !== after) throw new Error("refused target changed");
-    if (failure) throw failure;
-    await writeFile(join(runDir, "refusal.json"), JSON.stringify({ before, after }));
-  } else {
-    const install = await boot("install", true, "B3_INSTALL_OK:", 900000);
-    const installedUuid = rigLine(install.serial, "B3_INSTALL_OK:").trim();
-    await install.finish();
-    if (!installSucceeded(install.serial))
-      throw new Error("install service did not report success");
-    const require = createRequire(new URL("../../apps/setup/package.json", import.meta.url));
-    const { chromium } = require("playwright");
-    async function inspect(name) {
-      const guest = await boot(name, false, "B3_INSTALLED:", 300000);
-      try {
-        const observed = JSON.parse(rigLine(guest.serial, "B3_INSTALLED:"));
-        const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+  const vars = join(runDir, "persistent-vars.fd");
+  await copyFile("/usr/share/OVMF/OVMF_VARS_4M.fd", vars);
+  const tpmRoot = join(process.env.XDG_RUNTIME_DIR || "/run", `waitron-b3-tpm-${process.pid}`);
+  await mkdir(tpmRoot, { mode: 0o700 });
+  const tpmSocket = join(tpmRoot, "control.sock");
+  const tpm = spawn(
+    "swtpm",
+    [
+      "socket",
+      "--tpm2",
+      "--tpmstate",
+      `dir=${tpmRoot}`,
+      "--ctrl",
+      `type=unixio,path=${tpmSocket}`,
+      "--flags",
+      "not-need-init,startup-clear",
+    ],
+    { stdio: ["ignore", "ignore", "pipe"] },
+  );
+  tpm.stderr.on("data", (bytes) => appendFileSync(join(runDir, "tpm.log"), bytes));
+  const stopTpm = () => {
+    if (tpm.exitCode === null && tpm.signalCode === null) tpm.kill("SIGTERM");
+  };
+  process.once("exit", stopTpm);
+  try {
+    await new Promise((done, reject) => {
+      tpm.once("error", reject);
+      tpm.once("exit", (code) => reject(new Error(`TPM exited ${code}`)));
+      const until = Date.now() + 10000;
+      const check = async () => {
         try {
-          const context = await browser.newContext({ ignoreHTTPSErrors: true });
-          const ca = await context.request.get("https://127.0.0.1/ca.crt");
-          if (ca.status() !== 200) throw new Error(`CA HTTP ${ca.status()}`);
-          observed.ca = new X509Certificate(await ca.text()).fingerprint256;
-          const page = await context.newPage();
-          page.on("pageerror", (error) => console.error(error));
-          await page.goto("https://127.0.0.1/setup", { waitUntil: "domcontentloaded" });
-          await page.locator("setup-connection-screen [data-test=continue] button").click();
-          await page.locator("setup-mode-screen").waitFor();
-          const choices = await page
-            .locator("setup-mode-screen wt-choice-row")
-            .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-test")));
-          if (JSON.stringify(choices) !== '["choose-prepare","choose-live","choose-existing"]')
-            throw new Error(`Unexpected setup choices: ${JSON.stringify(choices)}`);
-          await page.screenshot({ path: join(runDir, `${name}-setup.png`) });
-          await page.getByText("Prepare your restaurant", { exact: true }).click();
-          await page.locator("setup-admin-screen").waitFor();
-          await page.screenshot({ path: join(runDir, `${name}-prepare.png`) });
-          await writeFile(join(runDir, `${name}-observed.json`), JSON.stringify(observed, null, 2));
-        } finally {
-          await browser.close();
+          await stat(tpmSocket);
+          done();
+        } catch {
+          if (Date.now() > until) reject(new Error("TPM socket deadline"));
+          else setTimeout(check, 20);
         }
-        return observed;
+      };
+      void check();
+    });
+    async function retainedKeyProof(target, proof, root, diskUuid) {
+      const mounted = join(root, "read-proof");
+      const unlocked = join(root, "unlocked");
+      await mkdir(mounted);
+      await mkdir(unlocked);
+      const loop = execFileSync("losetup", ["--find", "--show", "--partscan", target], {
+        encoding: "utf8",
+      }).trim();
+      const mapping = `waitron-k-b315-${process.pid}`;
+      let proofMounted = false,
+        opened = false,
+        dataMounted = false;
+      try {
+        execFileSync("mount", ["-o", "ro,loop", proof, mounted]);
+        proofMounted = true;
+        const path = `${diskUuid}.json`;
+        const text = await readFile(join(mounted, path), "utf8");
+        const record = JSON.parse(text);
+        if (record.diskUuid !== diskUuid || !/^[0-9a-f]{64}$/.test(record.key))
+          throw new Error("retained record identity");
+        const secret = diskRecoveryKeyPassphrase(Buffer.from(record.key, "hex"));
+        const result = await runDiskCommand(
+          "cryptsetup",
+          ["open", "--readonly", "--key-file", "/proc/self/fd/3", `${loop}p3`, mapping],
+          secret,
+        );
+        if (result.status !== 0)
+          throw new Error(`independent retained-key unlock: ${result.status}`);
+        opened = true;
+        execFileSync("mount", [
+          "-o",
+          "ro,nologreplay,subvol=@host-state",
+          `/dev/mapper/${mapping}`,
+          unlocked,
+        ]);
+        dataMounted = true;
+        if ((await readFile(join(unlocked, "disk-recovery", path), "utf8")) !== text)
+          throw new Error("unlocked retained record differs");
+        await writeFile(
+          join(runDir, "retained-key-proof.json"),
+          JSON.stringify({ diskUuid, unlocked: true, recordMatches: true }),
+        );
       } finally {
-        await guest.stop();
+        if (dataMounted) execFileSync("umount", [unlocked]);
+        if (opened) execFileSync("cryptsetup", ["close", mapping]);
+        if (proofMounted) execFileSync("umount", [mounted]);
+        execFileSync("losetup", ["-d", loop]);
       }
     }
-    const first = await inspect("first");
-    const again = await inspect("again");
-    const failures = installedFailures(
-      JSON.parse(await readFile(join(output, "inventory.json"), "utf8")),
-      installedUuid,
-      first,
-      again,
-    );
-    if (failures.length) throw new Error(failures.join(", "));
+    const proof = join(tpmRoot, "proof.img");
+    await writeFile(proof, "", { mode: 0o600 });
+    await truncate(proof, 32 * 1024 ** 2);
+    execFileSync("mkfs.ext4", ["-q", "-F", proof]);
+    const pcrRead = "echo B3_PCRS:$(tpm2_pcrread sha256:8,9,15 | base64 -w0)";
+    const bootRead =
+      'echo B3_MEASURED:$(sha256sum /boot/vmlinuz-* /boot/initrd.img-* /boot/efi/EFI/BOOT/BOOTX64.EFI | sha256sum | cut -d" " -f1)';
+    async function boot(name, source, marker, deadline) {
+      const phaseStarted = Date.now();
+      const monitor = join(runDir, `${name}-monitor.sock`);
+      const args = [
+        ...common,
+        "-chardev",
+        `socket,id=chrtpm,path=${tpmSocket}`,
+        "-tpmdev",
+        "emulator,id=tpm0,chardev=chrtpm",
+        "-device",
+        "tpm-crb,tpmdev=tpm0",
+        "-monitor",
+        `unix:${monitor},server=on,wait=off`,
+        "-drive",
+        "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd",
+        "-drive",
+        `if=pflash,format=raw,file=${vars}`,
+      ];
+      if (source)
+        args.push(
+          "-drive",
+          `file=${stick},format=raw,if=none,id=stick,readonly=on`,
+          "-device",
+          "qemu-xhci,id=usb",
+          "-device",
+          "usb-storage,bus=usb.0,drive=stick,serial=waitron-dev-stick,bootindex=1",
+        );
+      args.push(
+        "-drive",
+        `file=${target},format=raw,if=none,id=target`,
+        "-device",
+        `virtio-blk-pci,drive=target,serial=waitron-dev-target,bootindex=${source ? 2 : 1}`,
+        "-nic",
+        source ? "none" : "user,restrict=on,hostfwd=tcp:127.0.0.1:443-:443",
+      );
+      const unitName = source ? "waitron-dev-install" : "waitron-disk-start";
+      let observedUnit = await readFile(
+        new URL(`../../deploy/box/${unitName}.service`, import.meta.url),
+        "utf8",
+      );
+      observedUnit += `\n[Service]\nExecStartPre=/bin/sh -ec '${pcrRead}${source ? "" : `; ${bootRead}`}'\n`;
+      args.push(
+        "-smbios",
+        `type=11,value=io.systemd.credential.binary:systemd.extra-unit.${unitName}.service=${Buffer.from(observedUnit).toString("base64")}`,
+      );
+      if (!source) {
+        args.push("-drive", `file=${proof},format=raw,if=virtio`);
+        const unit = await readFile(
+          new URL("../../deploy/box/waitron-dev.service", import.meta.url),
+          "utf8",
+        );
+        const copy =
+          "mkdir -m 0700 /run/b3-key-proof; mount /dev/vdb /run/b3-key-proof; cp /var/lib/waitron-host/disk-recovery/*.json /run/b3-key-proof/; sync; umount /run/b3-key-proof";
+        args.push(
+          "-smbios",
+          `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-dev.service=${Buffer.from(unit + `\n[Service]\nExecStartPost=/bin/sh -ec '${copy}'\n`).toString("base64")}`,
+        );
+      }
+      await writeFile(join(runDir, `${name}-args.json`), JSON.stringify(args));
+      const child = spawn("qemu-system-x86_64", args, { stdio: ["ignore", "pipe", "pipe"] });
+      await writeFile(join(runDir, `${name}-pid.json`), JSON.stringify({ pid: child.pid }));
+      let serial = "";
+      let failure;
+      const stopped = new Promise((done) =>
+        child.once("exit", (code, signal) => {
+          console.error(name, "exit", { code, signal });
+          done({ code, signal });
+        }),
+      );
+      const stop = async () => {
+        clearTimeout(deadlineKill);
+        await writeFile(
+          join(runDir, `${name}-timing.json`),
+          JSON.stringify({ started: phaseStarted, elapsedMs: Date.now() - phaseStarted }),
+        );
+        console.error(name, "stop", { code: child.exitCode, signal: child.signalCode });
+        if (child.exitCode !== null || child.signalCode !== null) return;
+        await new Promise((done) => {
+          const socket = createConnection(monitor);
+          socket.resume();
+          socket.setTimeout(1000, () => socket.destroy());
+          socket.on("error", (error) => console.error(name, "monitor", error.code));
+          socket.on("connect", () => {
+            console.error(name, "powerdown");
+            socket.end("system_powerdown\n");
+          });
+          socket.on("close", () => {
+            console.error(name, "monitor closed");
+            done();
+          });
+        });
+        const polite = setTimeout(() => child.kill("SIGTERM"), 20000);
+        const force = setTimeout(() => child.kill("SIGKILL"), 23000);
+        console.error(name, "waiting for exit");
+        await stopped;
+        console.error(name, "stopped");
+        clearTimeout(polite);
+        clearTimeout(force);
+      };
+      let deadlineKill;
+      const timer = setTimeout(() => {
+        failure = new Error(`${name} deadline`);
+        child.kill("SIGTERM");
+        deadlineKill = setTimeout(() => child.kill("SIGKILL"), 3000);
+      }, deadline);
+      try {
+        await new Promise((done, reject) => {
+          for (const stream of [child.stdout, child.stderr])
+            stream.on("data", (bytes) => {
+              serial += bytes.toString();
+              appendFileSync(join(runDir, `${name}-serial.log`), bytes);
+              if (rigLine(serial, marker) !== undefined) done();
+            });
+          child.once("error", reject);
+          child.once("exit", (code, signal) =>
+            reject(failure ?? new Error(`${name} exited ${code}/${signal} before ${marker}`)),
+          );
+        });
+        return {
+          get serial() {
+            return serial;
+          },
+          finish: async () => {
+            const result = await stopped;
+            clearTimeout(timer);
+            clearTimeout(deadlineKill);
+            await writeFile(
+              join(runDir, `${name}-timing.json`),
+              JSON.stringify({ started: phaseStarted, elapsedMs: Date.now() - phaseStarted }),
+            );
+            if (failure) throw failure;
+            if (result.code !== 0) throw new Error(`${name} exit ${result.code}/${result.signal}`);
+          },
+          stop: async () => {
+            clearTimeout(timer);
+            await stop();
+          },
+        };
+      } catch (error) {
+        clearTimeout(timer);
+        await stop();
+        throw error;
+      }
+    }
+    if (caseName === "installed-refusals") {
+      const handle = await open(target, "r+");
+      try {
+        await handle.write("occupied");
+      } finally {
+        await handle.close();
+      }
+      const before = await diskHash(target);
+      let failure;
+      try {
+        const guest = await boot("refused", true, "install.refused:occupied", 300000);
+        await guest.stop();
+      } catch (error) {
+        failure = error;
+      }
+      const after = await diskHash(target);
+      if (before !== after) throw new Error("refused target changed");
+      if (failure) throw failure;
+      await writeFile(join(runDir, "refusal.json"), JSON.stringify({ before, after }));
+    } else {
+      const install = await boot("install", true, "B3_INSTALL_OK:", 900000);
+      const installedUuid = rigLine(install.serial, "B3_INSTALL_OK:").trim();
+      await install.finish();
+      if (!installSucceeded(install.serial))
+        throw new Error("install service did not report success");
+      const bootstrap = await boot("bootstrap", false, "B3_DISK_START:", 300000);
+      await bootstrap.finish();
+      if (
+        !bootstrap.serial.includes('"action":"restart"') ||
+        /Starting Docker|Started Docker|B3_INSTALLED:/.test(bootstrap.serial)
+      )
+        throw new Error("bootstrap did not restart without Docker");
+      const require = createRequire(new URL("../../apps/setup/package.json", import.meta.url));
+      const { chromium } = require("playwright");
+      async function inspect(name) {
+        const guest = await boot(name, false, "B3_INSTALLED:", 300000);
+        try {
+          const observed = JSON.parse(rigLine(guest.serial, "B3_INSTALLED:"));
+          const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+          try {
+            const context = await browser.newContext({ ignoreHTTPSErrors: true });
+            const ca = await context.request.get("https://127.0.0.1/ca.crt");
+            if (ca.status() !== 200) throw new Error(`CA HTTP ${ca.status()}`);
+            observed.ca = new X509Certificate(await ca.text()).fingerprint256;
+            const page = await context.newPage();
+            page.on("pageerror", (error) => console.error(error));
+            await page.goto("https://127.0.0.1/setup", { waitUntil: "domcontentloaded" });
+            await page.locator("setup-connection-screen [data-test=continue] button").click();
+            await page.locator("setup-mode-screen").waitFor();
+            const choices = await page
+              .locator("setup-mode-screen wt-choice-row")
+              .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-test")));
+            if (JSON.stringify(choices) !== '["choose-prepare","choose-live","choose-existing"]')
+              throw new Error(`Unexpected setup choices: ${JSON.stringify(choices)}`);
+            await page.screenshot({ path: join(runDir, `${name}-setup.png`) });
+            await page.getByText("Prepare your restaurant", { exact: true }).click();
+            await page.locator("setup-admin-screen").waitFor();
+            await page.screenshot({ path: join(runDir, `${name}-prepare.png`) });
+            await writeFile(
+              join(runDir, `${name}-observed.json`),
+              JSON.stringify(observed, null, 2),
+            );
+          } finally {
+            await browser.close();
+          }
+          observed.pcrs = Buffer.from(rigLine(guest.serial, "B3_PCRS:"), "base64").toString();
+          observed.measured = rigLine(guest.serial, "B3_MEASURED:");
+          return observed;
+        } finally {
+          await guest.stop();
+        }
+      }
+      const first = await inspect("first");
+      const again = await inspect("again");
+      const sourcePcr = Buffer.from(rigLine(install.serial, "B3_PCRS:"), "base64").toString();
+      const bootstrapPcr = Buffer.from(rigLine(bootstrap.serial, "B3_PCRS:"), "base64").toString();
+      const pcr = (text, index) =>
+        new RegExp(`\\b${index}\\s*:\\s*0x([0-9a-fA-F]{64})`).exec(text)?.[1].toLowerCase();
+      for (const index of [8, 9]) {
+        const before = pcr(sourcePcr, index);
+        const after = pcr(bootstrapPcr, index);
+        if (!before || !after || /^0+$/.test(before) || /^0+$/.test(after) || before === after)
+          throw new Error(`PCR${index} did not distinguish stick from installed disk`);
+      }
+      for (const text of [bootstrapPcr, first.pcrs, again.pcrs])
+        if (pcr(text, 15) !== "8878b15a7d6a3a4f464e8f9f42591dbc0cf4bedea0ec309003d2b2ee53655ef8")
+          throw new Error("PCR15 was not extended exactly once");
+      const measured = rigLine(bootstrap.serial, "B3_MEASURED:");
+      if (
+        !/^[a-f0-9]{64}$/.test(measured) ||
+        measured !== first.measured ||
+        measured !== again.measured
+      )
+        throw new Error("measured boot bytes changed after enrollment");
+      await retainedKeyProof(target, proof, tpmRoot, first.luksUuid);
+      const failures = installedFailures(
+        JSON.parse(await readFile(join(output, "inventory.json"), "utf8")),
+        installedUuid,
+        first,
+        again,
+      );
+      if (failures.length) throw new Error(failures.join(", "));
+    }
+  } finally {
+    stopTpm();
+    process.removeListener("exit", stopTpm);
   }
   await writeFile(
     join(runDir, "timing.json"),
