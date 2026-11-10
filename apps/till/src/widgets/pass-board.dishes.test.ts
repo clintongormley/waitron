@@ -87,7 +87,7 @@ describe("A773 pass board widget: dishes", () => {
     expect(item.innerHTML.indexOf("Cortado")).toBeLessThan(item.innerHTML.indexOf("Kitchen large"));
   });
 
-  it("A1202 draws a measured extra with its amount and unit, as the paper ticket prints it", async () => {
+  it("draws a measured extra with its amount and unit, as the paper ticket prints it", async () => {
     const el = await inProgress([
       passItem({
         id: "toast",
@@ -108,7 +108,7 @@ describe("A773 pass board widget: dishes", () => {
     ).toEqual(["+ Jamón 150 gr", "+ Queso 0.250 kg"]);
   });
 
-  it("A1202 names a measured extra made at another station with its amount and unit", async () => {
+  it("names a measured extra made at another station with its amount and unit", async () => {
     const el = await inProgress([
       passItem({
         id: "with",
@@ -129,7 +129,7 @@ describe("A773 pass board widget: dishes", () => {
   });
 
   it.each(["Tea $& $' $`", "Tea {station}"])(
-    "A1006 shows a dish and station named %s exactly as typed in a cross-reference",
+    "shows a dish and station named %s exactly as typed in a cross-reference",
     async (name) => {
       const el = await inProgress([
         passItem({
@@ -235,7 +235,7 @@ describe("A773 pass board widget: dishes", () => {
     });
     afterEach(() => setLocale(previous));
 
-    it("A1202 draws a measured extra's unit in Spanish", async () => {
+    it("draws a measured extra's unit in Spanish", async () => {
       const el = await inProgress([
         passItem({
           id: "toast",

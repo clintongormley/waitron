@@ -7,7 +7,7 @@ import { snapshotDescriptionFor } from "./dish-format.js";
 
 /** An extra's amount per dish as the kitchen ticket prints it: " 150 g", " 0.250 kg", " x2", or
  *  nothing for one. */
-export function extraCount(extra: {
+export function extraAmount(extra: {
   perDish?: number;
   amount?: string;
   unitName?: Record<string, string>;
@@ -24,7 +24,7 @@ export function queueCrossRefs(
   if (!item.crossRefs?.length) return nothing;
   return html`<span class=${`${surface}-crossrefs`}
     >${item.crossRefs.map((ref, i) => {
-      const name = `${ref.name}${extraCount(ref)}`;
+      const name = `${ref.name}${extraAmount(ref)}`;
       const key =
         ref.kind === "with"
           ? "station.crossref_with"
