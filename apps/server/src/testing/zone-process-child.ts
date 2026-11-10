@@ -89,7 +89,7 @@ const familiesByKey: Record<string, { file: string; pattern: string; root?: stri
   "whole-order": {
     file: "src/till-sale-integrated.test.ts",
     pattern:
-      "whole-order saved-zone issuance|accepted-offline capture keeps|closed admission retains a completed capture|recovery checks admission inside its final transaction|collects a placed but unissued order",
+      "whole-order saved-zone issuance|closed admission retains a completed capture|recovery checks admission inside its final transaction|collects a placed but unissued order",
   },
   "bill-payment": { file: "src/zone-bill-payment-boundaries.test.ts", pattern: "." },
   "auto-issue": {

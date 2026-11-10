@@ -1869,8 +1869,8 @@ a format-11 export is refused as outdated.
 (`location_catalogues`) from configuration exports; a format-14 export is refused as
 `setup.configuration_outdated`.
 
-**2026-11-10, A1308 slice 4b:** format 16 removes `payment_policy`; the payments module
-transfers no configuration tables. A format-15 export is refused as `setup.configuration_outdated`.
+**2026-11-10, A1308 slice 4b:** format 17 removes `payment_policy`; the payments module
+transfers no configuration tables. A format-16 export is refused as `setup.configuration_outdated`.
 
 **2026-11-10, A1308 slice 5a:** format 12 removes `location_id` from the service, calendar,
 staff and booking tables and makes `convenio_config` a singleton with integer id 1.
