@@ -230,27 +230,28 @@ describe("till-table-order-screen: the party's bills", () => {
     expect(asked).toEqual([{ workingOrderId: "wo-check" }]);
   });
 
-  it("marks the bill on screen and offers no payment for it, since the charge below takes it", async () => {
+  it("marks the bill on screen and leaves payment to Pay below", async () => {
     const el = await mountScreen({ orderId: "wo-check", lines: [wine] });
     const asked = capture(el, "switch-bill");
 
     expect(row(el, "wo-check")!.getAttribute("aria-checked")).toBe("true");
     row(el, "wo-check")!.click();
     expect(asked).toEqual([]);
-    expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).not.toBeNull();
   });
 
-  it("hides the charge when the bill on screen is already paid", async () => {
+  it("hides Pay when the bill on screen is already paid", async () => {
     const el = await mountScreen();
 
     expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).toBeNull();
   });
 
   it("shows no bill switcher for a tab that belongs to no party", async () => {
     const el = await mountScreen({ party: null, bills: [] });
 
     expect(el.shadowRoot!.querySelector("[data-bill-switcher]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).not.toBeNull();
   });
 });
 
@@ -272,14 +273,14 @@ describe("till-table-order-screen: paying a bill by its state", () => {
     expect(asked).toEqual([{ workingOrderId: "wo-placed" }]);
   });
 
-  it("shows the charge on a presented bill on screen", async () => {
+  it("shows Pay on a presented bill on screen", async () => {
     const el = await mountScreen({ orderId: "wo-placed", bills: [paidTab, placed], lines: [wine] });
 
-    expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-bill-payments]")).toBeNull();
   });
 
-  it("shows a partly paid bill on screen what it still owes and to take the rest as a bill payment, with no charge", async () => {
+  it("shows what a partly paid bill still owes and offers Pay for the rest", async () => {
     const el = await mountScreen({
       orderId: "wo-part",
       bills: [paidTab, partlyPaid],
@@ -291,10 +292,10 @@ describe("till-table-order-screen: paying a bill by its state", () => {
     expect(notice.textContent).toContain(
       t("table.bill_to_pay").replace("{amount}", money("10.00")),
     );
-    expect(notice.textContent).toContain(t("bill.pay_with_bill_payments"));
+    expect(notice.querySelector("[data-pay-sheet]")!.textContent).toContain(t("action.pay"));
   });
 
-  it("takes no charge on a bill on screen whose only payment is a card still at the reader", async () => {
+  it("offers Pay without a separate charge for a bill with a card still at the reader", async () => {
     const pending: PartyBill = { ...check, workingOrderId: "wo-pending", hasPayments: true };
     const el = await mountScreen({
       orderId: "wo-pending",
@@ -303,9 +304,9 @@ describe("till-table-order-screen: paying a bill by its state", () => {
     });
 
     expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-bill-payments]")!.textContent).toContain(
-      t("bill.pay_with_bill_payments"),
-    );
+    expect(
+      el.shadowRoot!.querySelector("[data-bill-payments] [data-pay-sheet]")!.textContent,
+    ).toContain(t("action.pay"));
   });
 });
 

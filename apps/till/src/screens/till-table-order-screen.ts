@@ -179,7 +179,7 @@ import {
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
-import { PAY_WAYS, paidQuantities, payLines } from "../state/bill-payment.js";
+import { paidQuantities, payLines } from "../state/bill-payment.js";
 import { billHasUnsent, billUnsentText } from "../state/bill-unsent.js";
 import { sentSlicePortionKey, tabLinePortionKey } from "../state/portion-groups.js";
 import {
@@ -509,8 +509,6 @@ export interface AdjustDetail {
   counter?: true;
 }
 
-/** `bill-pay`: Pay items, Contribute or Split equally pressed on the bill on screen, with its dishes;
- * `amount` starts a contribution at what the bill still owes. */
 export interface BillPayDetail {
   way: PayWay;
   lines: PayLine[];
@@ -848,8 +846,7 @@ export class TillTableOrderScreen extends LitElement {
         border-radius: var(--wt-radius-md);
       }
 
-      .bill-choices,
-      .bill-pay-ways {
+      .bill-choices {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
@@ -5145,7 +5142,7 @@ export class TillTableOrderScreen extends LitElement {
           .receiptGuests=${defaultReceiptGuests(this.party)}
           .confirmation=${this.paymentConfirmation}
         ></till-tender-pay>
-        ${this.paymentConfirmation === undefined ? html`${this.#billChoices(shown)} ${this.#payWays()}` : nothing}
+        ${this.paymentConfirmation === undefined ? html`${this.#billChoices(shown)}` : nothing}
         ${this.#payUnsent()}
       </section>`;
     if (partlyPaid === undefined)
@@ -5180,23 +5177,33 @@ export class TillTableOrderScreen extends LitElement {
               >
                 ${t("bill.pay_with_bill_payments")}
               </wt-button>
-              ${this.#billChoices(shown)} ${this.#payWays()}`
+              ${this.#billChoices(shown)}`
       }
       ${this.#payUnsent()}
     </section>`;
   }
 
-  /** A handheld pays an open or a presented bill through a pay sheet; a whole payment A773-1 holds
-   * keeps the pay card, except on a presented bill, whose sheet shows it locked. */
+  /** A retained whole payment keeps its existing confirmation. Zero-total completion uses the
+   * whole-sale path rather than creating a bill payment with no money. */
   #paysOnSheet(shown: PartyBill | undefined): boolean {
-    if (!this.handheld) return false;
-    if (this.paymentConfirmation !== undefined) return shown?.status === "placed";
+    if (
+      !this.handheld &&
+      shown !== undefined &&
+      compareDecimal(decimal(shown.total), decimal("0")) === 0
+    )
+      return false;
+    if (this.paymentConfirmation !== undefined) return this.handheld && shown?.status === "placed";
     return shown === undefined || shown.status === "open" || shown.status === "placed";
   }
 
   #paySheetButton(shown: PartyBill | undefined): TemplateResult {
     return html`<wt-button
-      variant=${this.#payQuiet("sheet") ? "secondary" : "primary"}
+      variant=${
+        this.#payQuiet("sheet") ||
+        (!this.busy && this.#payStore!.lineCount === 0 && !this.#recovers("sheet"))
+          ? "secondary"
+          : "primary"
+      }
       data-pay-sheet
       .disabled=${this.busy}
       @click=${() => {
@@ -5254,24 +5261,6 @@ export class TillTableOrderScreen extends LitElement {
   #balanceShown(): BillBalance | null {
     const balance = this.billBalance;
     return balance !== null && balance.workingOrderId === this.orderId ? balance : null;
-  }
-
-  #payWays(): TemplateResult {
-    return html`<div class="bill-pay-ways">
-      ${PAY_WAYS.map(
-        ({ way, label }) =>
-          html`<wt-button
-            variant="secondary"
-            data-open-bill-pay=${way}
-            .disabled=${this.busy}
-            @click=${() => {
-              if (!this.#payQuietTap("bill-pay")) this.#payPart(way);
-            }}
-          >
-            ${t(label)}
-          </wt-button>`,
-      )}
-    </div>`;
   }
 
   #payPart(way: PayWay, amount?: string): void {

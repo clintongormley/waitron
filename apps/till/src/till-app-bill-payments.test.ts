@@ -59,7 +59,6 @@ import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
-import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillBillRefundDialog } from "./widgets/bill-refund-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
@@ -183,8 +182,10 @@ describe("stored station-choice ownership", () => {
       preview(el);
       await flush(el);
       expect(askOrderDeadEnds).toHaveBeenCalledOnce();
-      if (change === "logout") emit(tableOrder(el), "logout");
-      else if (change === "api") el.api = { ...api } as TillApi;
+      if (change === "logout") {
+        emit(tableOrder(el), "logout");
+        await discardUnsavedLeave(el);
+      } else if (change === "api") el.api = { ...api } as TillApi;
       else {
         const priorEdit = drafts.edit;
         drafts.edit = (billId) => ({ ...priorEdit(billId), editorVersion: 2 });
@@ -1909,25 +1910,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
           ? { method, amount: "150" }
           : { method, amount: "120.00", externalRef: "operation-17" };
       await showBillFooter(tableOrder(el));
-      const initial = tableOrder(el).shadowRoot!.querySelector("till-tender-pay")!;
-      await userEvent.click(
-        initial.shadowRoot!.querySelector(method === "cash" ? ".pay" : ".pay-card")!,
-      );
-      await initial.updateComplete;
-      if (method === "cash") {
-        const pad = initial.shadowRoot!.querySelector("till-numeric-pad")!;
-        await pad.updateComplete;
-        for (const digit of "150")
-          await userEvent.click(pad.shadowRoot!.querySelector(`[data-key="${digit}"]`)!);
-      } else {
-        const ref =
-          initial.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-            '[name="externalRef"]',
-          )!;
-        await ref.updateComplete;
-        await userEvent.fill(ref.shadowRoot!.querySelector("input")!, "operation-17");
-      }
-      await userEvent.click(initial.shadowRoot!.querySelector(".confirm")!);
+      emit(tableOrder(el), "pay-tab", { ...tender, guestCount: 4 });
       await expect.poll(() => send.mock.calls.length, { timeout: 10_000 }).toBe(1);
       await flush(el);
       const original = structuredClone(send.mock.calls[0]);
@@ -2406,6 +2389,7 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
     expect(vi.mocked(api.getBillBalance).mock.calls.length).toBeGreaterThan(reads);
     expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
 
+    await press(el, 'input[name="way"][value="contribution"]');
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
     await press(el, "[data-pay-continue]");
@@ -2646,10 +2630,8 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     savedAt: "2026-10-31T10:00:00.000Z",
   });
 
-  async function cashButton(order: TillTableOrderScreen): Promise<HTMLElement> {
-    const tender = order.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
-    await tender.updateComplete;
-    return tender.shadowRoot!.querySelector<HTMLElement>(".pay")!;
+  async function payButton(order: TillTableOrderScreen): Promise<HTMLElement> {
+    return order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!;
   }
 
   async function reopenTable(el: TillApp): Promise<TillTableOrderScreen> {
@@ -2662,7 +2644,7 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     return order;
   }
 
-  it("Pay items reopens a part payment that got no answer while another person's unsent dish is on the bill; Cash stays quiet", async () => {
+  it("Pay reopens a part payment that got no answer while another person's unsent dish is on the bill", async () => {
     const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await mountApp({ takeBillPayment });
     await openTable(el);
@@ -2684,18 +2666,8 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
 
     const order = await reopenTable(el);
     expect(order.shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
-    const cash = await cashButton(order);
-    expect(cash.getAttribute("variant")).toBe("secondary");
-    await userEvent.click(cash);
-    await order.updateComplete;
-    expect(text(order.shadowRoot!.querySelector("[data-pay-unsent]"))).toBe(
-      `Bill 1. ${t("bill_pay.unsent")}`,
-    );
-
     const sends = takeBillPayment.mock.calls.length;
-    await userEvent.click(
-      order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!,
-    );
+    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!);
     await flush(el);
     await expect.poll(() => dialog(el)?.confirmationLocked, { timeout: 10_000 }).toBe(true);
     expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(t("bill_pay.recheck"));
@@ -2714,14 +2686,14 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     const order = await openTable(el);
     await showBillFooter(order);
     expect(order.draftStore!.lineCount).toBe(1);
-    expect((await cashButton(order)).getAttribute("variant")).toBe("secondary");
+    expect((await payButton(order)).getAttribute("variant")).toBe("secondary");
     const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
 
     order.draftStore!.removeLine(0);
     await flush(el);
 
     expect(order.party!.unsentDrafts).toHaveLength(1);
-    expect((await cashButton(order)).getAttribute("variant")).toBe("primary");
+    expect((await payButton(order)).getAttribute("variant")).toBe("primary");
     await openDialog(el, "items");
     expect(dialog(el)).not.toBeNull();
     expect(order.shadowRoot!.querySelector("[data-pay-unsent]")).toBeNull();
@@ -2738,7 +2710,7 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     const order = await openTable(el);
     await showBillFooter(order);
     expect(order.shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
-    expect((await cashButton(order)).getAttribute("variant")).toBe("secondary");
+    expect((await payButton(order)).getAttribute("variant")).toBe("secondary");
     const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
 
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -2755,7 +2727,7 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     await flush(el);
 
     expect(tableOrder(el).shadowRoot!.querySelector("[data-take-over]")).toBeNull();
-    expect((await cashButton(tableOrder(el))).getAttribute("variant")).toBe("primary");
+    expect((await payButton(tableOrder(el))).getAttribute("variant")).toBe("primary");
     expect(vi.mocked(api.getTablesState).mock.calls.length).toBe(floorReads);
   });
 
@@ -2805,9 +2777,7 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
 
   it("takes no new payment from a reopened payment that Check again finds declined while the bill has unsent dishes", async () => {
     const { el, order, takeBillPayment } = await heldWithUnsent();
-    await userEvent.click(
-      order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!,
-    );
+    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!);
     await flush(el);
     await expect.poll(() => dialog(el)?.confirmationLocked, { timeout: 10_000 }).toBe(true);
     takeBillPayment.mockResolvedValueOnce({
@@ -2837,15 +2807,14 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
       });
       expect(order.billPaymentHeld).toBe(true);
       answered = true;
-      await userEvent.click(
-        order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="contribution"]')!,
-      );
+      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!);
       await flush(el);
       await expect
         .poll(() => inDialog(el, "[data-pay-continue]") !== null, { timeout: 10_000 })
         .toBe(true);
       expect(dialog(el)!.confirmationLocked).toBe(false);
       const previews = vi.mocked(api.previewBillPayment).mock.calls.length;
+      await press(el, 'input[name="way"][value="contribution"]');
       await type(el, "amount", "10");
       await type(el, "tendered", "10");
 
@@ -2873,13 +2842,12 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     );
     expect(order.draftStore!.lineCount).toBe(1);
     answered = true;
-    await userEvent.click(
-      order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="contribution"]')!,
-    );
+    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!);
     await flush(el);
     await expect
       .poll(() => inDialog(el, "[data-pay-continue]") !== null, { timeout: 10_000 })
       .toBe(true);
+    await press(el, 'input[name="way"][value="contribution"]');
     await type(el, "amount", "10");
     await type(el, "tendered", "10");
     order.draftStore!.removeLine(0);
@@ -2899,13 +2867,12 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
       ["p1", "Ana"],
     );
     answered = true;
-    await userEvent.click(
-      order.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="contribution"]')!,
-    );
+    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!);
     await flush(el);
     await expect
       .poll(() => inDialog(el, "[data-pay-continue]") !== null, { timeout: 10_000 })
       .toBe(true);
+    await press(el, 'input[name="way"][value="contribution"]');
     await type(el, "amount", "10");
     await type(el, "tendered", "10");
     const previews = vi.mocked(api.previewBillPayment).mock.calls.length;
@@ -3028,10 +2995,8 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     await showBillFooter(shown);
     expect(shown.orderId).toBe("wo-5");
     expect(shown.billPaymentHeld).toBe(false);
-    expect((await cashButton(shown)).getAttribute("variant")).toBe("secondary");
-    await userEvent.click(
-      shown.shadowRoot!.querySelector<HTMLElement>('[data-open-bill-pay="items"]')!,
-    );
+    expect((await payButton(shown)).getAttribute("variant")).toBe("secondary");
+    await userEvent.click(shown.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!);
     await flush(el);
     expect(dialog(el)).toBeNull();
     expect(text(shown.shadowRoot!.querySelector("[data-pay-unsent]"))).toBe(
@@ -3063,7 +3028,7 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
       await showBillFooter(order);
       expect(order.shadowRoot!.querySelector('[data-take-over="draft-p2"]')).not.toBeNull();
       const saves = vi.mocked(api.saveDraft).mock.calls.length;
-      await userEvent.click(await cashButton(order));
+      await userEvent.click(await payButton(order));
       await order.updateComplete;
       expect(text(order.shadowRoot!.querySelector("[data-pay-unsent]"))).toBe(
         `Bill 1. ${t("bill_pay.unsent")}`,
@@ -3671,10 +3636,9 @@ describe("till-app: a bill that already holds money", () => {
 
     await openDialog(el, "rest");
     expect(
-      dialog(el)!.shadowRoot!.querySelector<HTMLElement & { value: string }>(
-        'wt-input[name="amount"]',
-      )!.value,
-    ).toBe("70.00");
+      dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[name="way"]:checked')!.value,
+    ).toBe("whole");
+    expect(text(inDialog(el, "[data-pay-scope]"))).toContain(money("70.00"));
     await type(el, "tendered", "70");
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
@@ -3979,7 +3943,7 @@ describe("till-app: a single payment refused because money is already on the bil
         ),
     });
     const order = await openTable(el);
-    expect(order.shadowRoot!.querySelector("[data-pay-rest]")).toBeNull();
+    expect(order.shadowRoot!.querySelector("[data-pay-sheet]")).not.toBeNull();
 
     emit(order, "pay-tab", { method: "cash", amount: "120.00" });
     await flush(el);
@@ -3988,7 +3952,7 @@ describe("till-app: a single payment refused because money is already on the bil
     expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toContain(
       t("bill.pay_with_bill_payments"),
     );
-    const rest = tableOrder(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-rest]")!;
+    const rest = tableOrder(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!;
     rest.click();
     await flush(el);
     expect(dialog(el)).not.toBeNull();
@@ -5783,7 +5747,7 @@ describe("till-app: a bill payment on the card reader", () => {
         received = true;
         emit(dialog(el)!, "bill-pay-close");
         await flush(el);
-        await openDialog(el, "share");
+        await openDialog(el, "share", "settling");
       },
     };
   }

@@ -196,9 +196,10 @@ describe("the advice for a whole payment refused while an unanswered bill paymen
     (locale) => {
       const strings = catalogues[locale]!;
       const message = strings["bill_pay.unconfirmed_elsewhere"]!;
-      expect(message).toContain(strings["bill_pay.way_items"]!);
+      expect(message).toContain(strings["action.pay"]!);
+      expect(message.toLowerCase()).not.toContain(strings["bill_pay.way_items"]!.toLowerCase());
       expect(message).toContain(strings["bill_pay.recheck"]!);
-      expect(message.indexOf(strings["bill_pay.way_items"]!)).toBeLessThan(
+      expect(message.indexOf(strings["action.pay"]!)).toBeLessThan(
         message.indexOf(strings["bill_pay.recheck"]!),
       );
     },

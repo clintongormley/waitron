@@ -346,15 +346,11 @@ aparecen bajo **Tus cambios no se han guardado.**, con **Descartar cambios** y *
 pedido**. Una cuenta cobrada en otra caja sigue en tu pantalla, marcada como **Pagada**.
 
 Debajo del pedido, el pie muestra el **Total** de esta cuenta, después **Pendiente de pago en la
-mesa** para todas las cuentas de la mesa, y luego las formas de cobrar esta cuenta: **Efectivo** y
-**Tarjeta**, **Pagar artículos**, **Aportar una cantidad** y **Dividir a partes iguales**, la
-**Factura completa** de la cuenta y, cuando el local ofrece más de un idioma de ticket, el idioma en
-que se imprimirá su ticket. Cuando ya se ha pagado una parte de la cuenta, **Parte de esta cuenta ya
-está pagada: cobra el resto como pago de cuenta** ocupa el lugar de **Efectivo** y **Tarjeta**. En
-un terminal de camarero, un solo botón **Cobrar** ocupa el lugar de **Efectivo**, **Tarjeta** y las
-formas de cobrar. El pie no tiene **Aparcar**: la cuenta de una mesa ya espera en su mesa. En un
-terminal de camarero, cuando se paga una cuenta con factura simplificada y quedan otras, la pantalla
-enumera las cuentas que quedan por pagar y **Volver a la mesa** abre la primera de ellas.
+mesa** para todas las cuentas, y **Cobrar**. La elección de **Factura completa** y el idioma del
+ticket aparecen a su lado cuando se ofrecen. Una cuenta cobrada en parte también muestra cuánto
+se ha recibido y cuánto queda. El pie no tiene **Aparcar**: la cuenta ya espera en su mesa. En un
+terminal de camarero, si se cobra una cuenta con factura simplificada y quedan otras,
+**Volver a la mesa** abre la primera cuenta pendiente.
 
 Waitron no cobra una cuenta con platos sin enviar. Mientras la cuenta en pantalla tiene platos en tu
 **Nuevo pedido**, o se muestran platos sin enviar de otra persona para ella con su botón
@@ -362,8 +358,8 @@ Waitron no cobra una cuenta con platos sin enviar. Mientras la cuenta en pantall
 no empieza ningún cobro y explica por qué, por ejemplo **Cuenta 1. Envía o quita los platos sin
 enviar antes de cobrar.** Envía o quita tus propios platos. Para los de otra persona, toca primero
 **Tomar el pedido** y después envíalos o quítalos. Los platos sin enviar de otra cuenta de la mesa
-no frenan esta. Si se envió un cobro de esta cuenta y su resultado no se ha confirmado, los botones
-de cobro que no son **Efectivo** ni **Tarjeta** siguen abriéndolo, para que puedas saber si se
+no frenan esta. Si se envió un cobro de esta cuenta y su resultado no se ha confirmado, **Cobrar**
+sigue abriéndolo, para que puedas saber si se
 completó; esa ventana no acepta un cobro nuevo mientras haya platos sin enviar.
 
 Si eliges **Cerrar mesa** con una cuenta aún sin pagar, la caja indica **Hay una cuenta de esta mesa
@@ -530,3 +526,14 @@ ninguna factura ni consume su número; las facturas ya guardadas no cambian.
 
 Si la tarjeta ya se ha cobrado, no vuelvas a cobrarla. Conserva los datos de la cuenta y del pago
 para que el responsable pueda recuperar el pago una vez reparado el fallo.
+
+## Cobra toda la cuenta o una parte {#pay-window}
+
+Abre **Cobrar** en la cuenta de la mesa. Elige **Una cantidad**, **Dividir a partes iguales**,
+**Artículos** o **Toda la cuenta**, seleccionada a la derecha. Para **Dividir a partes iguales**,
+indica cuántas personas quedan por pagar. Elige efectivo o tarjeta, comprueba el importe y confirma
+el cobro. Tras un pago parcial, comprueba cuánto queda y cobra al siguiente comensal. En un teléfono,
+usa **Cobrar al siguiente** para continuar.
+
+Una cuenta ya presentada para su cobro solo permite cobrar el importe completo. Cerrar la mesa es
+una acción aparte, después del cobro.

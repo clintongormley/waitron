@@ -1,3 +1,4 @@
+import { balanceOf } from "../test/bill-pay-app.js";
 import { equipmentItem, roleOf } from "../test/pay-equipment-fixtures.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { passBoard } from "../test/pass-board-fixtures.js";
@@ -10393,21 +10394,26 @@ describe("till-app", () => {
         expect(ticket(el)).not.toBeNull();
       });
 
-      it("does not ask the counter dead-end question when a table bill opens cash tender", async () => {
+      it("does not ask the counter dead-end question when a table bill opens Pay", async () => {
         const askSaleDeadEnds = vi.fn();
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
           askSaleDeadEnds,
+          getBillBalance: vi
+            .fn()
+            .mockResolvedValue(
+              balanceOf({ workingOrderId: "wo-7", total: "3.00", outstanding: "3.00" }),
+            ),
         });
         const screen = await toTableOrder(el, openTable);
-        const tender = screen.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
-        expect(tender).not.toBeNull();
-        tender.shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+        screen.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
         await flush(el);
+        const pay = el.shadowRoot!.querySelector("till-bill-pay-dialog")!;
+        expect(pay).not.toBeNull();
         expect(askSaleDeadEnds).not.toHaveBeenCalled();
-        expect(tender.shadowRoot!.querySelector("till-numeric-pad")).not.toBeNull();
+        expect(pay.shadowRoot!.querySelector('wt-input[name="tendered"]')).not.toBeNull();
       });
 
       it("a failed tab pay keeps the operator on the screen with a non-fatal error", async () => {

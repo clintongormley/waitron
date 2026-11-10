@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
+import { setHelpMode } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -160,6 +161,63 @@ const cashPreview = (applied: string, change: string, tip = "0.00"): AllocationP
   tip,
   change,
   charged: null,
+});
+
+it.each([false, true])(
+  "opens Whole bill at the right of the shared Pay choices (handheld %s)",
+  async (handheld) => {
+    const el = await mount({
+      handheld,
+      way: undefined,
+      balance: balanceOf({ total: "30.00", outstanding: "30.00" }),
+    });
+    const ways = [...root(el).querySelectorAll<HTMLInputElement>('input[name="way"]')];
+    expect(ways.map((way) => [way.value, way.checked])).toEqual([
+      ["contribution", false],
+      ["share", false],
+      ["items", false],
+      ["whole", true],
+    ]);
+    expect(field(el, "amount")).toBeNull();
+    expect(offered(el)).toEqual([]);
+    await type(el, "tendered", "40.00");
+    const requests = capture<PayRequest>(el, "bill-pay-preview");
+    await click(el, "[data-pay-continue]");
+    expect(requests).toEqual([
+      {
+        choice: { kind: "contribution", amount: "30.00" },
+        pay: { method: "cash", tendered: "40.00" },
+      },
+    ]);
+  },
+);
+
+it.each([null, balanceOf({ outstanding: "0.00", reserved: "120.00" })])(
+  "waits for an owing balance before a desktop Whole bill card",
+  async (balance) => {
+    const el = await mount({ way: undefined, takesCash: false, balance });
+    expect(button(el, "[data-pay-continue]").disabled).toBe(true);
+  },
+);
+
+it.each(["en", "es"])("orients payment with help mode and a guide in %s", async (locale) => {
+  setLocale(locale);
+  try {
+    const el = await mount();
+    const tip = root(el).querySelector<HTMLElementTagNameMap["wt-help-tooltip"]>(
+      "[data-pay-way] wt-help-tooltip",
+    )!;
+    expect(tip).not.toBeNull();
+    await tip.updateComplete;
+    expect(tip.checkVisibility()).toBe(false);
+    setHelpMode(true);
+    await tip.updateComplete;
+    expect(tip.checkVisibility()).toBe(true);
+    expect(tip.getAttribute("guide-href")).toBe(`/help/${locale}/table-service#pay-window`);
+  } finally {
+    setHelpMode(false);
+    setLocale("en");
+  }
 });
 
 describe("till-bill-pay-dialog: the bill's balance", () => {
@@ -1689,15 +1747,15 @@ describe("till-bill-pay-dialog: on a handheld", () => {
       disabled: radio.disabled,
     }));
 
-  it("offers Whole bill first and chosen, then today's three ways, in Spanish as drawn", async () => {
+  it("offers the shared choices in Spanish with Whole bill selected at the right", async () => {
     setLocale("es");
     const el = await handheld();
 
     expect(radios(el, "way").map(({ value, label, checked }) => [value, label, checked])).toEqual([
-      ["whole", "Toda la cuenta", true],
-      ["items", "Pagar artículos", false],
-      ["contribution", "Aportar una cantidad", false],
+      ["contribution", "Una cantidad", false],
       ["share", "Dividir a partes iguales", false],
+      ["items", "Artículos", false],
+      ["whole", "Toda la cuenta", true],
     ]);
     expect(radios(el, "method").map(({ value, label }) => [value, label])).toEqual([
       ["card", "Tarjeta"],
@@ -1731,13 +1789,13 @@ describe("till-bill-pay-dialog: on a handheld", () => {
 
   it("keeps Whole bill, and Continue, disabled until the balance has been read", async () => {
     const el = await handheld({ balance: null });
-    const whole = radios(el, "way")[0]!;
+    const whole = radios(el, "way").find((radio) => radio.value === "whole")!;
     expect(whole).toMatchObject({ value: "whole", checked: true, disabled: true });
     expect(button(el, "[data-pay-continue]").disabled).toBe(true);
 
     el.balance = balanceOf({ outstanding: "62.40" });
     await el.updateComplete;
-    expect(radios(el, "way")[0]!.disabled).toBe(false);
+    expect(radios(el, "way").find((radio) => radio.value === "whole")!.disabled).toBe(false);
     expect(button(el, "[data-pay-continue]").disabled).toBe(false);
   });
 
@@ -1877,14 +1935,15 @@ describe("till-bill-pay-dialog: on a handheld", () => {
     ]);
   });
 
-  it("on a counter till offers today's three ways and two methods, with no table title", async () => {
+  it("on a counter till offers four ways and two methods, with no table title", async () => {
     // The two methods are also pinned by "offers cash by default, with no line about taking it at
     // a till" above.
     const el = await mount({ takesManualCard: true, tableName: "Mesa 4" });
     expect(radios(el, "way").map((radio) => radio.value)).toEqual([
-      "items",
       "contribution",
       "share",
+      "items",
+      "whole",
     ]);
     expect(radios(el, "method").map((radio) => radio.value)).toEqual(["cash", "card"]);
     expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(

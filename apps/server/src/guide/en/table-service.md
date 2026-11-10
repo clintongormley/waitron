@@ -326,14 +326,10 @@ have not been saved.**, with **Discard changes** and **Update the order**. A bil
 till stays on your screen, marked **Paid**.
 
 Below the order, the foot shows this bill's **Total**, then **Still to pay at this table** for all
-of the table's bills, then the ways to pay this bill: **Cash** and **Card**, **Pay items**,
-**Contribute** and **Split equally**, the bill's **Full invoice** and, when the venue offers more
-than one receipt language, the language its receipt will print in. Once part of the bill is paid,
-**Part of this bill is already paid: take the rest as a bill payment** takes the place of **Cash**
-and **Card**. On a handheld, one **Pay** button takes the place of **Cash**, **Card** and the
-ways to pay. The foot has no **Park**: a table's bill already waits at its table. On a handheld,
-when a bill is paid with a simplified invoice and others are not, the screen lists the bills still
-to pay and **Back to the table** opens the first of them.
+the table's bills, and **Pay**. The bill's **Full invoice** choice and receipt language sit beside
+it when offered. A partly paid bill also shows what has been received and what remains. The foot
+has no **Park**: a table's bill already waits at its table. On a handheld, when a bill is paid with
+a simplified invoice and others are not, **Back to the table** opens the first unpaid bill.
 
 Waitron takes no payment for a bill with dishes not yet sent. While the bill on screen has dishes in
 your **New order**, or another person's unsent dishes for it are shown with their **Take over
@@ -341,7 +337,7 @@ draft** button, the buttons that start a payment look quiet. They still respond:
 payment and says why, such as **Bill 1. Send or remove the unsent dishes before paying.** Send or
 remove your own dishes. For someone else's, tap **Take over draft** first, then send or remove them.
 Unsent dishes on another bill at the table do not hold this one back. If a payment of this bill was
-sent and its result is unconfirmed, the pay buttons other than **Cash** and **Card** still reopen
+sent and its result is unconfirmed, **Pay** still reopens
 it, so you can find out whether it went through; that window takes no new payment while the dishes
 are unsent.
 
@@ -501,3 +497,13 @@ invoices already stored stay unchanged.
 
 If the card was already charged, do not charge it again. Keep the bill and payment details so the
 manager can recover the payment after the fault is fixed.
+
+## Take a whole or part payment {#pay-window}
+
+Open **Pay** on the table's bill. Choose **An amount**, **Split equally**, **Items**, or **Whole
+bill**, selected at the right. For **Split equally**, enter how many people are still to pay.
+Choose cash or card, check the amount, and confirm the payment. After a part payment, check what
+remains and take the next guest's payment. On a phone, use **Take the next** to continue.
+
+A bill already presented for collection offers the whole amount only. Finishing the table is a
+separate action after payment.

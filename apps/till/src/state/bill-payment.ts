@@ -35,17 +35,11 @@ export type PayChoice =
   | { kind: "contribution"; amount: string }
   | { kind: "share"; shareOf: number };
 
-/** The three ways to pay part of a bill, in the order they are offered. */
-export const PAY_WAYS = [
-  { way: "items", label: "bill_pay.way_items" },
+export const BILL_PAY_WAYS = [
   { way: "contribution", label: "bill_pay.way_contribution" },
   { way: "share", label: "bill_pay.way_share" },
-] as const satisfies readonly { way: PayChoice["kind"]; label: StringKey }[];
-
-/** The ways a handheld offers: the whole of what is left in one go, then the three above. */
-export const HANDHELD_PAY_WAYS = [
+  { way: "items", label: "bill_pay.way_items" },
   { way: "whole", label: "bill_pay.way_whole" },
-  ...PAY_WAYS,
 ] as const satisfies readonly { way: PayChoice["kind"] | "whole"; label: StringKey }[];
 
 /** A payment's state, as its row names it. */

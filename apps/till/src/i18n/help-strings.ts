@@ -8,6 +8,8 @@ export const helpEn = {
   "help.guide_link": "Read more in the guide",
   "help.guide_title": "Guide",
   "help.guide_close": "Close",
+  "help.payment":
+    "Choose an amount, an equal share, items, or the whole amount left. Split equally asks how many people are still to pay. After a part payment, go on to the next guest.",
   "help.counter.park":
     "Saves this order without taking payment and clears the basket for the next customer. The name is optional. Pick the order up again from Parked orders, on this till or any other that serves its zone.",
   "help.counter.parked_orders":
@@ -69,6 +71,8 @@ export const helpEs: Record<HelpKey, string> = {
   "help.guide_link": "Más información en la guía",
   "help.guide_title": "Guía",
   "help.guide_close": "Cerrar",
+  "help.payment":
+    "Elige una cantidad, una parte igual, artículos o todo lo que queda. Dividir a partes iguales pregunta cuántas personas quedan por pagar. Tras un pago parcial, sigue con el siguiente comensal.",
   "help.counter.park":
     "Guarda este pedido sin cobrarlo y vacía la cesta para el siguiente cliente. El nombre es opcional. Recupéralo desde Pedidos aparcados, en esta caja o en cualquier otra que atienda su zona.",
   "help.counter.parked_orders":

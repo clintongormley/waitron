@@ -491,7 +491,11 @@ describe("till-table-order-screen: the fixed foot on a handheld", () => {
       const root = el.shadowRoot!;
 
       expect(
-        root.querySelector("[data-bill-actions] till-tender-pay"),
+        root.querySelector(
+          over.handheld
+            ? "[data-bill-actions] till-tender-pay"
+            : "[data-bill-actions] [data-pay-sheet]",
+        ),
         JSON.stringify(over),
       ).not.toBeNull();
       expect(root.querySelector("[data-order-foot]"), JSON.stringify(over)).toBeNull();

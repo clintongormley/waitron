@@ -151,6 +151,49 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       theme,
     );
 
+  for (const locale of ["en", "es"]) {
+    for (const width of [390, 1280]) {
+      it(`keeps Whole bill at the right of the shared choices in ${locale} at ${width}px`, async () => {
+        setLocale(locale);
+        await page.viewport(width, 900);
+        try {
+          const { el, host } = await mount({
+            way: undefined,
+            handheld: width === 390,
+            takesCash: true,
+          });
+          const choices = [
+            ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-pay-way] .option"),
+          ];
+          expect(choices).toHaveLength(4);
+          const boxes = choices.map((choice) => choice.getBoundingClientRect());
+          expect(boxes.map((box) => Math.round(box.top))).toEqual(
+            Array(4).fill(Math.round(boxes[0]!.top)),
+          );
+          expect(boxes[3]!.left).toBeGreaterThan(boxes[2]!.left);
+          expect(boxes[3]!.right).toBeLessThanOrEqual(width);
+          for (const choice of choices) {
+            const text = [...choice.querySelector("span")!.childNodes].find(
+              (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
+            )!;
+            for (const word of text.textContent!.matchAll(/\S+/g)) {
+              const range = document.createRange();
+              range.setStart(text, word.index);
+              range.setEnd(text, word.index + word[0].length);
+              expect(range.getClientRects()).toHaveLength(1);
+            }
+          }
+          await expectNoA11yViolations(host);
+          await page.screenshot({
+            path: `__screenshots__/a739-cut5-${locale}-${theme}-${width}.png`,
+          });
+        } finally {
+          setLocale("es-ES");
+        }
+      });
+    }
+  }
+
   it("has no violations choosing items, with the units of a line", async () => {
     const { el, host } = await mount();
     await pressed(el, 'input[name="line"][value="2"]');

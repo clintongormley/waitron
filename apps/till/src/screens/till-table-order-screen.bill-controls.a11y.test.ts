@@ -10,7 +10,6 @@ import { partyBill, switcherParty } from "./till-table-order-screen.bill-switche
 import { mountFooter } from "./till-table-order-screen.panel-footer.test-helpers.js";
 import { beer, resized } from "./till-table-order-screen.test-helpers.js";
 import { DraftStore } from "../state/draft-sync.js";
-import type { TillTenderPay } from "../widgets/tender-pay.js";
 
 afterEach(() => {
   cleanupWidgets();
@@ -189,11 +188,7 @@ describe.each(["light", "dark"] as const)("A803 quiet Pay, %s theme", (theme) =>
         theme,
       );
       await resized(el);
-      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay");
-      await tender?.updateComplete;
-      const pay = handheld
-        ? el.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!
-        : tender!.shadowRoot!.querySelector<HTMLElement>(".pay")!;
+      const pay = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!;
       expect(pay.getAttribute("variant")).toBe("secondary");
       await expectNoA11yViolations(host);
 

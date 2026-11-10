@@ -66,8 +66,7 @@ Lo que hay que hacer después depende de cómo se cobró la tarjeta:
 - **En el mostrador, o la cuenta de una mesa cobrada de una vez desde la cuenta presentada:** cuando se
   pueda volver a cobrar, cobra ese pedido otra vez de la misma forma. El pago se registra sin cobrar
   la tarjeta otra vez.
-- **Desde las opciones de pago de la cuenta (Toda la cuenta, Pagar artículos, Aportar una cantidad o
-  Dividir a partes iguales):** el pago queda pendiente, y el servidor lo registra por sí solo cuando
+- **Desde la ventana Cobrar de la cuenta:** el pago queda pendiente, y el servidor lo registra por sí solo cuando
   se puede volver a cobrar.
 
 Con internet, el servidor normalmente corrige su reloj por sí solo. Si no, un

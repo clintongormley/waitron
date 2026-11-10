@@ -1182,12 +1182,11 @@ Tab button and no side drawer.
 - **The foot**, in order: the Finish table refusal, only after Finish table was refused
   (`role="alert"`, with Take payment and Record unpaid departure, brought into view at
   1024×768 and at 390×844); this bill's total; "Still to pay at this table" with the party's
-  outstanding, only with a party; then the pay section. For an open owing bill on a wide screen the
-  pay section holds exactly `till-tender-pay`'s Cash and Card (no Park and no Full invoice of its
-  own), the bill's Full invoice (with a saved full-invoice customer's name and identifier in a
-  small muted line under the bill's choices), its receipt language when two or more are offered,
-  and Pay items, Contribute and Split equally. A part-paid bill shows what it still owes, Pay the
-  rest, the bill's choices and the pay ways. A handheld shows one Pay and the bill's choices. Comp the bill is never
+  outstanding, only with a party; then the pay section. Both desktop and handheld show one Pay for an open owing bill, followed by the bill's
+  Full invoice choice (with a saved customer's name and identifier below it) and its receipt
+  language when several are offered. A part-paid bill also shows what it has received and still
+  owes. The [shared bill payment window](#shared-bill-payment-window) owns the amount choices.
+  Retained whole-payment confirmations and zero-total completion keep their existing controls. Comp the bill is never
   in the foot.
 
 Guards: `apps/till/src/screens/till-table-order-screen.bill-switcher.test.ts`,
@@ -3063,14 +3062,13 @@ and the staffing grid's block editor in the A761 entry):
   **Exception: quiet Pay with unsent dishes** (A803 slice 3, owner amendment 5). While the bill on
   a table screen has unsent dishes on the screen (a line in the screen's own New order, or another
   person's draft of that bill drawn with dishes in its Take over panel; another bill's do not
-  count), Cash, Card, the pay ways, Pay the rest, a handheld's Pay, and the keypad's and the card
-  reference's Confirm payment are drawn `secondary` and are never `disabled`, because the tap
+  count), Pay is drawn `secondary` and is never `disabled`, because the tap
   explains: it starts nothing and shows the bill's label and `bill_pay.unsent` ("Bill 1. Send or
   remove the unsent dishes before paying.") in a `role="alert"` line at the end of the pay section,
   brought into view. Showing another bill, or the bill having no unsent dish left, clears the line.
-  The pay ways, Pay the rest and a handheld's Pay keep their own variant while a payment already
-  sent on the bill on screen is held without an answer, since their tap reopens it; a handheld's
-  Pay also keeps it on a presented bill whose whole payment has no answer. Cash and Card never do.
+  Pay keeps its own variant while a payment already sent on this bill is held without an answer,
+  since its tap reopens that payment. On a handheld, it also keeps its variant on a presented bill
+  whose whole payment has no answer.
   The bill payment dialog, reopened from a held payment or opened before the dishes were read,
   starts no new payment while the bill has unsent dishes; its Check again of a payment still without an answer always goes ahead. Guards: in
   `apps/till/src/`, `screens/till-table-order-screen.panel-footer.test.ts` ("quiet Pay while this
@@ -5998,7 +5996,7 @@ station takes every member; Change dish changes every member; Move dishes… pic
 ([The dish picker](#the-dish-picker)); Comp, discounts and Void act on the row, all of it
 or a count of it; Fire now fires the first member only, because its request names one line. On the
 kitchen screen a tap or a move takes every member, and the pass only draws the rows. These lists keep
-one row per portion: Pay items, until the A739 payment window releases its files; the counter basket
+one row per portion: Items in Pay, until the A739 payment window releases its files; the counter basket
 once any of its order is paid (`foldRetrievedPortions`); and MOVED slips, which lay out each line
 alone (`printMovedSlips`, `apps/server/src/kitchen-print.ts`).
 
@@ -6486,6 +6484,16 @@ unpaid Counter order uses Send. Course and group Held remains distinct.
 The payment card still offers Cash and Card and retains its existing full-invoice, receipt-language,
 post-payment receipt behavior. In practice, Approve, Decline and No answer are offered before Card; No answer leaves recovery to a manager. The bill-payment dialog offers the same three results, including on phones. Practice phones use the simulator without selecting a hardware reader. A739 owns the remaining replacement. Cash, Card and Park use
 the shared medium button size; Send fills its own row when the zone offers sending before payment.
+
+### Shared bill payment window
+
+Table bills open one Pay window from the foot. Its amount choices are An amount, Split equally,
+Items and Whole bill, in that order; Whole bill starts selected at the right. Keep all four choices
+in one row at phone width, allowing their labels to wrap within equal columns. The amount choices
+carry one help-mode badge linked to the payment guide. Existing cash, card, equipment, recovery and
+unsaved-input handling stays in the payment window. Presented bills keep whole-only collection;
+retained whole-payment confirmations and zero-total completion keep their existing paths.
+Counter's first part payment remains with A739's next cut.
 
 ### Departments and zones
 

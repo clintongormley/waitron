@@ -936,7 +936,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   catalogue, reports and invoice-line identity before building an arbitrary-price path.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
-- **A739 — Park · Pay and one payment window.** The [current plan](superpowers/plans/2026-11-10-a739-current-payment-flow.md) is approved for its non-slip cuts (watcher, 10 November 01:26); build those in order. Practice Approve/Decline/No answer and manager-ended recovery are delivered; the separate Demo reader is retired. Slip cuts wait for the owner's recovery decision; the shared window, final documents and runtime acceptance remain open.
+- **A739 — Park · Pay and one payment window.** The [current plan](superpowers/plans/2026-11-10-a739-current-payment-flow.md) is approved for its non-slip cuts (watcher, 10 November 01:26); build those in order. Practice Approve/Decline/No answer and manager-ended recovery are delivered; the separate Demo reader is retired. Slip cuts wait for the owner's recovery decision; the table Pay entry and shared four-way bill window are delivered. Counter first-part payments, final documents and runtime acceptance remain open.
   [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window)
 
 - **A666 — A floor join that moves tables together is sent once without seats and refused before

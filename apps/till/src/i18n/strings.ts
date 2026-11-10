@@ -1618,7 +1618,7 @@ export const en = {
   "bill.take_rest": "Take the rest",
   // The bill payment dialog: paying for items, contributing an amount, or an equal share.
   "bill_pay.unsent": "Send or remove the unsent dishes before paying.",
-  "bill_pay.title": "Pay part of the bill",
+  "bill_pay.title": "Pay",
   "bill_pay.title_table": "Pay · {table}",
   "bill_pay.balance": "This bill",
   "bill_pay.reading": "Reading the bill's payments…",
@@ -1628,8 +1628,8 @@ export const en = {
   "bill_pay.outstanding": "Still to pay",
   "bill_pay.way": "How is this paid?",
   "bill_pay.way_whole": "Whole bill",
-  "bill_pay.way_items": "Pay items",
-  "bill_pay.way_contribution": "Contribute",
+  "bill_pay.way_items": "Items",
+  "bill_pay.way_contribution": "An amount",
   "bill_pay.way_share": "Split equally",
   "bill_pay.items": "Items to pay for",
   "bill_pay.items_none": "Every item on this bill is already paid for.",
@@ -1683,7 +1683,7 @@ export const en = {
   "bill_pay.unconfirmed":
     "This payment could not be confirmed. Check again continues this same payment: if it was not recorded, it may charge the card or record the cash payment.",
   "bill_pay.unconfirmed_elsewhere":
-    "A payment on this bill could not be confirmed. On the bill, press Pay items, then Check again to continue that same payment.",
+    "A payment on this bill could not be confirmed. On the bill, press Pay, then Check again to continue that same payment.",
   "bill_pay.unconfirmed_elsewhere_handheld":
     "A payment on this bill could not be confirmed. On the bill, press Pay, then Check again to continue that same payment.",
   "bill_pay.unanswered_title": "Payment not confirmed",
@@ -3558,7 +3558,7 @@ export const es: Record<StringKey, string> = {
     "El pedido pasaría de {amount}, el límite de una factura simplificada. Elige Factura completa en una cuenta de mesa o quita artículos.",
   "bill.take_rest": "Cobrar el resto",
   "bill_pay.unsent": "Envía o quita los platos sin enviar antes de cobrar.",
-  "bill_pay.title": "Cobrar parte de la cuenta",
+  "bill_pay.title": "Cobrar",
   "bill_pay.title_table": "Cobrar · {table}",
   "bill_pay.balance": "Esta cuenta",
   "bill_pay.reading": "Leyendo los pagos de la cuenta…",
@@ -3568,8 +3568,8 @@ export const es: Record<StringKey, string> = {
   "bill_pay.outstanding": "Queda por pagar",
   "bill_pay.way": "¿Cómo se paga?",
   "bill_pay.way_whole": "Toda la cuenta",
-  "bill_pay.way_items": "Pagar artículos",
-  "bill_pay.way_contribution": "Aportar una cantidad",
+  "bill_pay.way_items": "Artículos",
+  "bill_pay.way_contribution": "Una cantidad",
   "bill_pay.way_share": "Dividir a partes iguales",
   "bill_pay.items": "Artículos que se pagan",
   "bill_pay.items_none": "Todos los artículos de esta cuenta ya están pagados.",
@@ -3623,7 +3623,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.unconfirmed":
     "No se ha podido confirmar este cobro. Comprobar de nuevo continúa ese mismo cobro: si no estaba registrado, puede cobrar la tarjeta o registrar el efectivo.",
   "bill_pay.unconfirmed_elsewhere":
-    "Un pago de esta cuenta no se ha podido confirmar. En la cuenta, pulsa Pagar artículos y luego Comprobar de nuevo para continuar ese mismo pago.",
+    "Un pago de esta cuenta no se ha podido confirmar. En la cuenta, pulsa Cobrar y luego Comprobar de nuevo para continuar ese mismo pago.",
   "bill_pay.unconfirmed_elsewhere_handheld":
     "Un pago de esta cuenta no se ha podido confirmar. En la cuenta, pulsa Cobrar y luego Comprobar de nuevo para continuar ese mismo pago.",
   "bill_pay.unanswered_title": "Cobro sin confirmar",
