@@ -14,9 +14,9 @@ import {
   shownMenu,
 } from "../menu-filter.js";
 import { formatMoney } from "@waitron/shared";
-import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
+import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import { MediaQueryController } from "../state/media-query-controller.js";
-import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
+import { chooserStyles } from "../widgets/chooser-styles.js";
 import "../widgets/menu-browser.js";
 import "../widgets/basket.js";
 import "../widgets/last-added.js";
@@ -58,7 +58,7 @@ export class TillCounterScreen extends LitElement {
   static override styles = [
     baseStyles,
     servicePeriodStyles,
-    languageChooserStyles,
+    chooserStyles,
     css`
       :host {
         display: block;

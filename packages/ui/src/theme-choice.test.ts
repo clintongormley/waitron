@@ -1,4 +1,5 @@
 import { LitElement, html } from "lit";
+import * as theme from "./theme-choice.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   THEME_CHOICES,
@@ -21,7 +22,11 @@ class ThemeChoiceProbe extends LitElement {
 customElements.define("theme-choice-probe", ThemeChoiceProbe);
 
 class ThemeChoiceApplyingProbe extends LitElement {
-  readonly #theme = new ThemeChoiceController(this, { applies: true });
+  readonly #theme = new ThemeChoiceController(this);
+  constructor() {
+    super();
+    this.addEventListener(THEME_SELECTED_EVENT, theme.applyThemePick);
+  }
   override render() {
     return html`<span>${this.#theme.choice}</span>`;
   }
@@ -310,14 +315,12 @@ describe("the saved theme choice", () => {
     expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
   });
 
-  it("once its host leaves the page it neither redraws nor applies picks", async () => {
+  it("once its host leaves the page it no longer redraws", async () => {
     startThemeChoice(root);
     const probe = await mount("theme-choice-applying-probe");
     probe.remove();
     const requestUpdate = vi.spyOn(probe, "requestUpdate");
     chooseTheme("dark");
     expect(requestUpdate).not.toHaveBeenCalled();
-    pick(probe, { choice: "light" });
-    expect(currentThemeChoice()).toBe("dark");
   });
 });

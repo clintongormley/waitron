@@ -12,6 +12,8 @@ import {
   chooseTheme,
   iconButtonStyles,
   ThemeChoiceController,
+  applyThemePick,
+  THEME_SELECTED_EVENT,
   themeChoices,
   themeChoicesStyles,
   themeLabelsPerLocale,
@@ -1134,7 +1136,7 @@ export class DashboardApp extends LitElement {
    * session probe whose answer was decided BEFORE the pick took effect carries the language from
    * before it, so that answer must not repaint over the person's choice. */
   #sessionLocaleChoice = 0;
-  readonly #theme = new ThemeChoiceController(this, { applies: true });
+  readonly #theme = new ThemeChoiceController(this);
   readonly #venueLogo = new VenueLogoController(this);
 
   readonly #themeLabelsFor = themeLabelsPerLocale(() => ({
@@ -1146,6 +1148,7 @@ export class DashboardApp extends LitElement {
 
   constructor() {
     super();
+    this.addEventListener(THEME_SELECTED_EVENT, applyThemePick);
     // Repaint the shell on language changes; authenticated screens are recreated by their locale key.
     // Login observes the locale itself so its current attempt survives the switch.
     new LocaleChangeController(this);

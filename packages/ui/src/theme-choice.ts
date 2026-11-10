@@ -1,4 +1,5 @@
-import type { ReactiveController, ReactiveControllerHost } from "lit";
+import type { ReactiveControllerHost } from "lit";
+import { ChangeObserver } from "./change-observer.js";
 
 export type ThemeChoice = "light" | "dark" | "device";
 
@@ -80,35 +81,17 @@ export function subscribeThemeChoice(listener: () => void): () => void {
   };
 }
 
-export class ThemeChoiceController implements ReactiveController {
-  readonly #host: ReactiveControllerHost & HTMLElement;
-  readonly #applies: boolean;
-  #unsubscribe?: () => void;
-
-  constructor(host: ReactiveControllerHost & HTMLElement, options: { applies?: boolean } = {}) {
-    this.#host = host;
-    this.#applies = options.applies ?? false;
-    host.addController(this);
+export class ThemeChoiceController extends ChangeObserver {
+  constructor(host: ReactiveControllerHost) {
+    super(host, subscribeThemeChoice);
   }
 
   get choice(): ThemeChoice {
     return choice;
   }
+}
 
-  hostConnected(): void {
-    this.#unsubscribe?.();
-    this.#unsubscribe = subscribeThemeChoice(() => this.#host.requestUpdate());
-    if (this.#applies) this.#host.addEventListener(THEME_SELECTED_EVENT, this.#onSelected);
-  }
-
-  hostDisconnected(): void {
-    this.#unsubscribe?.();
-    this.#unsubscribe = undefined;
-    this.#host.removeEventListener(THEME_SELECTED_EVENT, this.#onSelected);
-  }
-
-  readonly #onSelected = (event: Event): void => {
-    const picked = (event as CustomEvent<{ choice?: unknown } | null>).detail?.choice;
-    if (isThemeChoice(picked)) chooseTheme(picked);
-  };
+export function applyThemePick(event: Event): void {
+  const picked = (event as CustomEvent<{ choice?: unknown } | null>).detail?.choice;
+  if (isThemeChoice(picked)) chooseTheme(picked);
 }

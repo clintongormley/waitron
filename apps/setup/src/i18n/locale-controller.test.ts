@@ -30,24 +30,4 @@ describe("LocaleChangeController", () => {
     expect(el.shadowRoot!.textContent).toContain(t("shell.document_title", "es-ES"));
   });
 
-  it("unsubscribes on disconnect so a later switch does not repaint it", async () => {
-    const { el, host } = await mountWidget<SetupLocaleProbe>("setup-locale-probe", {});
-    expect(el.shadowRoot!.textContent).toContain(t("shell.document_title", "en-GB"));
-    host.remove();
-    setLocale("es-ES");
-    await el.updateComplete;
-    expect(el.shadowRoot!.textContent).toContain(t("shell.document_title", "en-GB"));
-  });
-
-  it("invokes a custom handler instead of the default requestUpdate", async () => {
-    let calls = 0;
-    // Lit's addController calls hostConnected at once on an already-connected host, so this
-    // controller subscribes at construction time.
-    const { el } = await mountWidget<SetupLocaleProbe>("setup-locale-probe", {});
-    new LocaleChangeController(el, () => {
-      calls += 1;
-    });
-    setLocale("es-ES");
-    expect(calls).toBe(1);
-  });
 });

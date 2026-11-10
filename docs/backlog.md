@@ -1424,7 +1424,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Contrast pass** (bundle of 1, size S). [Detail](backlog/dashboard.md#bundle-contrast-pass)
 
-- **Theme logo** (bundle of 2, size M). [Detail](backlog/dashboard.md#bundle-theme-logo)
 
 - **A1315. Help bubbles: the Transfers wording and missing guide destinations.** The Transfers
   help's last sentence awaits the owner's choice; some help still has no guide section to link.

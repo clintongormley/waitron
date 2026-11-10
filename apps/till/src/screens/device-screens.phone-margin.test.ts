@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import indexHtml from "../../index.html?raw";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
+import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import type { TableState, TillApi } from "../api/client.js";
 import { mount as mountTableOrder } from "./till-table-order-screen.test-helpers.js";
 import "./till-floor-screen.js";

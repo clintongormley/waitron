@@ -37,6 +37,8 @@ venue's themes.
 Anyone whose role is **Supervisor** or above can open this page and read both cards. Only a
 **Manager** or an **Admin** can change the look.
 
+Your **Theme** choice also applies to the certificate instructions when you open them at the same address.
+
 ## Edit a theme {#edit}
 
 The Look card shows **Edit** to a **Manager** or an **Admin**, whichever theme is in use. It opens

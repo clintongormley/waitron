@@ -78,6 +78,9 @@ tried on a box: one box reached by two names (its IP address and `waitron.local`
 choices; setup is always served over HTTPS, so a trading listener serving plain HTTP keeps a
 choice separate from setup's; in the dev stack the three apps run on three ports and keep three.
 
+Certificate-help pages read the same saved choice when you open them, including the Waitron logo.
+They keep the device setting when no recognised choice can be read.
+
 **The token layer sets more than `--wt-*` custom properties: each of its three blocks also sets the
 CSS `color-scheme` property**, to `light` or `dark` to match. That is what makes controls the app
 does not paint itself — native radios, checkboxes and scrollbars — drawn in the right theme, because
@@ -5853,7 +5856,7 @@ the lock screen, signed out, after Reload. With the bar showing, the page itself
 
 At 40rem wide or less the language chooser's trigger shows the language's short code instead of
 its full name, by each app's own `::part` rule (`apps/setup/src/setup-app.ts`,
-`apps/dashboard/src/dashboard-app.ts`, `apps/till/src/widgets/language-chooser-styles.ts`); its
+`apps/dashboard/src/dashboard-app.ts`, `apps/till/src/widgets/chooser-styles.ts`); its
 accessible name carries the full name either way: `Español` with the name shown, `ES Español` with
 the code shown. Its menu opens downwards. The parent passes the
 page's language as `active` and decides what a pick means. A signed-in operator's choice uses the

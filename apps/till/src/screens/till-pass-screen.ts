@@ -1,7 +1,7 @@
 import { ContentLanguageController, TickingClock, baseStyles } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
+import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import {

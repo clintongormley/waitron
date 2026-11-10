@@ -12,6 +12,8 @@ import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import {
   LeaveController,
   ThemeChoiceController,
+  applyThemePick,
+  THEME_SELECTED_EVENT,
   themeLabelsPerLocale,
   type DraftScope,
 } from "@waitron/ui";
@@ -645,7 +647,7 @@ export class SetupApp extends LitElement {
   /** Held for the page's life only: a reload goes back to the browser's languages. */
   #localeChosen = false;
 
-  readonly #theme = new ThemeChoiceController(this, { applies: true });
+  readonly #theme = new ThemeChoiceController(this);
   readonly #themeLabelsFor = themeLabelsPerLocale(() => ({
     theme: t("shell.theme.label"),
     light: t("shell.theme.light"),
@@ -655,6 +657,7 @@ export class SetupApp extends LitElement {
 
   constructor() {
     super();
+    this.addEventListener(THEME_SELECTED_EVENT, applyThemePick);
     new LocaleChangeController(this, () => {
       document.documentElement.lang = currentLocale();
       document.title = t("shell.document_title");
