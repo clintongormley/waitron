@@ -191,6 +191,27 @@ describe("till-table-order-screen: the Menu's New order bar", () => {
     expect(summary(el).scrollWidth).toBeGreaterThan(summary(el).clientWidth);
   });
 
+  it.each(["en", "es"])(
+    "the Menu's New order bar: Send all stays on one line while the words are cut, at 360 px (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const ten = Array.from({ length: 10 }, (_, n) => dish(`dish-${n}`, `Long dish name ${n}`));
+      const { el, host } = await phone({}, ten);
+      host.style.width = "700px";
+      await resized(el);
+      await tap(el, "Long dish name 0");
+      expect(summary(el).scrollWidth).toBeLessThanOrEqual(summary(el).clientWidth);
+      const oneLine = menuSendAll(el).getBoundingClientRect().height;
+
+      host.style.width = "360px";
+      await resized(el);
+      for (let n = 1; n < 10; n++) await tap(el, `Long dish name ${n}`);
+
+      expect(summary(el).scrollWidth).toBeGreaterThan(summary(el).clientWidth);
+      expect(menuSendAll(el).getBoundingClientRect().height).toBe(oneLine);
+    },
+  );
+
   it("the Menu's New order bar: Spanish", async () => {
     setLocale("es");
     const { el } = await phone();

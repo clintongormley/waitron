@@ -1104,7 +1104,8 @@ on Order when the bill on screen has sent lines and on Menu otherwise; a bill sw
 widening shows Menu. While the New order has a line, Menu ends in a bar (`[data-new-order-bar]`,
 sticky at the window's foot) whose words (New order · items — n × dish · …, cut on one line) show
 Order and whose Send all sends what the draft bar's Send all sends and shows Order as the send
-starts, quiet and disabled exactly when the draft bar's is. The menu's tiles take `inOrder`, a map
+starts, quiet and disabled exactly when the draft bar's is; Send all never shrinks or wraps, so the
+words beside it are cut first. The menu's tiles take `inOrder`, a map
 from product id to items, every variant and choice of a product counted together, and draw the
 number at the tile's corner with the words for screen readers; side by side the map is not passed.
 The number takes no room of its own: on a photo it covers the photo's corner, and a tile without a

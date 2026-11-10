@@ -1221,6 +1221,10 @@ export class TillTableOrderScreen extends LitElement {
         background: var(--wt-color-bg);
       }
 
+      .new-order-bar [data-menu-send-all] {
+        flex: none;
+      }
+
       .new-order-summary {
         flex: 1 1 auto;
         min-width: 0;
