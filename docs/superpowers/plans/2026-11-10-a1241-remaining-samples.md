@@ -26,3 +26,5 @@ Stop for watcher deviation approval before changed assertion meaning, unlisted s
 **Done:** all eight areas are merged; whole-file audits and final residual searches leave only the protected subjects above. The last slice deletes completed A1241 index/detail entries. The existing unrelated `row.tables` assertion gap goes in that PR’s thread under the lane loose-ends rule; it does not hold names-only closure or gain a new test/task here.
 
 **Approved, 2026-11-10 02:41.** Lane J’s watcher approved corrected commit `9308dd387f`, including both queue-required steps: “Build each slice as one PR under this approval, no further plan read.” About 150 changed source lines per slice; a slice needing more than about 225 lines, or changing a protected Spanish subject, stops for the watcher before building.
+
+**Amended, 2026-11-10 02:52.** Lane J’s watcher changed this approval to pieces of about 400 changed source lines, combining areas in their listed order, with a stop above about 600 or for a protected Spanish subject. Update the backlog only in the final piece. The rest of the approved method stands; no further plan read.

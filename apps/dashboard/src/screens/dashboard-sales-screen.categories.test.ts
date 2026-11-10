@@ -49,7 +49,7 @@ const report: CategorySalesDto = {
     node({
       kind: "category",
       id: "c-drinks",
-      name: "Bebidas Casa",
+      name: "House drinks",
       depth: 0,
       gross: "20.00",
       net: "17.00",
@@ -58,7 +58,7 @@ const report: CategorySalesDto = {
         node({
           kind: "category",
           id: "c-softs",
-          name: "Refrescos Casa",
+          name: "House soft drinks",
           depth: 1,
           gross: "15.00",
           net: "12.50",
@@ -69,7 +69,7 @@ const report: CategorySalesDto = {
     node({
       kind: "category",
       id: "c-kitchen",
-      name: "Cocina Casa",
+      name: "House kitchen",
       depth: 0,
       gross: "20.00",
       net: "18.00",
@@ -77,7 +77,7 @@ const report: CategorySalesDto = {
         node({
           kind: "category",
           id: "c-starters",
-          name: "Entrantes Casa",
+          name: "House starters",
           depth: 1,
           gross: "20.00",
           net: "18.00",
@@ -87,7 +87,7 @@ const report: CategorySalesDto = {
             node({
               kind: "category",
               id: "c-croquetas",
-              name: "Croquetas Casa",
+              name: "House croquettes",
               depth: 2,
               gross: "20.00",
               net: "18.00",
@@ -115,8 +115,8 @@ const report: CategorySalesDto = {
       children: [
         node({
           kind: "free_text",
-          id: "Tapas viejas",
-          name: "Tapas viejas",
+          id: "Old tapas",
+          name: "Old tapas",
           depth: 1,
           gross: "1.00",
           net: "4.00",
@@ -320,20 +320,20 @@ describe("dashboard-sales-screen — category report", () => {
   it("lays the tree out depth first, with a Directly-in row only for a parent that has children and lines of its own", async () => {
     const el = await mount(stubApi());
     expect(rows(el)).toEqual([
-      ["Bebidas Casa", 0, "category", "20,00\u00a0€", "17,00\u00a0€"],
-      ["Directamente en Bebidas Casa", 1, "direct", "5,00\u00a0€", "4,50\u00a0€"],
-      ["Refrescos Casa", 1, "category", "15,00\u00a0€", "12,50\u00a0€"],
-      // No Directly-in row: Cocina Casa has children but no lines of its own.
-      ["Cocina Casa", 0, "category", "20,00\u00a0€", "18,00\u00a0€"],
-      ["Entrantes Casa", 1, "category", "20,00\u00a0€", "18,00\u00a0€"],
+      ["House drinks", 0, "category", "20,00\u00a0€", "17,00\u00a0€"],
+      ["Directamente en House drinks", 1, "direct", "5,00\u00a0€", "4,50\u00a0€"],
+      ["House soft drinks", 1, "category", "15,00\u00a0€", "12,50\u00a0€"],
+      // No Directly-in row: House kitchen has children but no lines of its own.
+      ["House kitchen", 0, "category", "20,00\u00a0€", "18,00\u00a0€"],
+      ["House starters", 1, "category", "20,00\u00a0€", "18,00\u00a0€"],
       // Its direct amounts cancel to zero, but it has lines, so the row stays.
-      ["Directamente en Cocina Casa › Entrantes Casa", 2, "direct", "0,00\u00a0€", "0,00\u00a0€"],
+      ["Directamente en House kitchen › House starters", 2, "direct", "0,00\u00a0€", "0,00\u00a0€"],
       // A leaf with lines of its own has no Directly-in row.
-      ["Croquetas Casa", 2, "category", "20,00\u00a0€", "18,00\u00a0€"],
+      ["House croquettes", 2, "category", "20,00\u00a0€", "18,00\u00a0€"],
       ["Sin categoría", 0, "uncategorised", "3,00\u00a0€", "2,70\u00a0€"],
       ["No registrada", 0, "not_recorded", "1,00\u00a0€", "6,00\u00a0€"],
       ["Categoría desconocida", 1, "direct", "0,00\u00a0€", "2,00\u00a0€"],
-      ["Tapas viejas", 1, "free_text", "1,00\u00a0€", "4,00\u00a0€"],
+      ["Old tapas", 1, "free_text", "1,00\u00a0€", "4,00\u00a0€"],
     ]);
     expect(q(el, "category-total-gross")!.textContent!.trim()).toBe("44,00\u00a0€");
     expect(q(el, "category-total-net")!.textContent!.trim()).toBe("43,70\u00a0€");
@@ -343,19 +343,19 @@ describe("dashboard-sales-screen — category report", () => {
     const el = await mount(stubApi());
     const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=category-row] th")];
     const indent = (i: number): number => parseFloat(getComputedStyle(cells[i]!).paddingLeft);
-    // Rows 0, 4 and 6 are Bebidas Casa (0), Entrantes Casa (1) and Croquetas Casa (2).
+    // Rows 0, 4 and 6 are House drinks (0), House starters (1) and House croquettes (2).
     expect(indent(4)).toBeGreaterThan(indent(0));
     expect(indent(6)).toBeGreaterThan(indent(4));
     expect(indent(3)).toBe(indent(0));
     const path = cells[6]!.querySelector<HTMLElement>("[data-test=category-path]")!;
-    expect(path.textContent).toBe("Cocina Casa › Entrantes Casa › ");
+    expect(path.textContent).toBe("House kitchen › House starters › ");
     expect(path.offsetWidth).toBeGreaterThan(1);
-    expect(cells[6]!.textContent!.trim()).toBe("Cocina Casa › Entrantes Casa › Croquetas Casa");
+    expect(cells[6]!.textContent!.trim()).toBe("House kitchen › House starters › House croquettes");
     expect(cells[6]!.querySelector(".visually-hidden")).toBeNull();
     expect(cells[0]!.querySelector("[data-test=category-path]")).toBeNull();
     expect(cells[0]!.querySelector(".visually-hidden")).toBeNull();
     // A Directly-in row names its category by the whole path, so it needs no path of its own.
-    expect(cells[5]!.textContent!.trim()).toBe("Directamente en Cocina Casa › Entrantes Casa");
+    expect(cells[5]!.textContent!.trim()).toBe("Directamente en House kitchen › House starters");
     expect(cells[5]!.querySelector("[data-test=category-path]")).toBeNull();
   });
 
@@ -389,10 +389,10 @@ describe("dashboard-sales-screen — category report", () => {
         grossComplete: true,
         linesWithoutGross: 0,
       }) satisfies CategorySalesDto;
-    // Today's tree renamed Almuerzo to Mediodía, so each mode's rows name their own parents.
+    // Today's tree renamed Early lunch to Midday, so each mode's rows name their own parents.
     const twoBranches = (mode: CategorySalesDto["mode"]): CategorySalesDto => {
       const food = mains("c-food-mains", "c-food", "House food", mode);
-      const lunchName = mode === "current" ? "Mediodía" : "Almuerzo";
+      const lunchName = mode === "current" ? "Midday" : "Early lunch";
       const lunch = mains("c-lunch-mains", "c-lunch", lunchName, mode);
       return { ...food, tree: [...lunch.tree, ...food.tree], gross: "20.00", net: "18.00" };
     };
@@ -410,8 +410,8 @@ describe("dashboard-sales-screen — category report", () => {
         return copy.textContent!.replace(/\s+/g, " ").trim();
       });
     expect(shown()).toEqual([
-      "Almuerzo",
-      "Almuerzo › House mains",
+      "Early lunch",
+      "Early lunch › House mains",
       "House food",
       "House food › House mains",
     ]);
@@ -419,8 +419,8 @@ describe("dashboard-sales-screen — category report", () => {
     await flush(el);
     expect(api.getCategorySales).toHaveBeenLastCalledWith(today(), today(), "current", false);
     expect(shown()).toEqual([
-      "Mediodía",
-      "Mediodía › House mains",
+      "Midday",
+      "Midday › House mains",
       "House food",
       "House food › House mains",
     ]);
@@ -429,7 +429,7 @@ describe("dashboard-sales-screen — category report", () => {
   it("shows no path for No category, Not recorded or what sits under Not recorded", async () => {
     const el = await mount(stubApi());
     const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=category-row] th")];
-    // Rows 7 to 10: Sin categoría, No registrada, Categoría desconocida, Tapas viejas.
+    // Rows 7 to 10: Sin categoría, No registrada, Categoría desconocida, Old tapas.
     for (const cell of cells.slice(7)) {
       expect(cell.querySelector("[data-test=category-path]")).toBeNull();
     }
@@ -452,7 +452,7 @@ describe("dashboard-sales-screen — category report", () => {
     const el = await mount(api);
     expect(q(el, "categories-heading")!.textContent!.trim()).toBe("Categories at time of sale");
     const names = rows(el).map((r) => r[0]);
-    expect(names).toContain("Directly in Bebidas Casa");
+    expect(names).toContain("Directly in House drinks");
     expect(names).toContain("No category");
     expect(names).toContain("Not recorded");
     expect(names).toContain("Category unknown");
