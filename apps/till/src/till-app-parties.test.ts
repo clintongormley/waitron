@@ -8429,6 +8429,8 @@ describe("till-app: submitting the draft", () => {
     const server = groupsServer();
     const { el } = await mountApp({ ...withCourses(), ...server, ...firstOrderHistory() });
     const order = await openPartyTable(el);
+    await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-view=menu]")!);
+    await flush(el);
     await ring(el, order, beer, salad, croquettes, steak, flan);
 
     await toggle(el, order, "Beer");
