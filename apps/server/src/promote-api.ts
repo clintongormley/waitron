@@ -49,7 +49,6 @@ export interface PromoteApiDeps {
   nodePreparation?: ReturnType<typeof createNodeOperationPreparation>;
   /** Whether a request came from a browser on the box itself; tests replace it. */
   requestFromBox?: (c: Context) => boolean;
-  /** On a mirror both routes answer only a request from the box itself. */
   isMirror?: boolean;
   run: (
     attestation: FenceAttestation,

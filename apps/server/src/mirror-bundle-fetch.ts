@@ -248,14 +248,9 @@ async function firstToConnect(
 }
 
 /**
- * Connects to each address `url`'s host answers to in turn, with the same trust, and sends the
- * request only on the first connection to finish its handshake. An address that refuses or fails
- * the certificate check costs that connection; one still short of its handshake after two seconds
- * is passed over when another try follows. Under a pinned authority only a server holding a
- * certificate that authority issued for the name finishes a handshake; a call that checks no
- * certificate goes to whichever server finishes one first. When no remembered address connects,
- * the name is asked of the network once more and its answer tried the same way. A failure on every
- * address is the failure of the last one tried.
+ * Sends the request on the first connection to finish its handshake. Under a pinned authority only
+ * a server holding a certificate that authority issued for the name finishes one; a call that
+ * checks no certificate goes to whichever server finishes first.
  */
 async function openBoxRequest(url: URL, options: BoxRequest): Promise<IncomingMessage> {
   const { signal } = options;

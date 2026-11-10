@@ -27,7 +27,7 @@ import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { writeTlsSet } from "./testing/box-tls.js";
 import { writePendingAdoption } from "./finish-adoption.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
-import { resetObserver } from "./testing/reset-request.js";
+import { resetObserver } from "./testing/connection-reset.js";
 
 const served = vi.hoisted(() => [] as { port: number; server: import("node:net").Server }[]);
 const fetchWrap = vi.hoisted(() => ({

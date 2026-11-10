@@ -11,7 +11,7 @@ import {
   requestProvenFromBox,
   type RequestSourceDeps,
 } from "./request-from-box.js";
-import { resetObserver } from "./testing/reset-request.js";
+import { resetObserver } from "./testing/connection-reset.js";
 
 const interfaces = (() => ({
   eth0: [

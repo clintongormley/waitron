@@ -73,7 +73,7 @@ vi.mock("./break-glass.js", () => ({ verifyBreakGlass }));
 import { mountPromoteApi } from "./promote-api.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
-import { resetObserver } from "./testing/reset-request.js";
+import { resetObserver } from "./testing/connection-reset.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 const fakeDb = {} as Database;
