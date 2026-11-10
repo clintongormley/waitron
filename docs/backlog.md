@@ -101,7 +101,6 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 run one after another, because they share `apps/till/src/till-app.ts`.
 
 - [A1398. Pack the other packages' test shards by measured time](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
-- [A1400. An older copy must not undo a save](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
 - [A950. Automatic upgrades with rollback](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order): go-live (owner, 2026-11-09); the [two-group plan](superpowers/plans/2026-11-09-a950-shorter-upgrades.md) is approved; Lane F builds its first group after A739 and A840/A842/A848 (owner, 22:04).
 
 **3. The foundation, already running.** A1308 stays first in lane A, with
@@ -1446,8 +1445,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Forms refusal placement** (bundle of 4, 1 important, size L). [Detail](backlog/dashboard.md#bundle-forms-refusal-placement)
 
 - **Reorder controller** (bundle of 3, size S). Holds A901. [Detail](backlog/dashboard.md#bundle-reorder-controller)
-
-- **A1400. An older copy must not undo a save** — remaining limit for departments and Appearance: a newer read between commit and reply can be replaced if follow-up reads fail. [Detail](backlog/dashboard.md#bundle-a1400-an-older-copy-must-not-undo-a-save)
 
 - **Contrast pass** (bundle of 2, 1 important, size S). [Detail](backlog/dashboard.md#bundle-contrast-pass)
 

@@ -499,15 +499,6 @@ plans to retire the editor.
 - **Text size after A179 (#988).**
   [Detail](dashboard.md#text-size-after-a179-988)
 
-## Bundle A1400: An older copy must not undo a save
-
-1 entry, size S.
-
-- **A venue-model or theme-list read after the save commits but before its reply can be replaced by that
-  reply if the follow-up reads fail (including Appearance's bounded retries).** A1400 returns the stored department model and refreshes the theme list;
-  neither answer has a comparable server revision. The watcher approved this named
-  limit on 2026-11-07 at 23:12. No revision storage is included in A1400.
-
 ## Bundle: Slow key derivation off the main thread
 
 5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -725,6 +716,12 @@ probes do not settle it. This stays inside the existing bundle rather than becom
   [Detail](dashboard.md#empty-state-text-shows-beside-a-failed-read-on-payments-and-cloud-services-a252-seen-2026-10-03-while-checking-lane-as-w18--open)
 
 ## Decisions and deliberate limits
+
+- **A1400 save/read limit (watcher, 2026-11-07 23:12; retained 2026-11-10).** A venue-model or
+  theme-list read after a save commits but before its reply can be replaced by that reply if the
+  follow-up reads fail, including Appearance's bounded retries. The save returns the stored
+  department model and refreshes the theme list; neither answer has a comparable server revision.
+  No revision storage is included. See the [approved save-snapshot plan](../superpowers/plans/2026-11-07-a1400-save-snapshots.md).
 
 - **Cancel discards without asking (A657, owner, 2026-10-14).** An explicit Cancel, including
   page Cancel, restores and leaves its drafts. Escape, an existing backdrop action, the close
