@@ -226,6 +226,7 @@ async function sendChartToSource(deps: ChartPostDeps, stopping: AbortSignal): Pr
     return;
   }
   let answer: { status: number; text: string };
+  let accepted: unknown;
   try {
     answer = await boxExchange(
       new URL(`${base}/api/node/membership`),
@@ -240,6 +241,8 @@ async function sendChartToSource(deps: ChartPostDeps, stopping: AbortSignal): Pr
       },
       MAX_CHART_ANSWER_BYTES,
     );
+    accepted =
+      answer.status === 200 && (JSON.parse(answer.text) as { accepted?: unknown }).accepted;
   } catch (error) {
     if (stopping.aborted) return;
     deps.log("warn", "handover-activation.chart_post_failed", {
@@ -249,7 +252,7 @@ async function sendChartToSource(deps: ChartPostDeps, stopping: AbortSignal): Pr
     });
     return;
   }
-  if (answer.status === 200 && (JSON.parse(answer.text) as { accepted?: unknown }).accepted) {
+  if (accepted) {
     deps.log("info", "handover-activation.chart_posted", { operationId, sourceNodeId });
     return;
   }
