@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { CatalogueSummary, MenuStructure } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { AddToMenus, placementMenus, type PlacementMenu } from "./add-to-menus.js";
@@ -444,6 +444,17 @@ describe("dashboard-add-to-menus", () => {
     const escape = new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
     root(el).querySelector("wt-modal")!.dispatchEvent(escape);
     expect(escape.defaultPrevented).toBe(true);
+    const modal = root(el).querySelector("wt-modal")!;
+    await modal.updateComplete;
+    modal.shadowRoot!.querySelector<HTMLElement>(".body")!.focus();
+    const dialog = modal.shadowRoot!.querySelector("dialog")!;
+    await userEvent.keyboard("{Escape}");
+    await closeReportsDelivered();
+    expect(dialog.open).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    await closeReportsDelivered();
+    expect(dialog.open).toBe(true);
+    expect(cancel).not.toHaveBeenCalled();
   });
 });
 

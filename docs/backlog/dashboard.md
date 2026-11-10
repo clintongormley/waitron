@@ -431,31 +431,20 @@ plans to retire the editor.
   it is a behaviour change on the restore path and needs its own tests. Left open by A938.
   [Detail](box.md#a-restore-from-a-backup-file-derives-the-archives-key-at-least-three-times)
 
-## A keydown guard that cancels Escape while a save runs did not keep one dialog open
+## Repeated Escape checks for menu, modifier and media writes
 
-Five standalone dashboard forms still close on the second real Escape while busy:
-`option-label-form`, `add-to-menus`, `section-details-form`, `category-color-form` and
-`include-folder-form`, under `apps/dashboard/src/widgets/`. On 2026-11-09, the focused native
-control kept each dialog open after Escape one and closed it after Escape two. The same probe
-on base `5e61e90deb` gave the same results; a busy variant-form stayed open twice and a nonbusy
-option-label-form dismissed normally. These controls focus the modal body before making the
-form busy, and await native close delivery after each key. Command:
-`pnpm --filter @waitron/dashboard exec vitest run src/widgets/wt-dialog-sibling-control.test.ts --maxWorkers=1`
-in the disposable review checkout: 5 failing behavior assertions, 2 passing controls. Probe
-source and both logs remain in Lane D's `wt-dialog-sibling-*-20261109` receipts.
-
-The three approved option-list, extras-list and Add content language fixes do not settle these
-siblings. Next: add each modal's busy `dismissible` binding test-first. The menu/modifier delete
-flows and media save/delete flows still need the same repeated-key check; their earlier single-key
-probes do not settle it. This stays inside the existing bundle rather than becoming new items.
+The menu/modifier delete flows and media save/delete flows still need a real Escape twice while
+saving, waiting for native close delivery after each key, as in `option-label-form.test.ts`;
+their earlier single-key probes do not settle it. This stays inside the existing bundle rather
+than becoming new items.
 
 ## Bundle: Wt dialog lifecycle
 
 - **Dashboard leftovers from the coverage branch**: the login-purpose check and unreachable
   fallbacks remain outside the dialog work.
   [Detail](dashboard.md#dashboard-leftovers-from-the-coverage-branch)
-- **Five sibling busy forms still close on a second Escape.**
-  [Detail](dashboard.md#a-keydown-guard-that-cancels-escape-while-a-save-runs-did-not-keep-one-dialog-open)
+- **Repeated Escape checks for menu/modifier delete and media save/delete flows remain.**
+  [Detail](dashboard.md#repeated-escape-checks-for-menu-modifier-and-media-writes)
 - **Home/End caret behavior remains unresolved.** In macOS Chromium, End in an overflowing dialog
   left text selected and scrolled the body. Removing vertical containment let short-body tests
   pass but introduced underlying-page scrolling. In the 390×844 compact-modal control, End kept

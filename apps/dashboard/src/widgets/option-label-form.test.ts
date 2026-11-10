@@ -1,4 +1,5 @@
 import { afterEach, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
@@ -320,6 +321,27 @@ it("holds the dialog open against Escape only while it is saving", async () => {
   await el.updateComplete;
   expect(press("Escape")).toBe(true);
   expect(press("Enter")).toBe(false);
+  let cancelled = false;
+  el.addEventListener("wt-cancel", () => {
+    cancelled = true;
+  });
+  await modal.updateComplete;
+  modal.shadowRoot!.querySelector<HTMLElement>(".body")!.focus();
+  const dialog = modal.shadowRoot!.querySelector("dialog")!;
+  await userEvent.keyboard("{Escape}");
+  await closeReportsDelivered();
+  expect(dialog.open).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await closeReportsDelivered();
+  expect(dialog.open).toBe(true);
+  expect(cancelled).toBe(false);
+  el.busy = false;
+  await el.updateComplete;
+  await modal.updateComplete;
+  await userEvent.keyboard("{Escape}");
+  await closeReportsDelivered();
+  expect(dialog.open).toBe(false);
+  expect(cancelled).toBe(true);
 });
 
 it("saves on Enter in a field", async () => {

@@ -1,9 +1,10 @@
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   cleanupWidgets,
+  closeReportsDelivered,
   customSquarePixels,
   dialogMessageOf,
   expectMessageAboveButtons,
@@ -279,6 +280,19 @@ it("prevents duplicate save and dismissal while a save is in flight", async () =
   expect(escape.defaultPrevented).toBe(true);
   await el.updateComplete;
   expect(el.open).toBe(true);
+  const cancelled = vi.fn();
+  el.addEventListener("wt-cancel", cancelled);
+  const modal = modalOf(el);
+  await modal.updateComplete;
+  modal.shadowRoot!.querySelector<HTMLElement>(".body")!.focus();
+  const dialog = modal.shadowRoot!.querySelector("dialog")!;
+  await userEvent.keyboard("{Escape}");
+  await closeReportsDelivered();
+  expect(dialog.open).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await closeReportsDelivered();
+  expect(dialog.open).toBe(true);
+  expect(cancelled).not.toHaveBeenCalled();
   saveButton(el).click();
   expect(submitted).toHaveBeenCalledOnce();
   el.busy = false;
