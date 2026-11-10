@@ -15,7 +15,7 @@ Keep the commit and image metadata with your results.
 
 ```sh
 inputs=$(mktemp -d)
-test -z "$(git status --porcelain)"
+test -z "$(git status --porcelain)" || { printf '%s\n' "Stop: commit or set aside your changes before building." >&2; exit 1; }
 git rev-parse HEAD > "$inputs/source-commit.txt"
 app="waitron-b3-app:$(git rev-parse --short HEAD)"
 docker build --platform linux/amd64 --target runtime -f deploy/Dockerfile -t "$app" .
@@ -23,10 +23,10 @@ agent=ghcr.io/clintongormley/waitron-print-agent@sha256:650a9d69b217cb2f713cb620
 docker pull --platform linux/amd64 "$agent"
 docker pull --platform linux/amd64 axllent/mailpit:v1.33.0
 docker tag "$agent" waitron-b3-agent:rehearsal
-docker image inspect "$app" "$agent" axllent/mailpit:v1.33.0 > "$inputs/sources.json"
-docker save -o "$inputs/app.tar" "$app"
-docker save -o "$inputs/agent.tar" waitron-b3-agent:rehearsal
-docker save -o "$inputs/mailpit.tar" axllent/mailpit:v1.33.0
+docker image inspect --platform linux/amd64 "$app" "$agent" axllent/mailpit:v1.33.0 > "$inputs/sources.json"
+docker save --platform linux/amd64 -o "$inputs/app.tar" "$app"
+docker save --platform linux/amd64 -o "$inputs/agent.tar" waitron-b3-agent:rehearsal
+docker save --platform linux/amd64 -o "$inputs/mailpit.tar" axllent/mailpit:v1.33.0
 
 docker build -f bench/box-installer/Containerfile -t waitron-b3-tools:rehearsal .
 docker run -d --name waitron-b3-rehearsal --cpus 4 --memory 8g \
@@ -84,6 +84,6 @@ if you need it; otherwise deleting this container also deletes the built image.
 ```sh
 docker stop waitron-b3-rehearsal
 docker rm waitron-b3-rehearsal
-docker image rm waitron-b3-tools:rehearsal waitron-b3-app:rehearsal waitron-b3-agent:rehearsal
+docker image rm waitron-b3-tools:rehearsal "$app" waitron-b3-agent:rehearsal
 rm -rf "$inputs"
 ```
