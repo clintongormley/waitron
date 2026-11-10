@@ -96,7 +96,7 @@ afterEach(() => vi.restoreAllMocks());
 const agents: PrintAgentRow[] = [
   {
     id: "a1",
-    name: "Cocina agent",
+    name: "Kitchen agent",
     active: true,
     host: null,
     nodeId: null, // manually enrolled — no provenance marker
@@ -106,7 +106,7 @@ const agents: PrintAgentRow[] = [
   },
   {
     id: "a2",
-    name: "Barra agent",
+    name: "Bar agent",
     active: false,
     host: null,
     nodeId: "n1", // self-enrolled on a node, then revoked — marker + allow-again
@@ -119,7 +119,7 @@ const agents: PrintAgentRow[] = [
 const printers: Printer[] = [
   {
     id: "p1",
-    name: "Cocina",
+    name: "Kitchen",
     transport: "network_tcp",
     host: "10.0.0.9",
     port: 9100,
@@ -138,7 +138,7 @@ const printers: Printer[] = [
   },
   {
     id: "p2",
-    name: "Nube",
+    name: "Remote",
     transport: "cloud_poll",
     host: null,
     port: null,
@@ -157,7 +157,7 @@ const printers: Printer[] = [
   },
   {
     id: "p3",
-    name: "Barra USB",
+    name: "Bar USB",
     transport: "usb",
     host: null,
     port: null,
@@ -180,7 +180,7 @@ const printers: Printer[] = [
 const discovered: DiscoveredPrinter[] = [
   {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "usb",
     localKey: "SN-1",
     make: "Epson",
@@ -192,7 +192,7 @@ const discovered: DiscoveredPrinter[] = [
   },
   {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "usb",
     localKey: "SN-2",
     make: "Star",
@@ -207,7 +207,7 @@ const discovered: DiscoveredPrinter[] = [
 const discoveredNetwork: DiscoveredPrinter[] = [
   {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "network_tcp",
     host: "10.0.0.77",
     port: 9100,
@@ -225,7 +225,7 @@ const discoveredNetwork: DiscoveredPrinter[] = [
 const discoveredRegisteredNetwork: DiscoveredPrinter[] = [
   {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "network_tcp",
     host: "10.0.0.5",
     port: 9100,
@@ -240,7 +240,7 @@ const jobs: PrintJobRow[] = [
   {
     id: "j1",
     printerId: "p1",
-    printerName: "Cocina",
+    printerName: "Kitchen",
     status: "failed",
     canResend: false,
     attempts: 2,
@@ -251,7 +251,7 @@ const jobs: PrintJobRow[] = [
   {
     id: "j2",
     printerId: "p1",
-    printerName: "Cocina",
+    printerName: "Kitchen",
     status: "done",
     canResend: true,
     attempts: 1,
@@ -265,7 +265,7 @@ const printerProfiles: PrinterProfileOffer[] = [
   {
     printerId: "p1",
     profileId: "dp1",
-    profileName: "Camareros",
+    profileName: "Waitstaff",
     pagePrinterId: null,
     roles: ["receipt"],
     departmentId: null,
@@ -274,7 +274,7 @@ const printerProfiles: PrinterProfileOffer[] = [
   {
     printerId: "p2",
     profileId: "dp1",
-    profileName: "Camareros",
+    profileName: "Waitstaff",
     pagePrinterId: null,
     roles: ["receipt"],
     departmentId: null,
@@ -283,7 +283,7 @@ const printerProfiles: PrinterProfileOffer[] = [
   {
     printerId: "p1",
     profileId: "dp2",
-    profileName: "Mostrador",
+    profileName: "Counter",
     pagePrinterId: null,
     roles: ["receipt"],
     departmentId: null,
@@ -1407,7 +1407,7 @@ describe("the Printers tab at phone width", () => {
   const phonePrinters: Printer[] = [
     {
       ...printers[0]!,
-      name: "Impresora de tickets de la cocina caliente",
+      name: "Receipt ticket printer in the busy kitchen",
       pendingJobs: 3,
       lastPrintAt: "2026-08-25T14:00:00.000Z",
       lastPrintAgentId: "a1",
@@ -1479,8 +1479,8 @@ describe("the Agents tab at phone width", () => {
   const phoneAgents: PrintAgentRow[] = [
     {
       ...agents[0]!,
-      name: "Agente de impresión de la cocina caliente",
-      host: "cocina-caliente.local",
+      name: "Kitchen print agent for the large kitchen",
+      host: "kitchen-service.local",
     },
     ...agents.slice(1),
   ];
@@ -1590,7 +1590,7 @@ describe("printers-screen", () => {
     await flush(el);
     await filterAgents(el, "all");
 
-    expect(text(el, "[data-test=agent-name-a1]")).toBe("Cocina agent");
+    expect(text(el, "[data-test=agent-name-a1]")).toBe("Kitchen agent");
     expect(text(el, "[data-test=agent-status-a1]")).toBe(
       t("printers.agent_status_active", "es-ES"),
     );
@@ -1721,7 +1721,7 @@ describe("printers-screen", () => {
     await flush(el);
     q(el, "[data-test=printer-row-p3]")!.click();
     await flush(el);
-    expect(text(el, "[data-test=printer-detail-connected-through]")).toBe("Cocina agent");
+    expect(text(el, "[data-test=printer-detail-connected-through]")).toBe("Kitchen agent");
   });
 
   it("ignores saved sort and filter settings for removed printer columns", async () => {
@@ -1753,7 +1753,7 @@ describe("printers-screen", () => {
 
     expect(text(el, "[data-test=job-status-j1]")).toBe(jobStatusName("failed", "es-ES"));
     expect(text(el, "[data-test=job-attempts-j1]")).toContain("2");
-    expect(text(el, "[data-test=job-printer-j1]")).toBe("Cocina"); // resolved from the printer list
+    expect(text(el, "[data-test=job-printer-j1]")).toBe("Kitchen"); // resolved from the printer list
     expect(text(el, "[data-test=job-error-j1]")).toBe("printer offline");
     expect(q(el, "[data-test=job-error-j2]")).toBeNull();
   });
@@ -2877,7 +2877,7 @@ describe("printers-screen", () => {
   it("greys out a discovered office printer with no report of its own with an explanation and no Add, beside a receipt printer that keeps its Add", async () => {
     const office: DiscoveredPrinter = {
       agentId: "a1",
-      agentName: "Cocina agent",
+      agentName: "Kitchen agent",
       transport: "network_tcp",
       host: "10.0.0.56",
       port: 9100,
@@ -2939,7 +2939,7 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test=register-SN-2]")).toBeNull();
     expect(text(el, "[data-test=printer-last-seen-p3]")).toBe(
       t("printers.seen_at")
-        .replace("{agent}", "Cocina agent")
+        .replace("{agent}", "Kitchen agent")
         .replace("{time}", "2023-11-14 22:13"),
     );
     expect(q(el, "[data-test=register-SN-1]")).toBeTruthy();
@@ -2952,7 +2952,7 @@ describe("printers-screen", () => {
       agentId,
       agentName,
     });
-    const both = [seenOnBoth("a1", "Cocina agent"), seenOnBoth("a2", "Barra agent")];
+    const both = [seenOnBoth("a1", "Kitchen agent"), seenOnBoth("a2", "Bar agent")];
     const passive = vi.fn().mockResolvedValue(both);
     const api = stubApi({
       listDiscoveredPrinters: vi.fn().mockResolvedValue(both),
@@ -2967,7 +2967,7 @@ describe("printers-screen", () => {
       const rows = () => [...table.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr")];
       // Fails if the row key leaves out the agent: both rows share one key.
       expect(new Set(rows().map((row) => row.dataset.rowKey)).size).toBe(2);
-      const barAgent = rows().find((row) => row.textContent!.includes("Barra agent"))!;
+      const barAgent = rows().find((row) => row.textContent!.includes("Bar agent"))!;
 
       passive.mockResolvedValue([both[1]]);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
@@ -2989,7 +2989,7 @@ describe("printers-screen", () => {
       agentId,
       agentName,
     });
-    const both = [seenOnBoth("a1", "Cocina agent"), seenOnBoth("a2", "Barra agent")];
+    const both = [seenOnBoth("a1", "Kitchen agent"), seenOnBoth("a2", "Bar agent")];
     const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(both) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -3006,7 +3006,7 @@ describe("printers-screen", () => {
           offeredAfterAdd.push(addButtons().length);
       });
       const barAgent = [...table.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr")].find(
-        (row) => row.textContent!.includes("Barra agent"),
+        (row) => row.textContent!.includes("Bar agent"),
       )!;
       await addDiscovered(el, barAgent.querySelector<HTMLElement>("[data-test^=register-]")!);
       await flush(el);
@@ -3414,11 +3414,11 @@ describe("printers-screen", () => {
     expect(q(el, '[name="printer-detail-poll-id"]')).toBeNull();
     openDetailsEdit(el);
     await flush(el);
-    typeField(el, '[name="printer-detail-name"]', "Nube 2");
+    typeField(el, '[name="printer-detail-name"]', "Remote 2");
     saveDetailsEdit(el);
     await flush(el);
 
-    expect(api.updatePrinter).toHaveBeenCalledWith("p2", { name: "Nube 2" });
+    expect(api.updatePrinter).toHaveBeenCalledWith("p2", { name: "Remote 2" });
     const [, patch] = vi.mocked(api.updatePrinter).mock.calls[0]!;
     expect(patch).not.toHaveProperty("pollId");
   });
@@ -3711,7 +3711,7 @@ it("cancel discards printer name and connection edits and reopening restores sav
   openDetailsEdit(el);
   await flush(el);
   expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
-    "Cocina",
+    "Kitchen",
   );
   expect((q(el, '[name="printer-detail-host"]') as import("@waitron/ui").WtInput).value).toBe(
     "10.0.0.9",
@@ -3773,7 +3773,7 @@ it("shows a failed agent rename and lets Cancel discard the draft", async () => 
   q(el, "[data-test=edit-agent-a1]")!.click();
   await flush(el);
   expect((q(el, "[data-test=edit-agent-name]") as import("@waitron/ui").WtInput).value).toBe(
-    "Cocina agent",
+    "Kitchen agent",
   );
 });
 
@@ -3876,7 +3876,7 @@ it("hides a scan result that is already registered and shows when it was seen ag
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   expect(text(el, "[data-test=printer-last-seen-p1]")).toBe(
-    t("printers.seen_at").replace("{agent}", "Cocina agent").replace("{time}", "2023-11-14 22:13"),
+    t("printers.seen_at").replace("{agent}", "Kitchen agent").replace("{time}", "2023-11-14 22:13"),
   );
   expect(q(el, "[data-test=printer-last-seen-p2]")).toBeNull();
 
@@ -4078,7 +4078,7 @@ it.each(["printer-row-p1", "job-printer-j1"])(
     await flush(el);
     expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
     expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput)?.value).toBe(
-      "Cocina",
+      "Kitchen",
     );
   },
 );
@@ -4142,7 +4142,7 @@ it("opens the details from an address naming the printer", async () => {
   });
   await flush(el);
   expect(detailsOpen(el)).toBe(true);
-  expect(q(el, "[data-test=printer-details-modal]")!.getAttribute("heading")).toBe("Cocina");
+  expect(q(el, "[data-test=printer-details-modal]")!.getAttribute("heading")).toBe("Kitchen");
   expect(q(el, "wt-tabs")).not.toBeNull();
 });
 
@@ -4187,7 +4187,7 @@ it("closing the details returns to the tab they were opened from", async () => {
     api: stubApi(),
   });
   await flush(el);
-  expect(detailsHeading(el)).toContain("Cocina");
+  expect(detailsHeading(el)).toContain("Kitchen");
   await closeDetails(el);
   expect(location.search).toBe("?keep=yes");
   expect(location.pathname).toBe("/manage/printers/view/printers");
@@ -4255,7 +4255,7 @@ it.each(["en", "es-ES"] as const)(
       const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
       await flush(el);
       const row = q(el, "[data-test=printer-detail-connected-through]")!;
-      expect(row.textContent!.trim()).toBe("Cocina agent");
+      expect(row.textContent!.trim()).toBe("Kitchen agent");
       expect((row.previousElementSibling as HTMLElement).textContent!.trim()).toBe(
         locale === "en" ? "Connected through" : "Conectada a través de",
       );
@@ -4367,7 +4367,7 @@ it("closes calibration for the previous printer when browser navigation selects 
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
 
-  expect(detailsHeading(el)).toContain("Nube");
+  expect(detailsHeading(el)).toContain("Remote");
   expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
 });
 
@@ -4445,7 +4445,7 @@ it("keeps a late Active refusal off the next printer's details", async () => {
   history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
-  expect(detailsHeading(el)).toContain("Nube");
+  expect(detailsHeading(el)).toContain("Remote");
   expect(q(el, '[name="printer-detail-active"]')!.hasAttribute("disabled")).toBe(false);
 
   refuse({ code: "connection.failed" });
@@ -4595,21 +4595,21 @@ it("keeps the next printer's name draft when an earlier save finishes", async ()
   await flush(el);
   openDetailsEdit(el);
   await flush(el);
-  typeField(el, '[name="printer-detail-name"]', "Kitchen receipt");
+  typeField(el, '[name="printer-detail-name"]', "Receipt desk");
   saveDetailsEdit(el);
   await vi.waitFor(() =>
-    expect(api.updatePrinter).toHaveBeenCalledWith("p1", { name: "Kitchen receipt" }),
+    expect(api.updatePrinter).toHaveBeenCalledWith("p1", { name: "Receipt desk" }),
   );
 
   history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
-  expect(detailsHeading(el)).toContain("Cocina");
+  expect(detailsHeading(el)).toContain("Kitchen");
   await choosePrinter(el, "discard");
   history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
-  expect(detailsHeading(el)).toContain("Nube");
+  expect(detailsHeading(el)).toContain("Remote");
   openDetailsEdit(el);
   await flush(el);
   typeField(el, '[name="printer-detail-name"]', "Cloud copy");
@@ -4929,7 +4929,7 @@ it("shows the saved drawer independently of the profiles offering it, and the de
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   await selectTab(el, "printers");
-  expect(text(el, "[data-test=printer-agent-p1]")).toBe("Cocina agent");
+  expect(text(el, "[data-test=printer-agent-p1]")).toBe("Kitchen agent");
   q(el, "[data-test=printer-row-p1]")!.click();
   await flush(el);
   expect(text(el, "[data-test=printer-drawer]")).toBe(t("printers.yes"));
@@ -4954,8 +4954,8 @@ it("lists the profiles that offer a printer, following their changes but not a d
       line.textContent!.trim(),
     ),
   ).toEqual([
-    fill("printers.used_by_profile", { profile: "Camareros", uses: receipts }),
-    fill("printers.used_by_profile", { profile: "Mostrador", uses: receipts }),
+    fill("printers.used_by_profile", { profile: "Waitstaff", uses: receipts }),
+    fill("printers.used_by_profile", { profile: "Counter", uses: receipts }),
   ]);
   expect(profilesField.previousElementSibling!.textContent!.trim()).toBe(t("nav.device_profiles"));
   // A device's heartbeat changes `devices`; the offers do not read it.
@@ -4966,7 +4966,7 @@ it("lists the profiles that offer a printer, following their changes but not a d
   liveData.invalidate([{ type: "device_profile_printers", id: "changed" }]);
   await vi.waitFor(() =>
     expect(text(el, "[data-test=printer-used-by-profiles]")).toBe(
-      fill("printers.used_by_profile", { profile: "Camareros", uses: receipts }),
+      fill("printers.used_by_profile", { profile: "Waitstaff", uses: receipts }),
     ),
   );
 });
@@ -4976,25 +4976,25 @@ const usedByProfiles: PrinterProfileOffer[] = [
     printerId: "p1",
     pagePrinterId: null,
     profileId: "dp1",
-    profileName: "Camareros",
+    profileName: "Waitstaff",
     roles: ["receipt", "cash_drawer"],
     departmentId: "d1",
-    departmentName: "Sala",
+    departmentName: "Dining room",
   },
   {
     printerId: "p1",
     pagePrinterId: null,
     profileId: "dp2",
-    profileName: "Mostrador",
+    profileName: "Counter",
     roles: ["receipt", "payment_slip", "invoice"],
     departmentId: "d1",
-    departmentName: "Sala",
+    departmentName: "Dining room",
   },
   {
     printerId: "p1",
     pagePrinterId: null,
     profileId: "dp3",
-    profileName: "Pantalla cocina",
+    profileName: "Kitchen screen",
     roles: ["receipt"],
     departmentId: null,
     departmentName: null,
@@ -5003,16 +5003,16 @@ const usedByProfiles: PrinterProfileOffer[] = [
     printerId: "p2",
     pagePrinterId: null,
     profileId: "dp4",
-    profileName: "Terraza",
+    profileName: "Terrace",
     roles: ["receipt"],
     departmentId: "d2",
-    departmentName: "Terraza",
+    departmentName: "Terrace",
   },
 ];
 
 const usedByStations: PrinterStationName[] = [
-  { printerId: "p1", stationId: "s1", stationName: "Barra" },
-  { printerId: "p2", stationId: "s2", stationName: "Plancha" },
+  { printerId: "p1", stationId: "s1", stationName: "Bar" },
+  { printerId: "p2", stationId: "s2", stationName: "Grill" },
 ];
 
 async function openUsedBy(
@@ -5048,20 +5048,20 @@ it("says which profiles use the printer and for what, which departments they bel
     ),
   ).toEqual([
     fill("printers.used_by_profile", {
-      profile: "Camareros",
+      profile: "Waitstaff",
       uses: `${t("printers.use_receipt")}, ${t("printers.use_cash_drawer")}`,
     }),
     fill("printers.used_by_profile", {
-      profile: "Mostrador",
+      profile: "Counter",
       uses: `${t("printers.use_receipt")}, ${t("printers.use_payment_slip")}, ${t("printers.use_invoice")}`,
     }),
     fill("printers.used_by_profile", {
-      profile: "Pantalla cocina",
+      profile: "Kitchen screen",
       uses: t("printers.use_receipt"),
     }),
   ]);
-  expect(text(el, "[data-test=printer-used-by-departments]")).toBe("Sala");
-  expect(text(el, "[data-test=printer-used-by-stations]")).toBe("Barra");
+  expect(text(el, "[data-test=printer-used-by-departments]")).toBe("Dining room");
+  expect(text(el, "[data-test=printer-used-by-stations]")).toBe("Bar");
   expect(q(el, "[data-test=printer-used-by-nothing]")).toBeNull();
   expect(section.querySelector("a")).toBeNull();
 });
@@ -5071,15 +5071,15 @@ it("links each name to its screen only where the person may open it", async () =
   const section = q(el, "[data-test=printer-section-used-by]")!;
   const links = [...section.querySelectorAll("a")];
   expect(links.map((link) => [link.textContent!.trim(), link.getAttribute("href")])).toEqual([
-    ["Sala", "/manage/venue-operations/department/d1"],
+    ["Dining room", "/manage/venue-operations/department/d1"],
   ]);
   expect(text(el, "[data-test=printer-used-by-profile-dp1]")).toBe(
     fill("printers.used_by_profile", {
-      profile: "Camareros",
+      profile: "Waitstaff",
       uses: `${t("printers.use_receipt")}, ${t("printers.use_cash_drawer")}`,
     }),
   );
-  expect(text(el, "[data-test=printer-used-by-stations]")).toBe("Barra");
+  expect(text(el, "[data-test=printer-used-by-stations]")).toBe("Bar");
   cleanupWidgets();
 
   const all = await openUsedBy(() => true);
@@ -5089,11 +5089,11 @@ it("links each name to its screen only where the person may open it", async () =
       link.getAttribute("href"),
     ]),
   ).toEqual([
-    ["Camareros", "/manage/device-profiles/profile/dp1"],
-    ["Mostrador", "/manage/device-profiles/profile/dp2"],
-    ["Pantalla cocina", "/manage/device-profiles/profile/dp3"],
-    ["Sala", "/manage/venue-operations/department/d1"],
-    ["Barra", "/manage/prep-stations/view/stations"],
+    ["Waitstaff", "/manage/device-profiles/profile/dp1"],
+    ["Counter", "/manage/device-profiles/profile/dp2"],
+    ["Kitchen screen", "/manage/device-profiles/profile/dp3"],
+    ["Dining room", "/manage/venue-operations/department/d1"],
+    ["Bar", "/manage/prep-stations/view/stations"],
   ]);
 });
 
@@ -5158,9 +5158,9 @@ it("does not say nothing uses a printer while the stations are still being read"
     }),
   );
   expect(q(el, "[data-test=printer-used-by-nothing]")).toBeNull();
-  answer([{ printerId: "p1", stationId: "s1", stationName: "Barra" }]);
+  answer([{ printerId: "p1", stationId: "s1", stationName: "Bar" }]);
   await flush(el);
-  expect(text(el, "[data-test=printer-used-by-stations]")).toBe("Barra");
+  expect(text(el, "[data-test=printer-used-by-stations]")).toBe("Bar");
   expect(q(el, "[data-test=printer-used-by-nothing]")).toBeNull();
 });
 
@@ -5264,7 +5264,7 @@ it("keeps printer status live without replacing a name draft in the details form
   );
   cancelDetailsEdit(el);
   await flush(el);
-  expect(text(el, "[data-test=printer-status]")).toContain("Cocina agent");
+  expect(text(el, "[data-test=printer-status]")).toContain("Kitchen agent");
   expect(text(el, "[data-test=printer-status]")).toContain(
     formatRecentMinute("2026-09-26T16:00:00.000Z"),
   );
@@ -5288,7 +5288,7 @@ it("shows the newest observing agent even when discovery entries arrive out of o
         {
           ...device,
           agentId: "a2",
-          agentName: "Barra agent",
+          agentName: "Bar agent",
           lastSeenAt: "2026-09-26T13:00:00.000Z",
         },
         device,
@@ -5297,7 +5297,7 @@ it("shows the newest observing agent even when discovery entries arrive out of o
   });
   await flush(el);
   await filterPrinters(el, "all");
-  expect(text(el, "[data-test=printer-agent-p3]")).toBe("Barra agent");
+  expect(text(el, "[data-test=printer-agent-p3]")).toBe("Bar agent");
   expect(text(el, "[data-test=printer-last-seen-p3]")).toContain("2026-09-26 13:00");
 });
 
@@ -5783,10 +5783,10 @@ describe("printer setup refinements", () => {
     expect(q(el, '[name="printer-detail-local-key"]')).toBeNull();
     openDetailsEdit(el);
     await flush(el);
-    typeField(el, '[name="printer-detail-name"]', "Barra USB 2");
+    typeField(el, '[name="printer-detail-name"]', "Bar USB 2");
     saveDetailsEdit(el);
     await flush(el);
-    expect(api.updatePrinter).toHaveBeenCalledWith("p3", { name: "Barra USB 2" });
+    expect(api.updatePrinter).toHaveBeenCalledWith("p3", { name: "Bar USB 2" });
     expect(vi.mocked(api.updatePrinter).mock.calls[0]![1]).not.toHaveProperty("localKey");
   });
 
@@ -6267,7 +6267,7 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     history.pushState(null, "", "/manage/printers/view/printers/printer/p1");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
-    expect(detailsHeading(el)).toContain("Cocina");
+    expect(detailsHeading(el)).toContain("Kitchen");
     expect(q(el, "[data-test=new-printer-modal]")).not.toBeNull();
 
     vi.mocked(api.listPrinters).mockRejectedValue({ code: "connection.failed" });
@@ -6294,12 +6294,14 @@ describe("printers-screen tabs, tables and refresh edges", () => {
       ),
     );
     vi.mocked(api.listPrinters).mockResolvedValue(
-      printers.map((printer) => (printer.id === "p1" ? { ...printer, name: "Cocina 2" } : printer)),
+      printers.map((printer) =>
+        printer.id === "p1" ? { ...printer, name: "Kitchen 2" } : printer,
+      ),
     );
     api.liveData.refresh();
     await vi.waitFor(() => expect(q(el, "[data-test=printer-refresh-error]")).toBeNull());
     await flush(el);
-    expect(text(el, "[data-test=printer-row-p1]")).toBe("Cocina 2");
+    expect(text(el, "[data-test=printer-row-p1]")).toBe("Kitchen 2");
   });
 
   it("reads the discovered printers once the server answers again after a failed first load", async () => {
@@ -6323,7 +6325,7 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     await flush(el);
     expect(text(el, "[data-test=printer-last-seen-p1]")).toBe(
       t("printers.seen_at")
-        .replace("{agent}", "Cocina agent")
+        .replace("{agent}", "Kitchen agent")
         .replace("{time}", "2023-11-14 22:13"),
     );
   });
@@ -6419,11 +6421,11 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     const table = q(el, "[data-test=jobs-table]")!;
 
     await sortBy(el, table, "attempts");
-    expect(bodyRowTexts(table)).toEqual(["Nube", "Barra USB", "Cocina"]);
+    expect(bodyRowTexts(table)).toEqual(["Remote", "Bar USB", "Kitchen"]);
     await sortBy(el, table, "queued");
-    expect(bodyRowTexts(table)).toEqual(["Cocina", "Barra USB", "Nube"]);
+    expect(bodyRowTexts(table)).toEqual(["Kitchen", "Bar USB", "Remote"]);
     await sortBy(el, table, "delivered");
-    expect(bodyRowTexts(table)).toEqual(["Cocina", "Nube", "Barra USB"]);
+    expect(bodyRowTexts(table)).toEqual(["Kitchen", "Remote", "Bar USB"]);
   });
 });
 
@@ -6525,16 +6527,16 @@ describe("printers-screen discovery and add edges", () => {
     q(el, "[data-test=register-SN-2]")!.click();
     await flush(el);
     expect((q(el, "[data-test=discovered-name-SN-2]") as unknown as { value: string }).value).toBe(
-      "Barra USB",
+      "Bar USB",
     );
 
-    typeField(el, "[data-test=discovered-name-SN-2]", "Barra nueva");
+    typeField(el, "[data-test=discovered-name-SN-2]", "New bar");
     q(el, "[data-test=confirm-add-printer]")!.click();
 
     await vi.waitFor(() =>
       expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", {
         active: true,
-        name: "Barra nueva",
+        name: "New bar",
       }),
     );
     expect(api.createPrinter).not.toHaveBeenCalled();
@@ -6643,7 +6645,7 @@ describe("printers-screen printer editor edges", () => {
     await flush(el);
     openDetailsEdit(el);
     await flush(el);
-    typeField(el, '[name="printer-detail-name"]', "Barra nueva");
+    typeField(el, '[name="printer-detail-name"]', "New bar");
     await flush(el);
 
     staleName.dispatchEvent(
@@ -6652,7 +6654,7 @@ describe("printers-screen printer editor edges", () => {
     saveDetailsEdit(el);
 
     await vi.waitFor(() =>
-      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { name: "Barra nueva" }),
+      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { name: "New bar" }),
     );
   });
 
@@ -6663,7 +6665,7 @@ describe("printers-screen printer editor edges", () => {
     await flush(el);
     openDetailsEdit(el);
     await flush(el);
-    typeField(el, '[name="printer-detail-name"]', "Cocina 2");
+    typeField(el, '[name="printer-detail-name"]', "Kitchen 2");
     await flush(el);
     const staleSave = detailsEditButton(el, "save")!;
     cancelDetailsEdit(el);
@@ -7197,15 +7199,15 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     });
     openDetailsEdit(el);
     await flush(el);
-    typeField(el, '[name="printer-detail-name"]', "Cocina 2");
+    typeField(el, '[name="printer-detail-name"]', "Kitchen 2");
     saveDetailsEdit(el);
     await flush(el);
     expect(await detailsBottom(el)).toBe(codeMessage("printer.not_found"));
     expect(detailsEditButton(el, "save")!.hasAttribute("disabled")).toBe(false);
     saveDetailsEdit(el);
     await flush(el);
-    expect(api.updatePrinter).toHaveBeenNthCalledWith(1, "p1", { name: "Cocina 2" });
-    expect(api.updatePrinter).toHaveBeenNthCalledWith(2, "p1", { name: "Cocina 2" });
+    expect(api.updatePrinter).toHaveBeenNthCalledWith(1, "p1", { name: "Kitchen 2" });
+    expect(api.updatePrinter).toHaveBeenNthCalledWith(2, "p1", { name: "Kitchen 2" });
   });
 
   it("starts the details form afresh when it is reopened", async () => {
@@ -7226,12 +7228,12 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     openDetailsEdit(el);
     await flush(el);
     expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
-      "Cocina",
+      "Kitchen",
     );
     expect(errorOf(el, '[name="printer-detail-name"]')).toBe("");
     expect(await detailsBottom(el)).toBe("");
     expect(detailsEditButton(el, "save")!.hasAttribute("disabled")).toBe(true);
-    typeField(el, '[name="printer-detail-name"]', "Cocina 2");
+    typeField(el, '[name="printer-detail-name"]', "Kitchen 2");
     await flush(el);
     expect(detailsEditButton(el, "save")!.hasAttribute("disabled")).toBe(false);
   });
@@ -7398,7 +7400,7 @@ describe("printers-screen Bluetooth pairing", () => {
   const PIN = "8472";
   const barPrinter: DiscoveredPrinter = {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "bluetooth",
     localKey: ADDRESS,
     name: "Bar printer",
@@ -8479,7 +8481,7 @@ describe("printers-screen Bluetooth pairing", () => {
           {
             ...barPrinter,
             agentId: "a2",
-            agentName: "Barra agent",
+            agentName: "Bar agent",
             alreadyRegistered: true,
             printerId: "p8",
           },
@@ -9547,7 +9549,7 @@ describe("printers-screen Bluetooth pairing", () => {
     });
 
     it("offers Unpair again toward an agent still reporting the pairing another agent unpaired", async () => {
-      const fromB: DiscoveredPrinter = { ...reported, agentId: "b2", agentName: "Barra agent" };
+      const fromB: DiscoveredPrinter = { ...reported, agentId: "b2", agentName: "Bar agent" };
       const { el, api } = await mountForget(
         [
           [{ ...fromB, bluetoothCommand: finishedCommand("forget", "succeeded") }, reported],
@@ -9642,7 +9644,7 @@ describe("Bluetooth calibration transport outcomes", () => {
   const bluetoothPrinter: Printer = {
     ...printers[0]!,
     id: "p5",
-    name: "Barra Bluetooth",
+    name: "Bar Bluetooth",
     transport: "bluetooth",
     host: null,
     port: null,
@@ -9651,7 +9653,7 @@ describe("Bluetooth calibration transport outcomes", () => {
   const job = (over: Partial<PrintJobRow>): PrintJobRow => ({
     id: "j11",
     printerId: "p5",
-    printerName: "Barra Bluetooth",
+    printerName: "Bar Bluetooth",
     status: "queued",
     canResend: false,
     attempts: 0,
@@ -9986,7 +9988,7 @@ describe("A job ended because its printer was unpaired", () => {
   const bluetoothPrinter: Printer = {
     ...printers[0]!,
     id: "p5",
-    name: "Barra Bluetooth",
+    name: "Bar Bluetooth",
     transport: "bluetooth",
     host: null,
     port: null,
@@ -9995,7 +9997,7 @@ describe("A job ended because its printer was unpaired", () => {
   const unpaired: PrintJobRow = {
     id: "j11",
     printerId: "p5",
-    printerName: "Barra Bluetooth",
+    printerName: "Bar Bluetooth",
     status: "failed",
     canResend: true,
     attempts: 5,
@@ -10115,7 +10117,7 @@ describe("Print test page in a printer's row menu", () => {
     const notice = q(el, sel("print-test-page-notice")) as HTMLElement & { duration: number };
     expect(notice.localName).toBe("wt-notice");
     expect(notice.textContent!.trim()).toBe(
-      t("printers.test_page_sent").replace("{name}", "Cocina"),
+      t("printers.test_page_sent").replace("{name}", "Kitchen"),
     );
     expect(notice.duration).toBeGreaterThan(0);
     expect(q(el, "[role=alert]")).toBeNull();
@@ -10173,9 +10175,9 @@ describe("portable printers and their equipment label", () => {
   const portable: Printer = {
     ...printers[0]!,
     id: PORTABLE_ID,
-    name: "Mano de sala",
+    name: "Floor handheld",
     portable: true,
-    holder: { deviceId: "d7", deviceName: "Móvil 2", personName: "Ana" },
+    holder: { deviceId: "d7", deviceName: "Mobile 2", personName: "Ana" },
   };
 
   async function openDetails(api: DashboardApi, id: string): Promise<PrintersScreen> {
@@ -10250,7 +10252,7 @@ describe("portable printers and their equipment label", () => {
     const el = await openDetails(api, PORTABLE_ID);
     expect(text(el, "[data-test=printer-portable]")).toBe(t("printers.yes"));
     expect(text(el, "[data-test=printer-holder]")).toBe(
-      t("equipment.holder_with_person").replace("{device}", "Móvil 2").replace("{person}", "Ana"),
+      t("equipment.holder_with_person").replace("{device}", "Mobile 2").replace("{person}", "Ana"),
     );
   });
 
@@ -10274,7 +10276,7 @@ describe("portable printers and their equipment label", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=equipment-label-qr]")).not.toBeNull());
     const code = formatEquipmentCode("printer", PORTABLE_ID);
     expect(text(el, "[data-test=equipment-label-code]")).toBe(code);
-    expect(text(el, "[data-test=equipment-label-name]")).toBe("Mano de sala");
+    expect(text(el, "[data-test=equipment-label-name]")).toBe("Floor handheld");
     const qr = q(el, "[data-test=equipment-label-qr]") as HTMLImageElement;
     expect(await decodeQrImage(qr.src)).toBe(code);
   });
@@ -10294,7 +10296,7 @@ describe("portable printers and their equipment label", () => {
     expect(print).toHaveBeenCalledExactlyOnceWith({
       qr: (q(el, "[data-test=equipment-label-qr]") as HTMLImageElement).src,
       code: formatEquipmentCode("printer", PORTABLE_ID),
-      name: "Mano de sala",
+      name: "Floor handheld",
     });
   });
 });
@@ -10555,7 +10557,7 @@ describe("Deleting a printer", () => {
   // The shape `printerDeleteRules` (apps/server/src/printer-delete.ts) answers for a portable
   // drawer printer that a handheld chooses, a till inherits through its profile's defaults, and a
   // station prints to.
-  const kitchenImpact = impactOf("p1", "Cocina", {
+  const kitchenImpact = impactOf("p1", "Kitchen", {
     ends: [
       { key: "print_jobs", count: 3, targets: [] },
       { key: "invoice_receipts", count: 1, targets: [] },
@@ -10563,8 +10565,8 @@ describe("Deleting a printer", () => {
     ],
     removes: [
       { key: "device_cash_drawer", count: 1, targets: [{ id: "d-ana", name: "Handheld Ana" }] },
-      { key: "profile_cash_drawer", count: 1, targets: [{ id: "dp1", name: "Camareros" }] },
-      { key: "profile_cash_drawer_default", count: 1, targets: [{ id: "dp1", name: "Camareros" }] },
+      { key: "profile_cash_drawer", count: 1, targets: [{ id: "dp1", name: "Waitstaff" }] },
+      { key: "profile_cash_drawer_default", count: 1, targets: [{ id: "dp1", name: "Waitstaff" }] },
       { key: "device_cash_drawer_default", count: 1, targets: [{ id: "d-bar", name: "Bar till" }] },
       { key: "station_printers", count: 1, targets: [{ id: "s1", name: "Grill" }] },
     ],
@@ -10660,8 +10662,8 @@ describe("Deleting a printer", () => {
       "1 recibo de factura sin imprimir",
       "Handheld Ana deja de llevarla",
       "Cajón de 1 dispositivo: Handheld Ana",
-      "Cajón en 1 perfil: Camareros",
-      "Cajón predeterminado de 1 perfil: Camareros",
+      "Cajón en 1 perfil: Waitstaff",
+      "Cajón predeterminado de 1 perfil: Waitstaff",
       "Cajón predeterminado que usa 1 dispositivo: Bar till",
       "Imprime para 1 estación: Grill",
     ]);
@@ -10671,7 +10673,7 @@ describe("Deleting a printer", () => {
   it("draws a target's name as text, not markup", async () => {
     const { el } = await mounted({
       getPrinterDeleteImpact: vi.fn(async () =>
-        impactOf("p1", "Cocina", {
+        impactOf("p1", "Kitchen", {
           removes: [
             { key: "station_printers", count: 1, targets: [{ id: "s1", name: "<b>Grill</b>" }] },
           ],
@@ -10890,7 +10892,7 @@ describe("Deleting a printer", () => {
     expect(dialogOf(el)!.loading).toBe(true);
     expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
 
-    reads.get("p2")!.resolve(impactOf("p2", "Nube"));
+    reads.get("p2")!.resolve(impactOf("p2", "Remote"));
     await flush(el);
     expect(dialogOf(el)!.impact?.target.id).toBe("p2");
     confirmOf(el).click();
@@ -10904,7 +10906,7 @@ describe("Deleting a printer", () => {
       getPrinterDeleteImpact: vi
         .fn()
         .mockReturnValueOnce(first.promise)
-        .mockResolvedValueOnce(impactOf("p2", "Nube")),
+        .mockResolvedValueOnce(impactOf("p2", "Remote")),
     });
     await openDelete(el, "p1");
     await cancelDelete(el);
@@ -10932,9 +10934,9 @@ describe("Deleting a printer", () => {
     first.resolve(kitchenImpact);
     await flush(el);
     expect(dialogOf(el)!.impact).toBeNull();
-    second.resolve(impactOf("p1", "Cocina"));
+    second.resolve(impactOf("p1", "Kitchen"));
     await flush(el);
-    expect(dialogOf(el)!.impact).toEqual(impactOf("p1", "Cocina"));
+    expect(dialogOf(el)!.impact).toEqual(impactOf("p1", "Kitchen"));
   });
 
   it("a delete still out when its dialog was torn down does not touch the next printer's dialog", async () => {
@@ -10945,7 +10947,7 @@ describe("Deleting a printer", () => {
       deletePrinter: vi
         .fn()
         .mockReturnValueOnce(sent.promise)
-        .mockResolvedValue(impactOf("p2", "Nube")),
+        .mockResolvedValue(impactOf("p2", "Remote")),
     } as Partial<DashboardApi>);
     await openDelete(el, "p1");
     confirmOf(el).click();
@@ -11126,7 +11128,7 @@ describe("Deleting a printer", () => {
     expect(dialogOf(el)!.loading).toBe(true);
     expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
 
-    reads.get("p2")!.resolve(impactOf("p2", "Nube"));
+    reads.get("p2")!.resolve(impactOf("p2", "Remote"));
     await flush(el);
     expect(dialogOf(el)!.impact?.target.id).toBe("p2");
     confirmOf(el).click();
@@ -11290,7 +11292,7 @@ describe("Deleting a printer", () => {
         const ended: PrintJobRow = {
           id: "j30",
           printerId: "p-gone",
-          printerName: "Barra vieja",
+          printerName: "Old counter",
           status: "failed",
           canResend: false,
           attempts: 5,
@@ -11300,7 +11302,7 @@ describe("Deleting a printer", () => {
         };
         const { el } = await mounted({ listRecentJobs: vi.fn().mockResolvedValue([ended]) });
         await selectTab(el, "queue");
-        expect(text(el, "[data-test=job-printer-j30]")).toBe("Barra vieja");
+        expect(text(el, "[data-test=job-printer-j30]")).toBe("Old counter");
         expect(text(el, "[data-test=job-error-j30]")).toBe(reason);
         expect(text(el, "[data-test=job-attempts-j30]")).toBe("—");
         expect(q(el, "[data-test=resend-job-j30]")).toBeNull();
@@ -11346,7 +11348,7 @@ describe("Deleting a printer", () => {
         const ended: PrintJobRow = {
           id: "j31",
           printerId: "p-gone",
-          printerName: "Barra vieja",
+          printerName: "Old counter",
           status: "failed",
           canResend: false,
           attempts: 5,
@@ -11406,7 +11408,7 @@ describe("office printers in discovery", () => {
   };
   const office = (overrides: Partial<DiscoveredPrinter> = {}): DiscoveredPrinter => ({
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "network_tcp",
     host: "10.0.0.56",
     port: 9100,
@@ -11430,7 +11432,7 @@ describe("office printers in discovery", () => {
     resolutionDpi: 600,
     active: true,
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
   };
 
   async function mountWith(devices: DiscoveredPrinter[], overrides: Partial<DashboardApi> = {}) {
@@ -11598,7 +11600,7 @@ describe("office printers in discovery", () => {
           [
             office(),
             office({ host: "10.0.0.57" }),
-            office({ host: "10.0.0.58", agentId: "a2", agentName: "Barra agent" }),
+            office({ host: "10.0.0.58", agentId: "a2", agentName: "Bar agent" }),
             office({ host: "10.0.0.59" }),
             office({ host: "10.0.0.60", officeLent: true }),
           ],
@@ -11691,7 +11693,7 @@ describe("office printers in discovery", () => {
   });
 
   it("puts an agent name holding a replacement pattern into the add dialog's description as written", async () => {
-    const agentName = "Cocina $& agent";
+    const agentName = "Kitchen $& agent";
     const { el } = await mountWith([office({ agentName })], {
       listPagePrinters: vi.fn().mockResolvedValue([]),
     });
@@ -11715,7 +11717,7 @@ describe("office printers in discovery", () => {
     expect(field.required).toBe(true);
     expect(field.value).toBe("HP LaserJet");
     expect(text(el, "[data-test=page-printer-add-modal] p")).toBe(
-      `HP LaserJet · 10.0.0.56:631/ipp/print · ${t("printers.discovered_seen_on").replace("{agent}", "Cocina agent")}`,
+      `HP LaserJet · 10.0.0.56:631/ipp/print · ${t("printers.discovered_seen_on").replace("{agent}", "Kitchen agent")}`,
     );
     expect(isDisabled(el, "[data-test=confirm-add-page-printer]")).toBe(false);
     expect(q(el, "[data-test=confirm-add-page-printer]")!.getAttribute("variant")).toBe("primary");
@@ -12033,7 +12035,7 @@ describe("one table for every printer", () => {
       media: "na_letter_8.5x11in",
     }),
   ];
-  const narrow: Printer = { ...printers[0]!, id: "p5", name: "Barra 58", paperWidth: "58mm" };
+  const narrow: Printer = { ...printers[0]!, id: "p5", name: "Bar 58", paperWidth: "58mm" };
 
   async function mountTable(
     overrides: Partial<DashboardApi> = {},
@@ -12161,7 +12163,7 @@ describe("one table for every printer", () => {
     await flush(el);
     q(el, "[data-test=printer-row-p1]")!.click();
     await flush(el);
-    expect(detailsHeading(el)).toBe("Cocina");
+    expect(detailsHeading(el)).toBe("Kitchen");
     expect(q(el, "[data-test=printer-details-modal]")).toBe(modal(el));
     expect(inDetails(el, "[data-test=printer-status]")).not.toBeNull();
   });
@@ -12463,7 +12465,7 @@ describe("an A4 printer's details", () => {
     resolutionDpi: 600,
     active: true,
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
   };
   const invoiceProfiles: PrinterProfileOffer[] = [
     ...printerProfiles,
@@ -12471,7 +12473,7 @@ describe("an A4 printer's details", () => {
       printerId: null,
       pagePrinterId: "pp1",
       profileId: "dp3",
-      profileName: "Oficina",
+      profileName: "Office",
       roles: ["invoice"],
       departmentId: null,
       departmentName: null,
@@ -12480,7 +12482,7 @@ describe("an A4 printer's details", () => {
       printerId: null,
       pagePrinterId: "pp2",
       profileId: "dp4",
-      profileName: "Terraza",
+      profileName: "Terrace",
       roles: ["invoice"],
       departmentId: null,
       departmentName: null,
@@ -12526,7 +12528,7 @@ describe("an A4 printer's details", () => {
     const { el } = await openA4();
     expect(detailsHeading(el)).toBe("Back office");
     expect((modal(el) as unknown as { open: boolean }).open).toBe(true);
-    expect(detailText(el, "[data-test=page-printer-detail-agent]")).toBe("Cocina agent");
+    expect(detailText(el, "[data-test=page-printer-detail-agent]")).toBe("Kitchen agent");
     expect(detailText(el, "[data-test=page-printer-detail-address]")).toBe(
       "10.0.0.56:631/ipp/print",
     );
@@ -12541,7 +12543,7 @@ describe("an A4 printer's details", () => {
         line.textContent!.trim(),
       ),
     ).toEqual([
-      fill("printers.used_by_profile", { profile: "Oficina", uses: t("printers.use_invoice") }),
+      fill("printers.used_by_profile", { profile: "Office", uses: t("printers.use_invoice") }),
     ]);
     for (const absent of [
       "calibrate-printer-details",
@@ -12992,7 +12994,7 @@ describe("literal translated printer labels", () => {
 describe("the Add a printer dialog's discovered rows", () => {
   const officePrinter: DiscoveredPrinter = {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "network_tcp",
     host: "192.168.10.30",
     port: 631,
@@ -13016,7 +13018,7 @@ describe("the Add a printer dialog's discovered rows", () => {
   };
   const pairedBluetooth: DiscoveredPrinter = {
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "bluetooth",
     localKey: "00:11:22:33:44:55",
     name: "BlueTooth Printer",
@@ -13087,7 +13089,7 @@ describe("the Add a printer dialog's discovered rows", () => {
 describe("the name dialogs open with the found name filled in and selected", () => {
   const network = (overrides: Partial<DiscoveredPrinter>): DiscoveredPrinter => ({
     agentId: "a1",
-    agentName: "Cocina agent",
+    agentName: "Kitchen agent",
     transport: "network_tcp",
     host: "192.168.10.30",
     port: 9100,
@@ -13247,7 +13249,7 @@ describe("the printer details' footer and its one Edit form", () => {
       }),
     });
     await pressEdit(el);
-    expect(fieldValue(el, "printer-detail-name")).toBe("Cocina");
+    expect(fieldValue(el, "printer-detail-name")).toBe("Kitchen");
     expect(fieldValue(el, "printer-detail-host")).toBe("10.0.0.9");
     expect(fieldValue(el, "printer-detail-port")).toBe("9100");
     expect(q(el, "[data-test=printer-section-status]")).toBeNull();
@@ -13270,7 +13272,7 @@ describe("the printer details' footer and its one Edit form", () => {
     const bluetooth: Printer = {
       ...printers[2]!,
       id: "p8",
-      name: "Barra BT",
+      name: "Bar BT",
       transport: "bluetooth",
     };
     for (const id of ["p2", "p3", "p8"]) {
@@ -13291,7 +13293,7 @@ describe("the printer details' footer and its one Edit form", () => {
     const { el } = await mountSharedPrinter(api);
     await flush(el);
     await pressEdit(el);
-    typeField(el, '[name="printer-detail-name"]', "Otra");
+    typeField(el, '[name="printer-detail-name"]', "Other");
     typeField(el, '[name="printer-detail-host"]', "10.0.0.50");
     await flush(el);
     q(el, "[data-test=cancel-printer-details]")!.click();
@@ -13300,7 +13302,7 @@ describe("the printer details' footer and its one Edit form", () => {
     expect(q(el, '[name="printer-detail-name"]')).toBeNull();
     expect(text(el, "[data-test=printer-detail-address]")).toBe("10.0.0.9:9100");
     await pressEdit(el);
-    expect(fieldValue(el, "printer-detail-name")).toBe("Cocina");
+    expect(fieldValue(el, "printer-detail-name")).toBe("Kitchen");
     expect(fieldValue(el, "printer-detail-host")).toBe("10.0.0.9");
     expect(api.updatePrinter).not.toHaveBeenCalled();
   });
@@ -13323,13 +13325,13 @@ describe("the printer details' footer and its one Edit form", () => {
       updatePrinter: vi.fn().mockRejectedValue({ code: "printer.invalid_config" }),
     });
     await pressEdit(el);
-    typeField(el, '[name="printer-detail-name"]', "Cocina 2");
+    typeField(el, '[name="printer-detail-name"]', "Kitchen 2");
     await flush(el);
     saveButton(el)!.click();
     await vi.waitFor(async () =>
       expect(await bottomOf(el, footer)).toBe(codeMessage("printer.invalid_config")),
     );
-    expect(fieldValue(el, "printer-detail-name")).toBe("Cocina 2");
+    expect(fieldValue(el, "printer-detail-name")).toBe("Kitchen 2");
     expect(errorOf(el, '[name="printer-detail-name"]')).toBe("");
     expect(saveButton(el)!.disabled).toBe(false);
     saveButton(el)!.click();
