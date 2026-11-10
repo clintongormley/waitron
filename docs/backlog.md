@@ -1451,8 +1451,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Contrast pass** (bundle of 2, 1 important, size S). [Detail](backlog/dashboard.md#bundle-contrast-pass)
 
-- **Wt popups** (bundle of 3, size S). Holds A625, A903 and the combobox aria-required check. [Detail](backlog/dashboard.md#bundle-wt-popups)
-
 - **Theme logo** (bundle of 2, size M). [Detail](backlog/dashboard.md#bundle-theme-logo)
 
 - **Help tooltip primitive** (bundle of 2, size S). Holds A1244, A1247. [Detail](backlog/dashboard.md#bundle-help-tooltip-primitive)
@@ -1558,11 +1556,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **A deployment that overrides `--wt-color-primary` or `--wt-color-danger` by hand keeps Waitron's
   default hover, text and disabled colours, and no theme writes the danger ones**
   [Detail](backlog/dashboard.md#a-deployment-that-overrides---wt-color-primary-or---wt-color-danger-by-hand-keeps-waitrons-default-hover-text-and-disabled-colours)
-
-- **A541. A `wt-disclosure` reopened after an animated close snaps open with no animation** — OPEN,
-  found by A539's mutation tests, not fixed. The close sets `body.hidden` behind Lit's back, so the
-  reopen measures a hidden body and unhides it at once (`packages/ui/src/components/wt-disclosure.ts`).
-  [Detail](backlog/dashboard.md#a541-a-wt-disclosure-reopened-after-an-animated-close-snaps-open-with-no-animation)
 
 ### Interface languages
 

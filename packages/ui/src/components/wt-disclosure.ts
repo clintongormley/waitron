@@ -225,6 +225,7 @@ export class WtDisclosure extends LitElement {
     }
     if (!changed.has("open")) return;
     const body = this.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    body.hidden = false;
     const generation = ++this.animationGeneration;
     cancelAnimationFrame(this.animationFrame);
     const height = this.openingFromHidden ? 0 : body.getBoundingClientRect().height;

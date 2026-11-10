@@ -96,6 +96,14 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
+  test("open, required, without search", async () => {
+    await openThemed(
+      '<wt-combobox label="Dietary tags" required search="never"></wt-combobox>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   test("open with results", async () => {
     const el = (await mountThemed(
       '<wt-combobox label="Dietary tags"></wt-combobox>',

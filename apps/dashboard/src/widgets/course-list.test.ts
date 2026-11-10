@@ -1194,6 +1194,13 @@ describe("layout", () => {
         const handle = q(el, '[data-test="drag-c1"]')!;
 
         expect(window.innerWidth).toBe(frame);
+        const tableRight = q(el, ".table-wrap")!.getBoundingClientRect().right;
+        for (const action of el.shadowRoot!.querySelectorAll("wt-row-actions")) {
+          const trigger = action.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+          expect(trigger.width).toBeGreaterThan(0);
+          expect(trigger.right).toBeLessThanOrEqual(tableRight);
+          expect(trigger.right).toBeLessThanOrEqual(window.innerWidth);
+        }
         expect(row.getBoundingClientRect().height).toBeGreaterThan(
           handle.getBoundingClientRect().height * 1.5,
         );
@@ -1246,6 +1253,13 @@ describe("layout", () => {
         const menu = middle(row.querySelector("wt-row-actions")!.getBoundingClientRect());
 
         expect(window.innerWidth).toBe(frame);
+        const tableRight = q(el, ".table-wrap")!.getBoundingClientRect().right;
+        for (const action of el.shadowRoot!.querySelectorAll("wt-row-actions")) {
+          const trigger = action.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+          expect(trigger.width).toBeGreaterThan(0);
+          expect(trigger.right).toBeLessThanOrEqual(tableRight);
+          expect(trigger.right).toBeLessThanOrEqual(window.innerWidth);
+        }
         expect(refusal.textContent).toBe(t("kitchen.course_name_required"));
         expect(refusal.getBoundingClientRect().top).toBeGreaterThanOrEqual(fieldBox.bottom);
         expect(row.getBoundingClientRect().height).toBeGreaterThan(

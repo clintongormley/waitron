@@ -149,6 +149,16 @@ test("the body moves through intermediate heights while opening and closing", as
   expect(body.getBoundingClientRect().height).toBeLessThan(200);
   await finishHeightTransition(body, closing);
   expect(body.hidden).toBe(true);
+  header.click();
+  await disclosure.updateComplete;
+  const reopening = await pauseHeightTransition(body, closing);
+  reopening.currentTime = Number(reopening.effect!.getTiming().duration) / 2;
+  expect(body.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(body.getBoundingClientRect().height).toBeLessThan(200);
+  await finishHeightTransition(body, reopening);
+  expect(body.hidden).toBe(false);
+  expect(body.inert).toBe(false);
+  expect(body.getBoundingClientRect().height).toBe(200);
 });
 
 test("rapid toggles settle at the last state and keep closed content out of focus", async () => {
