@@ -83,11 +83,8 @@ it("tracks the trimmed note against an empty one", async () => {
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
-it.each([
-  ["handle", "escape"],
-  ["note", "escape"],
-] as const)(
-  "%s mode: closing by %s with a typed note asks, Keep keeps it, Discard closes",
+it.each(["handle", "note"] as const)(
+  "%s mode: Escape with a typed note asks, Keep keeps it, Discard closes",
   async (mode) => {
     const { app, form, dialog, input } = await fixture(mode);
     await edit(form, "Adviser said fine");

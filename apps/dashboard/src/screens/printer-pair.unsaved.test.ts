@@ -210,7 +210,7 @@ it("a refused Bluetooth request retains its exact dirty proof", async () => {
   await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
 });
-for (const route of ["escape"] as const) {
+for (const route of ["cancel", "escape"] as const) {
   it(`submitted Bluetooth request retains its existing ${route} and late command result`, async () => {
     let finish!: (value: { command: typeof command }) => void;
     let received: unknown;
@@ -226,7 +226,8 @@ for (const route of ["escape"] as const) {
     q(screen, "[data-test=confirm-pair]")!.click();
     await expect.poll(() => field(screen)?.disabled).toBe(true);
     expect(received).toEqual(["a1", address, "A?8"]);
-    await userEvent.keyboard("{Escape}");
+    if (route === "cancel") q(screen, "[data-test=cancel-pair]")!.click();
+    else await userEvent.keyboard("{Escape}");
     await expect.poll(() => modal(screen)).toBeNull();
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     expect(unload()).toBe(false);

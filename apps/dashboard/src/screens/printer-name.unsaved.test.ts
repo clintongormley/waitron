@@ -176,7 +176,7 @@ it("a refused registration keeps the disabled-while-writing name dirty", async (
   await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
 });
-for (const route of ["escape"] as const) {
+for (const route of ["cancel", "escape"] as const) {
   it(`registration in flight retains its existing ${route} and completed result`, async () => {
     let finish!: (value: { id: string }) => void;
     const { app, screen } = await mount({
