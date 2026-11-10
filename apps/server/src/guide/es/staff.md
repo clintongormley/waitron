@@ -118,3 +118,14 @@ y **Configuración que se elimina** cuando aparezcan esas secciones antes de con
 ## Horas y descansos {#hours}
 
 Usa **Iniciar descanso** y **Terminar descanso** para una pausa durante tu turno. Usa **Fichar salida** cuando termines de trabajar.
+
+Si falta un fichaje o su hora es incorrecta, elige **Corregir mis horas** en el menú de tu nombre.
+En un dispositivo de mano, abre **Más** si tu nombre está ahí. La opción aparece cuando puedes
+fichar. Elige la **Fecha** y pulsa **Corregir hora** junto a un fichaje, o **Fichar entrada**,
+**Fichar salida**, **Iniciar descanso** o **Terminar descanso** para añadir uno que falta.
+También puedes añadir juntos la entrada y la salida que faltan, o el inicio y el fin de un descanso.
+
+Introduce las fechas y horas reales y un **Motivo**, y pulsa **Guardar** para registrar tu
+solicitud. Pide a otro supervisor, gerente o administrador que elija **Aprobar con PIN**,
+seleccione su nombre e introduzca su PIN. Si eres administrador, puedes aprobar tu propia
+solicitud. Consulta su estado en **Mis horas**.
