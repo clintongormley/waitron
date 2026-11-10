@@ -2,7 +2,7 @@ import multicastDns from "multicast-dns";
 import type { Logger } from "./logger.js";
 import { isLoopbackHost } from "./primary-url.js";
 
-// A thin mDNS responder so a box answers to `waitron.local` on the LAN. It only answers; it never
+// A thin mDNS responder so a box answers to its names on the LAN. It only answers; it never
 // queries and holds no cache.
 
 /** One mDNS answer record — the subset of multicast-dns's ResourceRecord this module emits. */
@@ -32,8 +32,8 @@ export interface MdnsResponder {
 export interface MdnsDeps {
   devMode: boolean;
   httpHost: string;
-  /** The name to answer for, e.g. "waitron.local". */
-  hostname: string;
+  /** The names to answer for, read per query so a name dropped from the list stops being answered. */
+  names: () => readonly string[];
   /** Current box IPv4s, read per query (not cached) so a DHCP change is reflected. */
   getAddresses: () => string[];
   log: Logger;
@@ -55,16 +55,17 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
   if (deps.devMode || isLoopbackHost(deps.httpHost)) {
     return { stop: () => Promise.resolve() };
   }
-  const { hostname, getAddresses, log } = deps;
+  const { names, getAddresses, log } = deps;
   const makeSocket = deps.makeSocket ?? (() => multicastDns() as MdnsSocket);
   const socket = makeSocket();
 
   socket.on("query", (query) => {
-    const wantsUs = query.questions.some(
-      (q) => q.name === hostname && (q.type === "A" || q.type === "ANY"),
+    const ours = names();
+    const asked = query.questions.find(
+      (q) => ours.includes(q.name) && (q.type === "A" || q.type === "ANY"),
     );
-    if (!wantsUs) return;
-    const answers = buildMdnsAnswers(hostname, getAddresses());
+    if (asked === undefined) return;
+    const answers = buildMdnsAnswers(asked.name, getAddresses());
     if (answers.length === 0) return;
     socket.respond({ answers });
   });
@@ -74,7 +75,7 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
     log("warn", "mdns.socket_error", { message: err.message });
   });
 
-  log("info", "mdns.responding", { hostname });
+  log("info", "mdns.responding", { hostnames: [...names()] });
 
   let stopped = false;
   return {

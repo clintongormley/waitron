@@ -71,7 +71,7 @@ const REVIEWED_TYPES: ReadonlyMap<string, string> = new Map([
 
 const HARMLESS_LOG_FIELDS: ReadonlyMap<string, string> = new Map([
   ["discovery.mounted.hostname", "the box's own host name"],
-  ["mdns.responding.hostname", "the box's own host name"],
+  ["mdns.responding.hostnames", "the box's own host names"],
   ["recovery.venue_held.holderKind", "an enum of which process holds the venue folder"],
   ["recovery.venue_holder_stalled.holderKind", "an enum of which process holds the venue folder"],
   [

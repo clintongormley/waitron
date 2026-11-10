@@ -38,6 +38,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
 import { get } from "node:https";
+import type { MdnsAnswer, MdnsSocket } from "./mdns.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -46,6 +47,23 @@ vi.mock("@hono/node-server", async () => {
 
 const { beforeServerStarts, startServer, startConfiguredServer, httpPort } =
   ephemeralServerFixture();
+
+function fakeMdnsSocket() {
+  let onQuery: ((query: { questions: { name: string; type: string }[] }) => void) | undefined;
+  const responses: { answers: MdnsAnswer[] }[] = [];
+  const socket: MdnsSocket = {
+    on: ((event: string, handler: never) => {
+      if (event === "query") onQuery = handler;
+    }) as MdnsSocket["on"],
+    respond: (response) => responses.push(response),
+    destroy: (cb) => cb?.(),
+  };
+  return {
+    socket,
+    query: (name: string) => onQuery?.({ questions: [{ name, type: "A" }] }),
+    answered: () => [...new Set(responses.flatMap((r) => r.answers.map((a) => a.name)))],
+  };
+}
 
 // Mirror-mode server boot. A mirror reads its origin, relay and CA from node.db's
 // `node_mirror_link`. Four venue directories: `mirror` (read-only, refuses writes); `primary`, the
@@ -658,6 +676,34 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       expect(await read.json()).toMatchObject({ error: { code: "node.spare", params: {} } });
     } finally {
       await server.close();
+    }
+  }, 60_000);
+
+  it("a mirror start answers only its own name (control: the same identity as primary answers the venue's too)", async () => {
+    for (const [venue, answered] of [
+      ["mirror", ["box-3333.waitron.local"]],
+      ["primary", ["box-3333.waitron.local", "waitron.local"]],
+    ] as const) {
+      const mdns = fakeMdnsSocket();
+      const server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: venueDir[venue],
+          WAITRON_HTTP_HOST: "0.0.0.0",
+          WAITRON_MIRROR_ALLOW_EXPOSED: "true",
+          WAITRON_HTTP_PORT: String(await freePort()),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        },
+        {},
+        { mdnsSocket: () => mdns.socket },
+      );
+      try {
+        const asked = ["box-3333.waitron.local", "waitron.local", "box-7777.waitron.local"];
+        for (const name of asked) mdns.query(name);
+        expect({ venue, answered: mdns.answered() }).toEqual({ venue, answered });
+      } finally {
+        await server.close();
+      }
     }
   }, 60_000);
 

@@ -346,7 +346,8 @@ import { accountPurposeKey, resolveAccountKey } from "./account-key.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { mountGuidePages } from "./guide-pages.js";
-import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
+import { startMdnsResponder, type MdnsResponder, type MdnsSocket } from "./mdns.js";
+import { boxHostnameFor } from "./box-name.js";
 import { startMenuActivation } from "./menu-activation.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { readBoxCaFingerprint } from "./box-tls-repair.js";
@@ -978,6 +979,8 @@ export interface StartServerSeams {
    * carry-on request counts as reaching it over HTTPS (tests serve plain HTTP).
    */
   waitingStart?: { intervalMs?: number; secure?: (c: Context) => boolean };
+  /** The mDNS responder's socket; unset, the real multicast one. */
+  mdnsSocket?: () => MdnsSocket;
 }
 
 /**
@@ -1636,7 +1639,8 @@ async function bootServer(
     const server = startListening({ ...config, tls }, app, now, log);
     undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
-      hostname: BOX_HOSTNAME,
+      names: () => [BOX_HOSTNAME],
+      makeSocket: seams.mdnsSocket,
       devMode: config.devMode,
       httpHost: config.httpHost,
       getAddresses: boxAddresses,
@@ -1678,6 +1682,7 @@ async function bootServer(
   // every boot retries that step. `finish-adoption.ts`'s `PendingAdoption` header says why none can
   // complete it today. In this mode boot serves `/health` and a minimal `/api/box/status`, and reads
   // no deployment axes or membership.
+  const ownHostname = boxHostnameFor(config.node.nodeId);
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
@@ -1697,7 +1702,8 @@ async function bootServer(
     const server = startTradingListener(config, app, now, log);
     undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
-      hostname: BOX_HOSTNAME,
+      names: () => [ownHostname],
+      makeSocket: seams.mdnsSocket,
       devMode: config.devMode,
       httpHost: config.httpHost,
       getAddresses: boxAddresses,
@@ -1779,7 +1785,8 @@ async function bootServer(
         const server = startTradingListener(config, restrictedApp, now, log);
         undoOnFailure.push(() => closeListener(server));
         const mdns = startMdnsResponder({
-          hostname: BOX_HOSTNAME,
+          names: () => [ownHostname],
+          makeSocket: seams.mdnsSocket,
           devMode: config.devMode,
           httpHost: config.httpHost,
           getAddresses: boxAddresses,
@@ -1879,7 +1886,8 @@ async function bootServer(
         listen: (waitingApp) => {
           const server = startTradingListener(config, waitingApp, now, log);
           const mdns = startMdnsResponder({
-            hostname: BOX_HOSTNAME,
+            names: () => [ownHostname, BOX_HOSTNAME],
+            makeSocket: seams.mdnsSocket,
             devMode: config.devMode,
             httpHost: config.httpHost,
             getAddresses: boxAddresses,
@@ -1997,6 +2005,7 @@ async function bootServer(
         pointerTerm: () => readBucketPointerTerm(db, ring),
       });
   const isSingletonPrimary = holders.singletonRole.current === "primary";
+  const acceptingSales = isSingletonPrimary && !fencedOrMirror;
   // Before the tills' notice sources, which read it. Closed on a node that is not primary at its
   // start: the watch looks only on the primary, so it would not close it there (plan decision 14).
   const clockStart = clockStartUp({ primaryAtStart: isSingletonPrimary });
@@ -2346,7 +2355,7 @@ async function bootServer(
     app,
     {
       nodeId: tradingContext.nodeId,
-      acceptingSales: isSingletonPrimary && !fencedOrMirror,
+      acceptingSales,
       readTradingAdmission: () => tradingAdmission.snapshot(),
       environment: config.environment,
       readMembership: () => readNodeMembership(db),
@@ -3797,7 +3806,8 @@ async function bootServer(
   });
 
   const mdns = startMdnsResponder({
-    hostname: BOX_HOSTNAME,
+    names: () => [ownHostname, ...(acceptingSales ? [BOX_HOSTNAME] : [])],
+    makeSocket: seams.mdnsSocket,
     devMode: config.devMode,
     httpHost: config.httpHost,
     getAddresses: boxAddresses,

@@ -52,7 +52,7 @@ describe("mdns", () => {
     const log = vi.fn();
     const responder = startMdnsResponder({
       ...config,
-      hostname: "waitron.local",
+      names: () => ["waitron.local"],
       getAddresses: () => ["192.168.10.101"],
       log,
       makeSocket,
@@ -68,7 +68,7 @@ describe("mdns", () => {
   it("answers an A query for its hostname with the current addresses", () => {
     const f = fakeSocket();
     startMdnsResponder({
-      hostname: "waitron.local",
+      names: () => ["waitron.local"],
       devMode: false,
       httpHost: "0.0.0.0",
       getAddresses: () => ["192.168.1.5"],
@@ -84,7 +84,7 @@ describe("mdns", () => {
   it("answers an ANY query for its hostname (mDNS ANY asks for every record)", () => {
     const f = fakeSocket();
     startMdnsResponder({
-      hostname: "waitron.local",
+      names: () => ["waitron.local"],
       devMode: false,
       httpHost: "0.0.0.0",
       getAddresses: () => ["192.168.1.5"],
@@ -97,10 +97,90 @@ describe("mdns", () => {
     });
   });
 
+  it("answers each of its names", () => {
+    const f = fakeSocket();
+    startMdnsResponder({
+      names: () => ["box-0a1b.waitron.local", "waitron.local"],
+      devMode: false,
+      httpHost: "0.0.0.0",
+      getAddresses: () => ["192.168.1.5"],
+      log: () => {},
+      makeSocket: () => f.socket,
+    });
+    f.query({ questions: [{ name: "box-0a1b.waitron.local", type: "A" }] });
+    f.query({ questions: [{ name: "waitron.local", type: "A" }] });
+    expect(f.respond.mock.calls).toEqual([
+      [
+        {
+          answers: [
+            {
+              name: "box-0a1b.waitron.local",
+              type: "A",
+              ttl: MDNS_TTL_SECONDS,
+              data: "192.168.1.5",
+            },
+          ],
+        },
+      ],
+      [
+        {
+          answers: [
+            { name: "waitron.local", type: "A", ttl: MDNS_TTL_SECONDS, data: "192.168.1.5" },
+          ],
+        },
+      ],
+    ]);
+  });
+
+  it("stops answering a name dropped from the list on the next query", () => {
+    const f = fakeSocket();
+    let names = ["box-0a1b.waitron.local", "waitron.local"];
+    startMdnsResponder({
+      names: () => names,
+      devMode: false,
+      httpHost: "0.0.0.0",
+      getAddresses: () => ["192.168.1.5"],
+      log: () => {},
+      makeSocket: () => f.socket,
+    });
+    f.query({ questions: [{ name: "waitron.local", type: "A" }] });
+    expect(f.respond).toHaveBeenCalledTimes(1);
+    names = ["box-0a1b.waitron.local"];
+    f.query({ questions: [{ name: "waitron.local", type: "A" }] });
+    expect(f.respond).toHaveBeenCalledTimes(1);
+    f.query({ questions: [{ name: "box-0a1b.waitron.local", type: "A" }] });
+    expect(f.respond).toHaveBeenCalledTimes(2);
+  });
+
+  it("a box that is not selling answers its own name and not the venue's", () => {
+    const f = fakeSocket();
+    const logged: Array<{ event: string; fields?: Record<string, unknown> }> = [];
+    startMdnsResponder({
+      names: () => ["box-0a1b.waitron.local"],
+      devMode: false,
+      httpHost: "0.0.0.0",
+      getAddresses: () => ["192.168.1.5"],
+      log: (_level, event, fields) => logged.push({ event, fields }),
+      makeSocket: () => f.socket,
+    });
+    f.query({ questions: [{ name: "waitron.local", type: "A" }] });
+    expect(f.respond).not.toHaveBeenCalled();
+    f.query({ questions: [{ name: "box-0a1b.waitron.local", type: "ANY" }] });
+    expect(f.respond).toHaveBeenCalledWith({
+      answers: [
+        { name: "box-0a1b.waitron.local", type: "A", ttl: MDNS_TTL_SECONDS, data: "192.168.1.5" },
+      ],
+    });
+    expect(logged).toContainEqual({
+      event: "mdns.responding",
+      fields: { hostnames: ["box-0a1b.waitron.local"] },
+    });
+  });
+
   it("ignores a query for a different name", () => {
     const f = fakeSocket();
     startMdnsResponder({
-      hostname: "waitron.local",
+      names: () => ["waitron.local"],
       devMode: false,
       httpHost: "0.0.0.0",
       getAddresses: () => ["192.168.1.5"],
@@ -114,7 +194,7 @@ describe("mdns", () => {
   it("does not respond when the box has no addresses", () => {
     const f = fakeSocket();
     startMdnsResponder({
-      hostname: "waitron.local",
+      names: () => ["waitron.local"],
       devMode: false,
       httpHost: "0.0.0.0",
       getAddresses: () => [],
@@ -128,7 +208,7 @@ describe("mdns", () => {
   it("stop() destroys the socket once", async () => {
     const f = fakeSocket();
     const r = startMdnsResponder({
-      hostname: "waitron.local",
+      names: () => ["waitron.local"],
       devMode: false,
       httpHost: "0.0.0.0",
       getAddresses: () => ["192.168.1.5"],
@@ -146,7 +226,7 @@ describe("mdns", () => {
     const f = fakeSocket();
     const logged: Array<{ level: string; event: string; fields?: Record<string, unknown> }> = [];
     startMdnsResponder({
-      hostname: "waitron.local",
+      names: () => ["waitron.local"],
       devMode: false,
       httpHost: "0.0.0.0",
       getAddresses: () => ["192.168.1.5"],

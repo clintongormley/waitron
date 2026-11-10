@@ -45,6 +45,8 @@ import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeHandoverEvents, readHandoverRestriction } from "@waitron/node-db";
 import type { StartedServer, StartServerSeams } from "./boot.js";
+import { boxHostnameFor } from "./box-name.js";
+import type { MdnsAnswer, MdnsSocket } from "./mdns.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import type { PeerStatusBody } from "./peer-status-api.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
@@ -157,6 +159,7 @@ async function boot(
     seams?: StartServerSeams;
     /** A fixed HTTP port, bound as given rather than replaced by an ephemeral one. */
     port?: number;
+    httpHost?: string;
   },
 ): Promise<Booted> {
   beforeServerStarts();
@@ -215,6 +218,7 @@ async function boot(
     WAITRON_MAX_TICK_MS: "600000",
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
     ...(options.port === undefined ? {} : { WAITRON_HTTP_PORT: String(options.port) }),
+    ...(options.httpHost === undefined ? {} : { WAITRON_HTTP_HOST: options.httpHost }),
   };
   if (options.enrolled) {
     await mkdir(join(dir, "tls"), { recursive: true });
@@ -308,6 +312,29 @@ async function boot(
     return (await answer.json()) as { acceptingSales: unknown };
   });
   return { nodeId, env, lines, acceptingSales };
+}
+
+const WAIT_ON_SPARE: StartPeerCheckOutcome = {
+  result: "wait",
+  successorNodeId: null,
+  waitingOn: [SPARE.nodeId],
+};
+
+function fakeMdnsSocket() {
+  let onQuery: ((query: { questions: { name: string; type: string }[] }) => void) | undefined;
+  const responses: { answers: MdnsAnswer[] }[] = [];
+  const socket: MdnsSocket = {
+    on: ((event: string, handler: never) => {
+      if (event === "query") onQuery = handler;
+    }) as MdnsSocket["on"],
+    respond: (response) => responses.push(response),
+    destroy: (cb) => cb?.(),
+  };
+  return {
+    socket,
+    query: (name: string) => onQuery?.({ questions: [{ name, type: "A" }] }),
+    answered: () => [...new Set(responses.flatMap((r) => r.answers.map((a) => a.name)))],
+  };
 }
 
 function startChecks(lines: Record<string, unknown>[]) {
@@ -829,6 +856,41 @@ describe("the start check on a real start", () => {
       await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 30_000 });
     }, 60_000);
   });
+
+  it("a waiting box answers the venue's name and its own", async () => {
+    const mdns = fakeMdnsSocket();
+    const booted = await boot(suite, {
+      spareUrl: OWN_URL,
+      joined: false,
+      httpHost: "0.0.0.0",
+      seams: {
+        peerCheck: () => Promise.resolve(WAIT_ON_SPARE),
+        waitingStart: { intervalMs: 60_000 },
+        mdnsSocket: () => mdns.socket,
+      },
+    });
+    expect(booted.acceptingSales).toBe(false);
+    const own = boxHostnameFor(booted.nodeId);
+    for (const name of [own, "waitron.local", "box-ffff.waitron.local"]) mdns.query(name);
+    expect(mdns.answered()).toEqual([own, "waitron.local"]);
+  }, 60_000);
+
+  it("a restricted start answers only its own name", async () => {
+    const mdns = fakeMdnsSocket();
+    const booted = await boot(suite, {
+      spareUrl: OWN_URL,
+      joined: false,
+      httpHost: "0.0.0.0",
+      seams: {
+        peerCheck: () => Promise.resolve({ result: "superseded", successorNodeId: SPARE.nodeId }),
+        mdnsSocket: () => mdns.socket,
+      },
+    });
+    expect(booted.acceptingSales).toBe(false);
+    const own = boxHostnameFor(booted.nodeId);
+    for (const name of [own, "waitron.local"]) mdns.query(name);
+    expect(mdns.answered()).toEqual([own]);
+  }, 60_000);
 
   it("the seam's superseded with a successor takes the restricted start", async () => {
     const booted = await boot(suite, {
