@@ -307,6 +307,28 @@ describe("installVenueAuthority", () => {
     expect(await readFile(join(tls, "install.json"), "utf8")).toBe(body);
   });
 
+  it("a whole set with no install in progress has nothing to finish, and takes no lock for it", async () => {
+    const stateDir = await ownBox();
+    const before = await setOf(stateDir);
+    // A folder where the lock file goes makes taking the lock fail, as a full disk does.
+    await mkdir(join(stateDir, "recovery.lock"));
+
+    expect(await finishTlsInstall(stateDir)).toBe("none");
+    expect(await setOf(stateDir)).toEqual(before);
+    expect((await readdir(join(stateDir, "tls"))).sort()).toEqual(INSTALLED);
+  });
+
+  it.each(["install.json", "install.json.tmp", "server.crt.tmp"])(
+    "a set holding %s takes the lock to finish it",
+    async (name) => {
+      const stateDir = await ownBox();
+      await writeFile(join(stateDir, "tls", name), JSON.stringify({ files: ["server.crt"] }));
+      await mkdir(join(stateDir, "recovery.lock"));
+
+      await expect(finishTlsInstall(stateDir)).rejects.toThrow("unable to open database file");
+    },
+  );
+
   it("a box with no tls folder has nothing to finish", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-tls-install-"));
     dirs.push(stateDir);

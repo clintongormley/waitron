@@ -136,6 +136,11 @@ function keyBelongsTo(certPem: string, keyPem: string): boolean {
   }
 }
 
+async function anyExists(paths: readonly string[]): Promise<boolean> {
+  for (const path of paths) if (await fileExists(path)) return true;
+  return false;
+}
+
 function listedFiles(value: unknown): TlsSetFile[] {
   const files = (value as { files?: unknown }).files;
   if (
@@ -150,15 +155,19 @@ function listedFiles(value: unknown): TlsSetFile[] {
 
 /**
  * Moves into place what a listed install left, and deletes every other
- * working file of the set and of the list. Runs before anything reads `tls/`.
+ * working file of the set and of the list. Runs before anything reads `tls/`, and ahead of the
+ * start's full-disk handling, so with none of those files present it takes no lock and writes
+ * nothing.
  */
 export async function finishTlsInstall(
   stateDir: string,
 ): Promise<"none" | "finished" | "discarded"> {
   const tlsDir = join(stateDir, TLS_DIR);
   if (!(await fileExists(tlsDir))) return "none";
+  const list = join(stateDir, TLS_INSTALL_FILE);
+  const leftovers = [list, ...[...TLS_SET.map((name) => join(tlsDir, name)), list].map(stagedPath)];
+  if (!(await anyExists(leftovers))) return "none";
   return withRecoveryLock(stateDir, async () => {
-    const list = join(stateDir, TLS_INSTALL_FILE);
     // Read through the folder `tls` resolves to: the reader refuses a linked parent folder.
     const record = await readDurableHostJson(
       join(await realpath(tlsDir), basename(TLS_INSTALL_FILE)),
