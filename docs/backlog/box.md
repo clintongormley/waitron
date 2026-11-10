@@ -183,7 +183,7 @@ carry none.
 - `resolveSafeEntryPath` (`apps/server/src/state-secrets.ts`) is unchanged,
   and nothing chmods the staging folder that the archive restore's two entries outside `secrets/`
   (`manifest.json` and `db.dump`) are checked against; it receives nothing and keeps an existing
-  folder's mode. Still open, not fixed, by the owner's choice: `unpackBundleToDir`'s walk and file
+  folder's mode. Still open, not fixed, by the owner's choice: `unpackStateFiles`'s walk and file
   write go by path, so a folder inside the destination swapped for a symlink during the unpack is
   followed. The A41 run-it review reproduced an outside folder being set to 0700 and receiving the
   secret that way. It needs someone able to write inside the destination. `tightenTlsDir`
