@@ -481,17 +481,19 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const gatedAs = <T>(
       sessionId: string,
-      fn: (tx: Transaction, role: PersonRoleValue) => Promise<T>,
+      fn: (tx: Transaction, role: PersonRoleValue, personId: string) => Promise<T>,
     ): Promise<T> =>
       withTransaction(ctx.db, async (tx) => {
-        const { role } = await authorizeManager(tx, {
+        const { role, authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "venue.configure",
         });
-        return fn(tx, role);
+        return fn(tx, role, authorizedBy);
       });
-    const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-      gatedAs(sessionId, fn);
+    const gated = <T>(
+      sessionId: string,
+      fn: (tx: Transaction, personId: string) => Promise<T>,
+    ): Promise<T> => gatedAs(sessionId, (tx, _role, personId) => fn(tx, personId));
 
     const viewed = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
       withTransaction(ctx.db, async (tx) => {
@@ -608,9 +610,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readJsonBody<{ areaKey: string | null }>(c);
-        const geography = await gated(sessionId, (tx) => {
+        const geography = await gated(sessionId, (tx, personId) => {
           onlyKeys(body, ["areaKey"]);
-          return saveHolidayArea(tx, body);
+          return saveHolidayArea(tx, body, personId);
         });
         return geography === null ? c.body(null, 204) : c.json(geography);
       }),

@@ -1,5 +1,13 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { contentLanguages, products, productUnits, units, type Transaction } from "@waitron/db";
+import {
+  settings,
+  decodeSettingsRow,
+  VENUE_SETTINGS,
+  products,
+  productUnits,
+  units,
+  type Transaction,
+} from "@waitron/db";
 import type { ProductUsingUnit } from "./unit-types.js";
 
 export type { ProductUsingUnit };
@@ -163,15 +171,23 @@ export async function updateUnit(
       .select({
         unit: UNIT_COLUMNS,
         config: {
-          defaultLanguage: contentLanguages.defaultLanguage,
-          languages: contentLanguages.languages,
+          module: settings.module,
+          version: settings.version,
+          revision: settings.revision,
+          doc: settings.doc,
         },
       })
       .from(units)
-      .leftJoin(contentLanguages, eq(contentLanguages.id, 1))
+      .leftJoin(settings, eq(settings.module, "venue"))
       .where(eq(units.id, unitId));
     if (stored === undefined) throw new AppError("unit.not_found", { unitId });
-    const config = contentLanguagesOr(stored.config ?? undefined, fallbackLanguage);
+    const { doc } = decodeSettingsRow(stored.config ?? undefined, VENUE_SETTINGS);
+    const config = contentLanguagesOr(
+      doc.contentLanguages === null
+        ? undefined
+        : { defaultLanguage: doc.defaultContentLanguage!, languages: doc.contentLanguages },
+      fallbackLanguage,
+    );
     for (const field of ["name", "abbreviation"] as const) {
       if (patch[field] !== undefined) {
         validateOptionalTranslations(patch[field]);

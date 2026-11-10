@@ -555,7 +555,7 @@ describe("content languages screen", () => {
       defaultLanguage: "ca",
       languages: ["ca", "en", "de", "it"],
     });
-    liveData.invalidate([{ type: "content_languages" }]);
+    liveData.invalidate([{ type: "settings.venue" }]);
     await vi.waitFor(() => expect(shown(el)).toContain("Italiano"));
     const add = dialog(el);
     await chooseOption(add.shadowRoot!.querySelector("wt-combobox[name=language]")!, "fr");
@@ -594,7 +594,7 @@ describe("content languages screen", () => {
       config: ContentLanguages,
     ): Promise<void> {
       vi.mocked(client.getContentLanguages).mockResolvedValue(config);
-      liveData.invalidate([{ type: "content_languages" }]);
+      liveData.invalidate([{ type: "settings.venue" }]);
       await vi.waitFor(() => expect(shown(el)).toContain("Italiano"));
     }
 
@@ -743,7 +743,7 @@ describe("content languages screen", () => {
       defaultLanguage: "en",
       languages: ["en"],
     });
-    liveData.invalidate([{ type: "content_languages" }]);
+    liveData.invalidate([{ type: "settings.venue" }]);
     await vi.waitFor(() => expect(shown(el)).toEqual([name("en")]));
     expect(rows(el)[0]!.textContent).toContain(t("content_languages.default"));
   });
@@ -769,7 +769,7 @@ describe("content languages screen", () => {
     const client = Object.assign(api(), { liveData });
     const el = await mount(client);
     vi.mocked(client.getContentLanguages).mockRejectedValue(new Error("offline"));
-    liveData.invalidate([{ type: "content_languages" }]);
+    liveData.invalidate([{ type: "settings.venue" }]);
     await vi.waitFor(() =>
       expect(q(el, "[role=alert]")?.textContent?.trim()).toBe(t("content_languages.load_error")),
     );

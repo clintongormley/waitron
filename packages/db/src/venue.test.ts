@@ -27,6 +27,7 @@ describe("the venue accessor", () => {
       postalCode = null,
       city = null,
       province = null,
+      invoiceLocales = ["es"],
       ...columns
     } = values;
     const [row] = await suite.db
@@ -44,6 +45,7 @@ describe("the venue accessor", () => {
       postalCode,
       city,
       province,
+      invoiceLocales,
     });
     return row!.id;
   }
@@ -195,13 +197,15 @@ describe("the venue accessor", () => {
     expect((await withTransaction(suite.db, readVenueClock)).timeZone).toBe("Invalid/Zone");
   });
 
-  it("reads the invoice languages in their saved order, selecting no other column", async () => {
+  it("reads the invoice languages in their saved order from the venue document", async () => {
     await insertVenue({ invoiceLocales: ["gl-ES", "es-ES"], addressLine1: "Calle Mayor 1" });
 
     const { result, statements } = await selectsDuring(readVenueInvoiceLocales);
 
     expect(result).toEqual(["gl-ES", "es-ES"]);
-    expect(statements).toEqual(['select "invoice_locales" from "locations" limit ?']);
+    expect(statements).toEqual([
+      'select "module", "version", "revision", "doc", "updated_at", "updated_by" from "settings" where "settings"."module" = ?',
+    ]);
   });
 
   it("returns the venue's row id", async () => {
@@ -223,6 +227,8 @@ describe("the venue accessor", () => {
       // toMatchObject reads `params: {}` as "any params"; the params must be empty.
       expect((error as { params: unknown }).params).toEqual({});
     });
+
+    if (read === readVenueInvoiceLocales) return;
 
     it("refuses with two venues", async () => {
       await insertVenue();

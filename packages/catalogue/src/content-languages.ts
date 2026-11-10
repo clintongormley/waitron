@@ -7,8 +7,8 @@ import {
   type ContentLanguages,
   TRANSLATION_GAP_KINDS,
 } from "@waitron/shared";
-import { eq, sql } from "drizzle-orm";
-import { contentLanguages } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import { readSettings, VENUE_SETTINGS, saveVenueFields } from "@waitron/db";
 import { liveTranslationRows } from "./content-translation-candidates.js";
 import "./errors.js";
 
@@ -132,14 +132,13 @@ export async function readContentLanguages(
 export async function readSavedContentLanguages(
   tx: Transaction,
 ): Promise<ContentLanguages | undefined> {
-  const [row] = await tx
-    .select({
-      defaultLanguage: contentLanguages.defaultLanguage,
-      languages: contentLanguages.languages,
-    })
-    .from(contentLanguages)
-    .where(eq(contentLanguages.id, 1));
-  return row;
+  const { doc } = await readSettings(tx, VENUE_SETTINGS);
+  return doc.contentLanguages === null
+    ? undefined
+    : {
+        defaultLanguage: doc.defaultContentLanguage!,
+        languages: doc.contentLanguages,
+      };
 }
 
 export function contentLanguagesOr(
@@ -182,10 +181,15 @@ export async function writeContentLanguages(
   tx: Transaction,
   config: ContentLanguages,
   requiredLanguages: readonly string[] = [],
+  personId: string | null = null,
 ): Promise<void> {
   const values = checkedContentLanguages(config, requiredLanguages);
-  await tx
-    .insert(contentLanguages)
-    .values(values)
-    .onConflictDoUpdate({ target: contentLanguages.id, set: values });
+  await saveVenueFields(
+    tx,
+    {
+      contentLanguages: values.languages,
+      defaultContentLanguage: values.defaultLanguage,
+    },
+    personId,
+  );
 }

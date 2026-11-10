@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createStaffApp } from "./cloud-remote.js";
 import {
   departments,
@@ -21,7 +22,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
 import { withTransaction } from "@waitron/db";
-import { contentLanguages } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -2209,7 +2209,7 @@ describe("Management API — a credential change checks the current password bef
 const departmentReceiptPath = (id: string) =>
   `/management-api/venue-service/departments/${id}/receipt`;
 async function departmentFixture(active = true): Promise<string> {
-  await suite.db.update(contentLanguages).set({ languages: ["es", "ca", "gl", "eu"] });
+  await seedVenueSettings(suite.db, { contentLanguages: ["es", "ca", "gl", "eu"] });
   const [row] = await suite.db
     .insert(departments)
     .values({

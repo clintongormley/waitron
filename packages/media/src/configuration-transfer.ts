@@ -30,6 +30,7 @@ function parsedJson(value: unknown): unknown {
 /** Validate bytes before any configuration writes, preserving immutable URL contents on import. */
 export function validateMediaConfiguration(
   tables: Record<string, readonly Record<string, unknown>[]>,
+  bundle?: { readonly contentLanguages: { readonly defaultLanguage: string } | null },
 ): void {
   const images = tables.media_images ?? [];
   const data = tables.media_image_data ?? [];
@@ -60,10 +61,9 @@ export function validateMediaConfiguration(
     const metadata = normalizeImageMetadata({
       names: parsedJson(image.names),
     } as ImageMetadataInput);
-    // One tenant per database, so a bundle holds at most one content-language row.
-    const config = tables.content_languages?.[0];
-    if (typeof config?.default_language !== "string") invalid();
-    const language = contentLanguageCode(config.default_language);
+    const defaultLanguage = bundle?.contentLanguages?.defaultLanguage;
+    if (typeof defaultLanguage !== "string") invalid();
+    const language = contentLanguageCode(defaultLanguage);
     if (resolveContentText(metadata.names, language, language) === "") invalid();
     remaining.delete(image.id);
   }

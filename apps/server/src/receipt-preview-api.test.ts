@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
@@ -24,7 +25,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { isAppError } from "@waitron/shared";
-import { contentLanguages } from "@waitron/catalogue";
+import {} from "@waitron/catalogue";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { mountReceiptPreviewApi, type ReceiptPreviewResponse } from "./receipt-preview-api.js";
@@ -50,9 +51,10 @@ beforeAll(async () => {
     .update(departmentSalePolicies)
     .set({ printTradingName: false })
     .where(eq(departmentSalePolicies.departmentId, departmentId));
-  await suite.db
-    .update(contentLanguages)
-    .set({ defaultLanguage: "es", languages: ["es", "ca", "gl", "eu"] });
+  await seedVenueSettings(suite.db, {
+    defaultContentLanguage: "es",
+    contentLanguages: ["es", "ca", "gl", "eu"],
+  });
   taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
 });
 

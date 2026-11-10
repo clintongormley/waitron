@@ -83,37 +83,36 @@ function sharedName(names: readonly string[]): string | undefined {
 }
 
 function checkContentLanguages(
-  rows: Rows | undefined,
+  input: unknown,
   geography?: { readonly country: string; readonly area: string | null },
 ): void {
-  if (rows === undefined) return;
-  if (geography === undefined) throw new AppError("setup.request_invalid", { field: "venue" });
+  if (geography === undefined || typeof geography.country !== "string")
+    throw new AppError("setup.request_invalid", { field: "venue" });
   const { required } = resolveInstalledContentLanguageRules(geography);
-  if (rows.length === 0) {
+  if (input === null) {
     if (required[0] !== undefined)
       throw new AppError("content.language_required", { language: required[0] });
     return;
   }
-  if (rows.length !== 1) throw new AppError("content.languages_invalid", {});
-  const row = rows[0]!;
-  if (row.id !== 1) throw new AppError("content.languages_invalid", {});
   let config: ContentLanguages;
   try {
-    const languages: unknown =
-      typeof row.languages === "string" ? JSON.parse(row.languages) : undefined;
+    if (typeof input !== "object" || input === null || Array.isArray(input)) throw new Error();
+    const row = input as Record<string, unknown>;
     if (
-      typeof row.default_language !== "string" ||
-      !Array.isArray(languages) ||
-      languages.some((language) => typeof language !== "string")
+      typeof row.defaultLanguage !== "string" ||
+      !Array.isArray(row.languages) ||
+      row.languages.some((language) => typeof language !== "string")
     )
-      throw new AppError("content.languages_invalid", {});
-    config = checkedContentLanguages({ defaultLanguage: row.default_language, languages });
-    // Imports store the raw row, so accept only the codes the normal writer stores.
+      throw new Error();
+    config = checkedContentLanguages({
+      defaultLanguage: row.defaultLanguage,
+      languages: row.languages,
+    });
     if (
-      config.defaultLanguage !== row.default_language ||
-      languages.some((language) => !config.languages.includes(language))
+      config.defaultLanguage !== row.defaultLanguage ||
+      row.languages.some((language) => !config.languages.includes(language))
     )
-      throw new AppError("content.languages_invalid", {});
+      throw new Error();
   } catch {
     throw new AppError("content.languages_invalid", {});
   }
@@ -122,9 +121,13 @@ function checkContentLanguages(
 
 export function validateCatalogueConfiguration(
   tables: Readonly<Record<string, Rows>>,
-  geography?: { readonly country: string; readonly area: string | null },
+  bundle?: {
+    readonly country: string;
+    readonly area: string | null;
+    readonly contentLanguages: unknown;
+  },
 ): void {
-  checkContentLanguages(tables.content_languages, geography);
+  if (bundle !== undefined) checkContentLanguages(bundle.contentLanguages, bundle);
   for (const row of tables.units ?? []) {
     for (const [column, field] of [
       ["staff_name", "staffName"],
@@ -210,7 +213,6 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
     { name: "category_details" },
-    { name: "content_languages" },
     { name: "catalogue_settings" },
     { name: "unit_seed_states" },
     { name: "units" },
@@ -227,10 +229,14 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     { name: "menu_details" },
   ],
   validate: validateCatalogueConfiguration,
-  async beforeImport(tx: Transaction, tables: Readonly<Record<string, Rows>>): Promise<void> {
+  async beforeImport(
+    tx: Transaction,
+    _tables: Readonly<Record<string, Rows>>,
+    bundle?: { readonly contentLanguages: unknown },
+  ): Promise<void> {
     const country = (await readTenant(tx))?.country;
     if (country === undefined) throw new AppError("setup.request_invalid", { field: "venue" });
-    checkContentLanguages(tables.content_languages, {
+    checkContentLanguages(bundle?.contentLanguages ?? null, {
       country,
       area: (await readVenue(tx)).province,
     });

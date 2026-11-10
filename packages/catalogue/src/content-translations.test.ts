@@ -1,10 +1,10 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { TranslationTarget } from "./content-translation-targets.js";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   catalogues,
-  contentLanguages,
   extraLists,
   menuDetails,
   optionLabels,
@@ -317,7 +317,7 @@ describe("atomic content translations", () => {
         .update(products)
         .set({ unitPrice: 475, customerName: { ca: "CLIENT CA bread", es: "CLIENT ES bread" } })
         .where(eq(products.id, ids.product));
-      await tx.update(contentLanguages).set({ languages: ["en", "es", "ca"] });
+      await seedVenueSettings(tx, { contentLanguages: ["en", "es", "ca"] });
     });
     request.edits = request.edits.map((edit) => ({
       ...edit,
@@ -406,7 +406,7 @@ describe("atomic content translations", () => {
             .where(eq(sections.id, ids.section));
           break;
         case "configuration":
-          await tx.update(contentLanguages).set({ defaultLanguage: "ca" });
+          await seedVenueSettings(tx, { defaultContentLanguage: "ca" });
           break;
         case "required":
           break;
@@ -593,7 +593,10 @@ describe("atomic content translations", () => {
     "menu, section and folder writes keep enabled maps optional with %s configuration",
     async (mode) => {
       const ids = await fixture();
-      if (mode === "unset") await app((tx) => tx.delete(contentLanguages));
+      if (mode === "unset")
+        await app((tx) =>
+          seedVenueSettings(tx, { contentLanguages: null, defaultContentLanguage: null }),
+        );
       for (const writer of [
         () => app((tx) => updateMenuDetails(tx, ids.menuId, { names: { ca: "CA only" } })),
         () => app((tx) => updateSection(tx, ids.section, { names: { ca: "CA only" } }, "es")),

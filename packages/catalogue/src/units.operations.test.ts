@@ -1,9 +1,9 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { stringToThousandths } from "@waitron/shared";
 import {
   catalogues,
-  contentLanguages,
   CORE_MIGRATIONS,
   products,
   withTransaction,
@@ -91,9 +91,10 @@ describe("unit operations", () => {
   );
 
   it("accepts a missing default name with either a translated or an empty abbreviation", async () => {
-    await suite.db
-      .insert(contentLanguages)
-      .values({ defaultLanguage: "en", languages: ["en", "es"] });
+    await seedVenueSettings(suite.db, {
+      defaultContentLanguage: "en",
+      contentLanguages: ["en", "es"],
+    });
     for (const abbreviation of [{ en: "l" }, {}] as Record<string, string>[]) {
       const saved = await run((tx) =>
         createUnit(

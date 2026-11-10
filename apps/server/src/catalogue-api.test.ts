@@ -3,6 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
+  settings as settingsTable,
   categories,
   products,
   withTransaction,
@@ -709,7 +710,9 @@ async function seedRouting(): Promise<{ courseId: string }> {
 
 describe("content-language configuration", () => {
   beforeEach(async () => {
-    await suite.db.execute(sql`delete from content_languages`);
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.contentLanguages', null, '$.defaultContentLanguage', null) where module = 'venue'`,
+    );
   });
 
   it("starts from the configured site language and saves additional content languages", async () => {
@@ -724,6 +727,7 @@ describe("content-language configuration", () => {
     expect(await (await send(app, "GET", "/management-api/content-languages")).json()).toEqual(
       settings,
     );
+    expect((await suite.db.select().from(settingsTable))[0]!.updatedBy).toBe(managerPersonId);
   });
 
   it("switches the default over a partial customer name without copying staff or kitchen text", async () => {
@@ -946,7 +950,9 @@ describe("the missing-translations report", () => {
   const PATH = "/management-api/content-translation-gaps";
 
   beforeEach(async () => {
-    await suite.db.execute(sql`delete from content_languages`);
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.contentLanguages', null, '$.defaultContentLanguage', null) where module = 'venue'`,
+    );
   });
 
   it("answers a manager each enabled language's gaps under the saved configuration", async () => {
@@ -1098,7 +1104,9 @@ async function createNamedProductVia(app: Hono, name: string): Promise<string> {
 
 describe("product archive route boundaries", () => {
   beforeEach(async () => {
-    await suite.db.execute(sql`delete from content_languages`);
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.contentLanguages', null, '$.defaultContentLanguage', null) where module = 'venue'`,
+    );
   });
 
   async function archive(app: Hono, productId: string) {
@@ -3794,7 +3802,9 @@ describe("mountCatalogueApi — option lists", () => {
   // customer-facing name maps below. Emptying the table puts `readContentLanguages` on the mounted
   // venue locale, `es` — the one language every map here fills.
   beforeEach(async () => {
-    await suite.db.execute(sql`delete from content_languages`);
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.contentLanguages', null, '$.defaultContentLanguage', null) where module = 'venue'`,
+    );
   });
 
   /**
@@ -3992,7 +4002,9 @@ describe("mountCatalogueApi — extras lists", () => {
   // `createExtraList` demands of the customer-facing name map. Emptying the table puts
   // `readContentLanguages` on the mounted venue locale.
   beforeEach(async () => {
-    await suite.db.execute(sql`delete from content_languages`);
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.contentLanguages', null, '$.defaultContentLanguage', null) where module = 'venue'`,
+    );
   });
 
   /** Two products a list can offer. Each gets a catalogue of its own; only the ids matter here. */
@@ -5042,7 +5054,9 @@ it.each([
 
 it("authors a hierarchy and requires a session to read it", async () => {
   const app = mountApp("en-GB");
-  await suite.db.execute(sql`delete from content_languages`);
+  await suite.db.execute(
+    sql`update settings set doc = json_set(doc, '$.contentLanguages', null, '$.defaultContentLanguage', null) where module = 'venue'`,
+  );
   const created = await send(app, "POST", "/management-api/categories", {
     body: { name: "Food", parentId: null },
   });

@@ -122,7 +122,7 @@ it.each([
   [
     "getContentTranslationCells",
     [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
-    "content_languages",
+    "settings.venue",
   ],
   [
     "getContentTranslationCells",
@@ -169,7 +169,7 @@ it.each([
     [[{ kind: "unit", id: "u", language: "en", field: "name" }]],
     "units",
   ],
-  ["getContentSuggestions", [], "content_languages"],
+  ["getContentSuggestions", [], "settings.venue"],
   ["getContentSuggestions", [], "products"],
   ["getContentSuggestions", [], "option_lists"],
   ["getContentSuggestions", [], "option_labels"],
@@ -276,7 +276,7 @@ it.each([
       "catalogues",
       "products",
       "menu_item_variant_overrides",
-      "content_languages",
+      "settings.venue",
       "product_modifiers",
       "extra_lists",
       "extra_list_items",
@@ -460,7 +460,7 @@ it.each([
     "getContentTranslationGaps",
     [],
     [
-      "content_languages",
+      "settings.venue",
       "products",
       "option_lists",
       "option_labels",
@@ -797,7 +797,7 @@ it("subscribes the venue's privacy contact to the taxpayer row alone", () => {
 });
 
 it.each([
-  "content_languages",
+  "settings.venue",
   "products",
   "option_lists",
   "option_labels",
@@ -913,7 +913,7 @@ it("scopes department receipt subscriptions by department and refreshes passivel
     { type: "departments" },
     { type: "locations" },
     { type: "settings.venue" },
-    { type: "content_languages" },
+    { type: "settings.venue" },
   ]);
   const other = dashboardQuery(api, "getDepartmentReceipt", ["cafe"]);
   expect(other.key).not.toBe(query.key);
@@ -951,9 +951,8 @@ it("department receipt, policy, content and address refresh through the departme
     await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
     for (const [index, type] of [
       "department_sale_policies",
-      "content_languages",
-      "locations",
       "settings.venue",
+      "locations",
       "department_receipts",
       "departments",
     ].entries()) {

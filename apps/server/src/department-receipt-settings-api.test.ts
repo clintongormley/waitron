@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { Hono } from "hono";
@@ -6,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, tenants, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { contentLanguages } from "@waitron/catalogue";
+import {} from "@waitron/catalogue";
 import { persons, startManagementSession } from "@waitron/identity";
 import {
   MEDIA_MODULE,
@@ -63,9 +64,10 @@ async function fixture(role: "manager" | "staff" = "manager", withFiscal = true)
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-  await suite.db
-    .insert(contentLanguages)
-    .values({ defaultLanguage: "es", languages: ["es", "ca", "en"] });
+  await seedVenueSettings(suite.db, {
+    defaultContentLanguage: "es",
+    contentLanguages: ["es", "ca", "en"],
+  });
   const [department] = await suite.db
     .insert(departments)
     .values({ name: randomUUID(), tradingName: "Deli" })
@@ -626,8 +628,7 @@ describe("replacement department receipt HTTP contract", () => {
               .update(departments)
               .set({ active: false })
               .where(eq(departments.id, f.departmentId));
-          if (kind === "languages")
-            await tx.update(contentLanguages).set({ languages: ["es", "en"] });
+          if (kind === "languages") await seedVenueSettings(tx, { contentLanguages: ["es", "en"] });
           if (kind === "policy") {
             await tx.update(persons).set({ role: "staff" }).where(eq(persons.id, f.personId));
             await tx

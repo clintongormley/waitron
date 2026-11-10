@@ -1,34 +1,10 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { catalogues, products } from "../catalogue.js";
-import { count, id, label, labelList, money, newId, table } from "../columns.js";
+import { count, id, label, money, newId, table } from "../columns.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import type { HomeOrder, HomeTileMode } from "@waitron/shared";
 import { sections } from "./sections.js";
-
-/** The one content-language policy shared by the reusable catalogue and media: at most one row,
- * `id` pinned to 1. */
-export const contentLanguages = table(
-  "content_languages",
-  {
-    id: count("id").primaryKey().notNull().default(1),
-    defaultLanguage: label("default_language").notNull(),
-    languages: labelList("languages").notNull(),
-  },
-  (t) => [
-    check("content_languages_singleton_ck", sql`${t.id} = 1`),
-    // Membership in the list, matched on the QUOTED token so a code cannot match a prefix of a
-    // longer one. The match is exact only while a language code carries no `"` and needs no JSON
-    // escape — true of BCP-47 tags, and nothing below this line enforces it.
-    check(
-      "content_languages_default_ck",
-      sql`instr(${t.languages}, '"' || ${t.defaultLanguage} || '"') > 0`,
-    ),
-    // A JSON array holding a null entry, `[null]`, is accepted here. What refuses a null entry
-    // today is the column's own `string[]` type and the writer above it; the database does not.
-    check("content_languages_list_ck", sql`json_array_length(${t.languages}) between 1 and 200`),
-  ],
-);
 
 const homeTiles = (name: string) => label(name).$type<HomeTileMode>();
 const homeOrder = (name: string) => label(name).$type<HomeOrder>();

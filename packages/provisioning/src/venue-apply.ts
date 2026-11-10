@@ -248,7 +248,6 @@ export async function applyVenue(
           const existing = await tx
             .select({
               id: locations.id,
-              invoiceLocales: locations.invoiceLocales,
               operationDescription: locations.operationDescription,
               fiscalTerritory: locations.fiscalTerritory,
               timeZone: locations.timeZone,
@@ -300,7 +299,6 @@ export async function applyVenue(
           locationId = randomUUID();
           await tx.insert(locations).values({
             id: locationId,
-            invoiceLocales: [...action.invoiceLocales],
             operationDescription: action.operationDescription,
             fiscalTerritory: action.fiscalTerritory,
             timeZone: action.timeZone,
@@ -310,6 +308,10 @@ export async function applyVenue(
             tx,
             {
               name: action.name,
+              invoiceLocales: [...action.invoiceLocales],
+              contentLanguages: null,
+              defaultContentLanguage: null,
+              holidayArea: null,
               addressLine1: action.addressLine1,
               addressLine2: action.addressLine2,
               postalCode: action.postalCode,

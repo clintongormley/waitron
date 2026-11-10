@@ -1,4 +1,5 @@
-import { contentLanguages } from "@waitron/catalogue";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import {} from "@waitron/catalogue";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -21,9 +22,10 @@ let venue: Venue;
 let departmentId: string;
 beforeEach(async () => {
   venue = await setupVenue(suite.db);
-  await suite.db
-    .update(contentLanguages)
-    .set({ defaultLanguage: "es", languages: ["es", "ca", "gl", "eu"] });
+  await seedVenueSettings(suite.db, {
+    defaultContentLanguage: "es",
+    contentLanguages: ["es", "ca", "gl", "eu"],
+  });
   [{ id: departmentId }] = await suite.db.select({ id: departments.id }).from(departments);
 });
 function ask(body: unknown, cookie = venue.managerCookie) {

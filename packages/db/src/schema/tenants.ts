@@ -6,7 +6,6 @@ import {
   enumType,
   id,
   label,
-  labelList,
   newId,
   now,
   table,
@@ -52,24 +51,10 @@ export const tenants = table(
   ],
 );
 
-/**
- * A venue. `invoiceLocales` is an ORDERED list of one or two receipt languages. An
- * order line's customer text, in the default content language, is stored under every entry.
- *
- * The order is fiscal, not presentational. A reprint or a corrective invoice
- * issued a year later must reproduce the document the customer took, which is
- * why a sale snapshots its languages at issuance (`sales.invoice_locales`). Reordering a
- * venue's configuration must therefore never change how an already-issued
- * receipt reprints — hence a snapshot of an ordered value, not a lookup of a set.
- * A `primary_locale`/`secondary_locale` pair encodes order but cannot grow past
- * two, and the cap belongs in a constraint that can be relaxed, not in the
- * column layout.
- */
 export const locations = table(
   "locations",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    invoiceLocales: labelList("invoice_locales").notNull(),
     operationDescription: label("operation_description").notNull(),
     fiscalTerritory: label("fiscal_territory").notNull().default("ES-common"),
     timeZone: label("time_zone").notNull().default(DEFAULT_TIME_ZONE),
@@ -82,10 +67,6 @@ export const locations = table(
     /* v8 ignore stop */
   },
   (t) => [
-    check(
-      "locations_invoice_locales_len",
-      sql`json_array_length(${t.invoiceLocales}) between 1 and 2`,
-    ),
     check("locations_bump_mode_ck", enumCheck(t.bumpMode)),
     check("locations_fire_control_ck", enumCheck(t.fireControl)),
   ],

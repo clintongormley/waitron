@@ -1,11 +1,18 @@
 import { createHash } from "node:crypto";
 import { expect, it } from "vitest";
-import { validateMediaConfiguration } from "./configuration-transfer.js";
+import { validateMediaConfiguration as validateMediaConfigurationRaw } from "./configuration-transfer.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
+function validate(
+  input: Parameters<typeof validateMediaConfigurationRaw>[0],
+  contentLanguages: unknown = { defaultLanguage: "en", languages: ["en", "fr"] },
+) {
+  return validateMediaConfigurationRaw(input, { contentLanguages } as Parameters<
+    typeof validateMediaConfigurationRaw
+  >[1]);
+}
 const bytes = Buffer.from([0xff, 0xd8, 0xff, 1]);
 function tables() {
   return {
-    content_languages: [{ default_language: "en", languages: ["en", "fr"] }],
     media_images: [
       {
         id: "image-a",
@@ -36,18 +43,18 @@ function wire(input: ReturnType<typeof tables>) {
 }
 
 it("accepts image data written as \\x-prefixed hex with one matching metadata row", () => {
-  expect(() => validateMediaConfiguration(wire(tables()))).not.toThrow();
-  expect(() => validateMediaConfiguration({})).not.toThrow();
+  expect(() => validate(wire(tables()))).not.toThrow();
+  expect(() => validate({})).not.toThrow();
 });
 
 it("refuses metadata that is not the JSON text a raw read hands back", () => {
   // The object shape, which is what a reader assumes and what the engine never answers.
   const asObjects = tables();
-  expect(() => validateMediaConfiguration(asObjects)).toThrow();
+  expect(() => validate(asObjects)).toThrow();
   // And text that is not JSON at all.
   const broken = wire(tables());
   broken.media_images[0]!.names = "{not json";
-  expect(() => validateMediaConfiguration(broken)).toThrow();
+  expect(() => validate(broken)).toThrow();
 });
 it.each(["mismatch", "missing", "extra", "duplicate", "type", "hex", "oversize", "name"])(
   "refuses corrupt image data: %s",
@@ -62,7 +69,7 @@ it.each(["mismatch", "missing", "extra", "duplicate", "type", "hex", "oversize",
     if (kind === "oversize")
       input.media_image_data[0]!.bytes = "\\x" + "00".repeat(5 * 1024 * 1024 + 1);
     if (kind === "name") input.media_images[0]!.names.en = " ";
-    expect(() => validateMediaConfiguration(wire(input))).toThrow();
+    expect(() => validate(wire(input))).toThrow();
   },
 );
 
@@ -81,43 +88,38 @@ function twoImages() {
 const refused = expect.objectContaining({ code: "image.invalid_metadata" });
 
 it("accepts two valid images", () => {
-  expect(() => validateMediaConfiguration(wire(twoImages()))).not.toThrow();
+  expect(() => validate(wire(twoImages()))).not.toThrow();
 });
 
 it("refuses a data row whose image_id is not a string", () => {
   const input = wire(tables());
   (input.media_image_data[0] as Record<string, unknown>).image_id = 42;
-  expect(() => validateMediaConfiguration(input)).toThrow(refused);
+  expect(() => validate(input)).toThrow(refused);
 });
 
 it("refuses two data rows for one image even when the row counts agree", () => {
   const input = wire(twoImages());
   input.media_image_data[1]!.image_id = "image-a";
-  expect(() => validateMediaConfiguration(input)).toThrow(refused);
+  expect(() => validate(input)).toThrow(refused);
 });
 
 it.each(["id", "filename"])("refuses an image whose %s is not a string", (column) => {
   const input = wire(tables());
   (input.media_images[0] as Record<string, unknown>)[column] = 42;
-  expect(() => validateMediaConfiguration(input)).toThrow(refused);
+  expect(() => validate(input)).toThrow(refused);
 });
 
 it.each([
-  ["no content-language row", []],
-  ["a default language that is not a string", [{ default_language: 42, languages: ["en"] }]],
-])("refuses a bundle with images and %s", (_case, rows) => {
-  const input = { ...wire(tables()), content_languages: rows };
-  expect(() => validateMediaConfiguration(input)).toThrow(refused);
+  ["no content-language policy", null],
+  ["a default language that is not a string", { defaultLanguage: 42, languages: ["en"] }],
+])("refuses a bundle with images and %s", (_case, contentLanguages) => {
+  expect(() => validate(wire(tables()), contentLanguages)).toThrow(refused);
 });
 
 it.each(["und", "not a tag"])(
   "refuses a bundle with images whose default language is %s, as not a language",
   (defaultLanguage) => {
-    const input = {
-      ...wire(tables()),
-      content_languages: [{ default_language: defaultLanguage, languages: ["en"] }],
-    };
-    expect(() => validateMediaConfiguration(input)).toThrow(
+    expect(() => validate(wire(tables()), { defaultLanguage, languages: ["en"] })).toThrow(
       expect.objectContaining({ code: "content.language_invalid" }),
     );
   },
@@ -147,10 +149,10 @@ function editedTables(): Record<string, Record<string, unknown>[]> {
 
 it("accepts two edits sharing one immutable blob and an original-source edit", () => {
   const input = editedTables();
-  expect(() => validateMediaConfiguration(input)).not.toThrow();
+  expect(() => validate(input)).not.toThrow();
   input.media_image_edits![0]!.source_hash = null;
   input.media_image_edits![0]!.original_filename = null;
-  expect(() => validateMediaConfiguration(input)).not.toThrow();
+  expect(() => validate(input)).not.toThrow();
 });
 
 it.each([
@@ -201,5 +203,5 @@ it.each([
   if (fault === "filename-control") edit.original_filename = "a\0b";
   if (fault === "filename-long") edit.original_filename = "a".repeat(256);
   if (fault === "duplicate-image") input.media_images!.push({ ...input.media_images![0]! });
-  expect(() => validateMediaConfiguration(input)).toThrow(refused);
+  expect(() => validate(input)).toThrow(refused);
 });

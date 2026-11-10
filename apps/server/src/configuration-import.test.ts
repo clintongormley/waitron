@@ -46,6 +46,8 @@ afterEach(async () => {
 
 const bundle: ConfigurationBundle = {
   version: 15,
+  contentLanguages: null,
+  holidayArea: null,
   settings: {},
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
@@ -204,6 +206,7 @@ describe("staged configuration import", () => {
     ["A1308 4a-ii pre-menu-list-removal export", { version: 14 }],
     ["old version", { version: 1 }],
     ["A1308 pre-location-column export", { version: 11 }],
+    ["previous format before venue-language storage", { version: 14 }],
     ["future version", { version: 16 }],
     ["pre-venue-fields export", { version: 9, venue: formatNineVenue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {

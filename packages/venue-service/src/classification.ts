@@ -41,7 +41,6 @@ export const VENUE_SERVICE_TABLES = [
   "allergy_line_ticks",
   "bill_identities",
   "bill_number_allocations",
-  "holiday_geographies",
   "seasons",
   "special_days",
   "special_day_dates",

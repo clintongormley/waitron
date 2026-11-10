@@ -5,7 +5,9 @@ import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { getCountryPack } from "@waitron/country-packs";
 import {
   CORE_MIGRATIONS,
-  holidayGeographies,
+  settings,
+  readSettings,
+  VENUE_SETTINGS,
   specialDays,
   tenants,
   withTransaction,
@@ -149,12 +151,9 @@ const direct = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(db, f
 
 /** Every geography and entry, so a refusal can be shown to change none. */
 async function rows() {
-  const geographies = await db
-    .select()
-    .from(holidayGeographies)
-    .orderBy(asc(holidayGeographies.id));
+  const holidayArea = (await readSettings(db, VENUE_SETTINGS)).doc.holidayArea;
   const entries = await db.select().from(specialDays).orderBy(asc(specialDays.id));
-  return { geographies, entries };
+  return { holidayArea, entries };
 }
 
 async function create(date: string, name: string) {
@@ -291,8 +290,13 @@ describe("holiday area", () => {
     const saved = await send(fx, "PUT", "/holiday-area", fx.manager, { areaKey: "aran" });
     expect(saved.status).toBe(200);
     const geography = (await saved.json()) as HolidayGeography;
+    const [session] = await db
+      .select()
+      .from(managementSessions)
+      .where(eq(managementSessions.tokenHash, hashSessionToken(fx.manager.split("=")[1]!)));
+    expect((await db.select().from(settings))[0]!.updatedBy).toBe(session!.personId);
+
     expect(geography).toEqual({
-      id: geography.id,
       country: "ES",
       provinceCode: "25",
       city: "Vielha",

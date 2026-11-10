@@ -1,7 +1,7 @@
-import { expect, it } from "vitest";
+import { beforeEach, expect, it } from "vitest";
 import { CORE_MIGRATIONS, catalogues, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   readContentLanguages,
   validateContentTranslations,
@@ -10,6 +10,7 @@ import {
 import { racePair } from "../test/fixtures.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(() => seedVenueSettings(suite.db));
 
 async function configuredTenant() {
   await seedTenant(suite.db);

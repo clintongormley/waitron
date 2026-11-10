@@ -59,6 +59,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   catalogues,
+  saveVenueFields,
+  readVenueSettings,
   categories,
   deviceProfiles,
   devices,
@@ -389,6 +391,8 @@ function venue(taxId: string): VenueRequest {
 
 const bundle: ConfigurationBundle = {
   version: 15,
+  contentLanguages: null,
+  holidayArea: null,
   settings: {},
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
@@ -507,6 +511,72 @@ describe("configuration transfer archive", () => {
 });
 
 describe("configuration transfer database path", () => {
+  it("exports the venue setup fields exactly and carries languages and holiday area at the top level", async () => {
+    const source = await applyVenue(planVenue(venue("B13579246"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const holidayArea = { country: "ES", provinceCode: "28", cityKey: "madrid", areaKey: null };
+    await withTransaction(suite.db, (tx) =>
+      saveVenueFields(
+        tx,
+        {
+          contentLanguages: ["es", "en"],
+          defaultContentLanguage: "es",
+          holidayArea,
+        },
+        null,
+      ),
+    );
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const exported = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-11-10T10:00:00Z"),
+      versions,
+    );
+    expect(Object.keys(exported.venue).sort()).toEqual(
+      [
+        "country",
+        "taxId",
+        "legalName",
+        "taxpayerDomicile",
+        "name",
+        "invoiceLocales",
+        "operationDescription",
+        "fiscalTerritory",
+        "addressLine1",
+        "addressLine2",
+        "postalCode",
+        "city",
+        "province",
+        "timeZone",
+        "dayCutover",
+        "seriesCode",
+        "fullSeriesCode",
+        "rectificativeSeriesCode",
+      ].sort(),
+    );
+    expect(exported.contentLanguages).toEqual({ defaultLanguage: "es", languages: ["es", "en"] });
+    expect(exported.holidayArea).toEqual(holidayArea);
+    expect(exported.tables).not.toHaveProperty("content_languages");
+    expect(exported.tables).not.toHaveProperty("holiday_geographies");
+    await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, exported, ALL_MODULES, versions),
+    });
+    expect((await readVenueSettings(targetSuite.db)).doc).toMatchObject({
+      contentLanguages: ["es", "en"],
+      defaultContentLanguage: "es",
+      holidayArea,
+    });
+  });
+
   it("imports the first venue's explicit agreement limits with the other rule defaults", async () => {
     const source = await applyVenue(planVenue(venue("B13579246"), ALL_MODULES), {
       db: suite.db,

@@ -780,6 +780,12 @@ describe("applyVenue", () => {
       expect(nodes.rows[0]?.n).toBe(1);
     });
 
+    it("when its receipt languages differ", async () => {
+      await provisionThenReapply(
+        planVenue({ ...request("B13131313"), invoiceLocales: ["en-GB"] }, ALL_MODULES),
+      );
+    });
+
     it("when the plan names a series the node does not have, and adds no series", async () => {
       const otherSeries = { ...request("B13131313"), seriesCode: "B" };
       await provisionThenReapply(planVenue(otherSeries, ALL_MODULES));

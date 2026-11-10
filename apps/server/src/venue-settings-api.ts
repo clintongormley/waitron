@@ -1,10 +1,9 @@
 import type { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { readCatalogueSettings, saveCatalogueSettings } from "@waitron/catalogue";
 import {
-  locations,
   readVenue,
-  venueLocationId,
+  saveVenueFields,
   withTransaction,
   type Database,
   type Transaction,
@@ -84,6 +83,7 @@ async function writeReceiptLanguage(
   tx: Transaction,
   state: ReceiptLanguageState,
   language: string,
+  personId: string,
 ): Promise<ReceiptLanguageState> {
   const { venue, rules } = state;
   if (!rules.choices.includes(language)) {
@@ -103,10 +103,7 @@ async function writeReceiptLanguage(
     throw new AppError("receipt.language_orders_open", { field: "receiptLanguage", count });
   }
   const invoiceLocales = [language];
-  await tx
-    .update(locations)
-    .set({ invoiceLocales })
-    .where(eq(locations.id, await venueLocationId(tx)));
+  await saveVenueFields(tx, { invoiceLocales }, personId);
   return { rules, venue: { ...venue, invoiceLocales } };
 }
 
@@ -346,7 +343,7 @@ export function mountVenueSettingsApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<unknown>(c);
-      const answer = await gated(sessionId, async (tx) => {
+      const answer = await gated(sessionId, async (tx, personId) => {
         const request = venueDefaultsRequest(body);
         let state: ReceiptLanguageState | undefined;
         if ("receiptLanguage" in request) {
@@ -356,6 +353,7 @@ export function mountVenueSettingsApi(
             tx,
             await readReceiptLanguageState(tx),
             request.receiptLanguage,
+            personId,
           );
         }
         if ("defaultProductVatClass" in request)

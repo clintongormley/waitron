@@ -6,7 +6,7 @@ const MENU_PUBLICATION_READS = [
   "catalogues",
   "categories",
   "category_details",
-  "content_languages",
+  "settings.venue",
   "extra_list_items",
   "extra_lists",
   "menu_details",
@@ -76,7 +76,7 @@ const HIERARCHY_DELETE_READS = [
 ] as const;
 
 const TRANSLATION_READS = [
-  "content_languages",
+  "settings.venue",
   "products",
   "option_lists",
   "option_labels",
@@ -92,7 +92,7 @@ export const QUERY_DEPENDENCIES = {
   getZoneDeleteImpact: HIERARCHY_DELETE_READS,
   getDepartmentDeleteImpact: HIERARCHY_DELETE_READS,
   getCatalogueSettings: ["catalogue_settings"],
-  getContentLanguages: ["content_languages"],
+  getContentLanguages: ["settings.venue"],
   getVenueTheme: ["custom_themes", "media_images"],
   listThemes: ["custom_themes"],
   // The server works the rules out once at boot, so no table change moves them.
@@ -315,7 +315,7 @@ export const QUERY_DEPENDENCIES = {
     "catalogues",
     "products",
     "menu_item_variant_overrides",
-    "content_languages",
+    "settings.venue",
     "product_modifiers",
     "extra_lists",
     "extra_list_items",
@@ -516,7 +516,6 @@ export const QUERY_DEPENDENCIES = {
     "departments",
     "locations",
     "settings.venue",
-    "content_languages",
   ],
   getVenueDetails: [
     "locations",
