@@ -1174,7 +1174,7 @@ describe("the Edit dialog", () => {
   const editPrinters: Printer[] = [
     printers[0]!,
     { ...printers[0]!, id: "pr2", name: "Terrace" },
-    { ...printers[0]!, id: "pr3", name: "Bar", active: false },
+    { ...printers[0]!, id: "pr3", name: "Back bar", active: false },
   ];
   const editProfiles: DeviceProfile[] = [
     {
@@ -1316,7 +1316,7 @@ describe("the Edit dialog", () => {
     // The device keeps the switched-off printer it holds; it cannot newly choose one.
     expect(receipt.options).toEqual([
       { value: "", label: useDefaultNone() },
-      { value: "pr3", label: "Bar (Deshabilitada)" },
+      { value: "pr3", label: "Back bar (Deshabilitada)" },
       { value: "pr1", label: "Kitchen" },
       { value: "pr2", label: "Terrace" },
     ]);
@@ -1432,11 +1432,11 @@ describe("the Edit dialog", () => {
       const before = currentLocale();
       try {
         for (const [locale, receiptLabel, slipLabel] of [
-          ["en", "Room (not on this profile)", "Bar (Disabled) (not on this profile)"],
+          ["en", "Room (not on this profile)", "Back bar (Disabled) (not on this profile)"],
           [
             "es-ES",
             "Room (no está en este perfil)",
-            "Bar (Deshabilitada) (no está en este perfil)",
+            "Back bar (Deshabilitada) (no está en este perfil)",
           ],
         ] as const) {
           setLocale(locale);
@@ -4866,7 +4866,7 @@ describe("add a device", () => {
               everyStation: true,
               everyZone: true,
               profileEveryStation: true,
-              stations: [slot("s1", "Kitchen"), slot("s2", "Bar")],
+              stations: [slot("s1", "Kitchen"), slot("s2", "Back bar")],
               zones: null,
               nonPassStationsOverride: null,
               showNonPassStations: true,

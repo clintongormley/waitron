@@ -115,7 +115,7 @@ const report: CategorySalesDto = {
       children: [
         node({
           kind: "free_text",
-          id: "Tapas viejas",
+          id: "Old tapas",
           name: "Old tapas",
           depth: 1,
           gross: "1.00",
