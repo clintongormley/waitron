@@ -221,7 +221,7 @@ describe("readStaffingMonth", () => {
   });
 
   it("reads each table once when a repeating special day follows a public holiday, places it by that holiday, and its live query names every one of them", async () => {
-    const v = await painted();
+    await painted();
     const semanaSanta = await inTx(async (tx) => {
       await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       const [row] = await tx

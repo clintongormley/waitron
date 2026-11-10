@@ -150,7 +150,7 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
       if (before.length > 0) await tx.insert(tenants).values(before);
     }),
   );
-  const cfg = await withTransaction(db, async (tx) => {
+  await withTransaction(db, async (tx) => {
     await tx
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Invented SL" })
