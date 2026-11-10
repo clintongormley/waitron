@@ -277,7 +277,7 @@ it("A366 reconnect: a departed save's narrowed devices stay off the screen, and 
           narrowedDevices: [
             {
               deviceId: "dv1",
-              deviceName: "Pantalla Pase",
+              deviceName: "Pass screen",
               lost: { screens: [], stations: [{ id: "s1", name: "Kitchen" }], zones: [] },
             },
           ],
