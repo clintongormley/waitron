@@ -15,7 +15,11 @@ declare module "@waitron/shared" {
     "sale.correction_history_unusable": Record<string, never>;
     "sale.correction_breakdown_invalid": Record<string, never>;
     "sale.correction_not_admitted": {
-      reason: Extract<CorrectionAdmission, { eligible: false }>["reason"] | "replaced";
+      reason:
+        | Extract<CorrectionAdmission, { eligible: false }>["reason"]
+        | "replaced"
+        | "filed_figures_unreadable"
+        | "filed_figures_changed";
     };
     /** A tender still has `settledAt: null`, so `settleSale` settles nothing and the sale stays
      * retryable. `recordSale`'s immediate settlement runs the same `settleSale`. */

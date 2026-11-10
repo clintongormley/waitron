@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { saleLines, sales, saleSubstitutions, type Transaction } from "@waitron/db";
-import type { CorrectionAdmission, FiscalBackend } from "@waitron/fiscal";
+import type { CorrectionAdmission, FiledFigures, FiscalBackend } from "@waitron/fiscal";
 import {
   AppError,
   basisPointsToDecimal,
@@ -30,8 +30,9 @@ export type CorrectionPreview = CorrectionAmountPreview &
 /**
  * What a correction of `selection.gross` from the invoice `saleId`, issued by `issuingNodeId`, would
  * file, as the lines and split `recordCorrection` takes. Refused with
- * `sale.correction_not_admitted` when the invoice was replaced by a full invoice or its regime does
- * not admit a correction of it.
+ * `sale.correction_not_admitted` when the invoice was replaced by a full invoice, its regime does
+ * not admit a correction of it, or the regime's newest filed figures of it or of an earlier
+ * correction cannot be read or differ from the stored ones.
  */
 export async function previewCorrectionAmounts(
   tx: Transaction,
@@ -53,7 +54,9 @@ export async function previewCorrectionAmounts(
   if (!admission.eligible) {
     throw new AppError("sale.correction_not_admitted", { reason: admission.reason });
   }
-  const { history, invoiceLines } = await readHistory(tx, saleId);
+  const stored = await readStored(tx, saleId);
+  await refuseMovedFigures(tx, backend, [stored.sale, ...stored.corrections]);
+  const { history, invoiceLines } = await readHistory(tx, saleId, stored);
   const preview = allocateCorrectionAmounts(history, selection);
   return {
     ...preview,
@@ -78,26 +81,73 @@ export async function readCorrectionAmountHistory(
   return (await readHistory(tx, saleId)).history;
 }
 
-async function readHistory(
+type StoredFigures = Pick<typeof sales.$inferSelect, "id" | "total" | "vatBreakdown">;
+
+/** The invoice's and its earlier corrections' stored figures; refused when the sale is unknown or
+ * is itself a correction. */
+async function readStored(
   tx: Transaction,
   saleId: SaleId,
-): Promise<{ history: CorrectionAmountHistory; invoiceLines: InvoiceLine[] }> {
+): Promise<{ sale: StoredFigures; corrections: StoredFigures[] }> {
+  const figures = { id: sales.id, total: sales.total, vatBreakdown: sales.vatBreakdown };
   const [sale] = await tx
-    .select({ correctsSaleId: sales.correctsSaleId, vatBreakdown: sales.vatBreakdown })
+    .select({ ...figures, correctsSaleId: sales.correctsSaleId })
     .from(sales)
     .where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("sale.not_found", { saleId });
   if (sale.correctsSaleId !== null) unusable();
+  const corrections = await tx.select(figures).from(sales).where(eq(sales.correctsSaleId, saleId));
+  return { sale, corrections };
+}
+
+/**
+ * Refuses unless the regime reads each sale's newest filed figures and they equal the stored
+ * ones: the same total, and at each rate, the same base and VAT.
+ */
+async function refuseMovedFigures(
+  tx: Transaction,
+  backend: FiscalBackend,
+  stored: readonly StoredFigures[],
+): Promise<void> {
+  const ids = stored.map((sale) => sale.id as SaleId);
+  const filed = backend.filedFiguresFor ? await backend.filedFiguresFor(tx, ids) : new Map();
+  for (const sale of stored) {
+    const figures: FiledFigures | undefined = filed.get(sale.id as SaleId);
+    if (figures === undefined || !figures.readable) {
+      throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_unreadable" });
+    }
+    const { newest } = figures;
+    const splitOf = (split: readonly { rate: string; base: string; tax: string }[]) =>
+      new Map(
+        split.map((line) => [
+          decimalToBasisPoints(decimal(line.rate)),
+          [decimalToCents(decimal(line.base)), decimalToCents(decimal(line.tax))].join(),
+        ]),
+      );
+    const storedSplit = splitOf(sale.vatBreakdown);
+    const filedSplit = splitOf(newest.vatBreakdown);
+    if (
+      decimalToCents(newest.total) !== sale.total ||
+      storedSplit.size !== filedSplit.size ||
+      [...storedSplit].some(([rate, amounts]) => filedSplit.get(rate) !== amounts)
+    ) {
+      throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_changed" });
+    }
+  }
+}
+
+async function readHistory(
+  tx: Transaction,
+  saleId: SaleId,
+  stored?: Awaited<ReturnType<typeof readStored>>,
+): Promise<{ history: CorrectionAmountHistory; invoiceLines: InvoiceLine[] }> {
+  const { sale, corrections } = stored ?? (await readStored(tx, saleId));
 
   const lines = await tx
     .select()
     .from(saleLines)
     .where(eq(saleLines.saleId, saleId))
     .orderBy(saleLines.lineNo);
-  const corrections = await tx
-    .select({ id: sales.id, vatBreakdown: sales.vatBreakdown })
-    .from(sales)
-    .where(eq(sales.correctsSaleId, saleId));
   const earlierLines = await tx
     .select({
       saleId: saleLines.saleId,

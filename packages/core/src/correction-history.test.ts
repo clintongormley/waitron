@@ -8,7 +8,7 @@ import {
 } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type { FiledFigures, FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
   captureError,
@@ -466,5 +466,94 @@ it("refuses a substituted invoice as replaced before asking the regime", async (
   expect(await captureError(() => preview(saleId))).toMatchObject({
     code: "sale.correction_not_admitted",
     params: { reason: "replaced" },
+  });
+});
+
+const filed = (total: string, ...split: [rate: string, base: string, tax: string][]) => ({
+  readable: true as const,
+  newest: {
+    total: decimal(total),
+    vatBreakdown: split.map(([rate, base, tax]) => ({
+      rate: decimal(rate),
+      base: decimal(base),
+      tax: decimal(tax),
+    })),
+  },
+  newestAnswered: null,
+});
+
+it.each<
+  [
+    name: string,
+    moved: (ids: { invoice: SaleId; corrective: SaleId }) => [SaleId, FiledFigures],
+    reason: string,
+  ]
+>([
+  [
+    "the invoice filed at another rate",
+    ({ invoice }) => [invoice, filed("12.10", ["10.00", "11.00", "1.10"])],
+    "filed_figures_changed",
+  ],
+  [
+    "the invoice filed with an extra rate",
+    ({ invoice }) => [
+      invoice,
+      filed("12.10", ["21.00", "10.00", "2.10"], ["10.00", "0.00", "0.00"]),
+    ],
+    "filed_figures_changed",
+  ],
+  [
+    "the invoice's base and VAT moved at its rate",
+    ({ invoice }) => [invoice, filed("12.10", ["21.00", "10.01", "2.09"])],
+    "filed_figures_changed",
+  ],
+  [
+    "the invoice's total alone moved",
+    ({ invoice }) => [invoice, filed("12.11", ["21.00", "10.00", "2.10"])],
+    "filed_figures_changed",
+  ],
+  [
+    "an earlier corrective's split moved",
+    ({ corrective }) => [corrective, filed("-1.05", ["21.00", "-0.88", "-0.17"])],
+    "filed_figures_changed",
+  ],
+  [
+    "an earlier corrective unreadable",
+    ({ corrective }) => [corrective, { readable: false }],
+    "filed_figures_unreadable",
+  ],
+])("refuses when %s", async (_name, moved, reason) => {
+  const { saleId, ids } = await sellSteak();
+  const corrective = await correct(saleId, "-1.05", [
+    {
+      lineNo: 1,
+      name: "Steak",
+      descriptions: { "es-ES": "Steak" },
+      quantity: "-1",
+      unitPrice: "10.00",
+      vatRate: "21.00",
+      lineTotal: "-0.87",
+      lineGross: "-1.05",
+      correctsLineId: ids[0],
+    },
+  ]);
+  backend.setFiledFigures(...moved({ invoice: saleId, corrective: corrective.saleId }));
+
+  expect(await captureError(() => preview(saleId))).toMatchObject({
+    code: "sale.correction_not_admitted",
+    params: { reason },
+  });
+});
+
+it("refuses as unreadable when the regime cannot read its filed figures", async () => {
+  const { saleId } = await sellSteak();
+  const unreading = new Proxy<FiscalBackend>(backend, {
+    get: (target, key, receiver) =>
+      key === "filedFiguresFor" ? undefined : Reflect.get(target, key, receiver),
+  });
+
+  expect(await captureError(() => preview(saleId, unreading))).toMatchObject({
+    code: "sale.correction_not_admitted",
+    params: { reason: "filed_figures_unreadable" },
   });
 });
