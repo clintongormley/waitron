@@ -7,8 +7,8 @@ import type { MyScheduleScreen } from "./my-schedule-screen.js";
 import type { DashboardApi, MyAbsence, MyShift, MySwap, RosterEntry } from "../api/client.js";
 
 const roster: RosterEntry[] = [
-  { personId: "me", displayName: "Yo" },
-  { personId: "col1", displayName: "Colega" },
+  { personId: "me", displayName: "Me" },
+  { personId: "col1", displayName: "Colleague" },
 ];
 const shifts: MyShift[] = [
   {
