@@ -236,7 +236,7 @@ On a busy shift it is easy to start an order at one table, get called to another
 dishes you never sent. So on a phone or tablet the bar at the top shows **Floor**, then a button
 such as **✎ T4**, by the table's short name, for each table where you have dishes not yet sent;
 however many of your bills there hold unsent dishes, a table gets one button. Tap a button to go
-back to that table, on the bill you added to last. The table you are at is highlighted. Once nothing of yours is unsent there, for
+back to that table. The table you are at is highlighted. Once nothing of yours is unsent there, for
 example after you send everything, its button stays highlighted without the ✎ until you leave, and
 then goes, while a table you leave with dishes still unsent keeps its ✎ button. If someone else takes over your bill, it stops counting as yours: at once at the
 table you are at, and at any other table when the Floor next updates its tables. When there are

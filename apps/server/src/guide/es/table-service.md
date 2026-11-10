@@ -247,8 +247,7 @@ En un turno con mucho trabajo es fácil empezar un pedido en una mesa, que te ll
 olvidar los platos que no llegaste a enviar. Por eso, en un móvil o una tableta, la barra de arriba
 muestra **Sala** y después un botón como **✎ M4**, con el nombre corto de la mesa, por cada mesa
 donde tienes platos sin enviar; aunque varias cuentas tuyas tengan platos sin enviar allí, la mesa
-tiene un solo botón. Toca un botón para volver a esa mesa, en la cuenta a la que añadiste platos por
-última vez. La mesa en la que estás aparece
+tiene un solo botón. Toca un botón para volver a esa mesa. La mesa en la que estás aparece
 resaltada. Cuando ya no queda nada tuyo sin enviar en ella, por ejemplo después de enviarlo todo, su
 botón sigue resaltado sin el ✎ hasta que sales, y entonces desaparece, mientras que una mesa de la
 que sales con platos aún sin enviar conserva su botón con ✎. Si

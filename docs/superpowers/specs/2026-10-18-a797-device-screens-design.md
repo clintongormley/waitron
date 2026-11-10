@@ -726,7 +726,8 @@ edits the same files)
     fixed foot (A803 builds its contents and quiet Pay; this slice fixes it on a phone), tile counts,
     the opening view. LIGHT. Waits for A803's slice 3. (2026-11-09: slice 10.)
 11. **The switcher's unsent marks** ("✎ Bill 2 unsent", closed and open) and the bar button's choice
-    of bill. LIGHT. After 3 and A803's slice 3.
+    of bill. LIGHT. After 3 and A803's slice 3. (2026-11-10: slice 11; the closed switcher draws no
+    "·" before the ✎, and says "✎ 2 bills unsent" for two or more.)
 
 **4 — The pass and its Held column**
 12. **Built by A773-2** (its tasks T7a, T7b and T7) into these layouts, once firing through the pass

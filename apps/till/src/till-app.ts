@@ -11935,9 +11935,8 @@ export class TillApp extends LitElement {
     };
   }
 
-  /** D9: the held bill's button shows its order screen; any other opens its table as a Floor tap
-   * does. Both close an open overlay first. Slice 11, D6–D7: either shows the bill this person
-   * saved last ({@link barBillToOpen}). */
+  /** D9: the held bill's button shows its order screen; any other opens its table. Both close an
+   * open overlay first. Slice 11, D6–D7: either shows the bill {@link barBillToOpen} names, if any. */
   #onOpenBarTable({ tableId, held }: { tableId: string; held: boolean }): void {
     if (held) {
       if (
