@@ -70,7 +70,7 @@
   --wt-modal-inline-margin: clamp(var(--wt-space-1), 5vw - var(--wt-space-4), var(--wt-space-5));
   --wt-modal-inline-padding: clamp(var(--wt-space-3), 3vw, var(--wt-space-5));
 
-  /* Shared name-content sizing stays wider than the minimum tap target. */
+  /* Default name-content sizing is wider than the minimum tap target. */
   --wt-cell-name-max-width: 140px;
 
   /* The tallest wt-floor-plan-preview draws; a page or panel may set its own. */

@@ -713,9 +713,9 @@ and the zone editor's Save-edge cases at 1280 and 390px in
 `packages/venue-service/src/dashboard/zone-edit-dialog.test.ts`. A new field primitive that does not read
 `--wt-field-max-width` is seen by none of them, and neither is a new screen-styled native control.
 
-`--wt-cell-name-max-width` is the shared 140px sizing value for name content. It stays above
-`--wt-tap-min`, as `packages/ui-core/src/tokens/structure.test.ts` checks. A form chooses how it
-uses that value to fit its layout.
+`--wt-cell-name-max-width` is the shared sizing value for name content. Its 140px default is wider
+than the default `--wt-tap-min`; `packages/ui-core/src/tokens/structure.test.ts` checks that
+relationship in the shipped tokens. A form chooses how it uses the value to fit its layout.
 
 ### `--wt-tap-min`
 
