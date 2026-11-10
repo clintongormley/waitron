@@ -58,6 +58,7 @@ export const fiscalSubmissionSource: AlertSource = {
         params: { count: Number(stopped.n) },
         severity: "error",
         since: new Date(stopped.oldest!).toISOString(),
+        screen: "fiscal-filing",
       });
     }
 
@@ -69,6 +70,7 @@ export const fiscalSubmissionSource: AlertSource = {
         params: { count: open.count },
         severity: "error",
         since: open.oldestOpenedAt.toISOString(),
+        screen: "fiscal-filing",
       });
     }
     alerts.push(...(await refusalsRepeated(tx)));
@@ -148,5 +150,6 @@ async function refusalsRepeated(tx: Transaction): Promise<OngoingAlert[]> {
       params: { codigo: row.codigo, count: Number(row.run_length) },
       severity: "error",
       since: new Date(row.opened_at).toISOString(),
+      screen: "fiscal-filing",
     }));
 }

@@ -7,6 +7,36 @@ it("claims fiscal. incidents for the fiscal area under fiscal.view and clock.beh
   expect(FISCAL_ALERTS).toEqual({
     events: [
       { prefix: "fiscal.", area: "fiscal", permission: "fiscal.view" },
+      {
+        prefix: "fiscal.registro_rechazado",
+        area: "fiscal",
+        permission: "fiscal.view",
+        screen: "fiscal-filing",
+      },
+      {
+        prefix: "fiscal.huella_divergente",
+        area: "fiscal",
+        permission: "fiscal.view",
+        screen: "fiscal-filing",
+      },
+      {
+        prefix: "fiscal.duplicado_anulado",
+        area: "fiscal",
+        permission: "fiscal.view",
+        screen: "fiscal-filing",
+      },
+      {
+        prefix: "fiscal.aceptado_con_errores",
+        area: "fiscal",
+        permission: "fiscal.view",
+        screen: "fiscal-filing",
+      },
+      {
+        prefix: "fiscal.anulacion_retenida",
+        area: "fiscal",
+        permission: "fiscal.view",
+        screen: "fiscal-filing",
+      },
       { prefix: "clock.behind_chain", area: "box", permission: "system.manage" },
       { prefix: "clock.records_misdated", area: "box", permission: "system.manage" },
       { prefix: "clock.corrected", area: "box", permission: "system.manage" },

@@ -75,6 +75,7 @@ describe("fiscalSubmissionSource — open filing cases", () => {
         params: { count: 2 },
         severity: "error",
         since: EARLIER.toISOString(),
+        screen: "fiscal-filing",
       },
     ]);
   });
@@ -183,6 +184,7 @@ describe("fiscalSubmissionSource — a chain held after refusals with one code",
         params: { codigo: "1100", count: 4 },
         severity: "error",
         since: await caseOpenedAt(lastRefusal),
+        screen: "fiscal-filing",
       },
     ]);
     expect(await caseOpenedAt(lastRefusal)).toBe(at(2).toISOString());
