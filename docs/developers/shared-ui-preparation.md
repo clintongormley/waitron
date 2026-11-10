@@ -17,20 +17,15 @@ repository association and records the full Waitron commit in `waitronSource.com
 Both packages carry built JavaScript, declarations, Elastic License 2.0 and
 `LICENSE-GRANTS.md`. UI also carries CSS and its Lit peer; the signing package has no peers.
 
-For contract, the final step checks the token’s authenticated identity, `write:packages`
-scope and its private Cloud association. The contract package may be absent before
-its first upload. After upload, the same
-check requires its private association; registry output records the numbered version's
-integrity, source commit and repository. A pre-upload pass alone does not establish
-permission to create a new package. Cloud must then install that exact version with
-its own workflow token; a refused install needs a package access grant for Cloud.
-
-Check the workflow result after a qualifying merge. Read the final step’s log before
-retrying a failed run: the upload may have succeeded before a later metadata check
-failed. A retry uses the same version and cannot upload it again. The next qualifying
-merge attempts a new numbered version. An older run can
+Check the workflow result after a qualifying merge. A publication error fails the
+run; the next qualifying merge attempts a new numbered version. An older run can
 be refused if a higher package version has already been published. There is no
 scheduled publisher or catch-up process.
+
+After the first contract publication, record its version, source commit, integrity
+and private Cloud repository association. Cloud must install that exact version with
+its own workflow token; a refused install needs a package access grant for Cloud.
+A local tarball or a writer-token download does not establish that access.
 
 The [first publication on 7 November 2026](https://github.com/clintongormley/waitron/actions/runs/42376444927)
 released private `@waitron-io/ui-core@0.2.1`. Its downloaded registry tarball records

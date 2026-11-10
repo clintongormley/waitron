@@ -111,14 +111,9 @@ the next qualifying merge attempts a new `0.2.<run number>` version.
 
 The publisher uses a fixed UI/contract matrix, with UI-only Chromium setup and independent
 failures (`fail-fast: false`). Each row runs the same source/preparation/installed-consumer
-checks; contract runs in Node with no peers. For contract, the final step authenticates the
-write token, checks its package scope and existing private Cloud association, then repeats
-the association check after upload and prints registry integrity/source metadata. UI keeps
-its existing upload without these new API gates. New-contract metadata may be absent
-only before upload; first creation and Cloud’s
-own-token installation remain unverified until those operations run. A red final step may
-follow a successful upload; inspect the log before retrying. The run number, and therefore
-the version, stays the same on a retry, which cannot replace an already published version.
+checks; contract runs in Node with no peers. Both upload with restricted access.
+Actual private publication and Cloud’s own-token installation remain to be checked
+after the first contract release; local package checks do not establish registry access.
 
 The publisher uses its own concurrency group with `queue: max` and no cancellation
 of a running publication. This serializes uploads separately from `ci.yml`, whose
@@ -154,16 +149,6 @@ External provenance, read 2026-11-06:
 | --- | --- | --- |
 | Uploads can queue without replacing the one pending run | [Actions concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency): “Up to 100 jobs or workflow runs” | `queue: max` permits multiple pending publications in one group. |
 | Packages start private | [GitHub npm registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry): “default visibility is private” | The existing private package keeps its Cloud repository association; publication requests restricted access. |
-
-### Package credential checks: external provenance (2026-11-10)
-
-| Claim | Source’s words | Application here |
-| --- | --- | --- |
-| A classic token needs a package upload scope | [OAuth scopes](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps): “Grants access to upload or publish a package” | Require `write:packages` from the authenticated response header. |
-| Package metadata needs authenticated package access | [Packages REST API](https://docs.github.com/en/rest/packages/packages): “your token must include the `read:packages` scope” | Read the actual package visibility and linked repository before and after upload; a missing first contract is not proof of creation rights. |
-| Cloud’s workflow access is separate | [Package access settings](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility): “Manage Actions access” | Require a real install with Cloud’s token after first publication; a writer-token download does not establish that access. |
-| A retry retains the same version | [Actions variables](https://docs.github.com/en/actions/reference/workflows-and-actions/variables): “This number does not change if you re-run the workflow run.” | The publisher uses `GITHUB_RUN_NUMBER`, not the attempt. |
-| An uploaded version cannot be replaced | [npm publish](https://docs.npmjs.com/cli/v11/commands/npm-publish/): “The publish will fail if the package name and version combination already exists” | A failure after upload does not make the version available for another upload. |
 
 ## Disposable server-test runners
 
