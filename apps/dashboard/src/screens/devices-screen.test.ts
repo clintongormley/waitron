@@ -117,7 +117,7 @@ const devices: DeviceRow[] = [
     approvedProfileIds: [],
     kind: "kds_station",
     kitchenScreens: [],
-    label: "Pase revocado",
+    label: "Revoked pass",
     active: false,
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
@@ -206,14 +206,14 @@ const pending: JoinRequestRow[] = [
   {
     id: "r1",
     kind: "device",
-    label: "Barra 1",
+    label: "Bar 1",
     createdAt: "2026-09-08T10:02:00.000Z",
     pairingBy: null,
   },
   {
     id: "r2",
     kind: "device",
-    label: "Pantalla pase",
+    label: "Pass monitor",
     createdAt: "2026-09-08T10:03:00.000Z",
     pairingBy: null,
   },
@@ -231,7 +231,7 @@ const TAKEN_UNTIL = "2026-09-08T10:05:00.000Z";
 const printers: Printer[] = [
   {
     id: "pr1",
-    name: "Cocina",
+    name: "Kitchen",
     transport: "network_tcp",
     pendingJobs: 0,
     lastPrintAt: null,
@@ -311,7 +311,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     denyJoinRequest: vi.fn().mockResolvedValue(undefined),
     acceptDeviceJoinRequest: vi
       .fn()
-      .mockResolvedValue({ deviceId: "d9", name: "Barra 2", formFactor: "kds" }),
+      .mockResolvedValue({ deviceId: "d9", name: "Bar 2", formFactor: "kds" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
     updateDevice: vi.fn().mockResolvedValue(undefined),
     listReaders: vi.fn().mockResolvedValue(readers),
@@ -457,13 +457,13 @@ describe("devices-screen", () => {
         expect(deepText(el, "[data-test=device-label-d4]")).toBe("Retired profile");
         expect(dq(table.shadowRoot!, "[data-test=device-row-d1]")).toBeNull();
         await chooseOption(profile!, "none");
-        expect(deepText(el, "[data-test=device-label-d2]")).toBe("Pase revocado");
+        expect(deepText(el, "[data-test=device-label-d2]")).toBe("Revoked pass");
         expect(dq(table.shadowRoot!, "[data-test=device-row-d4]")).toBeNull();
         await chooseOption(profile!, "");
         const status = dq(table.shadowRoot!, 'wt-combobox[name="status-filter"]');
         expect(status).not.toBeNull();
         await chooseOption(status!, "disabled");
-        expect(deepText(el, "[data-test=device-label-d2]")).toBe("Pase revocado");
+        expect(deepText(el, "[data-test=device-label-d2]")).toBe("Revoked pass");
         expect(dq(table.shadowRoot!, "[data-test=device-row-d1]")).toBeNull();
         await chooseOption(status!, "");
         await chooseOption(profile!, "dp2");
@@ -632,7 +632,7 @@ describe("the device table", () => {
     id: "t1",
     kind: "till",
     kitchenScreens: [],
-    label: "Caja 1",
+    label: "Cash till 1",
     deviceProfileId: "dp1",
   };
 
@@ -663,7 +663,7 @@ describe("the device table", () => {
     expect(table.rows.map((row) => (row as DeviceRow).id)).toEqual(["d1", "d2", "t1"]);
     // What a device shows is a kitchen screen's; a till's cell is empty.
     expect(deepText(el, "[data-test=device-screens-t1]")).toBe("");
-    expect(deepText(el, "[data-test=device-label-t1]")).toBe("Caja 1");
+    expect(deepText(el, "[data-test=device-label-t1]")).toBe("Cash till 1");
   });
 
   describe("the Battery column", () => {
@@ -874,7 +874,7 @@ describe("the device table", () => {
     expect(row.classList.contains("clickable")).toBe(false);
     const menus = row.querySelectorAll<Menu>("dashboard-row-actions");
     expect(menus).toHaveLength(1);
-    expect(menus[0]!.label).toBe(`${t("devices.actions")}: Pase revocado`);
+    expect(menus[0]!.label).toBe(`${t("devices.actions")}: Revoked pass`);
     const items = [...menus[0]!.querySelectorAll("wt-button")];
     expect(items.map((b) => b.getAttribute("data-test"))).toEqual(["delete-device-d2"]);
     expect(items.map((b) => b.textContent?.trim())).toEqual([t("action.delete")]);
@@ -1054,7 +1054,7 @@ describe("the device table", () => {
       await page.viewport(390, 844);
       const long = {
         ...till,
-        label: "Caja-de-la-terraza-junto-a-la-puerta-del-jardin-trasero",
+        label: "Cash-till-by-the-terrace-door-near-the-rear-garden-gate",
       };
       const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
         api: stubApi({ listDevices: vi.fn().mockResolvedValue([devices[0], long, devices[1]]) }),
@@ -1077,13 +1077,13 @@ describe("the device table", () => {
           role: "receipt",
           selection: "default",
           chosenId: null,
-          resolved: { id: "pr1", name: "Cocina", available: true },
+          resolved: { id: "pr1", name: "Kitchen", available: true },
         },
         {
           role: "payment_slip",
           selection: "item",
           chosenId: "pr2",
-          resolved: { id: "pr2", name: "Terraza", available: true },
+          resolved: { id: "pr2", name: "Terrace", available: true },
         },
         {
           role: "cash_drawer",
@@ -1103,8 +1103,8 @@ describe("the device table", () => {
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
     const mark = t("devices.default_mark");
-    expect(deepText(el, "[data-test=device-receipt-d1]")).toBe(`Cocina (${mark})`);
-    expect(deepText(el, "[data-test=device-slip-d1]")).toBe("Terraza");
+    expect(deepText(el, "[data-test=device-receipt-d1]")).toBe(`Kitchen (${mark})`);
+    expect(deepText(el, "[data-test=device-slip-d1]")).toBe("Terrace");
     expect(deepText(el, "[data-test=device-drawer-d1]")).toBe(`${t("equipment.none")} (${mark})`);
     expect(deepText(el, "[data-test=device-reader-d1]")).toBe(`Front counter (${mark})`);
   });
@@ -1173,8 +1173,8 @@ describe("the Edit dialog", () => {
 
   const editPrinters: Printer[] = [
     printers[0]!,
-    { ...printers[0]!, id: "pr2", name: "Terraza" },
-    { ...printers[0]!, id: "pr3", name: "Barra", active: false },
+    { ...printers[0]!, id: "pr2", name: "Terrace" },
+    { ...printers[0]!, id: "pr3", name: "Bar", active: false },
   ];
   const editProfiles: DeviceProfile[] = [
     {
@@ -1198,7 +1198,7 @@ describe("the Edit dialog", () => {
     id: "t1",
     kind: "till",
     kitchenScreens: [],
-    label: "Caja 1",
+    label: "Cash till 1",
     deviceProfileId: "pa",
     // Switched off since the device chose it; it may keep it.
     receiptPrinterId: "pr3",
@@ -1290,7 +1290,7 @@ describe("the Edit dialog", () => {
       "name",
       true,
       t("devices.name"),
-      "Caja 1",
+      "Cash till 1",
     ]);
     const profile = field(el, "edit-profile");
     expect([profile.name, profile.required, profile.label, profile.value]).toEqual([
@@ -1316,9 +1316,9 @@ describe("the Edit dialog", () => {
     // The device keeps the switched-off printer it holds; it cannot newly choose one.
     expect(receipt.options).toEqual([
       { value: "", label: useDefaultNone() },
-      { value: "pr3", label: "Barra (Deshabilitada)" },
-      { value: "pr1", label: "Cocina" },
-      { value: "pr2", label: "Terraza" },
+      { value: "pr3", label: "Bar (Deshabilitada)" },
+      { value: "pr1", label: "Kitchen" },
+      { value: "pr2", label: "Terrace" },
     ]);
     const slip = field(el, "edit-slip-printer");
     expect([slip.name, slip.label, slip.value]).toEqual([
@@ -1328,7 +1328,7 @@ describe("the Edit dialog", () => {
     ]);
     expect(slip.options).toEqual([
       { value: "", label: useDefaultNone() },
-      { value: "pr2", label: "Terraza" },
+      { value: "pr2", label: "Terrace" },
     ]);
 
     const madeHere = q(el, "[data-test=edit-made-here]")!;
@@ -1419,7 +1419,7 @@ describe("the Edit dialog", () => {
   });
 
   describe("a printer the device holds that its profile no longer lists", () => {
-    const moved: Printer = { ...printers[0]!, id: "pr4", name: "Salón" };
+    const moved: Printer = { ...printers[0]!, id: "pr4", name: "Room" };
     // pa lists pr4 nowhere, and pr3 (switched off) only as a receipt printer, which it does not hold.
     const holding: DeviceRow = { ...till, receiptPrinterId: "pr4", paymentSlipPrinterId: "pr3" };
     const holdingApi = () =>
@@ -1432,11 +1432,11 @@ describe("the Edit dialog", () => {
       const before = currentLocale();
       try {
         for (const [locale, receiptLabel, slipLabel] of [
-          ["en", "Salón (not on this profile)", "Barra (Disabled) (not on this profile)"],
+          ["en", "Room (not on this profile)", "Bar (Disabled) (not on this profile)"],
           [
             "es-ES",
-            "Salón (no está en este perfil)",
-            "Barra (Deshabilitada) (no está en este perfil)",
+            "Room (no está en este perfil)",
+            "Bar (Deshabilitada) (no está en este perfil)",
           ],
         ] as const) {
           setLocale(locale);
@@ -1445,15 +1445,15 @@ describe("the Edit dialog", () => {
           expect(receipt.value).toBe("pr4");
           expect(receipt.options).toEqual([
             { value: "", label: useDefaultNone() },
-            { value: "pr1", label: "Cocina" },
-            { value: "pr2", label: "Terraza" },
+            { value: "pr1", label: "Kitchen" },
+            { value: "pr2", label: "Terrace" },
             { value: "pr4", label: receiptLabel },
           ]);
           const slip = field(el, "edit-slip-printer");
           expect(slip.value).toBe("pr3");
           expect(slip.options).toEqual([
             { value: "", label: useDefaultNone() },
-            { value: "pr2", label: "Terraza" },
+            { value: "pr2", label: "Terrace" },
             { value: "pr3", label: slipLabel },
           ]);
           for (const [id, label] of [
@@ -1476,11 +1476,11 @@ describe("the Edit dialog", () => {
       const api = holdingApi();
       const el = await openEdit(api);
       await expectSaveQuiet(el);
-      await rename(el, "Caja 2");
+      await rename(el, "Cash till 2");
       await save(el);
       await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
       expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
-        name: "Caja 2",
+        name: "Cash till 2",
         receiptPrinterId: "pr4",
         paymentSlipPrinterId: "pr3",
       });
@@ -1519,7 +1519,7 @@ describe("the Edit dialog", () => {
       expect(receipt.value).toBe("pr4");
       expect(receipt.options.map((o) => o.value)).toEqual(["", "pr1", "pr2"]);
       await expectSaveQuiet(el);
-      await rename(el, "Caja 2");
+      await rename(el, "Cash till 2");
       await save(el);
       await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
       expect(vi.mocked(api.updateDevice).mock.calls[0]![1].receiptPrinterId).toBe("pr4");
@@ -1529,7 +1529,7 @@ describe("the Edit dialog", () => {
   it("Save sends exactly the edit, then closes and refreshes the list", async () => {
     const api = editApi();
     const el = await openEdit(api);
-    wtChange(el, "[data-test=edit-name]", "  Caja 2 ");
+    wtChange(el, "[data-test=edit-name]", "  Cash till 2 ");
     await chooseOption(q(el, "[data-test=edit-receipt-printer]")!, "pr1");
     await chooseOption(q(el, "[data-test=edit-slip-printer]")!, "");
     q(el, '[data-test=edit-made-here] input[value="s1"]')!.click();
@@ -1538,7 +1538,7 @@ describe("the Edit dialog", () => {
 
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith("t1", {
-      name: "Caja 2",
+      name: "Cash till 2",
       profileId: "pa",
       receiptPrinterId: "pr1",
       paymentSlipPrinterId: null,
@@ -1578,7 +1578,7 @@ describe("the Edit dialog", () => {
         ),
     });
     const el = await openEdit(api, "k1");
-    wtChange(el, "[data-test=edit-name]", "Pantalla 2");
+    wtChange(el, "[data-test=edit-name]", "Display 2");
     await flush(el);
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
@@ -1629,7 +1629,7 @@ describe("the Edit dialog", () => {
       setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
     });
     const el = await openEdit(api);
-    wtChange(el, "[data-test=edit-name]", "Caja 2");
+    wtChange(el, "[data-test=edit-name]", "Cash till 2");
     await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
     await flush(el);
     await save(el);
@@ -1671,7 +1671,7 @@ describe("the Edit dialog", () => {
           readerIds: ["r2", "r3"],
           defaultReaderId: null,
         });
-        await rename(el, "Caja 2");
+        await rename(el, "Cash till 2");
         await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
         await flush(el);
         await save(el);
@@ -1855,7 +1855,7 @@ describe("the Edit dialog", () => {
     });
     const { el } = await openEditInHost(api);
     vi.mocked(api.listReaders).mockResolvedValue(readers.filter((r) => r.id !== "r1"));
-    await rename(el, "Caja 2");
+    await rename(el, "Cash till 2");
     await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
     await flush(el);
     await save(el);
@@ -1926,7 +1926,7 @@ describe("the Edit dialog", () => {
     expect(q(el, "[data-test=edit-reader]")).toBeNull();
     expect(await bottom(el)).toBe("");
     expect(q(el, "[data-test=page-error]")).toBeNull();
-    await rename(el, "Caja 2");
+    await rename(el, "Cash till 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.setDeviceReader).not.toHaveBeenCalled();
@@ -1949,7 +1949,7 @@ describe("the Edit dialog", () => {
     expect(q(el, "[data-test=edit-reader]")).toBeNull();
     expect(api.getDeviceReader).not.toHaveBeenCalled();
     expect(api.listReaders).not.toHaveBeenCalled();
-    await rename(el, "Caja 2");
+    await rename(el, "Cash till 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.updateDevice).toHaveBeenCalledTimes(1);
@@ -1987,7 +1987,7 @@ describe("the Edit dialog", () => {
     expect(q(el, "[data-test=edit-reader]")).toBeNull();
     // The reader change went with the field, so Save waits for another edit.
     await expectSaveQuiet(el);
-    await rename(el, "Caja 2");
+    await rename(el, "Cash till 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.updateDevice).toHaveBeenCalledTimes(1);
@@ -2059,7 +2059,7 @@ describe("the Edit dialog", () => {
     el.canManageReaders = false;
     await flush(el);
     expect(await bottom(el)).toBe("");
-    await rename(el, "Caja 2");
+    await rename(el, "Cash till 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.updateDevice).toHaveBeenCalledTimes(2);
@@ -2082,7 +2082,7 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-reader").disabled).toBe(true);
     expect(field(el, "edit-reader").error).toBe("");
     expect(await bottom(el)).toBe(codeMessage("connection.failed"));
-    await rename(el, "Caja 2");
+    await rename(el, "Cash till 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.updateDevice).toHaveBeenCalledTimes(1);
@@ -2100,7 +2100,7 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-name").error).toBe(t("form.name_required"));
     expect((q(el, "[data-test=edit-save]") as Button).disabled).toBe(true);
     expect(await bottom(el)).toBe(t("form.fix_fields"));
-    wtChange(el, "[data-test=edit-name]", "Caja 3");
+    wtChange(el, "[data-test=edit-name]", "Cash till 3");
     await flush(el);
     expect((q(el, "[data-test=edit-save]") as Button).disabled).toBe(false);
     expect(await bottom(el)).toBe("");
@@ -2122,7 +2122,7 @@ describe("the Edit dialog", () => {
       updateDevice: vi.fn().mockRejectedValue({ code: "device.name_taken" }),
     });
     const el = await openEdit(api);
-    await rename(el, "Barra 1");
+    await rename(el, "Bar 1");
     await save(el);
 
     await vi.waitFor(() =>
@@ -2133,7 +2133,7 @@ describe("the Edit dialog", () => {
     // A refusal never disables the action by itself.
     expect((q(el, "[data-test=edit-save]") as Button).disabled).toBe(false);
     expect(api.setDeviceReader).not.toHaveBeenCalled();
-    wtChange(el, "[data-test=edit-name]", "Caja 9");
+    wtChange(el, "[data-test=edit-name]", "Cash till 9");
     await flush(el);
     expect(field(el, "edit-name").error).toBe("");
   });
@@ -2150,7 +2150,7 @@ describe("the Edit dialog", () => {
           .mockRejectedValue({ code: "device.binding_invalid", params: { field: param } }),
       });
       const el = await openEdit(api);
-      await rename(el, "Caja 2");
+      await rename(el, "Cash till 2");
       await save(el);
       await vi.waitFor(() =>
         expect(field(el, under).error).toBe(codeMessage("device.binding_invalid")),
@@ -2171,7 +2171,7 @@ describe("the Edit dialog", () => {
   ])("a $code refusal shows under the field it is about", async ({ code, params, under }) => {
     const api = editApi({ updateDevice: vi.fn().mockRejectedValue({ code, params }) });
     const el = await openEdit(api, "k1");
-    await rename(el, "Pantalla 2");
+    await rename(el, "Display 2");
     await save(el);
     await vi.waitFor(() => expect(field(el, under).error).toBe(codeMessage(code)));
     expect(field(el, "edit-name").error).toBe("");
@@ -2242,7 +2242,7 @@ describe("the Edit dialog", () => {
       const api = approvalApi();
       const el = await openEdit(api);
       await expectSaveQuiet(el);
-      await rename(el, "Caja 2");
+      await rename(el, "Cash till 2");
       await save(el);
       await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
       expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
@@ -2302,7 +2302,7 @@ describe("the Edit dialog", () => {
         }),
       });
       const el = await openEdit(api);
-      await rename(el, "Caja 2");
+      await rename(el, "Cash till 2");
       await save(el);
       await vi.waitFor(() =>
         expect(text(el, "[data-test=edit-approved-error]")).toBe(
@@ -2323,7 +2323,7 @@ describe("the Edit dialog", () => {
         }),
       });
       const el = await openEdit(api);
-      await rename(el, "Caja 2");
+      await rename(el, "Cash till 2");
       await save(el);
       await vi.waitFor(() =>
         expect(text(el, "[data-test=edit-approved-error]")).toBe(
@@ -2355,7 +2355,7 @@ describe("the Edit dialog", () => {
     const api = editApi();
     const el = await openEdit(api);
     vi.mocked(api.listDevices).mockRejectedValue({ code: "connection.failed" });
-    await rename(el, "Caja 2");
+    await rename(el, "Cash till 2");
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     await vi.waitFor(() =>
@@ -2435,7 +2435,7 @@ describe("the Edit dialog", () => {
         expect(field(el, "edit-reader").value).toBe("r2");
         // Unchanged, so Save does not write the reader.
         await expectSaveQuiet(el);
-        await rename(el, "Pantalla 2");
+        await rename(el, "Display 2");
         await save(el);
         await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
         expect(api.setDeviceReader).not.toHaveBeenCalled();
@@ -2504,7 +2504,7 @@ describe("the Edit dialog", () => {
       const pending = deferred<undefined>();
       const api = editApi({ updateDevice: vi.fn().mockReturnValue(pending.promise) });
       const el = await openEdit(api);
-      await rename(el, "Caja 2");
+      await rename(el, "Cash till 2");
       await save(el);
       await save(el);
       q(el, "[data-test=edit-name]")!.focus();
@@ -2662,7 +2662,7 @@ describe("the Edit dialog", () => {
       const pending = deferred<undefined>();
       const api = editApi({ updateDevice: vi.fn().mockReturnValue(pending.promise) });
       const el = await openEdit(api);
-      await rename(el, "Caja 2");
+      await rename(el, "Cash till 2");
       await save(el);
 
       expect((q(el, "[data-test=edit-cancel]") as Button).disabled).toBe(true);
@@ -2690,7 +2690,7 @@ describe("the Edit dialog", () => {
       { liveData },
     );
     const el = await openEdit(api);
-    wtChange(el, "[data-test=edit-name]", "Caja 2");
+    wtChange(el, "[data-test=edit-name]", "Cash till 2");
     await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
     await chooseOption(q(el, "[data-test=edit-receipt-printer]")!, "pr2");
     await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
@@ -2700,7 +2700,7 @@ describe("the Edit dialog", () => {
       expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found")),
     );
     expect(q(el, "[data-test=edit-device-modal]")!.getAttribute("heading")).toBe(
-      t("devices.edit_title").replace("{name}", "Caja 2"),
+      t("devices.edit_title").replace("{name}", "Cash till 2"),
     );
 
     // The printer it now holds is switched off: as the saved profile's held printer it stays offered.
@@ -2713,7 +2713,7 @@ describe("the Edit dialog", () => {
     await vi.waitFor(() =>
       expect(field(el, "edit-receipt-printer").options).toContainEqual({
         value: "pr2",
-        label: "Terraza (Deshabilitada)",
+        label: "Terrace (Deshabilitada)",
       }),
     );
     await save(el);
@@ -2721,7 +2721,11 @@ describe("the Edit dialog", () => {
     const sent = vi.mocked(api.updateDevice).mock.calls.map(([, input]) => input);
     expect(sent).toHaveLength(2);
     expect(sent[1]).toEqual(sent[0]);
-    expect(sent[1]).toMatchObject({ name: "Caja 2", profileId: "pb", receiptPrinterId: "pr2" });
+    expect(sent[1]).toMatchObject({
+      name: "Cash till 2",
+      profileId: "pb",
+      receiptPrinterId: "pr2",
+    });
   });
 
   it("closing Edit opened from a row's menu puts focus back on that menu", async () => {
@@ -2749,7 +2753,7 @@ describe("the Edit dialog", () => {
     const portableTerraza: Printer = {
       ...editPrinters[1]!,
       portable: true,
-      holder: { deviceId: "d7", deviceName: "Móvil 2", personName: "Ana" },
+      holder: { deviceId: "d7", deviceName: "Mobile 2", personName: "Ana" },
     };
     const withDefaults: DeviceProfile = {
       ...editProfiles[0]!,
@@ -2775,7 +2779,7 @@ describe("the Edit dialog", () => {
       const el = await openEdit(equipmentApi());
       const receipt = field(el, "edit-receipt-printer");
       expect(receipt.value).toBe("");
-      expect(receipt.options[0]).toEqual({ value: "", label: useDefault("Cocina") });
+      expect(receipt.options[0]).toEqual({ value: "", label: useDefault("Kitchen") });
       // The slip default is carried by another device, so Use default prints no slip here.
       expect(field(el, "edit-slip-printer").options[0]).toEqual({
         value: "",
@@ -2789,14 +2793,14 @@ describe("the Edit dialog", () => {
       ]);
       expect(drawer.options).toEqual([
         { value: "", label: useDefault(t("equipment.none")) },
-        { value: "pr1", label: "Cocina" },
+        { value: "pr1", label: "Kitchen" },
       ]);
     });
 
     describe("the invoice printer", () => {
       const office: PagePrinterRow = {
         id: "pg1",
-        name: "Oficina",
+        name: "Office",
         host: "10.0.0.20",
         port: 631,
         resourcePath: "/ipp/print",
@@ -2819,8 +2823,8 @@ describe("the Edit dialog", () => {
         chosenId,
         resolved:
           chosenId === null
-            ? { id: "pg1", name: "Oficina", available: true }
-            : { id: chosenId, name: "Terraza", available: true },
+            ? { id: "pg1", name: "Office", available: true }
+            : { id: chosenId, name: "Terrace", available: true },
       });
 
       function invoiceApi(device: DeviceRow, overrides: Partial<DashboardApi> = {}) {
@@ -2835,7 +2839,7 @@ describe("the Edit dialog", () => {
       it("is a column of what each device prints invoices on", async () => {
         const el = await openEdit(invoiceApi({ ...onDefault, equipment: [invoiceOn(null)] }));
         expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(
-          `Oficina (${t("devices.default_mark")})`,
+          `Office (${t("devices.default_mark")})`,
         );
       });
 
@@ -2847,11 +2851,11 @@ describe("the Edit dialog", () => {
           t("devices.invoice_printer_now"),
           "",
         ]);
-        // Terraza is portable and another device carries it; an invoice printer ignores that.
+        // Terrace is portable and another device carries it; an invoice printer ignores that.
         expect(invoice.options).toEqual([
-          { value: "", label: useDefault("Oficina · A4") },
-          { value: "pg1", label: "Oficina · A4" },
-          { value: "pr2", label: "Terraza" },
+          { value: "", label: useDefault("Office · A4") },
+          { value: "pg1", label: "Office · A4" },
+          { value: "pr2", label: "Terrace" },
         ]);
       });
 
@@ -2859,7 +2863,7 @@ describe("the Edit dialog", () => {
         const api = invoiceApi({ ...onDefault, equipment: [invoiceOn("pr2")] });
         const el = await openEdit(api);
         expect(field(el, "edit-invoice-printer").value).toBe("pr2");
-        await rename(el, "Caja 2");
+        await rename(el, "Cash till 2");
         await save(el);
         await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
         expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
@@ -2950,7 +2954,7 @@ describe("the Edit dialog", () => {
           params: {
             field: "receiptPrinterId",
             holderDeviceId: "d7",
-            holderDeviceName: "Móvil 2",
+            holderDeviceName: "Mobile 2",
             holderPersonName: "Ana",
           },
         }),
@@ -2959,14 +2963,14 @@ describe("the Edit dialog", () => {
       const receipt = field(el, "edit-receipt-printer");
       expect(receipt.options.find((option) => option.value === "pr2")).toEqual({
         value: "pr2",
-        label: `Terraza (${t("equipment.carried_by").replace("{device}", "Móvil 2")})`,
+        label: `Terrace (${t("equipment.carried_by").replace("{device}", "Mobile 2")})`,
       });
       await chooseOption(q(el, "[data-test=edit-receipt-printer]")!, "pr2");
       await flush(el);
       await save(el);
       await vi.waitFor(() =>
         expect(field(el, "edit-receipt-printer").error).toBe(
-          t("devices.err_equipment_held").replace("{device}", "Móvil 2"),
+          t("devices.err_equipment_held").replace("{device}", "Mobile 2"),
         ),
       );
       expect(field(el, "edit-slip-printer").error).toBe("");
@@ -2975,27 +2979,27 @@ describe("the Edit dialog", () => {
 
     it("puts a device label and a holder name holding a replacement pattern into the heading and the refusal as written", async () => {
       const api = equipmentApi({
-        listDevices: vi.fn().mockResolvedValue([{ ...onDefault, label: "Caja $&" }, kitchen]),
+        listDevices: vi.fn().mockResolvedValue([{ ...onDefault, label: "Cash till $&" }, kitchen]),
         updateDevice: vi.fn().mockRejectedValue({
           code: "device.equipment_held",
           params: {
             field: "receiptPrinterId",
             holderDeviceId: "d7",
-            holderDeviceName: "Móvil $&",
+            holderDeviceName: "Mobile $&",
             holderPersonName: "Ana",
           },
         }),
       });
       const el = await openEdit(api);
       expect(q(el, "[data-test=edit-device-modal]")!.getAttribute("heading")).toBe(
-        t("devices.edit_title").split("{name}").join("Caja $&"),
+        t("devices.edit_title").split("{name}").join("Cash till $&"),
       );
       await chooseOption(q(el, "[data-test=edit-receipt-printer]")!, "pr2");
       await flush(el);
       await save(el);
       await vi.waitFor(() =>
         expect(field(el, "edit-receipt-printer").error).toBe(
-          t("devices.err_equipment_held").split("{device}").join("Móvil $&"),
+          t("devices.err_equipment_held").split("{device}").join("Mobile $&"),
         ),
       );
     });
@@ -3004,17 +3008,17 @@ describe("the Edit dialog", () => {
       const el = await openEdit(
         equipmentApi({
           listPrinters: vi.fn().mockResolvedValue([
-            { ...editPrinters[0]!, name: "Cocina $&" },
+            { ...editPrinters[0]!, name: "Kitchen $&" },
             {
               ...portableTerraza,
-              holder: { ...portableTerraza.holder!, deviceName: "Móvil $&" },
+              holder: { ...portableTerraza.holder!, deviceName: "Mobile $&" },
             },
             editPrinters[2],
           ]),
           listReaderHolders: vi.fn().mockResolvedValue([
             {
               readerId: "r2",
-              holder: { deviceId: "d7", deviceName: "Lector $&", personName: null },
+              holder: { deviceId: "d7", deviceName: "Reader $&", personName: null },
               paymentInProgressDeviceIds: [],
             },
           ]),
@@ -3023,22 +3027,22 @@ describe("the Edit dialog", () => {
       const receipt = field(el, "edit-receipt-printer");
       expect(receipt.options[0]).toEqual({
         value: "",
-        label: t("devices.use_default").split("{name}").join("Cocina $&"),
+        label: t("devices.use_default").split("{name}").join("Kitchen $&"),
       });
       expect(receipt.options.find((option) => option.value === "pr2")).toEqual({
         value: "pr2",
-        label: `Terraza (${t("equipment.carried_by").split("{device}").join("Móvil $&")})`,
+        label: `Terrace (${t("equipment.carried_by").split("{device}").join("Mobile $&")})`,
       });
       expect(field(el, "edit-reader").options.find((option) => option.value === "r2")).toEqual({
         value: "r2",
-        label: `Bar (Zeta Pay) (${t("equipment.carried_by").split("{device}").join("Lector $&")})`,
+        label: `Bar (Zeta Pay) (${t("equipment.carried_by").split("{device}").join("Reader $&")})`,
       });
     });
 
     it("a printer the device itself carries is not labelled as carried", async () => {
       const mine: Printer = {
         ...portableTerraza,
-        holder: { deviceId: "t1", deviceName: "Caja 1", personName: null },
+        holder: { deviceId: "t1", deviceName: "Cash till 1", personName: null },
       };
       const el = await openEdit(
         equipmentApi({
@@ -3046,8 +3050,8 @@ describe("the Edit dialog", () => {
         }),
       );
       expect(field(el, "edit-slip-printer").options).toEqual([
-        { value: "", label: useDefault("Terraza") },
-        { value: "pr2", label: "Terraza" },
+        { value: "", label: useDefault("Terrace") },
+        { value: "pr2", label: "Terrace" },
       ]);
     });
 
@@ -3061,7 +3065,7 @@ describe("the Edit dialog", () => {
             { readerId: "r1", holder: null, paymentInProgressDeviceIds: ["d9"] },
             {
               readerId: "r2",
-              holder: { deviceId: "d7", deviceName: "Móvil 2", personName: null },
+              holder: { deviceId: "d7", deviceName: "Mobile 2", personName: null },
               paymentInProgressDeviceIds: [],
             },
           ]),
@@ -3071,7 +3075,7 @@ describe("the Edit dialog", () => {
         { value: "", label: useDefault(t("equipment.none")) },
         {
           value: "r2",
-          label: `Bar (Zeta Pay) (${t("equipment.carried_by").replace("{device}", "Móvil 2")})`,
+          label: `Bar (Zeta Pay) (${t("equipment.carried_by").replace("{device}", "Mobile 2")})`,
         },
         { value: "r1", label: `Front counter (Acme Pay) (${t("equipment.busy")})` },
       ]);
@@ -3109,7 +3113,7 @@ describe("the Edit dialog", () => {
       const api = equipmentApi();
       const el = await openEdit(api);
       await expectSaveQuiet(el);
-      await rename(el, "Caja 2");
+      await rename(el, "Cash till 2");
       await save(el);
       await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
       expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
@@ -3396,8 +3400,8 @@ describe("add a device", () => {
     const api = stubApi({
       listDevices: vi.fn(() => Promise.resolve(rows)),
       acceptDeviceJoinRequest: vi.fn(() => {
-        rows = [{ ...devices[0]!, id: "d9", label: "Barra 2" }];
-        return Promise.resolve({ deviceId: "d9", name: "Barra 2", formFactor: "till" as const });
+        rows = [{ ...devices[0]!, id: "d9", label: "Bar 2" }];
+        return Promise.resolve({ deviceId: "d9", name: "Bar 2", formFactor: "till" as const });
       }),
     });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
@@ -3415,7 +3419,7 @@ describe("add a device", () => {
     await el.updateComplete;
     q(el, "[data-test=pair-submit]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
-    await vi.waitFor(() => expect(deepText(el, "[data-test=device-label-d9]")).toBe("Barra 2"));
+    await vi.waitFor(() => expect(deepText(el, "[data-test=device-label-d9]")).toBe("Bar 2"));
     const decoy = document.createElement("button");
     el.shadowRoot!.prepend(decoy);
 
@@ -3529,11 +3533,11 @@ describe("add a device", () => {
     const el = await openAdd(api);
 
     expect(api.joinRequests).toHaveBeenCalledWith("device");
-    expect(d(el, "[data-test=waiting-row-r1]")?.textContent?.trim()).toBe("Barra 1");
-    expect(d(el, "[data-test=waiting-row-r2]")?.textContent?.trim()).toBe("Pantalla pase");
+    expect(d(el, "[data-test=waiting-row-r1]")?.textContent?.trim()).toBe("Bar 1");
+    expect(d(el, "[data-test=waiting-row-r2]")?.textContent?.trim()).toBe("Pass monitor");
     expect(d(el, "[data-test=pair-r1]")?.textContent?.trim()).toBe(t("devices.pair"));
     expect(d(el, "[data-test=pair-r1]")?.getAttribute("aria-label")).toBe(
-      `${t("devices.pair")} Barra 1`,
+      `${t("devices.pair")} Bar 1`,
     );
     expect((d(el, "[data-test=pair-r1]") as Button).variant).toBe("primary");
     expect(d(el, "[data-test=pair-r2]")).not.toBeNull();
@@ -3547,7 +3551,7 @@ describe("add a device", () => {
     const el = await openAdd(api);
 
     const table = q(el, "[data-test=waiting-table]")!;
-    expect(table.shadowRoot!.textContent).toContain("Barra 1");
+    expect(table.shadowRoot!.textContent).toContain("Bar 1");
     expect(table.shadowRoot!.textContent).not.toContain(REAL_NUMBER);
     expect(d(el, "[data-choice]")).toBeNull();
     expect(api.joinChallenge).not.toHaveBeenCalled();
@@ -3590,12 +3594,12 @@ describe("add a device", () => {
   it("puts names holding a replacement pattern into the waiting list, the Pair title and the added heading as written", async () => {
     const api = stubApi({
       joinRequests: vi.fn().mockResolvedValue([
-        { ...pending[0]!, label: "Barra $&" },
+        { ...pending[0]!, label: "Bar $&" },
         { ...pending[1]!, pairingBy: { name: "Ana $&", mine: false } },
       ]),
       acceptDeviceJoinRequest: vi
         .fn()
-        .mockResolvedValue({ deviceId: "d9", name: "Barra $&", formFactor: "kds" }),
+        .mockResolvedValue({ deviceId: "d9", name: "Bar $&", formFactor: "kds" }),
     });
     const el = await openAdd(api);
 
@@ -3604,7 +3608,7 @@ describe("add a device", () => {
     );
     await openPair(el);
     expect(q(el, "[data-test=pair-modal]")!.getAttribute("heading")).toBe(
-      t("devices.pair_title").split("{name}").join("Barra $&"),
+      t("devices.pair_title").split("{name}").join("Bar $&"),
     );
     await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
     q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
@@ -3614,7 +3618,7 @@ describe("add a device", () => {
     q(el, "[data-test=pair-submit]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).not.toBeNull());
     expect(q(el, "[data-test=joined-modal]")!.getAttribute("heading")).toBe(
-      t("devices.added").split("{name}").join("Barra $&"),
+      t("devices.added").split("{name}").join("Bar $&"),
     );
   });
 
@@ -3629,7 +3633,7 @@ describe("add a device", () => {
     await openPair(el);
 
     expect(api.joinChallenge).not.toHaveBeenCalled();
-    expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Barra 1");
+    expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Bar 1");
   });
 
   it("asks for the number on the device, offering the three as large named buttons", async () => {
@@ -3638,7 +3642,7 @@ describe("add a device", () => {
     await openPair(el);
 
     expect(q(el, "[data-test=pair-modal]")!.getAttribute("heading")).toBe(
-      t("devices.pair_title").replace("{name}", "Barra 1"),
+      t("devices.pair_title").replace("{name}", "Bar 1"),
     );
     await vi.waitFor(() => expect(q(el, "[data-choice]")).not.toBeNull());
     expect(api.joinChallenge).toHaveBeenCalledExactlyOnceWith("r1");
@@ -3663,7 +3667,7 @@ describe("add a device", () => {
       holdId: "h1",
       createdAt: "2026-09-08T10:02:00.000Z",
     });
-    expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Barra 1");
+    expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Bar 1");
     expect(q(el, "[data-choice]")).toBeNull();
   });
 
@@ -3744,7 +3748,7 @@ describe("add a device", () => {
       "en-GB",
       "Waiting for devices…",
       "Waiting for more devices…",
-      "Barra 2 has been added.",
+      "Bar 2 has been added.",
       "Do you want to add another device?",
       "Add another device",
       "Close",
@@ -3753,7 +3757,7 @@ describe("add a device", () => {
       "es-ES",
       "Esperando dispositivos…",
       "Esperando más dispositivos…",
-      "Barra 2 se ha añadido.",
+      "Bar 2 se ha añadido.",
       "¿Quieres añadir otro dispositivo?",
       "Añadir otro dispositivo",
       "Cerrar",
@@ -3804,7 +3808,7 @@ describe("add a device", () => {
     it(`ends adding on confirmation ${dismissal} and starts a fresh first wait next time`, async () => {
       const api = stubApi({
         joinRequests: vi.fn().mockResolvedValue([pending[0]!]),
-        listDevices: vi.fn().mockResolvedValue([{ ...devices[0]!, id: "d9", label: "Barra 2" }]),
+        listDevices: vi.fn().mockResolvedValue([{ ...devices[0]!, id: "d9", label: "Bar 2" }]),
       });
       const el = await openAdd(api);
       await toSettings(el);
@@ -3821,7 +3825,7 @@ describe("add a device", () => {
       }
       await vi.waitFor(() => expect(q(el, "[data-test=joined-modal]")).toBeNull());
       expect(q(el, "[data-test=add-device-modal]")).toBeNull();
-      await vi.waitFor(() => expect(deepText(el, "[data-test=device-label-d9]")).toBe("Barra 2"));
+      await vi.waitFor(() => expect(deepText(el, "[data-test=device-label-d9]")).toBe("Bar 2"));
       vi.mocked(api.joinRequests).mockResolvedValue([]);
       // The already consumed ask may still appear in a passive snapshot until it refreshes.
       const parent = el.parentElement!;
@@ -3944,7 +3948,7 @@ describe("add a device", () => {
     }
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
     expect(api.denyJoinRequest).not.toHaveBeenCalled();
-    expect(text(el, "[data-test=asked-again]")).toContain("Pantalla pase");
+    expect(text(el, "[data-test=asked-again]")).toContain("Pass monitor");
   });
 
   it("refreshes simultaneous asks after the last hold released them", async () => {
@@ -3995,18 +3999,18 @@ describe("add a device", () => {
     await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
     await el.updateComplete;
     await chooseOption(q(el, "[data-test=pair-screen]")!, "station");
-    typeField(el, "[data-test=pair-name]", "Barra 2");
+    typeField(el, "[data-test=pair-name]", "Bar 2");
     await el.updateComplete;
     q(el, "[data-test=pair-submit]")!.click();
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
-      name: "Barra 2",
+      name: "Bar 2",
       profileId: "dp3",
       kitchenScreens: [{ kind: "station", stationIds: null, zoneIds: null }],
     });
     expect(q(el, "[data-test=joined-modal]")?.getAttribute("heading")).toBe(
-      t("devices.added").replace("{name}", "Barra 2"),
+      t("devices.added").replace("{name}", "Bar 2"),
     );
     expect(q(el, "[data-test=joined-modal]")!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
     expect(api.listDevices).toHaveBeenCalledTimes(2);
@@ -4056,7 +4060,7 @@ describe("add a device", () => {
     q(el, "[data-test=pair-submit]")!.click();
     await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
-      name: "Barra 1",
+      name: "Bar 1",
       profileId: "dp3",
       kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
     });
@@ -4075,7 +4079,7 @@ describe("add a device", () => {
     q(el, "[data-test=pair-submit]")!.click();
     await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(2));
     expect(api.acceptDeviceJoinRequest).toHaveBeenLastCalledWith("r2", {
-      name: "Pantalla pase",
+      name: "Pass monitor",
       profileId: "dp1",
       kitchenScreens: [],
     });
@@ -4129,7 +4133,7 @@ describe("add a device", () => {
     expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(t("form.fix_fields"));
     // A refusal never disables the action by itself.
     expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(false);
-    typeField(el, "[data-test=pair-name]", "Barra 9");
+    typeField(el, "[data-test=pair-name]", "Bar 9");
     await el.updateComplete;
     expect((q(el, "[data-test=pair-name]") as Field).error).toBe("");
   });
@@ -4149,7 +4153,7 @@ describe("add a device", () => {
     expect((q(el, "[data-test=pair-name]") as Field).error).toBe(t("form.name_required"));
     expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(true);
     expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(t("form.fix_fields"));
-    typeField(el, "[data-test=pair-name]", "Barra 3");
+    typeField(el, "[data-test=pair-name]", "Bar 3");
     await el.updateComplete;
     expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(false);
   });
@@ -4334,10 +4338,10 @@ describe("add a device", () => {
     expect(api.releasePairingHold).not.toHaveBeenCalled();
     expect(api.denyJoinRequest).not.toHaveBeenCalled();
 
-    answer({ deviceId: "d9", name: "Barra 1", formFactor: "till" });
+    answer({ deviceId: "d9", name: "Bar 1", formFactor: "till" });
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
     expect(q(el, "[data-test=joined-modal]")?.getAttribute("heading")).toBe(
-      t("devices.added").replace("{name}", "Barra 1"),
+      t("devices.added").replace("{name}", "Bar 1"),
     );
     expect(api.denyJoinRequest).not.toHaveBeenCalled();
   });
@@ -4379,7 +4383,7 @@ describe("add a device", () => {
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1);
     expect(pairFieldsDisabled(el)).toEqual({ name: true, profile: true, screen: true });
 
-    answer({ deviceId: "d9", name: "Barra 1", formFactor: "kds" });
+    answer({ deviceId: "d9", name: "Bar 1", formFactor: "kds" });
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
   });
 
@@ -4697,7 +4701,7 @@ describe("add a device", () => {
       createdAt: "2026-09-08T10:04:00.000Z",
       pairingBy: null,
       returning: {
-        name: "Pase revocado",
+        name: "Revoked pass",
         profileId: "dp3",
         kitchenScreens: [
           {
@@ -4706,7 +4710,7 @@ describe("add a device", () => {
             everyStation: false,
             everyZone: true,
             profileEveryStation: false,
-            stations: [{ id: "s1", name: "Cocina", available: true, switchedOff: false }],
+            stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
             zones: null,
             nonPassStationsOverride: null,
             showNonPassStations: true,
@@ -4735,39 +4739,39 @@ describe("add a device", () => {
             "Enable",
             "Pair",
             "Disabled device. Enabling it restores its settings.",
-            "Enabled Pase revocado",
+            "Enabled Revoked pass",
           ],
           [
             "es-ES",
             "Habilitar",
             "Emparejar",
             "Dispositivo deshabilitado. Al habilitarlo se restauran sus ajustes.",
-            "Pase revocado habilitado",
+            "Revoked pass habilitado",
           ],
         ] as const) {
           setLocale(locale);
           const api = waiting();
           const el = await openAdd(api);
 
-          expect(d(el, "[data-test=waiting-row-d2]")?.textContent?.trim()).toBe("Pase revocado");
+          expect(d(el, "[data-test=waiting-row-d2]")?.textContent?.trim()).toBe("Revoked pass");
           expect(d(el, "[data-test=returning-hint-d2]")?.textContent?.trim()).toBe(hint);
           expect(d(el, "[data-test=pair-d2]")?.textContent?.trim()).toBe(enable);
           expect(d(el, "[data-test=pair-d2]")?.getAttribute("aria-label")).toBe(
-            `${enable} Pase revocado`,
+            `${enable} Revoked pass`,
           );
           expect((d(el, "[data-test=pair-d2]") as Button).variant).toBe("primary");
-          expect(d(el, "[data-test=waiting-row-r1]")?.textContent?.trim()).toBe("Barra 1");
+          expect(d(el, "[data-test=waiting-row-r1]")?.textContent?.trim()).toBe("Bar 1");
           expect(d(el, "[data-test=returning-hint-r1]")).toBeNull();
           expect(d(el, "[data-test=pair-r1]")?.textContent?.trim()).toBe(pair);
 
           await toEnableSettings(el);
           expect(q(el, "[data-test=pair-modal]")!.getAttribute("heading")).toBe(
-            `${enable} Pase revocado`,
+            `${enable} Revoked pass`,
           );
           expect(text(el, "[data-test=pair-submit]")).toBe(enable);
           vi.mocked(api.acceptDeviceJoinRequest).mockResolvedValue({
             deviceId: "d2",
-            name: "Pase revocado",
+            name: "Revoked pass",
             formFactor: "kds",
           });
           q(el, "[data-test=pair-submit]")!.click();
@@ -4818,7 +4822,7 @@ describe("add a device", () => {
         holdId: "h1",
         createdAt: "2026-09-08T10:04:00.000Z",
       });
-      expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Pase revocado");
+      expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Revoked pass");
       expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
       expect((q(el, "[data-test=pair-screen]") as Field).value).toBe("station");
       expect(
@@ -4826,19 +4830,19 @@ describe("add a device", () => {
       ).toBe(true);
       vi.mocked(api.acceptDeviceJoinRequest).mockResolvedValue({
         deviceId: "d2",
-        name: "Pase revocado",
+        name: "Revoked pass",
         formFactor: "kds",
       });
       q(el, "[data-test=pair-submit]")!.click();
 
       await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
       expect(api.acceptDeviceJoinRequest).toHaveBeenCalledExactlyOnceWith("d2", {
-        name: "Pase revocado",
+        name: "Revoked pass",
         profileId: "dp3",
         kitchenScreens: [{ kind: "station", stationIds: ["s1"], zoneIds: null }],
       });
       expect(q(el, "[data-test=joined-modal]")?.getAttribute("heading")).toBe(
-        t("devices.enabled").replace("{name}", "Pase revocado"),
+        t("devices.enabled").replace("{name}", "Revoked pass"),
       );
       expect(api.denyJoinRequest).not.toHaveBeenCalled();
     });
@@ -4853,7 +4857,7 @@ describe("add a device", () => {
       const api = waiting({
         ...returning,
         returning: {
-          name: "Pase revocado",
+          name: "Revoked pass",
           profileId: "dp3",
           kitchenScreens: [
             {
@@ -4862,7 +4866,7 @@ describe("add a device", () => {
               everyStation: true,
               everyZone: true,
               profileEveryStation: true,
-              stations: [slot("s1", "Cocina"), slot("s2", "Barra")],
+              stations: [slot("s1", "Kitchen"), slot("s2", "Bar")],
               zones: null,
               nonPassStationsOverride: null,
               showNonPassStations: true,
@@ -4878,7 +4882,7 @@ describe("add a device", () => {
       q(el, "[data-test=pair-submit]")!.click();
       await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
       expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("d2", {
-        name: "Pase revocado",
+        name: "Revoked pass",
         profileId: "dp3",
         kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
       });
@@ -4888,7 +4892,7 @@ describe("add a device", () => {
       const api = waiting({
         ...returning,
         returning: {
-          name: "Caja vieja",
+          name: "Old cash till",
           profileId: "deleted",
           kitchenScreens: [],
           profileRetired: true,
@@ -4897,7 +4901,7 @@ describe("add a device", () => {
       const el = await openAdd(api);
       await toEnableSettings(el);
 
-      expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Caja vieja");
+      expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Old cash till");
       expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("");
       q(el, "[data-test=pair-submit]")!.click();
       await flush(el);
@@ -4913,7 +4917,7 @@ describe("add a device", () => {
       q(el, "[data-test=pair-submit]")!.click();
       await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
       expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("d2", {
-        name: "Caja vieja",
+        name: "Old cash till",
         profileId: "dp1",
         kitchenScreens: [],
       });
@@ -4946,7 +4950,7 @@ describe("add a device", () => {
               everyStation: false,
               everyZone: true,
               profileEveryStation: false,
-              stations: [{ id: "s1", name: "Cocina", available: false, switchedOff: true }],
+              stations: [{ id: "s1", name: "Kitchen", available: false, switchedOff: true }],
               zones: null,
               nonPassStationsOverride: null,
               showNonPassStations: true,
@@ -5010,7 +5014,7 @@ describe("add a device", () => {
           await flush(el);
           expect(api.denyJoinRequest).not.toHaveBeenCalled();
           expect(text(el, "[data-test=asked-again]")).toBe(
-            t("devices.asked_again").replace("{name}", "Pase revocado"),
+            t("devices.asked_again").replace("{name}", "Revoked pass"),
           );
           expect(q(el, "[data-test=asked-again]")!.getAttribute("role")).toBe("status");
           expect(d(el, "[data-test=pair-d2]")?.textContent?.trim()).toBe(t("devices.enable"));
@@ -5020,13 +5024,13 @@ describe("add a device", () => {
       it("names a device holding a replacement pattern as written in its Enable title and when it asks again", async () => {
         const renamed: JoinRequestRow = {
           ...returning,
-          returning: { ...returning.returning!, name: "Pase $&" },
+          returning: { ...returning.returning!, name: "Pass $&" },
         };
         const api = Object.assign(waiting(renamed), { liveData: new LiveData() });
         const el = await openAdd(api);
         await openPair(el, "d2");
         expect(q(el, "[data-test=pair-modal]")!.getAttribute("heading")).toBe(
-          t("devices.enable_title").split("{name}").join("Pase $&"),
+          t("devices.enable_title").split("{name}").join("Pass $&"),
         );
 
         vi.mocked(api.joinRequests).mockResolvedValue(
@@ -5035,7 +5039,7 @@ describe("add a device", () => {
         api.liveData.refresh();
         await vi.waitFor(() =>
           expect(text(el, "[data-test=asked-again]")).toBe(
-            t("devices.asked_again").split("{name}").join("Pase $&"),
+            t("devices.asked_again").split("{name}").join("Pass $&"),
           ),
         );
       });
@@ -5085,8 +5089,8 @@ describe("add a device", () => {
         const before = currentLocale();
         try {
           for (const [locale, said] of [
-            ["en", "Pase revocado asked again with new numbers."],
-            ["es-ES", "Pase revocado ha vuelto a solicitar el alta con números nuevos."],
+            ["en", "Revoked pass asked again with new numbers."],
+            ["es-ES", "Revoked pass ha vuelto a solicitar el alta con números nuevos."],
           ] as const) {
             setLocale(locale);
             const api = live();
@@ -5111,7 +5115,7 @@ describe("add a device", () => {
       await openPair(el, "d2");
 
       expect(api.joinChallenge).not.toHaveBeenCalled();
-      expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Pase revocado");
+      expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Revoked pass");
       expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
     });
   });
@@ -5131,14 +5135,14 @@ describe("a device's kitchen screens", () => {
   const deli: Station = { ...stations[0]!, id: "s3", name: "Deli" };
   const ksStations = [...stations, deli];
   const zones = [
-    { id: "z1", name: "Terraza", displayOrder: 0, active: true },
-    { id: "z2", name: "Salón", displayOrder: 1, active: true },
+    { id: "z1", name: "Terrace", displayOrder: 0, active: true },
+    { id: "z2", name: "Room", displayOrder: 1, active: true },
   ];
-  const kdsProfile: DeviceProfile = { ...deviceProfiles[2]!, id: "pk", name: "Cocina KDS" };
+  const kdsProfile: DeviceProfile = { ...deviceProfiles[2]!, id: "pk", name: "Kitchen KDS" };
   const tillProfile: DeviceProfile = {
     ...deviceProfiles[0]!,
     id: "pa",
-    name: "Caja",
+    name: "Cash till",
     capabilities: ["show-station", "show-expo"],
   };
   const handheldProfile: DeviceProfile = {
@@ -5185,7 +5189,7 @@ describe("a device's kitchen screens", () => {
   const tillRow = (id: string, kitchenScreens: DeviceRow["kitchenScreens"]): DeviceRow => ({
     ...base,
     id,
-    label: `Caja ${id}`,
+    label: `Cash till ${id}`,
     kind: "till",
     deviceProfileId: "pa",
     approvedProfileIds: ["pa"],
@@ -5361,7 +5365,7 @@ describe("a device's kitchen screens", () => {
     q(el, "[data-test=pair-submit]")!.click();
     await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
-      name: "Barra 1",
+      name: "Bar 1",
       profileId: "pk",
       kitchenScreens: [{ kind: "station", stationIds: ["s1"], zoneIds: null }],
     });
@@ -5387,7 +5391,7 @@ describe("a device's kitchen screens", () => {
     q(el, "[data-test=pair-submit]")!.click();
     await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
-      name: "Barra 1",
+      name: "Bar 1",
       profileId: "pk",
       kitchenScreens: [{ kind: "pass_monitor", stationIds: null, zoneIds: ["z1"] }],
     });
@@ -5428,7 +5432,7 @@ describe("a device's kitchen screens", () => {
     q(el, "[data-test=pair-submit]")!.click();
     await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
-      name: "Barra 1",
+      name: "Bar 1",
       profileId: "pa",
       kitchenScreens: [{ kind: "pass_monitor", stationIds: null, zoneIds: null }],
     });
@@ -5452,7 +5456,7 @@ describe("a device's kitchen screens", () => {
     q(el, "[data-test=pair-submit]")!.click();
     await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
-      name: "Barra 1",
+      name: "Bar 1",
       profileId: "pa",
       kitchenScreens: [{ kind: "station", stationIds: ["s2", "s3"], zoneIds: null }],
     });
@@ -5468,7 +5472,7 @@ describe("a device's kitchen screens", () => {
     q(el, "[data-test=pair-submit]")!.click();
     await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
-      name: "Barra 1",
+      name: "Bar 1",
       profileId: "pb",
       kitchenScreens: [],
     });
@@ -5536,7 +5540,7 @@ describe("a device's kitchen screens", () => {
     expect([button.variant, button.disabled]).toEqual(["secondary", true]);
     q(el, "[data-test=edit-name]")!.dispatchEvent(
       new CustomEvent("wt-change", {
-        detail: { value: "Pantalla 2" },
+        detail: { value: "Display 2" },
         bubbles: true,
         composed: true,
       }),
@@ -5544,7 +5548,7 @@ describe("a device's kitchen screens", () => {
     await flush(el);
     await saveEdit(el);
     await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({ name: "Pantalla 2" });
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({ name: "Display 2" });
     expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("kitchenScreens");
   });
 
@@ -5596,7 +5600,7 @@ describe("a device's kitchen screens", () => {
     expect(q(el, "[data-test=edit-gone]")).toBeNull();
     q(el, "[data-test=edit-name]")!.dispatchEvent(
       new CustomEvent("wt-change", {
-        detail: { value: "Pantalla 2" },
+        detail: { value: "Display 2" },
         bubbles: true,
         composed: true,
       }),
@@ -5658,7 +5662,7 @@ describe("a device's kitchen screens", () => {
     ]);
     q(el, "[data-test=edit-name]")!.dispatchEvent(
       new CustomEvent("wt-change", {
-        detail: { value: "Pantalla 2" },
+        detail: { value: "Display 2" },
         bubbles: true,
         composed: true,
       }),
@@ -5973,7 +5977,7 @@ describe("a device's kitchen screens", () => {
           `${kind("station")}: Hot line, Drinks`,
         );
         expect(deepText(el, "[data-test=device-screen-t1-pass]")).toBe(
-          `${kind("pass")}: ${every} · Terraza`,
+          `${kind("pass")}: ${every} · Terrace`,
         );
         expect(deepText(el, "[data-test=device-screen-t2-pass_monitor]")).toBe(
           `${kind("pass_monitor")}: ${every} · ${everyZone}`,
@@ -6105,7 +6109,7 @@ describe("a device's kitchen screens", () => {
       const el = await openEdit(api, "t1");
       q(el, "[data-test=edit-name]")!.dispatchEvent(
         new CustomEvent("wt-change", {
-          detail: { value: "Caja 2" },
+          detail: { value: "Cash till 2" },
           bubbles: true,
           composed: true,
         }),
@@ -6175,7 +6179,7 @@ describe("a device's kitchen screens", () => {
         expect(q(el, "[data-test=edit-other-stations]")).toBeNull();
         q(el, "[data-test=edit-name]")!.dispatchEvent(
           new CustomEvent("wt-change", {
-            detail: { value: "Caja 2" },
+            detail: { value: "Cash till 2" },
             bubbles: true,
             composed: true,
           }),
@@ -6228,7 +6232,7 @@ describe("a device's kitchen screens", () => {
       q(el, "[data-test=pair-submit]")!.click();
       await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
       expect(vi.mocked(api.acceptDeviceJoinRequest).mock.calls[0]![1]).toEqual({
-        name: "Barra 1",
+        name: "Bar 1",
         profileId: "pa",
         kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
       });
@@ -6321,10 +6325,10 @@ describe("Delete", () => {
   const kitchenImpact = impactOf("d1", "Grill display", {
     ends: [
       { key: "sessions", count: 2, targets: [] },
-      { key: "held_printers", count: 1, targets: [{ id: "pr1", name: "Mano" }] },
+      { key: "held_printers", count: 1, targets: [{ id: "pr1", name: "Handheld" }] },
     ],
     removes: [
-      { key: "printer_choices", count: 1, targets: [{ id: "pr1", name: "Mano" }] },
+      { key: "printer_choices", count: 1, targets: [{ id: "pr1", name: "Handheld" }] },
       { key: "approved_profiles", count: 1, targets: [{ id: "dp1", name: "Counter till" }] },
       { key: "kitchen_screens", count: 1, targets: [] },
       { key: "zone_selections", count: 2, targets: [] },
@@ -6337,8 +6341,8 @@ describe("Delete", () => {
         code: "device.payment_in_progress",
         params: {},
         targets: [
-          { id: "o1", name: "Mesa 4" },
-          { id: "o2", name: "Mesa 7" },
+          { id: "o1", name: "Table 4" },
+          { id: "o2", name: "Table 7" },
         ],
       },
     ],
@@ -6441,8 +6445,8 @@ describe("Delete", () => {
     expect(orderOf(el)).toEqual(["ends", "removes", "irreversible"]);
     expect(linesOf(el)).toEqual([
       "Cierra la sesión de 2 personas",
-      "Deja de llevar Mano",
-      "Impresoras: Mano",
+      "Deja de llevar Handheld",
+      "Impresoras: Handheld",
       "Puede cambiar a: Counter till",
       "Pantalla de cocina",
       "2 selecciones de zonas guardadas",
@@ -6455,7 +6459,7 @@ describe("Delete", () => {
     });
     await openDelete(el, "d1");
     expect(orderOf(el)).toEqual(["refusals", "ends", "removes", "irreversible"]);
-    expect(linesOf(el)[0]).toBe("Pago en curso: Mesa 4, Mesa 7");
+    expect(linesOf(el)[0]).toBe("Pago en curso: Table 4, Table 7");
     expect(confirmState(el)).toEqual(quiet);
     confirmOf(el).click();
     await flush(el);
@@ -6578,7 +6582,7 @@ describe("Delete", () => {
     expect(dialogOf(el)!.loading).toBe(true);
     expect(confirmState(el)).toEqual(quiet);
 
-    reads.get("d2")!.resolve(impactOf("d2", "Pase revocado"));
+    reads.get("d2")!.resolve(impactOf("d2", "Revoked pass"));
     await flush(el);
     expect(dialogOf(el)!.impact?.target.id).toBe("d2");
     confirmOf(el).click();
@@ -6592,7 +6596,7 @@ describe("Delete", () => {
       getDeviceDeleteImpact: vi
         .fn()
         .mockReturnValueOnce(first.promise)
-        .mockResolvedValueOnce(impactOf("d2", "Pase revocado")),
+        .mockResolvedValueOnce(impactOf("d2", "Revoked pass")),
     });
     await openDelete(el, "d1");
     await cancelDelete(el);
@@ -6633,7 +6637,7 @@ describe("Delete", () => {
     const { el: app } = await mountWidget<DeleteLeaveFixture>("devices-delete-leave-fixture", {});
     const api = stubApi({
       liveData,
-      getDeviceDeleteImpact: vi.fn().mockResolvedValue(impactOf("d2", "Pase revocado")),
+      getDeviceDeleteImpact: vi.fn().mockResolvedValue(impactOf("d2", "Revoked pass")),
       deleteDevice: vi.fn(),
     } as Partial<DashboardApi>);
     const el = document.createElement("dashboard-devices-screen");
@@ -6683,7 +6687,7 @@ describe("Delete", () => {
       deleteDevice: vi
         .fn()
         .mockReturnValueOnce(sent.promise)
-        .mockResolvedValue(impactOf("d2", "Pase revocado")),
+        .mockResolvedValue(impactOf("d2", "Revoked pass")),
     } as Partial<DashboardApi>);
     await openDelete(el, "d1");
     confirmOf(el).click();

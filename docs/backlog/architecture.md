@@ -1159,7 +1159,8 @@ product failures.
 ## A1241. Continue the dashboard test sample-name cleanup, one small slice per PR
 
 - **A1241. Continue the dashboard test sample-name cleanup, one small slice per PR.**
-  Catalogue, device and floor-plan suites still carry Spanish sample names.
+  Historical-category and renamed-parent samples in the sales-category suite, plus catalogue,
+  device and floor-plan suites still carry Spanish sample names.
   The `devices-screen.test.ts` suite still needs its
   disabled-device, till, pairing, kitchen-screen profile, returning-device station and printer
   sample names cleaned.
