@@ -85,6 +85,7 @@ export interface ModuleRouteContext {
     environment: "production" | "preproduction";
     clock: TrustedClock;
     requireWritable(): void;
+    returnSource?(tx: Transaction): Promise<NodeId | null>;
   };
   liveOperations?: LiveModuleOperationBridge;
   db: Database;

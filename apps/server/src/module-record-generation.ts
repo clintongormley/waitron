@@ -17,6 +17,7 @@ export function moduleRecordGeneration(
     nodeId: deps.nodeId,
     environment: deps.environment,
     clock: deps.clock,
+    returnSource: deps.returnSource,
     requireWritable() {
       if (deps.mode() !== "primary" || deps.role() !== "primary" || deps.fenced())
         throw new AppError("node.read_only", {});

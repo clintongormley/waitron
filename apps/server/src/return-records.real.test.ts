@@ -1,3 +1,9 @@
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
+import { FISCAL_PERMISSIONS } from "@waitron/fiscal-verifactu/src/permissions.js";
+import { listFilingCases } from "@waitron/fiscal-verifactu/src/filing-cases.js";
+import { mountRecordRemedies } from "@waitron/fiscal-verifactu/src/record-remedy-routes.js";
+import { steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
@@ -19,7 +25,7 @@ import {
 } from "@waitron/fiscal-verifactu/src/handover-return.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
-import { runReturnRecordsPass } from "./return-records.js";
+import { formerMainForReturn, runReturnRecordsPass } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
 
 const old = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -146,7 +152,8 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
     originals.records,
   );
   expect(wakes).toBe(1);
-  const aeat = createFakeAeat({ serverNow: now });
+  const aeat = createFakeAeat({ serverNow: now, tiempoEsperaInicial: 60 });
+  aeat.reject(`${identity!.nif}|Source/1|20-07-2026`, 1161, "Wrong detail");
   const filed = await drain(
     {
       db: current.db,
@@ -157,11 +164,75 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
     now,
   );
   expect(filed.recordsSubmitted).toBe(1);
-  expect(filed.recordsAccepted).toBe(1);
-  expect(
-    current.db.all<{ estado: string; csv: string | null }>(sql`select estado, csv from envios`),
-  ).toEqual([{ estado: "aceptado", csv: expect.any(String) }]);
-  expect(current.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
-    originals.records,
+  expect(filed.recordsAccepted).toBe(0);
+  expect(filed.recordsHalted).toBe(1);
+
+  const [filingCase] = await withTransaction(current.db, listFilingCases);
+  registerModulePermissions(FISCAL_PERMISSIONS);
+  const token = await withTransaction(current.db, async (tx) => {
+    const [person] = await tx
+      .insert(persons)
+      .values({ displayName: "Administrator", role: "admin" })
+      .returning();
+    return (await startManagementSession(tx, { personId: person!.id })).token;
+  });
+  const remedies = new Hono();
+  mountRecordRemedies(
+    remedies,
+    {
+      db: current.db,
+      recordGeneration: {
+        nodeId: receiverId,
+        environment: "preproduction",
+        clock: { ...steadyClock, now: () => ({ ...steadyClock.now(), instant: now }) },
+        requireWritable: () => {},
+        returnSource: (tx) =>
+          formerMainForReturn({ db: current.db, node: current.node, ring, nodeId: receiverId }, tx),
+      },
+    },
+    () => {},
   );
+  const correction = await remedies.request("/management-api/fiscal-records/remedy", {
+    method: "POST",
+    headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      kind: "record-correction",
+      caseId: filingCase!.id,
+      registroId: originals.records[0]!.id,
+      actionKey: "return-correction",
+      reason: "Correct the description",
+      facts: { description: "Corrected restaurant service" },
+    }),
+  });
+  expect(correction.status).toBe(200);
+  const corrected = (await correction.json()) as { registroId: string };
+  expect(
+    current.db.all<ReturnRow>(
+      sql`select * from registros_facturacion where id = ${originals.records[0]!.id}`,
+    ),
+  ).toEqual(originals.records);
+  expect(
+    current.db.all<{
+      node_id: string;
+      corrects_registro_id: string;
+    }>(sql`select node_id, corrects_registro_id
+    from registros_facturacion where id = ${corrected.registroId}`),
+  ).toEqual([{ node_id: receiverId, corrects_registro_id: originals.records[0]!.id }]);
+  const nextSend = new Date(now.getTime() + 60_000);
+  const accepted = createFakeAeat({ serverNow: nextSend, tiempoEsperaInicial: 60 });
+  const correctionFiling = await drain(
+    {
+      db: current.db,
+      resolveClient: async () => accepted.client(),
+      environment: "preproduction",
+      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+    },
+    nextSend,
+  );
+  expect(correctionFiling.recordsAccepted).toBe(1);
+  expect(
+    current.db.all<{ estado: string; csv: string | null }>(
+      sql`select estado, csv from envios where registro_id = ${corrected.registroId}`,
+    ),
+  ).toEqual([{ estado: "aceptado", csv: expect.any(String) }]);
 });

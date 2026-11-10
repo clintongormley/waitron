@@ -1,3 +1,4 @@
+import type { ReturnState } from "../return-records.js";
 import type { HandoverOperationState } from "@waitron/node-db";
 import type { SupportedLocale } from "@waitron/shared";
 
@@ -86,5 +87,30 @@ export const RESTRICTED_STEP_WORDS: Readonly<
   final_state: {
     "en-GB": "Final copy of the venue taken",
     "es-ES": "Copia final del local hecha",
+  },
+};
+
+export const RESTRICTED_RETURN_WORDS: Readonly<
+  Record<SupportedLocale, Readonly<Record<ReturnState, string>>>
+> = {
+  "en-GB": {
+    waiting:
+      "This box is waiting to return its invoice records to the main box. Keep its data. Do not reset this box. Refresh this page to check again.",
+    sending:
+      "This box is returning its invoice records to the main box. Do not reset this box. Refresh this page to check again.",
+    "needs-attention":
+      "The return needs attention on the main box. Keep this box's data. Do not reset this box. Refresh this page after the return has been resolved.",
+    confirmed:
+      "The main box has confirmed that every invoice record is accounted for. You can reset this box.",
+  },
+  "es-ES": {
+    waiting:
+      "Este equipo está esperando para devolver sus registros de facturación al equipo principal. Conserva sus datos. No restablezcas este equipo. Actualiza esta página para comprobar el estado.",
+    sending:
+      "Este equipo está devolviendo sus registros de facturación al equipo principal. No restablezcas este equipo. Actualiza esta página para comprobar el estado.",
+    "needs-attention":
+      "La devolución necesita atención en el equipo principal. Conserva los datos de este equipo. No restablezcas este equipo. Actualiza esta página cuando se haya resuelto la devolución.",
+    confirmed:
+      "El equipo principal ha confirmado que todos los registros se han recibido o sus conflictos se han revisado y aceptado. Ya puedes restablecer este equipo.",
   },
 };

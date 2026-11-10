@@ -18,6 +18,7 @@ import {
   recordHandoverRestrictionTx,
 } from "@waitron/node-db";
 import { advanceHandover, beginHandover } from "./handover-store.js";
+import type { ReturnState } from "./return-records.js";
 import { restrictedPageRoute } from "./restricted-page.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -61,12 +62,17 @@ async function handOver(successor: string): Promise<void> {
 
 const logged: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
 
-function request(language: string, venue: Database = suite.db): Promise<Response> {
+function request(
+  language: string,
+  venue: Database = suite.db,
+  returnState?: ReturnState,
+): Promise<Response> {
   const app = new Hono();
   restrictedPageRoute({
     venue,
     node: suite.node,
     nodeId: NODE,
+    returnState: () => returnState ?? "waiting",
     log: (level, event, fields) => logged.push({ level, event, fields }),
   })(app);
   return Promise.resolve(app.request("/", { headers: { "Accept-Language": language } }));
@@ -339,3 +345,17 @@ describe("the restricted box's own page", () => {
     inOrder(html, ["Stopped taking sales", ": toString</li>"]);
   });
 });
+
+it.each(["waiting", "sending", "needs-attention", "confirmed"] as const)(
+  "permits reset only after signed whole-inventory confirmation: %s",
+  async (state) => {
+    await handOver(await seedSuccessor("Main box"));
+    const response = await request("en-GB", suite.db, state);
+    const html = await response.text();
+    if (state === "confirmed") expect(html).toContain("You can reset this box.");
+    else {
+      expect(html).toContain("Do not reset this box.");
+      expect(html).not.toContain("You can reset this box.");
+    }
+  },
+);

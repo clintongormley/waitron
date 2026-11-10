@@ -75,3 +75,31 @@ describe("startRestricted", () => {
     expect(stranger.headers.get("access-control-allow-origin")).toBeNull();
   });
 });
+
+it("stops the return sender before a restricted server closes its stores", async () => {
+  const events: string[] = [];
+  const started = startRestricted({
+    app: new Hono(),
+    nodeId: "source",
+    environment: "preproduction",
+    readMembership: async () => null,
+    cors: corsForVenue(async () => false),
+    routes: [],
+    log: () => {},
+    returnRecords: {
+      state: () => "waiting",
+      stop: async () => {
+        events.push("return stopped");
+      },
+    },
+    listen: (_app, stopWork) => ({
+      health: createHealthState(new Date()),
+      close: async () => {
+        await stopWork();
+        events.push("stores closed");
+      },
+    }),
+  });
+  await started.close();
+  expect(events).toEqual(["return stopped", "stores closed"]);
+});

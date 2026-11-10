@@ -53,7 +53,10 @@ export async function applyCorrectedRecordFacts(
   } = await tx.execute(sql`select * from registros_facturacion where id = ${registroId}`);
   if (rawTarget === undefined) throw new AppError("fiscal.remedy_invalid", { registroId });
   const target = decodeRegistroRow(rawTarget);
-  const history = await readHistoryNodes(tx, generation.nodeId);
+  const source = await generation.returnSource?.(tx);
+  const history = [
+    ...new Set([...(await readHistoryNodes(tx, generation.nodeId)), ...(source ? [source] : [])]),
+  ];
   if (
     !history.some((id) => id === target.node_id) ||
     target.entorno !== generation.environment ||

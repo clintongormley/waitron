@@ -1,3 +1,4 @@
+import type { ReturnState } from "./return-records.js";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { nodes, readVenue, type Database, type NodeDatabase } from "@waitron/db";
@@ -15,6 +16,7 @@ import type { Logger } from "./logger.js";
 import { escapeHtml } from "./recovery-surface.js";
 import {
   RESTRICTED_PAGE_WORDS,
+  RESTRICTED_RETURN_WORDS,
   RESTRICTED_STEP_WORDS,
   type RestrictedStepKind,
 } from "./i18n/restricted-page.js";
@@ -25,6 +27,7 @@ export interface RestrictedPageDeps {
   node: NodeDatabase;
   nodeId: string;
   log: Logger;
+  returnState?(): ReturnState;
 }
 
 interface Step {
@@ -34,6 +37,7 @@ interface Step {
 }
 
 interface RestrictedView {
+  returnState: ReturnState;
   successor: string;
   steps: Step[];
   timeZone: string;
@@ -96,6 +100,7 @@ async function readView(deps: RestrictedPageDeps): Promise<RestrictedView> {
     timeZone: await readTimeZone(deps.venue),
     handoverPage:
       operation === null ? undefined : await handoverPageOf({ db: deps.venue }, operation),
+    returnState: deps.returnState?.() ?? "waiting",
   };
 }
 
@@ -131,6 +136,7 @@ ${view.steps
 <p>${escapeHtml(text.body[0])}<strong>${escapeHtml(view.successor)}</strong>${escapeHtml(text.body[1])}</p>
 ${view.handoverPage === undefined || !/^https?:\/\//.test(view.handoverPage) ? "" : `<p><a href="${escapeHtml(view.handoverPage)}">${escapeHtml(text.progress)}</a></p>`}
 ${steps}
+<p>${escapeHtml(RESTRICTED_RETURN_WORDS[locale][view.returnState])}</p>
 </body>
 </html>
 `;

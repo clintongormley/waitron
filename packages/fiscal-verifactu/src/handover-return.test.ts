@@ -1,3 +1,9 @@
+import { Hono } from "hono";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
+import { mountRecordRemedies } from "./record-remedy-routes.js";
+import { FISCAL_PERMISSIONS } from "./permissions.js";
+import { steadyClock } from "../test/write-path-fixtures.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +21,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { saleId } from "@waitron/shared";
-import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedNode as bareNode, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { archiveTo, openBackupQuery } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -714,13 +720,22 @@ it("preflights a different-id record clash before importing its orphan sale", as
   ]);
   const [filingCase] = await withTransaction(receiver.db, listFilingCases);
   const evidence = JSON.parse(filingCase!.evidence.mensaje!) as { fingerprint: string };
+  registerModulePermissions(FISCAL_PERMISSIONS);
+  const [person] = await receiver.db
+    .insert(persons)
+    .values({ displayName: "Administrator", role: "admin" })
+    .returning();
+  const token = (
+    await withTransaction(receiver.db, (tx) => startManagementSession(tx, { personId: person!.id }))
+  ).token;
+  const currentNode = await bareNode(receiver.db);
   const acceptance = {
     caseId: filingCase!.id,
     sourceNodeId: source.nodeId,
     fingerprint: evidence.fingerprint,
     actionKey: "accept-exact-clash",
     reason: "Keep the receiver original",
-    personId: "administrator",
+    personId: person!.id,
     now,
   };
   await expect(
@@ -737,6 +752,34 @@ it("preflights a different-id record clash before importing its orphan sale", as
       receiveReturnedOriginals(tx, source.nodeId, returned, now),
     ),
   ).toEqual({ complete: true });
+  const app = new Hono();
+  mountRecordRemedies(
+    app,
+    {
+      db: receiver.db,
+      recordGeneration: {
+        nodeId: currentNode,
+        environment: "production",
+        clock: steadyClock,
+        requireWritable: () => {},
+        returnSource: async () => source.nodeId,
+      },
+    },
+    () => {},
+  );
+  const request = {
+    method: "POST",
+    headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      fingerprint: evidence.fingerprint,
+      actionKey: acceptance.actionKey,
+      reason: acceptance.reason,
+    }),
+  };
+  const endpoint = `/management-api/fiscal-records/return-clashes/${filingCase!.id}/accept`;
+  expect((await app.request(endpoint, request)).status).toBe(200);
+  await receiver.db.update(persons).set({ role: "manager" }).where(eq(persons.id, person!.id));
+  expect((await app.request(endpoint, request)).status).toBe(403);
   const changed = structuredClone(returned);
   changed.records[0]!.offset_minutos = 60;
   expect(
@@ -896,23 +939,19 @@ it("batches real originals within the row and byte bounds without splitting paym
   const [last] = suite.db.all<{ sale_id: string }>(
     sql`select sale_id from registros_facturacion order by secuencia desc limit 1`,
   );
-  await suite.db
-    .insert(tenders)
-    .values({
-      id: "batch-payment",
-      saleId: last!.sale_id,
-      method: "cash",
-      amount: 200,
-      tipAmount: 200,
-      settledAt: "2026-07-20T17:21:00.000Z",
-    });
-  await suite.db
-    .insert(saleSettlements)
-    .values({
-      id: "batch-settlement",
-      saleId: last!.sale_id,
-      settledAt: "2026-07-20T17:21:00.000Z",
-    });
+  await suite.db.insert(tenders).values({
+    id: "batch-payment",
+    saleId: last!.sale_id,
+    method: "cash",
+    amount: 200,
+    tipAmount: 200,
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
+  await suite.db.insert(saleSettlements).values({
+    id: "batch-settlement",
+    saleId: last!.sale_id,
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
   const returned = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, node.nodeId));
   const batches = makeReturnedBatches(returned);
 

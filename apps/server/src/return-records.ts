@@ -1,8 +1,15 @@
+import { readPinnedPrimaryKey } from "@waitron/node-db";
+import { nodeId as asNodeId } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { realSleep } from "./loop.js";
 import { randomUUID } from "node:crypto";
-import { readDeploymentEnvironment, readNodeMembership, readTenant } from "@waitron/db";
+import {
+  readDeploymentEnvironment,
+  readNodeMembership,
+  readTenant,
+  type Transaction,
+} from "@waitron/db";
 import { sha256Hex, verifyEnvelope } from "@waitron/handover";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
 import type { WaitronModule } from "@waitron/module";
@@ -126,4 +133,22 @@ export function startReturnRecordsDuty(
       await task;
     },
   };
+}
+
+export async function formerMainForReturn(deps: PeerStatusApiDeps, tx: Transaction = deps.db) {
+  const chart = await readNodeMembership(tx);
+  await assertHeldDocumentTrusted(deps, chart);
+  assertHeldDocumentReadable(chart);
+  const pinned = await readPinnedPrimaryKey(deps.node, deps.nodeId);
+  if (
+    !pinned ||
+    pinned.primaryNodeId === deps.nodeId ||
+    chart?.body.nodes.find((row) => row.standing === "serving-primary")?.nodeId !== deps.nodeId ||
+    !chart.body.nodes.some(
+      (row) => row.nodeId === pinned.primaryNodeId && row.standing !== "evicted",
+    ) ||
+    chart.body.revoked?.includes(pinned.primaryNodeId)
+  )
+    return null;
+  return asNodeId(pinned.primaryNodeId);
 }
