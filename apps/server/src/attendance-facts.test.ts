@@ -12,7 +12,6 @@ import {
   parties,
   withTransaction,
   type Transaction,
-  venueLocationId,
 } from "@waitron/db";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -38,7 +37,7 @@ const suite = useVenueDb({
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const backend = new WorkforceBackend();
 let ana: string, bea: string, caro: string, diego: string;
-let locationId: string, nodeId: string, deviceId: string, orderId: string, partyId: string;
+let nodeId: string, deviceId: string, orderId: string, partyId: string;
 const day = (): AttendanceDay => ({
   businessDay: "2026-01-05",
   startAt: "2026-01-05T03:00:00.000Z",
@@ -88,7 +87,6 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  locationId = await venueLocationId(suite.db);
   nodeId = await seedNode(suite.db);
   deviceId = (await seedDevice(suite.db)).deviceId;
   const people = await suite.db
@@ -414,7 +412,7 @@ describe("attendance source facts", () => {
 });
 
 describe("planned attendance shifts", () => {
-  async function version(status: "draft" | "published" | "superseded", _place = locationId) {
+  async function version(status: "draft" | "published" | "superseded") {
     const id = newId();
     await suite.db.insert(rosterVersions).values({
       id,
@@ -425,12 +423,7 @@ describe("planned attendance shifts", () => {
     });
     return id;
   }
-  async function shift(
-    rosterVersionId: string | null,
-    startsAt: string,
-    endsAt: string,
-    _place = locationId,
-  ) {
+  async function shift(rosterVersionId: string | null, startsAt: string, endsAt: string) {
     const id = newId();
     await suite.db.insert(shifts).values({
       id,

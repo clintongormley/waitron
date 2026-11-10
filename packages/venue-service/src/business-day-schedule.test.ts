@@ -1006,7 +1006,7 @@ describe("a waiting change checks the hours written while it waits", () => {
     });
     expect(await storedZone(v)).toEqual([]);
   });
-  const specialDayNames = (_v: Awaited<ReturnType<typeof fixture>>) =>
+  const specialDayNames = () =>
     withTransaction(suite.db, async (tx) =>
       (await tx.select({ name: specialDays.name }).from(specialDays)).map((row) => row.name).sort(),
     );
@@ -1048,11 +1048,11 @@ describe("a waiting change checks the hours written while it waits", () => {
         ],
       },
     });
-    expect(await specialDayNames(v)).toEqual([]);
+    expect(await specialDayNames()).toEqual([]);
     await expect(
       paintDate(v, "menu", "2026-11-04", [range("09:00", "17:00")], at, 1),
     ).resolves.toBeUndefined();
-    expect(await specialDayNames(v)).toEqual(["Special day"]);
+    expect(await specialDayNames()).toEqual(["Special day"]);
   });
   it("refuses a repeating special day crossing the waiting start, parsing it under the start in force", async () => {
     const v = await fixture([]);
@@ -1074,7 +1074,7 @@ describe("a waiting change checks the hours written while it waits", () => {
         ],
       },
     });
-    expect(await specialDayNames(v)).toEqual([]);
+    expect(await specialDayNames()).toEqual([]);
   });
   it("refuses a special day's zone paint crossing the waiting start, and stores one that fits", async () => {
     const v = await fixture([], { zone: true });
@@ -1100,11 +1100,11 @@ describe("a waiting change checks the hours written while it waits", () => {
         ],
       },
     });
-    expect(await specialDayNames(v)).toEqual([]);
+    expect(await specialDayNames()).toEqual([]);
     await expect(
       paintDate(v, "zone", "2026-11-04", [range("09:00", "17:00")], at, 1),
     ).resolves.toBeUndefined();
-    expect(await specialDayNames(v)).toEqual(["Special day"]);
+    expect(await specialDayNames()).toEqual(["Special day"]);
   });
   // The two dates' conflicts came back in either order across repeat runs.
   it("answers a special day clashing only under the waiting start as a waiting-change conflict", async () => {
@@ -1164,7 +1164,7 @@ describe("a waiting change checks the hours written while it waits", () => {
         ]),
       },
     });
-    expect(await specialDayNames(v)).toEqual([]);
+    expect(await specialDayNames()).toEqual([]);
   });
   it("refuses deleting a special day while another holds a clash, and deletes the clashing one", async () => {
     const v = await fixture([]);
@@ -1200,9 +1200,9 @@ describe("a waiting change checks the hours written while it waits", () => {
         ],
       },
     });
-    expect(await specialDayNames(v)).toEqual(["Fiesta", "Market"]);
+    expect(await specialDayNames()).toEqual(["Fiesta", "Market"]);
     await expect(removeSpecialDay(clashing!)).resolves.toBeUndefined();
-    expect(await specialDayNames(v)).toEqual(["Market"]);
+    expect(await specialDayNames()).toEqual(["Market"]);
   });
   it("answers a special-day delete beside hours clashing only under the waiting start as a waiting-change conflict", async () => {
     const v = await fixture([]);
@@ -1216,7 +1216,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       code: "hours.clock_change_conflict",
       params: waitingStartClash,
     });
-    expect(await specialDayNames(v)).toEqual(["Market"]);
+    expect(await specialDayNames()).toEqual(["Market"]);
   });
   it("refuses adding a season while a stored range clashes, since the new season copies it", async () => {
     const clash = { weekday: 6, startsAt: "21:00", endsAt: "04:30", reason: "range" };

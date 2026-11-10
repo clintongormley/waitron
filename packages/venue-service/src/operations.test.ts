@@ -328,7 +328,7 @@ describe("new department service periods", () => {
     });
     return id;
   }
-  const terraces = async (_id: string) =>
+  const terraces = async () =>
     (await db.execute(sql`select name from departments where name = 'Terrace'`)).rows;
   const createTerrace = () =>
     scoped((tx) => createDepartment(tx, { name: "Terrace", orderStart: "counter" }));
@@ -336,7 +336,7 @@ describe("new department service periods", () => {
   it("with a 21:00 start waiting, refuses a new department whose default week would clash with it", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
     try {
-      const id = await waitingLocation("21:00");
+      await waitingLocation("21:00");
       await expect(createTerrace()).rejects.toMatchObject({
         code: "hours.clock_change_conflict",
         params: {
@@ -354,7 +354,7 @@ describe("new department service periods", () => {
           ]),
         },
       });
-      expect(await terraces(id)).toEqual([]);
+      expect(await terraces()).toEqual([]);
     } finally {
       vi.useRealTimers();
     }
@@ -363,10 +363,10 @@ describe("new department service periods", () => {
   it("with a 03:00 start waiting, adds a department with its default week", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
     try {
-      const id = await waitingLocation("03:00");
+      await waitingLocation("03:00");
       const department = await createTerrace();
       expect(department).toMatchObject({ name: "Terrace" });
-      expect(await terraces(id)).toEqual([{ name: "Terrace" }]);
+      expect(await terraces()).toEqual([{ name: "Terrace" }]);
       const slots = await db.execute(
         sql`select d.weekday, s.starts_at, s.ends_at from department_days d join department_day_ranges s on s.day_id = d.id join seasons se on se.id = d.season_id and se.starts_on = '12-01' where d.department_id = ${department.id} order by d.weekday`,
       );

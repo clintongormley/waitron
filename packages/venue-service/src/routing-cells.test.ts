@@ -232,7 +232,7 @@ type StoredCell = {
   no_category: number;
 };
 
-async function readStoredCells(_f: Fixture): Promise<StoredCell[]> {
+async function readStoredCells(): Promise<StoredCell[]> {
   return (
     await db.execute<StoredCell>(
       sql`select category_id, product_id, zone_id, station_id, no_preparation, no_category
@@ -242,9 +242,9 @@ async function readStoredCells(_f: Fixture): Promise<StoredCell[]> {
   ).rows;
 }
 
-async function readStoredCell(f: Fixture, address: CellAddress): Promise<StoredCell | undefined> {
+async function readStoredCell(address: CellAddress): Promise<StoredCell | undefined> {
   const row = address.row;
-  return (await readStoredCells(f)).find(
+  return (await readStoredCells()).find(
     (cell) =>
       cell.category_id === (row.kind === "category" ? row.categoryId : null) &&
       cell.product_id === (row.kind === "product" ? row.productId : null) &&
@@ -263,7 +263,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       zoneId: f.terrace,
     };
     await scoped((tx) => setRoutingCell(tx, address, station(f.bar)));
-    expect(await readStoredCells(f)).toEqual([
+    expect(await readStoredCells()).toEqual([
       {
         category_id: f.drinks,
         product_id: null,
@@ -274,7 +274,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       },
     ]);
     await scoped((tx) => setRoutingCell(tx, address, station(f.kitchen)));
-    expect(await readStoredCells(f)).toEqual([
+    expect(await readStoredCells()).toEqual([
       {
         category_id: f.drinks,
         product_id: null,
@@ -286,7 +286,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     ]);
     await scoped((tx) => clearRoutingCell(tx, address));
     await scoped((tx) => clearRoutingCell(tx, address));
-    expect(await readStoredCells(f)).toEqual([]);
+    expect(await readStoredCells()).toEqual([]);
   });
 
   it("writes each coordinate class to its own row and clears only the addressed one", async () => {
@@ -303,11 +303,11 @@ describe("setRoutingCell / clearRoutingCell", () => {
     await scoped(async (tx) => {
       for (const address of addresses) await setRoutingCell(tx, address, station(f.kitchen));
     });
-    expect(await readStoredCells(f)).toHaveLength(7);
+    expect(await readStoredCells()).toHaveLength(7);
     await scoped((tx) => clearRoutingCell(tx, addresses[1]!));
-    expect(await readStoredCell(f, addresses[1]!)).toBeUndefined();
+    expect(await readStoredCell(addresses[1]!)).toBeUndefined();
     for (const address of [addresses[0]!, ...addresses.slice(2)])
-      expect(await readStoredCell(f, address)).toMatchObject({ station_id: f.kitchen });
+      expect(await readStoredCell(address)).toMatchObject({ station_id: f.kitchen });
   });
 
   it("keeps a category × zone cell when the same category's Every zone cell is set and cleared", async () => {
@@ -330,7 +330,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     };
     await scoped((tx) => setRoutingCell(tx, terrace, station(f.bar)));
     await scoped((tx) => setRoutingCell(tx, everyZone, station(f.kitchen)));
-    expect(await readStoredCells(f)).toEqual([
+    expect(await readStoredCells()).toEqual([
       {
         category_id: f.drinks,
         product_id: null,
@@ -342,14 +342,14 @@ describe("setRoutingCell / clearRoutingCell", () => {
       terraceRow,
     ]);
     await scoped((tx) => clearRoutingCell(tx, everyZone));
-    expect(await readStoredCells(f)).toEqual([terraceRow]);
+    expect(await readStoredCells()).toEqual([terraceRow]);
   });
 
   it("stores explicit No preparation distinctly from a cleared cell", async () => {
     const f = await setup();
     const address: CellAddress = { row: { kind: "product", productId: f.mojito }, zoneId: null };
     await scoped((tx) => setRoutingCell(tx, address, noPrep));
-    expect(await readStoredCell(f, address)).toEqual({
+    expect(await readStoredCell(address)).toEqual({
       category_id: null,
       product_id: f.mojito,
       zone_id: null,
@@ -358,7 +358,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       no_category: 0,
     });
     await scoped((tx) => clearRoutingCell(tx, address));
-    expect(await readStoredCell(f, address)).toBeUndefined();
+    expect(await readStoredCell(address)).toBeUndefined();
   });
 
   it("accepts caller UUID spellings and stores the canonical one", async () => {
@@ -369,7 +369,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     };
     await scoped((tx) => setRoutingCell(tx, upper, station(f.bar.toUpperCase())));
     await scoped((tx) => setRoutingCell(tx, upper, station(f.kitchen.toUpperCase())));
-    expect(await readStoredCells(f)).toEqual([
+    expect(await readStoredCells()).toEqual([
       {
         category_id: null,
         product_id: f.mojito,
@@ -380,7 +380,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       },
     ]);
     await scoped((tx) => clearRoutingCell(tx, upper));
-    expect(await readStoredCells(f)).toEqual([]);
+    expect(await readStoredCells()).toEqual([]);
   });
 
   it("refuses a variant or unknown subject", async () => {
@@ -413,7 +413,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
         params,
       });
     }
-    expect(await readStoredCells(f)).toEqual([]);
+    expect(await readStoredCells()).toEqual([]);
   });
 
   it("refuses an inactive or unknown station", async () => {
@@ -423,7 +423,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       await expect(
         scoped((tx) => setRoutingCell(tx, address, station(stationId))),
       ).rejects.toMatchObject({ code: "route.station_inactive", params: { stationId } });
-    expect(await readStoredCells(f)).toEqual([]);
+    expect(await readStoredCells()).toEqual([]);
   });
 
   it("refuses an inactive or unknown zone", async () => {
@@ -437,7 +437,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
         scoped((tx) => setRoutingCell(tx, address, station(f.bar))),
       ).rejects.toMatchObject({ code: "service_zone.not_found", params: { zoneId } });
     }
-    expect(await readStoredCells(f)).toEqual([]);
+    expect(await readStoredCells()).toEqual([]);
   });
 
   it("refuses moving an active zone with a cell into a switched-off department and leaves the cell as it was", async () => {
@@ -447,7 +447,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       zoneId: f.terrace,
     };
     await scoped((tx) => setRoutingCell(tx, address, station(f.bar)));
-    const before = await readStoredCells(f);
+    const before = await readStoredCells();
     expect(before).toEqual([expect.objectContaining({ zone_id: f.terrace, station_id: f.bar })]);
     const closed = await scoped((tx) =>
       createDepartment(tx, { name: "Closed", orderStart: "table" }),
@@ -466,9 +466,9 @@ describe("setRoutingCell / clearRoutingCell", () => {
       code: "department.not_found",
       params: { departmentId: closed.id },
     });
-    expect(await readStoredCells(f)).toEqual(before);
+    expect(await readStoredCells()).toEqual(before);
     await scoped((tx) => clearRoutingCell(tx, address));
-    expect(await readStoredCells(f)).toEqual([]);
+    expect(await readStoredCells()).toEqual([]);
   });
 
   it("refuses an active zone whose department is switched off", async () => {
@@ -482,7 +482,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     await expect(scoped((tx) => setRoutingCell(tx, address, station(f.bar)))).rejects.toMatchObject(
       { code: "service_zone.not_found", params: { zoneId: f.terrace } },
     );
-    expect(await readStoredCells(f)).toEqual([]);
+    expect(await readStoredCells()).toEqual([]);
   });
 
   it("a No category cell and an All categories cell at the same zone are separate: setting, replacing and clearing one leaves the other", async () => {
@@ -507,26 +507,26 @@ describe("setRoutingCell / clearRoutingCell", () => {
     });
     await scoped((tx) => setRoutingCell(tx, all, station(f.bar)));
     await scoped((tx) => setRoutingCell(tx, none, station(f.kitchen)));
-    expect(await readStoredCells(f)).toEqual([allRow, noneRow(f.kitchen)]);
+    expect(await readStoredCells()).toEqual([allRow, noneRow(f.kitchen)]);
     await scoped((tx) => setRoutingCell(tx, none, station(f.bar)));
-    expect(await readStoredCells(f)).toEqual([allRow, noneRow(f.bar)]);
+    expect(await readStoredCells()).toEqual([allRow, noneRow(f.bar)]);
     await scoped((tx) => clearRoutingCell(tx, none));
-    expect(await readStoredCells(f)).toEqual([allRow]);
+    expect(await readStoredCells()).toEqual([allRow]);
     await scoped((tx) => setRoutingCell(tx, none, station(f.kitchen)));
     await scoped((tx) => setRoutingCell(tx, all, station(f.kitchen)));
-    expect(await readStoredCells(f)).toEqual([
+    expect(await readStoredCells()).toEqual([
       { ...allRow, station_id: f.kitchen },
       noneRow(f.kitchen),
     ]);
     await scoped((tx) => clearRoutingCell(tx, all));
-    expect(await readStoredCells(f)).toEqual([noneRow(f.kitchen)]);
+    expect(await readStoredCells()).toEqual([noneRow(f.kitchen)]);
   });
 
   it("stores explicit No preparation on No category × Every zone, and clears it", async () => {
-    const f = await setup();
+    await setup();
     const address: CellAddress = { row: { kind: "no_category" }, zoneId: null };
     await scoped((tx) => setRoutingCell(tx, address, noPrep));
-    expect(await readStoredCells(f)).toEqual([
+    expect(await readStoredCells()).toEqual([
       {
         category_id: null,
         product_id: null,
@@ -537,7 +537,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       },
     ]);
     await scoped((tx) => clearRoutingCell(tx, address));
-    expect(await readStoredCells(f)).toEqual([]);
+    expect(await readStoredCells()).toEqual([]);
   });
 
   it("refuses an inactive zone and an inactive station for a No category cell with the same codes as any row", async () => {
@@ -563,7 +563,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
         code: "route.station_inactive",
         params: { stationId: f.switchedOff },
       });
-    expect(await readStoredCells(f)).toEqual([]);
+    expect(await readStoredCells()).toEqual([]);
   });
 
   it("refuses the All × Every zone address for both set and clear", async () => {
@@ -578,7 +578,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
         code: "management.request_invalid",
         params: { field: "address" },
       });
-    expect(await readStoredCells(f)).toEqual([]);
+    expect(await readStoredCells()).toEqual([]);
   });
 
   it("never changes the default station when clearing", async () => {
@@ -591,7 +591,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       .from(kitchenStations)
       .where(eq(kitchenStations.locationId, f.cfg.locationId));
     expect(defaults.filter((row) => row.isDefault).map((row) => row.id)).toEqual([f.bar]);
-    expect(await readStoredCells(f)).toEqual([]);
+    expect(await readStoredCells()).toEqual([]);
   });
 
   it("two queued transactions writing one coordinate leave one row holding the second value", async () => {
@@ -604,7 +604,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
       scoped((tx) => setRoutingCell(tx, address, station(f.bar))),
       scoped((tx) => setRoutingCell(tx, address, station(f.kitchen))),
     ]);
-    expect(await readStoredCells(f)).toEqual([
+    expect(await readStoredCells()).toEqual([
       {
         category_id: f.drinks,
         product_id: null,

@@ -139,7 +139,7 @@ function nextNif(): string {
   return nifWithControlLetter(50_000_000 + nifCounter);
 }
 
-async function readyDepartment(_venueId: string): Promise<void> {
+async function readyDepartment(): Promise<void> {
   const [department] = await suite.db.select({ id: departments.id }).from(departments);
   await suite.db.insert(departmentReceipts).values({
     departmentId: department!.id,
@@ -205,7 +205,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   );
 
   const venueId = await venueLocationId(suite.db);
-  await readyDepartment(venueId);
+  await readyDepartment();
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
   const catalogue = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -820,7 +820,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       { db: suite.db, modules: ALL_MODULES },
     );
     const venueId = await venueLocationId(suite.db);
-    await readyDepartment(venueId);
+    await readyDepartment();
     const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
     const productId = await withTransaction(suite.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -1076,7 +1076,7 @@ describe("ordering extras and options — parent + child lines", () => {
       { db: suite.db, modules: ALL_MODULES },
     );
     const venueId = await venueLocationId(suite.db);
-    await readyDepartment(venueId);
+    await readyDepartment();
     const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
     const seeded = await withTransaction(suite.db, async (tx) => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);

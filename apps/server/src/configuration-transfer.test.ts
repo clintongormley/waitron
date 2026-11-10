@@ -5927,7 +5927,7 @@ describe("special days in a configuration transfer", () => {
     };
   }
 
-  async function specialDaysByName(db: typeof suite.db, _located: { locationId: string }) {
+  async function specialDaysByName(db: typeof suite.db) {
     const rows = await db.execute<{ date: string; name: string; closed_all_day: number }>(sql`
       select d.date, s.name, d.closed_all_day from special_day_dates d
       join special_days s on s.id = d.special_day_id
@@ -6012,17 +6012,13 @@ describe("special days in a configuration transfer", () => {
       beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
 
-    const expected = await specialDaysByName(suite.db, {
-      locationId: await venueLocationId(suite.db),
-    });
+    const expected = await specialDaysByName(suite.db);
     expect(expected.dates.map((date) => date.date)).toEqual([
       "2026-12-24",
       "2026-12-25",
       "2027-01-01",
     ]);
-    const actual = await specialDaysByName(targetSuite.db, {
-      locationId: await venueLocationId(targetSuite.db),
-    });
+    const actual = await specialDaysByName(targetSuite.db);
     expect(actual.dates).toEqual(expected.dates);
 
     const sourceIds = new Set(transferred.tables.special_days!.map((row) => row.id));
@@ -7709,7 +7705,7 @@ describe("seasons in a configuration transfer", () => {
   const saturday = <T>(entries: T[]) =>
     [0, 1, 2, 3, 4, 5, 6].map((weekday) => (weekday === 6 ? entries : []));
 
-  async function seasonsOf(db: typeof suite.db, _located: { locationId: string }) {
+  async function seasonsOf(db: typeof suite.db) {
     return db
       .select({ name: seasons.name, startsOn: seasons.startsOn, colour: seasons.colour })
       .from(seasons)
@@ -7733,8 +7729,6 @@ describe("seasons in a configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
-    const scope = { locationId: venueId };
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(seasons)
@@ -7787,7 +7781,7 @@ describe("seasons in a configuration transfer", () => {
         { seasonId: ids.get(STARTER_SEASON_NAMES.Winter.es)! },
       );
     });
-    const exported = await seasonsOf(suite.db, scope);
+    const exported = await seasonsOf(suite.db);
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
       ALL_MODULES,
@@ -7815,9 +7809,7 @@ describe("seasons in a configuration transfer", () => {
       { name: "Harvest", startsOn: "09-15", colour: "teal" },
       { name: STARTER_SEASON_NAMES.Winter.es, startsOn: "12-01", colour: "blue" },
     ]);
-    expect(
-      await seasonsOf(targetSuite.db, { locationId: await venueLocationId(targetSuite.db) }),
-    ).toEqual(exported);
+    expect(await seasonsOf(targetSuite.db)).toEqual(exported);
     expect(await saturdays(targetSuite.db)).toEqual([
       { season: "Harvest", period: "Dinner", starts_at: "20:00:00", ends_at: "02:00:00" },
       {
@@ -7856,7 +7848,7 @@ describe("special days in a configuration transfer", () => {
   const FIESTA_EVENING = new Date("2030-08-15T19:30:00Z");
   const CLOSED_EVENING = new Date("2030-08-16T19:30:00Z");
 
-  async function fiestaRows(db: typeof suite.db, _locationId: string) {
+  async function fiestaRows(db: typeof suite.db) {
     const paint = await db.execute(sql`
       select s.name, s.repeats_yearly, d.date, d.closed_all_day, dep.name as department,
         p.name as period, r.starts_at, r.ends_at
@@ -7939,9 +7931,7 @@ describe("special days in a configuration transfer", () => {
       modules: ALL_MODULES,
       beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
     });
-    const targetVenueId = await venueLocationId(targetSuite.db);
-
-    const exported = await fiestaRows(suite.db, await venueLocationId(suite.db));
+    const exported = await fiestaRows(suite.db);
     expect(exported).toEqual({
       paint: [
         {
@@ -7985,7 +7975,7 @@ describe("special days in a configuration transfer", () => {
         },
       ],
     });
-    expect(await fiestaRows(targetSuite.db, targetVenueId)).toEqual(exported);
+    expect(await fiestaRows(targetSuite.db)).toEqual(exported);
 
     const [department] = await targetSuite.db
       .select({ id: departments.id })

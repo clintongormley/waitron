@@ -43,7 +43,7 @@ async function seasonVenue() {
   return provisionSignedInTill(suite.db, {
     taxId: nextNif(),
     dayCutover: "06:00",
-    seed: async (tx, _cfg) => {
+    seed: async (tx) => {
       const restaurant = await createBareDepartment(tx, "Restaurant", SUNDAY_00_15);
       const diningRoomId = (await createServiceZone(tx, { name: "Sala", departmentId: restaurant }))
         .id;

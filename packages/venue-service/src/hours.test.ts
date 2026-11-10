@@ -165,7 +165,7 @@ const dateSnapshot = (_f: Fixture, subject: HoursSubject, date: LocalDate) =>
     };
   });
 
-const storedDates = (_f: Fixture) =>
+const storedDates = () =>
   withTransaction(db, async (tx) => ({
     days: await tx
       .select()
@@ -635,20 +635,13 @@ describe("Hours on a real Spanish public holiday", () => {
         await dateSnapshot(f, subject, ORDINARY),
       );
     }
-    expect(await storedDates(f)).toEqual({ days: [], dates: [] });
+    expect(await storedDates()).toEqual({ days: [], dates: [] });
   });
 });
 
 describe("special-day station occurrences", () => {
   /** A special day "Navidad" closed all day, written straight to its tables. */
-  async function closure(
-    f: Fixture,
-    {
-      date = "2026-12-25",
-      repeats = true,
-      locationId: _locationId = f.cfg.locationId as string,
-    } = {},
-  ) {
+  async function closure({ date = "2026-12-25", repeats = true } = {}) {
     return withTransaction(db, async (tx) => {
       const [day] = await tx
         .insert(specialDays)
@@ -664,7 +657,7 @@ describe("special-day station occurrences", () => {
 
   it("closes the Calendar on each yearly occurrence without closing prep stations, adjacent dates or earlier years", async () => {
     const f = await fixture();
-    const id = await closure(f);
+    const id = await closure();
     const days = await calendar("2027-12-20", "2027-12-31");
     expect(days.filter((day) => day.closed).map((day) => day.date)).toEqual(["2027-12-25"]);
     expect(days.find((day) => day.date === "2027-12-25")).toMatchObject({
@@ -682,8 +675,8 @@ describe("special-day station occurrences", () => {
   });
 
   it("applies a repeating leap-day Calendar closure only in leap years", async () => {
-    const f = await fixture();
-    await closure(f, { date: "2024-02-29" });
+    await fixture();
+    await closure({ date: "2024-02-29" });
     expect((await calendar("2027-02-28", "2027-03-01")).map((day) => day.tone)).toEqual([
       "standard",
       "standard",
@@ -697,8 +690,8 @@ describe("special-day station occurrences", () => {
   });
 
   it("reports a recurring Calendar closure even when its first date is before the requested range", async () => {
-    const f = await fixture();
-    const id = await closure(f);
+    await fixture();
+    const id = await closure();
     expect((await calendar("2027-12-25"))[0]).toMatchObject({
       date: "2027-12-25",
       tone: "special_day",
@@ -708,8 +701,8 @@ describe("special-day station occurrences", () => {
   });
 
   it("does not report a repeating Calendar closure when no occurrence remains in the date range", async () => {
-    const f = await fixture();
-    await closure(f, { date: "2024-02-29" });
+    await fixture();
+    await closure({ date: "2024-02-29" });
     expect((await calendar("9999-01-01"))[0]).toMatchObject({
       date: "9999-01-01",
       tone: "standard",
@@ -718,8 +711,8 @@ describe("special-day station occurrences", () => {
   });
 
   it("does not report an expired one-off closure on a later Calendar date", async () => {
-    const f = await fixture();
-    const id = await closure(f, { repeats: false });
+    await fixture();
+    const id = await closure({ repeats: false });
     expect((await calendar("2027-01-01"))[0]).toMatchObject({
       date: "2027-01-01",
       tone: "standard",

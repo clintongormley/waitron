@@ -154,7 +154,7 @@ const expectedDetail = (r: Routed, id: string) => ({
 
 const seeded = (r: Routed) => scoped((tx) => saveSpecialDay(tx, null, christmas(r), new Date(), 0));
 const stored = (id: string) => scoped((tx) => readSpecialDay(tx, id));
-const countDays = async (_r: Routed) => (await db.select().from(specialDays)).length;
+const countDays = async () => (await db.select().from(specialDays)).length;
 
 async function answers(response: Response, status: number, error?: Record<string, unknown>) {
   expect(response.status).toBe(status);
@@ -258,7 +258,7 @@ describe("the special-day routes", () => {
       await r.send("DELETE", `/${day.id}`, r.manager, { expectedClockRevision: 0 }),
       204,
     );
-    expect(await countDays(r)).toBe(0);
+    expect(await countDays()).toBe(0);
   });
 
   it("refuses an unknown body key on POST and PUT, writing nothing", async () => {
@@ -273,7 +273,7 @@ describe("the special-day routes", () => {
       code: "management.request_invalid",
       params: { field: "id" },
     });
-    expect(await countDays(r)).toBe(1);
+    expect(await countDays()).toBe(1);
     expect(await stored(day.id)).toEqual(day);
   });
 
@@ -287,7 +287,7 @@ describe("the special-day routes", () => {
       await r.send("DELETE", `/${day.id}`, r.supervisor, { expectedClockRevision: 0 }),
     ])
       await refusedAs(response, 403, "authorization.not_permitted");
-    expect(await countDays(r)).toBe(1);
+    expect(await countDays()).toBe(1);
     expect(await stored(day.id)).toEqual(day);
   });
 
@@ -337,7 +337,7 @@ describe("the special-day routes", () => {
       );
       await answers(await r.send("DELETE", `/${day.id}`, r.manager, revision), 409, error);
     }
-    expect(await countDays(r)).toBe(1);
+    expect(await countDays()).toBe(1);
     expect(await stored(day.id)).toEqual(day);
     await answers(
       await r.send("DELETE", `/${day.id}`, r.manager, { expectedClockRevision: 1 }),
@@ -360,7 +360,7 @@ describe("the special-day routes", () => {
       error,
     );
     await answers(await r.send("DELETE", `/${day.id}`, r.manager, {}), 409, error);
-    expect(await countDays(r)).toBe(1);
+    expect(await countDays()).toBe(1);
     expect(await stored(day.id)).toEqual(day);
   });
 
@@ -380,7 +380,7 @@ describe("the special-day routes", () => {
         params: { date: "2030-12-25", specialDayId: day.id, name: "Christmas" },
       },
     );
-    expect(await countDays(r)).toBe(1);
+    expect(await countDays()).toBe(1);
   });
 
   it("refuses a zone closure outside its department's hours on that date, storing nothing", async () => {
@@ -406,10 +406,10 @@ describe("the special-day routes", () => {
       },
     };
     await answers(await r.send("POST", "", r.manager, body), 400, error);
-    expect(await countDays(r)).toBe(0);
+    expect(await countDays()).toBe(0);
     const day = await seeded(r);
     await answers(await r.send("PUT", `/${day.id}`, r.manager, body), 400, error);
-    expect(await countDays(r)).toBe(1);
+    expect(await countDays()).toBe(1);
     expect(await stored(day.id)).toEqual(day);
   });
 
@@ -565,7 +565,7 @@ describe("the special-day routes", () => {
         },
       },
     );
-    expect(await countDays(r)).toBe(0);
+    expect(await countDays()).toBe(0);
   });
 
   it("answers special_day.invalid with 400", async () => {

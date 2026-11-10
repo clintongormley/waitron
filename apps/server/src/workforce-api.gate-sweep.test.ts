@@ -120,7 +120,7 @@ async function send(
   });
 }
 
-async function seedAcceptedSwap(personId: string, _locationId: string): Promise<string> {
+async function seedAcceptedSwap(personId: string): Promise<string> {
   const [shift] = await suite.db
     .insert(shifts)
     .values({
@@ -201,7 +201,7 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
 
   it("a manager decides a swap and an absence — the decider columns come back through the route", async () => {
     const a = await setupVenue();
-    const swapA = await seedAcceptedSwap(a.personId, a.locationId);
+    const swapA = await seedAcceptedSwap(a.personId);
     const absA = await seedRequestedAbsence(a.personId);
     const appA = mountApp();
 

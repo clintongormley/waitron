@@ -44,7 +44,7 @@ async function fixture() {
 }
 
 /** A special day "Festival" on 2026-10-09, written straight to its tables. */
-async function festival(_f: Awaited<ReturnType<typeof fixture>>) {
+async function festival() {
   return withTransaction(suite.db, async (tx) => {
     const [day] = await tx
       .insert(specialDays)
@@ -58,7 +58,7 @@ async function festival(_f: Awaited<ReturnType<typeof fixture>>) {
 describe("Calendar without a station-hours page model", () => {
   it("keeps local stations separate from special-day Calendar facts", async () => {
     const f = await fixture();
-    const special = await festival(f);
+    const special = await festival();
     const ids = await withTransaction(suite.db, async (tx) => {
       const [bar, prep, kitchen] = await tx
         .insert(kitchenStations)
@@ -94,8 +94,8 @@ describe("Calendar without a station-hours page model", () => {
   });
 
   it("keeps special days without station-hour fields when the venue has no stations", async () => {
-    const f = await fixture();
-    const special = await festival(f);
+    await fixture();
+    const special = await festival();
     const model = await withTransaction(suite.db, (tx) =>
       readSpecialDaysModel(tx, "2026-10-09", "2026-10-09", at),
     );
