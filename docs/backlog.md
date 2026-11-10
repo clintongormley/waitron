@@ -788,14 +788,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Remove till code nothing reaches** (bundle of 3, size M). Holds A1007. [Detail](backlog/till.md#bundle-remove-till-code-nothing-reaches)
 
-- **Small till and floor wording fixes** (bundle of 11, size M). Holds A1259, A934, A1238, A920, A912, A470, A563, A883, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
+- **Small till and floor wording fixes** (bundle of 10, size M). Holds A1259, A934, A920, A912, A470, A563, A883, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 
 - **A1052. A handheld's transfer accept list holds only counter zones.** Read, not run: a handheld
   fills it from `GET /api/default-service-zone/offers`, whose `zones` are the profile's counter
   zones (`apps/server/src/till-api.ts`); a till's holds every profile zone. Unchanged by A797 slice
   4 (its plan's D4).
 
-- **Small till test renames** (bundle of 5, size S). Holds A1053, A1054, A1128. [Detail](backlog/till.md#bundle-small-till-test-renames)
+- **Small till test renames** (bundle of 4, size S). Holds A1054, A1128. [Detail](backlog/till.md#bundle-small-till-test-renames)
 
 - **A1421. Three till oddities seen once and not looked into.** At phone width the Downstairs
   bar's map is drawn tiny; a reload on a table's order lands on an empty order page; and a slow
@@ -1425,7 +1425,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Forms refusal placement** (bundle of 1 remaining entry, size M). [Detail](backlog/dashboard.md#bundle-forms-refusal-placement)
 
-- **Reorder controller** (bundle of 3, size S). Holds A901. [Detail](backlog/dashboard.md#bundle-reorder-controller)
+- **Reorder controller** (bundle of 2, size S). [Detail](backlog/dashboard.md#bundle-reorder-controller)
 
 - **Contrast pass** (bundle of 1, size S). [Detail](backlog/dashboard.md#bundle-contrast-pass)
 

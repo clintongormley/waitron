@@ -284,15 +284,16 @@ describe("till-shell", () => {
   });
 
   it("names each language in full in More's language group, at 1280 wide and at 390", async () => {
+    const original = currentLocale();
     setLocale("es-ES");
-    const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "tablet-landscape",
-      loadLocales: async () => [{ code: "es-ES", label: "Español" }],
-    });
-    const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
     const width = window.innerWidth;
     const height = window.innerHeight;
     try {
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        formFactor: "tablet-landscape",
+        loadLocales: async () => [{ code: "es-ES", label: "Español" }],
+      });
+      const chooser = el.shadowRoot!.querySelector("wt-language-chooser")!;
       for (const w of [1280, 390]) {
         await page.viewport(w, 844);
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -315,10 +316,12 @@ describe("till-shell", () => {
       }
     } finally {
       await page.viewport(width, height);
+      setLocale(original);
     }
   });
 
   it("updates the chooser's active language when the till locale changes", async () => {
+    const original = currentLocale();
     setLocale("es-ES");
     try {
       const { el } = await mountWidget<TillShell>("till-shell", {
@@ -331,7 +334,7 @@ describe("till-shell", () => {
         "en-GB",
       );
     } finally {
-      setLocale("es-ES");
+      setLocale(original);
     }
   });
 
