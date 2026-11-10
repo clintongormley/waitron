@@ -115,7 +115,6 @@ const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
   ["menu_period.name_taken.name", "the name of a menu period"],
   ["menu_publication.time_past.activatesAt", "an instant"],
   ["migrations.set_missing.name", "the name of a migration set"],
-  ["mirror.peer_unresolved.hostname", "the .local name a box looked up"],
   ["printer.bluetooth_not_discovered.address", "a Bluetooth address"],
   ["printer.bluetooth_not_paired.address", "a Bluetooth address"],
   ["product.name_taken.name", "the name of a product"],

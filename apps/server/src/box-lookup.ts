@@ -74,7 +74,7 @@ export async function lookupBoxName(
     return found.map((entry) => entry.address);
   }
   const heard = await askNetwork(hostname, opts);
-  if (heard.length === 0) throw new AppError("mirror.peer_unresolved", { hostname });
+  if (heard.length === 0) throw new AppError("mirror.peer_unresolved", {});
   return heard;
 }
 

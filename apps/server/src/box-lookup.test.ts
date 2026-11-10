@@ -97,7 +97,7 @@ describe("lookupBoxName", () => {
     const fake = fakeSocket([[a(OWN, VENUE), a("127.0.0.1", VENUE)]]);
     const error = await refusal(lookupBoxName(VENUE, opts(fake)));
     expect(error.code).toBe("mirror.peer_unresolved");
-    expect(error.params).toEqual({ hostname: VENUE });
+    expect(error.params).toEqual({});
   });
 
   it("leaves out this box's interface addresses by default", async () => {

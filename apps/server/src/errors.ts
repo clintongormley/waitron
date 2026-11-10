@@ -1306,7 +1306,7 @@ declare module "@waitron/shared" {
      */
     "mirror.bundle_fetch_failed": Record<string, never>;
     /** No box but this one answered for another box's `.local` name within the time limit. */
-    "mirror.peer_unresolved": { hostname: string };
+    "mirror.peer_unresolved": Record<string, never>;
     /**
      * A box joining as a spare already holds a sealed vault row. Joining replaces its key ring with
      * the main box's, so that row would never open again; nothing has been written.
