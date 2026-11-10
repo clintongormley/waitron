@@ -11,7 +11,13 @@ import { NODE_MIGRATIONS } from "@waitron/node-db";
 import type { WaitronModule } from "@waitron/module";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
-import { startReturnRecordsDuty, runReturnRecordsPass } from "./return-records.js";
+import {
+  startReturnRecordsDuty,
+  runReturnRecordsPass,
+  formerMainForReturn,
+  returnDigest,
+  returnVenue,
+} from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
 import { signAsThisBox } from "./handover-signing.js";
 import { AppError } from "@waitron/shared";
@@ -118,9 +124,9 @@ it("returns all module batches through real signatures and confirms only the com
   expect(received).toEqual(["first", "second"]);
   expect(answers).toEqual([
     expect.objectContaining({
-      body: expect.objectContaining({ accounted: true, complete: false }),
+      body: expect.objectContaining({ accounted: true }),
     }),
-    expect.objectContaining({ body: expect.objectContaining({ accounted: true, complete: true }) }),
+    expect.objectContaining({ body: expect.objectContaining({ accounted: true }) }),
   ]);
 });
 
@@ -239,6 +245,75 @@ it.each(["digest", "nonce"])(
   },
 );
 
+it("rejects a matching receipt signed by the source without contacting the main", async () => {
+  expect(
+    await send(async (_url, init) => {
+      const { body } = JSON.parse(String(init?.body)) as { body: Record<string, CanonicalValue> };
+      return Response.json(
+        await signAsThisBox({ node: suite.node, ring, nodeId: source }, "return-receipt", {
+          venue: await returnVenue({ db: suite.db }),
+          sourceNodeId: source,
+          destinationNodeId: receiver,
+          inventory: body.inventory!,
+          index: body.index!,
+          nonce: body.nonce!,
+          digest: returnDigest({ module: body.module!, payload: body.payload! }),
+          accounted: true,
+          complete: true,
+        }),
+      );
+    }),
+  ).toBe("needs-attention");
+  expect(received).toEqual([]);
+});
+
+it.each([
+  "missing pin",
+  "self pin",
+  "other primary",
+  "evicted source",
+  "revoked source",
+  "untrusted chart",
+])("does not enable former-main correction with %s", async (field) => {
+  const deps = { db: suite.db, node: suite.node, ring, nodeId: receiver };
+  expect(await formerMainForReturn(deps)).toBe(source);
+  if (field === "missing pin") {
+    expect(await formerMainForReturn({ ...deps, nodeId: source })).toBeNull();
+    return;
+  }
+  const chart = (await database.readNodeMembership(suite.db))!;
+  const receiverKey = await readNodeIdentityKey(suite.node, ring, receiver);
+  const changed = {
+    ...chart,
+    body: {
+      ...chart.body,
+      nodes: chart.body.nodes.map((row) => ({ ...row })),
+      revoked: [...(chart.body.revoked ?? [])],
+    },
+  };
+  if (field === "self pin")
+    await pinMainBoxKey(suite.node, receiver, {
+      nodeId: receiver,
+      publicKey: nodeSigningPublicKey(receiverKey),
+    });
+  if (field === "other primary") {
+    changed.body.nodes[0]!.standing = "sell-only";
+    changed.body.nodes[1]!.standing = "serving-primary";
+  }
+  if (field === "evicted source") changed.body.nodes[1]!.standing = "evicted";
+  if (field === "revoked source") changed.body.revoked = [source];
+  changed.signature =
+    field === "untrusted chart"
+      ? Buffer.alloc(64).toString("base64")
+      : signDocumentBody(changed.body, receiverKey);
+  await writeNodeMembership(suite.db, changed);
+  if (field === "untrusted chart")
+    await expect(formerMainForReturn(deps)).rejects.toMatchObject({
+      code: "membership.held_untrusted",
+    });
+  else expect(await formerMainForReturn(deps)).toBeNull();
+});
+
 it("waits after a lost final confirmation and safely re-enumerates on the next pass", async () => {
   const app = destination();
   let calls = 0;
@@ -250,6 +325,71 @@ it("waits after a lost final confirmation and safely re-enumerates on the next p
   expect(first).toBe("waiting");
   expect(await send(async (url, init) => app.request(String(url), init))).toBe("confirmed");
   expect(received).toEqual(["first", "second", "first", "second"]);
+});
+
+it("confirms each accounted batch even when the receiver restarts between batches", async () => {
+  expect(await send(async (url, init) => destination().request(String(url), init))).toBe(
+    "confirmed",
+  );
+  expect(received).toEqual(["first", "second"]);
+});
+
+it("shows a retryable clock refusal when the receiver cannot yet accept the record date", async () => {
+  const seat = modules[0]!.handover!.returnRecords!;
+  const receive = vi.spyOn(seat, "receive").mockRejectedValue(
+    new AppError("fiscal.return_clock_ahead", {
+      recordAt: "2026-07-20T17:20:01.000Z",
+      clockAt: "2026-07-20T17:05:00.000Z",
+    }),
+  );
+  try {
+    const app = destination();
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("clock");
+  } finally {
+    receive.mockRestore();
+  }
+});
+
+it("retries a clock refusal and confirms once the main can accept the dates", async () => {
+  const app = destination();
+  let paused!: () => void;
+  let resume!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    paused = resolve;
+  });
+  const release = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const sleep = vi.spyOn(loop, "realSleep").mockImplementationOnce(async () => {
+    paused();
+    await release;
+  });
+  let ahead = true;
+  const duty = startReturnRecordsDuty({
+    db: suite.db,
+    node: suite.node,
+    ring,
+    nodeId: source,
+    modules,
+    log: () => {},
+    fetch: async (url, init) =>
+      ahead
+        ? Response.json({ error: { code: "fiscal.return_clock_ahead" } }, { status: 409 })
+        : app.request(String(url), init),
+  });
+  try {
+    await waiting;
+    expect(duty.state()).toBe("clock");
+    ahead = false;
+    resume();
+    await vi.waitFor(() => expect(duty.state()).toBe("confirmed"));
+    await duty.stop();
+    expect(received).toEqual(["first", "second"]);
+  } finally {
+    resume();
+    await duty.stop();
+    sleep.mockRestore();
+  }
 });
 
 it("distinguishes a signed unaccounted batch from a request refusal", async () => {

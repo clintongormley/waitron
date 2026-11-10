@@ -49,6 +49,9 @@ If the return stops because invoice or payment facts differ, keep both boxes run
 data intact. Recovery from these differences is not available yet. Records after a clashing
 invoice may still be waiting on this box; do not reset it.
 
+If the page reports a clock difference, check the clocks on both boxes and keep both running
+while the return retries. Do not reset the old box.
+
 The page is in Spanish when your browser prefers Spanish, and in English otherwise.
 
 ## When a box is waiting for another box {#waiting}

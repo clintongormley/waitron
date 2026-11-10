@@ -19,9 +19,11 @@ import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { archiveTo, openBackupQuery } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { recordTakeover } from "../test/takeover-fixture.js";
 import { listFilingCases } from "./filing-cases.js";
 import { appendToChain } from "./chain.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
+import { clockBehindChain } from "./clock-behind.js";
 import {
   makeReturnedBatches,
   readReturnedOriginals,
@@ -1004,3 +1006,87 @@ it("refuses a single oversized byte payload before inserting it", async () => {
   });
   expect(receiver.db.all<{ n: number }>(sql`select count(*) n from sales`)).toEqual([{ n: 0 }]);
 });
+
+it("stops when both boxes have corrected the same original", async () => {
+  const main = await seedNode(suite.db, "Main");
+  const source = await original("Source", 1, copyBase);
+  const now = new Date("2026-07-20T17:22:00.000Z");
+  const first = await withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId));
+  await withTransaction(receiver.db, (tx) =>
+    receiveReturnedOriginals(tx, source.nodeId, first, now),
+  );
+  await recordTakeover(receiver.db, source.nodeId, main.nodeId);
+  for (const [db, node] of [
+    [suite.db, source],
+    [receiver.db, main],
+  ] as const) {
+    const pending = altaFor(node, source.saleId, 1, 3);
+    pending.input.IDEmisorFactura = source.issuerTaxId;
+    pending.input.NumSerieFactura = "Source/1";
+    pending.input.Subsanacion = "S";
+    await withTransaction(db, (tx) =>
+      appendToChain(tx, node.nodeId, { ...pending, correctsRegistroId: source.recordId }),
+    );
+  }
+  const returned = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, source.nodeId),
+  );
+  const before = receiver.db.all<ReturnRow>(sql`select * from registros_facturacion order by id`);
+  expect(
+    await withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, returned, now),
+    ),
+  ).toEqual({ complete: false });
+  expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion order by id`)).toEqual(
+    before,
+  );
+});
+
+it.each(["chain position", "invoice identity"])(
+  "stops a record clashing only on %s",
+  async (field) => {
+    const source = await original("Source", 1, copyBase);
+    const returned = await withTransaction(suite.db, (tx) =>
+      readReturnedOriginals(tx, source.nodeId),
+    );
+    const now = new Date("2026-07-20T17:22:00.000Z");
+    await withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, returned, now),
+    );
+    const conflicting = structuredClone(returned);
+    conflicting.records[0]!.id = "different-record";
+    if (field === "chain position") conflicting.records[0]!.num_serie_factura = "Other/1";
+    else conflicting.records[0]!.secuencia = 2;
+    expect(
+      await withTransaction(receiver.db, (tx) =>
+        receiveReturnedOriginals(tx, source.nodeId, conflicting, now),
+      ),
+    ).toEqual({ complete: false });
+    expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual(
+      returned.records,
+    );
+  },
+);
+
+it.each([60000, 60001])(
+  "admits a returned clock lead only through the one-minute margin: %s ms",
+  async (lead) => {
+    const source = await original("Source", 1, copyBase);
+    const returned = await withTransaction(suite.db, (tx) =>
+      readReturnedOriginals(tx, source.nodeId),
+    );
+    const at = Date.parse(String(returned.records[0]!.fecha_hora_huso_gen_registro));
+    const now = new Date(at - lead);
+    const receive = () =>
+      withTransaction(receiver.db, (tx) =>
+        receiveReturnedOriginals(tx, source.nodeId, returned, now),
+      );
+    if (lead === 60000) expect(await receive()).toEqual({ complete: true });
+    else {
+      await expect(receive()).rejects.toMatchObject({ code: "fiscal.return_clock_ahead" });
+      expect(receiver.db.all<ReturnRow>(sql`select * from registros_facturacion`)).toEqual([]);
+      expect(receiver.db.all<ReturnRow>(sql`select * from sales`)).toEqual([]);
+    }
+    expect(await clockBehindChain(receiver.db, { instant: now, offsetMinutes: 120 })).toBeNull();
+  },
+);

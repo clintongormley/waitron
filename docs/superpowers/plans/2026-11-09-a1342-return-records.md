@@ -76,3 +76,20 @@ and the plan's reporting and settlement readers. The unused fiscal fingerprint i
 server signs the complete batch inventory, including late payment and delivery facts. The small
 text receipts and matching-image before/after measurement live in Lane J's
 `receipts/a1342-finish-20261110/`. The owner or watcher lands both fiscal PRs.
+
+
+## Fable corrections cleared by the watcher on 2026-11-10
+
+The watcher’s Lane J notes headed 22:55 and 23:00 clear correction-clash preflight, independent
+signature/correction-gate/clash tests, refusing a future-dated batch before any import, and removing
+the receiver’s in-memory completeness map. The source still requires a signed accounted answer
+for every batch, with its nonce, inventory and payload digest checked. A clock refusal retries and
+leaves the new main’s sale clock unchanged. The existing clock-stop rule is unchanged.
+
+The file list above was prospective: route cases live in `apps/server/src/return-records.test.ts`,
+not a separate `return-records-api.test.ts`; fixture setup remains in the existing suites, with no
+`apps/server/src/testing/return-records.ts`. The English guard gets one counted exception for the
+real two-box fiscal test and its exact inventory gains that same path, as the watcher cleared.
+Refund preservation and the archive/reset wording await the owner; no implementation is cleared
+for either by these notes. The known receiver-verdict and older-chain payment limits remain in the
+backlog under the watcher’s instruction.

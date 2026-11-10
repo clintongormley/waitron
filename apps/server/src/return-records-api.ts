@@ -18,12 +18,13 @@ export function mountReturnRecordsApi(
   },
   log: Logger,
 ): void {
-  const inventories = new Map<
-    string,
-    { inventory: string; count: number; digests: Map<number, string>; ok: boolean }
-  >();
   const run = createErrorBoundary(
-    { "handover.return_refused": 409, "membership.held_untrusted": 409, "node.read_only": 409 },
+    {
+      "handover.return_refused": 409,
+      "membership.held_untrusted": 409,
+      "node.read_only": 409,
+      "fiscal.return_clock_ahead": 409,
+    },
     "return-records.failed",
   );
   const refuse = (reason: string): never => {
@@ -85,24 +86,7 @@ export function mountReturnRecordsApi(
         return seat.receive(tx, verified.signerNodeId, body.payload!, deps.now?.() ?? new Date());
       });
       deps.wake();
-      if (body.index === 0 || inventories.get(verified.signerNodeId)?.inventory !== body.inventory)
-        inventories.set(verified.signerNodeId, {
-          inventory: body.inventory,
-          count: body.count,
-          digests: new Map(),
-          ok: true,
-        });
-      const progress = inventories.get(verified.signerNodeId)!;
-      if (progress.count !== body.count) return refuse("inventory");
       const digest = returnDigest({ module: body.module!, payload: body.payload! });
-      progress.digests.set(body.index, digest);
-      progress.ok &&= accounted;
-      const complete =
-        progress.ok &&
-        progress.digests.size === progress.count &&
-        returnDigest(
-          [...progress.digests.entries()].sort(([a], [b]) => a - b).map(([, value]) => value),
-        ) === body.inventory;
       c.header("Cache-Control", "no-store");
       return c.json(
         await signAsThisBox(deps, "return-receipt", {
@@ -114,7 +98,6 @@ export function mountReturnRecordsApi(
           nonce: body.nonce,
           digest,
           accounted,
-          complete,
         }),
         200,
       );

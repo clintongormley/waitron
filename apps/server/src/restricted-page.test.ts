@@ -346,7 +346,7 @@ describe("the restricted box's own page", () => {
   });
 });
 
-it.each(["waiting", "sending", "needs-attention", "clash", "confirmed"] as const)(
+it.each(["waiting", "sending", "needs-attention", "clock", "clash", "confirmed"] as const)(
   "permits reset only after signed whole-inventory confirmation: %s",
   async (state) => {
     await handOver(await seedSuccessor("Main box"));
@@ -356,6 +356,7 @@ it.each(["waiting", "sending", "needs-attention", "clash", "confirmed"] as const
     else {
       expect(html).toContain("Do not reset this box.");
       expect(html).not.toContain("You can reset this box.");
+      if (state === "clock") expect(html).toContain("clock");
     }
   },
 );

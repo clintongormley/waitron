@@ -1902,6 +1902,8 @@ Not in any track until the standalone primary is done.
 - **A1342 PR2: resolve clashes in returned invoice and payment facts.** A clash stops the return
   without permitting reset. Exact-clash acceptance must coexist with ordinary fiscal filing
   cases; the owner’s decision is pending. A later filing refusal must remain correctable.
+  A filing result held only by the old box is not applied to a record already on the new main.
+  A late payment on an older box’s chain is not included in this return.
   [Detail](backlog/replication-cloud.md#a1342-return-a-stopped-boxs-records-before-reset)
 
 - **A third box's chart can leave another box serving-secondary and filing.** The remaining

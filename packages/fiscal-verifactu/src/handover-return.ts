@@ -11,6 +11,7 @@ import type { BackupQuery } from "@waitron/store";
 import { checkFiscalChains } from "./handover-chain-check.js";
 import { openFilingCase, openAcceptedWithErrorsCase } from "./filing-cases.js";
 import { AppError } from "@waitron/shared";
+import { CLOCK_BEHIND_MARGIN_MS } from "./clock-behind.js";
 import "./errors.js";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
 
@@ -112,6 +113,9 @@ export async function receiveReturnedOriginals(
       held(tx, "registro_sif", record.sif_id)?.node_id !== sourceNodeId
     )
       throw new AppError("fiscal.return_invalid", { reason: "missing record metadata" });
+    const recordAt = String(record.fecha_hora_huso_gen_registro);
+    if (Date.parse(recordAt) > now.getTime() + CLOCK_BEHIND_MARGIN_MS)
+      throw new AppError("fiscal.return_clock_ahead", { recordAt, clockAt: now.toISOString() });
   }
   const allowed: ReturnRow[] = [];
   let blocked = false;
@@ -122,6 +126,7 @@ export async function receiveReturnedOriginals(
     const own = held(tx, "registros_facturacion", record.id);
     const [collision] = tx.all<ReturnRow>(sql`select * from registros_facturacion where
       (node_id = ${record.node_id} and secuencia = ${record.secuencia}) or
+      (${record.corrects_registro_id} is not null and corrects_registro_id = ${record.corrects_registro_id}) or
       (${record.corrects_registro_id} is null and corrects_registro_id is null and
         id_emisor_factura = ${record.id_emisor_factura} and num_serie_factura = ${record.num_serie_factura}
         and fecha_expedicion_factura = ${record.fecha_expedicion_factura}

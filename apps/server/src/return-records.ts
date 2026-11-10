@@ -22,7 +22,8 @@ export interface ReturnRecordsDeps extends PeerStatusApiDeps {
   modules: readonly WaitronModule[];
   now?: () => Date;
 }
-export type ReturnState = "waiting" | "sending" | "needs-attention" | "clash" | "confirmed";
+export type ReturnState =
+  "waiting" | "sending" | "needs-attention" | "clock" | "clash" | "confirmed";
 export const returnDigest = (value: CanonicalValue) => sha256Hex(canonicalize(value));
 
 export async function returnVenue(deps: Pick<ReturnRecordsDeps, "db">) {
@@ -56,7 +57,6 @@ export async function runReturnRecordsPass(
   if (batches.length === 0) return "waiting";
   const inventory = returnDigest(batches.map(returnDigest));
   const keyOf = await peerKeyOf(deps, chart);
-  let complete = false;
   for (let index = 0; index < batches.length; index++) {
     if (deps.stopped()) return "waiting";
     const nonce = randomUUID();
@@ -78,7 +78,15 @@ export async function runReturnRecordsPass(
         `${target.contactUrl.replace(/\/+$/, "")}/api/node/return-records`,
         JSON.stringify(await signAsThisBox(deps, "return-batch", body)),
       );
-      if (answer.status !== 200) return "needs-attention";
+      if (answer.status !== 200) {
+        try {
+          const refusal = JSON.parse(answer.text) as { error?: { code?: string } };
+          if (refusal.error?.code === "fiscal.return_clock_ahead") return "clock";
+        } catch {
+          return "needs-attention";
+        }
+        return "needs-attention";
+      }
       const verified = verifyEnvelope<Record<string, unknown>>(
         JSON.parse(answer.text),
         "return-receipt",
@@ -98,12 +106,11 @@ export async function runReturnRecordsPass(
       )
         return "needs-attention";
       if (receipt.accounted === false) return "clash";
-      complete = receipt.complete === true;
     } catch {
       return "waiting";
     }
   }
-  return complete && !deps.stopped() ? "confirmed" : "waiting";
+  return !deps.stopped() ? "confirmed" : "waiting";
 }
 
 export function startReturnRecordsDuty(

@@ -56,6 +56,9 @@ ambos equipos encendidos y conserva sus datos. La resolución de estas diferenci
 disponible. Los registros posteriores a una factura con diferencias pueden seguir pendientes en
 este equipo: no lo restablezcas.
 
+Si la página avisa de una diferencia de reloj, comprueba los relojes de ambos equipos y manténlos
+encendidos mientras se vuelve a intentar la devolución. No restablezcas el equipo anterior.
+
 La página aparece en español cuando tu navegador prefiere el español, y en inglés en los demás
 casos.
 

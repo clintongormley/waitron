@@ -104,6 +104,7 @@ declare module "@waitron/shared" {
      * (`apps/server/src/recovery-surface.ts`), so an operator's data must never travel here.
      */
     "fiscal.return_invalid": { reason: string };
+    "fiscal.return_clock_ahead": { recordAt: string; clockAt: string };
     "fiscal.record_invalid": { fields: string[]; codes: string[] };
     "fiscal.record_already_corrected": { registroId: string };
     "fiscal.remedy_invalid": { registroId: string };
