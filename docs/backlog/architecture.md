@@ -1328,7 +1328,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Query plans and indexes, measured on a year of data
 
-4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06). The planner-statistics entry was decided on 2026-11-10 and moved to [Decisions and deliberate limits](#decisions-and-deliberate-limits).
+4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **Index the dishes not yet fired, so the pass's reads stop scanning every ticket item ever kept
   (left open by A773-2 PR C's review).** This needs a migration.
@@ -1605,11 +1605,10 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 planner statistics (`ANALYZE` or `PRAGMA optimize`). On the bench's year of trading (days
 361–362, with the `order_groups(number_party_id)` index), a whole day took 0.35 s a bill with no
 statistics, 1.63 s with them, and 0.48 s with them plus three partial indexes; even then the filing pass's two reads of
-waiting records still took 29 s each. The statistics keep one average per index, count every
-null as one value, and this SQLite build has no STAT4, so they misjudge every column that is
-nearly all one value. Instead, a read that picks a worse index without statistics names its
-index with `indexed by`: the two reads of `payments` by working order (A1469) and the fiscal
-reads in A1471 (#2711). Commands and result files: the A1469 PR thread.
+waiting records still took 29 s each. Instead of statistics, a read that picks a worse index
+without them names its index with `indexed by`: the two reads of `payments` by working order
+(A1469), and the fiscal reads of A1471 once #2711 lands. Commands and result files: #2704 (with
+and without statistics) and the A1469 payments PR (the partial indexes).
 
 - **Official holiday names and English display names (A971, owner 2026-10-23).** Keep the published official name as the annual-rule key; choose the display name by the screen language. The country calendar supplies English names for holidays and area choices. A stored name absent from the supplied English-name inventory stays as recorded. This changes no stored holiday rule or database schema.
 

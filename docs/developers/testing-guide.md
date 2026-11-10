@@ -4016,7 +4016,9 @@ the real subquery emits, alongside its plan and public result. Replacing the sub
 with a condition that admits every bill fails that check in the disposable control. Checking
 the index name alone missed the historical candidates being passed to the lookup.
 
-Exercise a hot query both before and after `ANALYZE`. A1372's printer-id subquery and explicit
+Exercise a hot query without planner statistics: a box gathers none
+([decision, A1469](../backlog/architecture.md#decisions-and-deliberate-limits)), so that plan is
+the one it runs. A1372's printer-id subquery and explicit
 status set used both keys of `print_jobs_pull_idx` before statistics were gathered, but the same
 fixture planned a full job scan afterwards. The final printer-first candidate lookup names the
 existing index, and its history suite checks both planner states. A separate failed-job lookup

@@ -77,7 +77,8 @@ record writes, and adds a plain index to `payments` (no refusal changes; pa2 own
   `attendance-discovery.ts`, `till-sale.ts`, `payments-api.ts`, `boot.ts` (stops passing the
   integrated recorder); `apps/server/scripts/bench/measure.ts`.
 - Delete: `apps/server/src/attendance-integrated.ts`, `attendance-integrated-payments.test.ts`,
-  `attendance-integrated-discovery.test.ts` (their behaviour cases move, Task 3).
+  `attendance-integrated-discovery.test.ts` (their behaviour cases move, Task 3),
+  `attendance-integrated.read-plans.test.ts` (it pins a read this deletes).
 - Create: `apps/server/src/attendance-facts.plan.test.ts`.
 - Tests: `apps/server/src/attendance-whole-payments.test.ts`, `attendance-zero-payments.test.ts`,
   `attendance-capture.test.ts`, `attendance-facts.test.ts`, `till-sale.test.ts`, `payments-api.test.ts`.

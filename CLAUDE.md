@@ -456,6 +456,10 @@ called weaker than its name, the topic file lists what it does not see.
 - **A `sql` scalar subquery correlated to the OUTER query's table breaks silently when that table is
   the `.from()` base rather than a join** — no error, a wrong answer. Check base-vs-join and READ the
   emitted SQL with `.toSQL()`.
+- **A box gathers no SQLite planner statistics (no `ANALYZE`, no `PRAGMA optimize`); a read that
+  picks a worse index without them names its index with `indexed by`** (watcher, 2026-11-10,
+  A1469). Cost: on the bench's year, gathering them took a day from 0.35 to 1.63 s a bill (#2704).
+  Nothing guards it. [Receipt](docs/backlog/architecture.md#decisions-and-deliberate-limits).
 - **An untargeted `.onConflictDoNothing()` absorbs EVERY unique conflict, not only the primary
   key's.** Name the target when the table has more than one unique constraint and the code reads an
   empty result as a specific cause. Nothing guards this.
