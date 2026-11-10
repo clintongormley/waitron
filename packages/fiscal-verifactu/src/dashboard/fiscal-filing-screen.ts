@@ -277,6 +277,9 @@ export class FiscalFilingScreen extends LitElement {
       dd li span {
         display: block;
       }
+      .held {
+        margin-top: var(--wt-space-3);
+      }
       .footer {
         display: flex;
         justify-content: end;
@@ -555,14 +558,14 @@ export class FiscalFilingScreen extends LitElement {
           ${when(progress.lastConfirmedAt)}
         </p>
       </section>
-      <section aria-labelledby="fiscal-filing-cases" data-test="cases">
-        <h2 id="fiscal-filing-cases">${t("fiscal_filing.cases")}</h2>
+      <section data-test="cases">
+        <h2>${t("fiscal_filing.cases")}</h2>
         ${this.#cases(overview)}
       </section>
       ${
         overview.heldWithoutCase === 0
           ? nothing
-          : html`<p data-test="held-without-case">
+          : html`<p class="held" data-test="held-without-case">
               ${t("fiscal_filing.held_without_case", { count: count(overview.heldWithoutCase) })}
             </p>`
       }`;
