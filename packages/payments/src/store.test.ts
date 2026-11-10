@@ -21,7 +21,6 @@ import {
   assertReversible,
   associatePaymentWithSale,
   captureAttempting,
-  claimAcceptedOffline,
   existingReferences,
   expireInitiated,
   failAttempting,
@@ -31,12 +30,10 @@ import {
   findPaymentsByBillPayments,
   findPaymentByRef,
   getPaymentByRef,
-  insertAcceptedOffline,
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
   insertInitiated,
-  listAcceptedOffline,
   listAttempting,
   listReconcilable,
   markReconcileRemediated,
@@ -45,7 +42,6 @@ import {
   recordVoid,
   recordedRefundRefs,
   hasPaymentWithExternalRef,
-  settleForwarded,
   settleInitiated,
   stampAttemptingRef,
 } from "./store.js";
@@ -462,26 +458,6 @@ describe("findCapturedPaymentForWorkingOrder", () => {
     });
   });
 
-  it("matches an accepted_offline payment that is still unassociated (saleId null)", async () => {
-    const s = await seedWorkingOrder(suite.db, freshNif());
-    const key = {
-      origin: deviceOrigin(s.deviceId),
-      provider: "stripe",
-      workingOrderId: s.workingOrderId,
-      nodeId: s.nodeId,
-    };
-    await suite.db.transaction((tx) =>
-      insertAcceptedOffline(tx, {
-        ...key,
-        paymentRef: "o1",
-        amount: decimal("8.00"),
-        settledAt: new Date("2026-07-24T12:00:00Z"),
-      }),
-    );
-    const found = await suite.db.transaction((tx) => findCapturedPaymentForWorkingOrder(tx, key));
-    expect(found).toMatchObject({ paymentRef: "o1", state: "accepted_offline", saleId: null });
-  });
-
   it("returns undefined when the only payment is attempting (the lost-T2 window is not yet captured)", async () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
     const key = {
@@ -806,68 +782,6 @@ describe("externalRef on read-back + failed refunds", () => {
   });
 });
 
-describe("listAcceptedOffline", () => {
-  it("listAcceptedOffline returns this provider's accepted_offline rows without locking them", async () => {
-    const s = await seedWorkingOrder(suite.db, freshNif());
-    await suite.db.transaction((tx) =>
-      insertAcceptedOffline(tx, {
-        origin: deviceOrigin(s.deviceId),
-        workingOrderId: s.workingOrderId,
-        nodeId: s.nodeId,
-        provider: "fake",
-        paymentRef: "lst-1",
-        amount: decimal("10.00"),
-        settledAt: new Date("2026-07-24T10:00:00Z"),
-      }),
-    );
-    const listed = await suite.db.transaction((tx) => listAcceptedOffline(tx, "fake"));
-    expect(listed.map((r) => r.paymentRef)).toContain("lst-1");
-    expect(listed.find((r) => r.paymentRef === "lst-1")?.saleId).toBeNull();
-  });
-});
-
-describe("claimAcceptedOffline", () => {
-  it("returns this provider's accepted_offline rows and writes nothing to any payment row", async () => {
-    const s = await seedWorkingOrder(suite.db, freshNif());
-    const order = {
-      origin: deviceOrigin(s.deviceId),
-      workingOrderId: s.workingOrderId,
-      nodeId: s.nodeId,
-    };
-    await suite.db.transaction(async (tx) => {
-      await insertAcceptedOffline(tx, {
-        ...order,
-        provider: "fake",
-        paymentRef: "clm-mine",
-        amount: decimal("10.00"),
-        settledAt: new Date("2026-07-24T10:00:00Z"),
-      });
-      await insertAcceptedOffline(tx, {
-        ...order,
-        provider: "other",
-        paymentRef: "clm-other-provider",
-        amount: decimal("11.00"),
-        settledAt: new Date("2026-07-24T10:00:00Z"),
-      });
-      await insertFailedPayment(tx, {
-        ...order,
-        provider: "fake",
-        paymentRef: "clm-other-state",
-        amount: decimal("12.00"),
-      });
-    });
-    const allRows = () => suite.db.select().from(payments).orderBy(payments.paymentRef);
-    const before = await allRows();
-
-    const claimed = await suite.db.transaction((tx) => claimAcceptedOffline(tx, "fake"));
-
-    expect(claimed.map((r) => r.paymentRef)).toEqual(["clm-mine"]);
-    // Every column, not just `state`: the forward pass reads these rows and advances them through
-    // its own state-guarded updates, so the selection itself must leave them byte-for-byte alone.
-    expect(await allRows()).toEqual(before);
-  });
-});
-
 describe("Mode 3 initiated lifecycle", () => {
   const HOSTED = "hosted-abc";
   const SETTLED_AT = new Date("2026-07-24T12:00:00Z");
@@ -1023,31 +937,6 @@ describe("listReconcilable", () => {
     expect(rows[0].auditedAt).toBe(rows[0].settledAt);
   });
 
-  it("returns settled rows too — the forwarded-offline state the orphan rule also reaches", async () => {
-    // `settled` can be an orphan with NO reversal path, which is why the sweep's claim gate tests
-    // the state; that gate only means something if this query admits the state.
-    const seeded = await seedTenant();
-    await suite.db.transaction(async (tx) => {
-      await insertAcceptedOffline(tx, {
-        origin: deviceOrigin(seeded.deviceId),
-        workingOrderId: seeded.workingOrderId,
-        nodeId: seeded.nodeId,
-        provider: "fake",
-        paymentRef: "forwarded",
-        amount: decimal("12.00"),
-        settledAt: SETTLED,
-      });
-      await settleForwarded(tx, {
-        provider: "fake",
-        paymentRef: "forwarded",
-      });
-    });
-    const rows = await suite.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD));
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ paymentRef: "forwarded", state: "settled", amount: "12.00" });
-    expect(rows[0].auditedAt).toBe(rows[0].settledAt);
-  });
-
   it("merges its two state arms back into one created_at ordering", async () => {
     // The `initiated` row is created FIRST but comes back from the SECOND query, so a plain
     // concatenation would report it last.
@@ -1113,7 +1002,7 @@ describe("listReconcilable", () => {
     expect(rows[0].auditedAt).not.toBeNull();
   });
 
-  it("excludes failed and accepted_offline rows (forward's queue, not reconcile's)", async () => {
+  it("excludes failed rows", async () => {
     const seeded = await seedTenant();
     await suite.db.transaction(async (tx) => {
       await insertFailedPayment(tx, {
@@ -1123,15 +1012,6 @@ describe("listReconcilable", () => {
         provider: "fake",
         paymentRef: "nope",
         amount: decimal("3.00"),
-      });
-      await insertAcceptedOffline(tx, {
-        origin: deviceOrigin(seeded.deviceId),
-        workingOrderId: seeded.workingOrderId,
-        nodeId: seeded.nodeId,
-        provider: "fake",
-        paymentRef: "queued",
-        amount: decimal("4.00"),
-        settledAt: SETTLED,
       });
     });
     expect(await suite.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD))).toEqual([]);
@@ -1478,7 +1358,6 @@ describe("the link from a provider payment to its bill payment", () => {
   it.each([
     ["insertAttempting", insertAttempting],
     ["insertCapturedPayment", insertCapturedPayment],
-    ["insertAcceptedOffline", insertAcceptedOffline],
     ["insertFailedPayment", insertFailedPayment],
   ] as const)("%s writes the bill payment it was given", async (name, insert) => {
     const seeded = await seedTenant();
@@ -1695,7 +1574,7 @@ describe("rows written within one millisecond", () => {
    * the order they were written. Their settled times run backwards, against that order. */
   async function writePayments(
     seeded: Seeded,
-    state: "captured" | "accepted_offline" | "attempting",
+    state: "captured" | "attempting",
     settledAt: (written: number) => string | null,
   ): Promise<string[]> {
     const id = descending();
@@ -1744,19 +1623,6 @@ describe("rows written within one millisecond", () => {
     );
 
     expect(found?.paymentRef).toBe(refs.at(-1));
-  });
-
-  it("listAcceptedOffline and claimAcceptedOffline list the payments in the order they were written", async () => {
-    const seeded = await seedTenant();
-    const refs = await writePayments(seeded, "accepted_offline", (written) =>
-      new Date(Date.parse(AT) + COUNT - written).toISOString(),
-    );
-
-    const listed = await suite.db.transaction((tx) => listAcceptedOffline(tx, "fake"));
-    const claimed = await suite.db.transaction((tx) => claimAcceptedOffline(tx, "fake"));
-
-    expect(listed.map((row) => row.paymentRef)).toEqual(refs);
-    expect(claimed.map((row) => row.paymentRef)).toEqual(refs);
   });
 
   it("listAttempting lists the payments in the order they were written", async () => {

@@ -92,11 +92,6 @@ export class SimulatorPaymentProvider implements PaymentProvider {
     };
   }
 
-  forward(now: Date): Promise<ForwardResult> {
-    void now;
-    return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
-  }
-
   resolvePending(now: Date): Promise<ForwardResult> {
     void now;
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });

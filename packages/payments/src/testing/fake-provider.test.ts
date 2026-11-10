@@ -3,21 +3,14 @@ import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, captureError } from "@waitron/db";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { openIncidents } from "@waitron/core";
 import {
   AppError,
   decimal,
   workingOrderId as brandWorkingOrderId,
   deviceOrigin,
-  jobOrigin,
 } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
-import {
-  associatePaymentWithSale,
-  findPaymentByRef,
-  getPaymentByRef,
-  insertAttempting,
-} from "../store.js";
+import { findPaymentByRef, getPaymentByRef, insertAttempting } from "../store.js";
 import { FakePaymentProvider } from "./fake-provider.js";
 import {
   billPaymentOfRow,
@@ -25,8 +18,6 @@ import {
   readerOfRow,
   seedBillPayment,
   seedHeldReader,
-  seedPaymentPolicy,
-  seedSale,
   seedWorkingOrder,
 } from "../../test/seed.js";
 import type { Seeded } from "../../test/seed.js";
@@ -46,18 +37,12 @@ async function seedTenant(): Promise<Seeded> {
   return seedWorkingOrder(suite.db, freshNif());
 }
 
-async function collect(
-  provider: FakePaymentProvider,
-  s: Seeded,
-  amount = "10.00",
-  allowOffline?: boolean,
-) {
+async function collect(provider: FakePaymentProvider, s: Seeded, amount = "10.00") {
   return provider.collect({
     origin: deviceOrigin(s.deviceId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     nodeId: s.nodeId,
     amount: decimal(amount),
-    ...(allowOffline === undefined ? {} : { allowOffline }),
   });
 }
 
@@ -93,9 +78,9 @@ describe("FakePaymentProvider.collect", () => {
 });
 
 describe("FakePaymentProvider.collect with a card reader", () => {
-  it("names the reader on every row it writes: captured, failed, attempting and accepted offline", async () => {
+  it("names the reader on every row it writes: captured, failed and attempting", async () => {
     const s = await seedTenant();
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
+
     const readerId = await seedHeldReader(suite.db, s.deviceId);
     const provider = new FakePaymentProvider(suite.db);
     const pay = () =>
@@ -104,7 +89,6 @@ describe("FakePaymentProvider.collect with a card reader", () => {
         workingOrderId: brandWorkingOrderId(s.workingOrderId),
         nodeId: s.nodeId,
         amount: decimal("10.00"),
-        allowOffline: true,
         readerId,
       });
 
@@ -113,16 +97,13 @@ describe("FakePaymentProvider.collect with a card reader", () => {
     const failed = await pay();
     provider.stallNextCollect();
     const stalled = await pay();
-    provider.offlineNextCollect();
-    const offline = await pay();
 
-    expect([captured.state, failed.state, stalled.state, offline.state]).toEqual([
+    expect([captured.state, failed.state, stalled.state]).toEqual([
       "captured",
       "failed",
       "attempting",
-      "accepted_offline",
     ]);
-    for (const result of [captured, failed, stalled, offline]) {
+    for (const result of [captured, failed, stalled]) {
       expect(await readerOfRow(suite.db, result.paymentRef)).toBe(readerId);
     }
   });
@@ -143,7 +124,7 @@ describe("FakePaymentProvider.collect with a card reader", () => {
     "a collect scripted %s on a reader the device does not hold is refused reader.not_held, writing no row",
     async (script) => {
       const s = await seedTenant();
-      await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
+
       const { deviceId: other } = await seedDevice(suite.db, { locationId: s.locationId });
       const readerId = await seedHeldReader(suite.db, other);
       const provider = new FakePaymentProvider(suite.db);
@@ -156,7 +137,6 @@ describe("FakePaymentProvider.collect with a card reader", () => {
           workingOrderId: brandWorkingOrderId(s.workingOrderId),
           nodeId: s.nodeId,
           amount: decimal("10.00"),
-          allowOffline: true,
           readerId,
         }),
       );
@@ -171,7 +151,7 @@ describe("FakePaymentProvider.collect with a card reader", () => {
     "a collect scripted %s on a held reader another device has a payment in progress on is refused reader.payment_in_progress, writing no row",
     async (script) => {
       const s = await seedTenant();
-      await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
+
       const { deviceId: other } = await seedDevice(suite.db, { locationId: s.locationId });
       const readerId = await seedHeldReader(suite.db, other);
       await suite.db.transaction((tx) =>
@@ -198,7 +178,6 @@ describe("FakePaymentProvider.collect with a card reader", () => {
           workingOrderId: brandWorkingOrderId(s.workingOrderId),
           nodeId: s.nodeId,
           amount: decimal("10.00"),
-          allowOffline: true,
           readerId,
         }),
       );
@@ -302,26 +281,6 @@ describe("FakePaymentProvider.collect for a bill payment", () => {
     expect(await billPaymentOfRow(suite.db, failed.paymentRef)).toBe(second);
   });
 
-  it("names the bill payment on a row accepted offline", async () => {
-    const s = await seedTenant();
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
-    const provider = new FakePaymentProvider(suite.db);
-    const billPaymentId = await seedBillPayment(suite.db, s);
-    provider.offlineNextCollect();
-
-    const r = await provider.collect({
-      origin: deviceOrigin(s.deviceId),
-      workingOrderId: brandWorkingOrderId(s.workingOrderId),
-      nodeId: s.nodeId,
-      amount: decimal("10.00"),
-      allowOffline: true,
-      billPaymentId,
-    });
-
-    expect(r.state).toBe("accepted_offline");
-    expect(await billPaymentOfRow(suite.db, r.paymentRef)).toBe(billPaymentId);
-  });
-
   it("records every collect it is asked for, with its parameters", async () => {
     const s = await seedTenant();
     const provider = new FakePaymentProvider(suite.db);
@@ -391,142 +350,32 @@ describe("FakePaymentProvider.collect for a bill payment", () => {
 });
 
 describe("FakePaymentProvider.collect offline", () => {
-  it("accepts offline when policy allows, staff opt in, and amount is within the cap", async () => {
+  it("returns network_unavailable and writes nothing", async () => {
     const s = await seedTenant();
     await seedTenant();
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
-    const provider = new FakePaymentProvider(suite.db);
-    provider.offlineNextCollect();
-    const r = await collect(provider, s, "10.00", true);
-    expect(r.state).toBe("accepted_offline");
-    expect(r.offline).toBe(true);
-    expect(r.settledAt).not.toBeNull();
-    const row = await suite.db.transaction((tx) => findPaymentByRef(tx, "fake", r.paymentRef));
-    expect(row?.state).toBe("accepted_offline");
-    expect(row?.settledAt).not.toBeNull();
-  });
 
-  it("returns network_unavailable and writes nothing when staff did not opt in", async () => {
-    const s = await seedTenant();
-    await seedTenant();
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
     const provider = new FakePaymentProvider(suite.db);
     provider.offlineNextCollect();
-    const r = await collect(provider, s, "10.00", false);
+    const r = await collect(provider, s, "10.00");
     expect(r.state).toBe("network_unavailable");
     expect(r.settledAt).toBeNull();
     const row = await suite.db.transaction((tx) => findPaymentByRef(tx, "fake", r.paymentRef));
     expect(row).toBeUndefined();
   });
 
-  it("returns network_unavailable when there is no policy row (fail-safe)", async () => {
-    const s = await seedTenant();
-    await seedTenant();
-    const provider = new FakePaymentProvider(suite.db);
-    provider.offlineNextCollect();
-    const r = await collect(provider, s, "10.00", true);
-    expect(r.state).toBe("network_unavailable");
-  });
-
-  it("returns network_unavailable over the cap", async () => {
-    const s = await seedTenant();
-    await seedTenant();
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
-    const provider = new FakePaymentProvider(suite.db);
-    provider.offlineNextCollect();
-    const r = await collect(provider, s, "50.01", true);
-    expect(r.state).toBe("network_unavailable");
-  });
-
   it("offlineNextCollect is one-shot — the next collect is a normal online capture", async () => {
     const s = await seedTenant();
     await seedTenant();
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
+
     const provider = new FakePaymentProvider(suite.db);
     provider.offlineNextCollect();
-    await collect(provider, s, "10.00", true);
-    const online = await collect(provider, s, "10.00", true);
+    await collect(provider, s, "10.00");
+    const online = await collect(provider, s, "10.00");
     expect(online.state).toBe("captured");
   });
 });
 
-async function acceptOfflineAndAssociate(
-  provider: FakePaymentProvider,
-  s: Seeded,
-  amount = "10.00",
-): Promise<string> {
-  provider.offlineNextCollect();
-  const r = await collect(provider, s, amount, true);
-  const saleId = await seedSale(suite.db, s);
-  await suite.db.transaction((tx) =>
-    associatePaymentWithSale(tx, {
-      provider: "fake",
-      paymentRef: r.paymentRef,
-      saleId,
-    }),
-  );
-  return r.paymentRef;
-}
-
-describe("FakePaymentProvider.forward", () => {
-  it("settles an accepted_offline payment the network clears", async () => {
-    const s = await seedTenant();
-    await seedTenant();
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
-    const provider = new FakePaymentProvider(suite.db);
-    const ref = await acceptOfflineAndAssociate(provider, s);
-    const result = await provider.forward(new Date());
-    expect(result).toMatchObject({
-      forwarded: 1,
-      declined: 0,
-      incidentsRaised: 0,
-      nextDueAt: null,
-    });
-    const row = await suite.db.transaction((tx) => findPaymentByRef(tx, "fake", ref));
-    expect(row?.state).toBe("settled");
-  });
-
-  it("declines a payment the network refuses, raising one incident, without touching the sale", async () => {
-    const s = await seedTenant();
-    await seedTenant();
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
-    const provider = new FakePaymentProvider(suite.db);
-    const ref = await acceptOfflineAndAssociate(provider, s);
-    provider.declineForwardFor(ref);
-    const result = await provider.forward(new Date());
-    expect(result).toMatchObject({ forwarded: 0, declined: 1, incidentsRaised: 1 });
-    const row = await suite.db.transaction((tx) => findPaymentByRef(tx, "fake", ref));
-    expect(row?.state).toBe("declined");
-    const incidents = await suite.db.transaction((tx) =>
-      openIncidents(tx, jobOrigin("payment_check")),
-    );
-    expect(incidents).toHaveLength(1);
-    expect(incidents[0].code).toBe("payment.offline_forward_declined");
-  });
-
-  it("is idempotent — a second forward advances nothing and raises no duplicate incident", async () => {
-    const s = await seedTenant();
-    await seedTenant();
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
-    const provider = new FakePaymentProvider(suite.db);
-    const ref = await acceptOfflineAndAssociate(provider, s);
-    provider.declineForwardFor(ref);
-    await provider.forward(new Date());
-    const second = await provider.forward(new Date());
-    expect(second).toMatchObject({ forwarded: 0, declined: 0, incidentsRaised: 0 });
-    const incidents = await suite.db.transaction((tx) =>
-      openIncidents(tx, jobOrigin("payment_check")),
-    );
-    expect(incidents).toHaveLength(1);
-  });
-
-  it("returns all-zeros when there is nothing to forward", async () => {
-    await seedTenant();
-    const provider = new FakePaymentProvider(suite.db);
-    const result = await provider.forward(new Date());
-    expect(result).toEqual({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
-  });
-
+describe("FakePaymentProvider.resolvePending", () => {
   it("resolvePending is all-zeros (the fake's collect resolves in one transaction)", async () => {
     await seedTenant();
     const provider = new FakePaymentProvider(suite.db);

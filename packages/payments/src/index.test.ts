@@ -52,7 +52,6 @@ import type {
 } from "./index.js";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
-import { paymentPolicy } from "./schema/payment-policy.js";
 import * as schema from "./schema/index.js";
 
 /**
@@ -280,17 +279,6 @@ describe("schema constraint declarations (forces the lazy extraConfig callbacks)
 
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("payment_refunds_amount_ck");
-  });
-
-  it("declares the payment_policy table's one-row and value check constraints", () => {
-    const config = getTableConfig(paymentPolicy);
-
-    expect(config.foreignKeys).toEqual([]);
-
-    const checkNames = config.checks.map((c) => c.name);
-    expect(checkNames).toContain("payment_policy_singleton_ck");
-    expect(checkNames).toContain("payment_policy_offline_mode_ck");
-    expect(checkNames).toContain("payment_policy_cap_ck");
   });
 
   it("forces the extraConfig callback of every owned schema table (new tables can't drop coverage)", () => {

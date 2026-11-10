@@ -6,7 +6,7 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, deviceOrigin, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
-import { freshNif, seedPaymentPolicy, seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
 import { FakeStripeDevice } from "./testing/fake-stripe-device.js";
 import { FakeStripeHosted } from "./testing/fake-stripe-hosted.js";
@@ -67,19 +67,6 @@ describe("a Stripe payment carries the node id of the box that started it", () =
     client.nextCollect("declined");
     const result = await new StripeOnDeviceProvider({ client, db: suite.db }).collect(collect);
     expect(result.state).toBe("failed");
-    expect(await storedNode(result.paymentRef)).toBe(s.nodeId);
-  });
-
-  it("StripeOnDeviceProvider.collect, accepted offline", async () => {
-    const { s, collect } = await params();
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
-    const client = new FakeStripeDevice();
-    client.nextCollect("offline");
-    const result = await new StripeOnDeviceProvider({ client, db: suite.db }).collect({
-      ...collect,
-      allowOffline: true,
-    });
-    expect(result.state).toBe("accepted_offline");
     expect(await storedNode(result.paymentRef)).toBe(s.nodeId);
   });
 

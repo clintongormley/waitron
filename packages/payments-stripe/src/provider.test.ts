@@ -549,22 +549,6 @@ describe("reverseViaStripe's processor-ref resolution", () => {
   });
 });
 
-describe("StripeTerminalProvider.forward", () => {
-  it("forward is a no-op for the server-driven provider (no device-local offline queue)", async () => {
-    const provider = new StripeTerminalProvider({
-      captureAlerts,
-      client: new FakeStripe(),
-      db: suite.db,
-    });
-    expect(await provider.forward(new Date("2026-07-24T10:00:00Z"))).toEqual({
-      nextDueAt: null,
-      forwarded: 0,
-      declined: 0,
-      incidentsRaised: 0,
-    });
-  });
-});
-
 describe("StripeTerminalProvider.resolvePending", () => {
   it("resolvePending is all-zeros when no row needs checking", async () => {
     const provider = new StripeTerminalProvider({

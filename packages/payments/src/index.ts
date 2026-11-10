@@ -28,8 +28,6 @@ export {
   assertReversible,
   associatePaymentWithSale,
   captureAttempting,
-  claimAcceptedOffline,
-  declineForwarded,
   existingReferences,
   expireInitiated,
   failAttempting,
@@ -40,12 +38,10 @@ export {
   findPaymentByRef,
   getPaymentByRef,
   hasPaymentWithExternalRef,
-  insertAcceptedOffline,
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
   insertInitiated,
-  listAcceptedOffline,
   listAttempting,
   listReconcilable,
   markReconcileRemediated,
@@ -53,14 +49,12 @@ export {
   recordRefund,
   recordVoid,
   recordedRefundRefs,
-  settleForwarded,
   settleInitiated,
   stampAttemptingRef,
 } from "./store.js";
 export type {
   AttemptingPayment,
   CapturedPaymentForOrder,
-  ForwardablePayment,
   PaymentRow,
   ReconcilableRow,
   SettledInitiated,
@@ -108,8 +102,6 @@ export { PAYMENTS_ALERTS } from "./alerts.js";
 export { PAYMENTS_HANDOVER, summariseOpenPayments } from "./handover-summary.js";
 export type { OpenPayments, OpenPaymentState } from "./handover-summary.js";
 export { PAYMENTS_MIGRATIONS } from "./migrations.js";
-export { getPaymentPolicy, resolveOfflineDecision } from "./policy.js";
-export type { PaymentPolicyRow } from "./policy.js";
 export { DEFAULT_SETTLEMENT_LAG_MS, classify, reconcilePayments } from "./reconcile.js";
 export type { OrphanRemediation } from "./errors.js";
 export type {
@@ -128,7 +120,6 @@ export type {
 } from "./reconcile.js";
 export { PAYMENTS_CLASSIFICATION } from "./classification.js";
 export { paymentsBackupVerification } from "./backup-verification.js";
-export { PAYMENTS_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { PAYMENTS_CHANGE_SOURCES } from "./classification.js";
 export type {
   AddReaderResult,

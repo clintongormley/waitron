@@ -61,17 +61,6 @@ CREATE TABLE `payment_holds` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `payment_holds_payment_key` ON `payment_holds` (`payment_id`);--> statement-breakpoint
-CREATE TABLE `payment_policy` (
-	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
-	`offline_mode` text NOT NULL,
-	`offline_amount_cap` integer NOT NULL,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL,
-	CONSTRAINT "payment_policy_singleton_ck" CHECK("payment_policy"."id" = 1),
-	CONSTRAINT "payment_policy_offline_mode_ck" CHECK("payment_policy"."offline_mode" in ('accept_offline', 'cash_only')),
-	CONSTRAINT "payment_policy_cap_ck" CHECK("payment_policy"."offline_amount_cap" >= 0)
-);
---> statement-breakpoint
 CREATE TABLE `payment_refunds` (
 	`id` text PRIMARY KEY NOT NULL,
 	`payment_id` text NOT NULL,
@@ -137,7 +126,7 @@ CREATE TABLE `payments` (
 	CONSTRAINT "payments_amount_ck" CHECK("payments"."amount" > 0),
 	CONSTRAINT "payments_card_last4_ck" CHECK("payments"."card_last4" is null or length("payments"."card_last4") = 4),
 	CONSTRAINT "payments_card_entry_mode_ck" CHECK("payments"."card_entry_mode" is null or "payments"."card_entry_mode" in ('contactless','chip','swipe','unknown')),
-	CONSTRAINT "payments_state_ck" CHECK("payments"."state" in ('attempting', 'captured', 'voided', 'refunded', 'partially_refunded', 'failed', 'accepted_offline', 'settled', 'declined', 'initiated')),
+	CONSTRAINT "payments_state_ck" CHECK("payments"."state" in ('attempting', 'captured', 'voided', 'refunded', 'partially_refunded', 'failed', 'initiated')),
 	CONSTRAINT "payments_source_ck" CHECK("payments"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script')),
 	CONSTRAINT "payments_source_device_ck" CHECK(("payments"."source" = 'device') = ("payments"."device_id" is not null))
 );

@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { decimal, deviceOrigin } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
@@ -7,8 +9,11 @@ import {
   isRefusal,
   engineErrorMessage,
   type Database,
+  withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "../test/seed.js";
+import { insertCapturedPayment } from "./store.js";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
@@ -86,10 +91,65 @@ describe("payments migrations", () => {
     expect(await acceptedPaymentStates()).toContain("attempting");
   });
 
-  it("accepts accepted_offline, settled and declined as payment states", async () => {
-    expect(await acceptedPaymentStates()).toEqual(
-      expect.arrayContaining(["accepted_offline", "settled", "declined"]),
+  it("accepts exactly the seven payment states", async () => {
+    expect(await acceptedPaymentStates()).toEqual([
+      "attempting",
+      "captured",
+      "voided",
+      "refunded",
+      "partially_refunded",
+      "failed",
+      "initiated",
+    ]);
+  });
+
+  it.each(["accepted_offline", "settled", "declined"])(
+    "refuses a payment moved to the retired state %s",
+    async (state) => {
+      const seeded = await seedWorkingOrder(db);
+      const paymentRef = randomUUID();
+      await withTransaction(db, (tx) =>
+        insertCapturedPayment(tx, {
+          origin: deviceOrigin(seeded.deviceId),
+          workingOrderId: seeded.workingOrderId,
+          nodeId: seeded.nodeId,
+          provider: "simulator",
+          paymentRef,
+          amount: decimal("10.00"),
+          settledAt: new Date(),
+        }),
+      );
+      const error = await captureError(async () => {
+        await db.execute(
+          sql`update payments set state = ${state} where payment_ref = ${paymentRef}`,
+        );
+      });
+      expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(error)).toMatch(/payments_state_ck/);
+      expect(
+        (await db.execute(sql`select state from payments where payment_ref = ${paymentRef}`)).rows,
+      ).toEqual([{ state: "captured" }]);
+    },
+  );
+
+  it("still accepts a captured payment moving to refunded", async () => {
+    const seeded = await seedWorkingOrder(db);
+    const paymentRef = randomUUID();
+    await withTransaction(db, (tx) =>
+      insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
+        workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
+        provider: "simulator",
+        paymentRef,
+        amount: decimal("10.00"),
+        settledAt: new Date(),
+      }),
     );
+    await db.execute(sql`update payments set state = 'refunded' where payment_ref = ${paymentRef}`);
+    expect(
+      (await db.execute(sql`select state from payments where payment_ref = ${paymentRef}`)).rows,
+    ).toEqual([{ state: "refunded" }]);
   });
 
   it("accepts 'initiated' as a payment state", async () => {
@@ -116,15 +176,10 @@ describe("payments migrations", () => {
     expect(columns.rows.map((r) => r.name)).toEqual(["provider", "settled_at"]);
   });
 
-  it("creates payment_policy and leaves every money column a count of whole cents", async () => {
-    const table = await db.execute<{ name: string }>(
-      sql`select name from sqlite_master where type = 'table' and name = 'payment_policy'`,
-    );
-    expect(table.rows.map((r) => r.name)).toEqual(["payment_policy"]);
+  it("leaves every money column a count of whole cents", async () => {
     // Nothing in the schema refuses a fractional value in these columns; only
     // `packages/shared/src/cents.ts` does, above the row.
     const money = [
-      ["payment_policy", "offline_amount_cap"],
       ["payment_refunds", "amount"],
       ["payments", "amount"],
     ] as const;
@@ -133,10 +188,6 @@ describe("payments migrations", () => {
       found.push({ table_name, column: await columnOf(table_name, column_name) });
     }
     expect(found).toEqual([
-      {
-        table_name: "payment_policy",
-        column: { name: "offline_amount_cap", type: "INTEGER", notnull: 1 },
-      },
       { table_name: "payment_refunds", column: { name: "amount", type: "INTEGER", notnull: 1 } },
       { table_name: "payments", column: { name: "amount", type: "INTEGER", notnull: 1 } },
     ]);
@@ -144,50 +195,11 @@ describe("payments migrations", () => {
 
   it("carries no tenant_id column on any table in the set", async () => {
     const found: string[] = [];
-    for (const table of [
-      "payments",
-      "payment_refunds",
-      "payment_policy",
-      "card_readers",
-      "device_card_readers",
-    ]) {
+    for (const table of ["payments", "payment_refunds", "card_readers", "device_card_readers"]) {
       for (const column of await columnsOf(table)) {
         if (column.name === "tenant_id") found.push(`${table}.${column.name}`);
       }
     }
     expect(found).toEqual([]);
-  });
-
-  it("keeps payment_policy to one row: the first row is id 1 and no second row is accepted", async () => {
-    // Named because their defaults are the drizzle schema's `$defaultFn`, which a raw insert skips.
-    const stamps = sql`'2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'`;
-    await db.execute(sql`
-        insert into payment_policy (offline_mode, offline_amount_cap, created_at, updated_at)
-        values ('cash_only', 0, ${stamps})`);
-    const stored = await db.execute<{ id: number }>(sql`select id from payment_policy`);
-    expect(stored.rows).toEqual([{ id: 1 }]);
-
-    // `execute` throws synchronously; the async wrapper turns that into the rejection
-    // `captureError` catches.
-    const second = await captureError(async () => {
-      await db.execute(sql`
-          insert into payment_policy (id, offline_mode, offline_amount_cap, created_at, updated_at)
-          values (2, 'cash_only', 0, ${stamps})`);
-    });
-    expect(isRefusal(second, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(second)).toMatch(/payment_policy_singleton_ck/);
-
-    // An `integer primary key` is a rowid alias and ignores its column DEFAULT, so a row omitting
-    // `id` is assigned 2 and the singleton check, not the key, refuses it.
-    const duplicate = await captureError(async () => {
-      await db.execute(sql`
-          insert into payment_policy (offline_mode, offline_amount_cap, created_at, updated_at)
-          values ('cash_only', 0, ${stamps})`);
-    });
-    expect(isRefusal(duplicate, CHECK_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(duplicate)).toMatch(/payment_policy_singleton_ck/);
-    expect(
-      (await db.execute<{ n: number }>(sql`select count(*) as n from payment_policy`)).rows,
-    ).toEqual([{ n: 1 }]);
   });
 });

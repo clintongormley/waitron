@@ -16,16 +16,10 @@ export function stripeDeviceClient(stripe: Stripe): StripeDeviceClient {
       amount: Decimal;
       currency: string;
       idempotencyKey: string;
-      offlineAllowed: boolean;
       metadata: { working_order_id: string; payment_ref: string };
     }): Promise<{ outcome: DeviceCollectOutcome; externalRef?: string }> {
       // A real implementation MUST forward `metadata` onto the PaymentIntent it creates.
       throw new Error("on-device collect runs in the device SDK, not the server wrapper (SP7/SP9)");
-    },
-    syncOfflineQueue() {
-      throw new Error(
-        "offline-queue sync runs in the device SDK, not the server wrapper (SP7/SP9)",
-      );
     },
     async refund({ paymentIntentId, amount, idempotencyKey }) {
       const refund = await stripe.refunds.create(

@@ -15,7 +15,6 @@ export const PAYMENTS_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly("payment_holds", "ledger", LEDGER),
   appendOnly("payment_hold_outcomes", "ledger", LEDGER),
 
-  classify("payment_policy", "state", STATE),
   classify("card_readers", "state", STATE),
   classify("device_card_readers", "state", STATE),
   classify("device_profile_card_readers", "state", STATE),

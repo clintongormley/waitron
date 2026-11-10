@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { nodeId as brandNodeId, stringToCents } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import {
   billPayments,
@@ -22,7 +22,6 @@ import {
 } from "@waitron/db/testing/seed.js";
 import { cardReaderHolders } from "../src/schema/card-reader-holders.js";
 import { cardReaders } from "../src/schema/card-readers.js";
-import { paymentPolicy } from "../src/schema/payment-policy.js";
 import type { CollectionOwners } from "../src/provider.js";
 import type { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 
@@ -137,18 +136,6 @@ export async function seedForSale(
     await backend.registerNode(tx, brandNodeId(seeded.nodeId));
   });
   return { ...seeded, seriesId: series!.id };
-}
-
-/** Seeds the venue's one `payment_policy` row (`id = 1`) through the fixture connection. `cap` is
- * a decimal literal such as "50.00"; the column holds its count of cents. */
-export async function seedPaymentPolicy(
-  db: Database,
-  mode: "accept_offline" | "cash_only",
-  cap: string,
-): Promise<void> {
-  await db
-    .insert(paymentPolicy)
-    .values({ offlineMode: mode, offlineAmountCap: stringToCents(cap) });
 }
 
 /** A pending card bill payment on the seeded order, for a provider's `payments` row to name. */

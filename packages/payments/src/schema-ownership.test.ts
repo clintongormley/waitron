@@ -10,7 +10,6 @@ import * as schema from "./schema/index.js";
 const OWNED = [
   "payments",
   "payment_refunds",
-  "payment_policy",
   "card_readers",
   "device_card_readers",
   "payment_resolutions",

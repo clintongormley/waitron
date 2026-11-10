@@ -22,8 +22,7 @@ import { cardReaders } from "./card-readers.js";
 
 /**
  * Mirrors `PaymentState` in ../provider.ts. `attempting` is written before an integrated adapter's
- * network call and resolved after it; `accepted_offline` advances to `settled` or `declined` when
- * forwarded; `initiated` is a hosted payment minted but not yet paid.
+ * network call and resolved after it; `initiated` is a hosted payment minted but not yet paid.
  */
 export const paymentState = enumType([
   "attempting",
@@ -32,9 +31,6 @@ export const paymentState = enumType([
   "refunded",
   "partially_refunded",
   "failed",
-  "accepted_offline",
-  "settled",
-  "declined",
   "initiated",
 ]);
 

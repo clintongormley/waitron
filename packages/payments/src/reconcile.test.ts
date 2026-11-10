@@ -8,12 +8,7 @@ import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@wa
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
 import type { ReconcileDeps, SettlementRecord } from "./reconcile.js";
-import {
-  insertAcceptedOffline,
-  insertCapturedPayment,
-  insertInitiated,
-  settleForwarded,
-} from "./store.js";
+import { insertCapturedPayment, insertInitiated } from "./store.js";
 import { listOpenHolds, recordHoldOutcome } from "./holds.js";
 import { FakeSettlementReport } from "./testing/fake-settlement-report.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
@@ -85,25 +80,6 @@ async function capture(seeded: Seeded, paymentRef: string, externalRef: string, 
       settledAt: OLD_SETTLED,
     }),
   );
-}
-
-/** Drives a payment to state `settled` the only way the state machine permits: an offline-accepted
- * tender that a later `forward()` pass cleared. `settled` is auditable (so it reaches the orphan
- * class) but has no reversal path, which is exactly what the claim gate has to respect. */
-async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef: string) {
-  await withTransaction(suite.db, async (tx) => {
-    await insertAcceptedOffline(tx, {
-      origin: deviceOrigin(seeded.deviceId),
-      workingOrderId: seeded.workingOrderId,
-      nodeId: seeded.nodeId,
-      provider: PROVIDER,
-      paymentRef,
-      externalRef,
-      amount: decimal("10.00"),
-      settledAt: OLD_SETTLED,
-    });
-    await settleForwarded(tx, { provider: PROVIDER, paymentRef });
-  });
 }
 
 /** Seeds a second till device, node and open working order at the same location as `seeded`. */
@@ -553,36 +529,6 @@ describe("orphan remediation", () => {
         remediation: "workingOrderNotAbandoned",
       },
     ]);
-  });
-
-  it("does NOT claim a SETTLED-state orphan on an abandoned order — nothing can reverse it", async () => {
-    // An offline-accepted tender forwarded to `settled`, on an abandoned order: the working-order
-    // gate alone would claim it.
-    const seeded = await seedWorkingOrder(suite.db, freshNif());
-    await forwardedOffline(seeded, "p1", "ext-1");
-    await setOrderStatus(seeded, "abandoned");
-    const reverse = recordingReverse();
-    const result = await reconcilePayments(
-      deps(new FakeSettlementReport([settlement()]), reverse.fn),
-      PERIOD,
-      NOW,
-    );
-    expect(result.orphan).toHaveLength(1);
-    expect(result.orphan[0]).toMatchObject({ paymentRef: "p1", localState: "settled" });
-    expect(result.remediated).toBe(0);
-    expect(result.remediationFailures).toEqual([]);
-    expect(reverse.calls).toEqual([]);
-    expect(await openIncidentCodes()).toEqual(["payment.reconcile_orphan"]);
-    const incident = parseParams<{ payments: { remediation: string }[] }>(
-      await suite.db.execute<{ params: string }>(
-        sql`select params from incidents where code = 'payment.reconcile_orphan'`,
-      ),
-    );
-    expect(incident.rows[0].params.payments[0].remediation).toBe("stateNotCaptured");
-    const { rows } = await suite.db.execute<{ reconcile_remediated_at: string | null }>(
-      sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
-    );
-    expect(rows[0].reconcile_remediated_at).toBeNull();
   });
 
   it("reverses each orphan at most once, however many sweeps run", async () => {

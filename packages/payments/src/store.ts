@@ -107,15 +107,6 @@ export async function insertCapturedPayment(
   await insertPayment(tx, params, "captured", params.settledAt.toISOString());
 }
 
-/** Written only once the offline gate has accepted; `forward()` later advances it to `settled` or
- * `declined`. */
-export async function insertAcceptedOffline(
-  tx: Transaction,
-  params: NewPayment & { settledAt: Date },
-): Promise<void> {
-  await insertPayment(tx, params, "accepted_offline", params.settledAt.toISOString());
-}
-
 /** Persisted so a declined attempt still leaves an audit record. The type forbids an
  * `externalRef`: a failed attempt never settled on a terminal. */
 export async function insertFailedPayment(
@@ -343,7 +334,7 @@ export interface CapturedPaymentForOrder {
   saleId: string | null;
   externalRef: string | null;
   settledAt: string | null;
-  state: "captured" | "accepted_offline" | "settled";
+  state: "captured";
   cardScheme: string | null;
   cardLast4: string | null;
   cardEntryMode: string | null;
@@ -384,7 +375,7 @@ async function selectCapturedForWorkingOrder(
     where ${and(
       key.provider === undefined ? undefined : eq(payments.provider, key.provider),
       eq(payments.workingOrderId, key.workingOrderId),
-      inArray(payments.state, ["captured", "accepted_offline", "settled"]),
+      inArray(payments.state, ["captured"]),
     )}
     order by ${payments.settledAt} desc nulls last, ${payments}.rowid desc
     limit 1`);
@@ -453,54 +444,6 @@ export async function findPaymentByRef(
   return row === undefined ? undefined : withDecimalAmount(row);
 }
 
-export interface ForwardablePayment {
-  paymentRef: string;
-  workingOrderId: string;
-  saleId: string | null;
-  amount: string;
-}
-
-const FORWARDABLE_COLUMNS = {
-  paymentRef: payments.paymentRef,
-  workingOrderId: payments.workingOrderId,
-  saleId: payments.saleId,
-  amount: payments.amount,
-};
-
-async function selectForwardable(tx: Transaction, provider: string): Promise<ForwardablePayment[]> {
-  const rows = await tx
-    .select(FORWARDABLE_COLUMNS)
-    .from(payments)
-    .where(and(eq(payments.provider, provider), eq(payments.state, "accepted_offline")))
-    .orderBy(payments.createdAt, sql`${payments}.rowid`);
-  return rows.map(withDecimalAmount);
-}
-
-/**
- * State IS the queue: there is no claim column, so this stamps nothing (pinned in `store.test.ts`).
- *
- * **What makes this a claim is the CALLER's transaction, not anything in the statement**: the
- * selection and the state-guarded advances after it must commit together, and two passes are
- * serialised only inside `withTransaction`, which takes the write lock.
- */
-export async function claimAcceptedOffline(
-  tx: Transaction,
-  provider: string,
-): Promise<ForwardablePayment[]> {
-  return await selectForwardable(tx, provider);
-}
-
-/** The same statement as `claimAcceptedOffline`, for a real adapter whose network call must not
- * run inside the transaction. Two passes listing the same rows advance each row once, because the
- * advances match only a row still `accepted_offline`; but the caller raises the declined incident
- * either way, so only its `recordIncidentOnce` keeps that to one incident. */
-export async function listAcceptedOffline(
-  tx: Transaction,
-  provider: string,
-): Promise<ForwardablePayment[]> {
-  return await selectForwardable(tx, provider);
-}
-
 /** One in-flight payment as `resolvePending` reads it. `externalRef` is the processor's POLL key
  * (stamped by `stampAttemptingRef` after the create call), null when the adapter crashed before
  * stamping it; `createdAt` bounds how long a not-found row is still considered pending. */
@@ -512,7 +455,7 @@ export interface AttemptingPayment {
   createdAt: string;
 }
 
-/** Not a claim, like `listAcceptedOffline`: `captureAttempting`/`failAttempting` each match only a
+/** Not a claim: `captureAttempting`/`failAttempting` each match only a
  * row still `attempting`, so two concurrent passes cannot resolve a row twice; the loser throws
  * `payment.not_found`. Lists only the rows `owners` covers. */
 export async function listAttempting(
@@ -555,28 +498,6 @@ export async function stampAttemptingRef(
     .where(and(keyWhere(params), eq(payments.state, "attempting")))
     .returning({ id: payments.id });
   return stamped.length > 0;
-}
-
-export async function settleForwarded(tx: Transaction, params: Key): Promise<void> {
-  return advanceAcceptedOffline(tx, params, "settled");
-}
-
-/** The uncollected-receivable incident is the caller's to raise, keeping `@waitron/core` out of
- * this store. */
-export async function declineForwarded(tx: Transaction, params: Key): Promise<void> {
-  return advanceAcceptedOffline(tx, params, "declined");
-}
-
-/** Matches only a row still `accepted_offline`, so re-running a completed forward is a no-op. */
-async function advanceAcceptedOffline(
-  tx: Transaction,
-  params: Key,
-  state: "settled" | "declined",
-): Promise<void> {
-  await tx
-    .update(payments)
-    .set({ state, updatedAt: nowIso() })
-    .where(and(keyWhere(params), eq(payments.state, "accepted_offline")));
 }
 
 export interface SettledInitiated {
@@ -723,8 +644,8 @@ export interface ReconcilableRow {
 }
 
 /**
- * Auditable: money we believe we hold (`captured`/`settled`, by `settled_at`) or believe is pending
- * (`initiated`, by `created_at`). `accepted_offline` belongs to `forward()`.
+ * Auditable: money we believe we hold (`captured`, by `settled_at`) or believe is pending
+ * (`initiated`, by `created_at`).
  * `failed`/`voided`/`refunded`/`partially_refunded` are absent too, and `existingReferences` still
  * sees them, so a settlement for one never reads as missingLocal.
  */
@@ -762,7 +683,7 @@ export async function listReconcilable(
     await auditable().where(
       and(
         eq(payments.provider, provider),
-        inArray(payments.state, ["captured", "settled"]),
+        eq(payments.state, "captured"),
         gte(payments.settledAt, from),
         lt(payments.settledAt, to),
       ),
