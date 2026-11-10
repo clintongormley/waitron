@@ -140,7 +140,10 @@ export const CONTRAST_GROUPS: readonly ContrastGroup[] = [
     [
       "at-least",
       3,
-      [...each(["field-line"], ["field-fill", "surface", "bg"]), ["primary", "field-fill"]],
+      [
+        ...each(["field-line"], ["field-fill", "surface", "surface-raised", "bg"]),
+        ["primary", "field-fill"],
+      ],
     ],
     [
       "at-least",

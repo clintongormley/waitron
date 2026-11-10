@@ -20,7 +20,7 @@ const SIZES: Record<ContrastGroupId, readonly [light: number, dark: number]> = {
   "lifted-surface": [6, 6],
   "sunken-surface": [1, 1],
   "bar-track": [3, 3],
-  field: [10, 10],
+  field: [11, 11],
   "primary-text": [4, 4],
   "search-highlight": [2, 2],
   "hover-text": [2, 2],
@@ -71,8 +71,8 @@ describe("the rule groups", () => {
   }
 
   test("all the rules, in table order", () => {
-    expect(allRules("light")).toHaveLength(405);
-    expect(allRules("dark")).toHaveLength(411);
+    expect(allRules("light")).toHaveLength(406);
+    expect(allRules("dark")).toHaveLength(412);
     expect(allRules("dark")).toEqual(CONTRAST_GROUPS.flatMap((group) => rulesIn(group.id, "dark")));
   });
 
@@ -145,8 +145,8 @@ describe.each(MODES)("Waitron's own palette (%s)", (mode) => {
 describe("the rules naming a colour the theme writes", () => {
   const themeTokens = new Set<string>(THEME_COLOURS.map(colourToken));
   test.each([
-    ["light", 114],
-    ["dark", 119],
+    ["light", 115],
+    ["dark", 120],
   ] as const)("%s", (mode, count) => {
     expect(THEME_RULES[mode]).toEqual(
       allRules(mode).filter((rule) => themeTokens.has(rule.a) || themeTokens.has(rule.b)),

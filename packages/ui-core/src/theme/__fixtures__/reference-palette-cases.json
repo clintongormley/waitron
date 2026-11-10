@@ -785,7 +785,7 @@
         "primary-text": "#292929",
         "focus": "#000000",
         "field-fill": "#f0f1f4",
-        "field-line": "#7d8390",
+        "field-line": "#3e434f",
         "field-label-focus": "#292929",
         "field-value": "#000000",
         "field-fill-disabled": "#f7f7f8",

@@ -68,7 +68,7 @@ export class WtSwitch extends LitElement {
         width: var(--wt-space-6);
         height: var(--wt-space-4);
         border-radius: var(--wt-radius-lg);
-        background: var(--wt-color-border);
+        background: var(--wt-color-field-line);
         transition: background 120ms ease;
       }
 

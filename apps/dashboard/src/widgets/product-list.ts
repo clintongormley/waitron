@@ -251,7 +251,7 @@ export class ProductList extends LitElement {
       wt-data-table::part(badge) {
         display: inline-flex;
         padding: 0 var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
+        border: 1px solid var(--wt-color-text-muted);
         border-radius: var(--wt-radius-sm);
       }
       wt-data-table::part(count),
