@@ -1,3 +1,4 @@
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanup, mount, mountInShadowRoot } from "../test-helpers.js";
@@ -51,10 +52,12 @@ function rowKeys(el: WtDataTable<Row>): string[] {
 
 test("text rows re-sort when the page language changes", async () => {
   document.documentElement.lang = "en";
+  const label = SUPPORTED_LOCALES[0].label;
+  const plain = label.normalize("NFD").replace(/\p{M}/gu, "");
   const el = await table({
     rows: [
-      { id: "enye", name: "Ñoquis", status: "" },
-      { id: "n", name: "Nuez", status: "" },
+      { id: "enye", name: label, status: "" },
+      { id: "n", name: plain, status: "" },
     ],
     columns: [nameColumn],
     sortKey: "name",

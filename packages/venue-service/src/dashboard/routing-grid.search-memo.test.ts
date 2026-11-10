@@ -1,3 +1,4 @@
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "@waitron/dashboard-kit";
@@ -87,12 +88,14 @@ it("does not search again when an editor opens or a choice is waiting, and does 
 it("refreshes the shown search order on a live language change", async () => {
   const el = document.createElement("venue-routing-grid") as RoutingGrid;
   hosts.push(el);
+  const label = SUPPORTED_LOCALES[0].label;
+  const plain = label.normalize("NFD").replace(/\p{M}/gu, "");
   el.model = {
     ...model,
     categories: [],
     products: [
-      { id: "gnocchi", name: "Ñoquis", categoryId: null },
-      { id: "nut", name: "Nuez", categoryId: null },
+      { id: "accented", name: label, categoryId: null },
+      { id: "plain", name: plain, categoryId: null },
     ],
   };
   document.body.append(el);
@@ -106,9 +109,9 @@ it("refreshes the shown search order on a live language change", async () => {
     [...root.querySelectorAll('tbody td[data-row^="p:"][data-zone="every"]')].map((row) =>
       row.getAttribute("data-row"),
     );
-  expect(rows()).toEqual(["p:gnocchi", "p:nut"]);
+  expect(rows()).toEqual(["p:accented", "p:plain"]);
   setLocale("es-ES");
   await el.updateComplete;
-  expect(rows()).toEqual(["p:nut", "p:gnocchi"]);
+  expect(rows()).toEqual(["p:plain", "p:accented"]);
   setLocale("en");
 });
