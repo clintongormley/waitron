@@ -1328,7 +1328,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Query plans and indexes, measured on a year of data
 
-5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06), except the planner-statistics entry, rewritten with A1469's measurements on 2026-11-10.
+4 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06). The planner-statistics entry was decided on 2026-11-10 and moved to [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 - **Index the dishes not yet fired, so the pass's reads stop scanning every ticket item ever kept
   (left open by A773-2 PR C's review).** This needs a migration.
@@ -1339,15 +1339,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **Measure the remaining top-level-dish reads (A1370 follow-up).** Check `parent_line_id is null`
   reads across the server and venue-service, including `listOrderGroups`, `working-order`,
   `move-bill`, `finish-party-service` and `party-allergy`. Measure their plans with history.
-- **Decide whether a box gathers SQLite's planner statistics (A1370 follow-up).** Nothing
-  gathers them today. On the bench's year of trading (A1469, 2026-11-10, days 361–362, with the
-  `order_groups(number_party_id)` index in both runs), gathering them with
-  `PRAGMA optimize=0x10002` made taking a payment faster (160 to 54 ms) but sending a round,
-  firing, marking served and finishing a party slower (19.7 to 309 ms, 10 to 375, 3.1 to 71, 6.9
-  to 49). A whole day went from 0.35 to 1.63 s a bill. Next: find which reads the statistics slow
-  and which pick a worse index without them (taking a payment is one), then choose between no
-  statistics, with the second group naming their index, and statistics, with fixes to the first
-  group. Commands and result files: the A1469 PR thread.
 - **Decide how kitchen queues order bills tied on time (A1370 follow-up).** The queue sorts by
   ticket `queued_at` and line number; different query plans can reorder bills tied on both.
   Check whether a product path produces those ties before choosing a stable tie-breaker.
@@ -1609,6 +1600,16 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](architecture.md#files-that-still-spell-the-stores-file-names-themselves)
 
 ## Decisions and deliberate limits
+
+**No runtime planner statistics (A1469, watcher, 2026-11-10).** A box does not gather SQLite's
+planner statistics (`ANALYZE` or `PRAGMA optimize`). On the bench's year of trading (days
+361–362, with the `order_groups(number_party_id)` index), a whole day took 0.35 s a bill with no
+statistics, 1.63 s with them, and 0.48 s with them plus three partial indexes; even then the filing pass's two reads of
+waiting records still took 29 s each. The statistics keep one average per index, count every
+null as one value, and this SQLite build has no STAT4, so they misjudge every column that is
+nearly all one value. Instead, a read that picks a worse index without statistics names its
+index with `indexed by`: the two reads of `payments` by working order (A1469) and the fiscal
+reads in A1471 (#2711). Commands and result files: the A1469 PR thread.
 
 - **Official holiday names and English display names (A971, owner 2026-10-23).** Keep the published official name as the annual-rule key; choose the display name by the screen language. The country calendar supplies English names for holidays and area choices. A stored name absent from the supplied English-name inventory stays as recorded. This changes no stored holiday rule or database schema.
 

@@ -41,7 +41,7 @@ export async function beginIntegratedAttendance(
     outcome: "pending",
   });
   const { rows: previous } = await tx.execute<{ paymentRef: string }>(
-    sql`select payment_ref as paymentRef from payments where working_order_id = ${order.id} and provider = ${order.provider} and bill_payment_id is null`,
+    sql`select payment_ref as paymentRef from payments indexed by payments_working_order_idx where working_order_id = ${order.id} and provider = ${order.provider} and bill_payment_id is null`,
   );
   await tx.insert(attendanceSourceState).values({
     source: "whole-payment",
