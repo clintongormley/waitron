@@ -45,7 +45,8 @@ A production setup offers Live and Join or recover. See the
 
 You can [build a development image, install onto a virtual disk and open setup](../bench/box-installer/README.md).
 The installed-setup rehearsal boots that disk alone twice and stops at Prepare’s administrator form.
-It is unencrypted and emulator-only. Encryption, retained keys and physical-box checks remain B3 work.
+It uses LUKS2 with an empty development password and provides no protection against theft.
+Retained-key startup, refusal while the empty slot remains and physical-box checks remain B3 work.
 
 ## Setting up a box
 

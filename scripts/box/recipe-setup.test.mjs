@@ -159,6 +159,11 @@ describe("installed boot evidence", () => {
   const first = {
     ...complete,
     uuid: "installed-root",
+    luksUuid: "installed-luks",
+    luksVersion: "2",
+    luksSubsystem: "waitron-box-1",
+    dataPartition: { type: "A8AAEA61-BAEF-47F4-9CFF-C4C967EE12C7", name: "waitron-box" },
+    partitionBytes: [536870912, 1073741824, 11272192000],
     machineId: "machine-a",
     ca: "ca-a",
     writerAbsent: true,
@@ -175,6 +180,24 @@ describe("installed boot evidence", () => {
     ["identity", { machineId: "another" }, "machine-id"],
     ["CA", { ca: "another" }, "ca"],
     ["app", { images: { ...first.images, app: "another" } }, "image:app"],
+    ["LUKS identity", { luksUuid: "another-disk" }, "luks-uuid"],
+    ["LUKS version", { luksVersion: "1" }, "disk-markers"],
+    ["LUKS subsystem", { luksSubsystem: "another-system" }, "disk-markers"],
+    [
+      "partition type",
+      { dataPartition: { ...first.dataPartition, type: "0FC63DAF-8483-4772-8E79-3D69D8477DE4" } },
+      "disk-markers",
+    ],
+    [
+      "partition name",
+      { dataPartition: { ...first.dataPartition, name: "another-system" } },
+      "disk-markers",
+    ],
+    ["missing partition marks", { dataPartition: undefined }, "disk-markers"],
+    ["EFI size", { partitionBytes: [535822336, 1073741824, 11272192000] }, "partitions"],
+    ["boot size", { partitionBytes: [536870912, 1048576000, 11272192000] }, "partitions"],
+    ["data size", { partitionBytes: [536870912, 1073741824, 1073741824] }, "partitions"],
+    ["partition report", { partitionBytes: undefined }, "partitions"],
   ])("rejects a changed %s on the disk-only reboot", async (_name, patch, failure) => {
     const { installedFailures } = await import("./recipe-setup.mjs");
     expect(installedFailures(expected, "installed-root", first, { ...first, ...patch })).toContain(
@@ -186,6 +209,8 @@ describe("installed boot evidence", () => {
     ["missing UUID", undefined, { uuid: undefined }, "root-uuid"],
     ["blank identity", "installed-root", { machineId: "" }, "machine-id"],
     ["blank CA", "installed-root", { ca: "" }, "ca"],
+    ["missing LUKS identity", "installed-root", { luksUuid: undefined }, "luks-uuid"],
+    ["filesystem as LUKS identity", "installed-root", { luksUuid: "installed-root" }, "luks-uuid"],
   ])("rejects two matching but unusable boots (%s)", async (_name, uuid, patch, failure) => {
     const { installedFailures } = await import("./recipe-setup.mjs");
     expect(
