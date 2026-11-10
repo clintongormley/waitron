@@ -1,6 +1,6 @@
 # Keep five busy dashboard forms open — implementation plan
 
-Lane D’s queued ask is only the five sibling forms in the “Wt dialog lifecycle” bundle (`docs/backlog/dashboard.md`), not its other bullets. A separate GPT-6.1 Sol high-effort run drafted this plan; the Codex driver checked and shortened it. Claude reviewed it (131 seconds); watcher clearance is pending. No owner design approval is recorded.
+Lane D’s queued ask is only the five sibling forms in the “Wt dialog lifecycle” bundle (`docs/backlog/dashboard.md`), not its other bullets. A separate GPT-6.1 Sol high-effort run drafted this plan; the Codex driver checked and shortened it. Claude reviewed it (131 seconds); the watcher cleared this corrected plan in Lane D’s questions.md at 16:41 on 2026-11-10. No owner design approval is recorded.
 
 **Finish line:** repeated Escape cannot close these forms while saving. Once idle, existing dismissal and unsaved-draft protection still apply. One PR within three active hours.
 

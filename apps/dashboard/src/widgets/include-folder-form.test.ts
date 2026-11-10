@@ -1,7 +1,9 @@
 import { t } from "../i18n/t.js";
 import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import {
   cleanupWidgets,
+  closeReportsDelivered,
   dialogMessageOf,
   expectMessageAboveButtons,
   mountWidget,
@@ -305,6 +307,17 @@ it("emits wt-cancel from Cancel when nothing changed, and blocks Save and closin
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
   emit(el.shadowRoot!.querySelector("wt-modal")!, "wt-close", {});
   expect(listener).not.toHaveBeenCalled();
+  expect(cancelled).not.toHaveBeenCalled();
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  await modal.updateComplete;
+  modal.shadowRoot!.querySelector<HTMLElement>(".body")!.focus();
+  const dialog = modal.shadowRoot!.querySelector("dialog")!;
+  await userEvent.keyboard("{Escape}");
+  await closeReportsDelivered();
+  expect(dialog.open).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await closeReportsDelivered();
+  expect(dialog.open).toBe(true);
   expect(cancelled).not.toHaveBeenCalled();
   el.busy = false;
   await el.updateComplete;

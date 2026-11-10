@@ -254,6 +254,7 @@ export class SectionDetailsForm extends LitElement {
     return html`<wt-modal
       size="standard"
       .open=${this.open}
+      .dismissible=${!this.busy}
       .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       heading=${this.heading}
       @keydown=${(event: KeyboardEvent) => {

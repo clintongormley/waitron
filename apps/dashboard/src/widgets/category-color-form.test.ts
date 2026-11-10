@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import {
   cleanupWidgets,
+  closeReportsDelivered,
   dialogMessageOf,
   expectMessageAboveButtons,
   mountWidget,
@@ -102,7 +103,11 @@ it("sends nothing, and cannot be dismissed, while a colour is saving", async () 
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel"]')!.click();
   modal(el).shadowRoot!.querySelector<HTMLElement>(".body")!.focus();
   await userEvent.keyboard("{Escape}");
-  for (let frame = 0; frame < 2; frame++) await new Promise(requestAnimationFrame);
+  await closeReportsDelivered();
+  expect(sent).toEqual([]);
+  expect(modal(el).shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  await closeReportsDelivered();
   expect(sent).toEqual([]);
   expect(modal(el).shadowRoot!.querySelector("dialog")!.open).toBe(true);
 });

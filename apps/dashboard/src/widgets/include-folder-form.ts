@@ -329,6 +329,7 @@ export class IncludeFolderForm extends LitElement {
       size="standard"
       height="medium"
       .open=${this.open}
+      .dismissible=${!this.busy}
       .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       heading=${fill("menus.include_edit_heading", { name: this.menuName })}
       @keydown=${(event: KeyboardEvent) => {

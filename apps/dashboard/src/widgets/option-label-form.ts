@@ -315,6 +315,7 @@ export class OptionLabelForm extends LitElement {
     return html`<wt-modal
       size="standard"
       .open=${this.open}
+      .dismissible=${!this.busy}
       .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       heading=${t(this.value ? "options.edit_option" : "options.add_option")}
       @keydown=${(event: KeyboardEvent) => {

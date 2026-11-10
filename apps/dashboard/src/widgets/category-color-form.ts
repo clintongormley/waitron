@@ -61,6 +61,7 @@ export class CategoryColorForm extends LitElement {
     return html`<wt-modal
       size="compact"
       .open=${this.open}
+      .dismissible=${!this.busy}
       heading=${this.heading}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
