@@ -196,7 +196,8 @@ These steps assume Spain; another country follows the same shape with its own of
 
 ### Earlier data-revision receipt
 
-**2026-11-10, A1308 5c:** the area choice below now lives in settings.venue; the two retired tables no longer hold rows.
+**2026-11-10, A1308 5c:** the holiday_geographies table is dropped; the area choice below
+is settings.venue.holidayArea.
 
 **2026-10-09, A366 slice 2:** the 2026-10-06 data-revision experiment described here used
 `local_holidays`, which the slice now retires. It is not evidence about today's named-day writes.

@@ -13,5 +13,4 @@ Los nombres de tus días especiales se quedan como los escribiste. Si creas un d
 Algunos festivos dependen de la isla o de la parte de la provincia donde se encuentra tu local. Si la vista Año pide una zona de festivos, elige la que corresponde a tu dirección. Las opciones también siguen el idioma del panel; **Lleida, fuera del territorio de Arán** aparece como **Lleida, outside Aran** en inglés.
 
 Cambiar el idioma de la pantalla mantiene la zona elegida. Para cambiar los festivos que se aplican, cambia la propia zona.
-
 Revisa los festivos después de cambiar la ciudad del local. Si eliges otra zona de festivos, se sustituye la elección anterior.

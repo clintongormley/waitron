@@ -764,10 +764,10 @@ triggers.
    trigger, 5.9 ms reading a typed row, 6.9 ms reading a settings document (the ledger's run, 4 November);
    a second run, medians of 41, gave 0.4, 3.9 and 4.3 ms. Both triggers refused a wrong language.
    **2026-11-10, real schema (watcher, Lane H questions.md 12:27):** Apple M5 Pro developer Mac,
-   Node v26.13.0/SQLite3.54.1, not the reference micro PC; medians of 41 transactions/2,001 lines:
-   current 82.996ms, document 82.916ms, four language triggers removed 64.834ms. The watcher kept
+   Node v26.13.0 / SQLite 3.54.1, not the reference micro PC; medians of 41 transactions/2,001 lines:
+   current 82.996 ms, document 82.916 ms, four language triggers removed 64.834 ms. The watcher kept
    the document because changing its source added no measured cost. Differing-lists controls
-   followed the correct source in all 16 description/variant combinations; full script/output in 5c's PR.
+   followed both directions in all 16 description/variant combinations (5c plan, Task 1 receipts).
 3. **Document upgrades vs backup verification.** Take a backup, raise a document's `version` with an
    upgrade-on-read, restore and verify. Failing result: verification refuses — then the read-time
    upgrade rule in §2.4 must be written into the central definition, or core's comparison must accept a

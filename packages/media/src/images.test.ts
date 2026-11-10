@@ -1182,6 +1182,7 @@ describe("relevance scores and tie-breaks", () => {
 
   it("sorts an image with no name in the listing's default language as an empty name", async () => {
     await withTransaction(suite.db, async (tx) => {
+      await tx.execute(sql`delete from settings where module = 'venue'`);
       // No stored language settings, so each call's fallback is the default it validates against.
       const english = await uploadImage(
         tx,
