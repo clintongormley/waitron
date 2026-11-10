@@ -7,7 +7,7 @@ import type {
   ConflictEvidence,
   LookupConflictEvidence,
 } from "./conflict-types.js";
-import { heldRecords, openCaseRecordIds, openFilingCases } from "./filing-cases.js";
+import { heldRecords, openFilingCases } from "./filing-cases.js";
 import type {
   ComparisonView,
   FilingOverview,
@@ -26,8 +26,9 @@ import { registrosFacturacion } from "./schema/registros.js";
 /**
  * What the Fiscal filing screen shows, read in the caller's one transaction by a fixed number of
  * queries whatever the number of cases. `limit` bounds the case list (null: every open case).
- * Every object is built from named fields: a stored row or reply is never copied whole, so a
- * recipient or an AEAT request reference cannot reach the answer.
+ * Every object is built from fields named here or in `openFilingCases`' selection: a stored row
+ * or reply is never copied whole, so a recipient or an AEAT request reference cannot reach the
+ * answer.
  */
 export async function readFilingOverview(
   tx: Transaction,
@@ -35,8 +36,7 @@ export async function readFilingOverview(
 ): Promise<FilingOverview> {
   const readAt = new Date().toISOString();
   const progress = await readProgress(tx);
-  const { cases, total } = await openFilingCases(tx, scope.limit);
-  const listed = openCaseRecordIds(tx, scope.limit);
+  const { cases, total, recordIds: listed } = await openFilingCases(tx, scope.limit);
   const conflictRows = await tx
     .select({
       registroId: fiscalConflictEvidence.registroId,
@@ -82,27 +82,13 @@ export async function readFilingOverview(
         csv: found.evidence.csv,
       },
       record: {
-        tipoRegistro: found.record.tipoRegistro,
-        idEmisorFactura: found.record.idEmisorFactura,
-        numSerieFactura: found.record.numSerieFactura,
-        fechaExpedicionFactura: found.record.fechaExpedicionFactura,
-        tipoFactura: found.record.tipoFactura,
-        importeTotal: found.record.importeTotal,
-        cuotaTotal: found.record.cuotaTotal,
-        huella: found.record.huella,
-        anteriorHuella: found.record.anteriorHuella,
+        ...found.record,
         fechaHoraHusoGenRegistro: found.record.fechaHoraHusoGenRegistro.toISOString(),
-        numeroInstalacion: found.record.numeroInstalacion,
       },
       submission:
         found.submission === null
           ? null
-          : {
-              estado: found.submission.estado,
-              codigoError: found.submission.codigoError,
-              mensajeError: found.submission.mensajeError,
-              enviadoEn: found.submission.enviadoEn?.toISOString() ?? null,
-            },
+          : { ...found.submission, enviadoEn: found.submission.enviadoEn?.toISOString() ?? null },
       conflicts: (conflictsByRecord.get(found.registroId) ?? []).map((row) => ({
         attempt: row.attempt,
         cause: row.cause,
@@ -118,6 +104,7 @@ export async function readFilingOverview(
     totalCases: total,
     heldWithoutCase,
     activeConflicts: active.map((conflict) => ({
+      source: conflict.registroId === undefined ? "series" : "record",
       invoiceNumber: conflict.invoiceIdentity,
       installationName: conflict.installationIdentity,
       cause: conflict.cause,

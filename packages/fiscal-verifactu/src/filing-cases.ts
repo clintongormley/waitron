@@ -222,53 +222,13 @@ function caseIsOpen(tx: Transaction): SQL {
   );
 }
 
-export interface OpenFilingCase {
-  caseId: string;
-  registroId: string;
-  cause: FilingCaseCause;
-  evidence: FilingCaseEvidence;
-  openedAt: Date;
-  record: {
-    tipoRegistro: string;
-    idEmisorFactura: string;
-    numSerieFactura: string;
-    fechaExpedicionFactura: string;
-    tipoFactura: string | null;
-    importeTotal: string | null;
-    cuotaTotal: string | null;
-    huella: string;
-    anteriorHuella: string | null;
-    fechaHoraHusoGenRegistro: Date;
-    numeroInstalacion: string;
-  };
-  submission: {
-    estado: string;
-    codigoError: string | null;
-    mensajeError: string | null;
-    enviadoEn: Date | null;
-  } | null;
-}
-
-/** The record ids of the newest `limit` open cases (every open case when `limit` is null), as a
- * subquery, so a caller can restrict a read to them without binding a list that grows. */
-export function openCaseRecordIds(tx: Transaction, limit: number | null) {
-  const query = tx
-    .select({ registroId: filingCases.registroId })
-    .from(filingCases)
-    .where(caseIsOpen(tx))
-    .orderBy(sql`${filingCases}.rowid desc`);
-  return limit === null ? query : query.limit(limit);
-}
-
 /**
  * The newest `limit` cases with no resolution yet, newest first (every one when `limit` is null),
  * each with its record, identity and submission, and how many cases are open in all. Newest by
- * `rowid`, for the reason `listFilingCases` gives.
+ * `rowid`, for the reason `listFilingCases` gives. `recordIds` is the same list as a subquery of
+ * the cases' record ids, so a caller can restrict a read to them without binding a list that grows.
  */
-export async function openFilingCases(
-  tx: Transaction,
-  limit: number | null,
-): Promise<{ cases: OpenFilingCase[]; total: number }> {
+export async function openFilingCases(tx: Transaction, limit: number | null) {
   const query = tx
     .select({
       caseId: filingCases.id,
@@ -302,9 +262,12 @@ export async function openFilingCases(
     .leftJoin(envios, eq(envios.registroId, filingCases.registroId))
     .where(caseIsOpen(tx))
     .orderBy(sql`${filingCases}.rowid desc`);
-  const cases = await (limit === null ? query : query.limit(limit));
+  const listed = limit === null ? query : query.limit(limit);
+  const cases = await listed;
   const [{ total }] = await tx.select({ total: count() }).from(filingCases).where(caseIsOpen(tx));
-  return { cases, total };
+  const inList = listed.as("listed");
+  const recordIds = tx.select({ registroId: inList.registroId }).from(inList);
+  return { cases, total, recordIds };
 }
 
 /** How many cases have no resolution yet, and when the oldest of them opened; null when none. */

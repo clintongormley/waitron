@@ -161,6 +161,7 @@ const en = {
   "fiscal_filing.conflict.open": "Open conflict recovery",
   "fiscal_filing.conflict.reply": "Invoice {number}: AEAT answered {state} {code} {description}",
   "fiscal_filing.conflict.lookup": "AEAT holds invoice {number} as {state}.",
+  "fiscal_filing.conflict.series": "AEAT holds invoice {number}; this box did not issue it.",
   "fiscal_filing.conflict.cancelled": "Invoice {number}: AEAT lists it as cancelled.",
   "fiscal_filing.conflict.no_evidence": "Invoice {number}: AEAT's answer was not kept.",
   "fiscal_filing.conflict.theirs": "AEAT's fingerprint: {fingerprint}",
@@ -393,6 +394,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.conflict.reply":
     "Factura {number}: la AEAT respondió {state} {code} {description}",
   "fiscal_filing.conflict.lookup": "La AEAT tiene la factura {number} como {state}.",
+  "fiscal_filing.conflict.series": "La AEAT tiene la factura {number}; este equipo no la emitió.",
   "fiscal_filing.conflict.cancelled": "Factura {number}: la AEAT la tiene como anulada.",
   "fiscal_filing.conflict.no_evidence": "Factura {number}: no se guardó la respuesta de la AEAT.",
   "fiscal_filing.conflict.theirs": "Huella de la AEAT: {fingerprint}",

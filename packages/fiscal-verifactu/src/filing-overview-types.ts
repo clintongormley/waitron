@@ -2,7 +2,7 @@ import type { ConflictCause } from "./conflict-types.js";
 import type { FilingCaseCause } from "./schema/filing-cases.js";
 import type { EnvioState } from "./handover-summary.js";
 
-/** Types only: the dashboard screen imports this file, so it must pull in no database code. */
+/** Type-only imports: the browser bundle must take no database code from this file. */
 
 export interface FilingProgress {
   counts: Record<EnvioState, number>;
@@ -96,6 +96,9 @@ export interface FilingCaseView {
 }
 
 export interface ActiveConflictView {
+  /** `record`: one of this box's own records. `series`: AEAT holds an invoice under one of this
+   * box's live series that this box did not issue. */
+  source: "record" | "series";
   invoiceNumber: string;
   installationName: string;
   cause: ConflictCause;

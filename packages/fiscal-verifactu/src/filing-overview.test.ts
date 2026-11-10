@@ -264,9 +264,8 @@ describe("readFilingOverview", () => {
     expect(overview.totalCases).toBe(3);
     expect(overview.cases.map((each) => each.heldBehind)).toEqual([0, 0, 2]);
     expect(overview.heldWithoutCase).toBe(1);
-    expect(overview.cases[1]).toEqual({
-      registroId: diverged,
-      cause: "fiscal.huella_divergente",
+    // The values the read builds or converts; which keys appear is the field-list case's.
+    expect(overview.cases[1]).toMatchObject({
       openedAt: "2026-07-21T08:00:00.000Z",
       evidence: {
         codigo: 1161,
@@ -274,24 +273,12 @@ describe("readFilingOverview", () => {
         csv: "CSV-fiscal.huella_divergente",
       },
       record: {
-        tipoRegistro: "alta",
-        idEmisorFactura: seeded.nif,
-        numSerieFactura: "S7/1",
-        fechaExpedicionFactura: "2026-07-20",
-        tipoFactura: "F2",
-        importeTotal: "12.10",
-        cuotaTotal: "2.10",
         huella: huellaOf(7),
         anteriorHuella: huellaOf(6),
         fechaHoraHusoGenRegistro: "2026-07-20T18:20:30.000Z",
         numeroInstalacion: installation,
       },
-      submission: {
-        estado: "detenido",
-        codigoError: "3000",
-        mensajeError: "Registro duplicado.",
-        enviadoEn: SENT_AT.toISOString(),
-      },
+      submission: { enviadoEn: SENT_AT.toISOString() },
       conflicts: [
         {
           attempt: 1,
@@ -332,11 +319,10 @@ describe("readFilingOverview", () => {
           system: null,
         },
       ],
-      heldBehind: 0,
     });
   });
 
-  it("gives this node's active conflicts, the diverged record and the live series' unheld invoice, and none for no node", async () => {
+  it("gives this node's active conflicts, the diverged record and the live series' invoice this box did not issue, each with where it was found, and none for no node", async () => {
     const { seeded, installation } = await seedOverview();
 
     const forNode = await inTx((tx) =>
@@ -346,6 +332,7 @@ describe("readFilingOverview", () => {
 
     expect(forNode.activeConflicts).toEqual([
       {
+        source: "record",
         invoiceNumber: "S7/1",
         installationName: installation,
         cause: "fiscal.huella_divergente",
@@ -356,6 +343,7 @@ describe("readFilingOverview", () => {
         },
       },
       {
+        source: "series",
         invoiceNumber: "S1/99",
         installationName: installation,
         cause: "fiscal.huella_divergente",
@@ -445,6 +433,7 @@ describe("readFilingOverview", () => {
       ".cases[].lookups[]": ["recordedAt", ...lookup],
       ".cases[].lookups[].invoice": invoice,
       ".activeConflicts[]": [
+        "source",
         "invoiceNumber",
         "installationName",
         "cause",
@@ -469,6 +458,22 @@ describe("readFilingOverview", () => {
     const text = JSON.stringify(overview);
     for (const hidden of [RECIPIENT_NAME, REF_EXTERNA, DUPLICATE_REQUEST, LOOKUP_REFERENCE])
       expect(text).not.toContain(hidden);
+  });
+
+  it("gives the listed cases their observations when the newest case is resolved and the limit cuts the list", async () => {
+    const { seeded, cancellation, diverged } = await seedOverview();
+
+    const overview = await inTx((tx) =>
+      readFilingOverview(tx, { nodeId: seeded.nodeId, limit: 2 }),
+    );
+
+    expect(overview.cases.map((each) => each.registroId)).toEqual([cancellation, diverged]);
+    expect(overview.cases[1]!.conflicts.map((each) => each.recordedAt)).toEqual([
+      OBSERVED_AT.toISOString(),
+    ]);
+    expect(overview.cases[1]!.lookups.map((each) => each.recordedAt)).toEqual([
+      LOOKED_UP_AT.toISOString(),
+    ]);
   });
 
   it("returns the newest 200 of 201 open cases and the total, and every case with no limit", async () => {

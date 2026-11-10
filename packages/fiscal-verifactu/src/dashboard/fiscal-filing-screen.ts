@@ -151,7 +151,10 @@ function conflictLine(conflict: ActiveConflictView): TemplateResult {
   const evidence = conflict.evidence;
   let said: string;
   let theirs: string | null = null;
-  if (evidence === null) {
+  if (conflict.source === "series") {
+    said = t("fiscal_filing.conflict.series", { number });
+    theirs = evidence !== null && "fingerprint" in evidence ? evidence.fingerprint : null;
+  } else if (evidence === null) {
     said =
       conflict.cause === "fiscal.duplicado_anulado"
         ? t("fiscal_filing.conflict.cancelled", { number })

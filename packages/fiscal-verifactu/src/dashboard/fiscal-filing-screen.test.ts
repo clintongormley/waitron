@@ -85,6 +85,7 @@ function overview(over: Partial<FilingOverviewAnswer> = {}): FilingOverviewAnswe
     heldWithoutCase: 7,
     activeConflicts: [
       {
+        source: "record",
         invoiceNumber: "T1/41",
         installationName: "BOX-01",
         cause: "fiscal.huella_divergente",
@@ -242,6 +243,24 @@ describe("vf-fiscal-filing-screen", () => {
 
     const none = await mount(vi.fn(async () => overview({ activeConflicts: [] })));
     expect(none.screen.shadowRoot!.querySelector("[data-test=conflict]")).toBeNull();
+  });
+
+  it("says when AEAT holds an invoice under this box's series that this box did not issue", async () => {
+    const [record] = overview().activeConflicts;
+    const answer = (): Promise<FilingOverviewAnswer> =>
+      Promise.resolve(
+        overview({ activeConflicts: [{ ...record!, source: "series", invoiceNumber: "T1/99" }] }),
+      );
+    const { screen } = await mount(vi.fn(answer));
+    const line = text(screen, "[data-test=conflict] li");
+    expect(line).toContain("AEAT holds invoice T1/99; this box did not issue it.");
+    expect(line).not.toContain("Correcta");
+
+    setLocale("es");
+    const spanish = await mount(vi.fn(answer));
+    expect(text(spanish.screen, "[data-test=conflict] li")).toContain(
+      "La AEAT tiene la factura T1/99; este equipo no la emitió.",
+    );
   });
 
   it("shows a refused read's message under the actions until a later read succeeds", async () => {

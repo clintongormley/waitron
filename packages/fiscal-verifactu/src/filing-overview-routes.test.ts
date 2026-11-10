@@ -29,12 +29,16 @@ async function sessionCookie(role: PersonRoleValue): Promise<string> {
   });
 }
 
-function mount(drain?: ModuleRouteContext["fiscalDrain"]): Hono {
+function mount(
+  drain?: ModuleRouteContext["fiscalDrain"],
+  recordGeneration?: ModuleRouteContext["recordGeneration"],
+): Hono {
   const ctx: ModuleRouteContext = {
     db: suite.db,
     cfg: {},
     core: {} as ModuleRouteContext["core"],
     ...(drain === undefined ? {} : { fiscalDrain: drain }),
+    ...(recordGeneration === undefined ? {} : { recordGeneration }),
   };
   const app = new Hono();
   FISCAL_ROUTES.mount(app, ctx, () => {});
@@ -54,6 +58,16 @@ it("answers a manager with the overview, not cached, on a box without a submissi
     nodeId: null,
     limit: 200,
   });
+});
+
+it("reads the conflicts of the box that issues records here", async () => {
+  const nodeId = "44444444-4444-4444-8444-444444444444";
+  const app = mount(undefined, {
+    nodeId,
+  } as unknown as NonNullable<ModuleRouteContext["recordGeneration"]>);
+  const res = await app.request(PATH, { headers: { cookie: await sessionCookie("manager") } });
+  expect(res.status).toBe(200);
+  expect(readFilingOverview).toHaveBeenCalledWith(expect.anything(), { nodeId, limit: 200 });
 });
 
 it("reports the submission loop's state beside the overview", async () => {
