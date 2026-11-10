@@ -5,9 +5,9 @@ questions answered 16:26–16:28; both are written into the
 [revision](#clearance-and-answers-2026-11-10-1623-1628). Slice 3b is cleared to build after this slice.**
 Parts B and C were built before the runner read the owner's instruction: the watcher wrote its note
 at 15:43; the runner, in a firing that started at 15:00, did not read it until 15:48; Part B
-(`6c1220e8b4`, 15:15), Part C (`84f6b5ad6c`, 15:22) and the review-fix round (`6c461e5e6a`, 15:47)
-were committed in that window. Nothing more is built until this revision is cleared. The owner approved the first
-version 2026-11-10 14:33 ("approve all, no old invoices exist"), all four choices below; the
+(15:15), Part C (15:22) and the review-fix round (15:47) were committed in that window. The
+owner approved the first version 2026-11-10 14:33 ("approve all, no old invoices exist"), all
+four choices below; the
 [revision at the end](#revision-2026-11-10-second-review-and-the-owners-1543-instruction) changes
 Parts B and C, adds slice 3b, and asks the owner two questions. Slice 1 (the amount calculator,
 `packages/core/src/correction-allocation.ts`) landed as #2653; slice 2 (the writer files the exact
@@ -128,7 +128,8 @@ the approved interface:
   `recordCorrection`'s `sale_voids` check, `record-correction.ts:150`, stays the writer's backstop);
   versions that do not form one line of fixes → `filing_versions_unusable`. A zero-total invoice is not
   admission's concern: the calculator refuses an amount when nothing has value.
-- **Revised 2026-11-10 (finding 1).** The eligible answer also carries `filed: { total: Decimal;
+- **(Superseded by the clearance's point 1: a separate `filedFiguresFor`; admission unchanged.)**
+  **Revised 2026-11-10 (finding 1).** The eligible answer also carries `filed: { total: Decimal;
   vatBreakdown: VatBreakdownLine[] }`, the judged version's total and split read from the same row
   (`desglose`, `importe_total`, `cuota_total`), the same figures for the latest version of each
   earlier corrective invoice core names, and a new refusal reason `filed_figures_unreadable`.
@@ -154,7 +155,7 @@ admission's `filing` and `original`, and the correction's `lines: RecordSaleLine
 `recordCorrection`: one per allocation, copying every field the whole-invoice credit copies
 (`apps/server/src/cancel-credit.ts:83–117`, checked by `satisfies Required<RecordSaleLine>`), so the
 category, reporting classification, product, parent product, menu and kitchen name are kept
-(finding 2, built in `84f6b5ad6c`); `quantity` the negated invoice
+(finding 2, built in Part C's first build); `quantity` the negated invoice
 line's quantity (an amount correction's quantity is the scope shown, never units returned, as
 slice 2's plan says); `lineTotal` −base, `lineGross` −gross, `listGross` null (a part of a line has
 no list gross), `correctsLineId` the invoice line. **Revised 2026-11-10:** after admission, the
@@ -172,6 +173,7 @@ until a consumer existed; this is the point where one does).
 
 Create `packages/core/src/correction-history.ts` and its `.test.ts`;
 `packages/fiscal-verifactu/src/correction-admission.ts` and its `.test.ts`;
+`packages/fiscal-verifactu/src/filed-figures.ts` (tested in `correction-admission.test.ts`);
 `packages/fiscal-verifactu/src/correction-history.e2e.test.ts`. Modify `packages/fiscal/src/backend.ts`
 (+ barrel), `packages/fiscal-verifactu/src/backend.ts` (one delegating member),
 `packages/fiscal-none/src/backend.ts`, the fake backend, `packages/core/src/errors.ts` (one code),
@@ -187,6 +189,8 @@ cases another test covers before landing and, if it cannot reach about twice, sa
 review added fixed originals, the core substitution check, the earlier-split check and the line
 builder). Stop for an outside opinion past 1,400 written lines or tests past twice the code. If Part B alone passes about 450 lines, split
 it into its own PR at the `CorrectionAdmission` interface and say so in questions.md first.
+
+**2026-11-10 (watcher, 18:35):** the stop is now about 2,100 written lines, plan excluded.
 
 ## Steps (test first; implementer dispatches at medium)
 
@@ -216,8 +220,8 @@ it into its own PR at the `CorrectionAdmission` interface and say so in question
 3a. **The preview, Part C, failing first** (in `correction-history.test.ts`, the fake backend):
    an admitted preview returns the admission's `filing`, `original` and the built lines; no regime
    member answers `unsupported`; a substituted invoice is refused before the regime is asked
-   (all built in `84f6b5ad6c`). **Revised 2026-11-10:** filed figures that differ from the stored
-   ones are refused (section D, step R2).
+   (all built in Part C's first build). **Revised 2026-11-10:** filed figures that differ from the
+   stored ones are refused (section D, step R2).
 4. **End to end, failing first** (`correction-history.e2e.test.ts`, real core writers, real Verifactu
    backend, the library's `validate`): the €12.10 invoice above, three rounds of
    `previewCorrectionAmounts` then `recordCorrection` with the preview's own lines and split; assert each stored and filed
@@ -282,14 +286,14 @@ stored splits, a dependency on unlanded #2711, the line builder) are written int
 ## Revision 2026-11-10 (second review and the owner's 15:43 instruction)
 
 **Inputs.** The second review, `~/waitron-campaign-l/receipts/a802-slice3-fable-review.md`
-(findings 1–8, read against `55da144ed6`, Part A only). The owner's instruction,
+(findings 1–8, read against Part A's first build only). The owner's instruction,
 `~/waitron-campaign-shared/desk/done/20261110-1543-a802-slice3-fable-review.md` and lane L
 `questions.md` "WATCHER 2026-11-10 15:43". The owner's words: "I'm not sure what you mean here.
 what would you be refusing, because we need to be able to do the refund, albeit with the right VAT
 figures", then "y" to: every correction is measured against the latest version the tax agency
 accepted; where a fix changed the split or total, the amounts and rates at each VAT rate come from
 that fix, not the frozen sale rows; a full refund then nets every rate at the agency to zero. A
-fresh-context review of this revision's first draft (`86ae51732d`) found one critical and three
+fresh-context review of this revision's first draft found one critical and three
 important gaps; they are written in below.
 
 ### Clearance and answers (2026-11-10 16:23–16:28)
@@ -397,9 +401,10 @@ for receipts (`fiscal-verifactu/src/backend.ts:408–416`, the inverse of `toDet
 `:146–154`), for the FIRST version only (`:396–397`).
 
 **A fix of an earlier corrective invoice (the review's critical finding).** What earlier corrections
-took is read from each corrective's stored split, by the reader (`correction-history.ts:97–100`)
-and by the writer (`record-correction.ts:275–280`), never from what was filed. A part corrective
-refused by the agency (plausible for the final-cent shape, base 0.00 with VAT only) and fixed with
+took is read from each corrective's stored split, by the reader (`readHistory` in
+`correction-history.ts`) and by the writer (`record-correction.ts:275–280`), never from what was
+filed. A part corrective refused by the agency (plausible for the final-cent shape, base 0.00 with
+VAT only) and fixed with
 different figures is then counted at its old figures, and a full refund leaves rates off zero. So
 every check below covers the invoice AND each earlier corrective of it.
 
@@ -407,7 +412,7 @@ every check below covers the invoice AND each earlier corrective of it.
 
 1. **(Superseded by the clearance's point 1: a separate `filedFiguresFor`, admission unchanged.)**
    **The regime returns filed figures with admission** (slice 3). Core first reads the ids of the
-   invoice's earlier corrective invoices (it already reads them, `correction-history.ts:97–100`;
+   invoice's earlier corrective invoices (it already reads them, in `readStored`;
    the read moves before admission) and passes them to `correctionAdmissionFor`. Admission already
    reads the invoice's rows and picks its latest version (`correction-admission.ts:28–52`); it now
    also reads that row's `desglose`, `cuota_total` and `importe_total`, and the same for the latest
@@ -461,8 +466,8 @@ every check below covers the invoice AND each earlier corrective of it.
      is slice 4's settlement question, put to the owner in its plan.
    - **What "consumed" means.** Two budgets: at each rate, what earlier correctives took by their
      filed figures; on each invoice line, the sum of earlier correction lines' gross
-     (`partial-correction-breakdown.ts:128–141`). Not moved, they agree (the reader's check,
-     `correction-history.ts:118–141`). Moved, they are kept separately and the reader skips that
+     (`partial-correction-breakdown.ts:128–141`). Not moved, they agree (the reader's check in
+     `readHistory`). Moved, they are kept separately and the reader skips that
      agreement check. An earlier correction at a rate the filed split lacks (filed before a fix
      that moved the split) is refused with `sale.correction_history_unusable`: the calculator finds
      no stand-in line for its rate (`correction-allocation.ts:207–217`, the test at `:210`), and the
@@ -490,10 +495,11 @@ path works out VAT by rounding and checks nothing against the invoice (design B 
 version, not the accepted one; a reprinted receipt does too (`backend.ts:396–397`, since
 `fe080412c5`, 2026-11-02). Both predate this branch. After slice 3b, a full refund of a moved
 invoice nets to zero at the agency, but the VAT return shows the original at its old rate and the
-corrective at the new one. Not A802's to fix: one entry joins "Reporting — the fiscal remainder" in
-`docs/backlog/fiscal.md` when slice 3b lands (a wrong VAT return could cost a filing). The derived
-path's weakness joins the A802 bundle in the same file ("Nothing in the product can issue a
-corrective invoice…") at the same time.
+corrective at the new one. Not A802's to fix (a wrong VAT return could cost a filing): the watcher
+queued it at 16:26 as its own item, A1481, in lane L after slice 3b, its backlog entry to come with
+its first pull request; `docs/backlog.md` does not name it yet. The derived path's weakness joins
+the A802 bundle in `docs/backlog/fiscal.md` ("Nothing in the product can issue a corrective
+invoice…") when slice 3b lands.
 
 **The tests.**
 
@@ -543,7 +549,9 @@ under A), past the owner's "at most about twice", because the replay the owner a
 **The exact writer change under A, and nothing else** (no change to the record builders, chain
 append, hash, numbering, stored rows or the corrective's filing shape):
 
-1. A new optional, read-only fiscal backend member, `filedFiguresFor(tx, saleIds)`, returning for
+1. **(Superseded by the clearance's point 1 and [As built](#as-built-2026-11-10): built in slice 3,
+   answering the newest and the newest answered version.)** A new optional, read-only fiscal
+   backend member, `filedFiguresFor(tx, saleIds)`, returning for
    each sale the figures of its newest **answered** version, or nothing when no version is
    answered; the regime answers it with admission's reader. The writer cannot use admission: the
    existing administrator path files corrective invoices against refused filings on purpose
@@ -606,23 +614,25 @@ every rate ends exact, the agency accepts both, and the alternative reopens two 
 
 | Finding | Response | Where | Status |
 | --- | --- | --- | --- |
-| 2. Correction lines lost category, product and menu | The builder copies the whole-invoice credit's field set, checked by `satisfies Required<RecordSaleLine>` (`correction-history.ts:174–213`); its test asserts every field (`correction-history.test.ts:344–386`). `listGross` stays null on purpose: only the receipt reads it, to print comps and discounts beside a full invoice's lines (`apps/server/src/receipt-adjustments.ts:51–82`); no report reads it (`git grep` of `packages/reporting`); a negated whole-line list price on a part correction would overstate. `listUnitPriceGross`, a frozen unit price, is copied. One gap remains: an extra corrected without its dish gets no parent (`correction-history.ts:210`), so when the category report folds extras into their dishes it files that extra under its own category (`packages/reporting/src/category-sales.ts:226–231`). Slice 3b step S5 has the report fall back through the corrected invoice line to its dish. That the report now places the money under the dish's category is read, not run; S5's test asserts it. | Part C (`84f6b5ad6c`); slice 3b S5 | Done, one gap planned |
+| 2. Correction lines lost category, product and menu | The builder copies the whole-invoice credit's field set, checked by `satisfies Required<RecordSaleLine>` (`correctionLinesFor`); its test in `correction-history.test.ts` asserts every field. `listGross` stays null on purpose: only the receipt reads it, to print comps and discounts beside a full invoice's lines (`apps/server/src/receipt-adjustments.ts:51–82`); no report reads it (`git grep` of `packages/reporting`); a negated whole-line list price on a part correction would overstate. `listUnitPriceGross`, a frozen unit price, is copied. One gap remains: an extra corrected without its dish gets no parent (`correctionLinesFor`'s `parentLineNo`), so when the category report folds extras into their dishes it files that extra under its own category (`packages/reporting/src/category-sales.ts:226–231`). Slice 3b step S5 has the report fall back through the corrected invoice line to its dish. That the report now places the money under the dish's category is read, not run; S5's test asserts it. | Part C; slice 3b S5 | Done, one gap planned |
 | 3. Amount corrections take whole quantities off top sellers | Only the top-sellers report reads correction quantities (`packages/reporting/src/top-sellers.ts:18–19, :46`). The other readers of `sale_lines.quantity` are the order list, which lists no corrective invoice (`apps/server/src/orders-list.ts:192, :684, :875`), and the writer's own check (`record-correction.ts:244`); the category report reads money and category only (`category-sales.ts:202–207`). Rule: per corrected invoice line, the correction whose running sum of gross completes that line's money counts as its dishes returned (minus the line's quantity); every other correction line changes money, never dishes. So €6.05, €6.02 and €0.03 off one steak return the steak with the third. A line with no stored gross (a whole-invoice credit of an invoice whose lines have none) counts when its line total completes the line's, so such a credit still counts its dishes as returned. Lines naming no invoice line (older administrator corrections) count as today. Stored facts are enough (`corrects_line_id`, `line_gross`, `line_total`, `quantity`): no schema change, which the A1308 table hold would block. A future mode choosing dishes and quantities would store which units went back and replace this rule. About 20 code and 70 test lines, with a category assertion. Slice 3b, not slice 3 (slice 3 is already at its stop). | Slice 3b, step S5 | Planned |
-| 4. Demo sales store no line gross | Checked: `apps/server/scripts/demo-seed/seed-sales.ts:255–278` files lines with no gross and works out each rate's VAT from its summed base (`:136–145`), so every demo invoice is refused with `sale.correction_history_unusable`. The golden test forbids re-recording to make it pass (`seed-sales.golden.test.ts:6–8`). Options: (a) leave demo sales uncorrectable, free, but the first thing anyone trying the screen on demo data meets is a refusal; (b) the seeder stores each line's gross and takes each rate's VAT as gross minus base, as the till does, and the golden copy is re-recorded deliberately with the owner's say-so: about 15 lines plus a regenerated golden file, and demo venues reset; (c) seed through the till's pricing, larger. Recommend (b). The owner decides when slice 5's plan (the screen) is cleared, before anyone can try it. The plan's false sentence about callers was corrected in `6c461e5e6a` (Part A's caller list). | "Left out"; slice 5 plan | Owner, at slice 5 |
+| 4. Demo sales store no line gross | Checked: `apps/server/scripts/demo-seed/seed-sales.ts:255–278` files lines with no gross and works out each rate's VAT from its summed base (`:136–145`), so every demo invoice is refused with `sale.correction_history_unusable`. The golden test forbids re-recording to make it pass (`seed-sales.golden.test.ts:6–8`). Options: (a) leave demo sales uncorrectable, free, but the first thing anyone trying the screen on demo data meets is a refusal; (b) the seeder stores each line's gross and takes each rate's VAT as gross minus base, as the till does, and the golden copy is re-recorded deliberately with the owner's say-so: about 15 lines plus a regenerated golden file, and demo venues reset; (c) seed through the till's pricing, larger. Recommend (b). The owner decides when slice 5's plan (the screen) is cleared, before anyone can try it. The plan's false sentence about callers was corrected in the review-fix round (Part A's caller list). | "Left out"; slice 5 plan | Owner, at slice 5 |
 | 5. Returning whole dishes does not give back their own VAT | Not decided here: the owner's question 2. | Question 2 | Owner |
-| 6. Four reader branches untested | Ran each change against today's tests. M1 (each earlier correction checked against all corrections' lines): the reader tests still pass (17), the end-to-end three-round case fails, so it is caught. M2 (no refusal of an earlier line without gross): still passes (17); the split check refuses the same history with the same code (a missing gross counts as zero there). M3 (no base comparison) and M4 (no refusal of an unmatched rate): each fails one test, the rows `6c461e5e6a` added. M2: the implementer reshapes that row so only the missing-gross check can refuse it, or deletes the check if no storable history reaches it, showing which by deleting the branch. | Section D, step R3 | M1, M3, M4 done; M2 planned |
+| 6. Four reader branches untested | Ran each change against today's tests. M1 (each earlier correction checked against all corrections' lines): the reader tests still pass (17), the end-to-end three-round case fails, so it is caught. M2 (no refusal of an earlier line without gross): still passes (17); the split check refuses the same history with the same code (a missing gross counts as zero there). M3 (no base comparison) and M4 (no refusal of an unmatched rate): each fails one test, the rows the review-fix round added. M2: the implementer reshapes that row so only the missing-gross check can refuse it, or deletes the check if no storable history reaches it, showing which by deleting the branch. | Section D, step R3 | M1, M3, M4 done; M2 planned |
 | 7. A cancelled correction still uses up value | Core has no mark of it: the administrator's cancellation appends a cancellation record with the corrective's sale id and writes no `sale_voids` row (`fiscal-verifactu/src/record-remedy-absent.ts:54–58, :102–111, :125–140`). Cost: slice 4 hands the cash back in the same step as filing, so if a refused corrective is then cancelled, the agency holds no correction, the venue's declared revenue stays too high by that amount, and Waitron gives no way to file it again. Excluding it would not repair that alone: it needs the regime to list cancelled correctives, the reader to drop them, and the protected writer to drop them from its three reads (`record-correction.ts:139–140, :275–289`): about 30 code and 60 test lines plus another protected change. Recommend counting it as used (Waitron refuses, never credits twice) and telling administrators that the remedy for a refused corrective is a fix of it. A fix that keeps the corrective's figures keeps its share and files correctly; one that changes them is the critical case in section A, refused in slice 3 and measured at its filed figures in slice 3b. The design gets: "a cancelled correction keeps its share, as a refused or held one does." | Design pointer at landing | Recommendation |
-| 8. Small points | Part C now has its own step (3a). The double read was removed in `6c461e5e6a`: one read of the invoice lines feeds both the calculator and the line builder (`correction-history.ts:56, :92–96, :164`). The lane E pointer now reads line 116, where the quoted text is. The reconciliation pointer now reads `correction-allocation.ts:165–232`; the writer's latest-version read is cited at `fiscal-verifactu/src/backend.ts:520–529`. The first line is replaced by the revised status. | Plan body | Done |
+| 8. Small points | Part C now has its own step (3a). The double read was removed in the review-fix round: one read of the invoice lines in `readHistory` feeds both the calculator and the line builder. The lane E pointer now reads line 116, where the quoted text is. The reconciliation pointer now reads `correction-allocation.ts:165–232`; the writer's latest-version read is cited at `fiscal-verifactu/src/backend.ts:520–529`. The first line is replaced by the revised status. | Plan body | Done |
 
 ### C. Parts B and C as built
 
-- **Part B** (`6c1220e8b4`, `6c461e5e6a`): kept. Changed by step R1: admission takes the earlier
-  correctives' ids, returns the filed figures of the invoice and of each, and refuses
+**(Superseded by the clearance's point 1: what was built is in [As built](#as-built-2026-11-10).)**
+
+- **Part B** (its first build and the review-fix round): kept. Changed by step R1: admission takes
+  the earlier correctives' ids, returns the filed figures of the invoice and of each, and refuses
   `filed_figures_unreadable`. The fake backend's default eligible answer returns the stored figures;
   fiscal-none is unchanged (`unsupported`).
-- **Part C** (`84f6b5ad6c`, `6c461e5e6a`): kept. The line builder already answers finding 2.
-  Changed by step R2: the correctives' ids are read before admission, and anything moved is refused.
-  The end-to-end file keeps its three cases and gains step R5's.
+- **Part C** (its first build and the review-fix round): kept. The line builder already answers
+  finding 2. Changed by step R2: the correctives' ids are read before admission, and anything moved
+  is refused. The end-to-end file keeps its three cases and gains step R5's.
 
 ### D. What remains
 
@@ -650,8 +660,9 @@ lines), and the lane says so to the watcher before passing 1,400. Tests about 2.
 
 **Slice 3b (new, before slice 4), after the owner's answer to question 1 (design A shown):**
 
-- **S1.** The backend member `filedFiguresFor` (interface; Veri*Factu sharing admission's reader;
-  fiscal-none absent; fake).
+- **S1.** **(Superseded: built in slice 3; see [As built](#as-built-2026-11-10).)** The backend
+  member `filedFiguresFor` (interface; Veri*Factu sharing admission's reader; fiscal-none absent;
+  fake).
 - **S2.** The writer and checker change, points 2–4 (and 5 if approved), failing first in
   `partial-correction-breakdown.test.ts` and `record-correction.test.ts`, including the reviewer's
   other-rate case and the new refusal order; the golden huella, `inmutabilidad`, and slice 1–2
@@ -678,3 +689,57 @@ sums of its lines) and the guide, with the owner's demo-seed choice (finding 4).
 **Settled.** The queued-invoice reading went to the owner as question 3 and was answered
 "allow" (the clearance, point 4): the one-line limit written there stands in place of this
 paragraph's earlier text.
+
+### As built (2026-11-10)
+
+**The preview's order.** `previewCorrectionAmounts` (`packages/core/src/correction-history.ts`)
+refuses an invoice a full invoice replaced (`sale.correction_not_admitted`, reason `replaced`);
+asks the regime's `correctionAdmissionFor`, whose answers are unchanged; reads the stored sale and
+refuses a named-customer invoice with `sale.correction_unsupported`, through the writer's own
+`requireSupportedCorrection`; reads the earlier correctives' ids; asks `filedFiguresFor` for the
+invoice and each corrective, refusing `filed_figures_unreadable` (a sale absent from the answer,
+unreadable figures, or a backend with no `filedFiguresFor`) or `filed_figures_changed` (newest
+filed figures differ from the stored ones); reads the history and builds the lines; then runs slice
+1's calculator.
+
+**`filedFiguresFor` as built.** It answers `newest` and `newestAnswered`; `newestAnswered` is unused
+until slice 3b. The Veri*Factu reader (`packages/fiscal-verifactu/src/filed-figures.ts`) reads
+through `registros_sale_idx`, one query per 1,000 sale ids. The fake backend answers from its own
+filed records, so a sale it never filed is absent, with a setter to override one filed sale.
+
+**Size** (`git diff --numstat bb313893b4 -- packages/`): production 543 lines added; test support
+(`fake-backend.ts`) 58 added and 5 removed; tests 1,112 added and 1 removed; 1,713 added in all.
+
+**Test cases cut** under the owner's 2026-11-09 test rule and the watcher's 2026-11-10 18:35
+decision, one line each with what still covers it:
+
+- End to end, "refuses a refused original before reading its history": R5's case fails when
+  admission moves after the history read.
+- Filed figures, "answers an unfixed invoice's and a corrective's own figures": each check it held
+  fails a remaining case (a fixed-filing row, the no-alta case or the end-to-end cases).
+- The exempt-detail row: only the unknown-key check refuses it, and the surcharge row fails without
+  that check.
+- "Reads a whole-invoice credit": core's happy path files its earlier correction as two lines, and
+  fails when the reader keeps only the last line at a rate instead of their sum.
+- The "invoice filed at another rate" row: the base-and-VAT-moved and corrective rows fail without
+  the per-rate comparison.
+- The detenido and retenido rows: the rechazado rows fail when an unknown filing state is admitted.
+- The ten-coffees end-to-end case: the calculator test refunds those bills cent by cent, and
+  `partial-correction-gross.e2e.test.ts` files the same zero-base correction through the real
+  backend.
+- The separate `filed-figures.test.ts`, merged into `correction-admission.test.ts`: both filed the
+  same records through the chain writer, so they share one setup.
+- The eligible answer repeated before each admission refusal: the submission-state table owns it.
+- Core's two reader happy paths, two line-builder cases and two "regime lacks a member" cases,
+  each merged into one case or table.
+- The fake backend's two-sale filed-figures case now uses one sale.
+- From the earlier fix round: the remedy-path cancellation (the core-void case and
+  `record-remedy-absent.test.ts` cover it), the exact partial read (the derived-path case and the
+  end-to-end rounds) and the regime refusal passed through (the end-to-end refused original).
+
+**Corrections found while building.**
+
+- The chain writer cannot write a filing with a missing VAT rate or VAT amount, so that
+  unreadable-figures check in `filed-figures.ts` has no test.
+- The reverse-charged (S2) row files an F1 invoice at rate 0.00 with no VAT, because the chain
+  writer refuses S2 on any other invoice type or with tax charged.

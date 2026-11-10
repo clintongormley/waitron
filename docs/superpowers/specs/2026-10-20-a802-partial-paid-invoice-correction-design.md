@@ -138,6 +138,11 @@ base and VAT, as the receipt reader already does for absent gross
 ([transaction-receipt.ts:39](../../../apps/server/src/transaction-receipt.ts#L39)). Do not silently
 use that display fallback when the source lines and stored breakdown cannot be reconciled.
 
+**2026-11-10:** Three changes, in the [slice 3 plan](../plans/2026-11-10-a802-correction-history.md):
+a missing line gross is refused, not rebuilt (owner, 2026-11-10 14:33, "approve all, no old
+invoices exist"); an invoice whose refused filing was later fixed is judged by its newest version;
+and a cancelled correction keeps its share, as a refused or held one does.
+
 For Amount, distribute gross proportionally to the selected lines' remaining gross. Assign whole
 cents first and then the leftover cents by largest fractional remainder, with original line
 number and id breaking ties. Cap each line at its remaining value. Group those allocations by
