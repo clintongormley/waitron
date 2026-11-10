@@ -552,6 +552,7 @@ CREATE TABLE `order_groups` (
 );
 --> statement-breakpoint
 CREATE INDEX `order_groups_party_idx` ON `order_groups` (`party_id`);--> statement-breakpoint
+CREATE INDEX `order_groups_number_party_idx` ON `order_groups` (`number_party_id`);--> statement-breakpoint
 CREATE TABLE `order_group_hold_stations` (
 	`group_id` text NOT NULL,
 	`station_id` text NOT NULL,
