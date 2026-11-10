@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -767,6 +768,97 @@ describe("computeTopSellers", () => {
     // 3.000 sold − 1.000 returned = 2.000 net; 30.00 − 10.00 = 20.00 net.
     const rows = await run();
     expect(rows).toEqual([{ name: coffeeName, quantity: "2.000", total: "20.00", variants: [] }]);
+  });
+
+  it("returns a dish only with the correction that completes its line's money", async () => {
+    const steakLine = randomUUID();
+    const invoice = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "12.10",
+      lines: [
+        {
+          id: steakLine,
+          vatRate: "10.00",
+          lineTotal: "11.00",
+          lineGross: "12.10",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "1.000",
+        },
+      ],
+    });
+    const correct = (invoiceNumber: number, minute: string, net: string, gross: string) =>
+      seedSale(suite.db, venue, {
+        invoiceNumber,
+        issuedAt: new Date(`2026-08-04T10:${minute}:00Z`).toISOString(),
+        total: `-${gross}`,
+        correctsSaleId: invoice,
+        lines: [
+          {
+            vatRate: "10.00",
+            lineTotal: `-${net}`,
+            lineGross: `-${gross}`,
+            name: coffeeName,
+            descriptions: coffeeText,
+            quantity: "-1.000",
+            correctsLineId: steakLine,
+          },
+        ],
+      });
+    await correct(2, "01", "5.50", "6.05");
+    await correct(3, "02", "5.47", "6.02");
+
+    // €12.07 of €12.10 given back: the dish still counts as sold.
+    expect(await run()).toEqual([
+      { name: coffeeName, quantity: "1.000", total: "0.03", variants: [] },
+    ]);
+
+    await correct(4, "03", "0.03", "0.03");
+
+    // Today's count would be 1 − 3 = −2.000.
+    expect(await run()).toEqual([
+      { name: coffeeName, quantity: "0.000", total: "0.00", variants: [] },
+    ]);
+  });
+
+  it("returns a dish with a whole-invoice credit of a line that stored no gross", async () => {
+    const line = randomUUID();
+    const invoice = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "22.00",
+      lines: [
+        {
+          id: line,
+          vatRate: "10.00",
+          lineTotal: "20.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "2.000",
+        },
+      ],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: noonUtc,
+      total: "-22.00",
+      correctsSaleId: invoice,
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "-20.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "-2.000",
+          correctsLineId: line,
+        },
+      ],
+    });
+
+    expect(await run()).toEqual([
+      { name: coffeeName, quantity: "0.000", total: "0.00", variants: [] },
+    ]);
   });
 
   it("buckets by issuance and the cutover: a 01:30-local sale is outside its calendar day", async () => {

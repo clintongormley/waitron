@@ -516,6 +516,48 @@ describe("computeCategorySales at time of sale", () => {
     ]);
   });
 
+  it("files a correction of an extra alone under its dish's category with extrasIntoDish", async () => {
+    const dish = randomUUID();
+    const extra = randomUUID();
+    const invoice = await sell("2026-08-04", [
+      {
+        id: dish,
+        net: "10.00",
+        gross: "11.00",
+        cls: classified(chain(["cat-food", "Food"], ["cat-burgers", "Burgers"])),
+      },
+      {
+        id: extra,
+        parentLineId: dish,
+        net: "1.00",
+        gross: "1.10",
+        cls: classified(chain(["cat-extras", "Extras"])),
+      },
+    ]);
+    await sellLines(
+      suite.db,
+      venue,
+      at("2026-08-04"),
+      [
+        {
+          correctsLineId: extra,
+          net: "-0.50",
+          gross: "-0.55",
+          quantity: "-1.000",
+          cls: classified(chain(["cat-extras", "Extras"])),
+        },
+      ],
+      invoice,
+    );
+
+    const rolled = await run({ extrasIntoDish: true });
+
+    expect(rows(rolled.tree).map((r) => `${r.path}: ${r.gross}/${r.net} ${r.direct}`)).toEqual([
+      "Food: 11.55/10.50 0.00/0.00/0",
+      "Food > Burgers: 11.55/10.50 11.55/10.50/3",
+    ]);
+  });
+
   it("rolls an extra of an unclassified dish into Not recorded under the dish's free-text category", async () => {
     const dish = randomUUID();
     await sell("2026-08-04", [

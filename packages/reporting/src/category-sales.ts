@@ -201,12 +201,15 @@ export async function computeCategorySales(
   const { rows } = await tx.execute<LineRow>(sql`
     select s.id as sale_id, s.issued_at, sl.line_no,
       cast(sl.line_total as text) as net, cast(sl.line_gross as text) as gross,
-      sl.parent_line_id, sl.product_id, sl.category, sl.classification,
+      coalesce(sl.parent_line_id, il.parent_line_id) as parent_line_id,
+      sl.product_id, sl.category, sl.classification,
       dl.product_id as dish_product_id, dl.category as dish_category,
       dl.classification as dish_classification
     from sale_lines sl
     join sales s on s.id = sl.sale_id
-    left join sale_lines dl on dl.id = sl.parent_line_id
+    -- A correction's extra named without its dish reaches the dish through the line it corrects.
+    left join sale_lines il on il.id = sl.corrects_line_id
+    left join sale_lines dl on dl.id = coalesce(sl.parent_line_id, il.parent_line_id)
     where ${issuedSalesClause(window)}
       ${nodeClause}
     union all

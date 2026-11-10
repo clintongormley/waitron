@@ -176,6 +176,8 @@ export async function seedSale(
       lineGross?: string;
       /** The recorded classification snapshot; absent means none was recorded. */
       classification?: SaleLineClassification;
+      /** On a correction's line, the corrected invoice's line it adjusts; absent means none. */
+      correctsLineId?: string;
     }>;
     correctsSaleId?: SaleId;
     counterpartyTaxId?: string;
@@ -230,6 +232,7 @@ export async function seedSale(
       productId: line.productId ?? null,
       lineGross: line.lineGross === undefined ? null : stringToCents(line.lineGross),
       classification: line.classification ?? null,
+      correctsLineId: line.correctsLineId ?? null,
     })),
   );
   return saleId;
