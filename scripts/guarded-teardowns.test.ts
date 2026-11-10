@@ -33,8 +33,8 @@ import { blankCommentsAndLiterals } from "../packages/shared/src/source-comments
 const REPO_ROOT = join(import.meta.dirname, "..");
 
 /**
- * **`apps/` is IN scope, unlike `english-only.ts`'s scan**: a masked teardown error wastes the same
- * debugging hour wherever it happens.
+ * **`apps/` is IN scope**: a masked teardown error wastes the same debugging hour wherever it
+ * happens.
  */
 const SCAN_ROOTS = ["packages", "apps"] as const;
 

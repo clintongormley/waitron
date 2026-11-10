@@ -1028,9 +1028,9 @@ output.
 
 ## `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in `.husky/pre-push` beside the same loop; it is not there
 
-- A reason #602 deleted and did not restore, for the owner to confirm: `scripts/english-only.test.ts`'s
-  provisioning-test exemption lost its end condition ("until that test runs against fiscal-none",
-  spec §6 step 5).
+Since #602 the comment at `.github/workflows/ci.yml` about line 268 says the three-shell receipt is
+in `.husky/pre-push`; that file holds no such receipt. Restore the receipt there or cut the pointer
+from the comment.
 
 ## Tests that close a dialog and then check after a single `flush` (A452, #1487)
 

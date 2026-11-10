@@ -358,8 +358,8 @@ as recommended; 3, 5 and 6 in the owner's own words, recorded in
 was A918; its decision is under "Decisions and deliberate limits" below. The items
 below carry them out, one pull request each unless an item says otherwise. File and line references
 are the audit's, taken on `a3be14ba4`; re-find them on current `main`. Every item follows the rule
-for its own diff (grep it for non-English text before pushing — the guard will not see most of it
-until A977).
+for its own diff (grep it for non-English text before pushing — the guard does not read a file
+listed in `scripts/english-only-still-to-clean.ts` line by line).
 
 - **Full-invoice locality/province commas.** On A963's `e5693d460`,
   `recipientAddressErrors` accepts a nonblank Spanish locality/province containing a comma, but
@@ -556,7 +556,7 @@ until A977).
   Remaining helper and screen fixtures stay
   with this item. Catalogue import-validation samples use English menu, dessert and drink names;
   accented-name collision and multilingual unit examples remain. Continue package by package
-  from A977's list. UI switch behavior and accessibility
+  from `scripts/english-only-still-to-clean.ts`. UI switch behavior and accessibility
   suites use English sample labels and descriptions. Disclosure accessibility samples use English
   headings, summaries and body text; deliberate EN/ES summary examples remain. Printing layout
   and printer samples use English; layout samples keep their character counts and word boundaries.
@@ -629,12 +629,6 @@ until A977).
   `scripts/cloud-cost/fixtures/remote-browser-backend.mjs` and `remote-waitron-backend.mjs` still
   carry Spanish operation and street examples. Translate those samples in a Cloud change; the
   Waitron fixture's wording change does not update those files.
-- **A977 — point 8, after the remaining English cleanup.** Widen `scripts/english-only.test.ts` to every
-  text file under `packages/` and `apps/`, exempting only the homes (the packages written for Spain,
-  `fiscal-verifactu`, translation files, a package's `src/starter-content.ts`), add an accented-letter check, and keep a list of test
-  folders still to clean that may only get shorter. Fix the wrong comment at
-  `packages/reporting/src/dr303-layout.ts:14–16` and its generator
-  (`reference/generate-dr303-layout.py:184–186, 274–275`), which say the guard scans `reporting`.
 
 ## Go-live day steps
 
@@ -1039,7 +1033,7 @@ product failures.
   Native server floor-annotation and kitchen/floor read-model suites use English location,
   operation, station, table and contact samples; their Spanish locale keys remain.
   Other helpers and screen expectations remain.
-  Continue package by package from A977's list; keep accent-sensitive
+  Continue package by package from `scripts/english-only-still-to-clean.ts`; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
   glyph cases. Preserve text lengths when translating remaining printing samples. Low priority.
   [Detail](architecture.md#a913s-fix-items-general-code-english-only)

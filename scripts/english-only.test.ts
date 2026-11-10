@@ -1,32 +1,97 @@
 /**
- * The English-only vocabulary guard's suite, over the generic packages' `src/`.
+ * The English-only guard's suite, over every tracked text file under `apps/` and `packages/` that
+ * `isHome` does not place in a home for non-English text.
  *
  * The forbidden set is ASSEMBLED here: `packages/db/src/english-only.ts` holds only the base list
  * of generic Spanish no module owns, and every Spanish-by-design module declares its own terms on
  * its descriptor's `vocabulary` seat. `english-only.ts` lives under `packages/db/src` so that
  * package's `typecheck` covers it; the root config measures its coverage and `packages/db`'s config
  * excludes it.
+ *
+ * Weaker than its name: see conventions-data.md → "What the guard does not see".
  */
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import {
-  GENERIC_PACKAGES,
-  I18N_CATALOGUES,
-  PACKAGES_ROOT,
-  SELF,
+  KEEPS_NON_ENGLISH,
   SPANISH_WORDS,
-  STARTER_CONTENT_FILE,
+  type Violation,
+  findAccented,
   findSpanish,
-  readSource,
-  sourceFilesIn,
+  isHome,
+  readText,
 } from "../packages/db/src/english-only.js";
 import { forbiddenVocabulary, vocabularyOwners } from "../packages/module/src/vocabulary.js";
+import { STILL_TO_CLEAN } from "./english-only-still-to-clean.js";
 
 const OWNERS = vocabularyOwners(ALL_MODULES);
 const FORBIDDEN = forbiddenVocabulary(SPANISH_WORDS, ALL_MODULES);
+
+const repoRoot = join(import.meta.dirname, "..");
+
+/**
+ * `STILL_TO_CLEAN`'s length, pinned equal so a change in either direction fails: deleting entries
+ * lowers this in the same change, and adding one has to raise it where the diff shows it.
+ */
+const STILL_TO_CLEAN_COUNT = 1230;
+
+// A per-call kill timeout for a hung `git` (Vitest's timer cannot interrupt a blocking child), and
+// a per-test bound above it for the case that builds a repository.
+const GIT_SPAWN_TIMEOUT_MS = 30_000;
+const SPAWN_TEST_TIMEOUT_MS = 60_000;
+
+const GIT_LOCATION_OVERRIDES = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_NAMESPACE",
+];
+
+function isolatedGitEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const name of GIT_LOCATION_OVERRIDES) delete env[name];
+  return env;
+}
+
+/** Every file `git ls-files` lists under `apps/` and `packages/` at `root`, repo-relative. */
+function trackedFiles(root: string): string[] {
+  return execFileSync("git", ["ls-files", "-z", "--", "apps", "packages"], {
+    cwd: root,
+    encoding: "utf8",
+    env: isolatedGitEnv(),
+    timeout: GIT_SPAWN_TIMEOUT_MS,
+    maxBuffer: 64 * 1024 * 1024,
+  })
+    .split("\0")
+    .filter(Boolean)
+    .sort();
+}
+
+/** The scanned files at `root`: tracked, outside every home, and text (no NUL byte). */
+function scannedTexts(root: string): Map<string, string> {
+  const texts = new Map<string, string>();
+  for (const path of trackedFiles(root)) {
+    if (isHome(path)) continue;
+    const text = readText(join(root, path));
+    if (text !== undefined) texts.set(path, text);
+  }
+  return texts;
+}
+
+function findings(source: string): Violation[] {
+  return [...findSpanish(source, FORBIDDEN), ...findAccented(source)];
+}
+
+const TRACKED = trackedFiles(repoRoot);
+const SCANNED = scannedTexts(repoRoot);
+const STILL_LISTED: ReadonlySet<string> = new Set(STILL_TO_CLEAN);
 
 /** The tokeniser's own tests run against a FIXED set, so a change to a module's declaration
  * cannot redden a test that is about tokenising. Assembly is tested separately. */
@@ -61,93 +126,129 @@ const ANCHORS: Record<string, readonly string[]> = {
   "workforce-es": ["convenio", "jornada", "trabajador"],
 };
 
-const discovered = GENERIC_PACKAGES.flatMap((name) =>
-  sourceFilesIn(name).map((file) => [`${name}: ${file.replace(PACKAGES_ROOT, "")}`, file] as const),
-);
-
 describe("configuration", () => {
-  it("scans real TypeScript files without reading screenshot directories named after tests", () => {
-    const fixture = mkdtempSync(join(tmpdir(), "waitron-vocabulary-"));
-    try {
-      const source = join(fixture, "src");
-      const screenshotDirectory = join(source, "__screenshots__", "widget.test.ts");
-      mkdirSync(screenshotDirectory, { recursive: true });
-      const testFile = join(source, "widget.test.ts");
-      const nestedFile = join(screenshotDirectory, "nested.ts");
-      writeFileSync(testFile, "export const count = 1;\n");
-      writeFileSync(nestedFile, "export const total = 2;\n");
-      writeFileSync(join(screenshotDirectory, "failure.png"), "image");
-      const files = sourceFilesIn(relative(PACKAGES_ROOT, fixture));
-      expect(files).toEqual([nestedFile, testFile].sort());
-      expect(files.map(readSource)).toEqual([
-        "export const total = 2;\n",
-        "export const count = 1;\n",
-      ]);
-    } finally {
-      rmSync(fixture, { recursive: true, force: true });
+  it(
+    "reads tracked text files only: never an untracked screenshot or a file holding a NUL byte",
+    () => {
+      const root = mkdtempSync(join(tmpdir(), "waitron-vocabulary-"));
+      try {
+        const git = (...args: string[]) =>
+          execFileSync(
+            "git",
+            [
+              "-c",
+              "user.name=t",
+              "-c",
+              "user.email=t@example.com",
+              "-c",
+              "commit.gpgsign=false",
+              "-c",
+              "core.hooksPath=/dev/null",
+              ...args,
+            ],
+            { cwd: root, env: isolatedGitEnv(), timeout: GIT_SPAWN_TIMEOUT_MS, stdio: "pipe" },
+          );
+        const source = join(root, "packages", "x", "src");
+        const screenshotDirectory = join(source, "__screenshots__", "widget.test.ts");
+        mkdirSync(screenshotDirectory, { recursive: true });
+        writeFileSync(join(source, "widget.test.ts"), "export const count = 1;\n");
+        writeFileSync(join(screenshotDirectory, "nested.ts"), "export const total = 2;\n");
+        writeFileSync(join(source, "binary.png"), Buffer.from([0x89, 0x50, 0x00, 0xc3, 0xa9]));
+        git("init", "-q");
+        git("add", "packages");
+        git("commit", "-q", "-m", "fixture");
+        writeFileSync(join(screenshotDirectory, "failure.png"), "Café\n");
+        writeFileSync(join(source, "untracked.ts"), "const mesa = 1;\n");
+
+        expect([...scannedTexts(root)]).toEqual([
+          ["packages/x/src/__screenshots__/widget.test.ts/nested.ts", "export const total = 2;\n"],
+          ["packages/x/src/widget.test.ts", "export const count = 1;\n"],
+        ]);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+    SPAWN_TEST_TIMEOUT_MS,
+  );
+
+  it.each([
+    ["packages/fiscal-verifactu/src/huella.ts", "packages/fiscal/src/chain.ts"],
+    ["packages/country-es/src/holidays.ts", "packages/country-gb/src/holidays.ts"],
+    ["packages/workforce-es/src/convenio.ts", "packages/workforce/src/shifts.ts"],
+    ["packages/reporting/src/dr303-layout.ts", "packages/reporting-extra/src/form.ts"],
+    ["apps/till/src/i18n/allergen-names.ts", "apps/till/src/i18n-helpers.ts"],
+    ["packages/recovery-pack/src/i18n/pack-words.ts", "apps/till/src/i18n.ts"],
+    [
+      "packages/payments-stripe/src/dashboard/strings.ts",
+      "packages/payments-stripe/src/dashboard/strings.test.ts",
+    ],
+    [
+      "packages/payments-sumup/src/dashboard/strings.ts",
+      "packages/dashboard-kit/src/table-strings.ts",
+    ],
+    ["apps/server/src/guide/es/orders.md", "apps/server/src/guide/en/orders.md"],
+    ["apps/server/src/guide/ca/orders.md", "apps/server/src/guide/es.ts"],
+    [
+      "packages/adjustments/src/starter-content.ts",
+      "packages/adjustments/src/dashboard/starter-content.ts",
+    ],
+    ["packages/catalogue/src/starter-content.ts", "packages/catalogue/src/starter-content.test.ts"],
+    ["packages/catalogue/src/starter-content.ts", "packages/catalogue/src/my-starter-content.ts"],
+    ["packages/catalogue/src/starter-content.ts", "apps/server/src/starter-content.ts"],
+    ["packages/db/src/english-only.ts", "packages/core/src/english-only.ts"],
+    ["packages/fiscal/src/no-regime-vocabulary.test.ts", "packages/db/src/english-only.test.ts"],
+    [
+      "packages/fiscal-verifactu/src/x.test.ts",
+      "packages/provisioning/src/provisioning.e2e.test.ts",
+    ],
+  ])("treats %s as a home and still scans %s", (home, scanned) => {
+    expect(isHome(home)).toBe(true);
+    expect(isHome(scanned)).toBe(false);
+  });
+
+  it("would flag each home's real text if scanned, so its pass is the exclusion", () => {
+    for (const path of [
+      "packages/payments-stripe/src/dashboard/strings.ts",
+      "packages/payments-sumup/src/dashboard/strings.ts",
+      "packages/recovery-pack/src/i18n/pack-words.ts",
+      "packages/adjustments/src/starter-content.ts",
+    ]) {
+      expect(TRACKED, path).toContain(path);
+      expect(SCANNED.has(path), path).toBe(false);
+      expect(findings(readText(join(repoRoot, path))!).length, path).toBeGreaterThan(0);
     }
   });
 
-  it("scopes itself to the generic packages, in this order", () => {
-    expect([...GENERIC_PACKAGES]).toEqual([
-      "db",
-      "migrations",
-      "core",
-      "fiscal",
-      "shared",
-      "payments",
-      "payments-stripe",
-      "payments-sumup",
-      "credentials",
-      "workforce",
-      "identity",
-      "catalogue",
-      "media",
-      "membership",
-      "module",
-      "layouts",
-      "recipes",
-      "purchasing",
-      "printing",
-      "print-agent",
-      "diagnostics",
-      "sync-enrolment",
-      "stream",
-      "store",
-      "adjustments",
-      "staffing",
-      "composition",
-      "fiscal-none",
-      "recovery-pack",
-      "node-db",
-      "handover",
-      "provisioning",
-      "ui",
-      "dashboard-kit",
-      "dashboard-modules",
-      "country",
-      "country-packs",
-    ]);
-  });
-
-  it("does not scan country-specific implementations or other Spanish-domain packages", () => {
-    // reporting (the modelo-303 form) is Spanish by nature and unscanned by OMISSION — neither a
-    // generic package nor a vocabulary owner. Pinned so a future edit cannot silently re-add one to
-    // the generic set.
-    for (const domainSpecific of ["country-es", "country-gb", "reporting"]) {
-      expect(GENERIC_PACKAGES).not.toContain(domainSpecific);
+  it("scans the home packages' neighbours, provisioning's tests and apps", () => {
+    for (const path of [
+      "packages/adjustments/src/provisioning.ts",
+      "packages/payments-stripe/src/index.ts",
+      "apps/server/src/log-personal-data.ts",
+    ]) {
+      expect(SCANNED.has(path), path).toBe(true);
     }
+    expect([...SCANNED.keys()].some((p) => /^packages\/provisioning\/.*\.test\.ts$/.test(p))).toBe(
+      true,
+    );
+    expect([...SCANNED.keys()].some((p) => p.startsWith("apps/server/src/guide/en/"))).toBe(true);
   });
 
-  it("excludes provisioning's test files as a documented production-only interim", () => {
-    // Provisioning's e2e test provisions a real Veri*Factu venue and names the Spanish fiscal
-    // TABLES in SQL, which cannot be renamed, so only provisioning's production source is scanned —
-    // the ONLY test exemption.
-    const files = sourceFilesIn("provisioning");
-    expect(files.length).toBeGreaterThan(0);
-    expect(files.some((f) => f.endsWith(".test.ts"))).toBe(false);
-    // Every other generic package keeps the "tests are scanned too" rule.
-    expect(sourceFilesIn("db").some((f) => f.endsWith(".test.ts"))).toBe(true);
+  it("scans something in every package and app that is not a home", () => {
+    // A guard whose file list is empty passes every per-file case. This stops that.
+    const owners = new Set(TRACKED.map((p) => p.split("/").slice(0, 2).join("/")));
+    for (const owner of owners) {
+      if (isHome(`${owner}/src/x.ts`)) continue;
+      expect(
+        [...SCANNED.keys()].some((p) => p.startsWith(`${owner}/`)),
+        owner,
+      ).toBe(true);
+    }
+    expect(owners.size).toBeGreaterThan(10);
+  });
+
+  it("cannot reach this suite or its list, so neither needs an exemption", () => {
+    expect([...SCANNED.keys()].some((p) => p.startsWith("scripts/"))).toBe(false);
+    expect(SCANNED.size).toBeGreaterThan(0);
   });
 
   it("derives the vocabulary owners from the descriptors, in ALL_MODULES order", () => {
@@ -160,119 +261,58 @@ describe("configuration", () => {
   });
 
   it("never scans a vocabulary owner's package", () => {
-    // A module's terms are legitimate inside its own package by definition (spec §2); listing that
-    // package as generic would make the guard fail on the vocabulary it exists to define.
+    // A module's terms are legitimate inside its own package by definition (spec §2).
     for (const owner of OWNERS) {
-      expect(GENERIC_PACKAGES).not.toContain(owner.packageDir);
-    }
-  });
-
-  it("excludes only the files that define a forbidden-vocabulary list, by exact name", () => {
-    // A wildcard here (say, *.test.ts) would silently drop every test file in packages/db out of
-    // scope, which is where fixture names live.
-    expect([...SELF]).toEqual(["english-only.ts", "no-regime-vocabulary.test.ts"]);
-  });
-
-  it("excludes the translation catalogues by exact suffix, and nothing wider", () => {
-    // Each catalogue holds `{ en, es }` copy: its `es` values are translation, not vocabulary.
-    expect([...I18N_CATALOGUES]).toEqual(["dashboard/strings.ts", "i18n/pack-words.ts"]);
-  });
-
-  it("drops the recovery pack's word catalogue from the scan, which its Spanish would fail", () => {
-    const files = sourceFilesIn("recovery-pack");
-    expect(files.some((f) => f.endsWith("i18n/pack-words.ts"))).toBe(false);
-    expect(files.length).toBeGreaterThan(0);
-    const catalogue = join(PACKAGES_ROOT, "recovery-pack", "src", "i18n", "pack-words.ts");
-    expect(findSpanish(readSource(catalogue), FORBIDDEN).length).toBeGreaterThan(0);
-  });
-
-  it("drops each payment provider's dashboard catalogue from the scan while keeping its other files", () => {
-    // The two catalogues that fail on real Spanish translations (`nombre`, `pagos`). Excluded here,
-    // but the package's non-catalogue source is still discovered and scanned.
-    for (const pkg of ["payments-stripe", "payments-sumup"]) {
-      const files = sourceFilesIn(pkg);
+      const own = TRACKED.filter((p) => p.startsWith(`packages/${owner.packageDir}/`));
+      expect(own.length, owner.module).toBeGreaterThan(0);
       expect(
-        files.some((f) => f.endsWith("dashboard/strings.ts")),
-        pkg,
-      ).toBe(false);
-      expect(files.length, pkg).toBeGreaterThan(0);
+        own.filter((p) => SCANNED.has(p)),
+        owner.module,
+      ).toEqual([]);
     }
   });
+});
 
-  it("would flag the catalogues' es values if scanned, so the pass is the exclusion not weak vocab", () => {
-    // The catalogue's real content fires on the assembled set, so the file passing the tree scan is
-    // DUE TO the exclusion.
-    for (const pkg of ["payments-stripe", "payments-sumup"]) {
-      const catalogue = join(PACKAGES_ROOT, pkg, "src", "dashboard", "strings.ts");
-      expect(existsSync(catalogue), pkg).toBe(true);
-      expect(findSpanish(readSource(catalogue), FORBIDDEN).length, pkg).toBeGreaterThan(0);
-    }
-  });
-
-  it("still scans a Spanish identifier in a non-catalogue dashboard file (the exclusion keeps its teeth)", () => {
-    // The exclusion is by PATH, not content: only the listed catalogue suffixes are dropped.
-    const isCatalogue = (relative: string) =>
-      I18N_CATALOGUES.some((suffix) => relative.endsWith(suffix));
-    expect(isCatalogue("dashboard/strings.ts")).toBe(true);
-    expect(isCatalogue("dashboard/panel.ts")).toBe(false);
-    expect(isCatalogue("dashboard/strings.test.ts")).toBe(false);
-    // And a Spanish identifier in such a non-catalogue file is a real violation, exactly as before.
-    expect(findSpanish("const nombreLector = 1;", FORBIDDEN).map((v) => v.word)).toEqual([
-      "nombre",
+describe("the lists", () => {
+  it("keeps exactly the files whose job needs non-English text, each with a reason", () => {
+    expect(Object.keys(KEEPS_NON_ENGLISH).sort()).toEqual([
+      "apps/server/scripts/bench/measure.ts",
+      "apps/server/scripts/bench/trading-day.test.ts",
+      "apps/server/scripts/receipt-look.ts",
+      "apps/server/src/first-setup-database-holdings.test.ts",
+      "apps/server/src/first-setup-start-again-hour.test.ts",
+      "apps/server/src/log-personal-data.ts",
+      "apps/server/src/start-again-full-disk.e2e.test.ts",
+      "packages/db/src/immutability.sql.md",
+      "packages/identity/src/passkey-providers.ts",
+      "packages/migrations/migrations.manifest.json",
+      "packages/shared/src/locales.ts",
     ]);
-  });
-
-  it("excludes a package's top-level starter-content translations by exact path, and nothing wider", () => {
-    expect(STARTER_CONTENT_FILE).toBe("starter-content.ts");
-    const fixture = mkdtempSync(join(tmpdir(), "waitron-vocabulary-"));
-    try {
-      const source = join(fixture, "src");
-      mkdirSync(join(source, "dashboard"), { recursive: true });
-      const content = 'export const x = { es: "Mesa" };\n';
-      const kept = [
-        join(source, "dashboard", "starter-content.ts"),
-        join(source, "starter-content.test.ts"),
-        join(source, "my-starter-content.ts"),
-        join(source, "other.ts"),
-      ];
-      for (const file of [join(source, "starter-content.ts"), ...kept]) {
-        writeFileSync(file, content);
-      }
-      expect(sourceFilesIn(relative(PACKAGES_ROOT, fixture))).toEqual([...kept].sort());
-      expect(findSpanish(content, FORBIDDEN).map((v) => v.word)).toEqual(["mesa"]);
-    } finally {
-      rmSync(fixture, { recursive: true, force: true });
+    for (const [path, keep] of Object.entries(KEEPS_NON_ENGLISH)) {
+      expect(keep.reason, path).toMatch(/^[^\n]{10,}$/);
+      expect(Number.isInteger(keep.findings) && keep.findings >= 1, path).toBe(true);
     }
   });
 
-  it("drops adjustments' starter-content translations from the scan while keeping its other files", () => {
-    const starter = join(PACKAGES_ROOT, "adjustments", "src", "starter-content.ts");
-    expect(existsSync(starter)).toBe(true);
-    const files = sourceFilesIn("adjustments");
-    expect(files).not.toContain(starter);
-    expect(files).toContain(join(PACKAGES_ROOT, "adjustments", "src", "provisioning.ts"));
+  it("keeps the still-to-clean list sorted and free of duplicates", () => {
+    expect(STILL_TO_CLEAN).toEqual([...new Set(STILL_TO_CLEAN)].sort());
   });
 
-  it("cannot reach this suite, so it needs no exemption", () => {
-    const scanned = GENERIC_PACKAGES.flatMap((name) => sourceFilesIn(name));
-    expect(scanned.some((file) => file.endsWith("english-only.test.ts"))).toBe(false);
-    expect(scanned.length).toBeGreaterThan(0);
+  it("names only tracked, scanned text files, and no file on both lists", () => {
+    const unscanned = [...STILL_TO_CLEAN, ...Object.keys(KEEPS_NON_ENGLISH)].filter(
+      (p) => !SCANNED.has(p),
+    );
+    expect(unscanned).toEqual([]);
+    expect(STILL_TO_CLEAN.filter((p) => p in KEEPS_NON_ENGLISH)).toEqual([]);
   });
 
-  it("returns nothing for a package that does not exist on disk", () => {
-    // A name in GENERIC_PACKAGES with no directory yet is silence, not a crash: the guard has to be
-    // in place BEFORE a generic package is created.
-    expect(sourceFilesIn("no-such-package")).toEqual([]);
-  });
-
-  it("discovers source files in every generic package that exists on disk", () => {
-    // A guard whose file list is empty passes every assertion below it. This stops that.
-    for (const name of GENERIC_PACKAGES) {
-      const dir = join(PACKAGES_ROOT, name, "src");
-      if (!existsSync(dir)) continue;
-      expect(sourceFilesIn(name).length).toBeGreaterThan(0);
-    }
-    expect(discovered.length).toBeGreaterThan(0);
+  it("holds the still-to-clean list at its pinned count", () => {
+    expect(
+      STILL_TO_CLEAN.length,
+      "STILL_TO_CLEAN_COUNT must equal the list's length. After deleting cleaned entries, lower it " +
+        "to match. Do not add a file to the list: clean the file instead. An addition only passes by " +
+        "raising the count, which the diff shows.",
+    ).toBe(STILL_TO_CLEAN_COUNT);
   });
 });
 
@@ -308,11 +348,16 @@ describe("each module's vocabulary declaration", () => {
       // The declaration matches vocabulary that occurs in the owner's REAL source, and the owner is
       // excluded by SCOPE, not by a list too weak to fire on it. The declaration file is excluded:
       // every declared term is a literal there.
-      const files = sourceFilesIn(owner.packageDir).filter((f) => !f.endsWith("/vocabulary.ts"));
+      const files = TRACKED.filter(
+        (f) =>
+          f.startsWith(`packages/${owner.packageDir}/src/`) &&
+          f.endsWith(".ts") &&
+          !f.endsWith("/vocabulary.ts"),
+      );
       expect(files.length).toBeGreaterThan(0);
       const own = new Set(owner.terms);
       const fired = new Set(
-        files.flatMap((f) => findSpanish(readSource(f), own)).map((v) => v.word),
+        files.flatMap((f) => findSpanish(readText(join(repoRoot, f))!, own)).map((v) => v.word),
       );
       expect([...fired]).toEqual(expect.arrayContaining([...ANCHORS[module]!]));
     },
@@ -630,11 +675,87 @@ describe("findSpanish", () => {
   });
 });
 
-describe.each(discovered)("%s", (_label, file) => {
-  it("uses English vocabulary only", () => {
-    const violations = findSpanish(readSource(file), FORBIDDEN);
-    // Reported as formatted lines rather than a bare count: a failure needs to say which word on
-    // which line, or the next person deletes the test.
-    expect(violations.map((v) => `${v.line}: ${v.word} — ${v.text}`)).toEqual([]);
+describe("findAccented", () => {
+  it.each([
+    "á",
+    "é",
+    "í",
+    "ó",
+    "ú",
+    "ñ",
+    "Á",
+    "É",
+    "Í",
+    "Ó",
+    "Ú",
+    "Ñ",
+    "¿",
+    "¡",
+    "à",
+    "è",
+    "ò",
+    "ç",
+    "À",
+    "È",
+    "Ò",
+    "Ç",
+    "ü",
+    "Ü",
+  ])("flags %s", (letter) => {
+    expect(findAccented(`const label = "x${letter}y";`).map((v) => v.word)).toEqual([letter]);
   });
+
+  it("reports each line once, with its number and text", () => {
+    expect(findAccented('const ok = 1;\nconst s = "Café niño";\n')).toEqual([
+      { line: 2, word: "é", text: 'const s = "Café niño";' },
+    ]);
+  });
+
+  it("flags a decomposed accent as well as a composed one", () => {
+    expect(findAccented('const s = "Café";').map((v) => v.word)).toEqual(["é"]);
+  });
+
+  it("does not flag plain ASCII or letters outside the set", () => {
+    expect(findAccented("const s = 'naïve façade'.length; // ø ß → ê")).toEqual([
+      expect.objectContaining({ word: "ç" }),
+    ]);
+    expect(findAccented("const s = 'naive facade'; // o s -> e")).toEqual([]);
+  });
+
+  it("flags accented prose in a comment", () => {
+    expect(findAccented("// the año is fixed").map((v) => v.line)).toEqual([1]);
+  });
+
+  it("exempts a guillemet quote and a backtick citation in a comment", () => {
+    expect(findAccented("// AEAT: «Facturación»\n// the `año` field")).toEqual([]);
+  });
+
+  it("still flags an accented letter in a template literal in code", () => {
+    expect(findAccented("const q = sql`select año`;").map((v) => v.word)).toEqual(["ñ"]);
+  });
+});
+
+describe.each([...SCANNED])("%s", (path, source) => {
+  const keep = KEEPS_NON_ENGLISH[path];
+  if (keep !== undefined) {
+    it("holds exactly its kept number of findings", () => {
+      expect(
+        findings(source).map((v) => `${v.line}: ${v.word} — ${v.text}`),
+        "a kept file's findings changed: clean any new text, or set `findings` to the new count (delete the keep when none are left)",
+      ).toHaveLength(keep.findings);
+    });
+  } else if (STILL_LISTED.has(path)) {
+    it("still holds non-English text, so it stays listed", () => {
+      expect(
+        findings(source).length,
+        "nothing left to clean: delete it from the list",
+      ).toBeGreaterThan(0);
+    });
+  } else {
+    it("uses English only", () => {
+      // Reported as formatted lines rather than a bare count: a failure needs to say which word on
+      // which line, or the next person deletes the test.
+      expect(findings(source).map((v) => `${v.line}: ${v.word} — ${v.text}`)).toEqual([]);
+    });
+  }
 });

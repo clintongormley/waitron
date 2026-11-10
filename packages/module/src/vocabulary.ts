@@ -28,7 +28,7 @@ export function vocabularyOwners(modules: readonly WaitronModule[]): VocabularyO
 }
 
 /**
- * The forbidden set a vocabulary guard scans generic packages for: `base` ∪ every module's
+ * The forbidden set a vocabulary guard scans for: `base` ∪ every module's
  * declared terms. Returns a new set; `base` is untouched.
  */
 export function forbiddenVocabulary(

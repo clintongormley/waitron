@@ -159,22 +159,43 @@ into them. Every country pack must also carry English for the words it shows, an
 ## Spanish domain terms are deliberate, and a module declares its own
 
 The guard (`packages/db/src/english-only.ts`; suite `scripts/english-only.test.ts`, root project)
-forbids, in every generic package, a base list of generic Spanish plus every module's declared
-`vocabulary` seat; an owner's own package (derived from `migrations.from`) is never scanned. One
-declaring home per word: a fiscal term goes in `FISCAL_VOCABULARY` (`packages/fiscal-verifactu`), a
-labour term in `WORKFORCE_ES_VOCABULARY` (`packages/workforce-es`), never the base list — the suite
-fails on a clash. `apps/*`
-is out of scope by a recorded decision, so non-English text anywhere under `apps/` — identifiers,
-literals, comments — is caught only by review. Designed and built in #240.
+reads every file `git ls-files` lists under `apps/` and `packages/`, skipping as binary a file that
+holds a NUL byte. In each it refuses a base list of generic Spanish plus every module's declared
+`vocabulary` seat, and any of the letters `áéíóúñÁÉÍÓÚÑ¿¡àèòçÀÈÒÇüÜ`. One declaring home per word: a
+fiscal term goes in `FISCAL_VOCABULARY` (`packages/fiscal-verifactu`), a labour term in
+`WORKFORCE_ES_VOCABULARY` (`packages/workforce-es`), never the base list — the suite fails on a
+clash. Designed and built in #240.
 
-**What the guard does not see.** `scripts/english-only.test.ts` is weaker than its name — it finds
-comments without a parser, guessing from the code before a `/` whether it opens a regular
-expression, and a wrong guess can hide a Spanish word in code on a later line. It also never scans
-a package that `GENERIC_PACKAGES` leaves out (among them `bookings`,
-`venue-service`, `ui-core`, `server-kit` and `country-gb`), `provisioning`'s test files, any
-`dashboard/strings.ts` or `i18n/pack-words.ts`, a package's top-level `src/starter-content.ts` (the whole file, comments
-and identifiers included; nothing checks that it holds only data), a `«…»` quote anywhere
-in the source (code included), or a backtick citation in a comment.
+It never reads the homes `isHome` names: the packages written for Spain (`fiscal-verifactu`,
+`country-es`, `workforce-es`, `reporting`), a file inside an `i18n` folder or named `strings.ts`,
+the guide in every language but English (`apps/server/src/guide/<lang>/`), a
+package's `src/starter-content.ts`, and the two files that list forbidden words
+(`english-only.ts` itself and `packages/fiscal/src/no-regime-vocabulary.test.ts`).
+
+Two lists sit beside it. `KEEPS_NON_ENGLISH` in `english-only.ts` names the files outside the homes
+whose job needs non-English text, each with its reason. `scripts/english-only-still-to-clean.ts`
+names the files that held non-English text on 2026-11-10 and that nobody has yet cleaned or judged to
+need it. A listed file with nothing left to find fails the suite until its entry is deleted, and
+the suite holds the list's length equal to `STILL_TO_CLEAN_COUNT` in the suite, so deleting an entry lowers the
+count in the same change and adding one has to raise it where the diff shows it. A renamed or moved
+file's entry follows it, and the count stays. Never add a file to the list; clean the file, or move
+it to `KEEPS_NON_ENGLISH` with its reason. Each keep carries the number of findings its file holds,
+and the suite fails when the file holds more or fewer.
+
+**What the guard does not see.** `scripts/english-only.test.ts` is weaker than its name. It knows a
+fixed word list plus a set of accented letters, so a Spanish word with no accent and not on the list
+passes. A kept file is held to its number of findings, not to which lines they are on, so new text
+that replaces kept text passes. A file on the still-to-clean list is checked only for holding at
+least one finding, never line by line. The pinned count stops the list growing on its own, not a
+swap: deleting a cleaned file's entry and adding another file in the same change keeps the length
+and passes, and nothing compares the list with `main`'s copy.
+It reads tracked files only, and never checks a file's NAME. It finds comments without a parser,
+guessing from the code before a `/` whether it opens a regular expression, and a wrong guess can
+hide a word in code on a later line; it applies the same guessing to every file, including
+Markdown, JSON and SQL. It skips a `«…»` quote anywhere in the source (code included) and a backtick
+citation in a comment. Nothing checks that a home holds only what its job needs: no home is read
+at all, comments and identifiers included, and that takes in every file in an `i18n` folder (tests
+and code too), any file named `strings.ts`, and a package's `src/starter-content.ts`.
 
 **Module and package boundaries**
 
@@ -4932,8 +4953,8 @@ belonging to another tenant". Printer routes enforce the same check; their regre
 `packages/fiscal-verifactu` is Spanish by design; `packages/reporting`'s modelo-303 form (Spain's
 VAT return) and `packages/workforce-es` are homes for text official only in Spain and for
 Spanish-specific terms ([General code is English only](#general-code-is-english-only)). Since 2026-09-07 the
-English-only guard (`scripts/english-only.test.ts`) scans comment prose as well as identifiers in
-the generic packages, leaving only `«…»` quotes and backtick citations exempt.
+English-only guard (`scripts/english-only.test.ts`) scans comment prose as well as identifiers,
+leaving only `«…»` quotes and backtick citations exempt.
 `packages/fiscal/src/no-regime-vocabulary.test.ts` enforces a different axis — a domain's vocabulary
 rather than a language. Its forbidden set is regime vocabulary in ANY language: English (`chain`,
 `hash`, `fingerprint`) and Spanish alike (`huella`, `cadena`, `encadenamiento`, `registro`,
@@ -4943,8 +4964,8 @@ strips comments first, so a comment citing AEAT is fine while `export const aeat
 Measured 2026-09-12 on a copy of
 `packages/fiscal/src`: planting `export const huellaValue = 1;` and `export const cadenaValue = 1;`
 each turned the suite red. A PR introducing a regime term in any language into `packages/fiscal`, one that adds a
-module's word to the base list instead of the module's own declaration, or one that drops a generic
-package from `GENERIC_PACKAGES` (and its pin) to make a scan pass, is a design question to raise,
+module's word to the base list instead of the module's own declaration, or one that adds a file to
+`scripts/english-only-still-to-clean.ts` or a new home to `isHome` to make a scan pass, is a design question to raise,
 not a nit to wave through.
 
 ## Default optional input only when it is absent
@@ -5566,8 +5587,9 @@ in other languages go in the writing package's `src/starter-content.ts`, which t
 exact path (owner, 2026-10-20, A918); a test of a non-English screen reads its expected text from
 the strings file. A Spanish domain term
 has one declaring home, its module's vocabulary; a fiscal term never goes in the base list. Guard:
-`scripts/english-only.test.ts`, weaker than its name — it refuses only listed words, scans only
-the packages `GENERIC_PACKAGES` names and never `apps/*`, so review greps the diff. Detail:
+`scripts/english-only.test.ts`, weaker than its name — it refuses only listed words and accented
+letters, reads tracked files only, does not read line by line the files on its still-to-clean list,
+and holds each kept file only to its number of findings, so review greps the diff. Detail:
 [conventions-data.md](conventions-data.md).
 
 ### Multi-table writes share ONE transaction, and `withTransaction` IS that transaction.

@@ -50,6 +50,8 @@ Every task's requirements include these.
   `apps/dashboard/src/i18n/strings.ts`, `packages/venue-service/src/dashboard/strings.ts`'s `es`
   block) and the Spanish guides under `apps/server/src/guide/es/`. Guard:
   `scripts/english-only.test.ts` (weaker than its name: it skips `apps/*`, so review greps the diff).
+  Pointer, 2026-11-10: #2660 makes the guard read `apps/` as well, but a file on its still-to-clean
+  list is only checked for holding some Spanish, so review still greps the diff.
 - Product text is as short as the meaning allows. The words Q51 (f) and (g) settled land as written
   in design §10.
 - Pre-live: no backwards-compatibility or data-migration code. A venue may be reset; if a slice
@@ -9366,6 +9368,8 @@ touch `docs/backlog.md`, #2660 `docs/backlog/till.md`, #2663 and #2661
 small docs conflict. #2660 (the English-only guard reading every file under `apps/`) means any
 Spanish outside `apps/till/src/i18n/` and the Spanish guides would now fail CI: there is none in
 this plan. Check again before the first commit and before `/finish-branch`.
+Pointer, 2026-11-10: a file on #2660's still-to-clean list is only checked for holding some
+Spanish, so Spanish added to one does not fail CI.
 
 ### Plan decisions for slice 10
 

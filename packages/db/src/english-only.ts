@@ -1,107 +1,93 @@
-import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { mapComments } from "@waitron/shared";
 
-/** `<repo>/packages`. Derived, so the guard survives being run from anywhere. */
-export const PACKAGES_ROOT = join(import.meta.dirname, "..", "..");
+const SPAIN_PACKAGES: ReadonlySet<string> = new Set([
+  "fiscal-verifactu",
+  "country-es",
+  "workforce-es",
+  "reporting",
+]);
+
+const WORD_LISTS: ReadonlySet<string> = new Set([
+  "packages/db/src/english-only.ts",
+  "packages/fiscal/src/no-regime-vocabulary.test.ts",
+]);
 
 /**
- * English throughout — identifiers, table/column names AND comments alike. A package
- * neither listed here nor owning a module's declared `vocabulary` (`@waitron/module`'s
- * `vocabularyOwners`, read by the root suite) is never scanned — `reporting` (the Spanish
- * modelo-303 form) among them.
- * `apps/*` is out of scope by the composition-root decision recorded below.
+ * Places whose job is non-English text, never scanned: the packages written for Spain (CLAUDE.md
+ * §3), translation files (anything in an `i18n` folder, or a file named `strings.ts`), the guide in every
+ * language but English, a package's starter-content translations (A918), and the two files that
+ * exist to list forbidden words. Takes a repo-relative path with `/` separators.
  */
-export const GENERIC_PACKAGES = [
-  "db",
-  "migrations",
-  "core",
-  "fiscal",
-  "shared",
-  "payments",
-  "payments-stripe",
-  "payments-sumup",
-  "credentials",
-  "workforce",
-  "identity",
-  "catalogue",
-  "media",
-  "membership",
-  "module",
-  "layouts",
-  "recipes",
-  "purchasing",
-  "printing",
-  "print-agent",
-  "diagnostics",
-  "sync-enrolment",
-  "stream",
-  "store",
-  "adjustments",
-  "staffing",
-  "composition",
-  "fiscal-none",
-  "recovery-pack",
-  "node-db",
-  "handover",
-  "provisioning",
-  "ui",
-  // Generic browser infrastructure, same as `ui`: the dashboard module-UI kit (i18n + code-message
-  // registries + request helper) and the app-side module registry. Neither names a regime, so both
-  // are English-only; user-facing translation VALUES (a `{ en, es }` copy entry) are not vocabulary.
-  "dashboard-kit",
-  "dashboard-modules",
-  // Browser-safe country contract and installed-pack registry. Country-specific implementations are
-  // deliberately outside this generic vocabulary boundary.
-  "country",
-  "country-packs",
-] as const;
+export function isHome(path: string): boolean {
+  const segments = path.split("/");
+  const name = segments.at(-1)!;
+  return (
+    (segments[0] === "packages" && SPAIN_PACKAGES.has(segments[1]!)) ||
+    segments.slice(0, -1).includes("i18n") ||
+    name === "strings.ts" ||
+    /^apps\/server\/src\/guide\/(?!en\/)[^/]+\//.test(path) ||
+    /^packages\/[^/]+\/src\/starter-content\.ts$/.test(path) ||
+    WORD_LISTS.has(path)
+  );
+}
+
+export interface Keep {
+  reason: string;
+  /** How many findings the file holds today; one more, or one fewer, fails the suite. */
+  findings: number;
+}
+
+const VERIFACTU_NAMES =
+  "names Veri*Factu tables or columns, which packages/fiscal-verifactu's schema spells in Spanish";
 
 /**
- * Packages whose TEST files are excluded from the scan — the guard's ONLY test exemption.
- * `provisioning`'s tests provision a REAL Spanish Veri*Factu venue, so their Spanish is domain
- * data, not fixture sloppiness: the unrenameable fiscal TABLES in SQL (`registros_facturacion`,
- * `registro_sif`, `cadenas`) AND realistic Spanish venue data for an es-ES venue. The skip is
- * whole-file because the table names are interleaved through the SQL. Removal condition: run
- * provisioning's tests against `fiscal-none` so they never touch the Spanish fiscal schema, then
- * delete this set.
+ * Files outside the homes whose job needs non-English text, with why. Each is held to its number of
+ * findings, not to which lines hold them.
  */
-export const PRODUCTION_ONLY: ReadonlySet<string> = new Set(["provisioning"]);
-
-// Decision record: apps/* is OUT OF SCOPE for this guard. `GENERIC_PACKAGES` enumerates
-// `packages/<name>`, so nothing under `apps/` is reachable by `sourceFilesIn`. The generic/regime
-// split this guard enforces is a property of a LIBRARY: a package that names only its own domain's
-// vocabulary, so that a second regime could be added beside Veri*Factu without touching it.
-// `apps/server` is the COMPOSITION ROOT, whose job is to wire the generic layer to a specific
-// regime for real, so it necessarily speaks both vocabularies. An exemption list that tried to
-// cover everything a composition root legitimately says would end up listing most of the assembled
-// forbidden set, which asserts nothing.
-
-/**
- * Files that exist to enumerate forbidden vocabulary in plain text, excluded by exact name from
- * the scan that vocabulary feeds — this file, plus `packages/fiscal`'s narrower one, whose own
- * forbidden-term list necessarily contains words the fiscal module declares.
- *
- * Excluded by name rather than by a `*.test.ts` pattern: test files stay in scope, and a Spanish
- * fixture name in packages/db is exactly as wrong as a Spanish column.
- */
-export const SELF = ["english-only.ts", "no-regime-vocabulary.test.ts"] as const;
-
-/**
- * Translation catalogues, excluded by exact suffix from the scan: their `es` values are
- * translation, not vocabulary.
- *
- * NARROW, by design: only those exact suffixes, so any other file in those folders is still
- * scanned.
- */
-export const I18N_CATALOGUES = ["dashboard/strings.ts", "i18n/pack-words.ts"] as const;
-
-/**
- * A package's starter-content translations: the words its seed writes into a new venue in
- * languages other than English (owner, 2026-10-20, A918). Excluded by exact path at the top of
- * `src/`, so a file of that name anywhere else is still scanned.
- */
-export const STARTER_CONTENT_FILE = "starter-content.ts";
+export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
+  "packages/shared/src/locales.ts": {
+    reason: "a language's own name in the language picker",
+    findings: 1,
+  },
+  "packages/identity/src/passkey-providers.ts": {
+    reason: "a passkey provider's own product name",
+    findings: 1,
+  },
+  "packages/migrations/migrations.manifest.json": {
+    reason: VERIFACTU_NAMES,
+    findings: 2,
+  },
+  "packages/db/src/immutability.sql.md": {
+    reason: VERIFACTU_NAMES,
+    findings: 2,
+  },
+  "apps/server/src/log-personal-data.ts": {
+    reason: "AEAT's wire field name `idEmisorFactura`",
+    findings: 2,
+  },
+  "apps/server/scripts/receipt-look.ts": { reason: "AEAT's QR address parameters", findings: 2 },
+  "apps/server/scripts/bench/measure.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 2,
+  },
+  "apps/server/scripts/bench/trading-day.test.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 8,
+  },
+  "apps/server/src/first-setup-database-holdings.test.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 3,
+  },
+  "apps/server/src/first-setup-start-again-hour.test.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 9,
+  },
+  "apps/server/src/start-again-full-disk.e2e.test.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 2,
+  },
+};
 
 /** There is deliberately no list of forgiven words: if a column's name needs one, rename the column. */
 
@@ -156,8 +142,10 @@ export interface Violation {
   text: string;
 }
 
-export function readSource(file: string): string {
-  return readFileSync(file, "utf8");
+/** The file's text, or `undefined` when it holds a NUL byte and so is binary. */
+export function readText(file: string): string | undefined {
+  const bytes = readFileSync(file);
+  return bytes.includes(0) ? undefined : bytes.toString("utf8");
 }
 
 /**
@@ -212,8 +200,7 @@ function tokenise(line: string): string[] {
 export function findSpanish(source: string, words: ReadonlySet<string>): Violation[] {
   const violations: Violation[] = [];
   const originalLines = source.split("\n");
-  const preparedLines = mapComments(blankGuillemets(source), blankBackticks).split("\n");
-  preparedLines.forEach((line, index) => {
+  prepareLines(source).forEach((line, index) => {
     for (const token of tokenise(line)) {
       if (words.has(token)) {
         violations.push({ line: index + 1, word: token, text: originalLines[index]!.trim() });
@@ -223,19 +210,23 @@ export function findSpanish(source: string, words: ReadonlySet<string>): Violati
   return violations;
 }
 
-/** Every `.ts` file under a package's `src`, discovered rather than listed; `[]` for a package
- * that does not exist. */
-export function sourceFilesIn(packageName: string): string[] {
-  const root = join(PACKAGES_ROOT, packageName, "src");
-  if (!existsSync(root)) return [];
-  const productionOnly = PRODUCTION_ONLY.has(packageName);
-  return readdirSync(root, { recursive: true, encoding: "utf8" })
-    .filter((entry) => entry.endsWith(".ts"))
-    .filter((entry) => !SELF.some((name) => entry.endsWith(name)))
-    .filter((entry) => !I18N_CATALOGUES.some((suffix) => entry.endsWith(suffix)))
-    .filter((entry) => entry !== STARTER_CONTENT_FILE)
-    .filter((entry) => !(productionOnly && entry.endsWith(".test.ts")))
-    .map((entry) => join(root, entry))
-    .filter((entry) => statSync(entry).isFile())
-    .sort();
+/** The source split into lines, with quotes and comment citations blanked to equal width. */
+function prepareLines(source: string): string[] {
+  return mapComments(blankGuillemets(source), blankBackticks).split("\n");
+}
+
+const ACCENTED = /[áéíóúñÁÉÍÓÚÑ¿¡àèòçÀÈÒÇüÜ]/;
+
+/**
+ * Every line of `source` holding one of the accented letters or inverted marks Spanish and Catalan
+ * use, outside the same quotes and comment citations `findSpanish` skips; `word` is the first one.
+ */
+export function findAccented(source: string): Violation[] {
+  const originalLines = source.split("\n");
+  return prepareLines(source).flatMap((line, index) => {
+    const letter = ACCENTED.exec(line.normalize("NFC"))?.[0];
+    return letter === undefined
+      ? []
+      : [{ line: index + 1, word: letter, text: originalLines[index]!.trim() }];
+  });
 }

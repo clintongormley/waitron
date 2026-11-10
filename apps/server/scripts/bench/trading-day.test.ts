@@ -92,8 +92,11 @@ describe("tradeDay", () => {
       expect(counts.attendance_operation_facts).toBeGreaterThan(0);
       expect(counts.daily_closes).toBe(1);
       for (const route of PAYMENT_ROUTES) expect(result.routes[route], route).toBeGreaterThan(0);
-      const estados = rows(venue, sql`select estado, count(*) as n from envios group by estado`);
-      expect(estados).toEqual([{ estado: "aceptado", n: 10 }]);
+      const filingStates = rows(
+        venue,
+        sql`select estado, count(*) as n from envios group by estado`,
+      );
+      expect(filingStates).toEqual([{ estado: "aceptado", n: 10 }]);
       expect(rows(venue, sql`pragma foreign_key_check`)).toEqual([]);
     },
     CASE_TIMEOUT_MS,

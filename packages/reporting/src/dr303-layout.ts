@@ -12,8 +12,7 @@
 // offset as posición − 1. Every field's { pos, len, type } is transcribed from the .xlsx and
 // self-validated by dr303-layout.test.ts (per-segment contiguity + declared length). The AEAT
 // Descripción of each field (which carries the casilla-27/45 summation formulas verbatim) is the
-// // comment ABOVE each field — a comment, not a string literal, because the english-only guard
-// scans string literals in packages/reporting but excludes comments (the descriptions are Spanish).
+// // comment ABOVE each field.
 
 /** A single fixed-layout field, transcribed from the DR303e26 record design. */
 export interface Dr303Field {
