@@ -150,14 +150,14 @@
     counts member rows directly);
   - the `addCatalogueToVenue` row of the not-found table at `:1638`.
 - `apps/server/src/catalogue-api.test.ts`:
-  - "GET lists every tenant catalogue with sellable + default flags (200)" (`:1361`);
-  - "POST adds a catalogue to the venue's menu list (204)" (`:1377`);
-  - "DELETE removes a catalogue from the venue's menu list (204)" (`:1389`);
-  - "POST unauthenticated → 401" (`:1419`);
-  - "POST as a staff-role session → 403 authorization.not_permitted" (`:1428`);
-  - "POST with a missing/non-string catalogueId → management.request_invalid 400" (`:1437`);
-  - "POST with a valid-but-nonexistent catalogueId → catalogue.not_found 404" (`:1455`);
-  - "POST with a malformed-uuid catalogueId → shared.invalid_id 400" (`:1473`).
+  - "GET lists every tenant catalogue with sellable + default flags (200)" (`:1418`);
+  - "POST adds a catalogue to the venue's menu list (204)" (`:1434`);
+  - "DELETE removes a catalogue from the venue's menu list (204)" (`:1446`);
+  - "POST unauthenticated → 401" (`:1476`);
+  - "POST as a staff-role session → 403 authorization.not_permitted" (`:1485`);
+  - "POST with a missing/non-string catalogueId → management.request_invalid 400" (`:1494`);
+  - "POST with a valid-but-nonexistent catalogueId → catalogue.not_found 400" (`:1512`);
+  - "POST with a malformed-uuid catalogueId → shared.invalid_id 400" (`:1530`).
 - `apps/server/src/catalogue-api.full-manifest.test.ts:342-349`: the POST and DELETE refusals.
 - `apps/dashboard/src/api/client.test.ts:615-650`: the three venue-catalogue cases.
 - `packages/db/src/schema/location-catalogues.test.ts` (the whole file).
@@ -186,7 +186,7 @@
     - It asserts `house` still reads `active: true` from `listCatalogues(tx)`.
   - "setVenueDefaultCatalogue sets the default when the venue had none" (`:1609`) asserts
     `defaultCatalogueId === house.id`.
-- **`apps/server/src/catalogue-api.test.ts:1402`**, "PUT default-catalogue sets the default and keeps
+- **`apps/server/src/catalogue-api.test.ts:1459`**, "PUT default-catalogue sets the default and keeps
   the old default sellable (204)", becomes "PUT default-catalogue sets the default (204)". It reads
   `locations.catalogue_id` (expect `day`) instead of the removed GET route.
 - **`apps/server/src/till-api.test.ts:2193`**, "reads the venue's accessible menus and product
@@ -258,7 +258,7 @@ identifier after slice 1a or 4a-i.
 - `apps/server/src/testing/clear-provision-fixture.ts:51`
 - `apps/server/src/order-portions.counter.test.ts:55-62`, `order-portions.filing.test.ts:83-90`,
   `order-portions.lifecycle.test.ts:55-62`
-- `apps/server/src/catalogue-api.test.ts:1347-1356` (the `beforeEach`)
+- `apps/server/src/catalogue-api.test.ts:1404-1413` (the `beforeEach`)
 - `apps/server/src/till-api.test.ts:58`, `:71`, `:214`, `:2195`
 - `apps/server/scripts/demo-seed/seed.test.ts`, `seed.integration.test.ts` and
   `seed-catalogue.test.ts` (D2 imports)
@@ -321,7 +321,7 @@ file needs reading arm by arm.
 4. From `apps/server`, `pnpm protection-list compare --old <base> --new <tip> --report <file>` prints
    exactly "Expected protection-list difference".
 5. On a dev stack (`wa-wt demo <worktree>`), `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:<port>/management-api/venue/catalogues`
-   prints `404`. Before this slice it printed `401` without a session (`catalogue-api.test.ts:1419`
+   prints `404`. Before this slice it printed `401` without a session (`catalogue-api.test.ts:1476`
    asserts the 401 for POST).
 6. CI is green on the head commit. The pull request's first line reads: "Every venue is reset: core;
    backups and exports from before this cannot be restored or imported."
@@ -403,8 +403,8 @@ Any other line is a stop (rules §5.2).
 2. **A deactivated menu's products** must not appear. Covered by the kept case "hides every product
    of a deactivated catalogue" (`operations.test.ts:1682`), and by Task 1's new case.
 3. **Setting the default to a menu that does not exist** still refuses with `catalogue.not_found`,
-   which is a 404 through the route. The `operations.test.ts` case "refuses an unknown catalogue
-   with catalogue.not_found" and `catalogue-api.test.ts:1464` both stay unchanged.
+   which is a 400 through the route (A394-11). The `operations.test.ts` case "refuses an unknown
+   catalogue with catalogue.not_found" and `catalogue-api.test.ts:1521` both stay unchanged.
 4. **A department receipt is unaffected** when no venue receipt row can exist any more. Its printed
    text, logo and diagnostics must be the same as today. Covered by the D3-kept assertions in
    `receipt-print.test.ts`, `receipt-presentation.test.ts` and `till-sale.test.ts`.

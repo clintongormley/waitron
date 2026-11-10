@@ -110,6 +110,9 @@ permission as the category routes below. A section answer is
 | `PUT /management-api/sections/:id/members/:memberId/position` | `{ to }`; 200, the members in their new order |
 | `PUT /management-api/sections/:id/members/:memberId/folder` | `{ showAsFolder, overrides? }` sets how an included menu held by this list shows: as one folder, or with its sections directly in its place. `overrides` holds what the folder fixes — `names` by language, `image`, `color` — and a key or language left out follows the included menu; without `overrides` the stored ones are kept; 200, `{ showAsFolder, overrides }` |
 | `POST /management-api/sections/:id/members/:memberId/replace` | `{ ref }`; 200, the member, keeping its id and position |
+| `POST /management-api/sections/:id/members/move-in` | `{ members: [{ listId, memberId }], position? }`; 200 |
+| `POST /management-api/section-members/remove` | `{ members: [{ listId, memberId }] }`; 204 |
+| `POST /management-api/sections/delete` | `{ sectionIds }`; 204; deletes each named section and its owned descendants |
 
 The collection routes, usages routes and section duplication route have been removed. Create
 nested sections with `/:id/sections`; add products or include a menu root with the member routes.
@@ -120,7 +123,8 @@ below.
 Malformed ids answer `shared.invalid_id` (400); a malformed body answers
 `management.request_invalid` (400), naming its field. `menu_section.not_found` names an unknown
 section (`sectionId`) or a member not held by that list (`sectionId`, `memberId`): 400 on
-`sections/delete` and `section-members/remove`, whose ids are all in the body, and 404 elsewhere.
+`sections/delete`, `section-members/remove` and the Device Home Page shortcut add, where only the
+body names the section or member, and 404 elsewhere.
 `menu_section.wrong_role` (409, `sectionId`, `role`) refuses presentation edits or deletes of roots
 and Device Home Page sections, structure writes into a Device Home Page section, and a member ref to
 anything other than a menu root.
@@ -350,7 +354,8 @@ including the menu's own root, and a Archived product, which no list holds. A sh
 archived later becomes a missing tile in its place, which publishes as an empty slot with a
 `shortcut_missing` warning. `menu_section.wrong_role` (409, `sectionId`, `role`) refuses a Device Home Page section,
 this menu's or another's, as a target. `menu_section.not_found` names a missing section, or a
-member the menu's Device Home Page does not hold; a product target must be a stored top-level
+member the menu's Device Home Page does not hold: 400 when the shortcut add's `ref` names the
+section, 404 otherwise; a product target must be a stored top-level
 product or it answers `menu_section.membership_invalid` (400). A repeated target answers
 `menu_section.member_duplicate` (409), and a negative or fractional position answers
 `menu_section.invalid` (400, `field`). The dashboard adds, removes and moves shortcuts, and edits
@@ -538,8 +543,9 @@ Content-Type: application/json
 }
 ```
 
-The successful response is `204 No Content`. A missing product or variant ID is `product.not_found`
-(400); a missing category is `category.not_found` (400); a category move into itself or its descendants
+The successful response is `204 No Content`. In `folders/move` and `folders/delete`, a missing
+product or variant ID is `product.not_found` (400) and a missing category is `category.not_found`
+(400); a category move into itself or its descendants
 is `category.parent_cycle` (409). A category name that would match a sibling's is
 `category.name_taken` (409, `{ field, name }`), from the category create and update routes, from
 `folders/move`, and from `folders/delete` when `contents` is `move_up`. A `folders/delete` whose
