@@ -4,7 +4,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
-import { formatMoney, searchBy, type DeleteImpact } from "@waitron/shared";
+import { formatMoney, languageDisplayName, searchBy, type DeleteImpact } from "@waitron/shared";
 import {
   baseStyles,
   ReorderController,
@@ -174,9 +174,6 @@ const LIMIT_MESSAGES: Record<LimitField, StringKey> = {
 const percentFormat = perLocale(
   (locale) => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
 );
-const languageNames = perLocale(
-  (locale) => new Intl.DisplayNames([locale], { type: "language", fallback: "code" }),
-);
 
 /** A decimal string written with the dashboard language's decimal mark, as the list shows it. */
 function localDecimal(value: string): string {
@@ -184,7 +181,7 @@ function localDecimal(value: string): string {
 }
 
 function languageName(code: string): string {
-  return languageNames(currentLocale()).of(code)!;
+  return languageDisplayName(code, currentLocale(), false);
 }
 
 @customElement("dashboard-adjustment-reasons-screen")

@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, type TemplateResult } from "lit";
 import { setContentLanguages, type WtInput } from "@waitron/ui";
@@ -22,6 +23,8 @@ import {
   wholeWithin,
   withLanguageText,
 } from "./form-fields.js";
+
+useLocale("es-ES");
 
 let host: HTMLDivElement;
 

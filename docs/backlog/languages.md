@@ -45,15 +45,6 @@ The amounts and date read `20,00 €`, `5 ago 2026`, while its words are Galicia
 The screen falls back to the registry's `FALLBACK_RECEIPT_LOCALE` for any language the browser cannot
 format. The printed receipt is formatted on the server and keeps the language's own pattern.
 
-## The dashboard's locale lookup reads inherited properties
-
-`pickLocale` in `packages/dashboard-kit/src/i18n.ts`, re-exported by the dashboard's `i18n/t.ts`,
-returns a function for `"constructor"` and an object for `"__proto__"`. `alertMessage` throws
-`TypeError` for `"__proto__"`, `"constructor"` and `"toString"` as locales. Whether a real dashboard
-caller admits those locales is unverified.
-
-**Next:** check own locale keys, test the English fallback and trace the callers.
-
 ## The image library calls an archived variant an "Archived product"
 
 `packages/media/src/dashboard/image-library.ts` (`#usage`) labels every inactive product or variant

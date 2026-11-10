@@ -1,11 +1,19 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { render } from "lit";
 import { setContentLanguages } from "@waitron/ui";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { renderTopSellers } from "./top-sellers-table.js";
 
 const host = document.createElement("div");
-afterEach(() => render(undefined, host));
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
+  setLocale("es-ES");
+});
+afterEach(() => {
+  render(undefined, host);
+  setLocale(previousLocale);
+});
 
 it("renders a row's plain staff name verbatim, regardless of the active locale or content languages", () => {
   const previousLocale = currentLocale();

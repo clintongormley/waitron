@@ -309,13 +309,6 @@ Safari was not tried, so what it draws with no colour chosen, and whether the ri
   "fills the Custom square right up to its border while a palette colour is chosen"). **Next action:** try
   the first in Safari or Playwright's WebKit, and the second by hand in Chromium.
 
-## Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03 while checking lane A's W18) — OPEN
-
-While its read is failing, Payments still says "No card
-readers yet." under an empty table, and Cloud services says "Checking Cloud connection…" under the
-failure message; the same on `main` before W18. It is the kind of empty-state text W18 removed from
-Roster and Planned vs actual.
-
 ## A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07)
 
 Left open by the completed A331 batches:
@@ -578,18 +571,6 @@ probes do not settle it. This stays inside the existing bundle rather than becom
 - **Four tidy-ups A681's review left for later (#1842, 2026-10-17).**
   [Detail](dashboard.md#four-tidy-ups-a681s-review-left-for-later-1842-2026-10-17)
 
-## Bundle: Dashboard i18n odds
-
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- The dashboard's `es-ES` module default still needs the flip the till got in #170.
-- **Three older dashboard screens name languages with their own code rather than
-  `languageDisplayName` (`packages/shared`)** — left open by C114 (#1022, a copy printed in another
-  receipt language): one of two tidy-ups its review raised and left, because each changes files
-  outside it.
-- **The dashboard's locale lookup reads inherited properties.**
-  [Detail](languages.md#the-dashboards-locale-lookup-reads-inherited-properties)
-
 ## Bundle: Help tooltip primitive
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -610,18 +591,6 @@ probes do not settle it. This stays inside the existing bundle rather than becom
   [Detail](dashboard.md#loose-ends-left-by-signing-a-dashboard-tab-out-when-its-box-has-been-reset-a485-1545)
 - **Loose ends left by A501 (#1552).**
   [Detail](dashboard.md#loose-ends-left-by-a501-1552)
-
-## Bundle: Read failure display
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Left as it was** (#1142's run-it review, which found the same on `main`): **on Device profiles,
-  a failed one-off reload's message can stay after fresh data arrives.** Left open by A224 (dashboard
-  reads have no time limit, #1125, #1135, #1142).
-- **Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03
-  while checking lane A's W18) — OPEN.** It is the kind of empty-state text W18 removed from
-  Roster and Planned vs actual.
-  [Detail](dashboard.md#empty-state-text-shows-beside-a-failed-read-on-payments-and-cloud-services-a252-seen-2026-10-03-while-checking-lane-as-w18--open)
 
 ## Decisions and deliberate limits
 

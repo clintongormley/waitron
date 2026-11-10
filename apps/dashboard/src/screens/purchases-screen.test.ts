@@ -1,9 +1,9 @@
 import { LiveData } from "@waitron/dashboard-kit";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { t, currentLocale, setLocale } from "../i18n/t.js";
 import type { DashboardApi, PurchaseInvoice } from "../api/client.js";
 import type { PurchaseList } from "../widgets/purchase-list.js";
 import type { PurchaseForm } from "../widgets/purchase-form.js";
@@ -478,3 +478,10 @@ it.each(["connection.failed", "server.internal"])(
     expect(alert()).toBe(codeMessage("connection.failed"));
   },
 );
+
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
+  setLocale("es-ES");
+});
+afterEach(() => setLocale(previousLocale));

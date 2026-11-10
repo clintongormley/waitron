@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { CSSResult } from "lit";
@@ -7,6 +8,8 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { AllergenDietaryPicker, type AllergenDietaryValue } from "./allergen-dietary-picker.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
+
+useLocale("es-ES");
 
 afterEach(cleanupWidgets);
 

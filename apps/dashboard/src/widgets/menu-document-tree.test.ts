@@ -620,3 +620,14 @@ it("A498 gives the single phone column room for a short customer name", async ()
   const name = row(el, "juice")!.querySelector('[data-test="name"]')!;
   expect(name.getBoundingClientRect().width).toBeGreaterThan(100);
 });
+
+it.each([
+  ["en-GB", "No Valencian name"],
+  ["es-ES", "Sin nombre en valenciano"],
+])("names the missing Valencian translation in a sentence in %s", async (locale, message) => {
+  setLocale(locale!);
+  const el = await mount();
+  el.view = { kind: "customer", language: "ca-ES-valencia" };
+  await settle(el);
+  expect(row(el, "drinks")!.textContent).toContain(message);
+});

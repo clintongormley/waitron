@@ -747,6 +747,12 @@ it("takes a failed opening read's message away when Retry then loads the status"
   });
   const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
   await expect.poll(() => cloudError(el)).not.toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("Checking");
+  click(el, "retry");
+  await flush(el);
+  expect(cloudError(el)).not.toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("Checking");
+  expect(el.shadowRoot!.querySelector<HTMLButtonElement>("#retry")?.disabled).toBe(false);
   reachable = true;
   click(el, "retry");
   await expect.poll(() => el.shadowRoot!.textContent).toContain("12345678");
@@ -866,3 +872,6 @@ for (const [locale, label] of [
       setLocale(before);
     }
   });
+
+const receivedLocale = currentLocale();
+afterEach(() => setLocale(receivedLocale));

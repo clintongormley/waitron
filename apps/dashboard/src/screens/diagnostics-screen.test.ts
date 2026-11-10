@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { currentLocale, setLocale } from "../i18n/t.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, DiagnosticsLine } from "../api/client.js";
@@ -303,3 +304,10 @@ describe("diagnostics-screen messages across an outage", () => {
     expect(q(el, "[role=alert]")).toBeNull();
   });
 });
+
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
+  setLocale("es-ES");
+});
+afterEach(() => setLocale(previousLocale));

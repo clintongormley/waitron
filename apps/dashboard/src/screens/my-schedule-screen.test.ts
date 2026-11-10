@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -6,6 +7,8 @@ import { MyScheduleScreen, scheduleWindow } from "./my-schedule-screen.js";
 import type { DashboardApi, MyAbsence, MyShift, MySwap, RosterEntry } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { absenceKindName } from "../i18n/domain.js";
+
+useLocale("es-ES");
 
 const roster: RosterEntry[] = [
   { personId: "me", displayName: "Yo" },

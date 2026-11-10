@@ -4,7 +4,13 @@ import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import { codeMessage, setLocale, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
+import {
+  codeMessage,
+  currentLocale,
+  setLocale,
+  LiveData,
+  type DashboardRequest,
+} from "@waitron/dashboard-kit";
 import "./image-library.js";
 import type { ImageLibrary } from "./image-library.js";
 import { ImageApi, type ImageUsage, type LibraryImage } from "./client.js";
@@ -2250,3 +2256,18 @@ it("uses square framed cards and editor previews, with the complete current sour
   );
   expect(image.filename).toBe(reference);
 });
+
+it.each([
+  ["en-GB", "Valencian"],
+  ["es-ES", "Valenciano"],
+])("names the standalone Valencian section in %s", async (locale, name) => {
+  setLocale(locale!);
+  setContentLanguages({ defaultLanguage: "ca-ES-valencia", languages: ["ca-ES-valencia"] });
+  await mount();
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-modal legend")!.textContent).toContain(name);
+});
+
+const receivedLocale = currentLocale();
+afterEach(() => setLocale(receivedLocale));

@@ -2636,25 +2636,29 @@ export class PaymentsScreen extends LitElement {
               >${t("payments.refresh")}</wt-button
             >
           </div>
-          <wt-data-table
-            noMatchesMessage=${tableNoMatches()}
-            aria-label=${t("payments.readers_heading")}
-            viewKey="waitron.payments.readers.table"
-            customiseColumnsLabel=${t("table.customise_columns")}
-            customiseLabel=${t("table.customise")}
-            restoreColumnsLabel=${t("table.restore_columns")}
-            doneLabel=${t("table.done")}
-            moveColumnLabel=${t("table.move_column")}
-            showColumnLabel=${t("table.show_column")}
-            hideColumnLabel=${t("table.hide_column")}
-            alwaysShownColumnLabel=${t("table.column_always_shown")}
-            lastShownColumnLabel=${t("table.column_last_shown")}
-            columnPositionLabel=${t("table.column_position")}
-            .rows=${(this.readers ?? []).filter((reader) => this.readerFilter === "all" || reader.active === (this.readerFilter === "active"))}
-            .columns=${this.#readerColumns()}
-            .rowKey=${(reader: ReaderRow) => reader.id}
-            .emptyMessage=${this.readers?.length ? tableNoMatches() : t("payments.readers_empty")}
-          ></wt-data-table>
+          ${
+            this.readers === undefined
+              ? nothing
+              : html`<wt-data-table
+                  noMatchesMessage=${tableNoMatches()}
+                  aria-label=${t("payments.readers_heading")}
+                  viewKey="waitron.payments.readers.table"
+                  customiseColumnsLabel=${t("table.customise_columns")}
+                  customiseLabel=${t("table.customise")}
+                  restoreColumnsLabel=${t("table.restore_columns")}
+                  doneLabel=${t("table.done")}
+                  moveColumnLabel=${t("table.move_column")}
+                  showColumnLabel=${t("table.show_column")}
+                  hideColumnLabel=${t("table.hide_column")}
+                  alwaysShownColumnLabel=${t("table.column_always_shown")}
+                  lastShownColumnLabel=${t("table.column_last_shown")}
+                  columnPositionLabel=${t("table.column_position")}
+                  .rows=${(this.readers ?? []).filter((reader) => this.readerFilter === "all" || reader.active === (this.readerFilter === "active"))}
+                  .columns=${this.#readerColumns()}
+                  .rowKey=${(reader: ReaderRow) => reader.id}
+                  .emptyMessage=${this.readers?.length ? tableNoMatches() : t("payments.readers_empty")}
+                ></wt-data-table>`
+          }
         </section>
       </wt-tabs>
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}

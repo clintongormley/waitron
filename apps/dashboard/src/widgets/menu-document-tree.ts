@@ -4,7 +4,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
 import type { ContentLanguages, DocumentMember, MenuDocument, MenuTarget } from "@waitron/shared";
-import { resolveMenuText, type MenuView } from "@waitron/shared";
+import { languageDisplayName, resolveMenuText, type MenuView } from "@waitron/shared";
 import { indexMenuOccurrences } from "@waitron/catalogue/src/menu-navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -180,7 +180,7 @@ export class MenuDocumentTree extends LitElement {
       aria-current=${row.key === this.highlightedKey ? "true" : nothing}
     >
       <span data-test="name" lang=${text.language ?? ""}>${text.text}</span>
-      ${text.missingRequested ? html`<span part="note">${t("customer_menu.missing_translation").replace("{language}", new Intl.DisplayNames([currentLocale()], { type: "language" }).of(this.view.kind === "customer" ? this.view.language : this.languages.defaultLanguage) ?? (this.view.kind === "customer" ? this.view.language : this.languages.defaultLanguage))}</span>` : nothing}
+      ${text.missingRequested ? html`<span part="note">${t("customer_menu.missing_translation").replace("{language}", languageDisplayName(this.view.kind === "customer" ? this.view.language : this.languages.defaultLanguage, currentLocale(), false))}</span>` : nothing}
     </span>`;
     const media =
       member.kind === "section"

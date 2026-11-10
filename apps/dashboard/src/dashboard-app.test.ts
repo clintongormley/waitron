@@ -468,13 +468,17 @@ function emit(source: Element, type: string, detail?: unknown): void {
 const initialUrl = location.href;
 afterEach(() => {
   cleanupWidgets();
+  setLocale(previousLocale);
   history.replaceState(null, "", initialUrl);
   sessionStorage.clear();
   localStorage.clear();
 });
 // `setLocale` is module-global state that outlives a test.
-beforeEach(() => setLocale("es-ES"));
-afterEach(() => setLocale("es-ES"));
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
+  setLocale("es-ES");
+});
 let signalAll: MockInstance<typeof PublicKeyCredential.signalAllAcceptedCredentials>;
 let signalDetails: MockInstance<typeof PublicKeyCredential.signalCurrentUserDetails>;
 beforeEach(() => {
@@ -9847,4 +9851,15 @@ it("profile mail recovery signs out through the leave coordinator", async () => 
   });
   await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
   expect(login(el)).toBeTruthy();
+});
+
+it("returns to English sign-in before locale reads answer", async () => {
+  setLocale("es-ES");
+  const api = stubApi({
+    getMe: vi.fn().mockRejectedValue({ code: "management_session.expired" }),
+    getLocales: vi.fn(() => new Promise(() => undefined)),
+  });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  await vi.waitFor(() => expect(login(el)).not.toBeNull());
+  expect(currentLocale()).toBe("en-GB");
 });

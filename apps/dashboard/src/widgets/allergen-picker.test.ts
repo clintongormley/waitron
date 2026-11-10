@@ -1,8 +1,11 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
 import { AllergenPicker } from "./allergen-picker.js";
+
+useLocale("es-ES");
 
 afterEach(cleanupWidgets);
 

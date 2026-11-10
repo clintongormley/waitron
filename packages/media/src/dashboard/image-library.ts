@@ -18,7 +18,7 @@ import {
   codeOf,
   subscribeLocale,
 } from "@waitron/dashboard-kit";
-import { capitaliseFirst, resolveEnabledContentText } from "@waitron/shared";
+import { languageDisplayName, resolveEnabledContentText } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -1071,7 +1071,6 @@ export class ImageLibrary extends LitElement {
     if (editor === null) return nothing;
     const config = currentContentLanguages();
     const languages = this.#languages();
-    const languageNames = new Intl.DisplayNames([currentLocale()], { type: "language" });
     const checked = this.#checked();
     const invalid = [...checked.values()].some(Boolean);
     const refusal = this.refusal;
@@ -1168,7 +1167,7 @@ export class ImageLibrary extends LitElement {
           (language) =>
             html`<fieldset>
               <legend>
-                ${capitaliseFirst(languageNames.of(language)!, currentLocale())}${language === config.defaultLanguage ? ` (${t("image.default")})` : ""}
+                ${languageDisplayName(language, currentLocale())}${language === config.defaultLanguage ? ` (${t("image.default")})` : ""}
               </legend>
               <wt-input
                 name=${`name-${language}`}

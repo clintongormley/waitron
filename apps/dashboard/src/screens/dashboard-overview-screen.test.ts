@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -5,6 +6,8 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DashboardApi, OverdueOrder, SalesOverview } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { OverviewScreen } from "./dashboard-overview-screen.js";
+
+useLocale("es-ES");
 
 const overview: SalesOverview = {
   businessDay: "2026-08-29",
@@ -59,7 +62,7 @@ async function flush(el: OverviewScreen): Promise<void> {
 }
 afterEach(() => {
   cleanupWidgets();
-  setLocale("es-ES"); // restore the shipped default (a test switches it)
+  // restore the shipped default (a test switches it)
 });
 
 describe("dashboard-overview-screen", () => {

@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { LitElement, html } from "lit";
 import { LeaveController, UrlStateController, type WtFormActions } from "@waitron/ui";
 import { dashboardPath } from "../navigation.js";
@@ -46,6 +47,8 @@ import {
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { formatEquipmentCode, type DeleteImpact } from "@waitron/shared";
 import { decodeQrImage } from "../testing/decode-qr.js";
+
+useLocale("es-ES");
 
 class PrinterLeaveFixture extends LitElement {
   readonly leave = new LeaveController(this);
@@ -12352,7 +12355,7 @@ describe("one table for every printer", () => {
 
   const refreshError = (el: PrintersScreen) =>
     textOf(el, "[data-test=printer-refresh-error] p.error");
-  const listFailed = `${t("printers.refresh_failed")} ${codeMessage("connection.failed")}`;
+  const listFailed = `${t("printers.refresh_failed", "es-ES")} ${codeMessage("connection.failed", "es-ES")}`;
 
   it("leaves a failed list refresh's message in place when a test page's read succeeds", async () => {
     const listPagePrinters = vi.fn().mockResolvedValue(PAGE_ROWS);

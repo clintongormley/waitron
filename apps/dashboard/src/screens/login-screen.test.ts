@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
@@ -9,6 +10,8 @@ import { DashboardApi } from "../api/client.js";
 import { NavigationGuard } from "@waitron/ui";
 import { SERIF_BOLD_SHEET, TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import { LoginScreen } from "./login-screen.js";
+
+useLocale("es-ES");
 
 // Keep the real WebAuthn library; stub only the hardware boundary so an earlier
 // library import still reaches the stub when the operator starts the ceremony.
@@ -1840,10 +1843,15 @@ describe("login-screen: emailed account links", () => {
     [
       "beside the new password",
       "password.too_short",
-      codeMessage("password.too_short"),
-      t("form.fix_fields"),
+      codeMessage("password.too_short", "es-ES"),
+      t("form.fix_fields", "es-ES"),
     ],
-    ["only at the bottom", "account_action.invalid", "", codeMessage("account_action.invalid")],
+    [
+      "only at the bottom",
+      "account_action.invalid",
+      "",
+      codeMessage("account_action.invalid", "es-ES"),
+    ],
   ])("shows a refused completion %s", async (_where, code, fieldError, bottom) => {
     const { el } = await mountValidatedInvitation({
       completeAccountAction: vi.fn().mockRejectedValue({ code }),
@@ -2504,7 +2512,7 @@ describe("login-screen: errors at the bottom of the form, not above it", () => {
       action: "continue",
       bad: "",
       good: "owner@x.com",
-      message: t("form.email_required"),
+      message: t("form.email_required", "es-ES"),
     },
     {
       name: "password",
@@ -2519,7 +2527,7 @@ describe("login-screen: errors at the bottom of the form, not above it", () => {
       action: "submit",
       bad: "",
       good: "correct horse",
-      message: t("form.password_required"),
+      message: t("form.password_required", "es-ES"),
     },
     {
       name: "authenticator code",
@@ -2536,7 +2544,7 @@ describe("login-screen: errors at the bottom of the form, not above it", () => {
       action: "submit-factor",
       bad: "",
       good: "123456",
-      message: t("form.factor_required"),
+      message: t("form.factor_required", "es-ES"),
     },
     {
       name: "account setup",
@@ -2553,7 +2561,7 @@ describe("login-screen: errors at the bottom of the form, not above it", () => {
       action: "complete-account",
       bad: "short",
       good: "new password",
-      message: codeMessage("password.too_short"),
+      message: codeMessage("password.too_short", "es-ES"),
     },
   ];
   const action = (el: LoginScreen, test: string) =>

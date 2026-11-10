@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -7,6 +8,8 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";
 import { PurchaseForm, purchaseRefusalErrors } from "./purchase-form.js";
 import type { PurchaseInvoice } from "../api/client.js";
+
+useLocale("es-ES");
 
 afterEach(cleanupWidgets);
 
@@ -772,7 +775,7 @@ describe("purchase-form — money fields", () => {
 });
 
 describe("purchase-form — a server refusal", () => {
-  const invalidRequest = codeMessage("management.request_invalid");
+  const invalidRequest = codeMessage("management.request_invalid", "es-ES");
   it.each([
     [{ field: "supplierTaxId" }, "supplier-tax-id"],
     [{ field: "supplierName" }, "supplier-name"],

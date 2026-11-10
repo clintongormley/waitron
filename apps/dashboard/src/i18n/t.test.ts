@@ -1,12 +1,14 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { currentLocale, fill, setLocale, subscribeLocale, t } from "./t.js";
 import { catalogues, en, es } from "./strings.js";
 import { codeMessage } from "./codes.js";
 
-afterEach(() => {
-  // Reset to the shipped default so a setLocale in one test cannot leak into another.
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
   setLocale("es-ES");
 });
+afterEach(() => setLocale(previousLocale));
 
 it("resolves an English base key to Spanish", () => {
   expect(t("action.save", "es-ES")).toBe("Guardar");

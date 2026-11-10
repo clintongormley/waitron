@@ -1,7 +1,7 @@
 import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { t, currentLocale, setLocale } from "../i18n/t.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import type { MenuPricesTable } from "./menu-prices-table.js";
 import "./menu-prices-table.js";
@@ -261,3 +261,10 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 });
+
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
+  setLocale("es-ES");
+});
+afterEach(() => setLocale(previousLocale));

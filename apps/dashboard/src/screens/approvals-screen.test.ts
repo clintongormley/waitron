@@ -1,9 +1,12 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, PendingAbsence, PendingSwap, PersonSummary } from "../api/client.js";
 import { ApprovalsScreen } from "./approvals-screen.js";
+
+useLocale("es-ES");
 
 const staff: PersonSummary[] = [
   {

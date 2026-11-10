@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { page } from "vitest/browser";
@@ -8,6 +9,8 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { ProfileScreen } from "./profile-screen.js";
 import "./profile-screen.js";
+
+useLocale("es-ES");
 
 // Stub the hardware boundary so the real library can be imported in any order.
 beforeEach(() => {

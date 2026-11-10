@@ -453,8 +453,8 @@ export class CloudServicesScreen extends LitElement {
         }
         ${
           !s
-            ? html`<p role="status">${t("cloud.loading")}</p>
-                ${button("retry", t("cloud.retry"), () => this.api.getCloudStatus())}`
+            ? html`${error ? nothing : html`<p role="status">${t("cloud.loading")}</p>`}
+              ${button("retry", t("cloud.retry"), () => this.api.getCloudStatus())}`
             : !s.configured
               ? html`<p>${t("cloud.not_configured")}</p>`
               : html` ${!s.isPrimary ? html`<p>${t("cloud.not_primary")}</p>` : nothing}

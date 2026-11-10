@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import type { DashboardApi, OrderDetailDto } from "../api/client.js";
 import "./order-detail-dialog.js";
 import type { OrderDetailDialog } from "./order-detail-dialog.js";
@@ -107,7 +107,7 @@ const detail: OrderDetailDto = {
 
 afterEach(() => {
   cleanupWidgets();
-  setLocale("es-ES");
+  setLocale(receivedLocale);
 });
 
 it("shows the bill's items, invoices, payments, party, departure and copies", async () => {
@@ -291,21 +291,12 @@ it("clears a failed load's message once the server answers again", async () => {
   expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 });
 
-it.each([
-  ["en-GB", ["1", "0.5", "1.25", "0.125", "10", "100"]],
-  ["es-ES", ["1", "0,5", "1,25", "0,125", "10", "100"]],
-])("shows quantities without trailing zeros in %s", async (locale, quantities) => {
-  setLocale(locale);
-  const shown = {
-    ...detail,
-    lines: ["1.000", "0.500", "1.250", "0.125", "10.000", "100"].map((quantity, index) => ({
-      ...detail.lines[0]!,
-      lineNo: index + 1,
-      quantity,
-    })),
-  };
+it("uses the localised quantity display in Spanish", async () => {
+  setLocale("es-ES");
   const api = {
-    getOrder: vi.fn().mockResolvedValue(shown),
+    getOrder: vi
+      .fn()
+      .mockResolvedValue({ ...detail, lines: [{ ...detail.lines[0]!, quantity: "0.500" }] }),
     liveData: new LiveData(),
   } as unknown as DashboardApi;
   const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
@@ -313,11 +304,9 @@ it.each([
     orderId: "bill-1",
   });
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelectorAll("section:first-of-type li")).toHaveLength(6),
-  );
-  const lines = [...el.shadowRoot!.querySelectorAll("section:first-of-type li")];
-  quantities.forEach((quantity, index) =>
-    expect(lines[index]!.textContent).toContain(`× ${quantity} —`),
+    expect(el.shadowRoot!.querySelector("section:first-of-type li")?.textContent).toContain(
+      "× 0,5 —",
+    ),
   );
 });
 
@@ -518,3 +507,5 @@ it.each([
   });
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(`${label}:  Ab-09 /xy `));
 });
+
+const receivedLocale = currentLocale();

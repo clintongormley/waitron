@@ -1,9 +1,12 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { html, LitElement } from "lit";
 import { customElement } from "lit/decorators.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "./locale-controller.js";
+
+useLocale("es-ES");
 
 @customElement("locale-probe")
 class LocaleProbe extends LitElement {
@@ -18,7 +21,6 @@ class LocaleProbe extends LitElement {
 
 afterEach(() => {
   cleanupWidgets();
-  setLocale("es-ES");
 });
 
 describe("LocaleChangeController", () => {

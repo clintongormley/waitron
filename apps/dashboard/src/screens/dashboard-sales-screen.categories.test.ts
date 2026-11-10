@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -14,6 +15,8 @@ import { codeMessage } from "../i18n/codes.js";
 import { today } from "../date-utils.js";
 import type { SalesScreen } from "./dashboard-sales-screen.js";
 import "./dashboard-sales-screen.js";
+
+useLocale("es-ES");
 
 const close: DailyCloseDto = {
   businessDay: "2026-08-29",
@@ -232,7 +235,6 @@ function rows(el: SalesScreen): [string, number, string, string, string][] {
 
 afterEach(() => {
   cleanupWidgets();
-  setLocale("es-ES");
 });
 
 describe("dashboard-sales-screen — category report", () => {

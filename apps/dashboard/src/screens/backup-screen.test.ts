@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -17,6 +18,8 @@ import { apiAnswering, evidence } from "../testing/backup-settings-evidence-fixt
 import { en, es } from "../i18n/strings.js";
 import type { StreamSettingsPanel } from "./stream-settings-panel.js";
 import type { WtInput } from "@waitron/ui";
+
+useLocale("es-ES");
 
 afterEach(cleanupWidgets);
 
