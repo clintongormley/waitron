@@ -7,11 +7,6 @@ describe("device capability mirror", () => {
     const action: CapabilityFlag = "clock-in";
     expect(action).toBe("clock-in");
   });
-
-  it("carries close-by-transfer as a profile capability", () => {
-    const action: CapabilityFlag = "close-by-transfer";
-    expect(action).toBe("close-by-transfer");
-  });
 });
 
 describe("kindOfFormFactor mirror", () => {

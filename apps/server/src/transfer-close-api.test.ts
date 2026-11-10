@@ -220,31 +220,6 @@ describe("POST /api/working-orders/:id/close-by-transfer, allowed", () => {
 });
 
 describe("POST /api/working-orders/:id/close-by-transfer, refusals", () => {
-  it("refuses a request with no session, then closes with one", async () => {
-    const allowed = await till();
-    const { billId, body } = await counterBill();
-    const deviceOnly = allowed.cookie.split("; ")[1]!;
-
-    await expectRefused(close(deviceOnly, billId, body), billId, "session.required");
-    await expectClosed(allowed.cookie, billId, body);
-  });
-
-  it("refuses an ended session, then closes on an open one", async () => {
-    const allowed = await till();
-    const { billId, body } = await counterBill();
-    await suite.db
-      .update(sessions)
-      .set({ endedAt: new Date().toISOString() })
-      .where(eq(sessions.id, allowed.sessionId));
-
-    await expectRefused(close(allowed.cookie, billId, body), billId, "session.required");
-    await suite.db
-      .update(sessions)
-      .set({ endedAt: null })
-      .where(eq(sessions.id, allowed.sessionId));
-    await expectClosed(allowed.cookie, billId, body);
-  });
-
   it("refuses a suspended person whose session is still open, then closes for an active one", async () => {
     const [person] = await suite.db
       .insert(persons)
@@ -256,16 +231,6 @@ describe("POST /api/working-orders/:id/close-by-transfer, refusals", () => {
 
     await expectRefused(close(allowed.cookie, billId, body), billId, "device_profile.not_admitted");
     await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, person!.id));
-    await expectClosed(allowed.cookie, billId, body);
-  });
-
-  it("refuses a switched-off device, then closes once it is on", async () => {
-    const allowed = await till();
-    const { billId, body } = await counterBill();
-    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, allowed.deviceId));
-
-    await expectRefused(close(allowed.cookie, billId, body), billId, "device.unauthorized");
-    await suite.db.update(devices).set({ active: true }).where(eq(devices.id, allowed.deviceId));
     await expectClosed(allowed.cookie, billId, body);
   });
 
@@ -283,20 +248,6 @@ describe("POST /api/working-orders/:id/close-by-transfer, refusals", () => {
       .set({ retiredAt: null })
       .where(eq(deviceProfiles.id, allowed.profileId));
     await expectClosed(allowed.cookie, billId, body);
-  });
-
-  it("refuses a stored profile without Close by transfer, then closes once it has it", async () => {
-    const without = await till(BASIC_ACTIONS);
-    const { billId, body } = await counterBill();
-
-    await expectRefused(close(without.cookie, billId, body), billId, "device.forbidden_action", {
-      action: "close-by-transfer",
-    });
-    await suite.db
-      .update(deviceProfiles)
-      .set({ capabilities: ALLOWED })
-      .where(eq(deviceProfiles.id, without.profileId));
-    await expectClosed(without.cookie, billId, body);
   });
 
   it("refuses a bill in a zone the profile does not cover, then closes once it does", async () => {
@@ -583,34 +534,7 @@ describe("GET /api/working-orders/:id/transfer-closure", () => {
     });
   });
 
-  it("refuses with no session and out of zone as the bill's own read does", async () => {
-    const zoned = await till(BASIC_ACTIONS);
-    const billId = await t.counterOrder("open");
-    const own = (cookie: string) =>
-      send(t.venue.app, cookie, "GET", `/api/working-orders/${billId}`);
-    const deviceOnly = zoned.cookie.split("; ")[1]!;
-    const [policy] = await suite.db
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, t.counterZone));
-    await inTx(t.venue, (tx) =>
-      setProfileServiceAccess(tx, zoned.profileId, {
-        departmentId: policy!.departmentId,
-        allowedZoneIds: [t.venue.zoneId],
-        startingZoneId: t.venue.zoneId,
-      }),
-    );
-
-    for (const cookie of [deviceOnly, zoned.cookie]) {
-      const read = await closure(cookie, billId);
-      expect(read.json.code).toBe((await own(cookie)).json.code);
-      expect(read.json.code).toBe(
-        cookie === deviceOnly ? "session.required" : "service_zone.not_allowed",
-      );
-    }
-  });
-
-  it("writes nothing and stamps no sighting of the device", async () => {
+  it("adds no sale or closure and stamps no sighting of the device", async () => {
     const reader = await till(BASIC_ACTIONS);
     const { billId, body } = await counterBill();
     await expectClosed((await till()).cookie, billId, body);

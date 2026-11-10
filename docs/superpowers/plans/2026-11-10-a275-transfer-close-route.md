@@ -65,8 +65,8 @@ off by default.
    (`bill-payments.ts:1121`, `tender-refund-api.ts:57–68`, `department-transfer-api.ts:43–53`): the
    person still signed in, the device still proven and its profile still allowed, the person's
    `payment.take`, the profile's `close-by-transfer`, and `checkZones` on the bill; build `cfg` from the
-   device read there. Then call `closeBillByTransferTx`; its replay lookup runs first inside it
-   (`transfer-close.ts:86`), so a revoked person cannot replay through the old approval. The route supplies `admitPartyRelease`: the person and device may release
+   device read there. Then call `closeBillByTransferTx`; the route's checks, before the queue and inside the
+   write, run before it is called, so a revoked person or device is refused before any replay lookup. The route supplies `admitPartyRelease`: the person and device may release
    a party only with `take-orders` and scope over every affected order (`"authority"` /`"scope"`
    otherwise). The disk read before the queue follows `bill-payments.ts:1236`, passed as
    `diskBlockedBeforeQueue`. Status map (`till-api.ts:431`): `transfer_close.ineligible`,

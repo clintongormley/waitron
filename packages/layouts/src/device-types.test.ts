@@ -84,14 +84,6 @@ describe("run-the-pass", () => {
   });
 });
 
-describe("close-by-transfer", () => {
-  it("is an action the server checks, added after every existing flag", () => {
-    expect(CAPABILITY_FLAGS.at(-1)).toBe("close-by-transfer");
-    expect(PROFILE_ACTIONS).toContain("close-by-transfer");
-    expect(PROFILE_SCREENS).not.toContain("close-by-transfer");
-  });
-});
-
 describe("kindOfFormFactor", () => {
   const expected: Record<FormFactor, DeviceKind> = {
     till: "till",

@@ -24,9 +24,11 @@ import {
 import "./errors.js";
 
 // Every role holds `payment.take`, so no real person can be refused it: `authorize` is wrapped
-// to refuse that one permission while `gate.deny` is set, and to record what it was asked.
+// to refuse that one permission while `gate.deny` is set, after letting `gate.allowFirst` checks
+// of it through, and to record what it was asked.
 const gate = vi.hoisted(() => ({
   deny: false,
+  allowFirst: 0,
   calls: [] as { sessionId: string; permission: string }[],
 }));
 vi.mock("@waitron/identity", async (importOriginal) => {
@@ -37,7 +39,8 @@ vi.mock("@waitron/identity", async (importOriginal) => {
       const [, request] = args;
       gate.calls.push({ sessionId: request.sessionId, permission: request.permission });
       if (gate.deny && request.permission === "payment.take") {
-        throw new AppError("authorization.not_permitted", { permission: request.permission });
+        if (gate.allowFirst > 0) gate.allowFirst -= 1;
+        else throw new AppError("authorization.not_permitted", { permission: request.permission });
       }
       return actual.authorize(...args);
     },
@@ -66,6 +69,7 @@ useVenueDb({
 
 beforeEach(() => {
   gate.deny = false;
+  gate.allowFirst = 0;
   gate.calls.length = 0;
 });
 
@@ -382,17 +386,20 @@ describe("POST /api/working-orders/:id/close-by-transfer needs payment.take", ()
     expect(closures(id)).toEqual([]);
   });
 
-  it("closes the same order when the permission is held", async () => {
+  it("refuses inside the write when the permission is gone after the check before the queue", async () => {
     const { id, body } = await openTarta();
+    gate.deny = true;
+    gate.allowFirst = 1;
 
-    const answer = await closeByTransfer(id, body);
+    expectRefused(await closeByTransfer(id, body));
 
-    expect(answer).toMatchObject({
-      status: 200,
-      json: { workingOrderId: id, classification: "to_be_paid_by_transfer" },
-    });
-    expectAsked();
-    expect(fiscalRecordCount(venue, id)).toBe(1);
-    expect(closures(id)).toHaveLength(1);
+    expect(gate.calls.filter(({ permission }) => permission === "payment.take")).toEqual([
+      { sessionId, permission: "payment.take" },
+      { sessionId, permission: "payment.take" },
+    ]);
+    expect(await statusOf(venue, id)).toBe("open");
+    expect(salesCount(id)).toBe(0);
+    expect(fiscalRecordCount(venue, id)).toBe(0);
+    expect(closures(id)).toEqual([]);
   });
 });

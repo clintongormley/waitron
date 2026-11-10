@@ -124,8 +124,9 @@ function parseClose(id: string, body: Record<string, unknown>): CloseByTransferR
 }
 
 /**
- * Inside the write: what `requireSession` checked before the queue, again, since a sign-out, a
- * switched-off device or a changed profile may have committed while the request waited.
+ * Run inside the write, because access may be withdrawn while the request waits in the queue: the
+ * session, the active device on an unretired profile allowing the action, the person's admission to
+ * that profile and `payment.take`, and the bill's zone.
  */
 async function stillAllowed(tx: Transaction, session: Session, billId: string) {
   await assertStillSignedIn(tx, session);
