@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1e926429-a055-4d41-9ed2-e2ab491a1e88",
+  "id": "d82d8054-e9d4-4f26-a349-c4e4fa004bf6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -9377,8 +9377,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "intent": {
-          "name": "intent",
+        "fingerprint": {
+          "name": "fingerprint",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -9461,6 +9461,19 @@
         }
       },
       "foreignKeys": {
+        "transfer_closures_actor_id_persons_id_fk": {
+          "name": "transfer_closures_actor_id_persons_id_fk",
+          "tableFrom": "transfer_closures",
+          "tableTo": "persons",
+          "columnsFrom": [
+            "actor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
         "transfer_closures_device_id_devices_id_fk": {
           "name": "transfer_closures_device_id_devices_id_fk",
           "tableFrom": "transfer_closures",

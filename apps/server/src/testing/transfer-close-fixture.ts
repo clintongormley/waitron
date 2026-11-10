@@ -92,7 +92,7 @@ function transferCloseKit(venue: BillVenue, counterZone: string) {
         partyId === null ? [] : await tx.select().from(parties).where(eq(parties.id, partyId));
       return {
         id: billId,
-        operationId: randomUUID(),
+        submissionId: randomUUID(),
         expectedRevision: order!.revision,
         expectedEdit: partyId === null ? null : await readBillEditState(tx, billId),
         expectedTotal,

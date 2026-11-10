@@ -5,6 +5,7 @@ import { devices } from "./devices.js";
 import { nodes } from "./nodes.js";
 import { workingOrders } from "./orders.js";
 import { originChecks, sourceColumn } from "./origin.js";
+import { persons } from "./identity/persons.js";
 import { sales } from "./sales.js";
 
 export type TransferClosurePartyBlocker =
@@ -12,7 +13,7 @@ export type TransferClosurePartyBlocker =
 
 /** The answer a bill's close by transfer gave, kept so a replay returns the same answer. */
 export interface TransferClosureResult {
-  operationId: string;
+  submissionId: string;
   workingOrderId: string;
   saleId: string;
   invoiceNumber: string;
@@ -30,9 +31,8 @@ export interface TransferClosureResult {
 /**
  * A bill closed as to be paid by bank transfer: one row per operation, per bill and per sale.
  *
- * `intent` is a digest of the request, not the request: the delivery email and invoice recipient
- * stay out of this append-only row. `actor_id` is a plain person id. No key yet, as on
- * `sales.operator_id`.
+ * `fingerprint` is a digest of the request, not the request: the delivery email and invoice
+ * recipient stay out of this append-only row.
  */
 export const transferClosures = table(
   "transfer_closures",
@@ -40,8 +40,10 @@ export const transferClosures = table(
     id: id("id").primaryKey(),
     workingOrderId: id("working_order_id").notNull(),
     saleId: id("sale_id").notNull(),
-    intent: label("intent").notNull(),
-    actorId: id("actor_id").notNull(),
+    fingerprint: label("fingerprint").notNull(),
+    actorId: id("actor_id")
+      .notNull()
+      .references(() => persons.id, { onDelete: "restrict" }),
     source: sourceColumn("source").notNull(),
     /* v8 ignore start */
     deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),

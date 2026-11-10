@@ -11,6 +11,7 @@ import { captureError } from "../testing/errors.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { sales } from "./sales.js";
+import { persons } from "./identity/persons.js";
 import { invoiceSeries } from "./series.js";
 import { transferClosures, type TransferClosureResult } from "./transfer-closures.js";
 
@@ -18,7 +19,7 @@ const ACTOR = "cccccccc-0000-4000-8000-000000000001";
 const MISSING = "cccccccc-3333-4000-8000-0000000000ff";
 const AT = "2026-11-09T21:00:00.000Z";
 const DAY = "2026-11-09";
-const INTENT = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+const FINGERPRINT = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
 
 let nodeId = "";
 let otherNodeId = "";
@@ -53,6 +54,7 @@ describe("transfer_closures", () => {
       .returning({ id: invoiceSeries.id });
     seriesId = series!.id;
     ({ deviceId } = await seedDevice(db));
+    await db.insert(persons).values({ id: ACTOR, displayName: "Server" });
   });
 
   /** One bill and the invoice issued from it. */
@@ -90,9 +92,9 @@ describe("transfer_closures", () => {
     });
   }
 
-  function resultFor(operationId: string, bill: Bill): TransferClosureResult {
+  function resultFor(submissionId: string, bill: Bill): TransferClosureResult {
     return {
-      operationId,
+      submissionId,
       workingOrderId: bill.billId,
       saleId: bill.saleId,
       invoiceNumber: "FA-1",
@@ -114,7 +116,7 @@ describe("transfer_closures", () => {
       id,
       workingOrderId: bill.billId,
       saleId: bill.saleId,
-      intent: INTENT,
+      fingerprint: FINGERPRINT,
       actorId: ACTOR,
       source: "device",
       deviceId,
@@ -141,7 +143,7 @@ describe("transfer_closures", () => {
       id: row.id,
       workingOrderId: bill.billId,
       saleId: bill.saleId,
-      intent: INTENT,
+      fingerprint: FINGERPRINT,
       actorId: ACTOR,
       source: "device",
       deviceId,
@@ -172,7 +174,7 @@ describe("transfer_closures", () => {
     expect(rows).toHaveLength(1);
   });
 
-  it("refuses a second closure under the same operation id", async () => {
+  it("refuses a second closure under the same submission id", async () => {
     const first = closure(await invoicedBill());
     await insert(first);
     const other = await invoicedBill();
@@ -217,6 +219,12 @@ describe("transfer_closures", () => {
   ] as const)("refuses a closure naming no %s", async (_, overrides) => {
     const bill = await invoicedBill();
     const error = await captureError(() => insert(closure(bill, overrides)));
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("refuses a closure naming a person who does not exist", async () => {
+    const bill = await invoicedBill();
+    const error = await captureError(() => insert(closure(bill, { actorId: MISSING })));
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 

@@ -314,6 +314,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["time_entries", ["node_id"], "nodes"],
   ["time_entries", ["person_id"], "persons"],
   ["time_entries", ["recorded_by_person_id"], "persons"],
+  ["transfer_closures", ["actor_id"], "persons"],
   ["transfer_closures", ["device_id"], "devices"],
   ["transfer_closures", ["node_id"], "nodes"],
   ["transfer_closures", ["sale_id"], "sales"],

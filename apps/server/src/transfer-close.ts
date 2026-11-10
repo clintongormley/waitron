@@ -82,8 +82,8 @@ export async function closeBillByTransferTx(
   actorId: string,
 ): Promise<CloseByTransferResult> {
   const request = normalised(deps.backend, sent);
-  const intent = intentDigest(cfg, request, actorId);
-  const replayed = await replay(tx, cfg, request, actorId, intent);
+  const fingerprint = requestFingerprint(cfg, request, actorId);
+  const replayed = await replay(tx, cfg, request, actorId, fingerprint);
   if (replayed !== null) return replayed;
   const billId = request.id;
   if (deps.diskBlockedBeforeQueue === true || deps.disk?.noted() === true)
@@ -207,10 +207,10 @@ export async function closeBillByTransferTx(
     attendance,
   );
   if (!placedHere)
-    await captureKitchenActivity(tx, attendance, actorId, [billId], request.operationId);
+    await captureKitchenActivity(tx, attendance, actorId, [billId], request.submissionId);
 
   const result: CloseByTransferResult = {
-    operationId: request.operationId,
+    submissionId: request.submissionId,
     workingOrderId: billId,
     saleId,
     invoiceNumber: (await readInvoiceNumbers(tx, [saleId])).get(saleId)!,
@@ -222,10 +222,10 @@ export async function closeBillByTransferTx(
     party,
   };
   await tx.insert(transferClosures).values({
-    id: request.operationId,
+    id: request.submissionId,
     workingOrderId: billId,
     saleId,
-    intent,
+    fingerprint,
     actorId,
     source: cfg.origin.source,
     deviceId: cfg.origin.deviceId,
@@ -342,7 +342,7 @@ async function finishParty(
 }
 
 /**
- * The answer an earlier close of this operation or this bill gave, when this request is the same;
+ * The answer an earlier close under this submission id or this bill gave, when this request is the same;
  * a different request naming either is refused. Reads only, so it answers while new work cannot.
  */
 async function replay(
@@ -350,20 +350,20 @@ async function replay(
   cfg: DeviceRequestConfig,
   request: CloseByTransferRequest,
   actorId: string,
-  intent: string,
+  fingerprint: string,
 ): Promise<CloseByTransferResult | null> {
   const kept = {
     id: transferClosures.id,
-    intent: transferClosures.intent,
+    fingerprint: transferClosures.fingerprint,
     result: transferClosures.result,
   };
   const [byId] = await tx
     .select(kept)
     .from(transferClosures)
-    .where(eq(transferClosures.id, request.operationId));
+    .where(eq(transferClosures.id, request.submissionId));
   if (byId !== undefined) {
-    if (byId.intent !== intent)
-      throw new AppError("submission.id_reused", { submissionId: request.operationId });
+    if (byId.fingerprint !== fingerprint)
+      throw new AppError("submission.id_reused", { submissionId: request.submissionId });
     return byId.result;
   }
   const [byBill] = await tx
@@ -371,7 +371,9 @@ async function replay(
     .from(transferClosures)
     .where(eq(transferClosures.workingOrderId, request.id));
   if (byBill === undefined) return null;
-  if (intentDigest(cfg, { ...request, operationId: byBill.id }, actorId) !== byBill.intent)
+  if (
+    requestFingerprint(cfg, { ...request, submissionId: byBill.id }, actorId) !== byBill.fingerprint
+  )
     throw new AppError("transfer_close.conflict", { workingOrderId: request.id });
   return byBill.result;
 }
@@ -390,7 +392,7 @@ function normalised(
   const finishing = request.partyFinish;
   return {
     id: uuid(request.id),
-    operationId: uuid(request.operationId),
+    submissionId: uuid(request.submissionId),
     expectedRevision: request.expectedRevision,
     expectedEdit: request.expectedEdit === null ? null : edit(request.expectedEdit),
     expectedTotal: centsToDecimal(decimalToCents(decimal(request.expectedTotal))),
@@ -479,7 +481,7 @@ async function stagedChoice(
 }
 
 /** The request's SHA-256, bound to who sent it from where. */
-function intentDigest(
+function requestFingerprint(
   cfg: DeviceRequestConfig,
   request: CloseByTransferRequest,
   actorId: string,

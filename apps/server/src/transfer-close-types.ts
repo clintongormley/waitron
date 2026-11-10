@@ -7,7 +7,7 @@ import type { BillInvoiceDelivery } from "./parties.js";
 export interface CloseByTransferRequest {
   /** The bill. */
   id: string;
-  operationId: string;
+  submissionId: string;
   expectedRevision: number;
   expectedEdit: BillEditExpected | null;
   expectedTotal: string;

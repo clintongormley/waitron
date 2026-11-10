@@ -132,7 +132,7 @@ describe("closeBillByTransferTx, replay", () => {
     expect(facts).toHaveLength(recordedFirst);
     expect(fiscalRecordCount(t.venue, billId)).toBe(1);
     expect(await tendersOfBill(t.venue, billId)).toHaveLength(1);
-    expect(closures(billId)).toEqual([{ id: request.operationId }]);
+    expect(closures(billId)).toEqual([{ id: request.submissionId }]);
   });
 
   it("answers the same after a restart, with fresh dependencies over the same database", async () => {
@@ -173,7 +173,7 @@ describe("closeBillByTransferTx, replay", () => {
     const respelled: CloseByTransferRequest = {
       ...request,
       id: request.id.toUpperCase(),
-      operationId: request.operationId.toUpperCase(),
+      submissionId: request.submissionId.toUpperCase(),
       expectedTotal: "12",
       recipient: { ...RECIPIENT, legalName: ` ${RECIPIENT.legalName} `, countryCode: "es" },
       delivery: { medium: "email", recipient: " customer@example.com " },
@@ -185,27 +185,27 @@ describe("closeBillByTransferTx, replay", () => {
     };
 
     expect(await t.close(respelled)).toEqual(result);
-    expect(await t.close({ ...respelled, operationId: randomUUID() })).toEqual(result);
+    expect(await t.close({ ...respelled, submissionId: randomUUID() })).toEqual(result);
   });
 
-  it.each(changes)("refuses the same operation id with a changed %s", async (_name, change) => {
+  it.each(changes)("refuses the same submission id with a changed %s", async (_name, change) => {
     const { request } = await closedStagedF1();
     const before = await t.ledger();
 
     const error = await refusal(t.close(change(request)));
 
     expect(error.code).toBe("submission.id_reused");
-    expect(error.params).toEqual({ submissionId: request.operationId });
+    expect(error.params).toEqual({ submissionId: request.submissionId });
     expect(await t.ledger()).toEqual(before);
   });
 
   it.each(changes)(
-    "refuses another operation id on a closed bill with a changed %s",
+    "refuses another submission id on a closed bill with a changed %s",
     async (_name, change) => {
       const { request } = await closedStagedF1();
       const before = await t.ledger();
 
-      const error = await refusal(t.close({ ...change(request), operationId: randomUUID() }));
+      const error = await refusal(t.close({ ...change(request), submissionId: randomUUID() }));
 
       expect(error.code).toBe("transfer_close.conflict");
       expect(error.params).toEqual({ workingOrderId: request.id });
@@ -213,13 +213,13 @@ describe("closeBillByTransferTx, replay", () => {
     },
   );
 
-  it("answers another operation id on a closed bill with the stored result when nothing else differs", async () => {
+  it("answers another submission id on a closed bill with the stored result when nothing else differs", async () => {
     const { billId, request, result } = await closedCounterBill();
 
-    const again = await t.close({ ...request, operationId: randomUUID() });
+    const again = await t.close({ ...request, submissionId: randomUUID() });
 
     expect(again).toEqual(result);
-    expect(closures(billId)).toEqual([{ id: request.operationId }]);
+    expect(closures(billId)).toEqual([{ id: request.submissionId }]);
   });
 
   // Each close is its own withTransaction, as a route makes it; the store runs them in turn.
@@ -237,7 +237,7 @@ describe("closeBillByTransferTx, replay", () => {
         sql`select s.id from sale_settlements s join sales on sales.id = s.sale_id where sales.working_order_id = ${billId}`,
       ),
     ).toHaveLength(1);
-    expect(closures(billId)).toEqual([{ id: request.operationId }]);
+    expect(closures(billId)).toEqual([{ id: request.submissionId }]);
   });
 
   it("closes once when two different requests for one bill arrive at once, refusing the other", async () => {
@@ -245,7 +245,7 @@ describe("closeBillByTransferTx, replay", () => {
     const billId = party.tabId;
     const request = await t.requestFor(billId, "12.00", party.partyId);
     // Either request alone would close the bill; only the replay can refuse the later one.
-    const changed = { ...request, operationId: randomUUID(), partyFinish: null };
+    const changed = { ...request, submissionId: randomUUID(), partyFinish: null };
 
     const outcomes = await Promise.allSettled([t.close(request), t.close(changed)]);
 
@@ -274,17 +274,17 @@ describe("closeBillByTransferTx, replay", () => {
     for (const error of [byPerson, fromDevice]) expect(error.code).toBe("submission.id_reused");
   });
 
-  it("refuses an operation id already used on another bill", async () => {
+  it("refuses a submission id already used on another bill", async () => {
     const { request } = await closedCounterBill();
     const otherBill = await t.counterOrder("placed");
     const before = await t.ledger();
 
     const error = await refusal(
-      t.close(await t.requestFor(otherBill, "18.00", null, { operationId: request.operationId })),
+      t.close(await t.requestFor(otherBill, "18.00", null, { submissionId: request.submissionId })),
     );
 
     expect(error.code).toBe("submission.id_reused");
-    expect(error.params).toEqual({ submissionId: request.operationId });
+    expect(error.params).toEqual({ submissionId: request.submissionId });
     expect(await t.ledger()).toEqual(before);
   });
 

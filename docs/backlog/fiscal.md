@@ -349,6 +349,8 @@ usable until Task 7 adds the button, after A739 Cut B. A275 stays open pending t
 build and acceptance. The reviewed plan includes an explicit recovery read,
 party completion before its retained result, live Bills exclusion, separate delivery/closing actors
 and bounded implementation checkpoints.
+2026-11-10: the table's digest column is now `fingerprint`, the request id `submissionId`, and
+`actor_id` references `persons` ([Task 3 plan](../superpowers/plans/2026-11-10-a275-transfer-close-route.md)).
 
 ## A679's internet time reading came back unavailable against pre-production in each of four runs on 2026-10-23
 
