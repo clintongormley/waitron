@@ -30,13 +30,12 @@ async function fixture() {
     const [location] = await tx
       .insert(locations)
       .values({
-        invoiceLocales: ["en-GB"],
         operationDescription: "Hospitality",
         timeZone: "Europe/Madrid",
         dayCutover: "06:00:00",
       })
       .returning();
-    await seedVenueSettings(tx, { name: randomUUID() });
+    await seedVenueSettings(tx, { name: randomUUID(), invoiceLocales: ["en-GB"] });
     const cfg = { locationId: location!.id };
     const [department, other] = await tx
       .insert(departments)

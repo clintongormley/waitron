@@ -107,11 +107,10 @@ async function seedIdentity(admin: Database): Promise<void> {
     .values({
       id: TILL_LOCATION_ID,
 
-      invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  await seedVenueSettings(admin, { name: "Loc" });
+  await seedVenueSettings(admin, { name: "Loc", invoiceLocales: ["en"] });
   await admin
     .insert(nodes)
     .values({

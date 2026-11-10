@@ -25,10 +25,9 @@ async function seed(db: Database): Promise<void> {
   await db.insert(locations).values({
     id: LOCATION_B,
 
-    invoiceLocales: ["es"],
     operationDescription: "Hostelería",
   });
-  await seedVenueSettings(db, { name: "Fixture Location B" });
+  await seedVenueSettings(db, { name: "Fixture Location B", invoiceLocales: ["es"] });
   await seedNode(db, LOCATION_B);
 }
 

@@ -223,7 +223,6 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     await suite.db.insert(locations).values({
       id: probeLocation,
 
-      invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
     await seedStation(probeLocation, "Probe default", true);

@@ -355,11 +355,10 @@ describe("the pass screen's device routes", () => {
     const [foreignLocation] = await suite.db
       .insert(locations)
       .values({
-        invoiceLocales: ["es-ES"],
         operationDescription: "Restaurant",
       })
       .returning({ id: locations.id });
-    await seedVenueSettings(suite.db, { name: "Other venue" });
+    await seedVenueSettings(suite.db, { name: "Other venue", invoiceLocales: ["es-ES"] });
     const foreignNode = await seedNode(suite.db, foreignLocation!.id);
     const [foreignStation] = await suite.db
       .insert(kitchenStations)

@@ -63,10 +63,9 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     await suite.db.insert(locations).values({
       id: LOCATION,
 
-      invoiceLocales: ["es"],
       operationDescription: "Hospitality",
     });
-    await seedVenueSettings(suite.db, { name: "Loc A" });
+    await seedVenueSettings(suite.db, { name: "Loc A", invoiceLocales: ["es"] });
     const [zone] = await suite.db
       .insert(floorZones)
       .values({ locationId: LOCATION, name: "Booking zone" })

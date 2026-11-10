@@ -33,10 +33,9 @@ describe("dining_tables columns", () => {
     await db.insert(locations).values({
       id: LOCATION_B,
 
-      invoiceLocales: ["es"],
       operationDescription: "Restaurant",
     });
-    await seedVenueSettings(db, { name: "Loc B" });
+    await seedVenueSettings(db, { name: "Loc B", invoiceLocales: ["es"] });
   });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

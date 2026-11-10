@@ -40,10 +40,9 @@ beforeEach(async () => {
     await db.insert(locations).values({
       id: "venue",
 
-      invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     });
-    await seedVenueSettings(db, { name: "Venue" });
+    await seedVenueSettings(db, { name: "Venue", invoiceLocales: ["en"] });
     await db.insert(persons).values({
       id: "person",
       displayName: "Suspended person",

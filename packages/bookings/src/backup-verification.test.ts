@@ -19,10 +19,9 @@ beforeEach(async () => {
     await suite.db.insert(locations).values({
       id: "location",
 
-      invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     });
-    await seedVenueSettings(suite.db, { name: "Venue" });
+    await seedVenueSettings(suite.db, { name: "Venue", invoiceLocales: ["en"] });
     await suite.db.insert(bookings).values({
       id: "record",
       bookingDate: "2026-10-25",

@@ -720,9 +720,9 @@ async function seedLowReader(name = "Card reader"): Promise<void> {
 async function seedStuckPrintJob(): Promise<void> {
   const [loc] = await db
     .insert(locations)
-    .values({ invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+    .values({ operationDescription: "Retail" })
     .returning({ id: locations.id });
-  await seedVenueSettings(db, { name: "Bar" });
+  await seedVenueSettings(db, { name: "Bar", invoiceLocales: ["es-ES"] });
   const [printer] = await db
     .insert(printers)
     .values({

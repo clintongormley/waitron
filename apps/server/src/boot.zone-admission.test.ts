@@ -144,12 +144,11 @@ beforeEach(async () => {
   await suite.db.insert(locations).values({
     id: LOCATION,
 
-    invoiceLocales: ["en-GB"],
     operationDescription: "Restaurant service",
     timeZone: "Europe/Madrid",
     dayCutover: "06:00:00",
   });
-  await seedVenueSettings(suite.db, { name: "Counter" });
+  await seedVenueSettings(suite.db, { name: "Counter", invoiceLocales: ["en-GB"] });
   await suite.db
     .insert(nodes)
     .values({ id: NODE, locationId: LOCATION, name: "Node", filingModule: "verifactu" });

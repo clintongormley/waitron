@@ -18,10 +18,9 @@ beforeEach(async () => {
   await suite.db.insert(locations).values({
     id: locationId,
 
-    invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  await seedVenueSettings(suite.db, { name: "Clock" });
+  await seedVenueSettings(suite.db, { name: "Clock", invoiceLocales: ["es"] });
 });
 const change = (location: string, date: string, cutover: string) =>
   withTransaction(suite.db, async (tx) => {

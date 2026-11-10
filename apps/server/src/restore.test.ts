@@ -110,10 +110,9 @@ beforeAll(async () => {
   await db.insert(locations).values({
     id: T.locationId,
 
-    invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  await seedVenueSettings(db, { name: "Local" });
+  await seedVenueSettings(db, { name: "Local", invoiceLocales: ["es"] });
   await db.insert(nodes).values({ id: T.nodeId, locationId: T.locationId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
   await db
@@ -2137,7 +2136,6 @@ it("resolves an archive node's own location through the read-only source databas
   await suite.db.insert(locations).values({
     id: otherLocation,
 
-    invoiceLocales: ["en"],
     operationDescription: "Hospitality",
   });
   await suite.db

@@ -112,11 +112,10 @@ beforeEach(async () => {
   await suite.db.insert(locations).values({
     id: TENANT_A.locationId,
 
-    invoiceLocales: ["en"],
     operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
   });
-  await seedVenueSettings(suite.db, { name: "Restaurant" });
+  await seedVenueSettings(suite.db, { name: "Restaurant", invoiceLocales: ["en"] });
   await suite.db.insert(nodes).values(
     [primary, standby].map((node) => ({
       id: node.nodeId,
@@ -1081,7 +1080,6 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
   await spare.db.insert(locations).values({
     id: TENANT_A.locationId,
 
-    invoiceLocales: ["en"],
     operationDescription: "Hospitality",
   });
   await spare.db.insert(nodes).values({

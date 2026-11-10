@@ -205,10 +205,14 @@ it.each([
       id: LOCATION,
 
       timeZone: "Europe/London",
-      invoiceLocales: ["en-GB"],
+
       operationDescription: "Hospitality",
     });
-    await seedVenueSettings(source.db, { name: "Counter", province: "London" });
+    await seedVenueSettings(source.db, {
+      name: "Counter",
+      province: "London",
+      invoiceLocales: ["en-GB"],
+    });
     await source.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Own box" });
     const server = await startServer({ ...(await environment(true)), WAITRON_TILL_LOCALE: raw });
     try {
@@ -247,7 +251,7 @@ it.each([
       id: LOCATION,
 
       timeZone: "Europe/London",
-      invoiceLocales: ["en-GB"],
+
       operationDescription: "Hospitality",
     });
     await seedVenueSettings(source.db, { name: "Counter", province: "London" });
@@ -292,7 +296,7 @@ it.each(["mirror", "primary"] as const)(
       id: LOCATION,
 
       timeZone: "Europe/London",
-      invoiceLocales: ["en-GB"],
+
       operationDescription: "Hospitality",
     });
     await seedVenueSettings(source.db, { name: "Counter", province: "London" });

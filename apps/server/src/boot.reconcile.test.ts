@@ -98,11 +98,10 @@ async function seed(db: Database): Promise<void> {
     .values({
       id: TILL_LOCATION_ID,
 
-      invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  await seedVenueSettings(db, { name: "Loc" });
+  await seedVenueSettings(db, { name: "Loc", invoiceLocales: ["en"] });
   await db
     .insert(nodes)
     .values({

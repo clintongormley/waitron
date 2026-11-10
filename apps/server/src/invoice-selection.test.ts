@@ -26,11 +26,10 @@ async function bill(full = false) {
     const [location] = await tx
       .insert(locations)
       .values({
-        invoiceLocales: ["es-ES"],
         operationDescription: "Restaurant",
       })
       .returning();
-    await seedVenueSettings(tx, { name: "Selector" });
+    await seedVenueSettings(tx, { name: "Selector", invoiceLocales: ["es-ES"] });
     const [node] = await tx
       .insert(nodes)
       .values({ locationId: location!.id, name: "Selector" })

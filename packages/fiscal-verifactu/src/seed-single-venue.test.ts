@@ -31,11 +31,11 @@ it.each([
     .insert(locations)
     .values({
       timeZone: "Europe/Rome",
-      invoiceLocales: ["es"],
+
       operationDescription: "Restaurant",
     })
     .returning({ id: locations.id });
-  await seedVenueSettings(suite.db, { name: "Retained venue" });
+  await seedVenueSettings(suite.db, { name: "Retained venue", invoiceLocales: ["es"] });
   const before = await readVenue(suite.db);
   await seed(suite.db);
   expect(await readVenue(suite.db)).toEqual(before);

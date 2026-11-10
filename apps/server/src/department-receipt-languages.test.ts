@@ -14,10 +14,9 @@ async function read(receiptLanguage: string, languages?: string[], country: stri
       .insert(tenants)
       .values({ id: 1, country, taxId: "B12345678", legalName: "Venue SL" });
   await suite.db.insert(locations).values({
-    invoiceLocales: [receiptLanguage],
     operationDescription: "Bootstrap",
   });
-  await seedVenueSettings(suite.db, { name: randomUUID() });
+  await seedVenueSettings(suite.db, { name: randomUUID(), invoiceLocales: [receiptLanguage] });
   if (languages !== undefined) {
     await seedVenueSettings(suite.db, {
       defaultContentLanguage: languages[0]!,

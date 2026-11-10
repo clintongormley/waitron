@@ -188,10 +188,9 @@ export function useBackupVerificationFixture() {
     await suite.db.insert(locations).values({
       id: verificationNode.locationId,
 
-      invoiceLocales: ["en"],
       operationDescription: "Restaurant service",
     });
-    await seedVenueSettings(suite.db, { name: "Fixture location" });
+    await seedVenueSettings(suite.db, { name: "Fixture location", invoiceLocales: ["en"] });
     await suite.db.insert(nodes).values({
       id: verificationNode.nodeId,
       locationId: verificationNode.locationId,

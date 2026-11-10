@@ -2543,10 +2543,9 @@ describe("startServer, against a migrated venue directory", () => {
     await sharedDb.insert(locations).values({
       id: other,
 
-      invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     });
-    await seedVenueSettings(sharedDb, { name: "Other" });
+    await seedVenueSettings(sharedDb, { name: "Other", invoiceLocales: ["en"] });
     try {
       const error = await startServer({
         ...KEY_ENV,

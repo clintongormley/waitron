@@ -190,11 +190,10 @@ async function seedMirror(
     .values({
       id: MIRROR_LOCATION_ID,
 
-      invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  await seedVenueSettings(admin, { name: "Barra" });
+  await seedVenueSettings(admin, { name: "Barra", invoiceLocales: ["en"] });
   const t = await admin.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 

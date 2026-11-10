@@ -458,9 +458,9 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     await seedTenant(db);
     const [location] = await db
       .insert(locations)
-      .values({ invoiceLocales: ["en"], operationDescription: "Hospitality" })
+      .values({ operationDescription: "Hospitality" })
       .returning({ id: locations.id });
-    await seedVenueSettings(db, { name: "Venue" });
+    await seedVenueSettings(db, { name: "Venue", invoiceLocales: ["en"] });
     const locationId = location!.id;
     const [zone] = await db
       .insert(floorZones)

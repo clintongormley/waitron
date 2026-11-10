@@ -102,12 +102,11 @@ it.each(["account", "key"])(
     await suite.db.insert(locations).values({
       id: LOCATION,
 
-      invoiceLocales: ["en"],
       operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "05:00",
     });
-    await seedVenueSettings(suite.db, { name: "Restaurant" });
+    await seedVenueSettings(suite.db, { name: "Restaurant", invoiceLocales: ["en"] });
     await suite.db.insert(nodes).values({
       id: NODE,
       locationId: LOCATION,

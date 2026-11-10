@@ -164,11 +164,10 @@ async function seedVenueWithNodesAndTill(db: Database): Promise<void> {
     .values({
       id: LOCATION,
 
-      invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     })
     .onConflictDoNothing({ target: locations.id });
-  await seedVenueSettings(db, { name: "Loc" });
+  await seedVenueSettings(db, { name: "Loc", invoiceLocales: ["en"] });
   for (const node of [NODE_A, NODE_B]) {
     await db
       .insert(nodes)

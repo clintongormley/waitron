@@ -74,9 +74,9 @@ async function purgeProfiles(): Promise<void> {
 async function seedBoundDevice(profileId: string, active = true): Promise<string> {
   const [location] = await suite.db
     .insert(locations)
-    .values({ invoiceLocales: ["es"], operationDescription: "Hospitality" })
+    .values({ operationDescription: "Hospitality" })
     .returning({ id: locations.id });
-  await seedVenueSettings(suite.db, { name: "Loc" });
+  await seedVenueSettings(suite.db, { name: "Loc", invoiceLocales: ["es"] });
   const [device] = await suite.db
     .insert(devices)
     .values({

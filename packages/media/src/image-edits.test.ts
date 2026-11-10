@@ -389,11 +389,8 @@ describe("edit validation", () => {
 });
 
 async function attachLogo(filename: string, active: boolean) {
-  await suite.db
-    .insert(locations)
-    .values({ invoiceLocales: ["es-ES"], operationDescription: "Hospitality" })
-    .returning();
-  await seedVenueSettings(suite.db, { name: "Place" });
+  await suite.db.insert(locations).values({ operationDescription: "Hospitality" }).returning();
+  await seedVenueSettings(suite.db, { name: "Place", invoiceLocales: ["es-ES"] });
   const [department] = await suite.db
     .insert(departments)
     .values({

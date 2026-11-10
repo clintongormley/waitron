@@ -80,10 +80,9 @@ beforeEach(async () => {
   await suite.db.insert(locations).values({
     id: LOCATION,
 
-    invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant",
   });
-  await seedVenueSettings(suite.db, { name: "Old location" });
+  await seedVenueSettings(suite.db, { name: "Old location", invoiceLocales: ["es-ES"] });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Old node" });
   await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   oldName = await readRecoveryKeyName(suite.node, NODE);
@@ -166,7 +165,6 @@ it("refuses a copy with two venue rows as an unknown identity", async () => {
   await suite.db.insert(locations).values({
     id: "d0000000-0000-4000-8000-000000000003",
 
-    invoiceLocales: ["en-GB"],
     operationDescription: "Restaurant",
   });
   artifact = await packSelected();

@@ -58,10 +58,9 @@ export async function seedSharedVenue(db: Database): Promise<void> {
   await db.insert(locations).values({
     id: TILL_LOCATION_ID,
 
-    invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
-  await seedVenueSettings(db, { name: "Barra" });
+  await seedVenueSettings(db, { name: "Barra", invoiceLocales: ["es-ES"] });
   // `startServer` reads `nodes.filing_module` at boot (`readFilingModule`) and cross-checks it
   // against the enabled fiscal module.
   await db.insert(nodes).values({
@@ -335,7 +334,6 @@ export async function seedTradingVenue(db: Database): Promise<void> {
   await db.insert(locations).values({
     id: TILL_LOCATION_ID,
 
-    invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
   await seedVenueSettings(db, { name: "Barra" });

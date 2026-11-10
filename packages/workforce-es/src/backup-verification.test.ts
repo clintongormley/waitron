@@ -18,10 +18,9 @@ beforeEach(async () => {
     await suite.db.insert(locations).values({
       id: "venue",
 
-      invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     });
-    await seedVenueSettings(suite.db, { name: "Venue" });
+    await seedVenueSettings(suite.db, { name: "Venue", invoiceLocales: ["en"] });
     await suite.db.insert(convenioConfig).values({
       id: 1,
       workingDaysPerWeek: 4,

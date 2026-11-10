@@ -63,10 +63,9 @@ const suite = useVenueDb({
     await db.insert(locations).values({
       id: T.locationId,
 
-      invoiceLocales: ["es"],
       operationDescription: "Venta",
     });
-    await seedVenueSettings(db, { name: "Restaurant" });
+    await seedVenueSettings(db, { name: "Restaurant", invoiceLocales: ["es"] });
     await db
       .insert(nodes)
       .values({ id: T.nodeId, locationId: T.locationId, name: "Original node" });

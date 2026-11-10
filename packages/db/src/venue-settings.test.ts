@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import * as api from "./index.js";
@@ -126,15 +127,14 @@ describe("the venue document", () => {
   it("keeps the interim location identity independent of the venue document", async () => {
     const [row] = await suite.db
       .insert(locations)
-      .values({ invoiceLocales: ["es"], operationDescription: "Meals" })
+      .values({ operationDescription: "Meals" })
       .returning({ id: locations.id });
+    await seedVenueSettings(suite.db, { invoiceLocales: ["es"] });
     expect(await api.venueLocationId(suite.db)).toBe(row!.id);
   });
 
   it("refuses a locations row without its venue document", async () => {
-    await suite.db
-      .insert(locations)
-      .values({ invoiceLocales: ["es"], operationDescription: "Meals" });
+    await suite.db.insert(locations).values({ operationDescription: "Meals" });
     await expect(withTransaction(suite.db, api.readVenue)).rejects.toMatchObject({
       code: "venue.not_found",
       params: {},
@@ -143,7 +143,6 @@ describe("the venue document", () => {
 
   it("merges document fields with the remaining location fields and reads place in the clock query", async () => {
     await suite.db.insert(locations).values({
-      invoiceLocales: ["en", "es"],
       operationDescription: "Meals",
       timeZone: "Europe/London",
       dayCutover: "04:00:00",
@@ -219,9 +218,7 @@ describe("the venue document", () => {
   });
 
   it("the joined clock read refuses the same invalid document version as the settings reader", async () => {
-    await suite.db
-      .insert(locations)
-      .values({ invoiceLocales: ["es"], operationDescription: "Meals" });
+    await suite.db.insert(locations).values({ operationDescription: "Meals" });
     await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
     await suite.db.update(settings).set({ version: 2 }).where(eq(settings.module, "venue"));
     for (const read of [api.readVenueSettings, api.readVenueClockAndPlace])

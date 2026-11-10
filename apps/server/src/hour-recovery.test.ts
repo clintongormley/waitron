@@ -45,12 +45,11 @@ beforeEach(async () => {
   await suite.db.insert(locations).values({
     id: LOCATION,
 
-    invoiceLocales: ["es"],
     operationDescription: "Restaurant",
     fiscalTerritory: "ES-common",
     timeZone: "Europe/Madrid",
   });
-  await seedVenueSettings(suite.db, { name: "Selected venue" });
+  await seedVenueSettings(suite.db, { name: "Selected venue", invoiceLocales: ["es"] });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Selected box" });
   await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
 });
