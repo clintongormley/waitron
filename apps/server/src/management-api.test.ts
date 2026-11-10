@@ -2313,7 +2313,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
         overdueAfterMinutes: 8,
         printerIds: [missing],
       });
-      expect(refused.status).toBe(404);
+      expect(refused.status).toBe(400);
       expect(await refused.json()).toMatchObject({
         error: { code: "printer.not_found", params: { id: missing } },
       });
@@ -2384,7 +2384,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       const id = await createStation(original);
       const off = await addPrinter(false);
       const res = await patch(id, { name: unique("Cold refused"), printerIds: [off] });
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({
         error: { code: "printer.not_found", params: { id: off } },
       });
@@ -2494,7 +2494,37 @@ describe("/management-api/stations (KDS-1 config)", () => {
         { method: "POST", body: JSON.stringify({ name, printerIds: [a, off] }) },
         managerCookie,
       );
-      expect(notFound.status).toBe(404);
+      expect(notFound.status).toBe(400);
+      expect(await notFound.json()).toMatchObject({
+        error: { code: "printer.not_found", params: { id: off } },
+      });
+      expect(
+        await suite.db
+          .select({ id: kitchenStations.id })
+          .from(kitchenStations)
+          .where(eq(kitchenStations.name, name)),
+      ).toEqual([]);
+      expect(
+        await suite.db
+          .select({ id: stationPrinters.stationId })
+          .from(stationPrinters)
+          .where(eq(stationPrinters.printerId, a)),
+      ).toEqual([]);
+    });
+
+    it("a POST naming a missing printer is refused printer.not_found and creates no station", async () => {
+      const a = await addPrinter();
+      const missing = randomUUID();
+      const name = unique("Missing");
+      const res = await req(
+        "/stations",
+        { method: "POST", body: JSON.stringify({ name, printerIds: [a, missing] }) },
+        managerCookie,
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "printer.not_found", params: { id: missing } },
+      });
       expect(
         await suite.db
           .select({ id: kitchenStations.id })
@@ -2880,7 +2910,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     }
   });
 
-  it("PUT /products/:id/course sets + clears the product's default course; bad body → 400; a bad/retired course → 404; a malformed product → 404 product.not_found", async () => {
+  it("PUT /products/:id/course sets + clears the product's default course; bad body → 400; a bad/retired course → 400; a malformed product → 404 product.not_found", async () => {
     const courseId = await createCourse(unique("Course"));
     const { productId } = await withTransaction(suite.db, async (tx) => {
       const catalogue = await createCatalogue(tx, {
@@ -2919,11 +2949,26 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       error: { code: "management.request_invalid", params: { field: "courseId" } },
     });
     const badCourse = await put({ courseId: "not-a-uuid" });
-    expect(badCourse.status).toBe(404);
-    expect(await badCourse.json()).toMatchObject({ error: { code: "course.not_found" } });
-    const missingCourse = await put({ courseId: randomUUID() });
-    expect(missingCourse.status).toBe(404);
-    expect(await missingCourse.json()).toMatchObject({ error: { code: "course.not_found" } });
+    expect(badCourse.status).toBe(400);
+    expect(await badCourse.json()).toMatchObject({
+      error: { code: "course.not_found", params: { courseId: "not-a-uuid" } },
+    });
+    const missingId = randomUUID();
+    const missingCourse = await put({ courseId: missingId });
+    expect(missingCourse.status).toBe(400);
+    expect(await missingCourse.json()).toMatchObject({
+      error: { code: "course.not_found", params: { courseId: missingId } },
+    });
+    const retiredId = await createCourse(unique("Retired"));
+    await suite.db
+      .update(kitchenCourses)
+      .set({ active: false })
+      .where(eq(kitchenCourses.id, retiredId));
+    const retiredCourse = await put({ courseId: retiredId });
+    expect(retiredCourse.status).toBe(400);
+    expect(await retiredCourse.json()).toMatchObject({
+      error: { code: "course.not_found", params: { courseId: retiredId } },
+    });
     const malformed = await put({ courseId }, "not-a-uuid");
     expect(malformed.status).toBe(404);
     expect(await malformed.json()).toMatchObject({

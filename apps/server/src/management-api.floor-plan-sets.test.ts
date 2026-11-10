@@ -183,6 +183,36 @@ describe("/management-api/floor-plan-sets/:setId/zones/:zoneId/floor-plan", () =
     });
   });
 
+  it("refuses a table id only the body names with 400, and an unknown zone in the path with 404", async () => {
+    const at = await setAndZone();
+    const ghost = randomUUID();
+    const body = JSON.stringify({
+      revision: 0,
+      tables: [
+        {
+          id: ghost,
+          key: "a",
+          label: `T-${randomUUID().slice(0, 6)}`,
+          seats: 4,
+          fixed: false,
+          placement: PLACE,
+          partKeys: [],
+        },
+      ],
+    });
+    const refused = await layout(at, { method: "PUT", body }, managerCookie);
+    expect({ status: refused.status, body: await refused.json() }).toEqual({
+      status: 400,
+      body: { error: { code: "table.not_found", params: { tableId: ghost } } },
+    });
+    const zoneId = randomUUID();
+    const unknownZone = await layout({ ...at, zoneId }, { method: "PUT", body }, managerCookie);
+    expect({ status: unknownZone.status, body: await unknownZone.json() }).toEqual({
+      status: 404,
+      body: { error: { code: "zone.not_found", params: { zoneId } } },
+    });
+  });
+
   it("no longer serves the zone-only floor plan routes", async () => {
     const at = await setAndZone();
     const res = await app.request(`/management-api/zones/${at.zoneId}/floor-plan`, {
