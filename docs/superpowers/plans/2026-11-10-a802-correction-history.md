@@ -1,6 +1,8 @@
 # A802 slice 3: read an invoice's correction history and whether it may be corrected
 
-**Status: Revised for the watcher's clearance after the owner's 15:43 instruction; build paused after Part A.**
+**Status: R1–R5 cleared by the watcher 2026-11-10 16:23 with four changes, and the owner's three
+questions answered 16:26–16:28; both are written into the
+[revision](#clearance-and-answers-2026-11-10-1623-1628). Slice 3b is cleared to build after this slice.**
 Parts B and C were built before the runner read the owner's instruction: the watcher wrote its note
 at 15:43; the runner, in a firing that started at 15:00, did not read it until 15:48; Part B
 (`6c1220e8b4`, 15:15), Part C (`84f6b5ad6c`, 15:22) and the review-fix round (`6c461e5e6a`, 15:47)
@@ -290,6 +292,55 @@ that fix, not the frozen sale rows; a full refund then nets every rate at the ag
 fresh-context review of this revision's first draft (`86ae51732d`) found one critical and three
 important gaps; they are written in below.
 
+### Clearance and answers (2026-11-10 16:23–16:28)
+
+Lane L `questions.md`, "WATCHER 2026-11-10 16:23" (a watcher decision for slice 3) and the owner's
+answers relayed at 16:26, 16:27 and 16:28 (`~/waitron-campaign-shared/desk/done/20261110-1623-L-a802-q1-fixed-invoice-refund.md`,
+`…-q2-returned-dishes-vat.md`, `…-q3-refund-before-aeat-answers.md`). They override anything below
+that disagrees.
+
+1. **One read of the filed figures, `filedFiguresFor`, built in R1** and shared by the preview
+   (slice 3) and the writer (slice 3b). `correctionAdmissionFor` is not widened: it keeps its
+   current answer. Shape, in `@waitron/fiscal` beside `CorrectionAdmission`, in neutral terms:
+   `filedFiguresFor?(tx, saleIds: readonly SaleId[]): Promise<ReadonlyMap<SaleId, FiledFigures>>`,
+   where `FiledFigures` is `{ readable: true; newest: FiledVersionFigures; newestAnswered:
+   FiledVersionFigures | null } | { readable: false }` and `FiledVersionFigures` is `{ total:
+   Decimal; vatBreakdown: VatBreakdownLine[] }`. **Newest** is the version admission judges (the
+   one alta of the sale no other alta names in `corrects_registro_id`); **newest answered** is the
+   newest version in that line of fixes whose submission is accepted or accepted with errors, or
+   null. A sale with no alta is absent from the map. `readable: false` when the sale's altas do not
+   form one line of fixes, or when either version's `desglose` is not the shape `toDetalleDesglose`
+   writes (`fiscal-verifactu/src/backend.ts:146–154`): a detail with an exemption, a not-subject
+   amount, an equivalence surcharge, another tax or regime, or a missing rate or VAT amount; two
+   details at one rate; or details whose bases plus VAT do not equal `importe_total`, or whose VAT
+   does not equal `cuota_total`. One query for all ids, through `registros_sale_idx`. fiscal-none
+   leaves it out (admission already answers `unsupported` there); the fake backend answers from the
+   stored `sales.total` and `sales.vat_breakdown` for both versions, with a setter to override one
+   sale.
+2. **Option C is dropped** from question 1, and with it design point 3's "slice 4 … ships with this
+   refusal": the owner rejected refusing ("we need to be able to do the refund"). The refusal of a
+   moved invoice is slice 3's only, until slice 3b.
+3. **Slice 3b's tests**: end to end, only the replay (21% filed, refused, fixed to 10%, full refund,
+   every rate zero) and one part refund. The queued-fix refusal, the part amount refused when the
+   fix changed the total, and the control where the fix kept the figures are tested ONCE each, in
+   core, with the fake backend (the owner's 9 November test rule).
+4. **Owner's answers.** Q1 **A**: the protected writer reads the figures AEAT accepted, through
+   `filedFiguresFor` (the protected-writer approval for slice 3b; cite the Q1 file in its PR). Q2:
+   **keep the running split**; no change (cite the Q2 file in the PR). Q3: **allow** a correction
+   while the invoice's filing is queued or sending, as the 21 October design says, moved or not,
+   measured against the newest version; a moved invoice whose newest version is a fix not yet
+   answered is still refused in slice 3b (point 3's queued-fix case), because nothing has yet been
+   accepted to measure against. The limit, in one line: **a refund filed before AEAT refuses the
+   sale, whose fix then changes its VAT split, stays out of balance at AEAT and nothing repairs
+   it.**
+
+**Slice 3 after this clearance.** `previewCorrectionAmounts`: substitution check → admission (as
+built) → read the earlier correctives' ids → `filedFiguresFor` for the invoice and each corrective
+→ any id absent or `readable: false` refuses `sale.correction_not_admitted { reason:
+"filed_figures_unreadable" }`; any whose **newest** figures differ from its stored ones (rates, base
+and VAT at each rate to the cent, total) refuses `{ reason: "filed_figures_changed" }` → the
+calculator as built. `newestAnswered` is unused until slice 3b.
+
 **Words used.** The **split** is the base (price before VAT) and the VAT at each VAT rate. A
 **corrective invoice** is the new negative invoice that takes value off an earlier one (type R5).
 A **fix** is a second version of a filing the agency refused (or accepted with errors), sent again
@@ -354,7 +405,8 @@ every check below covers the invoice AND each earlier corrective of it.
 
 **Design.**
 
-1. **The regime returns filed figures with admission** (slice 3). Core first reads the ids of the
+1. **(Superseded by the clearance's point 1: a separate `filedFiguresFor`, admission unchanged.)**
+   **The regime returns filed figures with admission** (slice 3). Core first reads the ids of the
    invoice's earlier corrective invoices (it already reads them, `correction-history.ts:97–100`;
    the read moves before admission) and passes them to `correctionAdmissionFor`. Admission already
    reads the invoice's rows and picks its latest version (`correction-admission.ts:28–52`); it now
@@ -378,9 +430,7 @@ every check below covers the invoice AND each earlier corrective of it.
    filed ones.
 3. **Anything moved is refused in slice 3** (`sale.correction_not_admitted`, reason
    `filed_figures_changed`). No member of staff meets this refusal before slice 4 (nothing files a
-   correction from the till until then). If the owner approves neither design below, slice 4 either
-   waits for slice 3b or ships with this refusal, which the owner then accepts knowingly: a fixed
-   invoice whose figures changed cannot be refunded through A802.
+   correction from the till until then), and slice 3b, which the owner chose, lifts it first.
 4. **Slice 3b, design A (recommended): file at the fix's figures through a changed writer.**
    - **When.** A moved invoice is admitted only once its fix has the agency's answer (accepted, or
      accepted with errors). Measuring against a fix still queued is not harmless: if the agency
@@ -482,7 +532,7 @@ path about 60, the answered-version rule about 10) and 400 test lines (the end-t
 - **B: no protected change**; full refund only, at the fix's figures, through the older derived
   path, refused when rounding cannot give the fix's figures or the total changed; that path's
   weak checks (above) stay.
-- **C: neither**; such invoices stay refused (`filed_figures_changed`); slice 4 ships knowing it.
+(Option C, keeping such invoices refused, was dropped by the watcher at 16:23; the owner chose A.)
 
 Under A or B, two cuts from the owner's 18 October scope ("Select wrong lines and quantities, or
 enter an amount"): no choosing dishes on a moved invoice, and only the full refund when the fix
@@ -578,14 +628,16 @@ every rate ends exact, the agency accepts both, and the alternative reopens two 
 
 **Slice 3 (this branch), after clearance:**
 
-- **R1. Filed figures, failing first** (`correction-admission.test.ts`): the eligible answers carry
-  the invoice's figures and each named corrective's; a fixed version's figures are the fix's (a fix
-  row at 10% beside a first version at 21%), for an invoice and for a corrective; a table of
-  `filed_figures_unreadable` rows (an exempt detail, a surcharge, two details at one rate, details
-  not summing to the total). Fake backend: one case.
+- **R1. `filedFiguresFor`, failing first** (new `fiscal-verifactu/src/filed-figures.test.ts`, the
+  clearance's point 1): an unfixed invoice and a corrective answer their own figures for both
+  versions; a fixed version's figures are the fix's (a fix row at 10% beside a refused first
+  version at 21%), `newestAnswered` null while the fix is queued and the fix's once accepted; a
+  table of `readable: false` rows (an exempt detail, a surcharge, two details at one rate, details
+  not summing to the total, two lines of fixes); a sale with no alta absent. Fake backend: one case.
 - **R2. Moved refused, failing first** (`correction-history.test.ts`, fake backend): the invoice's
-  figures differing at one rate, differing only in total, and an earlier corrective's differing, each
-  refused with `filed_figures_changed`; equal figures preview as today (the existing case).
+  newest figures differing at one rate, differing only in total, and an earlier corrective's
+  differing, each refused with `filed_figures_changed`; one `readable: false` row refused with
+  `filed_figures_unreadable`; equal figures preview as today (the existing case).
 - **R3. Finding 6's M2 row.**
 - **R4. Trim** test cases another test covers: at least 60 lines.
 - **R5. End to end:** the real fix route, then the preview's refusal (section A).
@@ -613,8 +665,8 @@ lines), and the lane says so to the watcher before passing 1,400. Tests about 2.
   a category assertion after a part correction.
 
 Size under A: about 180 code and 540 test lines, about 720 in all; tests about three times the code
-(question 1 asks). Under B: about 90 code and 330 test lines. Under C: S5 alone, about 30 code and
-90 test lines, which could then join slice 3 or slice 4.
+(question 1 asks; the clearance's point 3 trims the tests to about twice the code). Under B: about
+90 code and 330 test lines.
 
 **What is left after slices 3 and 3b, so staff can use it (cash only):** slice 4, the cash
 acceptance (route, permission and PIN checks, one transaction filing the correction and recording
@@ -623,9 +675,6 @@ which also answers whether the cash handed back may differ from what was paid wh
 the total; slice 5, the till screen, the corrective paper (it prints the corrective's split, not
 sums of its lines) and the guide, with the owner's demo-seed choice (finding 4).
 
-**For the watcher.** The owner said "the latest version the tax agency accepted". For an invoice
-never fixed, or fixed without changing its figures, this revision keeps the approved design's rule
-(a correction may be filed while the invoice is queued or sending: the figures cannot change under
-it). For a moved invoice it takes the owner's words literally: admitted only once the fix is
-answered, because a fix later refused would leave the agency holding the earlier version or
-nothing, and a corrective filed at the fix's figures could not be undone.
+**Settled.** The queued-invoice reading went to the owner as question 3 and was answered
+"allow" (the clearance, point 4): the one-line limit written there stands in place of this
+paragraph's earlier text.
