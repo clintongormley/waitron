@@ -35,7 +35,7 @@ export async function checkPin(db: Database, personId: string, pin: string): Pro
  * log-only `reason`.
  */
 export async function verifyPersonCredential(
-  tx: Transaction,
+  tx: Database | Transaction,
   personId: string,
   pin: string,
   checked?: SecretCheck,
@@ -81,7 +81,7 @@ export interface PinAttempts {
  * check while the person is inside a wait, counts a `pin.invalid`, and clears the count on success.
  */
 export async function verifyThrottledCredential(
-  tx: Transaction,
+  tx: Database | Transaction,
   personId: string,
   pin: string,
   attempts: PinAttempts,

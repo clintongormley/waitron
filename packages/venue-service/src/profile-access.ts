@@ -7,7 +7,7 @@ import {
   floorZones,
   zoneServicePolicies,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { AppError, type ErrorParams } from "@waitron/shared";
 import "./errors.js";
 
@@ -67,7 +67,7 @@ export async function assertProfileZone(
 
 /** The zone half of {@link ProfileServiceAccess}. */
 export async function readProfileZones(
-  tx: Transaction,
+  tx: Database | Transaction,
   profileId: string,
 ): Promise<Pick<ProfileServiceAccess, "departmentId" | "allowedZoneIds" | "startingZoneId">> {
   const [profile] = await tx

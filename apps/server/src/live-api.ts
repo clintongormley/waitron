@@ -1,10 +1,10 @@
 import type { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
 import { withTransaction, type Database } from "@waitron/db";
-import { AppError, type ResourceChange, type ResourceIdentity } from "@waitron/shared";
-import { resolveManagementSession } from "@waitron/identity";
+import { type ResourceChange } from "@waitron/shared";
+import { resolveManagementSession, checkManagementSession } from "@waitron/identity";
 import { createErrorBoundary, requireManagementSession, codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import { liveStreamResponse, parseInterests } from "./live-stream.js";
 import "./errors.js";
 
 type BusEvent = { kind: "change"; change: ResourceChange } | { kind: "close" };
@@ -58,33 +58,6 @@ const run = createErrorBoundary(
   "live.stream_failed",
 );
 
-function parseInterests(raw: string | undefined, allowed: ReadonlySet<string>): ResourceIdentity[] {
-  const invalid = (): never => {
-    throw new AppError("management.request_invalid", { field: "resources" });
-  };
-  let value: unknown;
-  try {
-    value = JSON.parse(raw ?? "null");
-  } catch {
-    return invalid();
-  }
-  if (!Array.isArray(value) || value.length === 0 || value.length > 128) return invalid();
-  return (value as unknown[]).map((identity) => {
-    if (
-      identity === null ||
-      typeof identity !== "object" ||
-      !("type" in identity) ||
-      typeof identity.type !== "string" ||
-      !allowed.has(identity.type)
-    )
-      return invalid();
-    if (!("id" in identity)) return { type: identity.type };
-    if (typeof identity.id !== "string" || identity.id.length === 0 || identity.id.length > 200)
-      return invalid();
-    return { type: identity.type, id: identity.id };
-  });
-}
-
 /** Events expose identities to signed-in venue people; resource reads retain their own authorization. */
 export function mountLiveApi(
   app: Hono,
@@ -97,87 +70,23 @@ export function mountLiveApi(
       const sessionId = requireManagementSession(c);
       const authenticate = async (): Promise<void> => {
         await withTransaction(deps.db, async (tx) => {
-          // Resolving the session validates it is live (throws when missing, expired or suspended).
           await resolveManagementSession(tx, sessionId, { touch: false });
         });
       };
       await authenticate();
       const interests = parseInterests(c.req.query("resources"), allowed);
-      const response = streamSSE(c, async (stream) => {
-        const pending = new Map<string, ResourceIdentity>();
-        let reset = false;
-        let closed = false;
-        let wake = (): void => {};
-        const unsubscribe = deps.bus.subscribe((event) => {
-          if (event.kind === "close") closed = true;
-          else {
-            for (const resource of event.change.resources) {
-              if (
-                interests.some(
-                  (interest) =>
-                    interest.type === resource.type &&
-                    (interest.id === undefined ||
-                      resource.id === undefined ||
-                      interest.id === resource.id),
-                )
-              ) {
-                pending.set(JSON.stringify(resource), resource);
-              }
-            }
-            if (pending.size === 0) return;
-            // Slow readers receive a bounded reset instead of retaining an unbounded identity queue.
-            if (pending.size > 256) {
-              pending.clear();
-              reset = true;
-            }
-          }
-          wake();
-        });
-        const timer = setInterval(() => wake(), 15_000);
-        const cleanup = (): void => {
-          closed = true;
-          clearInterval(timer);
-          unsubscribe();
-          wake();
-        };
-        stream.onAbort(cleanup);
-        try {
-          await stream.writeSSE({ event: "ready", data: "{}" });
-          while (!closed && !stream.aborted) {
-            if (!reset && pending.size === 0)
-              await new Promise<void>((resolve) => {
-                wake = resolve;
-              });
-            if (closed || stream.aborted) break;
-            try {
-              await authenticate();
-            } catch (error) {
-              const code = codeOf(error);
-              if (
-                code === "management_session.required" ||
-                code === "management_session.expired" ||
-                code === "person.suspended"
-              ) {
-                await stream.writeSSE({ event: "session-invalid", data: JSON.stringify({ code }) });
-              } else log("warn", "live.stream_failed", { errorCode: code });
-              break;
-            }
-            if (closed || stream.aborted) break;
-            const identities = [...pending.values()];
-            pending.clear();
-            const event = reset ? "reset" : identities.length > 0 ? "change" : "keepalive";
-            reset = false;
-            await stream.writeSSE({ event, data: JSON.stringify(identities) });
-          }
-        } catch (error) {
-          log("warn", "live.stream_failed", { errorCode: codeOf(error) });
-        } finally {
-          cleanup();
-        }
+      return liveStreamResponse(c, {
+        bus: deps.bus,
+        interests,
+        recheck: () => checkManagementSession(deps.db, sessionId),
+        invalidCodes: new Set([
+          "management_session.required",
+          "management_session.expired",
+          "person.suspended",
+        ]),
+        sendIds: true,
+        log,
       });
-      response.headers.set("Cache-Control", "no-store");
-      response.headers.set("X-Accel-Buffering", "no");
-      return response;
     }),
   );
 }

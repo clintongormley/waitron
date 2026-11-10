@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   IDLE_TIMEOUT_MS,
+  checkManagementSession,
   endManagementSession,
   resolveManagementSession,
   startManagementSession,
@@ -235,3 +236,35 @@ describe("what the table holds, as anyone reading a copy of the database sees it
     );
   });
 });
+
+it.each(["active", "unknown", "expired", "suspended", "pending", "ended"] as const)(
+  "checks a management session without a write or activity stamp: %s",
+  async (state) => {
+    const personId = await seedPerson(suite.db, "manager");
+    const session = await run((tx) => startManagementSession(tx, { personId }));
+    const at = minutesAgo(state === "expired" ? 31 : 10);
+    await run((tx) => tx.execute(agedTo(at, session.token)));
+    if (state === "suspended" || state === "pending")
+      await run((tx) =>
+        tx.execute(sql`update persons set status = ${state} where id = ${personId}`),
+      );
+    if (state === "ended") await run((tx) => endManagementSession(tx, session.token));
+    const check = checkManagementSession(suite.db, state === "unknown" ? "unknown" : session.token);
+    if (state === "active") await expect(check).resolves.toBeUndefined();
+    else
+      await expect(check).rejects.toMatchObject({
+        code:
+          state === "expired"
+            ? "management_session.expired"
+            : state === "suspended"
+              ? "person.suspended"
+              : "management_session.required",
+      });
+    const [row] = (
+      await suite.db.execute<{ last_seen_at: string }>(
+        sql`select last_seen_at from management_sessions where token_hash = ${hashSessionToken(session.token)}`,
+      )
+    ).rows;
+    expect(row!.last_seen_at).toBe(at);
+  },
+);

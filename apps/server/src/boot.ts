@@ -86,6 +86,7 @@ import {
 } from "./start-peer-check.js";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
+import { mountDeviceLiveApi } from "./device-live-api.js";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { backgroundDuties, stopBackgroundDuties } from "./background-duties.js";
 import {
@@ -2294,6 +2295,17 @@ async function bootServer(
       db,
       bus: liveEvents,
       resourceTypes: liveResourceTypesForModules(setsToMigrate),
+    },
+    log,
+  );
+
+  mountDeviceLiveApi(
+    app,
+    {
+      db,
+      bus: liveEvents,
+      resourceTypes: liveResourceTypesForModules(setsToMigrate),
+      devMode: config.devMode,
     },
     log,
   );

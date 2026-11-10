@@ -31,6 +31,7 @@ export {
   IDLE_TIMEOUT_MS,
   startManagementSession,
   resolveManagementSession,
+  checkManagementSession,
   endManagementSession,
 } from "./management-session.js";
 export type { ManagementSession } from "./management-session.js";

@@ -23,6 +23,7 @@ import {
   startManagementSession,
   resolveManagementSession,
 } from "@waitron/identity";
+import * as identity from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ResourceChange } from "@waitron/shared";
 import type { Logger } from "./logger.js";
@@ -261,16 +262,19 @@ it("ends without sending a change that was pending when the server shut down mid
   });
   try {
     await reader.read();
-    // Holding the one write transaction keeps the stream's revalidation queued behind it.
-    const holding = withTransaction(suite.db, () => held);
+    const checking = vi
+      .spyOn(identity, "checkManagementSession")
+      .mockImplementationOnce(() => held);
     bus.publish({ resources: [{ type: "printers", id: "p1" }] });
     await new Promise((resolve) => setImmediate(resolve));
     bus.close();
     release();
-    await holding;
+    await held;
+    checking.mockRestore();
     expect((await reader.read()).done).toBe(true);
   } finally {
     release();
+    vi.restoreAllMocks();
     await reader.cancel();
   }
 });
@@ -301,17 +305,9 @@ describe("the change subscriber", () => {
 });
 
 it("delivers a write made outside withTransaction on the next transaction the process runs", async () => {
-  // A development script writing the database directly leaves its change row behind: the trigger
-  // still fills `change_log`, but nothing in this process has a transaction open to take it out.
-  // The drain is unfiltered, so the next transaction that does run carries it — here the stream's
-  // own fifteen-second session check.
   const { cookie, bus } = await fixture();
   const app = new Hono();
   mountLiveApi(app, { db: suite.db, bus, resourceTypes: ["dining_tables"] }, () => {});
-  // KEEP THIS THE LAST TEST IN THE FILE while this call lives inside it: the triggers it installs
-  // stay on the suite's one database for everything that runs after, so a test appended below would
-  // silently write change rows — and pay for them — without asking. Hoisting the call into
-  // `fixture()` instead would do that to every test in the file.
   const { location, zone } = await withTransaction(suite.db, async (tx) => {
     const [location] = await tx
       .insert(locations)
@@ -340,12 +336,47 @@ it("delivers a write made outside withTransaction on the next transaction the pr
       sql`select count(*) as n from change_log`,
     );
     expect(waiting.rows[0]!.n).toBe(2);
+    await withTransaction(suite.db, async () => {});
     await vi.advanceTimersByTimeAsync(15_000);
     expect(new TextDecoder().decode((await reader.read()).value)).toContain("event: change");
   } finally {
     await reader.cancel();
     unsubscribe();
     bus.close();
+    vi.useRealTimers();
+  }
+});
+
+it("writes a keepalive while another caller holds the write lock", async () => {
+  const { app, path, cookie } = await fixture();
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const response = await app.request(path, { headers: { cookie } });
+  const reader = response.body!.getReader();
+  await reader.read();
+  let release!: () => void;
+  let entered!: () => void;
+  const held = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const lock = suite.db.withWriteLock(async () => {
+    entered();
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+  });
+  await held;
+  let message: string | undefined;
+  try {
+    const next = reader.read().then((chunk) => {
+      message = new TextDecoder().decode(chunk.value);
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await expect.poll(() => message, { timeout: 250 }).toBe("event: keepalive\ndata: []\n\n");
+    await next;
+  } finally {
+    release();
+    await lock;
+    await reader.cancel();
     vi.useRealTimers();
   }
 });

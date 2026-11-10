@@ -131,6 +131,51 @@ export async function signedInPersonOn(
   return refusal === null ? { outcome: "person", personId } : { outcome: "refused", refusal };
 }
 
+async function readSessionRow(tx: Database | Transaction, token: string, c: Context) {
+  const [found] = await tx
+    .select({
+      id: sessions.id,
+      personId: sessions.personId,
+      deviceId: sessions.deviceId,
+      active: devices.active,
+      lastSeenAt: devices.lastSeenAt,
+      ...deviceBindingColumns,
+    })
+    .from(sessions)
+    // Always matches: `device_id` is NOT NULL with a RESTRICT foreign key.
+    .innerJoin(devices, eq(devices.id, sessions.deviceId))
+    .innerJoin(deviceProfiles, deviceProfileJoin)
+    .where(and(eq(sessions.tokenHash, hashSessionToken(token)), isNull(sessions.endedAt)));
+  if (found === undefined) throw new AppError("session.required", {});
+  if (!found.active) throw new AppError("device.unauthorized", {});
+  const refusal = personRefusal(c, found.personId);
+  if (refusal !== null) throw refusal;
+  return found;
+}
+
+export async function readTillSession(db: Database, token: string, c: Context) {
+  const row = await readSessionRow(db, token, c);
+  return {
+    personId: row.personId,
+    sessionId: row.id,
+    deviceId: brandDeviceId(row.deviceId),
+    device: toDeviceBinding(row.deviceId, row),
+  };
+}
+
+export async function checkDeviceStillProven(
+  db: Database,
+  deviceId: string,
+  tokenHash: string | null,
+): Promise<void> {
+  const [row] = await db
+    .select({ tokenHash: devices.tokenHash })
+    .from(devices)
+    .where(and(eq(devices.id, deviceId), eq(devices.active, true)));
+  if (row === undefined || (tokenHash !== null && row.tokenHash !== tokenHash))
+    throw new AppError("device.unauthorized", {});
+}
+
 /**
  * Resolves the request's cookie to an OPEN shift session and the device it was opened on, or throws
  * `session.required`. The lookup is by the token's hash with `ended_at IS NULL`, so an unknown token
@@ -150,24 +195,7 @@ export async function requireSession(
   const token = readSessionToken(c);
   if (token === null || !isUuid(token)) throw new AppError("session.required", {});
   const check = async (tx: Database | Transaction, stamp: boolean) => {
-    const [found] = await tx
-      .select({
-        id: sessions.id,
-        personId: sessions.personId,
-        deviceId: sessions.deviceId,
-        active: devices.active,
-        lastSeenAt: devices.lastSeenAt,
-        ...deviceBindingColumns,
-      })
-      .from(sessions)
-      // Always matches: `device_id` is NOT NULL with a RESTRICT foreign key.
-      .innerJoin(devices, eq(devices.id, sessions.deviceId))
-      .innerJoin(deviceProfiles, deviceProfileJoin)
-      .where(and(eq(sessions.tokenHash, hashSessionToken(token)), isNull(sessions.endedAt)));
-    if (found === undefined) throw new AppError("session.required", {});
-    if (!found.active) throw new AppError("device.unauthorized", {});
-    const refusal = personRefusal(c, found.personId);
-    if (refusal !== null) throw refusal;
+    const found = await readSessionRow(tx, token, c);
     const seenAt = nowIso();
     if (stamp && sightingDue(found.lastSeenAt, seenAt))
       await recordSighting(tx, found.deviceId, seenAt);
