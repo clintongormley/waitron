@@ -674,14 +674,19 @@ describe("till-table-order-screen", () => {
     expect(text).toContain("ghost"); // deactivated/unknown product → the raw id
   });
 
-  it("emits pay-tab with the tender when the embedded pay widget confirms, and does NOT leak confirm-payment", async () => {
-    const { el } = await mount({ lines: [pendingLine] });
+  it("emits pay-tab from a retained whole confirmation without leaking confirm-payment", async () => {
+    const { el } = await mount({
+      lines: [pendingLine],
+      paymentConfirmation: {
+        tender: { method: "cash", amount: "10.00" },
+        outstanding: "3.00",
+        guestCount: 1,
+      },
+    });
     let payTab: CustomEvent | undefined;
     let leaked = false;
     el.addEventListener("pay-tab", (e) => (payTab = e as CustomEvent));
     el.addEventListener("confirm-payment", () => (leaked = true));
-    // The tab-pay reuses `tender-pay`; the screen catches its terminal confirm-payment and re-emits it
-    // as pay-tab so it reaches the app's tab-pay handler, never the counter's #onConfirmPayment.
     tender(el).dispatchEvent(
       new CustomEvent("confirm-payment", {
         detail: { method: "cash", amount: "10.00" },
@@ -707,10 +712,13 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector("section.pay")).not.toBeNull();
   });
 
-  it("renders the embedded pay widget with the Card button", async () => {
-    // The table-order screen threads no `cashOnly`/`cardProvider`, so the embedded pay widget offers
-    // BOTH tenders — cash and the manual (datáfono) card.
-    const { el } = await mount({ lines: [pendingLine], canSettle: true });
+  it("keeps the Card button on the zero-total whole-sale path", async () => {
+    const { el } = await mount({
+      orderId: "wo-4",
+      bills: [bill({ total: "0.00", outstanding: "0.00" })],
+      lines: [{ ...pendingLine, unitPriceGross: "0.00" }],
+      canSettle: true,
+    });
     const widget = tender(el);
     await widget.updateComplete;
     expect(widget.shadowRoot!.querySelector(".pay-card")).not.toBeNull();
@@ -719,22 +727,17 @@ describe("till-table-order-screen", () => {
   it.each([
     { bill: "no lines", lines: [], variant: "secondary" },
     { bill: "a line", lines: [pendingLine], variant: "primary" },
-  ])(
-    "draws the pay card's Cash and Card $variant on a bill with $bill",
-    async ({ lines, variant }) => {
-      const { el } = await mount({ lines });
-      const widget = tender(el);
-      await widget.updateComplete;
-      expect(
-        [".pay", ".pay-card"].map((name) =>
-          widget.shadowRoot!.querySelector(name)!.getAttribute("variant"),
-        ),
-      ).toEqual([variant, variant]);
-    },
-  );
+  ])("draws Pay $variant on a bill with $bill", async ({ lines, variant }) => {
+    const { el } = await mount({ lines });
+    expect(el.shadowRoot!.querySelector("[data-pay-sheet]")!.getAttribute("variant")).toBe(variant);
+  });
 
-  it("draws no Hold in the embedded pay widget — a tab cannot be parked", async () => {
-    const { el } = await mount({ lines: [pendingLine] });
+  it("draws no Hold on the zero-total whole-sale path — a tab cannot be parked", async () => {
+    const { el } = await mount({
+      orderId: "wo-4",
+      bills: [bill({ total: "0.00", outstanding: "0.00" })],
+      lines: [{ ...pendingLine, unitPriceGross: "0.00" }],
+    });
     const widget = tender(el);
     await widget.updateComplete;
     expect(widget.shadowRoot!.querySelector(".pay")).not.toBeNull();

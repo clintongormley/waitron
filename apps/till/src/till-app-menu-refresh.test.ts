@@ -1294,9 +1294,9 @@ describe("the counter's basket hold stays on the counter", () => {
       seated: true,
     });
     await flush(el);
-    const tablePay = tableScreen(el)
-      .shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!
-      .shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".pay")!;
+    const tablePay = tableScreen(el).shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-pay-sheet]",
+    )!;
     expect(tablePay.disabled).toBe(false);
   });
 });

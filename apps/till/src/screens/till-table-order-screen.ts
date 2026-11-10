@@ -5198,7 +5198,12 @@ export class TillTableOrderScreen extends LitElement {
 
   #paySheetButton(shown: PartyBill | undefined): TemplateResult {
     return html`<wt-button
-      variant=${this.#payQuiet("sheet") ? "secondary" : "primary"}
+      variant=${
+        this.#payQuiet("sheet") ||
+        (!this.busy && this.#payStore!.lineCount === 0 && !this.#recovers("sheet"))
+          ? "secondary"
+          : "primary"
+      }
       data-pay-sheet
       .disabled=${this.busy}
       @click=${() => {
