@@ -370,7 +370,9 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
       "true",
     ]);
     expect(markedRows(el)).toEqual(["wo-2"]);
-    const rowMark = switcher(el)!.querySelector('[data-switch-bill="wo-2"] [data-bill-row-unsent-mark]')!;
+    const rowMark = switcher(el)!.querySelector(
+      '[data-switch-bill="wo-2"] [data-bill-row-unsent-mark]',
+    )!;
     expect(rowMark.textContent!.trim()).toBe("Unsent");
     expect(rowMark.querySelector("wt-icon")!.getAttribute("aria-hidden")).toBe("true");
     expect(items(el)[1]).toBe("Bill 2 · Clint Unsent €54.00 Ana has an unsent order: 2 items");
@@ -415,7 +417,8 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
 
     expect(triggerText(one)).toBe("Cuenta 1 · 3 cuentas · 67,00 € ▾ Cuenta 2 sin enviar");
     expect(
-      switcher(one)!.querySelector('[data-switch-bill="wo-2"] [data-bill-row-unsent-mark]')!
+      switcher(one)!
+        .querySelector('[data-switch-bill="wo-2"] [data-bill-row-unsent-mark]')!
         .textContent!.trim(),
     ).toBe("Sin enviar");
     cleanupWidgets();

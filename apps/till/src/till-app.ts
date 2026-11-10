@@ -11257,7 +11257,11 @@ export class TillApp extends LitElement {
       latest.revision >= party.revision &&
       latest.kitchenNote.revision >= party.kitchenNote.revision
     )
-      this.orderParty = { ...party, kitchenNote: latest.kitchenNote };
+      this.orderParty = {
+        ...party,
+        kitchenNote: latest.kitchenNote,
+        unsentDrafts: latest.unsentDrafts,
+      };
   }
 
   /** A free table seats a party with the guest count given; a seated one resumes its party on the
@@ -18394,11 +18398,14 @@ export class TillApp extends LitElement {
     );
   }
 
+  /** Slice 11, D4: the floor read carries the bill just left's unsent dishes into the switcher's
+   * marks, on a till as on a handheld. */
   #showBill(workingOrderId: string): void {
     this.errorKey = undefined;
     this.finishRefused = false;
     this.billGone = null;
     this.#chooseBill(workingOrderId);
+    void this.#refreshFloor();
   }
 
   /** Shows `billId` as this till's own choice. A bill the shown bills list holds came from a read no

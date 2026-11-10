@@ -4408,4 +4408,57 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
     expect(tableOrder(el)!.orderId).toBe("wo-new");
     expect(banner(el)?.textContent?.trim()).toBe(t("table.reread_failed"));
   });
+
+  it("A797 slice 11, worked example 3: back on Bill 1, the switcher says Bill 2 unsent once the floor read answers", async () => {
+    let created = false;
+    const { el } = await mountApp({
+      createPartyBill: vi.fn(async () => {
+        created = true;
+        return { billId: "wo-new", revision: 4 };
+      }),
+      getPartyBills: vi.fn(async () =>
+        created ? [bill("wo-7", 1), bill("wo-new", 2, { outstanding: "0.00" })] : [bill("wo-7", 1)],
+      ),
+      // The floor read answers with every saved draft holding dishes, as the server's does.
+      getTablesState: vi.fn(async () => [
+        {
+          ...openTable,
+          party: {
+            ...openTable.party!,
+            revision: created ? 4 : 3,
+            billCount: created ? 2 : 1,
+            unsentDrafts: drafts.drafts
+              .filter((draft) => draft.lines.length > 0)
+              .map((draft) => ({
+                billId: draft.billId,
+                billNumber: draft.billId === "wo-new" ? 2 : 1,
+                ownerId: draft.ownerId,
+                ownerName: draft.ownerName,
+                lineCount: draft.lines.length,
+                savedAt: "2026-08-17T10:00:00.000Z",
+              })),
+          },
+        },
+      ]),
+    });
+    await toTableOrder(el);
+    await choose(el, "[data-new-bill]");
+    expect(tableOrder(el)!.orderId).toBe("wo-new");
+    await ringCoffee(el, tableOrder(el)!);
+
+    await choose(el, '[data-switch-bill="wo-7"]');
+    await flush(el);
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    const trigger = switcher(el).querySelector<HTMLElement>('[slot="trigger"]')!;
+    expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe(
+      `Cuenta 1 · 2 cuentas · ${euros("12.00")} ▾ Cuenta 2 sin enviar`.replace(/\s+/g, " "),
+    );
+    expect(
+      switcher(el)
+        .querySelector('[data-switch-bill="wo-new"] .bill-row-unsent')
+        ?.textContent?.trim(),
+    ).toBe("Ana tiene un pedido sin enviar: 1 artículo");
+  });
 });

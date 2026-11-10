@@ -49,19 +49,15 @@ function unsentWords(marked: readonly PartyBill[]): string {
 
 /** One bill's row in the switcher: its short label, what it owes, and who has unsent dishes on it.
  * `marked` adds the Unsent mark after the label. */
-export function billRowContent(
-  bill: PartyBill,
-  party: TableParty,
-  marked = false,
-): TemplateResult {
+export function billRowContent(bill: PartyBill, party: TableParty, marked = false): TemplateResult {
   const unsent = party.unsentDrafts.filter((draft) => draft.billId === bill.workingOrderId);
   return html`<span class="bill-row-head"
       ><span class="bill-row-label"
         >${billLabel(bill)}${
           marked
             ? html` <span class="bill-unsent-mark" data-bill-row-unsent-mark
-                  >${unsentIcon}${t("floor.unsent_mark")}</span
-                >`
+                >${unsentIcon}${t("floor.unsent_mark")}</span
+              >`
             : nothing
         }</span
       >
