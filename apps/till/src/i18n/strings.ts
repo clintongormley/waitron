@@ -1421,7 +1421,7 @@ export const en = {
   "table.reread_failed":
     "The order was updated, but the table could not be read again. Open the table again to check its amounts.",
   "table.split_updated_elsewhere": "The table was updated by somebody else. Try to Split again.",
-  "table.draft_title": "Unsent order",
+  "table.draft_title": "New order",
   "table.view_menu": "Menu",
   "table.view_order": "Order",
   "table.new_order_dish": "{n} × {name}",
@@ -3369,7 +3369,7 @@ export const es: Record<StringKey, string> = {
   "table.reread_failed":
     "El pedido se actualizó, pero no se pudo volver a leer la mesa. Vuelve a abrir la mesa para comprobar sus importes.",
   "table.split_updated_elsewhere": "Otra persona ha actualizado la mesa. Intenta Separar de nuevo.",
-  "table.draft_title": "Pedido sin enviar",
+  "table.draft_title": "Nuevo pedido",
   "table.view_menu": "Carta",
   "table.view_order": "Pedido",
   "table.new_order_dish": "{n} × {name}",
