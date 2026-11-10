@@ -1140,5 +1140,6 @@ it("A1319 reads each switch's visible hint to screen readers as its description"
     expect(toggle.shadowRoot!.getElementById(describedBy!)!.textContent!.trim()).toBe(
       $(el, `[data-test=${hint}]`)!.textContent!.trim(),
     );
+    expect($(el, `[data-test=${hint}]`)!.getAttribute("aria-hidden"), hint).toBe("true");
   }
 });

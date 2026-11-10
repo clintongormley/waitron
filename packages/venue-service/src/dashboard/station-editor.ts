@@ -606,6 +606,9 @@ export class StationEditor extends LitElement {
     const generation = this.generation;
     // Fields stay editable while a save is sent: a newer edit stays as the draft once it is written.
     const current = () => generation === this.generation && this.isConnected && this.open;
+    const waitsHint = t("prep.waits_for_pass_hint");
+    const restHint = t("prep.shows_rest_of_order_hint");
+    const heldHint = t("prep.print_held_work_hint");
     return keyed(
       generation,
       html`<wt-modal
@@ -659,7 +662,7 @@ export class StationEditor extends LitElement {
           <wt-switch
             name="waitsForPass"
             label=${t("prep.waits_for_pass")}
-            .description=${t("prep.waits_for_pass_hint")}
+            .description=${waitsHint}
             .checked=${this.draft.waitsForPass}
             @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
               event.stopPropagation();
@@ -667,7 +670,7 @@ export class StationEditor extends LitElement {
                 this.changed({ ...this.draft, waitsForPass: event.detail.checked }, "waitsForPass");
             }}
           ></wt-switch>
-          <p class="note" data-test="waits-for-pass-hint">${t("prep.waits_for_pass_hint")}</p>
+          <p class="note" data-test="waits-for-pass-hint" aria-hidden="true">${waitsHint}</p>
           <fieldset>
             <legend>${t("prep.late_flags")}</legend>
             <div class="timing-fields">
@@ -710,7 +713,7 @@ export class StationEditor extends LitElement {
           <wt-switch
             name="showsRestOfOrder"
             label=${t("prep.shows_rest_of_order")}
-            .description=${t("prep.shows_rest_of_order_hint")}
+            .description=${restHint}
             .checked=${this.draft.showsRestOfOrder}
             @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
               event.stopPropagation();
@@ -718,7 +721,7 @@ export class StationEditor extends LitElement {
                 this.changed({ ...this.draft, showsRestOfOrder: event.detail.checked }, "rest");
             }}
           ></wt-switch>
-          <p class="note" data-test="rest-of-order-hint">${t("prep.shows_rest_of_order_hint")}</p>
+          <p class="note" data-test="rest-of-order-hint" aria-hidden="true">${restHint}</p>
           <fieldset class="moved-slips" data-test="moved-slips-group">
             <legend>${t("prep.moved_slips")}</legend>
             <wt-combobox
@@ -755,7 +758,7 @@ export class StationEditor extends LitElement {
           <wt-switch
             name="printHeldWork"
             label=${t("prep.print_held_work")}
-            .description=${t("prep.print_held_work_hint")}
+            .description=${heldHint}
             .checked=${this.draft.printHeldWork}
             @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
               event.stopPropagation();
@@ -766,7 +769,7 @@ export class StationEditor extends LitElement {
                 );
             }}
           ></wt-switch>
-          <p class="note" data-test="held-work-hint">${t("prep.print_held_work_hint")}</p>
+          <p class="note" data-test="held-work-hint" aria-hidden="true">${heldHint}</p>
           <wt-combobox
             name="changesAfterSending"
             label=${t("prep.changes_after_sending")}

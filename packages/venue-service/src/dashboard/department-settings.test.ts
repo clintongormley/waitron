@@ -2691,3 +2691,14 @@ it("reads in Spanish: Pasos de servicio under Estados de la mesa", async () => {
   expect(section.contains(list)).toBe(true);
   expect(list.shadowRoot!.querySelector("h4")!.textContent!.trim()).toBe("Pasos de servicio");
 });
+
+it("hides each switch's visible hint from screen readers, which hear it as the switch's description", async () => {
+  const { el } = await mount();
+  await selectDepartmentTab(el, "service");
+  for (const control of [lateSend(el), needsClearing(el)]) {
+    const hint = control.nextElementSibling!;
+    expect(hint.classList.contains("hint"), control.name).toBe(true);
+    expect(hint.textContent!.trim(), control.name).toBe(control.description);
+    expect(hint.getAttribute("aria-hidden"), control.name).toBe("true");
+  }
+});
