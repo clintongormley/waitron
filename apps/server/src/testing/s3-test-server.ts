@@ -122,15 +122,15 @@ export const PROBE_TIMEOUT_MS = 1_000;
 class PortTaken extends Error {}
 
 /**
- * Start versitygw on an OS-chosen loopback port, serving one bucket from a directory under `root`.
- * `--sidecar` keeps object metadata in a plain directory rather than in extended attributes, so the
- * server does not depend on what the temporary filesystem supports. A directory under the gateway
- * root IS a bucket, so the bucket is made with `mkdir` and no S3 call.
+ * Start versitygw on a loopback port from `freePort()`, serving one bucket from a directory under
+ * `root`. `--sidecar` keeps object metadata in a plain directory rather than in extended attributes,
+ * so the server does not depend on what the temporary filesystem supports. A directory under the
+ * gateway root IS a bucket, so the bucket is made with `mkdir` and no S3 call.
  *
- * The port is drawn and released before versitygw binds it, so another test's server can take it
- * first. Each server therefore gets credentials of its own and is ready only once a listing signed
- * with them is answered, which no other server can do; a server that lost its port is started again
- * on a fresh one.
+ * The port is drawn and released before versitygw binds it, so another process can take it first.
+ * Each server therefore gets credentials of its own and is ready only once a listing signed with
+ * them is answered, which no other server can do; a server that lost its port is started again on a
+ * fresh one.
  */
 export async function startS3TestServer(opts: {
   bin: string;

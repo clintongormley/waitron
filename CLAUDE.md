@@ -733,8 +733,8 @@ passed while proving nothing.
   [Receipt and paths](docs/developers/testing-guide.md#root-receipts-moved-on-2026-10-31).
 - **A process-started HTTP or landing fixture, and its matching in-process fixture, keeps a
   retained socket (`retainHttpListener`); `freePorts(n)` is only for a test that needs released
-  configured ports, keeping its origin, refusal and listener-release checks, and draws every such
-  port in one call before binding any of them.** Guard: `apps/server/src/testing/retained-http-listener.test.ts`,
+  configured ports, keeping its origin, refusal and listener-release checks; no `apps/server` suite
+  draws such a port by binding port 0 and releasing it.** Guard: `apps/server/src/testing/retained-http-listener.test.ts`,
   weaker than the rule: the helper only, not which fixture uses which.
   [Detail](docs/developers/testing-guide.md#keep-a-process-fixtures-socket-bound-through-handoff).
 - **With `useVenueDb({ resetPerTest: false })`, a row found by a drawn port must be checked as

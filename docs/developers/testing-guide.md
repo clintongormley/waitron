@@ -433,25 +433,28 @@ failure above took. The rule was briefly pruned from `CLAUDE.md` §4 on 2026-09-
 no PACKAGE fixture binds a port — true, and narrower than "the tree" — and restored with that hedge
 the same day; moved here 2026-10-07.
 
-## Draw every port a test needs in one `freePorts(n)` call, before binding any of them.
+## Draw a configured port from `freePorts(n)`, never by binding port 0 and releasing it.
 
-A suite that needs a released configured port picks it by binding port 0, reading the number the system
-chose, and releasing it, because `WAITRON_HTTP_PORT` refuses `"0"`. Drawing two ports that way one after the
-other can return the same number twice on Linux, and did in CI run 36317643554: the boot's HTTPS
-server took port 40141 and its landing listener was then refused `EADDRINUSE` on 40141 in the same
-start. Measured 2026-09-27 in `node:24-slim` (Node v24.21.0, kernel 6.12): 9 repeats in 50,000
-pairs drawn one after the other, 0 with both probes held until both were drawn; macOS (Node
-v26.7.0) repeated 0 times in 20,000 pairs, so local runs did not show it. `freePorts(n)` in
-`apps/server/src/testing/free-ports.ts` holds every probe until the last port is drawn, which rules
-out a repeat within one call. It does not cover a port another worker takes between the release and
-the test's own bind, nor a port drawn to stay unused (an "unreachable peer") that another worker
-later binds. Nor does it know about rows an earlier test left naming a port
-([below](#a-drawn-port-can-be-one-an-earlier-test-in-the-same-database-already-registered)).
-Nothing checks that a new suite uses the helper rather than its own copy. The S3 test
-server is the one caller that recovers from a port taken in that gap, because versitygw exits when
-its port is already bound and so can be started again on another (the stream loop test's section
-below, "The S3 test server knows its own server"). A Waitron server using its configured port is not retried:
-a taken HTTP port is `server.listen_failed` (the `EADDRINUSE` case in `apps/server/src/boot.test.ts`).
+A suite that needs a released configured port takes it from `freePorts(n)` in
+`apps/server/src/testing/free-ports.ts`, because `WAITRON_HTTP_PORT` refuses `"0"`. The helper used
+to bind port 0 and release what the system chose, so its ports came from the range every port-0 bind
+and outgoing connection draws from, and anything else doing either could take one before the test
+bound it. Twice in CI a port it had handed out was refused with `EADDRINUSE` in
+`boot.failed-start.test.ts` (runs 42692866626 and 42736079093, attempt 1); what held the port was
+not recorded. It now draws from 20000–32499, below Linux's default automatic range (32768–60999)
+and macOS's (49152–65535), and each worker walks its own slice of 500 ports chosen by
+`VITEST_POOL_ID` modulo 25, skipping any port already in use. One call never returns a port twice;
+successive calls in one process return different ports until the slice wraps.
+
+Limits: two separate Vitest runs on one machine share slice numbers, and so do pool ids 25 apart,
+so a port can still be taken between the check and the test's bind; a port drawn to stay unused
+(an "unreachable peer") is free until something binds it; and the helper does not know about rows
+an earlier test left naming a port ([below](#a-drawn-port-can-be-one-an-earlier-test-in-the-same-database-already-registered)).
+Nothing checks that a new suite uses the helper rather than its own copy. The S3 test server
+recovers from a taken port, because versitygw exits when its port is already bound and so can be
+started again on another (the stream loop test's section below, "The S3 test server knows its own
+server"). A Waitron server using its configured port is not retried: a taken HTTP port is
+`server.listen_failed` (the `EADDRINUSE` case in `apps/server/src/boot.test.ts`).
 
 ### Keep a process fixture’s socket bound through handoff
 
@@ -493,7 +496,7 @@ that represents an unreachable peer.
 
 ### Select a boot test's port at the real listener bind when its contract permits it
 
-A batch draw prevents duplicates within that draw; it does not reserve the ports through boot.
+A drawn port is not reserved through boot.
 `apps/server/src/boot.till-clock.test.ts` wraps only Hono's `serve` call to pass port 0, delegates
 all other options and the callback to the real implementation, and waits for that listener's
 `listening` event before reading its address. Its clock routes, boot modes, database, authentication
@@ -541,7 +544,7 @@ the process that held its port. Other setup/recovery suites remain in the linked
 ### A drawn port can be one an earlier test in the same database already registered
 
 A file that keeps one database across its tests (`resetPerTest: false`) keeps the rows earlier
-tests left, and a port the system handed to an earlier test can be handed out again later. A row
+tests left, and a port drawn for an earlier test can be drawn again once the slice wraps. A row
 keyed by address then belongs to the earlier test while the later one reads it as its own. A945
 followed main CI run `39537349722`, `test-server (16)`: in `apps/server/src/print-agent-e2e.test.ts`,
 discovery after a delete reported a printer at the test's address as registered. Measured
@@ -1409,8 +1412,7 @@ process on one port, and its release publishes SHA-256 checksums (SeaweedFS publ
 repository is archived and its community binaries are no longer published.
 
 **The S3 test server knows its own server.** `startS3TestServer` draws its port with `freePort()`,
-which releases it before versitygw binds it, so a server another test started in the same run can
-take it first. versitygw 1.8.0 prints its "listening on" banner BEFORE it binds, and on a taken port
+which releases it before versitygw binds it, so another process can take it first. versitygw 1.8.0 prints its "listening on" banner BEFORE it binds, and on a taken port
 then prints `bind: address already in use` and exits 1 (run by hand 2026-09-30, on macOS and in
 `node:24-slim`). Until 2026-09-30 the harness called a server ready once its port accepted a
 connection, and every server shared one set of credentials, so a start whose port the other test's
@@ -3585,7 +3587,7 @@ Cost: A527's first forced-failure control passed.
 
 Cost: main run 38430159396 failed `boot.backup-network.test.ts`.
 
-### In a suite whose `useVenueDb` sets `resetPerTest: false`, a port the system hands a test can be one an earlier test's rows still name
+### In a suite whose `useVenueDb` sets `resetPerTest: false`, a port drawn for a test can be one an earlier test's rows still name
 
 Cost: main run 39537349722's `test-server (16)` failed `print-agent-e2e.test.ts`'s discovery check, which a forced port collision reproduces (A945).
 
@@ -3724,10 +3726,10 @@ image attached, and `pnpm reap` does not detach it.
 Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text. Receipt:
 [testing-guide.md](testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem).
 
-### In a suite whose `useVenueDb` sets `resetPerTest: false`, a port the system hands a test can be one an earlier test's rows still name
+### In a suite whose `useVenueDb` sets `resetPerTest: false`, a port drawn for a test can be one an earlier test's rows still name
 
-**In a suite whose `useVenueDb` sets `resetPerTest: false`, a port the system hands a test can be
-one an earlier test's rows still name**, so a test that finds a row by address checks that the row
+**In a suite whose `useVenueDb` sets `resetPerTest: false`, a port drawn for a test can be one an
+earlier test's rows still name**, so a test that finds a row by address checks that the row
 is its own. Guard: `apps/server/src/print-agent-e2e.test.ts`'s `portsNoPrinterNames` and
 pre-discovery row check, weaker than the rule — they cover that one test. Receipt:
 [testing-guide.md](testing-guide.md#a-drawn-port-can-be-one-an-earlier-test-in-the-same-database-already-registered).

@@ -872,8 +872,9 @@ function listen(app: Hono, port: number): Promise<ServerType> {
   });
 }
 
-/** This file's tests share one database, and the system can hand an earlier test's printer port out
- * again; discovery matches by address, so a printer still registered there would read as this one. */
+/** This file's tests share one database, and once its slice wraps a later draw can return an earlier
+ * test's printer port; discovery matches by address, so a printer still registered there would read
+ * as this one. */
 async function portsNoPrinterNames(): Promise<number[]> {
   const attempts = 20;
   let lastPort = 0;

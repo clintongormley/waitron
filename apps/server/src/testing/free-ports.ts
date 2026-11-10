@@ -1,10 +1,30 @@
-import { createServer, type Server, type AddressInfo } from "node:net";
+import { createServer, type Server } from "node:net";
 
-function bindProbe(): Promise<Server> {
+const RANGE_START = 20000;
+const SLICE_SIZE = 500;
+const SLICES = 25;
+
+/**
+ * Ports are drawn from 20000–32499, below the default automatic range Linux (32768–60999) and macOS
+ * (49152–65535) hand out for a port-0 bind or an outgoing connection, so with those defaults no
+ * such bind can take a drawn port before the test binds it. Each Vitest worker draws from its own
+ * slice of 500 (`VITEST_POOL_ID` modulo 25, else the process id), walking forward from a random
+ * start, so two workers of one run never draw the same port while pool ids stay at or below 25.
+ * Two separate runs on one machine share slice numbers, so a port can still be taken between its
+ * check and the test's bind.
+ */
+const poolId = Number(process.env.VITEST_POOL_ID);
+const slice = (Number.isInteger(poolId) && poolId > 0 ? poolId : process.pid) % SLICES;
+const sliceStart = RANGE_START + slice * SLICE_SIZE;
+let cursor: number | undefined;
+
+function bindOn(port: number): Promise<Server | undefined> {
   return new Promise((resolve, reject) => {
     const probe = createServer();
-    probe.once("error", reject);
-    probe.listen(0, "127.0.0.1", () => resolve(probe));
+    probe.once("error", (error: NodeJS.ErrnoException) =>
+      error.code === "EADDRINUSE" ? resolve(undefined) : reject(error),
+    );
+    probe.listen(port, "127.0.0.1", () => resolve(probe));
   });
 }
 
@@ -14,22 +34,29 @@ function release(probe: Server): Promise<void> {
   );
 }
 
-/**
- * `count` distinct OS-assigned ports, released before use: `WAITRON_HTTP_PORT` rejects `"0"`. Every
- * probe stays bound until the last port is drawn, because Linux can hand a just-released port
- * straight back to the next draw. Draw every port a test needs before it binds any of them in one
- * call; a port another process binds between the release and the test's own bind is not covered.
- */
-export async function freePorts(count: number): Promise<number[]> {
-  const probes: Server[] = [];
-  try {
-    for (let i = 0; i < count; i += 1) probes.push(await bindProbe());
-  } catch (error) {
-    await Promise.allSettled(probes.map(release));
-    throw error;
+async function nextPort(taken: Set<number>): Promise<number> {
+  cursor ??= Math.floor(Math.random() * SLICE_SIZE);
+  for (let tried = 0; tried < SLICE_SIZE; tried += 1) {
+    const port = sliceStart + cursor;
+    cursor = (cursor + 1) % SLICE_SIZE;
+    if (taken.has(port)) continue;
+    const probe = await bindOn(port);
+    if (probe === undefined) continue;
+    await release(probe);
+    return port;
   }
-  const ports = probes.map((probe) => (probe.address() as AddressInfo).port);
-  await Promise.all(probes.map(release));
+  throw new Error(`no free port left from ${sliceStart} to ${sliceStart + SLICE_SIZE - 1}`);
+}
+
+/** `count` distinct ports, free when checked and released before use: `WAITRON_HTTP_PORT` rejects `"0"`. */
+export async function freePorts(count: number): Promise<number[]> {
+  const ports: number[] = [];
+  const taken = new Set<number>();
+  for (let i = 0; i < count; i += 1) {
+    const port = await nextPort(taken);
+    taken.add(port);
+    ports.push(port);
+  }
   return ports;
 }
 
