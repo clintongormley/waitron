@@ -334,17 +334,6 @@ describe("till-table-order-screen: a newly added line is not hidden behind the a
     expect(host.scrollTop).toBeGreaterThan(0);
     expectClearOfBar(el, host);
   });
-
-  it("shows the newest line above the bar when the phone's Order view opens on a long order", async () => {
-    const { el, host } = await orderedInWindow(390, 700);
-    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!);
-    await el.updateComplete;
-    await linesRendered(el);
-    await scrollSettled(host);
-
-    expect(host.scrollTop).toBeGreaterThan(0);
-    expectClearOfBar(el, host);
-  });
 });
 
 /** Twenty sent dishes listed and two unsent, on a part-paid bill with Full invoice, two receipt

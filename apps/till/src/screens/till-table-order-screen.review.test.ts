@@ -256,6 +256,41 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     expect(shown(draftPane(el))).toBe(false);
   });
 
+  it.each([
+    ["the switch", "[data-view=order]"],
+    ["the Menu bar's words", "[data-new-order-summary]"],
+    ["the Menu bar's Send all", "[data-menu-send-all]"],
+  ])(
+    "showing Order by %s shows its top, with the switch in view, not the dish just added",
+    async (_, opener) => {
+      const sent = Array.from({ length: 20 }, (_, n) => ({
+        ...storedDish,
+        id: `sent-${n}`,
+        lineNo: n + 1,
+        name: `Sent dish ${n}`,
+      }));
+      const cola = { ...beer, id: "cola", menuItemId: "offer-cola", name: "Cola" };
+      const offered = [beer, flan, cola];
+      const { el, host } = await mount({ lines: sent, products: offered, menus: menuOf(offered) });
+      host.style.width = "390px";
+      host.style.height = "600px";
+      host.style.overflowY = "auto";
+      await resized(el);
+      await showView(el, "menu");
+      for (const name of ["Beer", "Flan", "Cola"]) await tap(el, name);
+
+      el.shadowRoot!.querySelector<HTMLElement>(opener)!.click();
+      await resized(el);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      expect(host.scrollHeight).toBeGreaterThan(host.clientHeight);
+      const area = host.getBoundingClientRect();
+      const toggle = viewSwitch(el)!.getBoundingClientRect();
+      expect(toggle.top).toBeGreaterThanOrEqual(area.top);
+      expect(toggle.bottom).toBeLessThanOrEqual(area.bottom);
+    },
+  );
+
   it("a screen drawn for a bill with sent lines opens on Order", async () => {
     const { el, host } = await mount({ lines: [storedDish] });
     host.style.width = "390px";

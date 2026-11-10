@@ -811,8 +811,9 @@ export class TillBasket extends LitElement {
 
   @property({ type: Boolean }) revealAdded = false;
   #revealedAddition?: { store: WorkingOrderStore; addition: number };
+  /** An addition made while `revealAdded` is off counts as seen, so turning it on later (a phone
+   * switching to Order) leaves the list at its top rather than scrolling to that dish. */
   override updated(): void {
-    if (!this.revealAdded) return;
     const store = this.store;
     if (
       this.#revealedAddition?.store === store &&
@@ -820,6 +821,7 @@ export class TillBasket extends LitElement {
     )
       return;
     this.#revealedAddition = { store, addition: store.lastAddition };
+    if (!this.revealAdded) return;
     const line = store.lastAdded;
     if (line === undefined) return;
     const generation = store.loadGeneration;

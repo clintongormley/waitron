@@ -1101,7 +1101,9 @@ Menu / Order switch (`[data-view-switch]`, two `aria-pressed` buttons) in place 
 and its `view` state says which is shown; browsing is hidden, never removed, on Order. Order's
 button carries the New order's item count after a " · " hidden from screen readers. A table opens
 on Order when the bill on screen has sent lines and on Menu otherwise; a bill switch shows Menu;
-widening shows Menu. While the New order has a line, Menu ends in a bar (`[data-new-order-bar]`,
+widening shows Menu. Showing Order, by the switch or by the Menu bar's words or Send all, shows its
+top with the switch in view: the basket scrolls to a dish only when it is added while Order shows
+(`revealAdded`), and one added on Menu counts as seen. While the New order has a line, Menu ends in a bar (`[data-new-order-bar]`,
 sticky at the window's foot) whose words (New order · items — n × dish · …, cut on one line) show
 Order and whose Send all sends what the draft bar's Send all sends and shows Order as the send
 starts, quiet and disabled exactly when the draft bar's is; Send all never shrinks or wraps, so the
