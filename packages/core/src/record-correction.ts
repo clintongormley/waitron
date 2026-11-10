@@ -28,6 +28,10 @@ import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { assertSumsTo, atCents, deriveVatBreakdown } from "./record-sale.js";
 import { requireSupportedCorrection } from "./correction-eligibility.js";
+import {
+  checkPartialCorrectionBreakdown,
+  checkPartialCorrectionHistory,
+} from "./partial-correction-breakdown.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
 const ZERO = decimal("0");
@@ -70,6 +74,12 @@ export interface RecordCorrectionInput {
    * minus its line total, and every invoice line is named.
    */
   wholeInvoice?: boolean;
+  /**
+   * The exact VAT split of a partial correction, signed as filed, stored and filed in place of
+   * one derived from `lines`. Each line must then name a different invoice line it takes from and
+   * state its gross. Refused together with `wholeInvoice`.
+   */
+  partialVatBreakdown?: readonly VatBreakdownLine[];
   /** Checked by `recordCorrection` itself against permission `sale.rectify`; the authorizer is
    * recorded on `sales.authorized_by`. */
   authz: AuthzInput | { managementSessionId: string };
@@ -90,18 +100,32 @@ export interface RecordCorrectionInput {
  * invoice being corrected is refused with `sale.correction_line_not_on_invoice` after all of those
  * and before the number; then a whole-invoice credit whose lines do not reverse the invoice line
  * for line is refused with `sale.correction_line_not_reversed`, also before the number. A
- * partial correction's lines may name a line or not, and may name the same one. A failed
- * integrity check records an incident and the correction proceeds anyway.
+ * `partialVatBreakdown` is refused with `sale.correction_breakdown_invalid` first when it disagrees
+ * with the correction's own total or lines, and after `sale.correction_line_not_on_invoice`, before
+ * the number, with the same code when it disagrees with the invoice or the corrections already
+ * recorded against it, or with `sale.correction_history_unusable` when what is stored about them
+ * cannot be checked (`checkPartialCorrectionHistory`). Without `partialVatBreakdown`, a partial
+ * correction's lines may name a line or not, and may name the same one; with it, each names a
+ * different invoice line. A failed integrity check records an incident and the correction proceeds
+ * anyway.
  */
 export async function recordCorrection(
   tx: Transaction,
   backend: FiscalBackend,
   input: RecordCorrectionInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
-  // Unless the whole invoice is credited, derived before anything is written; refused when a line
-  // total is past the cent and the breakdown no longer sums to the total (`deriveVatBreakdown`).
+  const partial =
+    input.partialVatBreakdown === undefined
+      ? undefined
+      : checkPartialCorrectionBreakdown(
+          input.total,
+          input.lines,
+          input.partialVatBreakdown,
+          input.wholeInvoice === true,
+        );
   const derived =
-    input.wholeInvoice === true ? undefined : deriveVatBreakdown(input.total, input.lines);
+    partial ??
+    (input.wholeInvoice === true ? undefined : deriveVatBreakdown(input.total, input.lines));
 
   // The corrective inherits the original's `locale` and `invoiceLocales`.
   // `${sales}.id`, not `${sales.id}`: see the same subquery in `settleSale`.
@@ -210,21 +234,26 @@ export async function recordCorrection(
   const wholeLineRows =
     input.wholeInvoice === true ? saleLineRows("", input.lines, { corrective: true }) : undefined;
 
-  if (wholeLineRows !== undefined || input.lines.some((line) => line.correctsLineId != null)) {
-    const onInvoice = new Map(
-      (
-        await tx
-          .select({
-            id: saleLines.id,
-            quantity: saleLines.quantity,
-            lineTotal: saleLines.lineTotal,
-            productId: saleLines.productId,
-          })
-          .from(saleLines)
-          .where(eq(saleLines.saleId, input.correctsSaleId))
-          .orderBy(saleLines.lineNo)
-      ).map((row) => [row.id, row]),
-    );
+  const onInvoice =
+    wholeLineRows !== undefined || input.lines.some((line) => line.correctsLineId != null)
+      ? new Map(
+          (
+            await tx
+              .select({
+                id: saleLines.id,
+                quantity: saleLines.quantity,
+                lineTotal: saleLines.lineTotal,
+                productId: saleLines.productId,
+                vatRate: saleLines.vatRate,
+                lineGross: saleLines.lineGross,
+              })
+              .from(saleLines)
+              .where(eq(saleLines.saleId, input.correctsSaleId))
+              .orderBy(saleLines.lineNo)
+          ).map((row) => [row.id, row]),
+        )
+      : undefined;
+  if (onInvoice !== undefined) {
     for (const line of input.lines) {
       if (line.correctsLineId != null && !onInvoice.has(line.correctsLineId)) {
         throw new AppError("sale.correction_line_not_on_invoice", {
@@ -237,6 +266,28 @@ export async function recordCorrection(
     if (wholeLineRows !== undefined) {
       assertReversesLineForLine(input.correctsSaleId, wholeLineRows, onInvoice);
     }
+  }
+  if (partial !== undefined) {
+    checkPartialCorrectionHistory(input.lines, partial, {
+      invoiceBreakdown: original.vatBreakdown,
+      // Read above: every line of a checked split names an invoice line.
+      invoiceLines: onInvoice!,
+      earlierBreakdowns: (
+        await tx
+          .select({ vatBreakdown: sales.vatBreakdown })
+          .from(sales)
+          .where(eq(sales.correctsSaleId, input.correctsSaleId))
+      ).map((row) => row.vatBreakdown),
+      earlierLines: await tx
+        .select({
+          correctsLineId: saleLines.correctsLineId,
+          vatRate: saleLines.vatRate,
+          lineGross: saleLines.lineGross,
+        })
+        .from(saleLines)
+        .innerJoin(sales, eq(sales.id, saleLines.saleId))
+        .where(eq(sales.correctsSaleId, input.correctsSaleId)),
+    });
   }
 
   const verification = await backend.checkIntegrity(tx, input.nodeId);
