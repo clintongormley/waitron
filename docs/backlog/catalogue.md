@@ -769,9 +769,6 @@ be refused, or is fine as it is. Not tried in a browser. Left open by A815 (#188
 
 - A configuration import stores a fixed folder name as given, spaces included, where a save
   through the dialog or the route trims it. A name of spaces only shows as no name either way.
-- After browser Back to another menu with no edits made, the include's Edit dialog stays open
-  over that menu, as the section Edit dialog does: choosing another menu does not close either
-  (read in `menus-screen.ts`, not run).
 
 ## Translate all: an Edit translations dialog left open anywhere clears the "Translations ready" notice
 

@@ -4052,6 +4052,10 @@ it("closes an open window without a message when the person goes to another menu
   expect(q(el, '[data-test="member-error"]')).toBeNull();
 });
 
+const refusedInLunch = t("menus.change_not_saved", "es-ES")
+  .replace("{name}", "Lunch Menu")
+  .replace("{reason}", codeMessage("menu_section.not_found", "es-ES"));
+
 describe("a row's own Delete section confirm and another menu", () => {
   /** Opens Drinks' Delete section confirm in Lunch and, with `answer` given, presses Delete. */
   async function confirmDrinksInLunch(answer?: Promise<void>) {
@@ -4065,10 +4069,6 @@ describe("a row's own Delete section confirm and another menu", () => {
     }
     return { el, client };
   }
-
-  const refusedInLunch = t("menus.change_not_saved", "es-ES")
-    .replace("{name}", "Lunch Menu")
-    .replace("{reason}", codeMessage("menu_section.not_found", "es-ES"));
 
   it("shows a refusal in the confirm while its menu is open, and nowhere else", async () => {
     const answer = deferred<void>();
@@ -4144,21 +4144,111 @@ describe("a row's own Delete section confirm and another menu", () => {
   });
 });
 
-it("closes a row's Edit section form when another menu is opened, saving nothing", async () => {
-  const client = api();
-  const el = await mountLunch(client);
-  await rowAction(el, "m-drinks", "edit");
-  await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(true));
-  await visit(el, DINNER_PATH, "Dinner Menu");
-  expect(modal(el, "new-section").open).toBe(false);
-  emit(q(el, '[data-test="section-form"]')!, "wt-submit", {
-    internalName: "Ciders",
-    names: {},
-    image: null,
-    color: null,
+describe("a row's Edit section form and another menu", () => {
+  const ciders = { internalName: "Ciders", names: {}, image: null, color: null };
+
+  /** Opens Drinks' Edit section form in Lunch and, with `answer` given, saves it. */
+  async function editDrinksInLunch(
+    answer?: Promise<SectionDetails>,
+    setup: (client: Api) => void = () => {},
+  ) {
+    const client = api(answer ? { updateSection: vi.fn(() => answer) } : {});
+    setup(client);
+    const el = await mountLunch(client);
+    await rowAction(el, "m-drinks", "edit");
+    await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(true));
+    if (answer) {
+      emit(q(el, '[data-test="section-form"]')!, "wt-submit", ciders);
+      await vi.waitFor(() => expect(client.updateSection).toHaveBeenCalledOnce());
+    }
+    return { el, client };
+  }
+
+  it("closes a row's Edit section form when another menu is opened, saving nothing", async () => {
+    const { el, client } = await editDrinksInLunch();
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    expect(modal(el, "new-section").open).toBe(false);
+    emit(q(el, '[data-test="section-form"]')!, "wt-submit", ciders);
+    await el.updateComplete;
+    expect(client.updateSection).not.toHaveBeenCalled();
   });
-  await el.updateComplete;
-  expect(client.updateSection).not.toHaveBeenCalled();
+
+  it("shows a refusal in the form while its menu is open, and nowhere else", async () => {
+    const answer = deferred<SectionDetails>();
+    const { el } = await editDrinksInLunch(answer.promise);
+    answer.reject({ code: "menu_section.not_found" });
+    await vi.waitFor(() =>
+      expect(bottom(el, "new-section")).resolves.toBe(codeMessage("menu_section.not_found")),
+    );
+    await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+    expect(modal(el, "new-section").open).toBe(true);
+  });
+
+  it("names Lunch with a refusal that comes once Dinner is open", async () => {
+    const answer = deferred<SectionDetails>();
+    const { el } = await editDrinksInLunch(answer.promise);
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    answer.reject({ code: "menu_section.not_found" });
+    await vi.waitFor(() => expect(text(q(el, '[data-test="member-error"]'))).toBe(refusedInLunch));
+    await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+    expect(modal(el, "new-section").open).toBe(false);
+    expect(currentPlace(el)).toBe("Dinner Menu");
+  });
+
+  it.each([
+    ["Dinner is open", [DINNER_PATH]],
+    ["the person has gone to Dinner and back", [DINNER_PATH, LUNCH_PATH]],
+  ])("leaves focus where it is when the edit is saved once %s", async (_, paths) => {
+    const answer = deferred<SectionDetails>();
+    const { el } = await editDrinksInLunch(answer.promise);
+    for (const path of paths)
+      await visit(el, path, path === DINNER_PATH ? "Dinner Menu" : "Lunch Menu");
+    await afterDialogCloses(el);
+    const back = q<HTMLAnchorElement>(el, '[data-test="back"]')!;
+    back.focus();
+    answer.resolve(sections()[0]!);
+    await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+    await settleStructure(el);
+    await afterDialogCloses(el);
+    expect(el.shadowRoot!.activeElement).toBe(back);
+    expect(modal(el, "new-section").open).toBe(false);
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+  });
+
+  it("leaves an Edit section form opened in Dinner open when Lunch's edit is saved", async () => {
+    const answer = deferred<SectionDetails>();
+    const { el } = await editDrinksInLunch(answer.promise, dinnerWithLunchsFavourites);
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    emit(structure(el), "wt-member-edit", { sectionId: "s-fav", path: ["m-fav"] });
+    await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(true));
+    answer.resolve(sections()[0]!);
+    await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+    await settleStructure(el);
+    const form = q<HTMLElementTagNameMap["dashboard-section-details-form"]>(
+      el,
+      '[data-test="section-form"]',
+    )!;
+    expect(modal(el, "new-section").open).toBe(true);
+    expect(form.value?.id).toBe("s-fav");
+  });
+
+  it("leaves focus where it is when the edit is refused once the person has gone to Dinner and back", async () => {
+    const answer = deferred<SectionDetails>();
+    const { el } = await editDrinksInLunch(answer.promise);
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    await visit(el, LUNCH_PATH, "Lunch Menu");
+    await afterDialogCloses(el);
+    const back = q<HTMLAnchorElement>(el, '[data-test="back"]')!;
+    back.focus();
+    answer.reject({ code: "menu_section.not_found" });
+    await vi.waitFor(() => expect(text(q(el, '[data-test="member-error"]'))).toBe(refusedInLunch));
+    await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+    await settleStructure(el);
+    await afterDialogCloses(el);
+    expect(el.shadowRoot!.activeElement).toBe(back);
+    expect(modal(el, "new-section").open).toBe(false);
+  });
 });
 
 it("keeps a picker whose add is out open when the person goes to another menu, marking nothing from that menu, and closes it quietly when the add is saved", async () => {
@@ -7571,6 +7661,37 @@ describe("an include's Edit dialog", () => {
     );
     expect(includeField(el, "names-en").error).toBe("");
     expect(includeModal(el).open).toBe(true);
+  });
+
+  it("closes when another menu is opened, saving nothing", async () => {
+    const { client } = winesClient({ showAsFolder: true, overrides: {} });
+    const el = await mountLunch(client);
+    await openWines(el);
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    expect(includeModal(el).open).toBe(false);
+    emit(includeForm(el), "wt-submit", { showAsFolder: false });
+    await el.updateComplete;
+    expect(client.setIncludeFolder).not.toHaveBeenCalled();
+  });
+
+  it("names Lunch with a refusal that comes once Dinner is open", async () => {
+    const answer = deferred<IncludeFolder>();
+    const { client } = winesClient(
+      { showAsFolder: true, overrides: {} },
+      { setIncludeFolder: vi.fn(() => answer.promise) },
+    );
+    const el = await mountLunch(client);
+    await openWines(el);
+    includeForm(el).shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
+    await includeForm(el).updateComplete;
+    includeSave(el).click();
+    await vi.waitFor(() => expect(client.setIncludeFolder).toHaveBeenCalledOnce());
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    answer.reject({ code: "menu_section.not_found" });
+    await vi.waitFor(() => expect(text(q(el, '[data-test="member-error"]'))).toBe(refusedInLunch));
+    await vi.waitFor(() => expect(structure(el).busy).toBe(false));
+    expect(includeModal(el).open).toBe(false);
+    expect(currentPlace(el)).toBe("Dinner Menu");
   });
 });
 
